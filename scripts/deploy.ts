@@ -20,6 +20,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { parse, modify, applyEdits } from 'jsonc-parser';
 import Cloudflare from 'cloudflare';
+import { filterSkippedSecrets } from './deploy-secrets';
 
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -1800,7 +1801,7 @@ class CloudflareDeploymentManager {
 		];
 
 		// Add environment variables that are set
-		secretVars.forEach((varName) => {
+		filterSkippedSecrets(secretVars, process.env.DEPLOY_SKIP_SECRETS).forEach((varName) => {
 			let value = varName === 'JWT_SECRET' ? generatedJwtSecret : process.env[varName];
 			
 			// Apply fallback logic for CLOUDFLARE_AI_GATEWAY_TOKEN
