@@ -100,3 +100,35 @@ describe('brand guard: document shell', () => {
 		);
 	});
 });
+
+describe('brand guard: layout', () => {
+	it('renders the Estori top bar above a contained sidebar', () => {
+		const layout = source(frontendSources, '/src/components/layout/app-layout.tsx');
+		expect(layout).toContain('<EstoriTopBar />');
+		expect(layout).toMatch(/^\s*contained\s*$/m);
+	});
+
+	it('drops the BUILD wordmark from the sidebar', () => {
+		expect(
+			findMatches(
+				{ sidebar: source(frontendSources, '/src/components/layout/app-sidebar.tsx') },
+				/^\s*Build\s*$/,
+			),
+		).toEqual([]);
+	});
+
+	it('offers Sign In from the top bar only', () => {
+		expect(
+			source(frontendSources, '/src/components/layout/global-header.tsx'),
+		).not.toContain('Sign In');
+		expect(
+			source(frontendSources, '/src/components/layout/EstoriTopBar.tsx'),
+		).toContain('Sign In');
+	});
+
+	it('brands the standalone header', () => {
+		expect(source(frontendSources, '/src/components/header.tsx')).not.toContain(
+			'CloudflareLogo',
+		);
+	});
+});

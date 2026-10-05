@@ -4,6 +4,7 @@ import { SidebarProvider, useSidebar } from '@cloudflare/kumo';
 import { AppSidebar } from './app-sidebar';
 import { GlobalHeader } from './global-header';
 import { HeaderProvider } from './header-context';
+import { EstoriTopBar } from './EstoriTopBar';
 
 const SIDEBAR_COOKIE_NAME = 'sidebar_state';
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
@@ -50,25 +51,29 @@ export function AppLayout({ children }: AppLayoutProps) {
 	const defaultOpen = React.useMemo(() => getSidebarDefaultOpen(), []);
 
 	return (
-		<SidebarProvider
-			defaultOpen={defaultOpen}
-			collapsible="icon"
-			resizable={false}
-			mobileBreakpoint={768}
-			// peekable
-			onOpenChange={persistSidebarState}
-			className="vibesdk-sidebar-wrapper"
-		>
-			<HeaderProvider>
-				<SidebarKeyboardShortcut />
-				<AppSidebar />
-				<main className="bg-kumo-canvas flex flex-col h-screen relative flex-1 min-w-0 overflow-hidden">
-					<GlobalHeader />
-					<div className="flex-1 min-h-0 overflow-auto bg-kumo-canvas">
-						{children || <Outlet />}
-					</div>
-				</main>
-			</HeaderProvider>
-		</SidebarProvider>
+		<div className="flex h-svh flex-col">
+			<EstoriTopBar />
+			<SidebarProvider
+				defaultOpen={defaultOpen}
+				collapsible="icon"
+				resizable={false}
+				mobileBreakpoint={768}
+				// peekable
+				onOpenChange={persistSidebarState}
+				contained
+				className="vibesdk-sidebar-wrapper min-h-0 flex-1"
+			>
+				<HeaderProvider>
+					<SidebarKeyboardShortcut />
+					<AppSidebar />
+					<main className="bg-kumo-canvas flex flex-col h-full relative flex-1 min-w-0 overflow-hidden">
+						<GlobalHeader />
+						<div className="flex-1 min-h-0 overflow-auto bg-kumo-canvas">
+							{children || <Outlet />}
+						</div>
+					</main>
+				</HeaderProvider>
+			</SidebarProvider>
+		</div>
 	);
 }

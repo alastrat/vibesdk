@@ -10,7 +10,7 @@ import {
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { isValid } from 'date-fns';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import {
 	Button,
 	CloudflareLogo,
@@ -23,7 +23,6 @@ import { useAuth } from '@/contexts/auth-context';
 import { useApps, useFavoriteApps, useRecentApps } from '@/hooks/use-apps';
 import { AppActionsDropdown } from '@/components/shared/AppActionsDropdown';
 import { OrangeButton } from '@/components/shared/OrangeButton';
-import { AuthButton } from '@/components/auth/auth-button';
 import { useUsageLimitsBadgeState } from '@/components/usage-limits-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
@@ -257,40 +256,13 @@ export function AppSidebar() {
 			<Sidebar.Header
 				className={cn(
 					'h-12',
-					isCollapsed ? 'justify-center px-0' : 'px-3',
+					isCollapsed ? 'justify-center px-0' : 'justify-end px-3',
 				)}
 			>
-				{isCollapsed ? (
-					<div className="relative flex size-9 items-center justify-center">
-						<CloudflareLogo
-							variant="glyph"
-							className="size-7 shrink-0 transition-opacity group-hover/sidebar:opacity-0 group-focus-within/sidebar:opacity-0"
-						/>
-						<Sidebar.Trigger
-							aria-label="Open sidebar"
-							className="absolute inset-0 flex size-9 items-center justify-center opacity-0 transition-opacity group-hover/sidebar:opacity-100 group-focus-within/sidebar:opacity-100"
-						/>
-					</div>
-				) : (
-					<div className="flex w-full min-w-0 items-center gap-2.5">
-						<Link
-							to="/"
-							className="flex min-w-0 flex-1 items-center gap-2.5 text-kumo-strong"
-						>
-							<CloudflareLogo
-								variant="glyph"
-								className="size-7 shrink-0"
-							/>
-							<span className="min-w-0 flex-1 truncate text-base font-black font-funky-mono uppercase tracking-wide">
-								Build
-							</span>
-						</Link>
-						<Sidebar.Trigger
-							aria-label="Collapse sidebar"
-							className="ml-auto shrink-0"
-						/>
-					</div>
-				)}
+				<Sidebar.Trigger
+					aria-label={isCollapsed ? 'Open sidebar' : 'Collapse sidebar'}
+					className="flex size-9 shrink-0 items-center justify-center"
+				/>
 			</Sidebar.Header>
 
 			<div className="shrink-0 px-[11px] py-3 group-not-data-[state=collapsed]/sidebar:px-3.5">
@@ -619,18 +591,6 @@ export function AppSidebar() {
 							isCollapsed && 'flex-col',
 						)}
 					>
-						{user && (
-							<div className="min-w-0 flex-1">
-								<AuthButton
-									display="sidebar"
-									className={cn(
-										'w-full',
-										isCollapsed &&
-											'size-9 flex-none justify-center px-0',
-									)}
-								/>
-							</div>
-						)}
 						<ThemeToggle
 							align="end"
 							className="size-9 shrink-0 rounded-lg"

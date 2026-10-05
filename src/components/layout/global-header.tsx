@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SidebarTrigger, cn, useSidebar } from '@cloudflare/kumo';
-import { useAuth } from '@/contexts/auth-context';
 import { ChevronRight, AlertCircle } from 'lucide-react';
-import { SignInIcon } from '@phosphor-icons/react';
 import { usePlatformStatus } from '@/hooks/use-platform-status';
 import {
 	Dialog,
@@ -12,13 +10,9 @@ import {
 	DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { OrangeButton } from '@/components/shared/OrangeButton';
-import { useAuthModal } from '../auth/AuthModalProvider';
 import { useHeaderContent } from './header-context';
 
 export function GlobalHeader() {
-	const { user, isLoading: authLoading } = useAuth();
-	const { showAuthModal } = useAuthModal();
 	const { isMobile } = useSidebar();
 	const { content } = useHeaderContent();
 	const { status } = usePlatformStatus();
@@ -73,15 +67,6 @@ export function GlobalHeader() {
 
 					<div className="flex items-center justify-end gap-1.5 shrink-0">
 						{content?.trailing}
-						{!authLoading && !user && (
-							<OrangeButton
-								size="sm"
-								onClick={() => showAuthModal()}
-								icon={<SignInIcon className="size-4" />}
-							>
-								Sign In
-							</OrangeButton>
-						)}
 					</div>
 				</div>
 			</header>
