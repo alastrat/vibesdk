@@ -103,25 +103,25 @@ This goes in `docs/estori/provisioning.md`. It runs once and its IDs are committ
 - `wrangler d1 create estori-db`
 - `wrangler kv namespace create estori-store`
 - `wrangler r2 bucket create estori-assets`
-- Artifacts namespace `estori-production`: the plan determines whether the binding alone creates it on first use, or whether a `wrangler artifacts` command is needed, and records the answer here.
+- Artifacts namespace `estori-production`: no command needed. Artifacts creates a namespace automatically when the first repository is created in it, which SpaceDO does through the binding.
 - The AI Gateway `estori-gateway` already exists.
 
-### Dashboard-managed variables
+### Variables delivered by the deploy
 
-These are set once and survive deploys through `keep_vars`:
+`scripts/deploy.ts` uploads every variable on its allowlist that is present in its environment as a Worker secret (`createProdVarsFile`). A dashboard variable with the same name would collide with that secret, so these come from CI instead of the dashboard:
 
-- `ENABLE_ARTIFACTS=true`
+- `ENABLE_ARTIFACTS=true` (also required so the script keeps the `artifacts` binding)
 - `CLOUDFLARE_AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/6d16ad8a9f081e4939993391bd35ca4e/estori-gateway/`. Local dev needed this override because the AI binding's gateway lookup failed on the new account. It is kept in production as a deterministic URL.
 
 ### `scripts/deploy.ts` adjustments
 
 These are small changes, written so they can go upstream.
 
-- **Dispatch namespace.** Skip dispatch-namespace creation and syncing when the target config has no `dispatch_namespaces`. Today the script creates the namespace if it is missing, which requires Workers for Platforms.
+- **Dispatch namespace.** No change needed. `ensureDispatchNamespace` already returns early when the config has no `dispatch_namespaces` (`deploy.ts:273-278`).
 - **Artifacts binding.** The script removes the `artifacts` binding unless `ENABLE_ARTIFACTS=true` in its environment. The CI job sets it; no code change is needed for this.
 - **Containers.** The script's container patching already handles a config without `containers`: it logs a warning and skips (`deploy.ts:1280`, `:1345`). No change is needed.
-- **JWT secret.** The plan reads the script's JWT handling (`deploy.ts` around lines 1790–1804). The required outcome is that `JWT_SECRET` is uploaded once and never regenerated on later deploys. If the script cannot achieve this, it gets a minimal fix.
-- **Runtime secrets.** The plan lists exactly which secrets the script uploads to the Worker. The broad deploy `CLOUDFLARE_API_TOKEN` must not become a Worker secret if a narrower token covers the runtime need; the narrower tokens are in section 3.
+- **JWT secret.** No change needed. When `JWT_SECRET` is present in the environment the script leaves it out of the upload, so the Worker's existing secret is kept. It only generates a new one when the variable is absent (`deploy.ts:1790-1804`). CI always provides it, and the Worker secret is set once with `wrangler secret put` right after the first deploy, before anyone signs up.
+- **Runtime secrets.** `CLOUDFLARE_API_TOKEN` is on the upload allowlist, so the broad deploy token would become a Worker secret. In this configuration its runtime uses are all covered by narrower tokens: `CLOUDFLARE_AI_GATEWAY_TOKEN` for inference and analytics, `ARTIFACTS_API_TOKEN` for the Repo viewer. The others belong to disabled features: platform deploy, the container sandbox, and Cloudflare Images. The script gains a generic `DEPLOY_SKIP_SECRETS` option, a comma-separated list of names to leave out of the upload, and CI sets `DEPLOY_SKIP_SECRETS=CLOUDFLARE_API_TOKEN`.
 
 Local dev keeps using `wrangler.jsonc` and its local-only edits. Production does not depend on them.
 
@@ -221,7 +221,7 @@ This lives in `docs/estori/launch-checklist.md` and is run once by a person at f
 
 **Modified:**
 
-- `scripts/deploy.ts` (dispatch-namespace skip; JWT and secret-upload fixes only if needed)
+- `scripts/deploy.ts` (`DEPLOY_SKIP_SECRETS`), with the filter in a new `scripts/deploy-secrets.ts`
 - `worker/api/controllers/capabilities/controller.ts`
 - the `PlatformCapabilities` type
 - `src/routes/chat/chat.tsx`
