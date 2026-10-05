@@ -17,6 +17,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
 	ExternalLink,
 	LoaderCircle,
+	Rocket,
 	RotateCcw,
 } from 'lucide-react';
 import {
@@ -425,8 +426,10 @@ function ChatSession() {
 							>
 								{isDeploying ? (
 									<LoaderCircle className="size-3.5 animate-spin" />
-								) : (
+								) : userAccountDeployEnabled ? (
 									<CloudflareLogo className="size-3.5" />
+								) : (
+									<Rocket className="size-3.5" />
 								)}
 								{isDeploying
 									? 'Deploying...'

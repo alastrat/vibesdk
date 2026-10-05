@@ -158,3 +158,34 @@ describe('brand guard: copy', () => {
 		expect(findMatches(frontendSources, /rp: \{ name: 'vibesdk'/)).toEqual([]);
 	});
 });
+
+describe('brand guard: brand color and deploy copy', () => {
+	const BRAND_COLOR_FILES = [
+		'/src/routes/chat/components/messages.tsx',
+		'/src/routes/chat/components/thinking-indicator.tsx',
+		'/src/routes/chat/components/deployment-controls.tsx',
+	];
+
+	it('uses brand tokens instead of orange in brand surfaces', () => {
+		const brandSurfaces = Object.fromEntries(
+			BRAND_COLOR_FILES.map((path) => [path, source(frontendSources, path)]),
+		);
+		expect(findMatches(brandSurfaces, /-orange-\d{2,3}/)).toEqual([]);
+	});
+
+	it('shows the preview deploy state in brand colors', () => {
+		const timeline = source(frontendSources, '/src/routes/chat/components/phase-timeline.tsx');
+		expect(timeline).not.toContain('color="orange"');
+		expect(timeline).toContain('text-brand">Deploying preview...');
+	});
+
+	it('does not label platform deploys as Cloudflare', () => {
+		expect(findMatches(frontendSources, /Deploy(ing)? to Cloudflare|Redeploying to Cloudflare|Cloudflare Workers for Platforms/)).toEqual([]);
+	});
+
+	it('shows the Estori glyph next to platform credits', () => {
+		expect(source(frontendSources, '/src/components/credits-banner.tsx')).toContain(
+			'<EstoriGlyph className="w-3.5 h-3.5" />',
+		);
+	});
+});

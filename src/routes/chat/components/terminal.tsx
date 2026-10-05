@@ -96,7 +96,7 @@ export function Terminal({
 	const getLogTypeColor = (type: TerminalLog['type']) => {
 		switch (type) {
 			case 'command':
-				return 'text-kumo-brand-primary'; // Cloudflare orange
+				return 'text-kumo-brand-primary'; // brand accent
 			case 'stdout':
 				return 'text-green-600 dark:text-green-400';
 			case 'stderr':

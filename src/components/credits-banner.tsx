@@ -2,6 +2,7 @@ import { useState, useMemo, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 import { type UsageSummary, type LimitConfig } from '@/hooks/use-limits';
 import { CloudflareLogo } from './icons/logos';
+import { EstoriGlyph } from '@/brand';
 import { CREDITS_BANNER_THRESHOLD } from '../../shared/constants/limits';
 
 interface CreditsBannerProps {
@@ -91,7 +92,7 @@ function buildConnectedBalanceContent(
 	}
 	return (
 		<span className="inline-flex items-center gap-1">
-			<CloudflareLogo className="w-3.5 h-3.5" />
+			<EstoriGlyph className="w-3.5 h-3.5" />
 			<span>{formatMoney(credits.credits, credits.currency)} {resetSuffix}</span>
 		</span>
 	);

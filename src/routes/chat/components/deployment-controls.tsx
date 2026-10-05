@@ -5,6 +5,7 @@ import { cn } from '@cloudflare/kumo';
 import { apiClient } from '../../../lib/api-client';
 import { toast } from 'sonner';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { BRAND } from '@/brand';
 
 interface DeploymentControlsProps {
 	// Deployment state
@@ -102,7 +103,7 @@ export function DeploymentControls({
 	const currentState = getCurrentDeploymentState();
 	const destination = deploymentTarget === 'user'
 		? 'your Cloudflare account'
-		: 'Cloudflare Workers for Platforms';
+		: `${BRAND.name} hosting`;
 
 	const handleDeploy = () => {
 		setIsDeployButtonClicked(true);
@@ -185,7 +186,7 @@ export function DeploymentControls({
 					icon: null,
 					titleColor: "text-text-tertiary dark:text-text-tertiary",
 					subtitleColor: "text-text-tertiary/80 dark:text-text-tertiary/70",
-					title: "Deploy to Cloudflare",
+					title: deploymentTarget === 'user' ? 'Deploy to your Cloudflare account' : 'Deploy',
 					subtitle: deploymentTarget === 'user'
 						? "Deploy will be enabled after the app has files"
 						: "Deploy will be enabled after Phase 1 is implemented",
@@ -205,7 +206,7 @@ export function DeploymentControls({
 					subtitle: `Publishes a standalone Worker to ${destination}`,
 					buttonDisabled: false,
 					buttonVariant: "primary" as const,
-					buttonClass: "bg-brand text-white border-orange-500 dark:border-orange-600 hover:scale-105"
+					buttonClass: "bg-brand text-white border-brand hover:scale-105"
 				};
 
 			case DeploymentState.DEPLOYING:
@@ -215,7 +216,7 @@ export function DeploymentControls({
 					icon: <Loader className="w-2.5 h-2.5 text-white animate-spin" />,
 					titleColor: "text-blue-900 dark:text-blue-100",
 					subtitleColor: "text-blue-600 dark:text-blue-300",
-					title: "Deploying to Cloudflare",
+					title: deploymentTarget === 'user' ? 'Deploying to your Cloudflare account' : 'Deploying',
 					subtitle: `Publishing your application to ${destination}...`,
 					buttonDisabled: true,
 					buttonVariant: "primary" as const,
@@ -229,7 +230,7 @@ export function DeploymentControls({
 					icon: <Loader className="w-2.5 h-2.5 text-white animate-spin" />,
 					titleColor: "text-blue-900 dark:text-blue-100",
 					subtitleColor: "text-blue-600 dark:text-blue-300",
-					title: "Redeploying to Cloudflare",
+					title: deploymentTarget === 'user' ? 'Redeploying to your Cloudflare account' : 'Redeploying',
 					subtitle: `Updating your application in ${destination}...`,
 					buttonDisabled: true,
 					buttonVariant: "primary" as const,
@@ -248,7 +249,7 @@ export function DeploymentControls({
 					buttonDisabled: !isPhase1Complete,
 					buttonVariant: "primary" as const,
 					buttonClass: isPhase1Complete
-						? "bg-orange-500 hover:bg-orange-600 dark:bg-orange-600 dark:hover:bg-orange-700 text-white border-orange-500 dark:border-orange-600 hover:scale-105"
+						? "bg-brand hover:bg-brand/90 text-white border-brand hover:scale-105"
 						: "bg-kumo-base dark:bg-kumo-base text-text-tertiary dark:text-text-tertiary border-muted dark:border-muted cursor-not-allowed"
 				};
 
@@ -313,7 +314,7 @@ export function DeploymentControls({
 							) : (
 								<>
 									<Zap className="w-4 h-4 mr-2" />
-									{deploymentTarget === 'user' ? 'Deploy to My Account' : 'Deploy to Cloudflare'}
+									{deploymentTarget === 'user' ? 'Deploy to your Cloudflare account' : 'Deploy'}
 								</>
 							)}
 						</Button>
