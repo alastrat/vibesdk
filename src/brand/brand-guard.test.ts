@@ -58,4 +58,10 @@ describe('brand guard: worker', () => {
 	it('does not name VibeSDK in agent prompts', () => {
 		expect(findMatches(workerSources, /VibeSDK-specific/)).toEqual([]);
 	});
+
+	it('composes the Think system prompt with the brand persona', () => {
+		expect(
+			source(workerSources, '/worker/agents/think/ThinkAgent.ts'),
+		).toContain('composeSystemPrompt(base, projectContext)');
+	});
 });

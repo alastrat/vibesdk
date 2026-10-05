@@ -14,6 +14,7 @@ import {
 import type { SkillSource } from 'agents/skills';
 import { createSpaceWorkspaceOps, type SpaceWorkspaceStub } from './space-workspace-ops';
 import { selectSystemPrompt, PROMPT_MAX_STEPS } from './prompts';
+import { composeSystemPrompt } from './persona';
 import { createThinkSkillSource } from './skills';
 import { createAskQuestionsTool } from './ask-questions-tool';
 import { createBrowserConsoleLogsTool } from './browser-logs-tool';
@@ -67,7 +68,6 @@ export interface ThinkAgentConfig {
 }
 
 const DEFAULT_SYSTEM_PROMPT =
-	'You are an expert Cloudflare full-stack engineer building deployable web apps. ' +
 	'Use the workspace tools to read, write and edit files in the project. Keep changes ' +
 	'minimal and runnable.';
 
@@ -286,7 +286,7 @@ export class ThinkAgent extends Think<Env> {
 		// appended. Think additionally injects the skill catalog (see getSkills).
 		const base = selectSystemPrompt(cfg?.model.modelName ?? '');
 		const projectContext = cfg?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
-		return `${base}\n\n${projectContext}`;
+		return composeSystemPrompt(base, projectContext);
 	}
 
 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
