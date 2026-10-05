@@ -85,7 +85,7 @@ This file is new, derived from the committed upstream `wrangler.jsonc`.
 | Area | Value |
 |---|---|
 | `name` | `estori-production` |
-| `routes` | `{ pattern: "app.getestori.com", custom_domain: true }` and `{ pattern: "*.apps.getestori.com/*", zone_name: "getestori.com" }` |
+| `routes` | `{ pattern: "app.getestori.com", custom_domain: true }` and `{ pattern: "*apps.getestori.com/*", zone_name: "getestori.com" }` (the form `deploy.ts` writes from `CUSTOM_PREVIEW_DOMAIN`, as upstream does with `*build-preview.cloudflare.dev/*`) |
 | `vars` | `CUSTOM_DOMAIN=app.getestori.com`, `CUSTOM_PREVIEW_DOMAIN=apps.getestori.com`, `ENVIRONMENT=prod`, `CLOUDFLARE_AI_GATEWAY=estori-gateway`, `ARTIFACTS_NAMESPACE=estori-production`, `TEMPLATES_REPOSITORY` and `PLATFORM_CAPABILITIES` as upstream, `MAX_SANDBOX_INSTANCES` and `SANDBOX_INSTANCE_TYPE` dropped. No `DEV_BROWSER_*`, no `DISPATCH_NAMESPACE` |
 | D1 | binding `DB` → `estori-db` (new `database_id`), `migrations_dir: migrations` |
 | KV | binding `VibecoderStore` (name kept; code uses it) → namespace `estori-store` |
