@@ -26,6 +26,7 @@ import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
 import { InfoIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
+import { pageTitle } from '@/brand';
 
 export default function Home() {
 	const navigate = useNavigate();
@@ -185,7 +186,7 @@ export default function Home() {
 
 	return (
 		<div className="relative flex flex-col items-center w-full min-h-full">
-			<title>Build</title>
+			<title>{pageTitle()}</title>
 			<div className="home-atmosphere" aria-hidden>
 				<div className="home-atmosphere__spotlight" />
 			</div>
@@ -204,11 +205,9 @@ export default function Home() {
 						)}
 					>
 						<div className="mb-6 sm:mb-7 grid gap-2">
-							<h1 className="w-full text-center text-[clamp(1.75rem,4.5vw,2.5rem)] font-semibold leading-[1.12] text-kumo-strong/80 z-20">
+							<h1 className="w-full text-center text-[clamp(1.75rem,4.5vw,2.5rem)] font-semibold leading-[1.12] text-kumo-strong z-20">
 								What should we{' '}
-								<span className="font-funky-mono font-bold text-[1.1em] tracking-tighter uppercase text-brand-emphasis">
-									build
-								</span>{' '}
+								<span className="text-brand-emphasis">build</span>{' '}
 								today?
 							</h1>
 						</div>

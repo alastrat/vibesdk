@@ -7,6 +7,7 @@ import { AppFiltersForm } from '@/components/shared/AppFiltersForm';
 import { AppSortTabs } from '@/components/shared/AppSortTabs';
 import { VisibilityFilter } from '@/components/shared/VisibilityFilter';
 import type { AppSortOption } from '@/api-types';
+import { pageTitle } from '@/brand';
 
 export default function AppsPage() {
 	const navigate = useNavigate();
@@ -65,7 +66,7 @@ export default function AppsPage() {
 
 	return (
 		<div className="size-full">
-			<title>My Apps - Build</title>
+			<title>{pageTitle('My Apps')}</title>
 			<div className="container mx-auto px-4 py-8">
 				<motion.div
 					initial={{ opacity: 0, y: -20 }}

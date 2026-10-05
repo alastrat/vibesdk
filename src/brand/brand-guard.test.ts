@@ -132,3 +132,29 @@ describe('brand guard: layout', () => {
 		);
 	});
 });
+
+describe('brand guard: copy', () => {
+	it('titles pages with the brand name', () => {
+		expect(
+			findMatches(frontendSources, /- Build(?=[`'"<])|<title>Build<\/title>/),
+		).toEqual([]);
+	});
+
+	it('does not show the VibeSDK name', () => {
+		expect(findMatches(frontendSources, /VibeSDK/)).toEqual([]);
+	});
+
+	it('names the assistant after the brand', () => {
+		expect(findMatches(frontendSources, /^\s*Orange\s*$/)).toEqual([]);
+	});
+
+	it('drops the uppercase BUILD headline', () => {
+		expect(source(frontendSources, '/src/routes/home.tsx')).not.toContain(
+			'uppercase text-brand-emphasis',
+		);
+	});
+
+	it('labels passkeys with the brand name', () => {
+		expect(findMatches(frontendSources, /rp: \{ name: 'vibesdk'/)).toEqual([]);
+	});
+});

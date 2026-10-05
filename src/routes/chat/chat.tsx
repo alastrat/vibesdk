@@ -93,6 +93,7 @@ import { ApiError } from '@/lib/api-client';
 import { capitalizeFirstLetter } from '@/lib/utils';
 import { usePageHeader } from '@/components/layout/header-context';
 import { CloudflareLogo } from '@/components/icons/logos';
+import { pageTitle } from '@/brand';
 
 const isPhasicBlueprint = (
 	blueprint?: BlueprintType | null,
@@ -1082,7 +1083,7 @@ function ChatSession() {
 	if (awaitingStartConfirmation) {
 		return (
 			<div className="size-full flex items-center justify-center p-6 text-text-primary">
-				<title>Start building - Build</title>
+				<title>{pageTitle('Start building')}</title>
 				<div className="max-w-lg w-full flex flex-col gap-4 rounded-xl border bg-kumo-elevated p-6">
 					<h1 className="text-lg font-medium">
 						Start building this app?
@@ -1115,7 +1116,7 @@ function ChatSession() {
 	return (
 		<RollbackContext.Provider value={rollbackHandler}>
 			<title>
-				{headerTitle ? `${headerTitle} - Build` : 'Chat - Build'}
+				{pageTitle(headerTitle || 'Chat')}
 			</title>
 			<div className="size-full flex flex-col min-h-0 text-text-primary">
 				<div className="flex-1 flex min-h-0 overflow-hidden justify-center">

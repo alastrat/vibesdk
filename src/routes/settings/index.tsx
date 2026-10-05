@@ -39,6 +39,7 @@ import { queryKeys } from '@/lib/query-keys';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
 import { ConnectedAccounts } from '@/components/connected-accounts';
+import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
 
 type CreatedApiKey = {
@@ -249,7 +250,7 @@ export default function SettingsPage() {
 
 	return (
 		<div className="relative">
-			<title>Settings - Build</title>
+			<title>{pageTitle('Settings')}</title>
 			<main className="container mx-auto px-4 py-16 max-w-4xl pb-48">
 				<div className="grid gap-8">
 					{/* Page Header */}
@@ -279,7 +280,7 @@ export default function SettingsPage() {
 								<div className="flex items-start justify-between gap-4">
 									<div className="grid gap-1.5">
 										<h4 className="text-sm font-medium text-kumo-default">
-											VibeSDK API keys
+											{BRAND.name} API keys
 										</h4>
 										<p className="text-sm text-kumo-subtle">
 											Use these keys to authenticate
@@ -354,7 +355,7 @@ export default function SettingsPage() {
 															Treat this like a
 															password. Anyone
 															with this key can
-															act as your VibeSDK
+															act as your {BRAND.name}
 															account.
 														</p>
 													</div>
@@ -493,7 +494,7 @@ export default function SettingsPage() {
 												</p>
 												<p className="text-sm text-kumo-subtle">
 													Create an API key to use the
-													VibeSDK SDK from your own
+													{BRAND.name} SDK from your own
 													apps.
 												</p>
 											</div>

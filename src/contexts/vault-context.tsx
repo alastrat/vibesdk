@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import { apiClient } from '@/lib/api-client';
 import { useAuth } from './auth-context';
 import type { VaultConfigResponse, KdfAlgorithm, SecretMetadata } from '@/api-types';
+import { BRAND } from '@/brand';
 import {
 	deriveVMKFromPassword,
 	deriveVMKFromPRF,
@@ -315,7 +316,7 @@ export function VaultProvider({ children }: { children: React.ReactNode }) {
 			const credential = (await navigator.credentials.create({
 				publicKey: {
 					challenge: crypto.getRandomValues(new Uint8Array(32)),
-					rp: { name: 'vibesdk', id: window.location.hostname },
+					rp: { name: BRAND.name, id: window.location.hostname },
 					user: {
 						id: new TextEncoder().encode(user?.id || 'user'),
 						name: user?.email || 'user',

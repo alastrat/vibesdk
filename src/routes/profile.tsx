@@ -37,6 +37,7 @@ import { toast } from 'sonner';
 import { useUserStats, useUserActivity } from '@/hooks/use-stats';
 import { useUpdateProfile } from '@/hooks/use-profile';
 import { useApps } from '@/hooks/use-apps';
+import { pageTitle } from '@/brand';
 
 const STATS = [
 	{
@@ -145,9 +146,9 @@ export default function Profile() {
 	return (
 		<div className="min-h-screen">
 			<title>
-				{user?.displayName
-					? `${user.displayName} - Profile - Build`
-					: 'Profile - Build'}
+				{pageTitle(
+					user?.displayName ? `${user.displayName} - Profile` : 'Profile',
+				)}
 			</title>
 			<main className="container mx-auto max-w-4xl px-4 py-12 pb-24">
 				{/* Header */}

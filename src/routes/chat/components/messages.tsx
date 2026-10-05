@@ -17,6 +17,7 @@ import type { ConversationMessage } from '@/api-types';
 import { useState, useEffect, useRef } from 'react';
 import { DebugSessionBubble } from './debug-session-bubble';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
+import { BRAND } from '@/brand';
 
 /**
  * Strip internal system tags that should not be displayed to users
@@ -860,9 +861,9 @@ export function AIMessage({
 	return (
 		<div className="flex flex-col gap-2 min-w-0">
 			<div className="font-mono font-medium text-text-50 flex items-center gap-2 mb-3">
-				<AIAvatar className="size-5 text-orange-500 shrink-0" />
-				Orange
-				{isThinking && <Sparkles className="size-3 text-orange-400 animate-pulse" />}
+				<AIAvatar className="size-5 text-brand shrink-0" />
+				{BRAND.assistantName}
+				{isThinking && <Sparkles className="size-3 text-brand animate-pulse" />}
 			</div>
 			<div className={cn(isThinking && 'animate-pulse')}>
 				<AssistantParts parts={resolvedParts} streaming={!!isThinking} />
