@@ -4,6 +4,7 @@
 
 import { Octokit } from '@octokit/rest';
 import { createLogger } from '../../logger';
+import { BRAND } from '../../../shared/brand';
 import {
     GitHubRepository,
     CreateRepositoryOptions,
@@ -310,8 +311,8 @@ export class GitHubService {
                 dir: '/',
                 message: 'docs: Add Cloudflare deploy button to README',
                 author: { 
-                    name: 'vibesdk-bot', 
-                    email: 'bot@vibesdk.com',
+                    name: BRAND.gitAuthor.name,
+                    email: BRAND.gitAuthor.email,
                     timestamp: Math.floor(Date.now() / 1000)
                 }
             });

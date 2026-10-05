@@ -6,6 +6,7 @@
 import git from '@ashishkumar472/cf-git';
 import { MemFS } from './memfs';
 import { createLogger } from '../../logger';
+import { BRAND } from '../../../shared/brand';
 import type { TemplateDetails as SandboxTemplateDetails } from '../../services/sandbox/sandboxTypes';
 
 const logger = createLogger('GitCloneService');
@@ -52,8 +53,8 @@ export class GitCloneService {
                         fs, dir: '/',
                         message: `Template: ${templateDetails.name}`,
                         author: { 
-                            name: 'Vibesdk', 
-                            email: 'template@vibesdk.com',
+                            name: BRAND.gitAuthor.name,
+                            email: BRAND.gitAuthor.email,
                             timestamp: appCreatedAt ? Math.floor(appCreatedAt.getTime() / 1000) : 0
                         }
                     });
@@ -81,8 +82,8 @@ export class GitCloneService {
                     fs, dir: '/',
                     message: `Template: ${templateDetails.name}\n\nBase template for ${appQuery}`,
                     author: { 
-                        name: 'Vibesdk', 
-                        email: 'template@vibesdk.com',
+                        name: BRAND.gitAuthor.name,
+                        email: BRAND.gitAuthor.email,
                         timestamp: appCreatedAt ? Math.floor(appCreatedAt.getTime() / 1000) : 0
                     }
                 });

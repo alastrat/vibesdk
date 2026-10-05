@@ -337,7 +337,7 @@ export class GitHubExporterController extends BaseController {
                     description: exportData.description,
                     isPrivate: exportData.isPrivate || false,
                     token: tokenResult.accessToken,
-                    username: 'vibesdk-bot'
+                    username: BRAND.gitAuthor.name
                 });
 
                 if (!result.success) {

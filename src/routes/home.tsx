@@ -260,12 +260,10 @@ export default function Home() {
 							className="w-full max-w-2xl px-5 sm:px-6 mt-4"
 						>
 							<div
-								className="flex items-start gap-2 px-4 py-3 rounded-xl bg-bg-4/50 dark:bg-bg-2/50 shadow-sm"
-								style={{ borderColor: 'rgba(255, 61, 0, 0.2)' }}
+								className="flex items-start gap-2 px-4 py-3 rounded-xl bg-bg-4/50 dark:bg-bg-2/50 shadow-sm border-brand/20"
 							>
 								<InfoIcon
-									className="size-4 flex-shrink-0 mt-0.5"
-									style={{ color: '#ff3d00' }}
+									className="size-4 flex-shrink-0 mt-0.5 text-brand"
 								/>
 								<p className="text-xs text-kumo-subtle leading-relaxed">
 									<span className="font-medium text-text-secondary">

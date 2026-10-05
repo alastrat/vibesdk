@@ -92,6 +92,11 @@ html[data-theme='estori'] .vibesdk-sidebar-wrapper {
 	--sidebar-active-bg: var(--estori-selected-bg);
 }
 
+/* Run-app wallpaper icons default to orange via an inline --icon-color. */
+html[data-theme='estori'] .run-app-icons > span {
+	color: var(--estori-link);
+}
+
 /* Flat canvas: no orange spotlight behind the home prompt. */
 html[data-theme='estori'] .home-atmosphere {
 	display: none;

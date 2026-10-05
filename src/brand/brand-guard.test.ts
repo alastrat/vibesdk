@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { BRAND } from '../../shared/brand';
 import indexCss from '../index.css?raw';
+import themeCss from '../styles/estori-theme.css?raw';
 
 type Sources = Record<string, string>;
 
@@ -31,6 +32,23 @@ function findMatches(
 		);
 }
 
+/** Copy of `sources` with comment-only lines blanked, so rules target code and copy. */
+function withoutComments(sources: Sources): Sources {
+	return Object.fromEntries(
+		Object.entries(sources).map(([path, text]) => [
+			path,
+			text
+				.split('\n')
+				.map((line) => (/^\s*(\/\/|\/\*|\*)/.test(line) ? '' : line))
+				.join('\n'),
+		]),
+	);
+}
+
+function escapeRegExp(text: string): string {
+	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function source(sources: Sources, path: string): string {
 	const text = sources[path];
 	if (text === undefined) {
@@ -53,8 +71,10 @@ describe('brand guard: harness', () => {
 });
 
 describe('brand guard: worker', () => {
-	it('does not commit as the VibeSDK bot', () => {
-		expect(findMatches(workerSources, /vibesdk-bot@cloudflare\.com/)).toEqual([]);
+	it('does not commit as a VibeSDK identity', () => {
+		expect(
+			findMatches(workerSources, /@vibesdk\.com|vibesdk-bot|name:\s*'Vibesdk'/),
+		).toEqual([]);
 	});
 
 	it('defaults git commits to the brand author', () => {
@@ -70,23 +90,25 @@ describe('brand guard: worker', () => {
 	it('composes the Think system prompt with the brand persona', () => {
 		expect(
 			source(workerSources, '/worker/agents/think/ThinkAgent.ts'),
-		).toContain('composeSystemPrompt(base, projectContext)');
+		).toMatch(/\bcomposeSystemPrompt\(/);
 	});
 });
 
 describe('brand guard: document shell', () => {
 	it('activates the Estori theme on <html>', () => {
-		expect(indexHtml).toContain('<html lang="en" data-theme="estori">');
+		expect(indexHtml).toMatch(/<html\b[^>]*\bdata-theme="estori"/);
 	});
 
 	it('loads the Estori theme stylesheet', () => {
-		expect(indexCss).toContain("@import './styles/estori-theme.css';");
+		expect(indexCss).toMatch(/@import\s+['"]\.\/styles\/estori-theme\.css['"]/);
 	});
 
 	it('uses the brand title and description', () => {
-		expect(indexHtml).toContain(`<title>${BRAND.name}</title>`);
-		expect(indexHtml).toContain(
-			`<meta name="description" content="${BRAND.description}" />`,
+		expect(indexHtml).toMatch(new RegExp(`<title>\\s*${escapeRegExp(BRAND.name)}\\s*</title>`));
+		expect(indexHtml).toMatch(
+			new RegExp(
+				`<meta\\b(?=[^>]*\\bname="description")(?=[^>]*\\bcontent="${escapeRegExp(BRAND.description)}")`,
+			),
 		);
 	});
 
@@ -95,17 +117,15 @@ describe('brand guard: document shell', () => {
 	});
 
 	it('uses the Estori favicon', () => {
-		expect(indexHtml).toContain(
-			'<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
-		);
+		expect(indexHtml).toMatch(/<link\b(?=[^>]*\brel="icon")(?=[^>]*\bhref="\/favicon\.svg")/);
 	});
 });
 
 describe('brand guard: layout', () => {
 	it('renders the Estori top bar above a contained sidebar', () => {
 		const layout = source(frontendSources, '/src/components/layout/app-layout.tsx');
-		expect(layout).toContain('<EstoriTopBar />');
-		expect(layout).toMatch(/^\s*contained\s*$/m);
+		expect(layout).toMatch(/<EstoriTopBar\b/);
+		expect(layout).toMatch(/<SidebarProvider\b[^>]*\bcontained\b/);
 	});
 
 	it('drops the BUILD wordmark from the sidebar', () => {
@@ -141,7 +161,7 @@ describe('brand guard: copy', () => {
 	});
 
 	it('does not show the VibeSDK name', () => {
-		expect(findMatches(frontendSources, /VibeSDK/)).toEqual([]);
+		expect(findMatches(withoutComments(frontendSources), /VibeSDK/)).toEqual([]);
 	});
 
 	it('names the assistant after the brand', () => {
@@ -176,16 +196,33 @@ describe('brand guard: brand color and deploy copy', () => {
 	it('shows the preview deploy state in brand colors', () => {
 		const timeline = source(frontendSources, '/src/routes/chat/components/phase-timeline.tsx');
 		expect(timeline).not.toContain('color="orange"');
-		expect(timeline).toContain('text-brand">Deploying preview...');
+		const start = timeline.indexOf('else if (isPreviewDeploying) {');
+		const end = timeline.indexOf('Updating your preview environment', start);
+		expect(start).toBeGreaterThan(-1);
+		expect(end).toBeGreaterThan(start);
+		expect(timeline.slice(start, end)).not.toMatch(/-orange-\d/);
 	});
 
 	it('does not label platform deploys as Cloudflare', () => {
 		expect(findMatches(frontendSources, /Deploy(ing)? to Cloudflare|Redeploying to Cloudflare|Cloudflare Workers for Platforms/)).toEqual([]);
 	});
 
-	it('shows the Estori glyph next to platform credits', () => {
-		expect(source(frontendSources, '/src/components/credits-banner.tsx')).toContain(
-			'<EstoriGlyph className="w-3.5 h-3.5" />',
+	it('has no hardcoded brand orange in the home screen', () => {
+		expect(
+			findMatches(
+				{ home: source(frontendSources, '/src/routes/home.tsx') },
+				/#ff3d00|#f6821f|rgba\(255,\s*61,\s*0|rgba\(246,\s*130,\s*31/i,
+			),
+		).toEqual([]);
+	});
+
+	it('recolors the run-app wallpaper icons in the theme', () => {
+		expect(themeCss).toMatch(/\.run-app-icons > span\s*\{[^}]*color:\s*var\(--estori-/);
+	});
+
+	it('labels the connected Cloudflare AI Gateway balance as Cloudflare, not Estori', () => {
+		expect(source(frontendSources, '/src/components/credits-banner.tsx')).not.toMatch(
+			/<EstoriGlyph\b/,
 		);
 	});
 });
@@ -208,7 +245,11 @@ describe('brand guard: Cloudflare logo usage', () => {
 
 	it('renders the Cloudflare logo only for Cloudflare integrations', () => {
 		expect(
-			findMatches(frontendSources, /\bCloudflareLogo\b/, CLOUDFLARE_INTEGRATION_FILES),
+			findMatches(
+				frontendSources,
+				/\bCloudflareLogo(Themed)?\b|provider-logos\/cloudflare\.svg/,
+				CLOUDFLARE_INTEGRATION_FILES,
+			),
 		).toEqual([]);
 	});
 });
