@@ -189,3 +189,26 @@ describe('brand guard: brand color and deploy copy', () => {
 		);
 	});
 });
+
+describe('brand guard: Cloudflare logo usage', () => {
+	/** Files where the Cloudflare logo marks a real Cloudflare integration. */
+	const CLOUDFLARE_INTEGRATION_FILES = [
+		'/src/components/icons/logos.tsx',
+		'/src/components/shared/CloudflareLogoThemed.tsx',
+		'/src/components/auth/login-modal.tsx',
+		'/src/components/byok-api-keys-modal.tsx',
+		'/src/components/cloudflare-account-selector.tsx',
+		'/src/components/connected-accounts.tsx',
+		'/src/components/credits-banner.tsx',
+		'/src/components/usage-limits-card.tsx',
+		'/src/components/layout/app-sidebar.tsx',
+		'/src/routes/chat/chat.tsx',
+		'/src/utils/usage-limit-checker.tsx',
+	];
+
+	it('renders the Cloudflare logo only for Cloudflare integrations', () => {
+		expect(
+			findMatches(frontendSources, /\bCloudflareLogo\b/, CLOUDFLARE_INTEGRATION_FILES),
+		).toEqual([]);
+	});
+});
