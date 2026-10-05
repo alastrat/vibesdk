@@ -363,7 +363,7 @@ export class ThinkCodingBehavior
 	}
 
 	private async getPublicOrigin(): Promise<string> {
-		if (isDev(this.env)) return 'http://localhost:5173';
+		if (isDev(this.env)) return this.env.DEV_BROWSER_PREVIEW_ORIGIN || 'http://localhost:5173';
 		if (isSeparatePreviewDomain(this.env)) {
 			return `https://${getPreviewDomain(this.env)}`;
 		}

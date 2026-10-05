@@ -60,6 +60,9 @@ export function getAllowedOrigins(env: Env): string[] {
         origins.push('http://127.0.0.1:3000');
         origins.push('http://127.0.0.1:5173');
         origins.push('http://127.0.0.1:8787');
+        if (env.DEV_BROWSER_PREVIEW_ORIGIN && !origins.includes(env.DEV_BROWSER_PREVIEW_ORIGIN)) {
+            origins.push(env.DEV_BROWSER_PREVIEW_ORIGIN);
+        }
     }
     
     return origins;
