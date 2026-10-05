@@ -13,6 +13,7 @@ import type { CapabilitiesData } from './types';
 import type { FeatureDefinition, PlatformCapabilities } from '../../../agents/core/features/types';
 import { DEFAULT_FEATURE_DEFINITIONS } from '../../../agents/core/features';
 import { createLogger } from '../../../logger';
+import { isDispatcherAvailable } from '../../../utils/dispatcherUtils';
 
 const logger = createLogger('CapabilitiesController');
 
@@ -45,6 +46,7 @@ export class CapabilitiesController extends BaseController {
 			features,
 			version: config.version,
 			userAccountDeploy: env.ENABLE_USER_ACCOUNT_DEPLOY === 'true',
+			platformDeploy: isDispatcherAvailable(env),
 			artifacts: env.ENABLE_ARTIFACTS === 'true',
 		};
 

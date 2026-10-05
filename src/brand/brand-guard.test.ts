@@ -253,3 +253,11 @@ describe('brand guard: Cloudflare logo usage', () => {
 		).toEqual([]);
 	});
 });
+
+describe('brand guard: deploy availability', () => {
+	it('renders Deploy only when a deploy target is available', () => {
+		const chat = source(frontendSources, '/src/routes/chat/chat.tsx');
+		expect(chat).toMatch(/capabilities\?\.platformDeploy/);
+		expect(chat).toMatch(/behaviorType === 'think' && chatId && !appLoading && deployAvailable &&/);
+	});
+});

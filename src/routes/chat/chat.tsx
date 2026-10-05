@@ -358,6 +358,8 @@ function ChatSession() {
 	// platform's ENABLE_USER_ACCOUNT_DEPLOY flag (surfaced via capabilities).
 	const { capabilities } = useFeature();
 	const userAccountDeployEnabled = capabilities?.userAccountDeploy ?? false;
+	// Hide Deploy entirely when the platform has no deploy target.
+	const deployAvailable = Boolean(capabilities?.platformDeploy) || userAccountDeployEnabled;
 
 	const headerTitle = blueprint?.title || appTitle;
 	const showHeader = Boolean(
@@ -406,7 +408,7 @@ function ChatSession() {
 			),
 			trailing: (
 				<>
-					{behaviorType === 'think' && chatId && !appLoading && (
+					{behaviorType === 'think' && chatId && !appLoading && deployAvailable && (
 						<>
 							{cloudflareDeploymentUrl && (
 								<Button
@@ -528,6 +530,7 @@ function ChatSession() {
 		files,
 		handleDeployToCloudflare,
 		userAccountDeployEnabled,
+		deployAvailable,
 	]);
 
 	usePageHeader(headerContent);

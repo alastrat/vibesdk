@@ -109,6 +109,13 @@ export interface PlatformCapabilities {
 	userAccountDeploy: boolean;
 
 	/**
+	 * Whether think apps can deploy to the platform dispatch namespace
+	 * (the DISPATCHER binding exists). When false and userAccountDeploy is
+	 * false, the UI hides Deploy.
+	 */
+	platformDeploy: boolean;
+
+	/**
 	 * Whether Cloudflare Artifacts is enabled (ENABLE_ARTIFACTS). When true,
 	 * think apps keep durable git history in Artifacts and the read-only Repo
 	 * viewer is available; when false there is no Artifacts repo to browse.
