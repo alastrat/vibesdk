@@ -1,16 +1,22 @@
 # Estori Production Launch — Design
 
 Date: 2026-10-04
-Status: Draft for review
+Status: Approved; revised 2026-10-05 (domain moved to `estori.app`, see Revision note)
 Depends on: `docs/superpowers/specs/2026-10-04-estori-rebrand-design.md` (implemented on branch `claude/project-analysis-local-setup-dfd834`)
 
 ## Goal
 
-Launch the Estori-branded VibeSDK as a **private beta** on the Estori Cloudflare account (`6d16ad8a9f081e4939993391bd35ca4e`), serving the app at `app.getestori.com`. Done means:
+Launch the Estori-branded VibeSDK as a **private beta** on the Estori Cloudflare account (`6d16ad8a9f081e4939993391bd35ca4e`), serving the app at `estori.app`. Done means:
 
 - An invited person can open the app, pass the beta gate, sign up, generate an app, and see its preview.
 - A redeploy does not log anyone out.
 - Every production deploy is a reviewed, repeatable GitHub Actions run.
+
+## Revision note (2026-10-05)
+
+`getestori.com` turned out to be in the Pluriza account and actively serving the existing Estori product (estori/core) on Workers for Platforms, with advanced certificates for `*.sites.getestori.com` and canary/staging hosts. Moving that zone or cancelling its certificate add-on would break published customer sites. The owner bought `estori.app` in the Estori account instead. `getestori.com` and the Pluriza account are not touched by this launch.
+
+Think previews are path-based URLs on a single preview host (`https://<preview-host>/space/<app>/preview/<branch>?t=<token>`, `worker/agents/core/behaviors/think.ts` `getBrowserPreviewURL`), not wildcard subdomains. Without a separate preview host, `worker/index.ts` serves previews on the main host, which would run generated code on the app's own origin. The preview host is therefore `preview.estori.app`, a different origin from `estori.app`. The session cookie is host-only (`worker/utils/authUtils.ts` `createSecureCookie` sets no `Domain`), CORS admits only the app origin, and CSRF tokens are not readable from the preview.
 
 ## Decisions
 
@@ -18,9 +24,9 @@ Launch the Estori-branded VibeSDK as a **private beta** on the Estori Cloudflare
 |---|---|
 | Audience | Private beta |
 | Beta gate | Cloudflare Access (Zero Trust) on the app host; `ALLOWED_EMAIL` stays unset |
-| App host | `app.getestori.com` |
-| Previews | `*.apps.getestori.com`, covered by Advanced Certificate Manager (purchased by the owner) |
-| Zone | Move `getestori.com` from its current account into the Estori account |
+| App host | `estori.app` (apex) |
+| Previews | `preview.estori.app` (`CUSTOM_PREVIEW_DOMAIN`), covered by the free Universal SSL certificate |
+| Zone | `estori.app`, registered in and served by the Estori account; `getestori.com` untouched |
 | Generated-app deploy | Preview only; no Workers for Platforms; Deploy hidden through a new `platformDeploy` capability |
 | Version history | Cloudflare Artifacts enabled from day one (open beta since 2026-10-01; Workers Paid; billing from 2026-10-14) |
 | Deploy method | GitHub Actions on `alastrat/vibesdk`, push to `estori-live`, with manual approval |
@@ -35,46 +41,26 @@ Launch the Estori-branded VibeSDK as a **private beta** on the Estori Cloudflare
 - Public sign-up, billing, and Workers for Platforms or user-account deploys.
 - A staging environment.
 - Migrating any data from local dev; production starts empty.
-- Changes to the marketing site on Vercel, beyond keeping it working through the zone move.
+- Any change to `getestori.com`, the Pluriza account, or the existing estori/core deployment.
 - Changes to upstream `wrangler.jsonc`, `deploy-release-live.yml` or `deploy-staging.yml`.
 
-## 1. Account and domain migration
+## 1. Domain setup (`estori.app`)
 
-This is done first: routes and custom domains can only attach to a zone in the Worker's account.
+`estori.app` was bought through Cloudflare Registrar in the Estori account, so its zone already lives there and no migration is needed.
 
 ### Preconditions
 
-- The Estori account is on **Workers Paid** (Workers & Pages → Plans). This is required for Durable Objects, Worker Loader, Browser Rendering and Artifacts.
-- The registrar of `getestori.com` is known: Cloudflare Registrar in the old account, or an external registrar.
+- The Estori account is on **Workers Paid** (confirmed by the owner 2026-10-05).
+- The `estori.app` zone shows **Active** and its nameservers resolve publicly (`dig +short NS estori.app`).
 
 ### Runbook
 
-This goes in `docs/estori/domain-migration.md`.
+This goes in `docs/estori/domain-setup.md` (replacing the earlier `domain-migration.md`).
 
-1. **Old account.**
-   - Export DNS records as a BIND file.
-   - Record the SSL/TLS settings and any redirect, page or configuration rules.
-   - Turn off DNSSEC; with an external registrar, also remove the DS record there.
-   - Cancel the Advanced Certificate Manager subscription. Contact Cloudflare billing about prorating the recent purchase.
-2. **Estori account.**
-   - Add the site `getestori.com` on the Free plan.
-   - Import the BIND file with **every record DNS-only (grey cloud)**, so the apex and `www` (Vercel, `76.76.21.21`) and mail records resolve exactly as before.
-   - Purchase Advanced Certificate Manager and order a certificate covering `getestori.com`, `*.getestori.com` and `*.apps.getestori.com`.
-3. **Switch authority.**
-   - **External registrar:** set the nameservers to the pair shown by the Estori zone.
-   - **Cloudflare Registrar:** use the inter-account move under Manage Domain → Configuration. Only the registration and WHOIS move; the zone added in step 2 serves DNS. The Estori account accepts within 5 days, and the registration is then transfer-locked for 30 days.
-4. **Wait.** Both the zone and the ACM certificate must show **Active**.
-5. **Verify, then clean up.**
-   - `dig NS getestori.com` returns the Estori pair.
-   - The apex and `www` serve the Vercel site.
-   - MX, TXT and SPF records resolve.
-   - Then delete the zone from the old account.
-
-The `app` and `*.apps` records are created in section 2, not here.
-
-### Risk
-
-While the zone is Pending, Cloudflare does not proxy it. The current records are DNS-only to Vercel, so visitors are unaffected. Mail records are the main item to verify.
+1. Confirm the zone is Active (Domains → `estori.app`).
+2. Confirm SSL/TLS mode is **Full (strict)** and the Universal certificate covers `estori.app` and `*.estori.app`.
+3. Add the preview record: type `AAAA`, name `preview`, content `100::`, **Proxied**. The app host `estori.app` gets its record automatically from the Worker custom domain.
+4. Verify: `dig +short NS estori.app` returns Cloudflare nameservers; `echo | openssl s_client -connect preview.estori.app:443 -servername preview.estori.app` shows a certificate whose SAN covers `preview.estori.app`.
 
 ## 2. Production configuration and provisioning
 
@@ -85,8 +71,8 @@ This file is new, derived from the committed upstream `wrangler.jsonc`.
 | Area | Value |
 |---|---|
 | `name` | `estori-production` |
-| `routes` | `{ pattern: "app.getestori.com", custom_domain: true }` and `{ pattern: "*apps.getestori.com/*", zone_name: "getestori.com" }` (the form `deploy.ts` writes from `CUSTOM_PREVIEW_DOMAIN`, as upstream does with `*build-preview.cloudflare.dev/*`) |
-| `vars` | `CUSTOM_DOMAIN=app.getestori.com`, `CUSTOM_PREVIEW_DOMAIN=apps.getestori.com`, `ENVIRONMENT=prod`, `CLOUDFLARE_AI_GATEWAY=estori-gateway`, `ARTIFACTS_NAMESPACE=estori-production`, `TEMPLATES_REPOSITORY` and `PLATFORM_CAPABILITIES` as upstream, `MAX_SANDBOX_INSTANCES` and `SANDBOX_INSTANCE_TYPE` dropped. No `DEV_BROWSER_*`, no `DISPATCH_NAMESPACE` |
+| `routes` | `{ pattern: "estori.app", custom_domain: true }` and `{ pattern: "*preview.estori.app/*", zone_name: "estori.app" }` (the form `deploy.ts` writes from `CUSTOM_PREVIEW_DOMAIN`, as upstream does with `*build-preview.cloudflare.dev/*`) |
+| `vars` | `CUSTOM_DOMAIN=estori.app`, `CUSTOM_PREVIEW_DOMAIN=preview.estori.app`, `ENVIRONMENT=prod`, `CLOUDFLARE_AI_GATEWAY=estori-gateway`, `ARTIFACTS_NAMESPACE=estori-production`, `TEMPLATES_REPOSITORY` and `PLATFORM_CAPABILITIES` as upstream, `MAX_SANDBOX_INSTANCES` and `SANDBOX_INSTANCE_TYPE` dropped. No `DEV_BROWSER_*`, no `DISPATCH_NAMESPACE` |
 | D1 | binding `DB` → `estori-db` (new `database_id`), `migrations_dir: migrations` |
 | KV | binding `VibecoderStore` (name kept; code uses it) → namespace `estori-store` |
 | R2 | binding `TEMPLATES_BUCKET` → bucket `estori-assets` (image uploads, screenshots) |
@@ -131,10 +117,11 @@ Local dev keeps using `wrangler.jsonc` and its local-only edits. Production does
 
 This is configured in the Estori account's Zero Trust (free for up to 50 users) and documented in `docs/estori/access.md`.
 
-- **Self-hosted application** "Estori", covering `app.getestori.com`, all paths.
+- **Self-hosted application** "Estori", covering exactly the host `estori.app`, all paths. No wildcard: `preview.estori.app` must not be covered.
 - **Policy "Beta invitees" (Allow):** the include rule is an email list, and email domains may be added. Login method is the One-time PIN.
 - **Policy "CI smoke" (Service Auth):** the include rule is the service token `estori-ci-smoke`. Its client ID and secret are stored as GitHub secrets.
-- **Not covered:** `*.apps.getestori.com`. Previews are protected by signed, branch-scoped URLs and load in the app's iframe.
+- **Not covered:** `preview.estori.app`. Previews are protected by signed, branch-scoped URLs and load in the app's iframe.
+- **Access cookie scope:** the `CF_Authorization` cookie must be scoped to `estori.app` only (no `Domain=estori.app` that would reach subdomains), so the preview host never receives it. Verified in the launch checklist.
 - **API and WebSockets:** both use the same host and the Access cookie.
 - **Inviting someone:** add their email to the policy. No deploy is needed.
 
@@ -142,7 +129,7 @@ This is configured in the Estori account's Zero Trust (free for up to 50 users) 
 
 | Name | Location | Purpose |
 |---|---|---|
-| `CLOUDFLARE_API_TOKEN` (deploy) | GitHub secret | `wrangler deploy`, D1 migrations, routes. Scoped to the Estori account (Workers Scripts, D1, KV, R2, Workers Routes, AI Gateway, Artifacts) and the `getestori.com` zone |
+| `CLOUDFLARE_API_TOKEN` (deploy) | GitHub secret | `wrangler deploy`, D1 migrations, routes. Scoped to the Estori account (Workers Scripts, D1, KV, R2, Workers Routes, AI Gateway, Artifacts) and the `estori.app` zone |
 | `CLOUDFLARE_ACCOUNT_ID` | GitHub variable and Worker var | Account `6d16ad8a9f081e4939993391bd35ca4e` |
 | `JWT_SECRET` | GitHub secret and Worker secret | Session signing. Generated once: ≥ 32 chars, ≥ 3 character types, no 4-character repeats (see `worker/utils/jwtUtils.ts`) |
 | `CLOUDFLARE_AI_GATEWAY_TOKEN` | Worker secret | AI Gateway Run only |
@@ -182,9 +169,9 @@ This is a new file.
 
 `scripts/estori-smoke.ts` runs as the last CI step. It sends `CF-Access-Client-Id` and `CF-Access-Client-Secret` headers and checks:
 
-1. `GET https://app.getestori.com/api/health` → `200` with `{"status":"ok"}`.
-2. `GET https://app.getestori.com/api/capabilities` → `platformDeploy === false` and `artifacts === true`.
-3. `GET https://smoke.apps.getestori.com/` → a valid TLS handshake, and a response from the Worker rather than Vercel (Vercel serves only the apex and `www`).
+1. `GET https://estori.app/api/health` → `200` with `{"status":"ok"}`.
+2. `GET https://estori.app/api/capabilities` → `platformDeploy === false` and `artifacts === true`.
+3. `GET https://preview.estori.app/` → a valid TLS handshake, `server: cloudflare`, and no redirect to `cloudflareaccess.com` (the preview host must not be behind Access).
 
 Any failure fails the job and prints the rollback command.
 
@@ -192,13 +179,13 @@ Any failure fails the job and prints the rollback command.
 
 This lives in `docs/estori/launch-checklist.md` and is run once by a person at first launch.
 
-1. Open `app.getestori.com`: the Access One-time PIN works for an invited email and is refused for a non-invited one.
+1. Open `estori.app`: the Access One-time PIN works for an invited email and is refused for a non-invited one.
 2. Sign up with email and password.
-3. Create an app; its preview loads on `*.apps.getestori.com`.
+3. Create an app; its preview loads from `https://preview.estori.app/space/...`.
 4. The Repo tab shows commits (Artifacts).
 5. Asking "Who are you?" gets "Estori".
 6. Trigger a redeploy; the signed-in session survives.
-7. The apex and `www` still serve the Vercel marketing site.
+7. In browser devtools on `estori.app`, the `CF_Authorization` and `accessToken` cookies have no `Domain` attribute covering subdomains; requests to `preview.estori.app` carry neither.
 8. No Deploy button is shown.
 
 ### Rollback and operations
@@ -214,7 +201,7 @@ This lives in `docs/estori/launch-checklist.md` and is run once by a person at f
 - `wrangler.estori.jsonc`
 - `.github/workflows/deploy-estori.yml`
 - `scripts/estori-smoke.ts`
-- `docs/estori/domain-migration.md`
+- `docs/estori/domain-setup.md`
 - `docs/estori/provisioning.md`
 - `docs/estori/access.md`
 - `docs/estori/launch-checklist.md`
@@ -230,7 +217,7 @@ This lives in `docs/estori/launch-checklist.md` and is run once by a person at f
 ## Owner actions (cannot be automated)
 
 - Confirm Workers Paid on the Estori account.
-- Run the domain migration in both accounts and at the registrar, and buy ACM in the Estori account.
+- Confirm `estori.app` is Active and add the proxied `preview` record.
 - Create the Zero Trust organization, the Access application and policies, and the service token.
 - Create the scoped API tokens (deploy, AI Gateway Run, Artifacts read) and add them to GitHub and the Worker.
 - Create the GitHub Environment `production` with yourself as required reviewer.
@@ -239,7 +226,7 @@ This lives in `docs/estori/launch-checklist.md` and is run once by a person at f
 ## Risks
 
 - **Artifacts is in open beta.** A sync failure does not break commits or deploys (`space/src/space/artifacts-sync.ts`), but history durability depends on it.
-- **Domain move.** The Pending window and mail records need care; the runbook verifies both.
+- **Same-site previews.** `estori.app` and `preview.estori.app` share a registrable domain, the same model upstream uses (`build.cloudflare.dev` / `build-preview.cloudflare.dev`). Isolation relies on host-only cookies, origin-restricted CORS and CSRF tokens; the launch checklist verifies the cookie scopes.
 - **CI test baseline.** Pre-existing failures may block the gate on Linux. This is handled by an explicit fix-or-quarantine task.
 - **Access and long-lived WebSockets.** Access session expiry can drop a long chat session. The session duration is set to 24 hours in the Access application.
 - **`deploy.ts` behavior.** The script is complex (about 2,100 lines). Changes are limited to the dispatch skip and verified JWT and secret handling, each covered by the first dry-run.

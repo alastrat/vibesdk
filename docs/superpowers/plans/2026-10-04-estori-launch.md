@@ -2,18 +2,20 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Launch Estori as a private beta at `app.getestori.com` on the Estori Cloudflare account, deployed by a reviewed GitHub Actions workflow.
+**Goal:** Launch Estori as a private beta at `estori.app` on the Estori Cloudflare account, deployed by a reviewed GitHub Actions workflow.
 
 **Architecture:**
 - A dedicated `wrangler.estori.jsonc` is deployed through upstream's `scripts/deploy.ts`, with `WRANGLER_CONFIG_PATH` pointing at it.
-- Cloudflare Access gates the app host. Previews run on `*.apps.getestori.com` and are not gated.
+- Cloudflare Access gates the app host `estori.app`. Previews are path-based on one sibling host, `preview.estori.app`, and are not gated.
 - Generated-app deploy is hidden behind a new `platformDeploy` capability.
 - A post-deploy smoke script verifies the live system through an Access service token.
-- Tasks 1–5 are code and docs. Tasks 6, 8, 9, 10 and 11 involve the owner's accounts and outward-facing actions, and each needs an explicit go-ahead.
+- Tasks 1–5, 7 and 8 are code and docs. Tasks 6, 9, 10, 11 and 12 involve the owner's accounts and outward-facing actions, and each needs an explicit go-ahead.
 
 **Tech Stack:** Cloudflare Workers, Wrangler 4, D1, KV, R2, Artifacts, Cloudflare Access, GitHub Actions, bun, Vitest (`@cloudflare/vitest-pool-workers`), React 19.
 
 **Spec:** `docs/superpowers/specs/2026-10-04-estori-launch-design.md`
+
+**Revision 2026-10-05:** the hosts moved from `getestori.com` to `estori.app` (spec "Revision note"). Tasks 1–7 were completed against the old hosts and keep their original text as a record; Task 8 retargets their files. The zone-move task is replaced by Task 9 (`estori.app` setup), and the later tasks are renumbered 10–12.
 
 ## Global Constraints
 
@@ -22,7 +24,7 @@
 - Estori Cloudflare account ID: `6d16ad8a9f081e4939993391bd35ca4e`.
 - Worker name: `estori-production`.
 - Resource names: D1 `estori-db`, KV `estori-store`, R2 `estori-assets`, Artifacts namespace `estori-production`, AI Gateway `estori-gateway` (already exists).
-- Hosts: `app.getestori.com` for the app, `apps.getestori.com` as the preview domain, `*.apps.getestori.com` for previews.
+- Hosts: `estori.app` for the app (Access-gated), `preview.estori.app` as the preview domain (not gated). `getestori.com` and the Pluriza account are not touched.
 
 **Configuration**
 
@@ -42,23 +44,23 @@
 
 **Owner actions**
 
-- Anything that creates or changes resources in Cloudflare, GitHub, DNS or a registrar needs the owner's explicit go-ahead in chat at execution time. This covers Tasks 6, 8, 9, 10 and 11.
+- Anything that creates or changes resources in Cloudflare, GitHub, DNS or a registrar needs the owner's explicit go-ahead in chat at execution time. This covers Tasks 6, 9, 10, 11 and 12.
 
 ## Review Focus
 
 1. **Redeploy with signed-in users.** Sessions must survive a second deploy.
    - Task 2 adds a test that `JWT_SECRET` stays in the upload list unless explicitly skipped.
-   - Task 11 includes a manual redeploy-while-signed-in step.
-2. **Unauthenticated or non-invited request to `app.getestori.com`.** It must be stopped by Access: an API request without credentials is redirected to the Access login, never served.
-   - Task 11 adds a `curl` check.
+   - Task 12 includes a manual redeploy-while-signed-in step.
+2. **Unauthenticated or non-invited request to `estori.app`.** It must be stopped by Access: an API request without credentials is redirected to the Access login, never served.
+   - Task 12 adds a `curl` check.
 3. **Preview host.** It must *not* be behind Access and must be answered by the Worker.
-   - Task 3's smoke test asserts the preview probe is served by Cloudflare and is not a redirect to `cloudflareaccess.com`.
-4. **Marketing site after the zone move and wildcard route.** The apex must still be served by Vercel.
-   - Task 3's smoke test includes an apex check (`server: Vercel`).
-   - Task 8 verifies apex, `www` and mail records.
+   - The smoke test (Task 3, retargeted in Task 8) asserts the preview probe is served by Cloudflare and is not a redirect to `cloudflareaccess.com`.
+4. **Generated code on the preview host reaching app credentials.** Previews run on a sibling host of the app, so the `accessToken` and `CF_Authorization` cookies must stay host-only on `estori.app` and never reach `preview.estori.app`.
+   - Task 8 adds a launch-checklist item that inspects both cookies' `Domain` attribute and the preview requests.
+   - Task 12 runs it.
 5. **Long chat sessions through Access.** Streaming over WebSocket must work through Access, and the session must last a working day.
-   - Task 9 sets the Access session duration to 24 hours.
-   - Task 11's checklist runs a full generation through Access.
+   - Task 10 sets the Access session duration to 24 hours.
+   - Task 12's checklist runs a full generation through Access.
 
 ---
 
@@ -79,7 +81,8 @@
 | `.github/workflows/deploy-estori.yml` (new) | Gate, approval, deploy, smoke |
 | `wrangler.estori.jsonc` (new) | Estori production Worker config |
 | `scripts/estori-config.test.ts` (new) | Validates `wrangler.estori.jsonc` against upstream and the spec |
-| `docs/estori/domain-migration.md` (new) | Zone move runbook |
+| `docs/estori/domain-migration.md` (Task 5; deleted in Task 8) | Zone move runbook, superseded |
+| `docs/estori/domain-setup.md` (new, Task 8) | `estori.app` zone and preview record runbook |
 | `docs/estori/provisioning.md` (new) | Resource creation, secrets, rollback |
 | `docs/estori/access.md` (new) | Zero Trust and Access setup |
 | `docs/estori/launch-checklist.md` (new) | First-launch manual checks |
@@ -658,7 +661,7 @@ git commit -m "feat(estori): add post-deploy smoke checks" -m "Co-Authored-By: C
 - Produces:
   - GitHub `production` environment secrets: `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_AI_GATEWAY_TOKEN`, `GOOGLE_AI_STUDIO_API_KEY`, `JWT_SECRET`, `ACCESS_CLIENT_ID`, `ACCESS_CLIENT_SECRET`.
   - GitHub `production` environment variables: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_AI_GATEWAY_URL`.
-  - Task 9 creates all of these.
+  - Task 10 creates all of these.
 
 - [ ] **Step 1: Write the workflow**
 
@@ -816,7 +819,7 @@ git commit -m "ci(estori): add gated production deploy workflow" -m "Co-Authored
 
 **Interfaces:**
 - Consumes: spec sections 1–4.
-- Produces: the runbooks that Tasks 6, 8, 9 and 11 follow.
+- Produces: the runbooks that Tasks 6, 9, 10 and 12 follow.
 
 - [ ] **Step 1: Write `docs/estori/domain-migration.md`**
 
@@ -1284,46 +1287,411 @@ git commit -m "feat(estori): add production wrangler config" -m "Co-Authored-By:
 
 ---
 
-### Task 8: Domain migration (owner-run; executor verifies)
+### Task 8: Retarget committed work to `estori.app`
+
+Revision 2026-10-05: hosts move from `getestori.com` to `estori.app` (spec "Revision note"). Tasks 3, 5 and 7 were committed with the old hosts; this task updates them.
+
+**Files:**
+- Modify: `scripts/estori-config.test.ts` (routes and vars expectations)
+- Modify: `wrangler.estori.jsonc` (`routes`, `vars.CUSTOM_DOMAIN`, `vars.CUSTOM_PREVIEW_DOMAIN`)
+- Replace: `scripts/estori-smoke.test.ts`, `scripts/estori-smoke.ts` (new hosts; marketing-apex check removed)
+- Delete: `docs/estori/domain-migration.md`
+- Create: `docs/estori/domain-setup.md`
+- Modify: `docs/estori/access.md`, `docs/estori/launch-checklist.md`
+
+**Interfaces:**
+- Consumes: Tasks 3, 5, 7 files.
+- Produces:
+  - `SmokeConfig = { appOrigin: string; previewProbeUrl: string; accessClientId: string; accessClientSecret: string }` (no `apexUrl`).
+  - Smoke checks named `health`, `capabilities`, `preview-host`.
+  - CLI defaults `https://estori.app` and `https://preview.estori.app/`; `ESTORI_APEX_URL` is gone.
+
+- [ ] **Step 1: Update the config test expectations (failing)**
+
+In `scripts/estori-config.test.ts`, replace:
+
+```ts
+		expect(estori.routes).toEqual([
+			{ pattern: 'app.getestori.com', custom_domain: true },
+			{ pattern: '*apps.getestori.com/*', zone_name: 'getestori.com' },
+		]);
+```
+
+with:
+
+```ts
+		expect(estori.routes).toEqual([
+			{ pattern: 'estori.app', custom_domain: true },
+			{ pattern: '*preview.estori.app/*', zone_name: 'estori.app' },
+		]);
+```
+
+and replace:
+
+```ts
+			CUSTOM_DOMAIN: 'app.getestori.com',
+			CUSTOM_PREVIEW_DOMAIN: 'apps.getestori.com',
+```
+
+with:
+
+```ts
+			CUSTOM_DOMAIN: 'estori.app',
+			CUSTOM_PREVIEW_DOMAIN: 'preview.estori.app',
+```
+
+Also change the test name `'routes the app host and the preview wildcard'` to `'routes the app host and the preview host'`.
+
+Run: `bun run test scripts/estori-config.test.ts`
+
+Expected: 2 tests FAIL (routes, vars); 4 pass.
+
+- [ ] **Step 2: Update the config**
+
+In `wrangler.estori.jsonc`, replace the `routes` array with:
+
+```jsonc
+	"routes": [
+		{
+			"pattern": "estori.app",
+			"custom_domain": true
+		},
+		{
+			"pattern": "*preview.estori.app/*",
+			"zone_name": "estori.app"
+		}
+	],
+```
+
+In `vars`, set `"CUSTOM_DOMAIN": "estori.app"` and `"CUSTOM_PREVIEW_DOMAIN": "preview.estori.app"`. Leave every other key unchanged.
+
+Run: `bun run test scripts/estori-config.test.ts`
+
+Expected: 6 tests PASS.
+
+- [ ] **Step 3: Replace the smoke test (failing)**
+
+Overwrite `scripts/estori-smoke.test.ts` with:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { runSmokeChecks, type SmokeConfig } from './estori-smoke';
+
+const CONFIG: SmokeConfig = {
+	appOrigin: 'https://estori.app',
+	previewProbeUrl: 'https://preview.estori.app/',
+	accessClientId: 'id',
+	accessClientSecret: 'secret',
+};
+
+type Route = (init?: RequestInit) => Response;
+
+function fakeFetch(routes: Record<string, Route>) {
+	const seen: Array<{ url: string; headers: Headers }> = [];
+	const impl = async (url: string, init?: RequestInit): Promise<Response> => {
+		seen.push({ url, headers: new Headers(init?.headers) });
+		const route = routes[url];
+		if (!route) throw new Error(`unexpected fetch ${url}`);
+		return route(init);
+	};
+	return { impl, seen };
+}
+
+const healthy: Record<string, Route> = {
+	'https://estori.app/api/health': () => Response.json({ status: 'ok' }),
+	'https://estori.app/api/capabilities': () =>
+		Response.json({ success: true, data: { platformDeploy: false, artifacts: true } }),
+	'https://preview.estori.app/': () =>
+		new Response('Not Found', { status: 404, headers: { server: 'cloudflare' } }),
+};
+
+describe('runSmokeChecks', () => {
+	it('passes every check against a healthy deployment', async () => {
+		const { impl } = fakeFetch(healthy);
+		const results = await runSmokeChecks(CONFIG, impl);
+		expect(results.map((r) => [r.name, r.ok])).toEqual([
+			['health', true],
+			['capabilities', true],
+			['preview-host', true],
+		]);
+	});
+
+	it('sends Access service-token headers to the app host only', async () => {
+		const { impl, seen } = fakeFetch(healthy);
+		await runSmokeChecks(CONFIG, impl);
+		const app = seen.filter((s) => s.url.startsWith(`${CONFIG.appOrigin}/`));
+		const preview = seen.filter((s) => s.url.startsWith(CONFIG.previewProbeUrl));
+		expect(app).toHaveLength(2);
+		expect(app.every((s) => s.headers.get('CF-Access-Client-Id') === 'id')).toBe(true);
+		expect(app.every((s) => s.headers.get('CF-Access-Client-Secret') === 'secret')).toBe(true);
+		expect(preview).toHaveLength(1);
+		expect(preview.every((s) => s.headers.get('CF-Access-Client-Id') === null)).toBe(true);
+	});
+
+	it('fails health on a non-ok status', async () => {
+		const { impl } = fakeFetch({ ...healthy, 'https://estori.app/api/health': () => new Response('down', { status: 503 }) });
+		const health = (await runSmokeChecks(CONFIG, impl)).find((r) => r.name === 'health');
+		expect(health?.ok).toBe(false);
+	});
+
+	it('fails capabilities when platform deploy is exposed or artifacts is off', async () => {
+		const { impl } = fakeFetch({
+			...healthy,
+			'https://estori.app/api/capabilities': () =>
+				Response.json({ success: true, data: { platformDeploy: true, artifacts: false } }),
+		});
+		const caps = (await runSmokeChecks(CONFIG, impl)).find((r) => r.name === 'capabilities');
+		expect(caps?.ok).toBe(false);
+	});
+
+	it('fails the preview check when Access redirects it or another server answers', async () => {
+		const accessRedirect = fakeFetch({
+			...healthy,
+			'https://preview.estori.app/': () =>
+				new Response(null, { status: 302, headers: { server: 'cloudflare', location: 'https://estori.cloudflareaccess.com/cdn-cgi/access/login' } }),
+		});
+		const otherServer = fakeFetch({
+			...healthy,
+			'https://preview.estori.app/': () => new Response('x', { status: 404, headers: { server: 'nginx' } }),
+		});
+		expect((await runSmokeChecks(CONFIG, accessRedirect.impl)).find((r) => r.name === 'preview-host')?.ok).toBe(false);
+		expect((await runSmokeChecks(CONFIG, otherServer.impl)).find((r) => r.name === 'preview-host')?.ok).toBe(false);
+	});
+
+	it('reports a thrown fetch (for example a TLS failure) as a failed check', async () => {
+		const { impl } = fakeFetch({
+			...healthy,
+			'https://preview.estori.app/': () => {
+				throw new Error('certificate has expired');
+			},
+		});
+		const preview = (await runSmokeChecks(CONFIG, impl)).find((r) => r.name === 'preview-host');
+		expect(preview).toEqual({ name: 'preview-host', ok: false, detail: 'certificate has expired' });
+	});
+});
+```
+
+Run: `bun run test scripts/estori-smoke.test.ts`
+
+Expected: 1 test FAILS, `passes every check against a healthy deployment`: the script still runs `marketing-apex` (its `apexUrl` is undefined, so the fake fetch throws `unexpected fetch undefined`), giving 4 results instead of 3. The other 5 tests pass.
+
+- [ ] **Step 4: Replace the smoke script**
+
+Overwrite `scripts/estori-smoke.ts` with:
+
+```ts
+/**
+ * Post-deploy smoke checks for the Estori production Worker.
+ * Usage (CI): ACCESS_CLIENT_ID=... ACCESS_CLIENT_SECRET=... bun scripts/estori-smoke.ts
+ */
+
+export interface SmokeConfig {
+	appOrigin: string;
+	previewProbeUrl: string;
+	accessClientId: string;
+	accessClientSecret: string;
+}
+
+export interface SmokeResult {
+	name: string;
+	ok: boolean;
+	detail: string;
+}
+
+export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+
+interface CapabilitiesBody {
+	data?: { platformDeploy?: boolean; artifacts?: boolean };
+}
+
+async function check(name: string, probe: () => Promise<string | null>): Promise<SmokeResult> {
+	try {
+		const problem = await probe();
+		return { name, ok: problem === null, detail: problem ?? 'ok' };
+	} catch (error) {
+		return { name, ok: false, detail: error instanceof Error ? error.message : String(error) };
+	}
+}
+
+export async function runSmokeChecks(config: SmokeConfig, fetchImpl: FetchLike): Promise<SmokeResult[]> {
+	const accessHeaders = {
+		'CF-Access-Client-Id': config.accessClientId,
+		'CF-Access-Client-Secret': config.accessClientSecret,
+	};
+
+	return [
+		await check('health', async () => {
+			const res = await fetchImpl(`${config.appOrigin}/api/health`, { headers: accessHeaders, redirect: 'manual' });
+			if (res.status !== 200) return `expected 200, got ${res.status}`;
+			const body = (await res.json()) as { status?: string };
+			return body.status === 'ok' ? null : `unexpected body ${JSON.stringify(body)}`;
+		}),
+		await check('capabilities', async () => {
+			const res = await fetchImpl(`${config.appOrigin}/api/capabilities`, { headers: accessHeaders, redirect: 'manual' });
+			if (res.status !== 200) return `expected 200, got ${res.status}`;
+			const body = (await res.json()) as CapabilitiesBody;
+			if (body.data?.platformDeploy !== false) return 'platformDeploy must be false for the beta';
+			if (body.data?.artifacts !== true) return 'artifacts must be true';
+			return null;
+		}),
+		await check('preview-host', async () => {
+			const res = await fetchImpl(config.previewProbeUrl, { redirect: 'manual' });
+			const location = res.headers.get('location') ?? '';
+			if (location.includes('cloudflareaccess.com')) return 'preview host is behind Access';
+			const server = res.headers.get('server') ?? '';
+			return server.toLowerCase() === 'cloudflare' ? null : `preview served by "${server}", expected cloudflare`;
+		}),
+	];
+}
+
+function requireEnv(name: string): string {
+	const value = process.env[name];
+	if (!value) throw new Error(`Missing required environment variable ${name}`);
+	return value;
+}
+
+async function main(): Promise<void> {
+	const config: SmokeConfig = {
+		appOrigin: process.env.ESTORI_APP_ORIGIN ?? 'https://estori.app',
+		previewProbeUrl: process.env.ESTORI_PREVIEW_PROBE_URL ?? 'https://preview.estori.app/',
+		accessClientId: requireEnv('ACCESS_CLIENT_ID'),
+		accessClientSecret: requireEnv('ACCESS_CLIENT_SECRET'),
+	};
+	const results = await runSmokeChecks(config, (url, init) => fetch(url, init));
+	for (const result of results) {
+		console.log(`${result.ok ? 'PASS' : 'FAIL'} ${result.name}: ${result.detail}`);
+	}
+	if (results.some((result) => !result.ok)) {
+		console.log('Rollback: bunx wrangler rollback --name estori-production');
+		process.exit(1);
+	}
+}
+
+// process.argv can be undefined in the Workers test pool, so guard each access.
+if (process.argv?.[1]?.endsWith('estori-smoke.ts')) {
+	main().catch((error: unknown) => {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exit(1);
+	});
+}
+```
+
+Run: `bun run test scripts/estori-smoke.test.ts scripts/estori-config.test.ts`
+
+Expected: 6 + 6 tests PASS.
+
+Run: `env -u ACCESS_CLIENT_ID -u ACCESS_CLIENT_SECRET bun scripts/estori-smoke.ts; echo "exit=$?"`
+
+Expected: `Missing required environment variable ACCESS_CLIENT_ID` and `exit=1`.
+
+- [ ] **Step 5: Replace the domain runbook**
+
+Delete `docs/estori/domain-migration.md` (`git rm docs/estori/domain-migration.md`) and create `docs/estori/domain-setup.md`:
+
+````markdown
+# Set up estori.app
+
+`estori.app` was bought in the Estori account (`6d16ad8a9f081e4939993391bd35ca4e`), so its zone already lives there. `getestori.com` and the Pluriza account are not part of this launch; do not change them.
+
+1. Domains → `estori.app`: the zone shows Active.
+2. SSL/TLS → Overview: mode Full (strict). Edge Certificates: the Universal certificate covers `estori.app` and `*.estori.app`.
+3. DNS → Records → Add: type `AAAA`, name `preview`, IPv6 `100::`, Proxied (orange cloud). The app host `estori.app` gets its record from the Worker custom domain on first deploy.
+4. Verify:
+```bash
+dig +short NS estori.app
+echo | openssl s_client -connect preview.estori.app:443 -servername preview.estori.app 2>/dev/null | openssl x509 -noout -ext subjectAltName
+```
+Expect: two Cloudflare nameservers; a SAN list covering `preview.estori.app` (for example `*.estori.app`).
+````
+
+- [ ] **Step 6: Update the Access and checklist runbooks**
+
+In `docs/estori/access.md`, replace the line
+
+```markdown
+   - Name `Estori`, domain `app.getestori.com`, path empty (all paths).
+```
+
+with
+
+```markdown
+   - Name `Estori`, domain `estori.app` exactly (no subdomain wildcard), path empty (all paths).
+```
+
+and replace the line
+
+```markdown
+7. Do not create an application for `*.apps.getestori.com`. Previews are protected by signed URLs and must load without Access.
+```
+
+with
+
+```markdown
+7. Do not create an application for `preview.estori.app` or `*.estori.app`. Previews are protected by signed URLs and must load without Access.
+```
+
+Overwrite `docs/estori/launch-checklist.md` with:
+
+````markdown
+# First launch checklist
+
+Run after the first successful deploy and smoke test.
+
+1. Private window → `https://estori.app` → Access asks for an email. A non-invited email gets no PIN or is refused. An invited email receives a PIN and gets through.
+2. `curl -sI https://estori.app/api/health` (no credentials) → a 302 to `*.cloudflareaccess.com`, never `200`.
+3. Sign up with email and password.
+4. Create an app ("Create a habit tracker"). The agent streams; the preview loads from `https://preview.estori.app/space/...`.
+5. Repo tab shows at least one commit (Artifacts).
+6. Ask "Who are you?" → the answer names Estori.
+7. While signed in, trigger a redeploy (Actions → Deploy (Estori production) → Run workflow → approve). Reload the app: still signed in.
+8. Devtools on `estori.app` → Application → Cookies: `CF_Authorization` and `accessToken` have no `Domain` attribute covering subdomains, and requests to `preview.estori.app` (Network tab) carry neither cookie.
+9. No Deploy button in the chat header.
+````
+
+Run: `grep -rn "getestori" docs/estori scripts wrangler.estori.jsonc .github/workflows/deploy-estori.yml; echo "exit=$?"`
+
+Expected: exactly one match, the `docs/estori/domain-setup.md` line saying `getestori.com` is not part of this launch.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add scripts/estori-config.test.ts wrangler.estori.jsonc scripts/estori-smoke.test.ts scripts/estori-smoke.ts docs/estori/domain-setup.md docs/estori/access.md docs/estori/launch-checklist.md
+git status --short   # the domain-migration.md deletion is already staged by Step 5's git rm; wrangler.jsonc, .dev.vars and bun.lockb stay unstaged
+git commit -m "feat(estori): retarget launch config and runbooks to estori.app" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Task 9: `estori.app` domain setup (owner-run; executor verifies)
 
 **Files:** none.
 
 **Interfaces:**
-- Consumes: `docs/estori/domain-migration.md` (Task 5).
-- Produces: `getestori.com` Active in the Estori account, the ACM certificate Active, and the `*.apps` proxied record.
+- Consumes: `docs/estori/domain-setup.md` (Task 8).
+- Produces: `estori.app` Active in the Estori account with a proxied `preview` record.
 
-- [ ] **Step 1: The owner runs `docs/estori/domain-migration.md` sections 1–3**
+- [ ] **Step 1: The owner runs `docs/estori/domain-setup.md` steps 1–3**
 
-The executor waits for the owner to report that the zone shows Active in the Estori account.
+The executor waits for the owner to report the zone is Active and the `preview` record exists.
 
-- [ ] **Step 2: Verify DNS and the marketing site**
+- [ ] **Step 2: Verify**
 
 Run:
 
 ```bash
-dig +short NS getestori.com
-dig +short getestori.com
-curl -sI https://getestori.com | grep -i '^server'
-curl -sI https://www.getestori.com | grep -i '^server'
-dig +short MX getestori.com
-dig +short TXT getestori.com
+dig +short NS estori.app
+dig +short AAAA preview.estori.app
+echo | openssl s_client -connect preview.estori.app:443 -servername preview.estori.app 2>/dev/null | openssl x509 -noout -ext subjectAltName
 ```
 
 Expected:
-- The nameservers are the Estori zone's pair (as shown in the dashboard).
-- The apex resolves to the Vercel address.
-- Both `server` headers are `Vercel`.
-- MX and TXT records match the exported BIND file.
-
-- [ ] **Step 3: Verify the wildcard certificate**
-
-Run: `echo | openssl s_client -connect smoke.apps.getestori.com:443 -servername smoke.apps.getestori.com 2>/dev/null | openssl x509 -noout -subject -ext subjectAltName`
-
-Expected: the SAN list includes `*.apps.getestori.com`. Before the first deploy the HTTP response may be an error page; only the certificate matters here.
+- Two Cloudflare nameservers.
+- `preview.estori.app` resolves to Cloudflare anycast IPv6 addresses (proxied), not `100::`.
+- The SAN list covers `preview.estori.app` (`*.estori.app`).
 
 ---
 
-### Task 9: Access, tokens, and GitHub environment (owner-run with executor support)
+### Task 10: Access, tokens, and GitHub environment (owner-run with executor support)
 
 **Files:** none committed.
 
@@ -1339,7 +1707,7 @@ Includes the 24-hour session and the `estori-ci-smoke` service token.
 
 | Token | Permissions |
 |---|---|
-| `estori-deploy` | Account: Workers Scripts Edit, D1 Edit, Workers KV Storage Edit, Workers R2 Storage Edit, AI Gateway Edit, Artifacts Edit, Account Settings Read. Zone `getestori.com`: Workers Routes Edit, Zone Read, DNS Read |
+| `estori-deploy` | Account: Workers Scripts Edit, D1 Edit, Workers KV Storage Edit, Workers R2 Storage Edit, AI Gateway Edit, Artifacts Edit, Account Settings Read. Zone `estori.app`: Workers Routes Edit, Zone Read, DNS Read |
 | `estori-ai-gateway-run` | Account: AI Gateway Run |
 | `estori-artifacts-read` | Account: Artifacts Read |
 
@@ -1388,13 +1756,13 @@ Expected:
 
 ---
 
-### Task 10: CI gate baseline on Linux (owner go-ahead to push)
+### Task 11: CI gate baseline on Linux (owner go-ahead to push)
 
 **Files:**
 - Modify: only if the gate fails, as the steps below describe.
 
 **Interfaces:**
-- Consumes: Tasks 1–7 committed; the Task 9 environment exists, so the deploy job will wait for approval.
+- Consumes: Tasks 1–8 committed; the Task 10 environment exists, so the deploy job will wait for approval.
 - Produces: a green `gate` job on GitHub Actions.
 
 - [ ] **Step 1: Push the branch and trigger the gate (after the owner's go-ahead)**
@@ -1449,13 +1817,13 @@ Expected: the run shows cancelled with no deploy performed.
 
 ---
 
-### Task 11: First production deploy and launch checks (owner approves)
+### Task 12: First production deploy and launch checks (owner approves)
 
 **Files:** none, unless a check fails. Fixes then follow TDD in their own commits.
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: Estori live at `app.getestori.com` for invited users.
+- Produces: Estori live at `estori.app` for invited users.
 
 - [ ] **Step 1: Release and approve**
 
@@ -1494,11 +1862,11 @@ Run: `gh run rerun --repo alastrat/vibesdk --failed $(gh run list --repo alastra
 ACCESS_CLIENT_ID=<from owner> ACCESS_CLIENT_SECRET=<from owner> bun scripts/estori-smoke.ts
 ```
 
-Expected: `PASS health`, `PASS capabilities`, `PASS preview-host`, `PASS marketing-apex`.
+Expected: `PASS health`, `PASS capabilities`, `PASS preview-host`.
 
-- [ ] **Step 5: Run `docs/estori/launch-checklist.md` with the owner (Review Focus 1, 2, 5)**
+- [ ] **Step 5: Run `docs/estori/launch-checklist.md` with the owner (Review Focus 1, 2, 4, 5)**
 
-Record each of the 9 items as pass or fail in the ledger. Item 2 (unauthenticated `curl` gets a 302 to Access) and item 7 (redeploy keeps the session) are required.
+Record each of the 9 items as pass or fail in the ledger. Item 2 (unauthenticated `curl` gets a 302 to Access), item 7 (redeploy keeps the session) and item 8 (cookies stay host-only) are required.
 
 - [ ] **Step 6: Commit any fixes**
 
