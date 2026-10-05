@@ -8,6 +8,7 @@ import { AppService } from '../../../database/services/AppService';
 import { ExportResult } from 'worker/agents/core/types';
 import { SignJWT, jwtVerify, JWTPayload } from 'jose';
 import { validateRedirectUrl } from '../../../utils/authUtils';
+import { BRAND } from '../../../../shared/brand';
 
 export interface GitHubExportData {
     success: boolean;
@@ -218,7 +219,7 @@ export class GitHubExporterController extends BaseController {
                     repositoryHtmlUrl: repositoryUrl,
                     isPrivate,
                     token,
-                    email: 'vibesdk-bot@cloudflare.com',
+                    email: BRAND.gitAuthor.email,
                     username
                 }
             });

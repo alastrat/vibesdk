@@ -6,6 +6,7 @@ import git from '@ashishkumar472/cf-git';
 import { SqliteFS, type SqlExecutor } from './fs-adapter';
 import type { FileOutputType } from '../schemas';
 import * as Diff from 'diff';
+import { BRAND } from '../../../shared/brand';
 
 export interface CommitInfo {
     oid: string;
@@ -42,7 +43,7 @@ export class GitVersionControl {
 
     constructor(sql: SqlExecutor, author?: { name: string; email: string }) {
         this.fs = new SqliteFS(sql);
-        this.author = author || { name: 'Vibesdk', email: 'vibesdk-bot@cloudflare.com' };
+        this.author = author || { ...BRAND.gitAuthor };
         
         // Initialize SQLite table synchronously
         this.fs.init();

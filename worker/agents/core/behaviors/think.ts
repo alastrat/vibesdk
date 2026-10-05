@@ -293,7 +293,7 @@ export class ThinkCodingBehavior
 	 * Per-app context appended AFTER the file-based base prompt (the persona /
 	 * engineering guidance comes from `worker/agents/think/prompts/*.txt` via
 	 * `selectSystemPrompt`). This block only carries the dynamic project context
-	 * and the VibeSDK-specific deploy→verify workflow, which the generic prompt
+	 * and the platform-specific deploy→verify workflow, which the generic prompt
 	 * files don't know about — the environment and custom instructions for the run.
 	 */
 	private buildSystemPrompt(modelName: string, provider: string): string {
@@ -319,7 +319,7 @@ export class ThinkCodingBehavior
 			'3. End your turn after calling `ask_questions`. Do not write/edit files or deploy until the scope is clear or the user tells you to proceed with your assumptions.',
 			'If the request is already clear and specific, skip this and go straight to building.',
 			'',
-			'## Deploy & verify workflow (VibeSDK-specific)',
+			'## Deploy & verify workflow (platform-specific)',
 			'Once you are actively building (the scope is clear or the user confirmed), this app is previewed on Cloudflare Workers via SpaceDO — there is no shell. In a building turn, do NOT end after only writing files:',
 			'1. After writing or editing files, call `deploy_space` to commit and deploy so the preview rebuilds.',
 			'2. Then call `get_browser_console_logs` to inspect the running preview for client-side errors (JS exceptions, failed fetches, missing assets, hydration errors).',
