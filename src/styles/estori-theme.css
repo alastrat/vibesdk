@@ -1,0 +1,117 @@
+/*
+ * Estori brand theme, active when <html data-theme="estori">.
+ *
+ * Rules are intentionally unlayered: Kumo's tokens, Tailwind @theme variables
+ * and the base tokens in src/index.css all live in cascade layers, and
+ * unlayered declarations win over layered ones regardless of source order.
+ *
+ * The palette is declared once per mode as --estori-* variables; everything
+ * else maps onto them. src/brand/palette-contrast.test.ts reads the two
+ * palette blocks below, so keep them as plain `--estori-name: #rrggbb;` lines.
+ */
+
+:root[data-theme='estori'] {
+	--estori-topbar: #11295a;
+	--estori-topbar-line: #0e2250;
+	--estori-topbar-text: #ffffff;
+	--estori-canvas: #ffffff;
+	--estori-surface: #ffffff;
+	--estori-elevated: #ffffff;
+	--estori-recessed: #f7f8fa;
+	--estori-line: #e3e8f0;
+	--estori-text-strong: #11295a;
+	--estori-text-default: #1e2a3b;
+	--estori-text-subtle: #5b6576;
+	--estori-link: #0062e6;
+	--estori-action: #0062e6;
+	--estori-action-hover: #0058cc;
+	--estori-on-action: #ffffff;
+	--estori-highlight: #006eff;
+	--estori-selected-bg: #eef4ff;
+	--estori-logo-dot: #2c71f0;
+	--estori-brand-light: #4d94ff;
+}
+
+:root[data-theme='estori'][data-mode='dark'] {
+	--estori-canvas: #121417;
+	--estori-surface: #1a1d22;
+	--estori-elevated: #22262c;
+	--estori-recessed: #0e1013;
+	--estori-line: #2c313a;
+	--estori-text-strong: #ffffff;
+	--estori-text-default: #e6e9ef;
+	--estori-text-subtle: #9aa3b2;
+	--estori-link: #4d94ff;
+	--estori-highlight: #4d94ff;
+	--estori-selected-bg: #1b2a44;
+}
+
+html[data-theme='estori'] {
+	--estori-topbar-h: 3rem;
+
+	/* Kumo component tokens */
+	--color-kumo-canvas: var(--estori-canvas);
+	--color-kumo-base: var(--estori-surface);
+	--color-kumo-elevated: var(--estori-elevated);
+	--color-kumo-recessed: var(--estori-recessed);
+	--color-kumo-line: var(--estori-line);
+	--color-kumo-hairline: var(--estori-line);
+	--color-kumo-brand: var(--estori-action);
+	--color-kumo-brand-hover: var(--estori-action-hover);
+	--color-kumo-focus: var(--estori-highlight);
+	--text-color-kumo-brand: var(--estori-link);
+	--text-color-kumo-link: var(--estori-link);
+	--text-color-kumo-strong: var(--estori-text-strong);
+	--text-color-kumo-default: var(--estori-text-default);
+	--text-color-kumo-subtle: var(--estori-text-subtle);
+
+	/* App tokens from src/index.css */
+	--color-brand: var(--estori-action);
+	--border: var(--estori-line);
+	--input: var(--estori-line);
+	--build-chat-colors-brand-primary: var(--estori-action);
+	--build-chat-colors-brand-light: var(--estori-brand-light);
+	--build-chat-colors-bg-1: var(--estori-recessed);
+	--build-chat-colors-bg-2: var(--estori-canvas);
+	--build-chat-colors-bg-3: var(--estori-surface);
+	--build-chat-colors-bg-4: var(--estori-elevated);
+	--build-chat-colors-border-primary: var(--estori-line);
+	--build-chat-colors-border-secondary: var(--estori-line);
+	--build-chat-colors-border-tertiary: var(--estori-line);
+	--build-chat-colors-text-primary: var(--estori-text-default);
+	--build-chat-colors-text-secondary: var(--estori-text-default);
+	--build-chat-colors-text-tertiary: var(--estori-text-subtle);
+
+	/* Typography: estori/core's system stack; the pixel display font is retired */
+	--font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+	--font-funky-mono: var(--font-sans);
+}
+
+/* Selected sidebar item uses the Estori tint (Kumo sets this on the wrapper). */
+html[data-theme='estori'] .vibesdk-sidebar-wrapper {
+	--sidebar-active-bg: var(--estori-selected-bg);
+}
+
+/* Flat canvas: no orange spotlight behind the home prompt. */
+html[data-theme='estori'] .home-atmosphere {
+	display: none;
+}
+
+/* Chat edge pulse in brand blue instead of orange. */
+html[data-theme='estori'] .chat-edge-throb {
+	animation-name: estori-chat-edge-throb;
+}
+
+@keyframes estori-chat-edge-throb {
+	0%,
+	100% {
+		box-shadow:
+			0 0 0 0 rgb(0 98 230 / 0.1),
+			inset 0 0 0 1px rgb(0 98 230 / 0.16);
+	}
+	50% {
+		box-shadow:
+			0 0 0 6px rgb(0 98 230 / 0.08),
+			inset 0 0 0 2px rgb(0 98 230 / 0.22);
+	}
+}

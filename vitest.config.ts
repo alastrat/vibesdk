@@ -12,6 +12,9 @@ export default defineWorkersConfig({
   },
   test: {
     globals: true,
+    // Brand tests read these stylesheets as raw text; Vitest returns an empty
+    // string for CSS unless it is opted in here.
+    css: { include: [/estori-theme\.css/, /src\/index\.css/] },
     pool: '@cloudflare/vitest-pool-workers',
     deps: {
       optimizer: {

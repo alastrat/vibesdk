@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { BRAND } from '../../shared/brand';
+import indexCss from '../index.css?raw';
 
 type Sources = Record<string, string>;
 
@@ -37,6 +39,12 @@ function source(sources: Sources, path: string): string {
 	return text;
 }
 
+// The Workers test pool loads .html as a text module; `?raw` is not resolvable there.
+const indexHtml = source(
+	import.meta.glob<string>('/index.html', { import: 'default', eager: true }),
+	'/index.html',
+);
+
 describe('brand guard: harness', () => {
 	it('loads worker and frontend sources', () => {
 		expect(Object.keys(workerSources).length).toBeGreaterThan(50);
@@ -63,5 +71,26 @@ describe('brand guard: worker', () => {
 		expect(
 			source(workerSources, '/worker/agents/think/ThinkAgent.ts'),
 		).toContain('composeSystemPrompt(base, projectContext)');
+	});
+});
+
+describe('brand guard: document shell', () => {
+	it('activates the Estori theme on <html>', () => {
+		expect(indexHtml).toContain('<html lang="en" data-theme="estori">');
+	});
+
+	it('loads the Estori theme stylesheet', () => {
+		expect(indexCss).toContain("@import './styles/estori-theme.css';");
+	});
+
+	it('uses the brand title and description', () => {
+		expect(indexHtml).toContain(`<title>${BRAND.name}</title>`);
+		expect(indexHtml).toContain(
+			`<meta name="description" content="${BRAND.description}" />`,
+		);
+	});
+
+	it('does not preload the retired pixel font', () => {
+		expect(indexHtml).not.toContain('DepartureMono');
 	});
 });
