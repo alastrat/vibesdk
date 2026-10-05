@@ -45,17 +45,17 @@ describe('wrangler.estori.jsonc', () => {
 		expect(estoriRaw).not.toContain('__ESTORI_');
 	});
 
-	it('routes the app host and the preview wildcard', () => {
+	it('routes the app host and the preview host', () => {
 		expect(estori.routes).toEqual([
-			{ pattern: 'app.getestori.com', custom_domain: true },
-			{ pattern: '*apps.getestori.com/*', zone_name: 'getestori.com' },
+			{ pattern: 'estori.app', custom_domain: true },
+			{ pattern: '*preview.estori.app/*', zone_name: 'estori.app' },
 		]);
 	});
 
 	it('sets the Estori vars without dev or dispatch settings', () => {
 		expect(estori.vars).toMatchObject({
-			CUSTOM_DOMAIN: 'app.getestori.com',
-			CUSTOM_PREVIEW_DOMAIN: 'apps.getestori.com',
+			CUSTOM_DOMAIN: 'estori.app',
+			CUSTOM_PREVIEW_DOMAIN: 'preview.estori.app',
 			ENVIRONMENT: 'prod',
 			CLOUDFLARE_AI_GATEWAY: 'estori-gateway',
 			ARTIFACTS_NAMESPACE: 'estori-production',

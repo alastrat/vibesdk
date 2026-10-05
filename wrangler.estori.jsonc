@@ -108,12 +108,12 @@
 	],
 	"routes": [
 		{
-			"pattern": "app.getestori.com",
+			"pattern": "estori.app",
 			"custom_domain": true
 		},
 		{
-			"pattern": "*apps.getestori.com/*",
-			"zone_name": "getestori.com"
+			"pattern": "*preview.estori.app/*",
+			"zone_name": "estori.app"
 		}
 	],
 	"vars": {
@@ -128,8 +128,8 @@
 			},
 			"version": "1.0.0"
 		},
-		"CUSTOM_DOMAIN": "app.getestori.com",
-		"CUSTOM_PREVIEW_DOMAIN": "apps.getestori.com",
+		"CUSTOM_DOMAIN": "estori.app",
+		"CUSTOM_PREVIEW_DOMAIN": "preview.estori.app",
 		"ENVIRONMENT": "prod"
 	},
 	"workers_dev": false,

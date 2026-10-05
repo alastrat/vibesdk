@@ -2,12 +2,12 @@
 
 Run after the first successful deploy and smoke test.
 
-1. Private window → `https://app.getestori.com` → Access asks for an email. A non-invited email gets no PIN or is refused. An invited email receives a PIN and gets through.
-2. `curl -sI https://app.getestori.com/api/health` (no credentials) → a 302 to `*.cloudflareaccess.com`, never `200`.
+1. Private window → `https://estori.app` → Access asks for an email. A non-invited email gets no PIN or is refused. An invited email receives a PIN and gets through.
+2. `curl -sI https://estori.app/api/health` (no credentials) → a 302 to `*.cloudflareaccess.com`, never `200`.
 3. Sign up with email and password.
-4. Create an app ("Create a habit tracker"). The agent streams; the preview loads on a `*.apps.getestori.com` URL.
+4. Create an app ("Create a habit tracker"). The agent streams; the preview loads from `https://preview.estori.app/space/...`.
 5. Repo tab shows at least one commit (Artifacts).
 6. Ask "Who are you?" → the answer names Estori.
 7. While signed in, trigger a redeploy (Actions → Deploy (Estori production) → Run workflow → approve). Reload the app: still signed in.
-8. `https://getestori.com` and `https://www.getestori.com` still show the Vercel marketing site.
+8. Devtools on `estori.app` → Application → Cookies: `CF_Authorization` and `accessToken` have no `Domain` attribute covering subdomains, and requests to `preview.estori.app` (Network tab) carry neither cookie.
 9. No Deploy button in the chat header.

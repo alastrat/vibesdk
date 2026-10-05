@@ -6,7 +6,6 @@
 export interface SmokeConfig {
 	appOrigin: string;
 	previewProbeUrl: string;
-	apexUrl: string;
 	accessClientId: string;
 	accessClientSecret: string;
 }
@@ -60,11 +59,6 @@ export async function runSmokeChecks(config: SmokeConfig, fetchImpl: FetchLike):
 			const server = res.headers.get('server') ?? '';
 			return server.toLowerCase() === 'cloudflare' ? null : `preview served by "${server}", expected cloudflare`;
 		}),
-		await check('marketing-apex', async () => {
-			const res = await fetchImpl(config.apexUrl, { redirect: 'manual' });
-			const server = res.headers.get('server') ?? '';
-			return server.toLowerCase() === 'vercel' ? null : `apex served by "${server}", expected Vercel`;
-		}),
 	];
 }
 
@@ -76,9 +70,8 @@ function requireEnv(name: string): string {
 
 async function main(): Promise<void> {
 	const config: SmokeConfig = {
-		appOrigin: process.env.ESTORI_APP_ORIGIN ?? 'https://app.getestori.com',
-		previewProbeUrl: process.env.ESTORI_PREVIEW_PROBE_URL ?? 'https://smoke.apps.getestori.com/',
-		apexUrl: process.env.ESTORI_APEX_URL ?? 'https://getestori.com/',
+		appOrigin: process.env.ESTORI_APP_ORIGIN ?? 'https://estori.app',
+		previewProbeUrl: process.env.ESTORI_PREVIEW_PROBE_URL ?? 'https://preview.estori.app/',
 		accessClientId: requireEnv('ACCESS_CLIENT_ID'),
 		accessClientSecret: requireEnv('ACCESS_CLIENT_SECRET'),
 	};
