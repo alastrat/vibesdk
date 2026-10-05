@@ -93,4 +93,10 @@ describe('brand guard: document shell', () => {
 	it('does not preload the retired pixel font', () => {
 		expect(indexHtml).not.toContain('DepartureMono');
 	});
+
+	it('uses the Estori favicon', () => {
+		expect(indexHtml).toContain(
+			'<link rel="icon" href="/favicon.svg" type="image/svg+xml" />',
+		);
+	});
 });
