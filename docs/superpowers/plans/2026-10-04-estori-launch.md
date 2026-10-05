@@ -1643,7 +1643,7 @@ Run after the first successful deploy and smoke test.
 4. Create an app ("Create a habit tracker"). The agent streams; the preview loads from `https://preview.estori.app/space/...`.
 5. Repo tab shows at least one commit (Artifacts).
 6. Ask "Who are you?" → the answer names Estori.
-7. While signed in, trigger a redeploy (Actions → Deploy (Estori production) → Run workflow → approve). Reload the app: still signed in.
+7. While signed in, trigger a redeploy: re-run the last deploy run (`gh run rerun <run id> --repo alastrat/vibesdk`, or Re-run all jobs on its page) and approve it. Reload the app: still signed in.
 8. Devtools on `estori.app` → Application → Cookies: `CF_Authorization` and `accessToken` have no `Domain` attribute covering subdomains, and requests to `preview.estori.app` (Network tab) carry neither cookie.
 9. No Deploy button in the chat header.
 ````
@@ -1772,14 +1772,14 @@ Run:
 ```bash
 git push -u origin claude/project-analysis-local-setup-dfd834
 git push origin HEAD:refs/heads/estori-live
-gh run list --repo alastrat/vibesdk --workflow deploy-estori.yml --limit 1
+gh run list --repo alastrat/vibesdk --branch estori-live --limit 1
 ```
 
 Expected: a run in progress. The `deploy` job will show "Waiting" for approval; **do not approve it in this task.**
 
 - [ ] **Step 2: Read the gate result**
 
-Run: `gh run watch --repo alastrat/vibesdk --exit-status $(gh run list --repo alastrat/vibesdk --workflow deploy-estori.yml --limit 1 --json databaseId -q '.[0].databaseId') || true`
+Run: `gh run watch --repo alastrat/vibesdk --exit-status $(gh run list --repo alastrat/vibesdk --branch estori-live --limit 1 --json databaseId -q '.[0].databaseId') || true`
 
 Expected: the `gate` job is green. If it is green, skip to Step 4.
 
@@ -1811,7 +1811,7 @@ Commit the change with `ci(estori): <what changed>`, push both refs again, and r
 
 - [ ] **Step 4: Cancel the waiting deploy**
 
-Run: `gh run cancel --repo alastrat/vibesdk $(gh run list --repo alastrat/vibesdk --workflow deploy-estori.yml --limit 1 --json databaseId -q '.[0].databaseId')`
+Run: `gh run cancel --repo alastrat/vibesdk $(gh run list --repo alastrat/vibesdk --branch estori-live --limit 1 --json databaseId -q '.[0].databaseId')`
 
 Expected: the run shows cancelled with no deploy performed.
 
@@ -1827,13 +1827,15 @@ Expected: the run shows cancelled with no deploy performed.
 
 - [ ] **Step 1: Release and approve**
 
-Run: `gh workflow run deploy-estori.yml --repo alastrat/vibesdk --ref estori-live`
+Run: `gh run rerun --repo alastrat/vibesdk $(gh run list --repo alastrat/vibesdk --branch estori-live --limit 1 --json databaseId -q '.[0].databaseId')`
+
+This re-runs the run cancelled in Task 11 Step 4 (or start a fresh run by pushing a new commit to `estori-live`). `gh workflow run` and the Run workflow button are unavailable: GitHub only dispatches workflows present on the default branch, and `deploy-estori.yml` is not on `main`.
 
 Then the owner approves the `production` environment in the Actions UI.
 
 - [ ] **Step 2: Watch the deploy**
 
-Run: `gh run watch --repo alastrat/vibesdk --exit-status $(gh run list --repo alastrat/vibesdk --workflow deploy-estori.yml --limit 1 --json databaseId -q '.[0].databaseId')`
+Run: `gh run watch --repo alastrat/vibesdk --exit-status $(gh run list --repo alastrat/vibesdk --branch estori-live --limit 1 --json databaseId -q '.[0].databaseId')`
 
 Expected:
 - The deploy step completes, including `db:migrate:remote`.
@@ -1856,7 +1858,7 @@ Expected: both report `Success! Uploaded secret`.
 
 - [ ] **Step 4: Run the smoke checks again**
 
-Run: `gh run rerun --repo alastrat/vibesdk --failed $(gh run list --repo alastrat/vibesdk --workflow deploy-estori.yml --limit 1 --json databaseId -q '.[0].databaseId')` if the first smoke failed. Otherwise run the smoke script locally with the service token:
+Run: `gh run rerun --repo alastrat/vibesdk --failed $(gh run list --repo alastrat/vibesdk --branch estori-live --limit 1 --json databaseId -q '.[0].databaseId')` if the first smoke failed. Otherwise run the smoke script locally with the service token:
 
 ```bash
 ACCESS_CLIENT_ID=<from owner> ACCESS_CLIENT_SECRET=<from owner> bun scripts/estori-smoke.ts
