@@ -71,7 +71,7 @@ The message carries elapsed time rather than a start timestamp, so a browser clo
 - It processes each `inputTextDelta` once and never re-parses or keeps the arguments.
 - It tracks whether it is inside a string, escape state, nesting depth, and the current top-level key.
 - It captures the top-level `path` string when it closes, decoding standard JSON escapes.
-- It counts newline escapes (`\n`) inside the top-level `content` string. An escaped backslash followed by `n` (`\\n`) is not a newline, and the characters of a `\uXXXX` escape are never counted.
+- It counts the newline characters of the decoded top-level `content` string, so `\n` and `\u000a` both count. An escaped backslash followed by `n` (`\\n`) is not a newline, and the hex digits of a `\uXXXX` escape are never read as text.
 - An escape split across two deltas is handled, because the escape state carries over.
 - Unexpected input never throws. The scanner stops advancing its path or count and keeps what it has.
 - Lines are the newline count plus 1 once `content` has at least one character, and 0 before that.
@@ -102,6 +102,7 @@ Chunk handling:
 | Anything else | No change |
 
 - **Activity** is the most recently opened call that is still open. When no call is open, it is `thinking`. So a finished `write` cannot flash "Thinking…" while another call from the same step is still running.
+- **Paths** are sent without leading slashes, as `FILE_GENERATING` already does: `/src/App.tsx` becomes `src/App.tsx`. The final input sets the path for any tool that has one, so `read` shows `Reading src/App.tsx`.
 - **Throttle:** `onChunk` returns a snapshot at once when the step, the activity kind, the tool, or the path changes. When only the line count changed, it returns one at most once per second (1,000 ms since the last returned snapshot). Otherwise it returns `null`.
 
 ### Host wiring
@@ -150,8 +151,8 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
 
 - `useElapsedSeconds(startedAt)` ticks once a second inside the bar. Only the bar re-renders each second, not the chat page.
 - The clock uses `formatElapsedTime` from `src/routes/chat/hooks/use-debug-session.ts`, extended to `h:mm:ss` from 3,600 seconds. The debug bubble shares the change.
-- The activity label comes from a new exported helper in `src/routes/chat/utils/tool-display.ts`, `getToolActivityLabel(name, args)`: the start verb and detail without an ellipsis. `getToolSummary` builds its start-status text from the same verb and detail functions, so its output is unchanged.
-- The bar has `role="status"`. Only the activity line is an `aria-live="polite"` region, so screen readers announce a new activity but not the clock every second.
+- The activity label comes from a new exported helper in `src/routes/chat/utils/tool-display.ts`, `getToolActivityLabel(name, args)`: the start verb and detail without an ellipsis. For `write` and `edit` without a known path the detail is `file`. `getToolSummary` builds its start-status text from the same verb and detail functions, so its output is unchanged.
+- The activity line has `role="status"`, a polite live region. The headline with the clock sits outside it, so screen readers announce a new activity but not the clock every second.
 
 ## Error handling
 
@@ -174,7 +175,7 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
   - the path, including one split across deltas;
   - the line count;
   - an escape split across deltas;
-  - `\\n` and `\uXXXX` not counted as newlines;
+  - `\\n` and the hex digits of `\uXXXX` not counted as newlines, while `\u000a` is;
   - `content` before `path`;
   - malformed input does not throw.
 - **Tracker** (same file, injected clock):
