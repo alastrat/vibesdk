@@ -65,7 +65,7 @@ Helpers in the same module:
 
 Apps created before this change have no `thinkModelId`. They keep running on the model they were configured with (Gemini 3.6 Flash), and their chat picker shows a "Select model" placeholder rather than a model they are not using, until the user picks one.
 
-`ThinkAgentConfig.model` gains `creditCost`. `ThinkAgent.beforeStep` charges it in place of the hard-coded Gemini cost.
+`ThinkAgent.beforeStep` charges the catalog credit cost of the configured model (`resolveThinkModel(config.model.modelName)`) in place of the hard-coded Gemini cost.
 
 When `ENABLE_THINK_MODEL_FALLBACK` is on, the fallback is `fallbackModelFor(selected)`. Its key resolution is unchanged: the platform provider key when set, otherwise the key stored in the AI Gateway.
 
