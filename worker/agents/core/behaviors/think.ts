@@ -27,15 +27,8 @@ import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
-import {
-	THINK_FALLBACK_MODEL_CONFIG,
-	THINK_FALLBACK_MODEL_ID,
-	THINK_MODEL_CONFIG,
-	THINK_MODEL_ID,
-} from '../../think/model-config';
+import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
-import type { ModelFallback } from '../../think/model-fallback';
-import type { InferenceContext } from '../../inferutils/config.types';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
@@ -272,7 +265,6 @@ export class ThinkCodingBehavior
 				contextSize: aiModelConfig.contextSize,
 				headers: auth.headers,
 				useStoredKeys: auth.useStoredKeys,
-				fallback: await this.resolveThinkFallback(userId, inf, gatewayToken),
 			},
 			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
@@ -292,40 +284,6 @@ export class ThinkCodingBehavior
 			CLOUDFLARE_API_TOKEN?: string;
 		};
 		return tokenEnv.CLOUDFLARE_AI_GATEWAY_TOKEN || tokenEnv.CLOUDFLARE_API_TOKEN;
-	}
-
-	/**
-	 * Claude fallback for turns the primary model can't serve, when
-	 * `ENABLE_THINK_MODEL_FALLBACK` is on. Uses the platform Anthropic key if
-	 * one is set, otherwise the key stored in the AI Gateway.
-	 */
-	private async resolveThinkFallback(
-		userId: string,
-		inf: InferenceContext,
-		gatewayToken: string | undefined,
-	): Promise<ModelFallback | undefined> {
-		const flags = this.env as unknown as { ENABLE_THINK_MODEL_FALLBACK?: string };
-		if (flags.ENABLE_THINK_MODEL_FALLBACK !== 'true') return undefined;
-		try {
-			const conf = await getConfigurationForModel(
-				THINK_FALLBACK_MODEL_CONFIG,
-				this.env,
-				userId,
-				inf.runtimeOverrides,
-				false,
-				inf.userApiToken,
-				null,
-			);
-			const auth = resolveGatewayAuth(conf, gatewayToken);
-			return {
-				modelName: THINK_FALLBACK_MODEL_ID,
-				apiKey: auth.useStoredKeys ? undefined : auth.apiKey,
-				headers: auth.headers,
-			};
-		} catch (e) {
-			this.logger.warn('Failed to resolve fallback model config for ThinkAgent', e);
-			return undefined;
-		}
 	}
 
 	/**

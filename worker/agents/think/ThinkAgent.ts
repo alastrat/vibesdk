@@ -27,14 +27,14 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
-import { createFallbackFetch, FallbackLatch, type ModelFallback } from './model-fallback';
+import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 
-/** How long the primary model may take to start responding before the fallback takes over. */
-const PRIMARY_RESPONSE_TIMEOUT_MS = 60_000;
+/** How long a provider may take to start responding before the request counts as failed. */
+const MODEL_RESPONSE_TIMEOUT_MS = 60_000;
 
-/** Retries per turn after the first attempt; covers overload spikes when no fallback answers. */
-const TURN_MAX_RETRIES = 4;
+/** Retries per turn after the first attempt (about 6 seconds of backoff) before the user is asked. */
+const TURN_MAX_RETRIES = 2;
 
 /**
  * Per-instance configuration pushed into a {@link ThinkAgent} by the host
@@ -65,8 +65,6 @@ export interface ThinkAgentConfig {
 		 * rejects it. `getModel()` strips `Authorization` when this is set.
 		 */
 		useStoredKeys?: boolean;
-		/** Second model on the same gateway, used when the primary is overloaded or unresponsive. */
-		fallback?: ModelFallback;
 	};
 	/** Builder system prompt (assembled host-side; falls back to a default). */
 	systemPrompt?: string;
@@ -172,8 +170,8 @@ export class ThinkAgent extends Think<Env> {
 	 * the `extra_content` Google requires for multi-step function calling).
 	 */
 	private readonly thoughtSignatures = new Map<string, string>();
-	/** Once the primary model fails in a turn, the rest of that turn stays on the fallback. */
-	private readonly fallbackLatch = new FallbackLatch();
+	/** Last provider failure in the current turn; the host reads it when a turn fails. */
+	private providerFailure: ProviderFailure | null = null;
 	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean } | null = null;
 
 	private requireConfig(): ThinkAgentConfig {
@@ -201,15 +199,14 @@ export class ThinkAgent extends Think<Env> {
 		// (3) round-trip Gemini `thought_signature`s — harvest them from the
 		// response and re-inject them into outgoing request history (the AI SDK
 		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`); and
-		// (4) re-send to the fallback model when the primary is overloaded. The
-		// signatures are Gemini-only, so the fallback request goes without them.
-		const transport = createFallbackFetch({
-			fallback: model.fallback,
-			latch: this.fallbackLatch,
-			primaryTimeoutMs: PRIMARY_RESPONSE_TIMEOUT_MS,
-			preparePrimaryBody: (body) => injectThoughtSignatures(body, this.thoughtSignatures),
-			onFallback: (reason) =>
-				console.warn('Think model fallback', { from: model.modelName, to: model.fallback?.modelName, reason }),
+		// (4) end requests a provider never answers and record provider
+		// failures, so the host can offer the user a switch.
+		const transport = createModelTransport({
+			timeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
+			prepareBody: (body) => injectThoughtSignatures(body, this.thoughtSignatures),
+			onProviderStatus: (failure) => {
+				this.providerFailure = failure;
+			},
 		});
 		const gatewayFetch: typeof fetch = async (input, init) => {
 			const headers = new Headers(init?.headers);
@@ -269,7 +266,7 @@ export class ThinkAgent extends Think<Env> {
 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
-		this.fallbackLatch.reset();
+		this.providerFailure = null;
 		this.turnUsage = null;
 		if (config) {
 			try {
@@ -384,5 +381,10 @@ export class ThinkAgent extends Think<Env> {
 			// case the initial freezeSystemPrompt() during chat() renders with
 			// this config anyway.
 		}
+	}
+
+	/** RPC for the host: the provider failure behind the last failed turn, if any. */
+	async getProviderFailure(): Promise<ProviderFailure | null> {
+		return this.providerFailure;
 	}
 }

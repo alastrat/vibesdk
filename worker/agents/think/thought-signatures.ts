@@ -19,16 +19,17 @@ export function getThoughtSignature(call: unknown): string | undefined {
 /**
  * Re-attaches harvested signatures (keyed by tool-call id) to the `tool_calls`
  * in a chat-completions request body. Calls with no known signature get
- * {@link SKIP_THOUGHT_SIGNATURE}. Bodies that are not chat-completions JSON
+ * {@link SKIP_THOUGHT_SIGNATURE}. Bodies that are not chat-completions JSON for a Google model
  * are returned unchanged.
  */
 export function injectThoughtSignatures(bodyText: string, signatures: ReadonlyMap<string, string>): string {
-	let json: { messages?: unknown };
+	let json: { model?: unknown; messages?: unknown };
 	try {
 		json = JSON.parse(bodyText);
 	} catch {
 		return bodyText;
 	}
+	if (typeof json.model !== 'string' || !json.model.startsWith('google-ai-studio/')) return bodyText;
 	const messages = json.messages;
 	if (!Array.isArray(messages)) return bodyText;
 	let changed = false;

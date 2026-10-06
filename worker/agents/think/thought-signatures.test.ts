@@ -62,4 +62,9 @@ describe('injectThoughtSignatures', () => {
 	it('returns non-JSON bodies unchanged', () => {
 		expect(injectThoughtSignatures('not json', new Map())).toBe('not json');
 	});
+
+	it('leaves requests to other providers unchanged', () => {
+		const claudeBody = body(call('toolu_1')).replace('google-ai-studio/gemini-3.6-flash', 'anthropic/claude-sonnet-5-5');
+		expect(injectThoughtSignatures(claudeBody, new Map([['toolu_1', 'sig-1']]))).toBe(claudeBody);
+	});
 });

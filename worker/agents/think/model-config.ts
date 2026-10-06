@@ -72,14 +72,3 @@ export const THINK_MODEL_CONFIG: AIModelConfig = {
 	creditCost: 2,
 	contextSize: 1_048_576,
 };
-
-/** Used when the primary model is overloaded; enabled by `ENABLE_THINK_MODEL_FALLBACK`. */
-export const THINK_FALLBACK_MODEL_ID = 'anthropic/claude-sonnet-5-5';
-
-export const THINK_FALLBACK_MODEL_CONFIG: AIModelConfig = {
-	name: 'Claude Sonnet 5.5',
-	size: ModelSize.LARGE,
-	provider: 'anthropic',
-	creditCost: 8, // $2.00
-	contextSize: 1_000_000,
-};
