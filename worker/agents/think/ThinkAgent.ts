@@ -28,6 +28,7 @@ import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker'
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
 import { createFallbackFetch, type ModelFallback } from './model-fallback';
+import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 
 /** How long the primary model may take to start responding before the fallback takes over. */
 const PRIMARY_RESPONSE_TIMEOUT_MS = 60_000;
@@ -79,13 +80,6 @@ export interface ThinkAgentConfig {
 const DEFAULT_SYSTEM_PROMPT =
 	'Use the workspace tools to read, write and edit files in the project. Keep changes ' +
 	'minimal and runnable.';
-
-/** Extracts the Gemini thought signature from a `tool_calls[]` entry, if any. */
-function getThoughtSignature(call: unknown): string | undefined {
-	const sig = (call as { extra_content?: { google?: { thought_signature?: unknown } } })
-		?.extra_content?.google?.thought_signature;
-	return typeof sig === 'string' ? sig : undefined;
-}
 
 /**
  * Google's OpenAI-compatible streaming omits the `index` field on each
@@ -180,42 +174,6 @@ export class ThinkAgent extends Think<Env> {
 	private readonly thoughtSignatures = new Map<string, string>();
 	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean } | null = null;
 
-	/**
-	 * Re-attach harvested Gemini `thought_signature`s to the `tool_calls` in an
-	 * outgoing request body, keyed by tool-call id. No-op if we have none or the
-	 * body isn't the expected chat-completions JSON.
-	 */
-	private injectThoughtSignatures(bodyText: string): string {
-		if (this.thoughtSignatures.size === 0) return bodyText;
-		let json: { messages?: unknown };
-		try {
-			json = JSON.parse(bodyText);
-		} catch {
-			return bodyText;
-		}
-		const messages = json.messages;
-		if (!Array.isArray(messages)) return bodyText;
-		let changed = false;
-		for (const message of messages) {
-			const toolCalls = (message as { tool_calls?: unknown })?.tool_calls;
-			if (!Array.isArray(toolCalls)) continue;
-			for (const call of toolCalls) {
-				const id = (call as { id?: unknown })?.id;
-				if (typeof id !== 'string') continue;
-				if (getThoughtSignature(call)) continue;
-				const sig = this.thoughtSignatures.get(id);
-				if (!sig) continue;
-				const c = call as { extra_content?: { google?: Record<string, unknown> } };
-				c.extra_content = {
-					...(c.extra_content ?? {}),
-					google: { ...(c.extra_content?.google ?? {}), thought_signature: sig },
-				};
-				changed = true;
-			}
-		}
-		return changed ? JSON.stringify(json) : bodyText;
-	}
-
 	private requireConfig(): ThinkAgentConfig {
 		const cfg = this.getConfig<ThinkAgentConfig>();
 		if (!cfg) {
@@ -246,7 +204,7 @@ export class ThinkAgent extends Think<Env> {
 		const transport = createFallbackFetch({
 			fallback: model.fallback,
 			primaryTimeoutMs: PRIMARY_RESPONSE_TIMEOUT_MS,
-			preparePrimaryBody: (body) => this.injectThoughtSignatures(body),
+			preparePrimaryBody: (body) => injectThoughtSignatures(body, this.thoughtSignatures),
 			onFallback: (reason) =>
 				console.warn('Think model fallback', { from: model.modelName, to: model.fallback?.modelName, reason }),
 		});
