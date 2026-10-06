@@ -60,3 +60,37 @@ describe('build progress: chat state', () => {
 		expect(hook.slice(hook.lastIndexOf('return {'))).toContain('buildStatus,');
 	});
 });
+
+const BAR = '/src/components/BuildProgressBar.tsx';
+const CHAT = '/src/routes/chat/chat.tsx';
+
+describe('build progress: bar', () => {
+	it('renders nothing without a running build', () => {
+		expect(source(BAR)).toContain('if (!status) return null;');
+	});
+
+	it('ticks the clock inside the bar only', () => {
+		expect(source(BAR)).toContain('useElapsedSeconds(status?.startedAt ?? null)');
+		expect(source(CHAT)).not.toContain('useElapsedSeconds');
+	});
+
+	it('computes elapsed time from the start time, so background tabs stay correct', () => {
+		const hook = source('/src/hooks/use-elapsed-seconds.ts');
+		expect(hook).toContain('Math.max(0, Math.floor((now - startedAt) / 1000))');
+		expect(hook).toContain('}, [startedAt]);');
+	});
+
+	it('announces the activity but not the clock', () => {
+		const bar = source(BAR);
+		expect(bar.match(/role="status"/g) ?? []).toHaveLength(1);
+		const live = bar.slice(bar.indexOf('role="status"'));
+		expect(live).toContain('describeBuildActivity(status.activity)');
+		expect(live).not.toContain('describeBuildHeadline');
+	});
+
+	it('shows the bar above the chat input, before the failure card', () => {
+		const above = source(CHAT).slice(source(CHAT).indexOf('aboveContent={'));
+		expect(above).toContain('<BuildProgressBar status={buildStatus} />');
+		expect(above.indexOf('<BuildProgressBar')).toBeLessThan(above.indexOf('<ModelUnavailableNotice'));
+	});
+});

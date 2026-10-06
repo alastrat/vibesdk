@@ -70,6 +70,7 @@ import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { ModelUnavailableNotice } from '@/components/ModelUnavailableNotice';
+import { BuildProgressBar } from '@/components/BuildProgressBar';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
 import {
 	RollbackContext,
@@ -269,6 +270,7 @@ function ChatSession() {
 		retryModel,
 		dismissModelUnavailable,
 		isWebSocketOpen,
+		buildStatus,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -1414,6 +1416,7 @@ function ChatSession() {
 							}
 							aboveContent={
 								<>
+									<BuildProgressBar status={buildStatus} />
 									<ModelUnavailableNotice
 										notice={modelUnavailable}
 										options={capabilities?.thinkModels ?? []}
