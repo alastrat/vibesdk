@@ -57,12 +57,14 @@ interface AgenticAgentInitArgs extends BaseAgentInitArgs {
     };
 }
 
-/** Think agent initialization arguments — same shape as agentic */
+/** Think agent initialization arguments — agentic shape plus the chosen build model */
 interface ThinkAgentInitArgs extends BaseAgentInitArgs {
     templateInfo?: {
         templateDetails: TemplateDetails;
         selection: TemplateSelection;
     };
+    /** Catalog id of the build model (already resolved by the caller). */
+    thinkModelId?: string;
 }
 
 /** Generic initialization arguments based on state type */

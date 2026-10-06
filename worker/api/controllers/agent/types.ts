@@ -13,6 +13,8 @@ export interface CodeGenArgs {
     behaviorType?: BehaviorType;
     projectType?: ProjectType;
     images?: ImageAttachment[];
+    /** Build model for think apps (a THINK_MODELS id); unknown values use the default. */
+    modelId?: string;
 
     /** Optional ephemeral credentials (BYOK / gateway override) for sdk */
     credentials?: CredentialsPayload;

@@ -5,6 +5,7 @@ import { AgentState } from '../../../agents/core/state';
 import { BehaviorType, ProjectType } from '../../../agents/core/types';
 import { getBehaviorTypeForProject } from '../../../agents/core/features';
 import { getAgentStub, getTemplateForQuery } from '../../../agents';
+import { isThinkModelId, resolveThinkModel } from '../../../agents/think/model-config';
 import {
     AgentConnectionData,
     AgentPreviewResponse,
@@ -249,8 +250,13 @@ export class CodingAgentController extends BaseController {
                 },
             } as const;
 
+            const thinkModel = resolveThinkModel(body.modelId);
+            if (isThink && body.modelId !== undefined && !isThinkModelId(body.modelId)) {
+                this.logger.warn('Unknown build model requested; using the default', { requested: body.modelId, used: thinkModel.id });
+            }
+
             const initArgs = isThink
-                ? baseInitArgs
+                ? { ...baseInitArgs, thinkModelId: thinkModel.id }
                 : { ...baseInitArgs, templateInfo: { templateDetails: templateResult!.templateDetails, selection: templateResult!.selection } };
 
             const agentPromise = agentInstance.initialize(initArgs) as Promise<AgentState>;

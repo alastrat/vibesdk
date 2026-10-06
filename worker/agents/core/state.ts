@@ -131,6 +131,8 @@ export interface ThinkState extends BaseProjectState {
     blueprint: AgenticBlueprint;
     /** ThinkAgent DO `idFromName` key (the agent id). */
     thinkAgentName: string;
+    /** Build model chosen for this app (a THINK_MODELS id); absent for apps created before model selection. */
+    thinkModelId?: string;
     /** Git branch used for deployment previews. */
     currentBranch: string;
     /** Last commit SHA we successfully deployed. */

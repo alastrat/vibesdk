@@ -27,7 +27,7 @@ import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
-import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+import { resolveThinkModel } from '../../think/model-config';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
@@ -160,7 +160,7 @@ export class ThinkCodingBehavior
 		await super.initialize(initArgs);
 		// Think projects are template-free: SpaceDO + the agent's own file tools
 		// own scaffolding entirely. We intentionally ignore `templateInfo`.
-		const { query, hostname, inferenceContext, sandboxSessionId } = initArgs;
+		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId } = initArgs;
 
 		const baseName = (query || 'project').toString();
 		const projectName = generateProjectName(
@@ -193,6 +193,7 @@ export class ThinkCodingBehavior
 			projectType: this.projectType,
 			behaviorType: 'think',
 			thinkAgentName: agentName,
+			thinkModelId,
 			currentBranch: 'main',
 		});
 
@@ -214,13 +215,15 @@ export class ThinkCodingBehavior
 	/**
 	 * Resolve the AI Gateway model coordinates from VibeSDK's model config and
 	 * push them (plus space name + system prompt) into the ThinkAgent DO.
+	 * Returns whether the app's selected model was applied.
 	 */
-	private async configureThinkAgent(): Promise<void> {
+	private async configureThinkAgent(): Promise<boolean> {
 		const inf = this.getInferenceContext();
 		const userId = this.state.metadata.userId;
 
-		const modelName = THINK_MODEL_ID;
-		const aiModelConfig = THINK_MODEL_CONFIG;
+		const selected = resolveThinkModel(this.state.thinkModelId);
+		const modelName = selected.id;
+		const aiModelConfig = selected.config;
 
 		let conf: { baseURL: string; apiKey: string; defaultHeaders?: Record<string, string> };
 		try {
@@ -235,7 +238,7 @@ export class ThinkCodingBehavior
 			);
 		} catch (e) {
 			this.logger.warn('Failed to resolve model gateway config for ThinkAgent', e);
-			return;
+			return false;
 		}
 
 		// Provider key or gateway stored keys (BYOK); in stored-keys mode
@@ -273,8 +276,23 @@ export class ThinkCodingBehavior
 		try {
 			const stub = await this.getThinkStub();
 			await stub.configureVibe(config);
+			return true;
 		} catch (e) {
 			this.logger.warn('ThinkAgent.configureVibe failed (continuing)', e);
+			return false;
+		}
+	}
+
+	/**
+	 * Switches the build model for this app's next turns. The caller validates
+	 * the id; if the agent cannot be reconfigured the previous choice is kept.
+	 */
+	async setModel(modelId: string): Promise<void> {
+		const previous = this.state.thinkModelId;
+		this.setState({ ...this.state, thinkModelId: modelId });
+		if (!(await this.configureThinkAgent())) {
+			this.setState({ ...this.state, thinkModelId: previous });
+			throw new Error('the agent could not be reconfigured');
 		}
 	}
 

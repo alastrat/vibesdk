@@ -26,7 +26,7 @@ import { getUserConfigurableSettings } from '../../config';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
-import { THINK_MODEL_CONFIG } from './model-config';
+import { resolveThinkModel } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 
@@ -345,7 +345,7 @@ export class ThinkAgent extends Think<Env> {
 				'',
 				false,
 				this.turnUsage.hasCloudflareConfigured,
-				{ creditCost: THINK_MODEL_CONFIG.creditCost, throwOnExceeded: false },
+				{ creditCost: resolveThinkModel(config.model.modelName).config.creditCost, throwOnExceeded: false },
 			);
 		}
 		if (ctx.stepNumber >= this.maxSteps - 1) {
