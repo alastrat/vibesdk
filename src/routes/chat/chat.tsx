@@ -1418,6 +1418,7 @@ function ChatSession() {
 										onSwitch={switchModelAndResume}
 										onRetry={retryModel}
 										onDismiss={dismissModelUnavailable}
+										disabled={!isWebSocketOpen}
 									/>
 									<ClarifyingQuestionsPopup
 										questions={clarifyingQuestions ?? []}

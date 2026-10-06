@@ -26,10 +26,12 @@ interface ModelUnavailableNoticeProps {
 	onSwitch: (modelId: string) => void;
 	onRetry: () => void;
 	onDismiss: () => void;
+	/** Disables the actions that need the agent socket. */
+	disabled?: boolean;
 }
 
 /** Explains a build model provider failure and offers to switch or retry. */
-export function ModelUnavailableNotice({ notice, options, onSwitch, onRetry, onDismiss }: ModelUnavailableNoticeProps) {
+export function ModelUnavailableNotice({ notice, options, onSwitch, onRetry, onDismiss, disabled = false }: ModelUnavailableNoticeProps) {
 	if (!notice) return null;
 
 	const failed = options.find((option) => option.id === notice.modelId);
@@ -47,11 +49,11 @@ export function ModelUnavailableNotice({ notice, options, onSwitch, onRetry, onD
 			{notice.detail && <p className="mt-1 text-xs text-kumo-subtle">{notice.detail}</p>}
 			<div className="mt-3 flex flex-wrap items-center gap-2">
 				{alternative && (
-					<Button size="sm" onClick={() => onSwitch(alternative.id)}>
+					<Button size="sm" disabled={disabled} onClick={() => onSwitch(alternative.id)}>
 						Switch to {alternative.label}
 					</Button>
 				)}
-				<Button size="sm" variant="outline" onClick={onRetry}>
+				<Button size="sm" variant="outline" disabled={disabled} onClick={onRetry}>
 					Try again
 				</Button>
 				<Button size="sm" variant="ghost" onClick={onDismiss}>

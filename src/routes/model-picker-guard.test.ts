@@ -94,4 +94,14 @@ describe('model picker: provider failure card', () => {
 	it('names the price change when offering a switch', () => {
 		expect(source('/src/components/ModelUnavailableNotice.tsx')).toContain('describeCreditChange(failed.creditCost, alternative.creditCost)');
 	});
+
+	it('passes the socket state to the card as well as the picker', () => {
+		const chat = source('/src/routes/chat/chat.tsx');
+		expect(chat.match(/disabled=\{!isWebSocketOpen\}/g) ?? []).toHaveLength(2);
+	});
+
+	it('disables the switch and retry buttons, but not dismiss', () => {
+		const card = source('/src/components/ModelUnavailableNotice.tsx');
+		expect(card.match(/disabled=\{disabled\}/g) ?? []).toHaveLength(2);
+	});
 });
