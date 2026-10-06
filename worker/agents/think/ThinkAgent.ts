@@ -27,7 +27,7 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
-import { createFallbackFetch, type ModelFallback } from './model-fallback';
+import { createFallbackFetch, FallbackLatch, type ModelFallback } from './model-fallback';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 
 /** How long the primary model may take to start responding before the fallback takes over. */
@@ -172,6 +172,8 @@ export class ThinkAgent extends Think<Env> {
 	 * the `extra_content` Google requires for multi-step function calling).
 	 */
 	private readonly thoughtSignatures = new Map<string, string>();
+	/** Once the primary model fails in a turn, the rest of that turn stays on the fallback. */
+	private readonly fallbackLatch = new FallbackLatch();
 	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean } | null = null;
 
 	private requireConfig(): ThinkAgentConfig {
@@ -203,6 +205,7 @@ export class ThinkAgent extends Think<Env> {
 		// signatures are Gemini-only, so the fallback request goes without them.
 		const transport = createFallbackFetch({
 			fallback: model.fallback,
+			latch: this.fallbackLatch,
 			primaryTimeoutMs: PRIMARY_RESPONSE_TIMEOUT_MS,
 			preparePrimaryBody: (body) => injectThoughtSignatures(body, this.thoughtSignatures),
 			onFallback: (reason) =>
@@ -266,6 +269,7 @@ export class ThinkAgent extends Think<Env> {
 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
+		this.fallbackLatch.reset();
 		this.turnUsage = null;
 		if (config) {
 			try {

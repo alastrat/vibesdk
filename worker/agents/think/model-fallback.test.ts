@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createFallbackFetch, type ModelFallback } from './model-fallback';
+import { createFallbackFetch, FallbackLatch, type ModelFallback } from './model-fallback';
 
 const URL = 'https://gateway.ai.cloudflare.com/v1/acct/estori-gateway/compat/chat/completions';
 
@@ -143,6 +143,47 @@ describe('createFallbackFetch', () => {
 		controller.abort();
 		await expect(pending).rejects.toThrow();
 		expect(seen).toHaveLength(1);
+	});
+
+	it('sends later requests straight to the fallback once the primary has failed', async () => {
+		const latch = new FallbackLatch();
+		const { impl, seen } = fakeFetch([
+			() => new Response('overloaded', { status: 503 }),
+			() => new Response('fallback 1', { status: 200 }),
+			() => new Response('fallback 2', { status: 200 }),
+		]);
+		const transport = createFallbackFetch({ fallback: FALLBACK, primaryTimeoutMs: 1000, latch, fetchImpl: impl });
+		await transport(URL, primaryInit());
+		const second = await transport(URL, primaryInit());
+		expect(await second.text()).toBe('fallback 2');
+		expect(seen.map((s) => s.body.model)).toEqual([
+			'google-ai-studio/gemini-3.6-flash',
+			'anthropic/claude-opus-5-5',
+			'anthropic/claude-opus-5-5',
+		]);
+		expect(seen[2].headers.get('authorization')).toBe('Bearer anthropic-key');
+	});
+
+	it('tries the primary again after the latch is reset', async () => {
+		const latch = new FallbackLatch();
+		const { impl, seen } = fakeFetch([
+			() => new Response('overloaded', { status: 503 }),
+			() => new Response('fallback', { status: 200 }),
+			() => new Response('primary', { status: 200 }),
+		]);
+		const transport = createFallbackFetch({ fallback: FALLBACK, primaryTimeoutMs: 1000, latch, fetchImpl: impl });
+		await transport(URL, primaryInit());
+		latch.reset();
+		const res = await transport(URL, primaryInit());
+		expect(await res.text()).toBe('primary');
+		expect(seen[2].body.model).toBe('google-ai-studio/gemini-3.6-flash');
+	});
+
+	it('does not engage the latch when the primary succeeds', async () => {
+		const latch = new FallbackLatch();
+		const { impl } = fakeFetch([() => new Response('primary', { status: 200 })]);
+		await createFallbackFetch({ fallback: FALLBACK, primaryTimeoutMs: 1000, latch, fetchImpl: impl })(URL, primaryInit());
+		expect(latch.isEngaged()).toBe(false);
 	});
 
 	it('reports why it fell back', async () => {

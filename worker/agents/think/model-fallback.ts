@@ -7,7 +7,7 @@
 const FALLBACK_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 export interface ModelFallback {
-	/** Gateway model id, for example `anthropic/claude-opus-5-5`. */
+	/** Gateway model id, for example `anthropic/claude-sonnet-5-5`. */
 	modelName: string;
 	/** Provider key sent as the `Authorization` bearer token; omitted when the gateway holds the key (BYOK). */
 	apiKey?: string;
@@ -15,8 +15,30 @@ export interface ModelFallback {
 	headers?: Record<string, string>;
 }
 
+/**
+ * Remembers that the primary failed so later requests go straight to the
+ * fallback instead of waiting on the primary again. The owner resets it, for
+ * example at the start of each turn.
+ */
+export class FallbackLatch {
+	private engaged = false;
+
+	isEngaged(): boolean {
+		return this.engaged;
+	}
+
+	engage(): void {
+		this.engaged = true;
+	}
+
+	reset(): void {
+		this.engaged = false;
+	}
+}
+
 export interface FallbackFetchOptions {
 	fallback?: ModelFallback;
+	latch?: FallbackLatch;
 	/** How long to wait for the primary provider's response headers before falling back. */
 	primaryTimeoutMs: number;
 	/** Rewrites the body of the primary request only, for provider-specific fields. */
@@ -26,7 +48,7 @@ export interface FallbackFetchOptions {
 }
 
 export function createFallbackFetch(options: FallbackFetchOptions): typeof fetch {
-	const { fallback, primaryTimeoutMs, preparePrimaryBody, onFallback } = options;
+	const { fallback, latch, primaryTimeoutMs, preparePrimaryBody, onFallback } = options;
 	const fetchImpl: typeof fetch = options.fetchImpl ?? ((input, init) => fetch(input, init));
 
 	return async (input, init) => {
@@ -39,14 +61,17 @@ export function createFallbackFetch(options: FallbackFetchOptions): typeof fetch
 			return fetchImpl(input, primaryInit);
 		}
 
-		const attempt = await fetchWithTimeout(fetchImpl, input, primaryInit, primaryTimeoutMs);
-		if (attempt.kind === 'response' && !FALLBACK_STATUSES.has(attempt.response.status)) {
-			return attempt.response;
+		if (!latch?.isEngaged()) {
+			const attempt = await fetchWithTimeout(fetchImpl, input, primaryInit, primaryTimeoutMs);
+			if (attempt.kind === 'response' && !FALLBACK_STATUSES.has(attempt.response.status)) {
+				return attempt.response;
+			}
+			if (attempt.kind === 'response') {
+				await attempt.response.body?.cancel();
+			}
+			latch?.engage();
+			onFallback?.(attempt.kind === 'response' ? `status ${attempt.response.status}` : 'timeout');
 		}
-		if (attempt.kind === 'response') {
-			await attempt.response.body?.cancel();
-		}
-		onFallback?.(attempt.kind === 'response' ? `status ${attempt.response.status}` : 'timeout');
 
 		const headers = new Headers(init?.headers);
 		if (fallback.apiKey) {

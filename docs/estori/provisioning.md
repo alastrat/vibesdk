@@ -12,7 +12,7 @@ R2 must be enabled for the account first (R2 → Overview → Purchase/enable, f
 
 Artifacts needs no command: the `estori-production` namespace is created automatically with the first repository. The AI Gateway `estori-gateway` already exists.
 
-The build agent falls back from Gemini to Claude Opus 5.5 when Gemini is overloaded (`ENABLE_THINK_MODEL_FALLBACK` in `wrangler.estori.jsonc`). The Anthropic key lives only in the gateway: AI Gateway → `estori-gateway` → Provider Keys → Anthropic. Without it, fallback requests fail with 401, so set `ENABLE_THINK_MODEL_FALLBACK` to `"false"` if the stored key is ever removed.
+The build agent falls back from Gemini to Claude Sonnet 5.5 when Gemini is overloaded, and stays on it for the rest of that turn (`ENABLE_THINK_MODEL_FALLBACK` in `wrangler.estori.jsonc`). The Anthropic key lives only in the gateway: AI Gateway → `estori-gateway` → Provider Keys → Anthropic. Without it, fallback requests fail with 401, so set `ENABLE_THINK_MODEL_FALLBACK` to `"false"` if the stored key is ever removed.
 
 The D1 and KV IDs go into `wrangler.estori.jsonc` (see the implementation plan, Task 7).
 
