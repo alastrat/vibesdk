@@ -27,7 +27,8 @@ import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
-import { resolveThinkModel } from '../../think/model-config';
+import { modelUnavailableNotice, resolveThinkModel } from '../../think/model-config';
+import type { ProviderFailure } from '../../think/model-transport';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
@@ -44,6 +45,7 @@ type ThinkAgentStub = {
 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
 	getMessages: () => Promise<UIMessage[]>;
 	clearMessages: () => Promise<void>;
+	getProviderFailure: () => Promise<ProviderFailure | null>;
 };
 
 /** SpaceDO RPC surface this behavior drives (see `space/src/space/durable-object.ts`). */
@@ -491,9 +493,7 @@ export class ThinkCodingBehavior
 				await this.runPrompt(compiled);
 			} catch (e) {
 				this.logger.error('Think prompt failed', e);
-				this.broadcast(WebSocketMessageResponses.ERROR, {
-					error: e instanceof Error ? e.message : String(e),
-				});
+				await this.reportTurnError(e instanceof Error ? e.message : String(e));
 				break;
 			}
 
@@ -524,6 +524,7 @@ export class ThinkCodingBehavior
 		const toolNames = new Map<string, string>();
 		const toolInputs = new Map<string, Record<string, unknown>>();
 
+		let turnError: string | undefined;
 		const forwarder = new ThinkStreamForwarder(
 			(json) => {
 				let chunk: ThinkChunk;
@@ -534,7 +535,9 @@ export class ThinkCodingBehavior
 				}
 				return this.translateChunk(chunk, conversationId, accumulated, seenWrittenFiles, toolNames, toolInputs);
 			},
-			(err) => this.broadcast(WebSocketMessageResponses.ERROR, { error: err }),
+			(err) => {
+				turnError = err;
+			},
 		);
 
 		const stub = await this.getThinkStub();
@@ -559,6 +562,28 @@ export class ThinkCodingBehavior
 				});
 			}
 		}
+		if (turnError !== undefined) {
+			await this.reportTurnError(turnError);
+		}
+	}
+
+	/**
+	 * Reports a failed turn. A provider failure becomes a `model_unavailable`
+	 * card that can offer a switch; anything else stays a plain error.
+	 */
+	private async reportTurnError(error: string): Promise<void> {
+		const failure = await this.getThinkStub()
+			.then((stub) => stub.getProviderFailure())
+			.catch(() => null);
+		if (!failure) {
+			this.broadcast(WebSocketMessageResponses.ERROR, { error });
+			return;
+		}
+		const flags = this.env as unknown as { ENABLE_THINK_MODEL_FALLBACK?: string };
+		this.broadcast(
+			WebSocketMessageResponses.MODEL_UNAVAILABLE,
+			modelUnavailableNotice(failure, flags.ENABLE_THINK_MODEL_FALLBACK === 'true'),
+		);
 	}
 
 	private async translateChunk(

@@ -4,6 +4,7 @@ import {
 	THINK_MODELS,
 	fallbackModelFor,
 	isThinkModelId,
+	modelUnavailableNotice,
 	resolveThinkModel,
 	thinkModelOptions,
 } from './model-config';
@@ -60,6 +61,33 @@ describe('think model catalog', () => {
 			label: 'Claude Sonnet 5.5',
 			provider: 'anthropic',
 			creditCost: 8,
+		});
+	});
+});
+
+describe('modelUnavailableNotice', () => {
+	const failure = { modelId: 'google-ai-studio/gemini-3.6-flash', reason: 'overloaded' as const, status: 503, detail: 'high demand' };
+
+	it('offers the other provider when switching is enabled', () => {
+		expect(modelUnavailableNotice(failure, true)).toEqual({
+			modelId: 'google-ai-studio/gemini-3.6-flash',
+			reason: 'overloaded',
+			status: 503,
+			detail: 'high demand',
+			alternativeModelId: 'anthropic/claude-sonnet-5-5',
+		});
+	});
+
+	it('offers no alternative when switching is disabled', () => {
+		expect(modelUnavailableNotice(failure, false)).not.toHaveProperty('alternativeModelId');
+	});
+
+	it('offers Gemini when a Claude model fails', () => {
+		const claude = { modelId: 'anthropic/claude-opus-5-5', reason: 'timeout' as const };
+		expect(modelUnavailableNotice(claude, true)).toEqual({
+			modelId: 'anthropic/claude-opus-5-5',
+			reason: 'timeout',
+			alternativeModelId: 'google-ai-studio/gemini-3.6-flash',
 		});
 	});
 });

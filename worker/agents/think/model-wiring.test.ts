@@ -36,4 +36,11 @@ describe('think model wiring', () => {
 	it('keeps the catalog as the only model list', () => {
 		expect(source('/worker/agents/think/model-config.ts')).not.toMatch(/\bTHINK_MODEL_ID\b|\bTHINK_MODEL_CONFIG\b/);
 	});
+
+	it('reports failed turns through the provider failure check', () => {
+		const behavior = source('/worker/agents/core/behaviors/think.ts');
+		expect(behavior).toContain('stub.getProviderFailure()');
+		expect(behavior).toContain('WebSocketMessageResponses.MODEL_UNAVAILABLE');
+		expect(behavior.match(/await this\.reportTurnError\(/g) ?? []).toHaveLength(2);
+	});
 });

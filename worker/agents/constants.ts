@@ -86,6 +86,9 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
 
     // Vault messages
     VAULT_REQUIRED: 'vault_required',
+
+    // Build model provider failure (think only)
+    MODEL_UNAVAILABLE: 'model_unavailable',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types

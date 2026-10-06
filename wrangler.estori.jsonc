@@ -120,7 +120,7 @@
 		"TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
 		"CLOUDFLARE_AI_GATEWAY": "estori-gateway",
 		"ARTIFACTS_NAMESPACE": "estori-production",
-		// Re-send overloaded Gemini requests to Claude through the gateway (provider keys stored in the gateway).
+		// Offer switching to the other provider's model when the build model's provider fails (keys stored in the gateway).
 		"ENABLE_THINK_MODEL_FALLBACK": "true",
 		"PLATFORM_CAPABILITIES": {
 			"features": {

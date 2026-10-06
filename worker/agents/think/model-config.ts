@@ -1,5 +1,6 @@
 import { ModelSize, type AIModelConfig } from '../inferutils/config.types';
 import type { ThinkModelOption } from '../core/features/types';
+import type { ProviderFailure, ProviderFailureReason } from './model-transport';
 
 /** A model users can pick to build a think app. Ids are AI Gateway `provider/model` slugs. */
 export interface ThinkModel {
@@ -61,4 +62,24 @@ function requireThinkModel(id: string): ThinkModel {
 	const model = THINK_MODELS.find((candidate) => candidate.id === id);
 	if (!model) throw new Error(`Think model ${id} is missing from THINK_MODELS`);
 	return model;
+}
+
+/** What the chat needs to explain a provider failure and offer a switch. */
+export interface ModelUnavailableNotice {
+	modelId: string;
+	reason: ProviderFailureReason;
+	status?: number;
+	detail?: string;
+	/** The other provider's model, when switching is offered. */
+	alternativeModelId?: string;
+}
+
+export function modelUnavailableNotice(failure: ProviderFailure, offerAlternative: boolean): ModelUnavailableNotice {
+	return {
+		modelId: failure.modelId,
+		reason: failure.reason,
+		...(failure.status !== undefined ? { status: failure.status } : {}),
+		...(failure.detail !== undefined ? { detail: failure.detail } : {}),
+		...(offerAlternative ? { alternativeModelId: fallbackModelFor(resolveThinkModel(failure.modelId)).id } : {}),
+	};
 }

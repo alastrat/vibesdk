@@ -5,6 +5,7 @@ import type { CodeIssue, RuntimeError, StaticAnalysisResponse, TemplateDetails }
 import type { CodeFixResult } from "../services/code-fixer";
 import { IssueReport } from "../agents/domain/values/IssueReport";
 import type { RateLimitExceededError } from 'shared/types/errors';
+import type { ModelUnavailableNotice } from '../agents/think/model-config';
 
 type ErrorMessage = {
     type: 'error';
@@ -482,6 +483,8 @@ type VaultRequiredMessage = {
 	secretId?: string;
 };
 
+type ModelUnavailableMessage = { type: 'model_unavailable' } & ModelUnavailableNotice;
+
 // ========== VAULT WEBSOCKET MESSAGES (sent to vault DO) ==========
 
 /** Client request to store a new secret */
@@ -651,7 +654,8 @@ export type WebSocketMessage =
 	| ServerLogMessage
 	| VaultUnlockedMessage
 	| VaultLockedMessage
-	| VaultRequiredMessage;
+	| VaultRequiredMessage
+	| ModelUnavailableMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];
