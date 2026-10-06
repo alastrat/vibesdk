@@ -89,6 +89,9 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
 
     // Build model provider failure (think only)
     MODEL_UNAVAILABLE: 'model_unavailable',
+
+    // Live progress of a running build (think only)
+    BUILD_PROGRESS: 'build_progress',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types

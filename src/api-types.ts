@@ -150,7 +150,9 @@ export type {
   ModelConfigsInfoMessage,
   AgentDisplayConfig,
   ModelConfigsInfo,
-  CloudflareDeploymentErrorCode
+  CloudflareDeploymentErrorCode,
+  BuildActivity,
+  BuildProgress,
 } from 'worker/api/websocketTypes';
 
 // Database/Schema Types commonly used in frontend

@@ -24,6 +24,8 @@ type AgentConnectedMessage = {
     state: AgentState;
     templateDetails: TemplateDetails;
     previewUrl?: string;
+    /** Live progress when a Think build is running. */
+    buildProgress?: BuildProgress;
 };
 
 type TemplateUpdatedMessage = {
@@ -485,6 +487,22 @@ type VaultRequiredMessage = {
 
 type ModelUnavailableMessage = { type: 'model_unavailable' } & ModelUnavailableNotice;
 
+/** What a running Think build is doing right now. */
+export type BuildActivity =
+	| { kind: 'thinking' }
+	| { kind: 'tool'; toolName: string; path?: string; lines?: number };
+
+/** A snapshot of a running Think build. */
+export type BuildProgress = {
+	/** Milliseconds since the build started, measured on the server when sent. */
+	elapsedMs: number;
+	/** Model calls started in this build; 0 before the first. */
+	step: number;
+	activity: BuildActivity;
+};
+
+type BuildProgressMessage = { type: 'build_progress'; progress: BuildProgress };
+
 // ========== VAULT WEBSOCKET MESSAGES (sent to vault DO) ==========
 
 /** Client request to store a new secret */
@@ -655,7 +673,8 @@ export type WebSocketMessage =
 	| VaultUnlockedMessage
 	| VaultLockedMessage
 	| VaultRequiredMessage
-	| ModelUnavailableMessage;
+	| ModelUnavailableMessage
+	| BuildProgressMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];

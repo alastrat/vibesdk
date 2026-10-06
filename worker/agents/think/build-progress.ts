@@ -3,6 +3,8 @@
  * host already receives from the ThinkAgent.
  */
 
+import type { BuildActivity, BuildProgress } from '../../api/websocketTypes';
+
 type StringRole = 'key' | 'path' | 'content' | 'other';
 
 const SIMPLE_ESCAPES: Record<string, string> = {
@@ -154,4 +156,114 @@ export class ToolInputScanner {
 		if (this.key === 'content') return 'content';
 		return 'other';
 	}
+}
+
+/** A UI message stream chunk as the host receives it. */
+export type ProgressChunk = { type: string; [key: string]: unknown };
+
+/** Snapshots that change only the line count are sent at most this often. */
+export const LINE_UPDATE_INTERVAL_MS = 1_000;
+
+/** Tools whose streamed arguments are scanned for a path and line count. */
+const SCANNED_TOOLS = new Set(['write', 'edit']);
+
+interface OpenCall {
+	toolName: string;
+	scanner?: ToolInputScanner;
+	/** Final values from `tool-input-available`; they replace the scanner's. */
+	path?: string;
+	lines?: number;
+}
+
+/**
+ * Tracks one build's step count and current activity from stream chunks, and
+ * decides when a snapshot is worth broadcasting.
+ */
+export class BuildProgressTracker {
+	private step = 0;
+	/** Open tool calls in the order they opened. */
+	private readonly calls = new Map<string, OpenCall>();
+	private lastSent: { key: string; lines: number | undefined; at: number } | undefined;
+
+	constructor(private readonly startedAt: number) {}
+
+	/** Applies one chunk; returns a snapshot when it should be broadcast, otherwise null. */
+	onChunk(chunk: ProgressChunk, now: number): BuildProgress | null {
+		if (!this.apply(chunk)) return null;
+		const progress = this.snapshot(now);
+		const { activity } = progress;
+		const key =
+			activity.kind === 'tool'
+				? `${progress.step}|tool|${activity.toolName}|${activity.path ?? ''}`
+				: `${progress.step}|thinking`;
+		const lines = activity.kind === 'tool' ? activity.lines : undefined;
+		const last = this.lastSent;
+		if (last && last.key === key && (last.lines === lines || now - last.at < LINE_UPDATE_INTERVAL_MS)) {
+			return null;
+		}
+		this.lastSent = { key, lines, at: now };
+		return progress;
+	}
+
+	/** The current snapshot, for a tab that connects mid-build. */
+	snapshot(now: number): BuildProgress {
+		return { elapsedMs: Math.max(0, now - this.startedAt), step: this.step, activity: this.activity() };
+	}
+
+	private apply(chunk: ProgressChunk): boolean {
+		switch (chunk.type) {
+			case 'start-step':
+				this.step += 1;
+				return true;
+			case 'tool-input-start': {
+				const { toolCallId, toolName } = chunk;
+				if (typeof toolCallId !== 'string' || typeof toolName !== 'string') return false;
+				this.calls.set(toolCallId, {
+					toolName,
+					scanner: SCANNED_TOOLS.has(toolName) ? new ToolInputScanner() : undefined,
+				});
+				return true;
+			}
+			case 'tool-input-delta': {
+				const call = typeof chunk.toolCallId === 'string' ? this.calls.get(chunk.toolCallId) : undefined;
+				if (!call?.scanner || typeof chunk.inputTextDelta !== 'string') return false;
+				call.scanner.push(chunk.inputTextDelta);
+				return true;
+			}
+			case 'tool-input-available': {
+				const { toolCallId, toolName, input } = chunk;
+				if (typeof toolCallId !== 'string' || typeof toolName !== 'string') return false;
+				const call = this.calls.get(toolCallId) ?? { toolName };
+				const args = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+				call.path = typeof args.path === 'string' && args.path.length > 0 ? args.path : undefined;
+				call.lines = toolName === 'write' && typeof args.content === 'string' ? countLines(args.content) : undefined;
+				call.scanner = undefined;
+				this.calls.set(toolCallId, call);
+				return true;
+			}
+			case 'tool-output-available':
+			case 'tool-output-error':
+				return typeof chunk.toolCallId === 'string' && this.calls.delete(chunk.toolCallId);
+			default:
+				return false;
+		}
+	}
+
+	private activity(): BuildActivity {
+		let current: OpenCall | undefined;
+		for (const call of this.calls.values()) current = call;
+		if (!current) return { kind: 'thinking' };
+		const path = current.path ?? current.scanner?.path;
+		const lines = current.toolName === 'write' ? (current.lines ?? current.scanner?.lines) : undefined;
+		return {
+			kind: 'tool',
+			toolName: current.toolName,
+			...(path ? { path: path.replace(/^\/+/, '') } : {}),
+			...(lines ? { lines } : {}),
+		};
+	}
+}
+
+function countLines(content: string): number {
+	return content.length === 0 ? 0 : content.split('\n').length;
 }
