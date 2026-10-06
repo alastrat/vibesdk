@@ -19,7 +19,8 @@ export function ThinkModelPicker({ options, value, onChange, disabled = false, c
 		<Select value={value} onValueChange={onChange} disabled={disabled}>
 			<SelectTrigger
 				aria-label="Model"
-				className={cn('h-8 w-auto gap-1.5 border-none bg-transparent px-2 text-sm shadow-none', className)}
+				size="sm"
+				className={cn('w-auto gap-1.5 border-none bg-transparent px-2 text-sm shadow-none', className)}
 			>
 				<SelectValue placeholder="Select model" />
 			</SelectTrigger>
