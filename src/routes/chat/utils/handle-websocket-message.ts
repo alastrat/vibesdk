@@ -28,6 +28,7 @@ import {
     hasAnswerAfterMessage,
 } from './message-helpers';
 import { completeStages, type ProjectStage } from './project-stage-helpers';
+import { applyBuildProgress, buildStatusFromConnect, startBuildStatus, type BuildStatus } from './build-status';
 import { sendWebSocketMessage } from './websocket-helpers';
 import type { PhaseTimelineItem } from '../hooks/use-chat';
 import type { FileType } from '@/api-types';
@@ -69,6 +70,7 @@ export interface HandleMessageDeps {
     setCloudflareDeploymentUrl: React.Dispatch<React.SetStateAction<string>>;
     setThinkModelId: React.Dispatch<React.SetStateAction<string>>;
     setModelUnavailable: React.Dispatch<React.SetStateAction<ModelUnavailableNotice | null>>;
+    setBuildStatus: React.Dispatch<React.SetStateAction<BuildStatus | null>>;
     setDeploymentError: React.Dispatch<React.SetStateAction<string | undefined>>;
     setIsGenerationPaused: React.Dispatch<React.SetStateAction<boolean>>;
     setIsGenerating: React.Dispatch<React.SetStateAction<boolean>>;
@@ -156,6 +158,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setCloudflareDeploymentUrl,
             setThinkModelId,
             setModelUnavailable,
+            setBuildStatus,
             setDeploymentError,
             setIsGenerationPaused,
             setIsGenerating,
@@ -188,7 +191,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
         } = deps;
 
         // Log messages except for frequent ones
-        if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type.length <= 50) {
+        if (message.type !== 'file_chunk_generated' && message.type !== 'cf_agent_state' && message.type !== 'build_progress' && message.type.length <= 50) {
             logger.info('received message', message.type, message);
             onDebugMessage?.('websocket', 
                 `${message.type}`,
@@ -213,6 +216,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 if (state.behaviorType === 'think') {
                     setThinkModelId(state.thinkModelId ?? '');
                 }
+                setBuildStatus(buildStatusFromConnect(message.buildProgress, Date.now()));
                 if (!isInitialStateRestored) {
                     logger.debug('📥 Performing initial state restoration');
 
@@ -667,6 +671,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsGenerating(true);
                 // A new run supersedes any earlier failure card, in every open tab.
                 setModelUnavailable(null);
+                if (behaviorType === 'think') setBuildStatus(startBuildStatus(Date.now()));
                 break;
             }
 
@@ -689,6 +694,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setIsPhaseProgressActive(false);
                 setIsThinking(false);
                 setIsGenerating(false);
+                setBuildStatus(null);
+                break;
+            }
+
+            case 'build_progress': {
+                setBuildStatus((prev) => applyBuildProgress(prev, message.progress, Date.now()));
                 break;
             }
 

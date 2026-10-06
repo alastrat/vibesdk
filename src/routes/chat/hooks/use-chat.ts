@@ -32,6 +32,7 @@ import { initialStages as defaultStages, updateStage as updateStageHelper } from
 import type { ProjectStage } from '../utils/project-stage-helpers';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { RESUME_BUILD_MESSAGE } from '../../../../shared/think';
+import type { BuildStatus } from '../utils/build-status';
 
 export type Edit = Omit<CodeFixEdits, 'type'>;
 
@@ -161,6 +162,7 @@ export function useChat({
 	const [cloudflareDeploymentUrl, setCloudflareDeploymentUrl] = useState<string>('');
 	const [thinkModelId, setThinkModelId] = useState<string>('');
 	const [modelUnavailable, setModelUnavailable] = useState<ModelUnavailableNotice | null>(null);
+	const [buildStatus, setBuildStatus] = useState<BuildStatus | null>(null);
 	const [deploymentError, setDeploymentError] = useState<string>();
 	
 	// Issue tracking and debugging state
@@ -314,6 +316,7 @@ export function useChat({
 			setCloudflareDeploymentUrl,
 			setThinkModelId,
 			setModelUnavailable,
+			setBuildStatus,
 			setDeploymentError,
 			setIsGenerationPaused,
 			setIsGenerating,
@@ -892,6 +895,7 @@ export function useChat({
 		switchModelAndResume,
 		retryModel,
 		dismissModelUnavailable,
+		buildStatus,
 		isWebSocketOpen,
 		deploymentError,
 		isRedeployReady,
