@@ -69,6 +69,7 @@ import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
+import { ModelUnavailableNotice } from '@/components/ModelUnavailableNotice';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
 import {
 	RollbackContext,
@@ -263,6 +264,10 @@ function ChatSession() {
 		dismissClarifyingQuestions,
 		thinkModelId,
 		selectThinkModel,
+		modelUnavailable,
+		switchModelAndResume,
+		retryModel,
+		dismissModelUnavailable,
 		isWebSocketOpen,
 	} = useChat({
 		chatId: urlChatId,
@@ -1406,15 +1411,24 @@ function ChatSession() {
 								) : undefined
 							}
 							aboveContent={
-								<ClarifyingQuestionsPopup
-									questions={clarifyingQuestions ?? []}
-									open={
-										clarifyingQuestions !== null &&
-										clarifyingQuestions.length > 0
-									}
-									onSubmit={submitClarifyingAnswers}
-									onDismiss={dismissClarifyingQuestions}
-								/>
+								<>
+									<ModelUnavailableNotice
+										notice={modelUnavailable}
+										options={capabilities?.thinkModels ?? []}
+										onSwitch={switchModelAndResume}
+										onRetry={retryModel}
+										onDismiss={dismissModelUnavailable}
+									/>
+									<ClarifyingQuestionsPopup
+										questions={clarifyingQuestions ?? []}
+										open={
+											clarifyingQuestions !== null &&
+											clarifyingQuestions.length > 0
+										}
+										onSubmit={submitClarifyingAnswers}
+										onDismiss={dismissClarifyingQuestions}
+									/>
+								</>
 							}
 						/>
 					</motion.div>

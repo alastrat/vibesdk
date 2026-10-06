@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 const sources = import.meta.glob<string>(
 	[
 		'/src/components/ThinkModelPicker.tsx',
+		'/src/components/ModelUnavailableNotice.tsx',
 		'/src/routes/home.tsx',
 		'/src/routes/chat/chat.tsx',
 		'/src/routes/chat/components/chat-input.tsx',
@@ -72,5 +73,25 @@ describe('model picker: chat', () => {
 
 	it('leaves the input layout alone when no models are offered', () => {
 		expect(source('/src/routes/chat/chat.tsx')).toContain('(capabilities?.thinkModels?.length ?? 0) > 0');
+	});
+});
+
+describe('model picker: provider failure card', () => {
+	it('stores model_unavailable messages for the card', () => {
+		expect(source('/src/routes/chat/utils/handle-websocket-message.ts')).toContain("case 'model_unavailable':");
+	});
+
+	it('switches with resume and retries with the resume message', () => {
+		const hook = source('/src/routes/chat/hooks/use-chat.ts');
+		expect(hook).toContain("sendWebSocketMessage(websocket, 'set_model', { modelId, resume: true })");
+		expect(hook).toContain("sendWebSocketMessage(websocket, 'user_suggestion', { message: RESUME_BUILD_MESSAGE })");
+	});
+
+	it('shows the card above the chat input', () => {
+		expect(source('/src/routes/chat/chat.tsx')).toMatch(/<ModelUnavailableNotice\b/);
+	});
+
+	it('names the price change when offering a switch', () => {
+		expect(source('/src/components/ModelUnavailableNotice.tsx')).toContain('describeCreditChange(failed.creditCost, alternative.creditCost)');
 	});
 });

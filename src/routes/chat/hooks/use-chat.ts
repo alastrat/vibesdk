@@ -13,6 +13,7 @@ import {
 	type FileType,
 	type TemplateDetails,
 	type CloudflareDeploymentErrorCode,
+	type ModelUnavailableNotice,
 	getBehaviorTypeForProject,
 } from '@/api-types';
 import {
@@ -30,6 +31,7 @@ import { sendWebSocketMessage } from '../utils/websocket-helpers';
 import { initialStages as defaultStages, updateStage as updateStageHelper } from '../utils/project-stage-helpers';
 import type { ProjectStage } from '../utils/project-stage-helpers';
 import { useLimitsContext } from '@/contexts/limits-context';
+import { RESUME_BUILD_MESSAGE } from '../../../../shared/think';
 
 export type Edit = Omit<CodeFixEdits, 'type'>;
 
@@ -158,6 +160,7 @@ export function useChat({
 	const [isDeploying, setIsDeploying] = useState(false);
 	const [cloudflareDeploymentUrl, setCloudflareDeploymentUrl] = useState<string>('');
 	const [thinkModelId, setThinkModelId] = useState<string>('');
+	const [modelUnavailable, setModelUnavailable] = useState<ModelUnavailableNotice | null>(null);
 	const [deploymentError, setDeploymentError] = useState<string>();
 	
 	// Issue tracking and debugging state
@@ -234,6 +237,25 @@ export function useChat({
 		}
 	}, [websocket]);
 
+	const switchModelAndResume = useCallback((modelId: string) => {
+		if (sendWebSocketMessage(websocket, 'set_model', { modelId, resume: true })) {
+			setThinkModelId(modelId);
+			sendUserMessage(RESUME_BUILD_MESSAGE);
+			setModelUnavailable(null);
+		}
+	}, [websocket, sendUserMessage]);
+
+	const retryModel = useCallback(() => {
+		if (sendWebSocketMessage(websocket, 'user_suggestion', { message: RESUME_BUILD_MESSAGE })) {
+			sendUserMessage(RESUME_BUILD_MESSAGE);
+			setModelUnavailable(null);
+		}
+	}, [websocket, sendUserMessage]);
+
+	const dismissModelUnavailable = useCallback(() => {
+		setModelUnavailable(null);
+	}, []);
+
 	const submitClarifyingAnswers = useCallback((answers: { question: string; selected: string[]; custom: string }[]) => {
 		if (!websocket) return;
 
@@ -290,6 +312,7 @@ export function useChat({
 			setIsDeploying,
 			setCloudflareDeploymentUrl,
 			setThinkModelId,
+			setModelUnavailable,
 			setDeploymentError,
 			setIsGenerationPaused,
 			setIsGenerating,
@@ -864,6 +887,10 @@ export function useChat({
 		cloudflareDeploymentUrl,
 		thinkModelId,
 		selectThinkModel,
+		modelUnavailable,
+		switchModelAndResume,
+		retryModel,
+		dismissModelUnavailable,
 		isWebSocketOpen,
 		deploymentError,
 		isRedeployReady,

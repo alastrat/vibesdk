@@ -1,5 +1,5 @@
 import type { WebSocket } from 'partysocket';
-import type { WebSocketMessage, BlueprintType, ConversationMessage, AgentState, PhasicState, BehaviorType, ProjectType, TemplateDetails, CloudflareDeploymentErrorCode } from '@/api-types';
+import type { WebSocketMessage, BlueprintType, ConversationMessage, AgentState, PhasicState, BehaviorType, ProjectType, TemplateDetails, CloudflareDeploymentErrorCode, ModelUnavailableNotice } from '@/api-types';
 import { deduplicateMessages, isAssistantMessageDuplicate } from './deduplicate-messages';
 import { logger } from '@/utils/logger';
 import { getFileType } from '@/utils/string';
@@ -68,6 +68,7 @@ export interface HandleMessageDeps {
     setIsDeploying: React.Dispatch<React.SetStateAction<boolean>>;
     setCloudflareDeploymentUrl: React.Dispatch<React.SetStateAction<string>>;
     setThinkModelId: React.Dispatch<React.SetStateAction<string>>;
+    setModelUnavailable: React.Dispatch<React.SetStateAction<ModelUnavailableNotice | null>>;
     setDeploymentError: React.Dispatch<React.SetStateAction<string | undefined>>;
     setIsGenerationPaused: React.Dispatch<React.SetStateAction<boolean>>;
     setIsGenerating: React.Dispatch<React.SetStateAction<boolean>>;
@@ -154,6 +155,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setIsDeploying,
             setCloudflareDeploymentUrl,
             setThinkModelId,
+            setModelUnavailable,
             setDeploymentError,
             setIsGenerationPaused,
             setIsGenerating,
@@ -1146,6 +1148,17 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 }
                 
                 logger.info('Usage updated - dispatched event to refetch limits');
+                break;
+            }
+
+            case 'model_unavailable': {
+                setModelUnavailable({
+                    modelId: message.modelId,
+                    reason: message.reason,
+                    status: message.status,
+                    detail: message.detail,
+                    alternativeModelId: message.alternativeModelId,
+                });
                 break;
             }
 
