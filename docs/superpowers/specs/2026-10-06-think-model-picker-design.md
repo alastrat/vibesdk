@@ -63,7 +63,7 @@ Helpers in the same module:
   - it rejects ids outside the catalog with a WebSocket error;
   - it saves `thinkModelId` in state, which broadcasts `cf_agent_state` to every open tab;
   - it re-runs `configureThinkAgent`, which pushes the new model to the ThinkAgent with `configureVibe`.
-- `ThinkAgent.getModel()` reads the configuration on each turn, so the new model applies from the next message. `configureVibe` re-renders the system prompt, which `selectSystemPrompt` already picks by model family.
+- `ThinkAgent.getModel()` reads the configuration on each turn, so the new model applies from the next message. After a failed turn, messages queued during that turn stay queued instead of running on the failing model; the resume or the next message carries them. `configureVibe` re-renders the system prompt, which `selectSystemPrompt` already picks by model family.
 
 ### Agent configuration
 
@@ -71,7 +71,7 @@ Helpers in the same module:
 
 Apps created before this change have no `thinkModelId`. They keep running on the model they were configured with (Gemini 3.6 Flash). Their chat picker shows a "Select model" placeholder rather than a model they are not using, until the user picks one.
 
-`ThinkAgent.beforeStep` charges the catalog credit cost of the configured model (`resolveThinkModel(config.model.modelName)`) in place of the hard-coded Gemini cost.
+Each step is charged the catalog credit cost of the model the turn actually runs on, captured once in `beforeTurn` from the turn's model (`resolveThinkModel(ctx.model.modelId)`), in place of the hard-coded Gemini cost. A mid-turn switch therefore never changes the price of steps that still run on the previous model.
 
 ### When the model's provider fails
 
