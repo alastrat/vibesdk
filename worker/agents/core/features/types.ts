@@ -91,6 +91,16 @@ export interface ViewDefinition {
 	tooltip?: string;
 }
 
+/** A model users can pick to build a think app. */
+export interface ThinkModelOption {
+	/** AI Gateway model id, for example `anthropic/claude-sonnet-5-5`. */
+	id: string;
+	label: string;
+	provider: string;
+	/** Credits charged per build step ($0.25 per 1M input tokens = 1 credit). */
+	creditCost: number;
+}
+
 /**
  * Platform capabilities response from /api/capabilities endpoint.
  */
