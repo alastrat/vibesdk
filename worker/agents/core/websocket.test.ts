@@ -11,9 +11,16 @@ interface FakeBehavior {
 
 const allowAll = (async () => ({ allowed: true })) as unknown as typeof checkUsageAndBalance;
 
-function fakes(behavior: FakeBehavior) {
-	const sent: Array<{ type: string; error?: string }> = [];
-	const calls: string[] = [];
+/** A usage check that records when it runs, so tests can assert it ran and when. */
+function recordingCheck(order: string[], result: { allowed: boolean; reason?: string }): typeof checkUsageAndBalance {
+	return (async () => {
+		order.push('usage-check');
+		return result;
+	}) as unknown as typeof checkUsageAndBalance;
+}
+
+function fakes(behavior: FakeBehavior, calls: string[] = []) {
+	const sent: Array<{ type: string; error?: string; code?: string; showAsPopup?: boolean }> = [];
 	const connection = { id: 'c1', url: 'wss://estori.app/ws', send: (data: string) => sent.push(JSON.parse(data)) } as unknown as Connection;
 	const agent = {
 		getBehavior: () => behavior,
@@ -39,11 +46,23 @@ describe('set_model', () => {
 		expect(sent).toEqual([]);
 	});
 
-	it('resumes the build after switching when asked', async () => {
+	it('resumes the build after switching and passing the usage check', async () => {
 		const order: string[] = [];
-		const { agent, connection, calls } = fakes({ setModel: async (id) => void order.push(`model:${id}`) });
-		await handleWebSocketMessage(agent, connection, setModel('google-ai-studio/gemini-3.6-flash', true), allowAll);
-		expect([...order, ...calls]).toEqual(['model:google-ai-studio/gemini-3.6-flash', `input:${RESUME_BUILD_MESSAGE}`]);
+		const { agent, connection, sent } = fakes({ setModel: async (id) => void order.push(`model:${id}`) }, order);
+		const usageCheck = recordingCheck(order, { allowed: true });
+		await handleWebSocketMessage(agent, connection, setModel('google-ai-studio/gemini-3.6-flash', true), usageCheck);
+		expect(order).toEqual(['model:google-ai-studio/gemini-3.6-flash', 'usage-check', `input:${RESUME_BUILD_MESSAGE}`]);
+		expect(sent).toEqual([]);
+	});
+
+	it('switches but does not resume when the usage check blocks', async () => {
+		const order: string[] = [];
+		const { agent, connection, sent, calls } = fakes({ setModel: async (id) => void order.push(`model:${id}`) });
+		const usageCheck = recordingCheck(order, { allowed: false, reason: 'limit' });
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), usageCheck);
+		expect(order).toEqual(['model:anthropic/claude-opus-5-5', 'usage-check']);
+		expect(calls).toEqual([]);
+		expect(sent).toEqual([{ type: 'error', error: 'limit', code: 'USAGE_LIMIT_EXCEEDED', showAsPopup: true }]);
 	});
 
 	it('rejects ids outside the catalog', async () => {
