@@ -108,6 +108,9 @@ export const WebSocketMessageRequests = {
 
     // Restore a prior commit (think/SpaceDO only)
     ROLLBACK_TO_COMMIT: 'rollback_to_commit',
+
+    // Switch the build model, optionally resuming the build (think only)
+    SET_MODEL: 'set_model',
     
     // GitHub export request
     GITHUB_EXPORT: 'github_export',

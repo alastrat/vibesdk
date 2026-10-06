@@ -7,6 +7,8 @@ import { type CredentialsPayload } from '../inferutils/config.types';
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { DeploymentTarget } from './types';
+import { isThinkModelId } from '../think/model-config';
+import { RESUME_BUILD_MESSAGE } from '../../../shared/think';
 
 // Type for incoming WebSocket messages
 interface IncomingWebSocketMessage {
@@ -15,6 +17,8 @@ interface IncomingWebSocketMessage {
     images?: ImageAttachment[];
     credentials?: CredentialsPayload;
     commitHash?: string;
+    modelId?: string;
+    resume?: boolean;
     target?: DeploymentTarget;
     data?: {
         url?: string;
@@ -28,7 +32,8 @@ const logger = createLogger('CodeGeneratorWebSocket');
 export async function handleWebSocketMessage(
     agent: CodeGeneratorAgent, 
     connection: Connection, 
-    message: string
+    message: string,
+    usageCheck: typeof checkUsageAndBalance = checkUsageAndBalance,
 ): Promise<void> {
     try {
         logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
@@ -119,6 +124,37 @@ export async function handleWebSocketMessage(
                     logger.error('Error during rollback:', error);
                     sendError(connection, `Error during rollback: ${error instanceof Error ? error.message : String(error)}`);
                 });
+                break;
+            }
+            case WebSocketMessageRequests.SET_MODEL: {
+                const modelId = parsedMessage.modelId;
+                if (!isThinkModelId(modelId)) {
+                    sendError(connection, 'Unknown model');
+                    return;
+                }
+                const behavior = agent.getBehavior() as unknown as {
+                    setModel?: (modelId: string) => Promise<void>;
+                };
+                if (typeof behavior.setModel !== 'function') {
+                    sendError(connection, 'Model selection is not supported for this app');
+                    return;
+                }
+                logger.info('Switching build model', { modelId, resume: parsedMessage.resume === true });
+                try {
+                    await behavior.setModel(modelId);
+                } catch (error) {
+                    sendError(connection, `Could not switch model: ${error instanceof Error ? error.message : String(error)}`);
+                    return;
+                }
+                if (parsedMessage.resume === true) {
+                    if (!(await ensureCanPrompt(agent, connection, usageCheck))) {
+                        return;
+                    }
+                    agent.handleUserInput(RESUME_BUILD_MESSAGE).catch((error: unknown) => {
+                        logger.error('Error resuming after model switch:', error);
+                        sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
+                    });
+                }
                 break;
             }
             case WebSocketMessageRequests.CAPTURE_SCREENSHOT:
@@ -214,51 +250,7 @@ export async function handleWebSocketMessage(
                     }
                 }
                 
-                // Check usage limits before processing user suggestion
-                try {
-                    const env = agent.env;
-                    const userId = agent.state.metadata.userId;
-
-                    // The encrypted blob was captured from the HttpOnly cookie at WS
-                    // upgrade time (see codingAgent.onConnect) and stored in DO state.
-                    // WS frames do not carry cookies, so we rely on that snapshot.
-                    const userToken = agent.state.cloudflareToken || null;
-
-                    // Check limits and balance (this may transparently refresh the token).
-                    const wsOrigin = agent.state.wsOrigin || undefined;
-                    const limitResult = await checkUsageAndBalance(env, userId, undefined, userToken, wsOrigin);
-
-                    // If a refresh occurred, keep the DO-cached blob fresh so subsequent
-                    // user_suggestion messages pick up the new access token.
-                    if (limitResult.refreshedBlob) {
-                        agent.setState({ ...agent.state, cloudflareToken: limitResult.refreshedBlob });
-                    }
-
-                    if (!limitResult.allowed) {
-                        logger.warn('User suggestion blocked by usage check', {
-                            userId,
-                            reason: limitResult.reason,
-                            withinLimits: limitResult.withinLimits,
-                            remaining: limitResult.remaining,
-                            hasUserToken: limitResult.hasUserToken,
-                            balance: limitResult.balance,
-                        });
-                        
-                        // Send structured error for frontend to show as popup
-                        sendToConnection(connection, WebSocketMessageResponses.ERROR, {
-                            error: limitResult.reason,
-                            code: 'USAGE_LIMIT_EXCEEDED',
-                            showAsPopup: true,
-                        });
-                        return;
-                    }
-                    
-                } catch (error) {
-                    logger.error('Failed to check usage:', error);
-                    sendToConnection(connection, WebSocketMessageResponses.ERROR, {
-                        error: `Error processing request: ${error instanceof Error ? error.message : String(error)}`,
-                        showAsPopup: true,
-                    });
+                if (!(await ensureCanPrompt(agent, connection, usageCheck))) {
                     return;
                 }
                 
@@ -337,6 +329,63 @@ export async function handleWebSocketMessage(
         logger.error('Error processing WebSocket message:', error);
         sendError(connection, `Error processing message: ${error instanceof Error ? error.message : String(error)}`);
     }
+}
+
+/**
+ * Runs the usage check for a new prompt. Sends the limit popup or error and
+ * returns false when the user may not prompt.
+ */
+async function ensureCanPrompt(
+    agent: CodeGeneratorAgent,
+    connection: Connection,
+    usageCheck: typeof checkUsageAndBalance,
+): Promise<boolean> {
+    try {
+        const env = agent.env;
+        const userId = agent.state.metadata.userId;
+
+        // The encrypted blob was captured from the HttpOnly cookie at WS
+        // upgrade time (see codingAgent.onConnect) and stored in DO state.
+        // WS frames do not carry cookies, so we rely on that snapshot.
+        const userToken = agent.state.cloudflareToken || null;
+
+        // Check limits and balance (this may transparently refresh the token).
+        const wsOrigin = agent.state.wsOrigin || undefined;
+        const limitResult = await usageCheck(env, userId, undefined, userToken, wsOrigin);
+
+        // If a refresh occurred, keep the DO-cached blob fresh so subsequent
+        // user_suggestion messages pick up the new access token.
+        if (limitResult.refreshedBlob) {
+            agent.setState({ ...agent.state, cloudflareToken: limitResult.refreshedBlob });
+        }
+
+        if (!limitResult.allowed) {
+            logger.warn('User suggestion blocked by usage check', {
+                userId,
+                reason: limitResult.reason,
+                withinLimits: limitResult.withinLimits,
+                remaining: limitResult.remaining,
+                hasUserToken: limitResult.hasUserToken,
+                balance: limitResult.balance,
+            });
+
+            // Send structured error for frontend to show as popup
+            sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+                error: limitResult.reason,
+                code: 'USAGE_LIMIT_EXCEEDED',
+                showAsPopup: true,
+            });
+            return false;
+        }
+    } catch (error) {
+        logger.error('Failed to check usage:', error);
+        sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+            error: `Error processing request: ${error instanceof Error ? error.message : String(error)}`,
+            showAsPopup: true,
+        });
+        return false;
+    }
+    return true;
 }
 
 export function handleWebSocketClose(agent: CodeGeneratorAgent, connection: Connection): void {
