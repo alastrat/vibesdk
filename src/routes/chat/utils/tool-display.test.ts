@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ToolEvent } from './message-helpers';
 import {
 	getGroupStatus,
+	getToolActivityLabel,
 	getToolGroupSummary,
 	getToolSummary,
 	shortenPath,
@@ -113,5 +114,28 @@ describe('shortenPath', () => {
 		const result = shortenPath(long, 30);
 		expect(result.startsWith('…/')).toBe(true);
 		expect(result.length).toBeLessThanOrEqual(30);
+	});
+});
+
+describe('getToolActivityLabel', () => {
+	it('names a running write with its path and no ellipsis', () => {
+		expect(getToolActivityLabel('write', { path: 'src/pages/Catalog.tsx' })).toBe('Writing src/pages/Catalog.tsx');
+	});
+
+	it('says "file" for writes and edits before the path is known', () => {
+		expect(getToolActivityLabel('write')).toBe('Writing file');
+		expect(getToolActivityLabel('edit')).toBe('Editing file');
+	});
+
+	it('shortens long paths', () => {
+		expect(getToolActivityLabel('edit', { path: 'src/components/really/deep/folder/structure/Component.tsx' })).toBe(
+			'Editing …/structure/Component.tsx',
+		);
+	});
+
+	it('uses the same verbs as the tool rows', () => {
+		expect(getToolActivityLabel('deploy_space')).toBe('Deploying');
+		expect(getToolActivityLabel('read')).toBe('Reading');
+		expect(getToolActivityLabel('custom_tool')).toBe('Running custom tool');
 	});
 });

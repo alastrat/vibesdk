@@ -116,8 +116,7 @@ function verbFor(name: string, status: ToolEvent['status']): string {
 	return pretty.charAt(0).toUpperCase() + pretty.slice(1);
 }
 
-function detailFor(event: ToolEvent): string | undefined {
-	const { name, args } = event;
+function detailFor(name: string, args?: Record<string, unknown>): string | undefined {
 	const path = pickToolPath(args);
 	const paths = pickToolPaths(args);
 
@@ -213,10 +212,23 @@ function detailFor(event: ToolEvent): string | undefined {
  */
 export function getToolSummary(event: ToolEvent): string {
 	const verb = verbFor(event.name, event.status);
-	const detail = detailFor(event);
+	const detail = detailFor(event.name, event.args);
 	const ellipsis = event.status === 'start' ? '…' : '';
 	if (!detail) return `${verb}${ellipsis}`;
 	return `${verb} ${detail}${ellipsis}`;
+}
+
+/** Tools whose running label names a file even before its path is known. */
+const FILE_ACTIVITY_TOOLS = new Set(['write', 'edit']);
+
+/**
+ * Running label without the trailing ellipsis, for the build progress bar.
+ * e.g. "Writing src/App.tsx", "Writing file", "Deploying"
+ */
+export function getToolActivityLabel(name: string, args?: Record<string, unknown>): string {
+	const verb = verbFor(name, 'start');
+	const detail = detailFor(name, args) ?? (FILE_ACTIVITY_TOOLS.has(name) ? pathLabel(undefined) : undefined);
+	return detail ? `${verb} ${detail}` : verb;
 }
 
 /** Noun used when collapsing multiple consecutive tools of the same name. */
