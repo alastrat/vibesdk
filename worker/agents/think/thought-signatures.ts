@@ -6,7 +6,8 @@
 
 /**
  * Gemini's documented value for function calls it did not produce, such as
- * calls made by the fallback model or calls whose signature was not kept.
+ * calls made by another provider's model after a switch or calls whose
+ * signature was not kept.
  */
 export const SKIP_THOUGHT_SIGNATURE = 'skip_thought_signature_validator';
 

@@ -172,7 +172,8 @@ export class ThinkAgent extends Think<Env> {
 	private readonly thoughtSignatures = new Map<string, string>();
 	/** Last provider failure in the current turn; the host reads it when a turn fails. */
 	private providerFailure: ProviderFailure | null = null;
-	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean } | null = null;
+	/** Metering inputs fixed when the turn starts, so a mid-turn model switch cannot reprice steps. */
+	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number } | null = null;
 
 	private requireConfig(): ThinkAgentConfig {
 		const cfg = this.getConfig<ThinkAgentConfig>();
@@ -269,11 +270,15 @@ export class ThinkAgent extends Think<Env> {
 		this.providerFailure = null;
 		this.turnUsage = null;
 		if (config) {
+			// ctx.model is the model this turn runs on; the config may change before the turn ends.
+			const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
+			const creditCost = resolveThinkModel(turnModelId).config.creditCost;
 			try {
 				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
 				this.turnUsage = {
 					config: userConfig.security.rateLimit,
 					hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
+					creditCost,
 				};
 			} catch (error) {
 				console.warn('Failed to resolve Think credit metering configuration', error);
@@ -345,7 +350,7 @@ export class ThinkAgent extends Think<Env> {
 				'',
 				false,
 				this.turnUsage.hasCloudflareConfigured,
-				{ creditCost: resolveThinkModel(config.model.modelName).config.creditCost, throwOnExceeded: false },
+				{ creditCost: this.turnUsage.creditCost, throwOnExceeded: false },
 			);
 		}
 		if (ctx.stepNumber >= this.maxSteps - 1) {
@@ -359,11 +364,11 @@ export class ThinkAgent extends Think<Env> {
 
 	/**
 	 * RPC entrypoint used by `ThinkCodingBehavior` to push model/space/prompt
-	 * configuration. Called once per app, when the host behavior initializes a
-	 * fresh agent (each app maps to its own ThinkAgent DO — and therefore its
-	 * own session — keyed by `agentId`). Persisted in Think's `think_config`
-	 * table (survives hibernation), so subsequent turns resolve
-	 * `getModel()`/`getTools()`.
+	 * configuration. Called when the host behavior initializes a fresh agent
+	 * (each app maps to its own ThinkAgent DO — and therefore its own session —
+	 * keyed by `agentId`) and again each time the user switches the build model.
+	 * Persisted in Think's `think_config` table (survives hibernation), so
+	 * subsequent turns resolve `getModel()`/`getTools()`.
 	 *
 	 * The system prompt is frozen + persisted on its first render and served
 	 * from cache afterwards (see the Sessions lifecycle). Re-render it here so

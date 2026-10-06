@@ -29,8 +29,16 @@ describe('think model wiring', () => {
 		expect(controller).toContain('thinkModelId: thinkModel.id');
 	});
 
-	it("charges the configured model's credit cost per step", () => {
-		expect(source('/worker/agents/think/ThinkAgent.ts')).toContain('resolveThinkModel(config.model.modelName).config.creditCost');
+	it("charges the credit cost of the model the turn runs on, captured once per turn", () => {
+		const agent = source('/worker/agents/think/ThinkAgent.ts');
+		const beforeTurn = agent.slice(agent.indexOf('override async beforeTurn('), agent.indexOf('override getSkills('));
+		const beforeStep = agent.slice(agent.indexOf('override async beforeStep('), agent.indexOf('async configureVibe('));
+		expect(beforeTurn).toContain('resolveThinkModel(');
+		expect(beforeTurn).toContain('ctx.model');
+		expect(beforeTurn).toContain('creditCost');
+		expect(beforeStep).toContain('this.turnUsage.creditCost');
+		expect(beforeStep).not.toContain('resolveThinkModel');
+		expect(beforeStep).not.toContain('modelName');
 	});
 
 	it('keeps the catalog as the only model list', () => {
