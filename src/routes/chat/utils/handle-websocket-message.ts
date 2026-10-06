@@ -665,6 +665,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 updateStage('code', { status: 'active' });
                 setTotalFiles(message.totalFiles);
                 setIsGenerating(true);
+                // A new run supersedes any earlier failure card, in every open tab.
+                setModelUnavailable(null);
                 break;
             }
 

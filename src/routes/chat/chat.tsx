@@ -1031,6 +1031,7 @@ function ChatSession() {
 				images: images.length > 0 ? images : undefined,
 			});
 			sendUserMessage(newMessage);
+			dismissModelUnavailable();
 			setNewMessage('');
 			// Clear images after sending
 			if (images.length > 0) {
@@ -1043,6 +1044,7 @@ function ChatSession() {
 			newMessage,
 			websocket,
 			sendUserMessage,
+			dismissModelUnavailable,
 			isChatDisabled,
 			scrollToBottom,
 			images,

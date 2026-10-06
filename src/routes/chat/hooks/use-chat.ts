@@ -234,6 +234,7 @@ export function useChat({
 	const selectThinkModel = useCallback((modelId: string) => {
 		if (sendWebSocketMessage(websocket, 'set_model', { modelId })) {
 			setThinkModelId(modelId);
+			setModelUnavailable(null);
 		}
 	}, [websocket]);
 

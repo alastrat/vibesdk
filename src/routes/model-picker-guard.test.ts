@@ -105,3 +105,24 @@ describe('model picker: provider failure card', () => {
 		expect(card.match(/disabled=\{disabled\}/g) ?? []).toHaveLength(2);
 	});
 });
+
+describe('model picker: clearing the failure card', () => {
+	it('clears it when the model is switched from the picker', () => {
+		const hook = source('/src/routes/chat/hooks/use-chat.ts');
+		const select = hook.slice(hook.indexOf('const selectThinkModel = useCallback('), hook.indexOf('const switchModelAndResume = useCallback('));
+		expect(select).toContain('setModelUnavailable(null)');
+	});
+
+	it('clears it when the user sends a message by hand', () => {
+		const chat = source('/src/routes/chat/chat.tsx');
+		const send = chat.slice(chat.indexOf('const onNewMessage = useCallback('), chat.indexOf('onSubmit={onNewMessage}'));
+		expect(send).toContain('dismissModelUnavailable();');
+		expect(send).toContain('dismissModelUnavailable,');
+	});
+
+	it('clears it in every tab when generation starts', () => {
+		const handler = source('/src/routes/chat/utils/handle-websocket-message.ts');
+		const started = handler.slice(handler.indexOf("case 'generation_started':"), handler.indexOf("case 'generation_complete':"));
+		expect(started).toContain('setModelUnavailable(null)');
+	});
+});
