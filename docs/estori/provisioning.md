@@ -12,7 +12,12 @@ R2 must be enabled for the account first (R2 → Overview → Purchase/enable, f
 
 Artifacts needs no command: the `estori-production` namespace is created automatically with the first repository. The AI Gateway `estori-gateway` already exists.
 
-Users pick the build model (Gemini 3.6 Flash, Gemini 3.8 Flash, Claude Sonnet 5.5 or Claude Opus 5.5). When its provider fails, the chat offers switching to the other provider's model, with the credits per step (`ENABLE_THINK_MODEL_FALLBACK` in `wrangler.estori.jsonc`). Both provider keys live only in the gateway: AI Gateway → `estori-gateway` → Provider Keys. If either stored key is removed, set `ENABLE_THINK_MODEL_FALLBACK` to `"false"` so the chat stops offering a model that would fail with 401.
+Users pick the build model (Gemini 3.6 Flash, Gemini 3.8 Flash, Claude Sonnet 5.5 or Claude Opus 5.5), and Claude Sonnet 5.5 is the default. Each provider key lives in a different place:
+
+- Google: the `GOOGLE_AI_STUDIO_API_KEY` Worker secret, uploaded from CI on every deploy and preferred over the gateway key. Also store the key in AI Gateway → `estori-gateway` → Provider Keys.
+- Anthropic: only in AI Gateway → `estori-gateway` → Provider Keys. This key is required, because every new build starts on Claude Sonnet 5.5. Without it the request fails with 401, which is not a provider failure, so the chat shows a plain error and no switch card.
+
+When a provider fails (429, 5xx or a timeout), the chat can offer switching to the other provider's model, with the credits per step. `ENABLE_THINK_MODEL_FALLBACK` in `wrangler.estori.jsonc` only controls whether the card offers that switch; set it to `"false"` if the other provider's key is missing, so the chat does not offer a model that would fail with 401.
 
 The D1 and KV IDs go into `wrangler.estori.jsonc` (see the implementation plan, Task 7).
 
