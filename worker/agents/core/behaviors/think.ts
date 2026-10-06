@@ -271,7 +271,7 @@ export class ThinkCodingBehavior
 				headers: auth.headers,
 				useStoredKeys: auth.useStoredKeys,
 			},
-			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
+			systemPrompt: this.buildSystemPrompt(modelName),
 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
 		};
 
@@ -313,9 +313,9 @@ export class ThinkCodingBehavior
 	 * and the platform-specific deploy→verify workflow, which the generic prompt
 	 * files don't know about — the environment and custom instructions for the run.
 	 */
-	private buildSystemPrompt(modelName: string, provider: string): string {
+	private buildSystemPrompt(modelName: string): string {
 		return [
-			`You are powered by the model named ${modelName}. The exact model ID is ${provider}/${modelName}.`,
+			`You are powered by the model with the exact ID ${modelName}.`,
 			'<env>',
 			`  Platform: Cloudflare Workers (SpaceDO preview — no shell, no local filesystem)`,
 			`  Today's date: ${new Date().toDateString()}`,
@@ -489,8 +489,9 @@ export class ThinkCodingBehavior
 			this.setState({ ...this.state, pendingUserInputs: [] });
 
 			const compiled = pending.join('\n');
+			let completed: boolean;
 			try {
-				await this.runPrompt(compiled);
+				completed = await this.runPrompt(compiled);
 			} catch (e) {
 				this.logger.error('Think prompt failed', e);
 				await this.reportTurnError(e instanceof Error ? e.message : String(e));
@@ -501,6 +502,10 @@ export class ThinkCodingBehavior
 				this.setMVPGenerated();
 			}
 
+			// Inputs still queued wait for the resume or the next message, which runs
+			// them on whichever model the user picks after the failure.
+			if (!completed) break;
+
 			// Commits (and deploys) are driven entirely by the model: it calls the
 			// `commit` tool to snapshot a restore point when it decides, and
 			// `deploy_space` to build/preview. The harness does neither on its own.
@@ -509,9 +514,10 @@ export class ThinkCodingBehavior
 
 	/**
 	 * Submit a prompt to the ThinkAgent and translate its streamed
-	 * `UIMessageChunk`s into VibeSDK WebSocket events.
+	 * `UIMessageChunk`s into VibeSDK WebSocket events. Resolves to whether the
+	 * turn completed; a failed turn is reported to the user before it resolves.
 	 */
-	private async runPrompt(text: string): Promise<void> {
+	private async runPrompt(text: string): Promise<boolean> {
 		const conversationId = IdGenerator.generateConversationId();
 		this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 			message: '',
@@ -565,6 +571,7 @@ export class ThinkCodingBehavior
 		if (turnError !== undefined) {
 			await this.reportTurnError(turnError);
 		}
+		return turnError === undefined;
 	}
 
 	/**
@@ -574,16 +581,18 @@ export class ThinkCodingBehavior
 	private async reportTurnError(error: string): Promise<void> {
 		const failure = await this.getThinkStub()
 			.then((stub) => stub.getProviderFailure())
-			.catch(() => null);
+			.catch((e: unknown) => {
+				this.logger.warn('Could not read the provider failure for a failed turn', e);
+				return null;
+			});
 		if (!failure) {
 			this.broadcast(WebSocketMessageResponses.ERROR, { error });
 			return;
 		}
 		const flags = this.env as unknown as { ENABLE_THINK_MODEL_FALLBACK?: string };
-		this.broadcast(
-			WebSocketMessageResponses.MODEL_UNAVAILABLE,
-			modelUnavailableNotice(failure, flags.ENABLE_THINK_MODEL_FALLBACK === 'true'),
-		);
+		const notice = modelUnavailableNotice(failure, flags.ENABLE_THINK_MODEL_FALLBACK === 'true');
+		this.logger.warn('Provider failure reported to the chat', notice);
+		this.broadcast(WebSocketMessageResponses.MODEL_UNAVAILABLE, notice);
 	}
 
 	private async translateChunk(
