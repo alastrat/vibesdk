@@ -281,10 +281,12 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             } catch (error) {
                 this.logger().error('Error getting preview URL:', error);
             }
+            const buildProgress = this.behavior.getBuildProgress();
             sendToConnection(connection, WebSocketMessageResponses.AGENT_CONNECTED, {
                 state: this.state,
                 templateDetails: this.behavior.getTemplateDetails(),
-                previewUrl: previewUrl
+                previewUrl: previewUrl,
+                ...(buildProgress ? { buildProgress } : {}),
             });
         })();
     }

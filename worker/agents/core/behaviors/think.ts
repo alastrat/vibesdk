@@ -30,11 +30,12 @@ import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { modelUnavailableNotice, resolveThinkModel } from '../../think/model-config';
 import type { ProviderFailure } from '../../think/model-transport';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
+import { BuildProgressTracker } from '../../think/build-progress';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
 import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
-import type { CloudflareDeploymentErrorCode } from '../../../api/websocketTypes';
+import type { BuildProgress, CloudflareDeploymentErrorCode } from '../../../api/websocketTypes';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -117,6 +118,13 @@ export class ThinkCodingBehavior
 	protected static readonly PROJECT_NAME_PREFIX_MAX_LENGTH = 20;
 
 	override getBehavior(): 'think' { return 'think'; }
+
+	/** Progress of the running build. In memory only, so it never churns agent state. */
+	private buildProgress: BuildProgressTracker | null = null;
+
+	override getBuildProgress(): BuildProgress | null {
+		return this.buildProgress?.snapshot(Date.now()) ?? null;
+	}
 
 	// ──────────────────────────────────────────────────────────────
 	// DO stubs
@@ -480,35 +488,40 @@ export class ThinkCodingBehavior
 
 	/** Main loop: drain pendingUserInputs by driving the ThinkAgent. */
 	async build(): Promise<void> {
-		if (!this.isMVPGenerated() && this.state.query && this.state.pendingUserInputs.length === 0) {
-			this.setState({ ...this.state, pendingUserInputs: [this.state.query] });
-		}
-
-		while (this.state.pendingUserInputs.length > 0) {
-			const pending = this.state.pendingUserInputs.slice();
-			this.setState({ ...this.state, pendingUserInputs: [] });
-
-			const compiled = pending.join('\n');
-			let completed: boolean;
-			try {
-				completed = await this.runPrompt(compiled);
-			} catch (e) {
-				this.logger.error('Think prompt failed', e);
-				await this.reportTurnError(e instanceof Error ? e.message : String(e));
-				break;
+		this.buildProgress = new BuildProgressTracker(Date.now());
+		try {
+			if (!this.isMVPGenerated() && this.state.query && this.state.pendingUserInputs.length === 0) {
+				this.setState({ ...this.state, pendingUserInputs: [this.state.query] });
 			}
 
-			if (!this.isMVPGenerated()) {
-				this.setMVPGenerated();
+			while (this.state.pendingUserInputs.length > 0) {
+				const pending = this.state.pendingUserInputs.slice();
+				this.setState({ ...this.state, pendingUserInputs: [] });
+
+				const compiled = pending.join('\n');
+				let completed: boolean;
+				try {
+					completed = await this.runPrompt(compiled);
+				} catch (e) {
+					this.logger.error('Think prompt failed', e);
+					await this.reportTurnError(e instanceof Error ? e.message : String(e));
+					break;
+				}
+
+				if (!this.isMVPGenerated()) {
+					this.setMVPGenerated();
+				}
+
+				// Inputs still queued wait for the resume or the next message, which runs
+				// them on whichever model the user picks after the failure.
+				if (!completed) break;
+
+				// Commits (and deploys) are driven entirely by the model: it calls the
+				// `commit` tool to snapshot a restore point when it decides, and
+				// `deploy_space` to build/preview. The harness does neither on its own.
 			}
-
-			// Inputs still queued wait for the resume or the next message, which runs
-			// them on whichever model the user picks after the failure.
-			if (!completed) break;
-
-			// Commits (and deploys) are driven entirely by the model: it calls the
-			// `commit` tool to snapshot a restore point when it decides, and
-			// `deploy_space` to build/preview. The harness does neither on its own.
+		} finally {
+			this.buildProgress = null;
 		}
 	}
 
@@ -595,6 +608,19 @@ export class ThinkCodingBehavior
 		this.broadcast(WebSocketMessageResponses.MODEL_UNAVAILABLE, notice);
 	}
 
+	/** Feeds a chunk to the build's tracker and broadcasts any snapshot it returns. */
+	private trackBuildProgress(chunk: ThinkChunk): void {
+		const tracker = this.buildProgress;
+		if (!tracker) return;
+		try {
+			const progress = tracker.onChunk(chunk, Date.now());
+			if (progress) this.broadcast(WebSocketMessageResponses.BUILD_PROGRESS, { progress });
+		} catch (e) {
+			this.logger.warn('Build progress tracking failed; progress is off for the rest of this build', e);
+			this.buildProgress = null;
+		}
+	}
+
 	private async translateChunk(
 		chunk: ThinkChunk,
 		conversationId: string,
@@ -603,6 +629,7 @@ export class ThinkCodingBehavior
 		toolNames: Map<string, string>,
 		toolInputs: Map<string, Record<string, unknown>>,
 	): Promise<void> {
+		this.trackBuildProgress(chunk);
 		switch (chunk.type) {
 			case 'text-delta': {
 				const delta = (chunk as { delta?: string }).delta;

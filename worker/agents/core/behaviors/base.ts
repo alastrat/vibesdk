@@ -17,7 +17,7 @@ import { FileRegenerationOperation } from '../../operations/FileRegeneration';
 import { BaseSandboxService } from '../../../services/sandbox/BaseSandboxService';
 import { getTemplateImportantFiles } from '../../../services/sandbox/utils';
 import { createScratchTemplateDetails } from '../../utils/templates';
-import { WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
+import { BuildProgress, WebSocketMessageData, WebSocketMessageType } from '../../../api/websocketTypes';
 import { AgentActionKey, InferenceContext, InferenceRuntimeOverrides, ModelConfig } from '../../inferutils/config.types';
 import { ModelConfigService } from '../../../database/services/ModelConfigService';
 import { fixProjectIssues } from '../../../services/code-fixer';
@@ -569,6 +569,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
     getTotalFiles(): number {
         return this.fileManager.getGeneratedFilePaths().length
+    }
+
+    /** Live progress of the running build, for tabs that connect mid-build. */
+    getBuildProgress(): BuildProgress | null {
+        return null;
     }
 
     getSummary(): Promise<AgentSummary> {
