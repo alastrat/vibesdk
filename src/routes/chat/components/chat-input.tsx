@@ -47,6 +47,8 @@ interface ChatInputProps {
 
 	// Content tucked behind the top of the input box
 	aboveContent?: ReactNode;
+	/** Controls shown at the left of the input, such as the model picker. */
+	leftActions?: ReactNode;
 }
 
 export function ChatInput({
@@ -68,6 +70,7 @@ export function ChatInput({
 	limitsData,
 	onConnectCloudflare,
 	aboveContent,
+	leftActions,
 }: ChatInputProps) {
 	const handleStopGeneration = () => {
 		if (websocket) {
@@ -112,6 +115,7 @@ export function ChatInput({
 			limitsData={limitsData}
 			onConnectCloudflare={onConnectCloudflare}
 			variant="compact"
+			leftActions={leftActions}
 			rightActions={stopButton}
 			aboveContent={aboveContent}
 			maxWords={4000}

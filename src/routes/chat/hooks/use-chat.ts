@@ -54,6 +54,7 @@ export function useChat({
 	images: userImages,
 	projectType = 'app',
 	behaviorType: explicitBehaviorType,
+	modelId,
 	autoStart = true,
 	onDebugMessage,
 	onTerminalMessage,
@@ -64,6 +65,8 @@ export function useChat({
 	images?: ImageAttachment[];
 	projectType?: ProjectType;
 	behaviorType?: BehaviorType;
+	/** Build model for a new think session (a capabilities `thinkModels` id). */
+	modelId?: string;
 	/**
 	 * Whether a brand-new session may be created automatically on mount.
 	 * In-app navigation (e.g. the home prompt box) sets this true. Sessions
@@ -152,6 +155,7 @@ export function useChat({
 	// Deployment and generation control state
 	const [isDeploying, setIsDeploying] = useState(false);
 	const [cloudflareDeploymentUrl, setCloudflareDeploymentUrl] = useState<string>('');
+	const [thinkModelId, setThinkModelId] = useState<string>('');
 	const [deploymentError, setDeploymentError] = useState<string>();
 	
 	// Issue tracking and debugging state
@@ -222,6 +226,12 @@ export function useChat({
 		setMessages(prev => [...prev, createUserMessage(message)]);
 	}, []);
 
+	const selectThinkModel = useCallback((modelId: string) => {
+		if (sendWebSocketMessage(websocket, 'set_model', { modelId })) {
+			setThinkModelId(modelId);
+		}
+	}, [websocket]);
+
 	const submitClarifyingAnswers = useCallback((answers: { question: string; selected: string[]; custom: string }[]) => {
 		if (!websocket) return;
 
@@ -277,6 +287,7 @@ export function useChat({
 			setShouldRefreshPreview,
 			setIsDeploying,
 			setCloudflareDeploymentUrl,
+			setThinkModelId,
 			setDeploymentError,
 			setIsGenerationPaused,
 			setIsGenerating,
@@ -542,6 +553,7 @@ export function useChat({
 						query: userQuery,
 						projectType,
 						behaviorType: explicitBehaviorType,
+						modelId,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
 
@@ -691,6 +703,7 @@ export function useChat({
 	}, [
 		projectType,
 		explicitBehaviorType,
+		modelId,
 		connectWithRetry,
 		loadBootstrapFiles,
 		onDebugMessage,
@@ -844,6 +857,8 @@ export function useChat({
 		// Deployment and generation control
 		isDeploying,
 		cloudflareDeploymentUrl,
+		thinkModelId,
+		selectThinkModel,
 		deploymentError,
 		isRedeployReady,
 		isGenerationPaused,

@@ -67,6 +67,7 @@ export interface HandleMessageDeps {
     setShouldRefreshPreview: React.Dispatch<React.SetStateAction<boolean>>;
     setIsDeploying: React.Dispatch<React.SetStateAction<boolean>>;
     setCloudflareDeploymentUrl: React.Dispatch<React.SetStateAction<string>>;
+    setThinkModelId: React.Dispatch<React.SetStateAction<string>>;
     setDeploymentError: React.Dispatch<React.SetStateAction<string | undefined>>;
     setIsGenerationPaused: React.Dispatch<React.SetStateAction<boolean>>;
     setIsGenerating: React.Dispatch<React.SetStateAction<boolean>>;
@@ -152,6 +153,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             setShouldRefreshPreview,
             setIsDeploying,
             setCloudflareDeploymentUrl,
+            setThinkModelId,
             setDeploymentError,
             setIsGenerationPaused,
             setIsGenerating,
@@ -206,6 +208,9 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
             case 'agent_connected': {
                 const { state, templateDetails, previewUrl } = message;
+                if (state.behaviorType === 'think') {
+                    setThinkModelId(state.thinkModelId ?? '');
+                }
                 if (!isInitialStateRestored) {
                     logger.debug('📥 Performing initial state restoration');
 
@@ -382,6 +387,9 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 }
                 if (state.behaviorType === 'think' && state.cloudflareDeploymentUrl) {
                     setCloudflareDeploymentUrl(state.cloudflareDeploymentUrl);
+                }
+                if (state.behaviorType === 'think') {
+                    setThinkModelId(state.thinkModelId ?? '');
                 }
 
                 if (state.shouldBeGenerating && !isGenerating) {

@@ -68,6 +68,7 @@ import { useGitHubExport } from '@/hooks/use-github-export';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
+import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
 import {
 	RollbackContext,
@@ -128,6 +129,7 @@ function ChatSession() {
 	const urlBehaviorType = searchParams.get(
 		'behaviorType',
 	) as BehaviorType | null;
+	const urlModelId = searchParams.get('model') ?? undefined;
 
 	// Only auto-start a brand-new session when it originated from in-app
 	// navigation (e.g. the home prompt box sets `fromPrompt`). Sessions opened
@@ -259,12 +261,15 @@ function ChatSession() {
 		clarifyingQuestions,
 		submitClarifyingAnswers,
 		dismissClarifyingQuestions,
+		thinkModelId,
+		selectThinkModel,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
 		images: userImages,
 		projectType: urlProjectType as ProjectType,
 		behaviorType: urlBehaviorType ?? undefined,
+		modelId: urlModelId,
 		autoStart,
 		onDebugMessage: addDebugMessage,
 		onCloudflareDeployGate: handleCloudflareDeployGate,
@@ -1388,6 +1393,16 @@ function ChatSession() {
 							onConnectCloudflare={() => {
 								void startCloudflareConnect(window.location.href);
 							}}
+							leftActions={
+								behaviorType === 'think' ? (
+									<ThinkModelPicker
+										options={capabilities?.thinkModels ?? []}
+										value={thinkModelId}
+										onChange={selectThinkModel}
+										disabled={!websocket}
+									/>
+								) : undefined
+							}
 							aboveContent={
 								<ClarifyingQuestionsPopup
 									questions={clarifyingQuestions ?? []}

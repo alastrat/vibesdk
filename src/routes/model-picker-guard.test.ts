@@ -4,6 +4,10 @@ const sources = import.meta.glob<string>(
 	[
 		'/src/components/ThinkModelPicker.tsx',
 		'/src/routes/home.tsx',
+		'/src/routes/chat/chat.tsx',
+		'/src/routes/chat/components/chat-input.tsx',
+		'/src/routes/chat/hooks/use-chat.ts',
+		'/src/routes/chat/utils/handle-websocket-message.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -33,5 +37,27 @@ describe('model picker: home prompt', () => {
 		expect(source('/src/routes/home.tsx')).toContain(
 			"const modelParam = mode === 'app' && modelId ? `&model=${encodeURIComponent(modelId)}` : '';",
 		);
+	});
+});
+
+describe('model picker: chat', () => {
+	it('renders the picker in the chat input for think apps', () => {
+		const chat = source('/src/routes/chat/chat.tsx');
+		expect(chat).toMatch(/<ThinkModelPicker\b/);
+		expect(chat).toContain("searchParams.get('model')");
+		expect(source('/src/routes/chat/components/chat-input.tsx')).toContain('leftActions={leftActions}');
+	});
+
+	it('creates the session with the chosen model', () => {
+		expect(source('/src/routes/chat/hooks/use-chat.ts')).toMatch(/createAgentSession\(\{[^}]*\bmodelId\b/);
+	});
+
+	it('switches models over the agent websocket', () => {
+		expect(source('/src/routes/chat/hooks/use-chat.ts')).toContain("sendWebSocketMessage(websocket, 'set_model', { modelId })");
+	});
+
+	it('syncs the selected model from agent state, including apps without one', () => {
+		const handler = source('/src/routes/chat/utils/handle-websocket-message.ts');
+		expect(handler.match(/setThinkModelId\(state\.thinkModelId \?\? ''\)/g) ?? []).toHaveLength(2);
 	});
 });
