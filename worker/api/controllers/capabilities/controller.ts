@@ -14,6 +14,7 @@ import type { FeatureDefinition, PlatformCapabilities } from '../../../agents/co
 import { DEFAULT_FEATURE_DEFINITIONS } from '../../../agents/core/features';
 import { createLogger } from '../../../logger';
 import { isDispatcherAvailable } from '../../../utils/dispatcherUtils';
+import { DEFAULT_THINK_MODEL_ID, thinkModelOptions } from '../../../agents/think/model-config';
 
 const logger = createLogger('CapabilitiesController');
 
@@ -48,6 +49,8 @@ export class CapabilitiesController extends BaseController {
 			userAccountDeploy: env.ENABLE_USER_ACCOUNT_DEPLOY === 'true',
 			platformDeploy: isDispatcherAvailable(env),
 			artifacts: env.ENABLE_ARTIFACTS === 'true',
+			thinkModels: thinkModelOptions(),
+			defaultThinkModel: DEFAULT_THINK_MODEL_ID,
 		};
 
 		logger.info('Returning platform capabilities', {

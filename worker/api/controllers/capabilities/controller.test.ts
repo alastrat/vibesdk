@@ -49,4 +49,16 @@ describe('CapabilitiesController.getCapabilities', () => {
 		expect(capabilities.userAccountDeploy).toBe(true);
 		expect(capabilities.artifacts).toBe(true);
 	});
+
+	it('offers the build models, their credits and the default', async () => {
+		const capabilities = await capabilitiesFor({});
+		expect(capabilities.thinkModels.map((model) => model.id)).toEqual([
+			'google-ai-studio/gemini-3.6-flash',
+			'google-ai-studio/gemini-3.8-flash',
+			'anthropic/claude-sonnet-5-5',
+			'anthropic/claude-opus-5-5',
+		]);
+		expect(capabilities.thinkModels[3]).toEqual({ id: 'anthropic/claude-opus-5-5', label: 'Claude Opus 5.5', provider: 'anthropic', creditCost: 16 });
+		expect(capabilities.defaultThinkModel).toBe('anthropic/claude-sonnet-5-5');
+	});
 });

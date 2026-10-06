@@ -131,6 +131,12 @@ export interface PlatformCapabilities {
 	 * viewer is available; when false there is no Artifacts repo to browse.
 	 */
 	artifacts: boolean;
+
+	/** Models users can pick to build think apps, in display order. */
+	thinkModels: ThinkModelOption[];
+
+	/** Model preselected for a new build (one of `thinkModels`). */
+	defaultThinkModel: string;
 }
 
 /**

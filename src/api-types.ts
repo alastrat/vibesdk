@@ -71,7 +71,10 @@ export type {
   ViewDefinition,
   PlatformCapabilities,
   PlatformCapabilitiesConfig,
+  ThinkModelOption,
 } from 'worker/agents/core/features/types';
+
+export type { ModelUnavailableNotice } from 'worker/agents/think/model-config';
 
 export {
   DEFAULT_FEATURE_DEFINITIONS,
