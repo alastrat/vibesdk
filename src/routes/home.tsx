@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
+import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { InfoIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { pageTitle } from '@/brand';
@@ -34,9 +35,16 @@ export default function Home() {
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
 	const behaviorMode: Extract<BehaviorType, 'think' | 'phasic'> = 'think';
 	const [query, setQuery] = useState('');
+	const [modelId, setModelId] = useState('');
 	const { user } = useAuth();
 	const { isLoadingCapabilities, capabilities, getEnabledFeatures } =
 		useFeature();
+
+	useEffect(() => {
+		if (!modelId && capabilities?.defaultThinkModel) {
+			setModelId(capabilities.defaultThinkModel);
+		}
+	}, [capabilities, modelId]);
 	const { data: limitsData, loading: usageLimitsLoading } =
 		useLimitsContext();
 	const [showLimitDialog, setShowLimitDialog] =
@@ -147,7 +155,8 @@ export default function Home() {
 			images.length > 0
 				? `&images=${encodeURIComponent(JSON.stringify(images))}`
 				: '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${behaviorParam}${imageParam}`;
+		const modelParam = mode === 'app' && modelId ? `&model=${encodeURIComponent(modelId)}` : '';
+		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${behaviorParam}${modelParam}${imageParam}`;
 
 		if (
 			!requireAuth({
@@ -239,13 +248,20 @@ export default function Home() {
 								)
 							}
 							leftActions={
-								showModeSelector ? (
-									<ProjectModeSelector
-										value={projectMode}
-										onChange={setProjectMode}
-										modes={modeOptions}
+								<div className="flex items-center gap-2">
+									{showModeSelector && (
+										<ProjectModeSelector
+											value={projectMode}
+											onChange={setProjectMode}
+											modes={modeOptions}
+										/>
+									)}
+									<ThinkModelPicker
+										options={capabilities?.thinkModels ?? []}
+										value={modelId}
+										onChange={setModelId}
 									/>
-								) : undefined
+								</div>
 							}
 						/>
 					</motion.div>
