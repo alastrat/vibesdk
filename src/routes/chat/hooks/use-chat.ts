@@ -134,6 +134,8 @@ export function useChat({
 	}, []);
 
 	const [websocket, setWebsocket] = useState<WebSocket>();
+	// True only while the latest socket is open; `websocket` is set while still connecting.
+	const [isWebSocketOpen, setIsWebSocketOpen] = useState(false);
 
 	const [isGeneratingBlueprint, setIsGeneratingBlueprint] = useState(false);
 	const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -369,6 +371,7 @@ export function useChat({
 				logger.debug('🔗 Attempting WebSocket connection to:', wsUrl);
 				const ws = new WebSocket(wsUrl);
 				setWebsocket(ws);
+				setIsWebSocketOpen(false);
 
 				// Mark this attempt id
 				const myAttemptId = ++connectAttemptIdRef.current;
@@ -392,6 +395,7 @@ export function useChat({
 					}
 					if (myAttemptId !== connectAttemptIdRef.current) return;
 					
+					setIsWebSocketOpen(true);
 					clearTimeout(connectionTimeout);
 					logger.info('✅ WebSocket connection established successfully!');
 					connectionStatus.current = 'connected';
@@ -448,6 +452,7 @@ export function useChat({
 					);
 					// Only handle close for the latest attempt and when we should reconnect
 					if (myAttemptId !== connectAttemptIdRef.current) return;
+					setIsWebSocketOpen(false);
 					if (!shouldReconnectRef.current) return;
 					// Retry on any close while mounted (including 1000) to improve resilience
 					handleConnectionFailureRef.current?.(wsUrl, disableGenerate, `Connection closed (code: ${event.code})`);
@@ -859,6 +864,7 @@ export function useChat({
 		cloudflareDeploymentUrl,
 		thinkModelId,
 		selectThinkModel,
+		isWebSocketOpen,
 		deploymentError,
 		isRedeployReady,
 		isGenerationPaused,

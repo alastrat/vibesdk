@@ -60,4 +60,17 @@ describe('model picker: chat', () => {
 		const handler = source('/src/routes/chat/utils/handle-websocket-message.ts');
 		expect(handler.match(/setThinkModelId\(state\.thinkModelId \?\? ''\)/g) ?? []).toHaveLength(2);
 	});
+
+	it('enables the picker only while the agent socket is open', () => {
+		const chat = source('/src/routes/chat/chat.tsx');
+		expect(chat).toContain('disabled={!isWebSocketOpen}');
+		expect(chat).not.toContain('disabled={!websocket}');
+		const hook = source('/src/routes/chat/hooks/use-chat.ts');
+		expect(hook).toContain('setIsWebSocketOpen(true)');
+		expect(hook).toContain('setIsWebSocketOpen(false)');
+	});
+
+	it('leaves the input layout alone when no models are offered', () => {
+		expect(source('/src/routes/chat/chat.tsx')).toContain('(capabilities?.thinkModels?.length ?? 0) > 0');
+	});
 });

@@ -263,6 +263,7 @@ function ChatSession() {
 		dismissClarifyingQuestions,
 		thinkModelId,
 		selectThinkModel,
+		isWebSocketOpen,
 	} = useChat({
 		chatId: urlChatId,
 		query: userQuery,
@@ -1394,12 +1395,13 @@ function ChatSession() {
 								void startCloudflareConnect(window.location.href);
 							}}
 							leftActions={
-								behaviorType === 'think' ? (
+								behaviorType === 'think' &&
+								(capabilities?.thinkModels?.length ?? 0) > 0 ? (
 									<ThinkModelPicker
 										options={capabilities?.thinkModels ?? []}
 										value={thinkModelId}
 										onChange={selectThinkModel}
-										disabled={!websocket}
+										disabled={!isWebSocketOpen}
 									/>
 								) : undefined
 							}
