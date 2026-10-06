@@ -59,6 +59,7 @@ describe('wrangler.estori.jsonc', () => {
 			ENVIRONMENT: 'prod',
 			CLOUDFLARE_AI_GATEWAY: 'estori-gateway',
 			ARTIFACTS_NAMESPACE: 'estori-production',
+			ENABLE_THINK_MODEL_FALLBACK: 'true',
 		});
 		const keys = Object.keys(estori.vars ?? {});
 		expect(keys.filter((k) => k.startsWith('DEV_BROWSER_') || k === 'DISPATCH_NAMESPACE')).toEqual([]);

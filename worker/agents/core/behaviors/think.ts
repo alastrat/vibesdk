@@ -27,7 +27,15 @@ import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
-import { THINK_MODEL_CONFIG, THINK_MODEL_ID } from '../../think/model-config';
+import {
+	THINK_FALLBACK_MODEL_CONFIG,
+	THINK_FALLBACK_MODEL_ID,
+	THINK_MODEL_CONFIG,
+	THINK_MODEL_ID,
+} from '../../think/model-config';
+import { resolveGatewayAuth } from '../../think/gateway-auth';
+import type { ModelFallback } from '../../think/model-fallback';
+import type { InferenceContext } from '../../inferutils/config.types';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
@@ -237,22 +245,10 @@ export class ThinkCodingBehavior
 			return;
 		}
 
-		// `getConfigurationForModel` only emits `cf-aig-authorization` when a
-		// *separate* provider key exists (apiKey !== gatewayToken). When it's
-		// absent, the platform has no provider key of its own and relies on the
-		// gateway's stored keys (BYOK) — so authenticate with the gateway token
-		// and let `ThinkAgent.getModel()` drop the provider `Authorization`
-		// header (see `useStoredKeys`).
-		const tokenEnv = this.env as unknown as {
-			CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
-			CLOUDFLARE_API_TOKEN?: string;
-		};
-		const gatewayToken = tokenEnv.CLOUDFLARE_AI_GATEWAY_TOKEN || tokenEnv.CLOUDFLARE_API_TOKEN;
-		const usesStoredKeys = !conf.defaultHeaders?.['cf-aig-authorization'];
-		const headers: Record<string, string> = { ...(conf.defaultHeaders ?? {}) };
-		if (gatewayToken && !headers['cf-aig-authorization']) {
-			headers['cf-aig-authorization'] = `Bearer ${gatewayToken}`;
-		}
+		// Provider key or gateway stored keys (BYOK); in stored-keys mode
+		// `ThinkAgent.getModel()` drops the provider `Authorization` header.
+		const gatewayToken = this.getGatewayToken();
+		const auth = resolveGatewayAuth(conf, gatewayToken);
 
 		// Target the gateway by account + gateway ID (the `CLOUDFLARE_AI_GATEWAY`
 		// binding), forwarding `CLOUDFLARE_GATEWAY_ID: env.CLOUDFLARE_AI_GATEWAY`.
@@ -271,11 +267,12 @@ export class ThinkCodingBehavior
 			userId,
 			model: {
 				baseURL,
-				apiKey: conf.apiKey,
+				apiKey: auth.apiKey,
 				modelName,
 				contextSize: aiModelConfig.contextSize,
-				headers: Object.keys(headers).length > 0 ? headers : undefined,
-				useStoredKeys: usesStoredKeys,
+				headers: auth.headers,
+				useStoredKeys: auth.useStoredKeys,
+				fallback: await this.resolveThinkFallback(userId, inf, gatewayToken),
 			},
 			systemPrompt: this.buildSystemPrompt(modelName, aiModelConfig.provider),
 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
@@ -286,6 +283,48 @@ export class ThinkCodingBehavior
 			await stub.configureVibe(config);
 		} catch (e) {
 			this.logger.warn('ThinkAgent.configureVibe failed (continuing)', e);
+		}
+	}
+
+	private getGatewayToken(): string | undefined {
+		const tokenEnv = this.env as unknown as {
+			CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
+			CLOUDFLARE_API_TOKEN?: string;
+		};
+		return tokenEnv.CLOUDFLARE_AI_GATEWAY_TOKEN || tokenEnv.CLOUDFLARE_API_TOKEN;
+	}
+
+	/**
+	 * Claude fallback for turns the primary model can't serve, when
+	 * `ENABLE_THINK_MODEL_FALLBACK` is on. Uses the platform Anthropic key if
+	 * one is set, otherwise the key stored in the AI Gateway.
+	 */
+	private async resolveThinkFallback(
+		userId: string,
+		inf: InferenceContext,
+		gatewayToken: string | undefined,
+	): Promise<ModelFallback | undefined> {
+		const flags = this.env as unknown as { ENABLE_THINK_MODEL_FALLBACK?: string };
+		if (flags.ENABLE_THINK_MODEL_FALLBACK !== 'true') return undefined;
+		try {
+			const conf = await getConfigurationForModel(
+				THINK_FALLBACK_MODEL_CONFIG,
+				this.env,
+				userId,
+				inf.runtimeOverrides,
+				false,
+				inf.userApiToken,
+				null,
+			);
+			const auth = resolveGatewayAuth(conf, gatewayToken);
+			return {
+				modelName: THINK_FALLBACK_MODEL_ID,
+				apiKey: auth.useStoredKeys ? undefined : auth.apiKey,
+				headers: auth.headers,
+			};
+		} catch (e) {
+			this.logger.warn('Failed to resolve fallback model config for ThinkAgent', e);
+			return undefined;
 		}
 	}
 

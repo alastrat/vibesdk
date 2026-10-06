@@ -27,6 +27,13 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { THINK_MODEL_CONFIG } from './model-config';
+import { createFallbackFetch, type ModelFallback } from './model-fallback';
+
+/** How long the primary model may take to start responding before the fallback takes over. */
+const PRIMARY_RESPONSE_TIMEOUT_MS = 60_000;
+
+/** Retries per turn after the first attempt; covers overload spikes when no fallback answers. */
+const TURN_MAX_RETRIES = 4;
 
 /**
  * Per-instance configuration pushed into a {@link ThinkAgent} by the host
@@ -57,6 +64,8 @@ export interface ThinkAgentConfig {
 		 * rejects it. `getModel()` strips `Authorization` when this is set.
 		 */
 		useStoredKeys?: boolean;
+		/** Second model on the same gateway, used when the primary is overloaded or unresponsive. */
+		fallback?: ModelFallback;
 	};
 	/** Builder system prompt (assembled host-side; falls back to a default). */
 	systemPrompt?: string;
@@ -231,13 +240,20 @@ export class ThinkAgent extends Think<Env> {
 		// (which omit `index`) satisfy the OpenAI provider's chunk schema; and
 		// (3) round-trip Gemini `thought_signature`s — harvest them from the
 		// response and re-inject them into outgoing request history (the AI SDK
-		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`).
+		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`); and
+		// (4) re-send to the fallback model when the primary is overloaded. The
+		// signatures are Gemini-only, so the fallback request goes without them.
+		const transport = createFallbackFetch({
+			fallback: model.fallback,
+			primaryTimeoutMs: PRIMARY_RESPONSE_TIMEOUT_MS,
+			preparePrimaryBody: (body) => this.injectThoughtSignatures(body),
+			onFallback: (reason) =>
+				console.warn('Think model fallback', { from: model.modelName, to: model.fallback?.modelName, reason }),
+		});
 		const gatewayFetch: typeof fetch = async (input, init) => {
 			const headers = new Headers(init?.headers);
 			if (model.useStoredKeys) headers.delete('authorization');
-			let body = init?.body;
-			if (typeof body === 'string') body = this.injectThoughtSignatures(body);
-			const res = await fetch(input as RequestInfo, { ...(init ?? {}), headers, body });
+			const res = await transport(input, { ...(init ?? {}), headers });
 			if (!res.body) return res;
 			const outHeaders = new Headers(res.headers);
 			// Body length/encoding change after transforming the stream.
@@ -310,7 +326,7 @@ export class ThinkAgent extends Think<Env> {
 			originalMessageCount: ctx.messages.length,
 			selectedMessageCount: messages.length,
 		});
-		return { messages };
+		return { messages, maxRetries: TURN_MAX_RETRIES };
 	}
 
 	override getSkills(): SkillSource[] {
