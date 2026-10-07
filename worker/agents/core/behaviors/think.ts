@@ -44,6 +44,8 @@ import type { BuildProgress, CloudflareDeploymentErrorCode } from '../../../api/
 type ThinkAgentStub = {
 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
 	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
+	/** Aborts the `chat()` turn whose request id `onStart` reported; a no-op once it has ended. */
+	cancelChat: (requestId: string, reason?: string) => Promise<void>;
 	getMessages: () => Promise<UIMessage[]>;
 	clearMessages: () => Promise<void>;
 	getProviderFailure: () => Promise<ProviderFailure | null>;
@@ -85,12 +87,15 @@ type ThinkChunk =
  */
 class ThinkStreamForwarder extends RpcTarget {
 	constructor(
+		private readonly onStartCb: (requestId: string) => void,
 		private readonly onChunkJson: (json: string) => void | Promise<void>,
 		private readonly onErrorCb: (message: string) => void,
 	) {
 		super();
 	}
-	onStart(_event: { requestId: string }): void {}
+	onStart(event: { requestId: string }): void {
+		this.onStartCb(event.requestId);
+	}
 	async onEvent(json: string): Promise<void> {
 		await this.onChunkJson(json);
 	}
@@ -124,6 +129,36 @@ export class ThinkCodingBehavior
 
 	override getBuildProgress(): BuildProgress | null {
 		return this.buildProgress?.snapshot(Date.now()) ?? null;
+	}
+
+	/** Whether the running build was stopped, and the ThinkAgent turn it waits on. Null between builds. */
+	private runningBuild: { stopRequested: boolean; turnRequestId: string | null } | null = null;
+
+	/**
+	 * Stop also cancels the running ThinkAgent turn: the turn never sees the
+	 * shared abort controller, so aborting that alone leaves the build running.
+	 */
+	override cancelCurrentInference(): boolean {
+		const cancelled = super.cancelCurrentInference();
+		const run = this.runningBuild;
+		if (!run) return cancelled;
+		run.stopRequested = true;
+		if (run.turnRequestId) this.cancelThinkTurn(run.turnRequestId);
+		return true;
+	}
+
+	private cancelThinkTurn(requestId: string): void {
+		this.getThinkStub()
+			.then((stub) => stub.cancelChat(requestId, 'Stopped by the user'))
+			.catch((e: unknown) => this.logger.warn('Could not cancel the running Think turn', e));
+	}
+
+	/** Records the turn the build now waits on, cancelling it at once when Stop came first. */
+	private onTurnStart(requestId: string): void {
+		const run = this.runningBuild;
+		if (!run) return;
+		run.turnRequestId = requestId;
+		if (run.stopRequested) this.cancelThinkTurn(requestId);
 	}
 
 	// ──────────────────────────────────────────────────────────────
@@ -488,6 +523,7 @@ export class ThinkCodingBehavior
 
 	/** Main loop: drain pendingUserInputs by driving the ThinkAgent. */
 	async build(): Promise<void> {
+		this.runningBuild = { stopRequested: false, turnRequestId: null };
 		this.buildProgress = new BuildProgressTracker(Date.now());
 		try {
 			if (!this.isMVPGenerated() && this.state.query && this.state.pendingUserInputs.length === 0) {
@@ -513,7 +549,7 @@ export class ThinkCodingBehavior
 				}
 
 				// Inputs still queued wait for the resume or the next message, which runs
-				// them on whichever model the user picks after the failure.
+				// them on whichever model the user picks after a failure or Stop.
 				if (!completed) break;
 
 				// Commits (and deploys) are driven entirely by the model: it calls the
@@ -522,13 +558,15 @@ export class ThinkCodingBehavior
 			}
 		} finally {
 			this.buildProgress = null;
+			this.runningBuild = null;
 		}
 	}
 
 	/**
 	 * Submit a prompt to the ThinkAgent and translate its streamed
 	 * `UIMessageChunk`s into VibeSDK WebSocket events. Resolves to whether the
-	 * turn completed; a failed turn is reported to the user before it resolves.
+	 * turn completed; a failed turn is reported to the user before it resolves,
+	 * and a stopped one ends quietly.
 	 */
 	private async runPrompt(text: string): Promise<boolean> {
 		const conversationId = IdGenerator.generateConversationId();
@@ -545,6 +583,7 @@ export class ThinkCodingBehavior
 
 		let turnError: string | undefined;
 		const forwarder = new ThinkStreamForwarder(
+			(requestId) => this.onTurnStart(requestId),
 			(json) => {
 				let chunk: ThinkChunk;
 				try {
@@ -563,6 +602,7 @@ export class ThinkCodingBehavior
 		try {
 			await stub.chat(text, forwarder);
 		} finally {
+			if (this.runningBuild) this.runningBuild.turnRequestId = null;
 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
 				message: 'Usage data updated',
 			});
@@ -581,6 +621,8 @@ export class ThinkCodingBehavior
 				});
 			}
 		}
+		// A stopped turn ends quietly: an error it reports on the way out comes from the abort.
+		if (this.runningBuild?.stopRequested) return false;
 		if (turnError !== undefined) {
 			await this.reportTurnError(turnError);
 		}
