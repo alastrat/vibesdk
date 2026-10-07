@@ -32,10 +32,21 @@ export function describeBuildHeadline(step: number, elapsedSeconds: number): str
 	return step > 0 ? `Building · step ${step} · ${clock}` : `Building · ${clock}`;
 }
 
-/** Second line of the bar, e.g. "Writing src/App.tsx · 340 lines". */
-export function describeBuildActivity(activity: BuildActivity): string {
+/** The activity without its line count, e.g. "Writing src/App.tsx". Safe to announce. */
+export function describeBuildActivityLabel(activity: BuildActivity): string {
 	if (activity.kind === 'thinking') return 'Thinking…';
-	const label = getToolActivityLabel(activity.toolName, activity.path ? { path: activity.path } : undefined);
-	if (!activity.lines) return label;
-	return `${label} · ${activity.lines.toLocaleString()} ${activity.lines === 1 ? 'line' : 'lines'}`;
+	return getToolActivityLabel(activity.toolName, activity.path ? { path: activity.path } : undefined);
+}
+
+/** The line count of a write in progress, e.g. "340 lines", or null when there is none. */
+export function describeBuildLineCount(activity: BuildActivity): string | null {
+	if (activity.kind !== 'tool' || !activity.lines) return null;
+	return `${activity.lines.toLocaleString()} ${activity.lines === 1 ? 'line' : 'lines'}`;
+}
+
+/** Second line of the bar as one string, e.g. "Writing src/App.tsx · 340 lines". */
+export function describeBuildActivity(activity: BuildActivity): string {
+	const label = describeBuildActivityLabel(activity);
+	const lineCount = describeBuildLineCount(activity);
+	return lineCount ? `${label} · ${lineCount}` : label;
 }

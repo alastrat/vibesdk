@@ -4,7 +4,9 @@ import {
 	applyBuildProgress,
 	buildStatusFromConnect,
 	describeBuildActivity,
+	describeBuildActivityLabel,
 	describeBuildHeadline,
+	describeBuildLineCount,
 	startBuildStatus,
 } from './build-status';
 
@@ -71,5 +73,26 @@ describe('build status wording', () => {
 	it('shows other tools without a count', () => {
 		expect(describeBuildActivity({ kind: 'tool', toolName: 'edit', path: 'src/App.tsx' })).toBe('Editing src/App.tsx');
 		expect(describeBuildActivity({ kind: 'tool', toolName: 'deploy_space' })).toBe('Deploying');
+	});
+});
+
+describe('build status wording split for the live region', () => {
+	it('labels the activity without the line count', () => {
+		expect(describeBuildActivityLabel(THINKING)).toBe('Thinking…');
+		expect(describeBuildActivityLabel({ kind: 'tool', toolName: 'write', path: 'src/a.ts', lines: 340 })).toBe('Writing src/a.ts');
+		expect(describeBuildActivityLabel({ kind: 'tool', toolName: 'write', lines: 340 })).toBe('Writing file');
+		expect(describeBuildActivityLabel({ kind: 'tool', toolName: 'edit', path: 'src/App.tsx' })).toBe('Editing src/App.tsx');
+	});
+
+	it('words the line count on its own', () => {
+		expect(describeBuildLineCount({ kind: 'tool', toolName: 'write', path: 'src/a.ts', lines: 340 })).toBe('340 lines');
+		expect(describeBuildLineCount({ kind: 'tool', toolName: 'write', path: 'src/a.ts', lines: 1 })).toBe('1 line');
+		expect(describeBuildLineCount({ kind: 'tool', toolName: 'write', path: 'src/a.ts', lines: 1204 })).toBe('1,204 lines');
+	});
+
+	it('has no line count while thinking, for other tools, or before any line is written', () => {
+		expect(describeBuildLineCount(THINKING)).toBeNull();
+		expect(describeBuildLineCount({ kind: 'tool', toolName: 'edit', path: 'src/App.tsx' })).toBeNull();
+		expect(describeBuildLineCount({ kind: 'tool', toolName: 'write', path: 'src/a.ts' })).toBeNull();
 	});
 });

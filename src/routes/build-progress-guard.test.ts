@@ -84,7 +84,8 @@ describe('build progress: bar', () => {
 		const bar = source(BAR);
 		expect(bar.match(/role="status"/g) ?? []).toHaveLength(1);
 		const live = bar.slice(bar.indexOf('role="status"'));
-		expect(live).toContain('describeBuildActivity(status.activity)');
+		expect(live).toContain('describeBuildActivityLabel(status.activity)');
+		expect(live).not.toContain('describeBuildLineCount');
 		expect(live).not.toContain('describeBuildHeadline');
 	});
 

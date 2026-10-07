@@ -1,6 +1,11 @@
 import { LoaderCircle } from 'lucide-react';
 import { useElapsedSeconds } from '@/hooks/use-elapsed-seconds';
-import { describeBuildActivity, describeBuildHeadline, type BuildStatus } from '@/routes/chat/utils/build-status';
+import {
+	describeBuildActivityLabel,
+	describeBuildHeadline,
+	describeBuildLineCount,
+	type BuildStatus,
+} from '@/routes/chat/utils/build-status';
 
 interface BuildProgressBarProps {
 	status: BuildStatus | null;
@@ -10,6 +15,7 @@ interface BuildProgressBarProps {
 export function BuildProgressBar({ status }: BuildProgressBarProps) {
 	const elapsedSeconds = useElapsedSeconds(status?.startedAt ?? null);
 	if (!status) return null;
+	const lineCount = describeBuildLineCount(status.activity);
 
 	return (
 		<div className="mb-2 rounded-lg border border-kumo-line bg-kumo-elevated px-3 py-2 text-sm">
@@ -19,8 +25,9 @@ export function BuildProgressBar({ status }: BuildProgressBarProps) {
 			<div className="mt-1 flex min-w-0 items-center gap-2">
 				<LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-kumo-brand" />
 				<p role="status" className="min-w-0 truncate text-kumo-strong">
-					{describeBuildActivity(status.activity)}
+					{describeBuildActivityLabel(status.activity)}
 				</p>
+				{lineCount && <span className="shrink-0 tabular-nums text-kumo-subtle">· {lineCount}</span>}
 			</div>
 		</div>
 	);
