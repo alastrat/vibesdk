@@ -181,7 +181,7 @@ export function PromptBox({
 									disabled={disabled}
 									placeholder={resolvedPlaceholder}
 									rows={1}
-									className="w-full bg-transparent rounded-xl px-3 pr-20 py-3 text-sm leading-5 ring-0 outline-none text-text-primary placeholder:text-text-primary/50! disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-y-auto no-scrollbar min-h-10 max-h-[120px] group"
+									className="min-w-0 flex-1 bg-transparent rounded-xl px-3 py-3 text-sm leading-5 ring-0 outline-none text-text-primary placeholder:text-text-primary/50! disabled:opacity-50 disabled:cursor-not-allowed resize-none overflow-y-auto no-scrollbar min-h-10 max-h-[120px] group"
 									style={{
 										height: '40px',
 										minHeight: '40px',
@@ -193,7 +193,8 @@ export function PromptBox({
 										if (textarea) autoResize(textarea);
 									}}
 								/>
-								<div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-2">
+								<div className="flex shrink-0 items-center gap-2 pr-2">
+									{leftActions}
 									{rightActions}
 									<OrangeButton
 										type="submit"

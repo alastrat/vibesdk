@@ -4,6 +4,7 @@ const sources = import.meta.glob<string>(
 	[
 		'/src/components/ThinkModelPicker.tsx',
 		'/src/components/ModelUnavailableNotice.tsx',
+		'/src/components/prompt-box.tsx',
 		'/src/routes/home.tsx',
 		'/src/routes/chat/chat.tsx',
 		'/src/routes/chat/components/chat-input.tsx',
@@ -47,6 +48,15 @@ describe('model picker: chat', () => {
 		expect(chat).toMatch(/<ThinkModelPicker\b/);
 		expect(chat).toContain("searchParams.get('model')");
 		expect(source('/src/routes/chat/components/chat-input.tsx')).toContain('leftActions={leftActions}');
+	});
+
+	it('draws the picker in the one-line chat input, next to send', () => {
+		const box = source('/src/components/prompt-box.tsx');
+		const compact = box.slice(box.indexOf('if (isCompact) {'), box.indexOf('// Expanded variant'));
+		const actions = compact.slice(compact.indexOf('{leftActions}'));
+		expect(compact).toContain('{leftActions}');
+		expect(actions).toContain('{rightActions}');
+		expect(actions).toContain('aria-label="Send message"');
 	});
 
 	it('creates the session with the chosen model', () => {
