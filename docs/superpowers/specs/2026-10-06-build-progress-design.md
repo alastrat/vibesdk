@@ -163,7 +163,7 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
 | A tracker exception | Logged once; no more progress for that build; the build continues |
 | Several tool calls in one step | Activity follows the most recent open call; `thinking` only when none are open |
 | Provider failure | `model_unavailable` clears the bar and the failure card takes the slot; `build()` exits and drops the tracker |
-| Stop | The host cancels the running ThinkAgent turn with `cancelChat`, using the request id from `onStart`. `build()` exits without running queued inputs and drops the tracker; `generation_complete` clears the bar. A turn inside a tool call ends when that call returns. |
+| Stop | The host cancels the running ThinkAgent turn with `cancelChat`, using the request id from `onStart`. `build()` exits without running queued inputs and drops the tracker; `generation_complete` clears the bar. Tools get the same abort: `deploy_space` and `commit` stop waiting for their SpaceDO call, which still finishes, and the console-log capture closes its page. |
 | No `build_progress` arrives (a provider that sends no argument deltas, or an older server during a deploy) | The bar shows from `generation_started` with the local clock and `Thinking…` |
 | Model sends `content` before `path` | `Writing file · 340 lines` until the path arrives |
 | Provider sends all the arguments in one chunk (Gemini can) | The path and count appear at once |
