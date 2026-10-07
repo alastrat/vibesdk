@@ -213,6 +213,9 @@ export class BuildProgressTracker {
 	private apply(chunk: ProgressChunk): boolean {
 		switch (chunk.type) {
 			case 'start-step':
+				// A step only starts after every tool result of the one before, so a call
+				// still open here was orphaned by an interrupted stream.
+				this.calls.clear();
 				this.step += 1;
 				return true;
 			case 'tool-input-start': {

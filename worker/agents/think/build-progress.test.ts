@@ -186,6 +186,17 @@ describe('BuildProgressTracker', () => {
 		});
 	});
 
+	it('drops calls an interrupted turn left open when the next step starts', () => {
+		const tracker = new BuildProgressTracker(START);
+		tracker.onChunk(STEP, START);
+		tracker.onChunk(open('c1', 'write'), START);
+		tracker.onChunk(delta('c1', '{"path":"/src/App.tsx","content":"a'), START);
+		const next = tracker.onChunk(STEP, START);
+		expect(next?.step).toBe(2);
+		expect(next?.activity).toEqual({ kind: 'thinking' });
+		expect(tracker.snapshot(START).activity).toEqual({ kind: 'thinking' });
+	});
+
 	it('ignores chunks it does not track and malformed ones', () => {
 		const tracker = new BuildProgressTracker(START);
 		expect(tracker.onChunk({ type: 'text-delta', id: 't', delta: 'hi' }, START)).toBeNull();
