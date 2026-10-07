@@ -19,9 +19,31 @@ import type {
 
 const PAGE_LOAD_TIMEOUT_MS = 30_000;
 
+/** Waits `ms`, or rejects with the abort reason as soon as `signal` aborts. */
+function delay(ms: number, signal: AbortSignal | undefined): Promise<void> {
+	return new Promise<void>((resolve, reject) => {
+		const onAbort = () => {
+			clearTimeout(timer);
+			reject(signal?.reason);
+		};
+		const timer = setTimeout(() => {
+			signal?.removeEventListener('abort', onAbort);
+			resolve();
+		}, ms);
+		if (signal?.aborted) onAbort();
+		signal?.addEventListener('abort', onAbort, { once: true });
+	});
+}
+
+/**
+ * Loads the page and collects its output. Once `signal` aborts, it closes the
+ * page, which fails a navigation or script still in flight, and rejects with
+ * the abort reason.
+ */
 export async function runCapture(
 	page: CapturePage,
 	payload: CapturePayload,
+	signal?: AbortSignal,
 ): Promise<BrowserConsoleCaptureResult> {
 	const logs: BrowserConsoleEntry[] = [];
 	const pageErrors: BrowserConsolePageError[] = [];
@@ -68,7 +90,14 @@ export async function runCapture(
 		}
 	});
 
+	const closeOnAbort = () => {
+		page.close().catch(() => {
+			// ignore close failures
+		});
+	};
+	signal?.addEventListener('abort', closeOnAbort, { once: true });
 	try {
+		signal?.throwIfAborted();
 		await page.setViewport(payload.viewport);
 		await page.goto(payload.url, {
 			waitUntil: 'networkidle2',
@@ -79,9 +108,14 @@ export async function runCapture(
 		}
 		const waitMs = Math.max(0, payload.waitSeconds) * 1000;
 		if (waitMs > 0) {
-			await new Promise((r) => setTimeout(r, waitMs));
+			await delay(waitMs, signal);
 		}
+	} catch (error) {
+		// After an abort, the page errors from closing it mean the capture was stopped.
+		signal?.throwIfAborted();
+		throw error;
 	} finally {
+		signal?.removeEventListener('abort', closeOnAbort);
 		try {
 			await page.close();
 		} catch {

@@ -3,10 +3,10 @@
  * over HTTP. The sidecar drives Chromium locally with `puppeteer` and
  * shares the `runCapture` core with the prod path.
  *
- * Contract: this client NEVER throws. When the sidecar is unreachable
- * or misbehaves we log a warning and return an empty result with a
- * `warning` field so the tool surfaces the situation to the LLM
- * without an error that would trigger retries.
+ * Contract: this client throws only to report the caller's abort. When
+ * the sidecar is unreachable or misbehaves we log a warning and return
+ * an empty result with a `warning` field so the tool surfaces the
+ * situation to the LLM without an error that would trigger retries.
  */
 
 import type { StructuredLogger } from '../../logger';
@@ -51,6 +51,7 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 
 	async captureConsoleLogs(
 		payload: CapturePayload,
+		signal?: AbortSignal,
 	): Promise<BrowserConsoleCaptureResult> {
 		const base = this.env.DEV_BROWSER_SIDECAR_URL || DEFAULT_SIDECAR_URL;
 		const devOrigin =
@@ -87,12 +88,13 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 		}
 
 		// Phase 2 — actual capture.
+		const timeout = AbortSignal.timeout(CAPTURE_TIMEOUT_MS);
 		try {
 			const resp = await fetch(`${base}/capture-console-logs`, {
 				method: 'POST',
 				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify(localPayload),
-				signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
+				signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
 			});
 			if (!resp.ok) {
 				const text = await resp.text().catch(() => '');
@@ -108,6 +110,7 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 			}
 			return (await resp.json()) as BrowserConsoleCaptureResult;
 		} catch (e) {
+			signal?.throwIfAborted();
 			const msg = e instanceof Error ? e.message : String(e);
 			this.logger.warn('Dev browser sidecar capture errored', { base, error: msg });
 			return this.unavailable(localPayload, msg);

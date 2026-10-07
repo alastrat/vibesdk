@@ -54,17 +54,33 @@ export function isDurableObjectResetError(error: unknown): boolean {
 /**
  * Run a SpaceDO RPC, retrying ONCE with a freshly resolved stub when the call
  * failed because the DO was reset. All other errors propagate unchanged.
+ *
+ * Once `signal` aborts, it rejects with the abort reason and starts no further
+ * call. An RPC cannot be cancelled, so the SpaceDO still finishes a call in flight.
  */
 export async function withDurableObjectResetRetry<S, T>(
 	getStub: () => S,
 	call: (stub: S) => Promise<T>,
+	signal?: AbortSignal,
 ): Promise<T> {
+	signal?.throwIfAborted();
 	try {
-		return await call(getStub());
+		return await untilAborted(call(getStub()), signal);
 	} catch (error) {
-		if (!isDurableObjectResetError(error)) throw error;
-		return await call(getStub());
+		if (signal?.aborted || !isDurableObjectResetError(error)) throw error;
+		return await untilAborted(call(getStub()), signal);
 	}
+}
+
+/** Settles with `work`, or rejects with the abort reason as soon as `signal` aborts. */
+function untilAborted<T>(work: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+	if (!signal) return work;
+	return new Promise<T>((resolve, reject) => {
+		const onAbort = () => reject(signal.reason);
+		if (signal.aborted) onAbort();
+		signal.addEventListener('abort', onAbort, { once: true });
+		work.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+	});
 }
 
 // ── TEMP DIAGNOSTIC (write-escape-diag) ──────────────────────────────────────
