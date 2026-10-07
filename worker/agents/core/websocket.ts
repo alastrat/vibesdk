@@ -163,8 +163,8 @@ export async function handleWebSocketMessage(
                     return;
                 }
                 agent.getBehavior().captureScreenshot(parsedMessage.data.url, parsedMessage.data.viewport as { width: number; height: number } | undefined).then((screenshotResult) => {
-                    if (!screenshotResult) {
-                        logger.error('Failed to capture screenshot');
+                    if (screenshotResult === null) {
+                        logger.info('Screenshot already current; capture skipped');
                         return;
                     }
                     logger.info('Screenshot captured successfully!', screenshotResult);

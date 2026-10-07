@@ -31,6 +31,7 @@ import { modelUnavailableNotice, resolveThinkModel } from '../../think/model-con
 import type { ProviderFailure } from '../../think/model-transport';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
 import { BuildProgressTracker } from '../../think/build-progress';
+import { screenshotTarget } from '../../think/screenshot-policy';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
@@ -121,6 +122,9 @@ export class ThinkCodingBehavior
 
 	/** Progress of the running build. In memory only, so it never churns agent state. */
 	private buildProgress: BuildProgressTracker | null = null;
+
+	/** Commit a thumbnail capture is running for. In memory: a restart allows at most one repeat. */
+	private screenshotInFlightCommit: string | null = null;
 
 	override getBuildProgress(): BuildProgress | null {
 		return this.buildProgress?.snapshot(Date.now()) ?? null;
@@ -522,6 +526,7 @@ export class ThinkCodingBehavior
 			}
 		} finally {
 			this.buildProgress = null;
+			this.captureDeployedScreenshot();
 		}
 	}
 
@@ -851,6 +856,47 @@ export class ThinkCodingBehavior
 	}
 
 	/**
+	 * Captures the app thumbnail once per deployed commit, whether the server or
+	 * an open editor asks. Resolves to null when the stored thumbnail already
+	 * shows the deployed commit or a capture for it is running.
+	 */
+	override async captureScreenshot(
+		url: string,
+		viewport?: { width: number; height: number },
+	): Promise<string | null> {
+		const commit = this.pendingScreenshotCommit();
+		if (!commit) return null;
+		this.screenshotInFlightCommit = commit;
+		try {
+			const screenshotUrl = await super.captureScreenshot(url, viewport);
+			this.setState({ ...this.state, screenshotCommit: commit });
+			return screenshotUrl;
+		} finally {
+			if (this.screenshotInFlightCommit === commit) this.screenshotInFlightCommit = null;
+		}
+	}
+
+	/**
+	 * Thumbnails the deployed preview from the server, so an app gets one
+	 * without anyone opening its editor. Runs in the background; a failure is
+	 * logged and the next editor open retries it.
+	 */
+	private captureDeployedScreenshot(): void {
+		if (!this.pendingScreenshotCommit()) return;
+		void this.getBrowserPreviewURL()
+			.then((url) => this.captureScreenshot(url))
+			.catch((e: unknown) => this.logger.warn('Server-side thumbnail capture failed', e));
+	}
+
+	private pendingScreenshotCommit(): string | null {
+		return screenshotTarget({
+			lastDeployedCommit: this.state.lastDeployedCommit,
+			screenshotCommit: this.state.screenshotCommit,
+			inFlightCommit: this.screenshotInFlightCommit,
+		});
+	}
+
+	/**
 	 * Restore the SpaceDO to a prior commit and redeploy. Driven by the FE
 	 * "Rollback" control on a commit/deploy tool event. Refuses while a
 	 * generation turn is active, then reuses `handleDeploySpaceOutput` so the
@@ -878,6 +924,7 @@ export class ThinkCodingBehavior
 				conversationId: IdGenerator.generateConversationId(),
 				isStreaming: false,
 			});
+			this.captureDeployedScreenshot();
 		} catch (e) {
 			this.logger.warn('SpaceDO.rollbackToCommit failed', e);
 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {

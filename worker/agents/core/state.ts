@@ -137,6 +137,8 @@ export interface ThinkState extends BaseProjectState {
     currentBranch: string;
     /** Last commit SHA we successfully deployed. */
     lastDeployedCommit?: string;
+    /** Deployed commit the stored app thumbnail shows. */
+    screenshotCommit?: string;
     cloudflareDeploymentUrl?: string;
 }
 

@@ -1778,13 +1778,15 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     /**
-     * Capture screenshot of the given URL using Cloudflare Browser Rendering REST API.
-     * Includes retry logic with blank screenshot detection.
+     * Capture a screenshot of the given URL with Browser Rendering and store it
+     * as the app thumbnail. Includes retry logic with blank screenshot detection.
+     * Resolves to the signed screenshot URL, or null when a behavior skips the
+     * capture because the stored thumbnail is already current.
      */
     public async captureScreenshot(
         url: string,
         viewport: { width: number; height: number } = { width: 1280, height: 720 }
-    ): Promise<string> {
+    ): Promise<string | null> {
         if (!this.env.DB || !this.getAgentId()) {
             const error = 'Cannot capture screenshot: DB or agentId not available';
             this.logger.warn(error);
@@ -1805,7 +1807,7 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
             throw new Error(error);
         }
 
-        this.logger.info('Capturing screenshot via REST API', { url, viewport });
+        this.logger.info('Capturing screenshot', { url, viewport });
 
         // Notify start of screenshot capture
         this.broadcast(WebSocketMessageResponses.SCREENSHOT_CAPTURE_STARTED, {

@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 const sources = import.meta.glob<string>(
 	[
 		'/worker/agents/core/behaviors/base.ts',
+		'/worker/agents/core/behaviors/think.ts',
+		'/worker/agents/core/websocket.ts',
 		'/worker/services/browser-capture/binding-client.ts',
 		'/worker/services/browser-capture/sidecar-client.ts',
 		'/scripts/dev-browser-sidecar.ts',
@@ -48,5 +50,36 @@ describe('app screenshots', () => {
 		const sidecar = source('/scripts/dev-browser-sidecar.ts');
 		expect(sidecar).toContain("req.url === '/capture-screenshot'");
 		expect(sidecar).toContain('runScreenshot(');
+	});
+});
+
+describe('server-side thumbnails for Think apps', () => {
+	const THINK = '/worker/agents/core/behaviors/think.ts';
+
+	it('captures the deployed preview when a build ends', () => {
+		const build = between(source(THINK), 'async build(): Promise<void> {', 'private async runPrompt(');
+		expect(build).toMatch(/finally \{[^}]*this\.captureDeployedScreenshot\(\);/);
+	});
+
+	it('captures the deployed preview after a rollback redeploys', () => {
+		const rollback = between(source(THINK), 'async rollbackToCommit(', 'private async handleSetTitleOutput(');
+		expect(rollback).toContain('this.captureDeployedScreenshot();');
+	});
+
+	it('captures once per deployed commit, whoever asks', () => {
+		const capture = between(source(THINK), 'override async captureScreenshot(', 'private captureDeployedScreenshot(');
+		expect(capture).toContain('this.pendingScreenshotCommit()');
+		expect(capture).toContain('screenshotCommit: commit');
+		expect(source(THINK)).toContain('screenshotTarget({');
+	});
+
+	it('treats a skipped capture as current, not as a failure', () => {
+		const handler = between(
+			source('/worker/agents/core/websocket.ts'),
+			'case WebSocketMessageRequests.CAPTURE_SCREENSHOT:',
+			'case WebSocketMessageRequests.STOP_GENERATION:',
+		);
+		expect(handler).toContain('screenshotResult === null');
+		expect(handler).not.toContain("logger.error('Failed to capture screenshot')");
 	});
 });
