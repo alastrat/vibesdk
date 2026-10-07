@@ -15,6 +15,7 @@ import type {
 	BrowserConsoleEntry,
 	BrowserConsolePageError,
 	BrowserConsoleRequestFailure,
+	ScreenshotPayload,
 } from './types';
 
 const PAGE_LOAD_TIMEOUT_MS = 30_000;
@@ -96,4 +97,28 @@ export async function runCapture(
 		pageErrors,
 		requestFailures,
 	};
+}
+
+/** Loads the page at the payload's viewport and returns a base64 PNG of that viewport. */
+export async function runScreenshot(
+	page: CapturePage,
+	payload: ScreenshotPayload,
+): Promise<string> {
+	try {
+		await page.setViewport(payload.viewport);
+		await page.goto(payload.url, {
+			waitUntil: 'networkidle2',
+			timeout: payload.timeoutMs,
+		});
+		if (payload.settleMs > 0) {
+			await new Promise((r) => setTimeout(r, payload.settleMs));
+		}
+		return await page.screenshot({ type: 'png', fullPage: false, encoding: 'base64' });
+	} finally {
+		try {
+			await page.close();
+		} catch {
+			// ignore close failures
+		}
+	}
 }

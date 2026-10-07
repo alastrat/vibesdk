@@ -14,6 +14,7 @@ import type {
 	BrowserCaptureClient,
 	BrowserConsoleCaptureResult,
 	CapturePayload,
+	ScreenshotPayload,
 } from './types';
 
 const DEFAULT_SIDECAR_URL = 'http://127.0.0.1:9223';
@@ -49,24 +50,35 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 		private readonly logger: StructuredLogger,
 	) {}
 
+	/**
+	 * Unlike console capture, screenshots throw on failure: the caller
+	 * retries and reports the error to the chat.
+	 */
+	async captureScreenshot(payload: ScreenshotPayload): Promise<string> {
+		const resp = await fetch(`${this.sidecarBase()}/capture-screenshot`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ ...payload, url: this.localUrl(payload.url) }),
+			signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
+		});
+		if (!resp.ok) {
+			const text = await resp.text().catch(() => '');
+			throw new Error(
+				`Dev browser sidecar screenshot returned ${resp.status}: ${text.slice(0, 200)}. Start it with 'npm run dev:browser'.`,
+			);
+		}
+		const { screenshot } = (await resp.json()) as { screenshot?: string };
+		if (!screenshot) {
+			throw new Error('Dev browser sidecar returned no screenshot');
+		}
+		return screenshot;
+	}
+
 	async captureConsoleLogs(
 		payload: CapturePayload,
 	): Promise<BrowserConsoleCaptureResult> {
-		const base = this.env.DEV_BROWSER_SIDECAR_URL || DEFAULT_SIDECAR_URL;
-		const devOrigin =
-			this.env.DEV_BROWSER_PREVIEW_ORIGIN || DEFAULT_DEV_PREVIEW_ORIGIN;
-
-		// Always navigate against the local dev server. The path part of
-		// the agent-supplied URL is preserved, only the scheme + host
-		// are rewritten.
-		const rewrittenUrl = rewriteToLocalHost(payload.url, devOrigin);
-		if (rewrittenUrl !== payload.url) {
-			this.logger.info('Rewriting preview URL host for local dev capture', {
-				original: payload.url,
-				rewritten: rewrittenUrl,
-			});
-		}
-		const localPayload: CapturePayload = { ...payload, url: rewrittenUrl };
+		const base = this.sidecarBase();
+		const localPayload: CapturePayload = { ...payload, url: this.localUrl(payload.url) };
 
 		// Phase 1 — health probe with tight timeout so unavailability fails fast.
 		try {
@@ -112,6 +124,27 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 			this.logger.warn('Dev browser sidecar capture errored', { base, error: msg });
 			return this.unavailable(localPayload, msg);
 		}
+	}
+
+	private sidecarBase(): string {
+		return this.env.DEV_BROWSER_SIDECAR_URL || DEFAULT_SIDECAR_URL;
+	}
+
+	/**
+	 * Points a preview URL at the dev origin the local Chromium can reach.
+	 * The path is preserved; only the scheme and host are rewritten.
+	 */
+	private localUrl(url: string): string {
+		const devOrigin =
+			this.env.DEV_BROWSER_PREVIEW_ORIGIN || DEFAULT_DEV_PREVIEW_ORIGIN;
+		const rewritten = rewriteToLocalHost(url, devOrigin);
+		if (rewritten !== url) {
+			this.logger.info('Rewriting preview URL host for local dev capture', {
+				original: url,
+				rewritten,
+			});
+		}
+		return rewritten;
 	}
 
 	private unavailable(

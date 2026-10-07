@@ -1883,53 +1883,21 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
     }
 
     /**
-     * Execute a single screenshot capture attempt using Cloudflare Browser Rendering API.
+     * Execute a single screenshot capture attempt through the browser capture
+     * client: the `BROWSER` binding in production, the local sidecar in dev.
+     * Returns a base64 PNG.
      */
     private async executeScreenshotCapture(
         url: string,
         viewport: { width: number; height: number }
     ): Promise<string> {
-        const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${this.env.CLOUDFLARE_ACCOUNT_ID}/browser-rendering/snapshot`;
-
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${this.env.CLOUDFLARE_API_TOKEN}`,
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                url: url,
-                viewport: viewport,
-                gotoOptions: {
-                    waitUntil: 'networkidle2',
-                    timeout: SCREENSHOT_CONFIG.PAGE_LOAD_TIMEOUT
-                },
-                waitForTimeout: SCREENSHOT_CONFIG.WAIT_FOR_TIMEOUT,
-                screenshotOptions: {
-                    fullPage: false,
-                    type: 'png'
-                }
-            }),
+        const client = getBrowserCaptureClient(this.env, this.logger);
+        return client.captureScreenshot({
+            url,
+            viewport,
+            timeoutMs: SCREENSHOT_CONFIG.PAGE_LOAD_TIMEOUT,
+            settleMs: SCREENSHOT_CONFIG.WAIT_FOR_TIMEOUT,
         });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            throw new Error(`Browser Rendering API failed: ${response.status} - ${errorText}`);
-        }
-
-        const result = await response.json() as {
-            success: boolean;
-            result: {
-                screenshot: string;
-                content: string;
-            };
-        };
-
-        if (!result.success || !result.result.screenshot) {
-            throw new Error('Browser Rendering API succeeded but no screenshot returned');
-        }
-
-        return result.result.screenshot;
     }
 
     /**

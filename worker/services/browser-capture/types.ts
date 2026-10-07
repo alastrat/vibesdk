@@ -23,6 +23,15 @@ export interface CapturePayload {
 	interactScript?: string;
 }
 
+export interface ScreenshotPayload {
+	url: string;
+	viewport: { width: number; height: number };
+	/** Navigation timeout in milliseconds. */
+	timeoutMs: number;
+	/** Milliseconds to wait after the network goes idle, so late renders land in the image. */
+	settleMs: number;
+}
+
 export interface BrowserConsoleEntry {
 	level: string;
 	text: string;
@@ -93,9 +102,12 @@ export interface CapturePage {
 	setViewport(v: { width: number; height: number }): Promise<void>;
 	goto(url: string, opts?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
 	evaluate(script: string): Promise<unknown>;
+	screenshot(opts: { type: 'png'; fullPage: boolean; encoding: 'base64' }): Promise<string>;
 	close(): Promise<void>;
 }
 
 export interface BrowserCaptureClient {
 	captureConsoleLogs(payload: CapturePayload): Promise<BrowserConsoleCaptureResult>;
+	/** Returns a base64 PNG (no data URL prefix) of the page's viewport; throws on failure. */
+	captureScreenshot(payload: ScreenshotPayload): Promise<string>;
 }

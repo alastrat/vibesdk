@@ -14,10 +14,11 @@ import http from 'node:http';
 import type { Browser, Page } from 'puppeteer';
 import puppeteer from 'puppeteer';
 
-import { runCapture } from '../worker/services/browser-capture/capture-core';
+import { runCapture, runScreenshot } from '../worker/services/browser-capture/capture-core';
 import type {
 	CapturePage,
 	CapturePayload,
+	ScreenshotPayload,
 } from '../worker/services/browser-capture/types';
 
 const PORT = Number(process.env.PORT ?? 9223);
@@ -54,6 +55,33 @@ async function handleCapture(payload: CapturePayload) {
 	return runCapture(page as unknown as CapturePage, payload);
 }
 
+async function handleScreenshot(payload: ScreenshotPayload): Promise<string> {
+	const browser = await getBrowser();
+	const page: Page = await browser.newPage();
+	return runScreenshot(page as unknown as CapturePage, payload);
+}
+
+async function readPayload<T extends { url?: string }>(
+	req: http.IncomingMessage,
+	res: http.ServerResponse,
+): Promise<T | null> {
+	const raw = await readBody(req);
+	let payload: T;
+	try {
+		payload = JSON.parse(raw) as T;
+	} catch (e) {
+		sendJson(res, 400, {
+			error: `invalid JSON body: ${e instanceof Error ? e.message : String(e)}`,
+		});
+		return null;
+	}
+	if (!payload?.url) {
+		sendJson(res, 400, { error: 'missing required field: url' });
+		return null;
+	}
+	return payload;
+}
+
 function readBody(req: http.IncomingMessage): Promise<string> {
 	return new Promise((resolve, reject) => {
 		const chunks: Buffer[] = [];
@@ -75,20 +103,14 @@ const server = http.createServer(async (req, res) => {
 			return sendJson(res, 200, { ok: true, version: 1 });
 		}
 		if (req.method === 'POST' && req.url === '/capture-console-logs') {
-			const raw = await readBody(req);
-			let payload: CapturePayload;
-			try {
-				payload = JSON.parse(raw) as CapturePayload;
-			} catch (e) {
-				return sendJson(res, 400, {
-					error: `invalid JSON body: ${e instanceof Error ? e.message : String(e)}`,
-				});
-			}
-			if (!payload?.url) {
-				return sendJson(res, 400, { error: 'missing required field: url' });
-			}
-			const result = await handleCapture(payload);
-			return sendJson(res, 200, result);
+			const payload = await readPayload<CapturePayload>(req, res);
+			if (!payload) return;
+			return sendJson(res, 200, await handleCapture(payload));
+		}
+		if (req.method === 'POST' && req.url === '/capture-screenshot') {
+			const payload = await readPayload<ScreenshotPayload>(req, res);
+			if (!payload) return;
+			return sendJson(res, 200, { screenshot: await handleScreenshot(payload) });
 		}
 		res.statusCode = 404;
 		res.end();
@@ -102,7 +124,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
 	console.log(`[dev-browser-sidecar] listening on http://${HOST}:${PORT}`);
-	console.log('[dev-browser-sidecar] endpoints: GET /health, POST /capture-console-logs');
+	console.log('[dev-browser-sidecar] endpoints: GET /health, POST /capture-console-logs, POST /capture-screenshot');
 });
 
 async function shutdown(signal: string) {
