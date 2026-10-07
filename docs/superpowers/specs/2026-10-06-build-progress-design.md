@@ -19,7 +19,7 @@ While a Think build runs, show users that it is moving and how long it has run. 
 
 ## What the user sees
 
-The bar appears when a build starts (`generation_started`) and disappears when it ends (`generation_complete`). That covers the first prompt and every later message that runs a build. It goes in the chat input's `aboveContent` slot, before the failure card. The two never show together, because a failed build ends before its card appears.
+The bar appears when a build starts (`generation_started`) and disappears when it ends (`generation_complete`). That covers the first prompt and every later message that runs a build. It goes in the chat input's `aboveContent` slot, before the failure card. The two never show together: `model_unavailable` clears the bar.
 
 ```
 Building · step 4 · 3:12
@@ -94,7 +94,7 @@ Chunk handling:
 
 | Chunk | Effect |
 |---|---|
-| `start-step` | `step` + 1 |
+| `start-step` | Closes any calls still open from earlier steps (an interrupted stream can leave them open), then `step` + 1 |
 | `tool-input-start` | Opens the call (`toolCallId`, `toolName`); for `write` and `edit` it creates a scanner |
 | `tool-input-delta` | Feeds `inputTextDelta` to the call's scanner, if it has one |
 | `tool-input-available` | Takes `path` from the final input and, for `write`, the final line count of `content` |
@@ -144,10 +144,11 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
 | `build_progress` | `applyBuildProgress(prev, message.progress, Date.now())` |
 | `agent_connected` | `buildStatusFromConnect(message.buildProgress, Date.now())`. A tab that reconnects after the build ended shows no stale bar. |
 | `generation_complete` | `null` |
+| `model_unavailable` | `null` |
 
 ### Bar component
 
-`src/components/BuildProgressBar.tsx` takes `status: BuildStatus | null` and renders nothing for `null`. `chat.tsx` renders it first in `aboveContent`.
+`src/components/BuildProgressBar.tsx` takes `status: BuildStatus | null` and renders nothing for `null`. `chat.tsx` renders it first in `aboveContent`. It passes `null` unless the live `behaviorType` is `think`, so a legacy phasic chat whose socket handler kept a stale type never shows the bar. The line count renders beside the activity, outside the live region, so screen readers do not announce it every second.
 
 - `useElapsedSeconds(startedAt)` ticks once a second inside the bar. Only the bar re-renders each second, not the chat page.
 - The clock uses `formatElapsedTime` from `src/routes/chat/hooks/use-debug-session.ts`, extended to `h:mm:ss` from 3,600 seconds. The debug bubble shares the change.
@@ -161,7 +162,8 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
 | Malformed or cut-off tool arguments | The scanner keeps what it has; `tool-input-available` replaces the path and count with the final values |
 | A tracker exception | Logged once; no more progress for that build; the build continues |
 | Several tool calls in one step | Activity follows the most recent open call; `thinking` only when none are open |
-| Provider failure or Stop | `build()` exits and drops the tracker; `generation_complete` clears the bar; the failure card, if any, takes the slot |
+| Provider failure | `model_unavailable` clears the bar and the failure card takes the slot; `build()` exits and drops the tracker |
+| Stop | Stop does not end a Think build today: it aborts a controller the ThinkAgent never uses (pre-existing). The bar keeps showing the build, truthfully, until it ends. Making Stop reach the ThinkAgent is separate work. |
 | No `build_progress` arrives (a provider that sends no argument deltas, or an older server during a deploy) | The bar shows from `generation_started` with the local clock and `Thinking…` |
 | Model sends `content` before `path` | `Writing file · 340 lines` until the path arrives |
 | Provider sends all the arguments in one chunk (Gemini can) | The path and count appear at once |
@@ -206,7 +208,7 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
   - the file names and line counts move during long steps;
   - the final step number matches the AI Gateway request count;
   - a reload mid-build keeps the elapsed time;
-  - the bar clears on completion, on Stop, and when the failure card appears.
+  - the bar clears on completion and when the failure card appears.
 
 ## Out of scope
 
