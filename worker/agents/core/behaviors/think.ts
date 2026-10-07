@@ -13,7 +13,7 @@ import { ImageType, uploadImage } from 'worker/utils/images';
 import { IdGenerator } from '../../utils/idGenerator';
 import { generateNanoId } from '../../../utils/idGenerator';
 import { generateProjectName } from '../../utils/templateCustomizer';
-import { deriveShortTitle } from '../../utils/titleGenerator';
+import { deriveProjectTitle, deriveShortTitle } from '../../utils/titleGenerator';
 import { PreviewType, TemplateDetails } from 'worker/services/sandbox/sandboxTypes';
 import {
 	buildSpacePreviewPath,
@@ -191,7 +191,7 @@ export class ThinkCodingBehavior
 			projectName,
 			query,
 			blueprint: {
-				title: deriveShortTitle(baseName),
+				title: deriveProjectTitle(baseName),
 				projectName,
 				description: query,
 				colorPalette: ['#1e1e1e'],

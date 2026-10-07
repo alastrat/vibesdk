@@ -28,3 +28,24 @@ export function deriveShortTitle(
 	const base = lastSpace > maxLength * 0.5 ? slice.slice(0, lastSpace) : slice;
 	return `${base.trimEnd()}…`;
 }
+
+/**
+ * A product name the request gives in matching quotes after "called" or
+ * "named", e.g. `a store called "Trailhead Supply"`.
+ */
+const NAMED_PRODUCT =
+	/\b(?:called|named)\s+(?:"([^"\n]{2,60})"|“([^”\n]{2,60})”|'([^'\n]{2,60})'|‘([^’\n]{2,60})’)/i;
+
+/**
+ * The provisional title of a new project: the product name the request gives
+ * in quotes, or else the short form of the request itself.
+ */
+export function deriveProjectTitle(
+	query: string,
+	maxLength = 60,
+	fallback = 'New project',
+): string {
+	const match = NAMED_PRODUCT.exec(query ?? '');
+	const named = match?.slice(1).find((group) => group !== undefined)?.replace(/\s+/g, ' ').trim();
+	return named || deriveShortTitle(query, maxLength, fallback);
+}

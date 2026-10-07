@@ -13,9 +13,9 @@ import { z } from 'zod';
 const DESCRIPTION = [
 	'Set a short, human-friendly display title for this project (shown in the app list and preview header).',
 	'',
-	'Call this once, early, ONLY IF the project does not yet have a clear name — for example when the user request is a long or vague description rather than a concise product name. Keep it under ~60 characters, in Title Case, with no surrounding quotes.',
+	'A new project starts with a provisional title taken from the start of the user request, which is often not a real name. On the first turn of a new project, call this once, early, to give it one: use the name the user gave the product if there is one (for example "Trailhead Supply" in a request for a store called "Trailhead Supply"), otherwise a concise name for what is being built. Keep it under ~60 characters, in Title Case, with no surrounding quotes.',
 	'',
-	'Do not call this on every turn; a single good title is enough unless the user asks to rename.',
+	'After that, call it again only if the user asks to rename the project.',
 ].join('\n');
 
 export function createSetTitleTool(): Tool {
