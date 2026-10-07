@@ -1416,7 +1416,7 @@ function ChatSession() {
 							}
 							aboveContent={
 								<>
-									<BuildProgressBar status={buildStatus} />
+									<BuildProgressBar status={behaviorType === 'think' ? buildStatus : null} />
 									<ModelUnavailableNotice
 										notice={modelUnavailable}
 										options={capabilities?.thinkModels ?? []}

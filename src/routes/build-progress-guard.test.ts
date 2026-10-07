@@ -39,6 +39,11 @@ describe('build progress: chat state', () => {
 		expect(complete).toContain('setBuildStatus(null);');
 	});
 
+	it('clears the status when the model is unavailable, before the build ends', () => {
+		const unavailable = between(source(HANDLER), "case 'model_unavailable':", 'break;');
+		expect(unavailable).toContain('setBuildStatus(null);');
+	});
+
 	it('applies progress messages', () => {
 		const progress = between(source(HANDLER), "case 'build_progress':", 'break;');
 		expect(progress).toContain('setBuildStatus((prev) => applyBuildProgress(prev, message.progress, Date.now()));');
@@ -91,7 +96,7 @@ describe('build progress: bar', () => {
 
 	it('shows the bar above the chat input, before the failure card', () => {
 		const above = source(CHAT).slice(source(CHAT).indexOf('aboveContent={'));
-		expect(above).toContain('<BuildProgressBar status={buildStatus} />');
+		expect(above).toContain("<BuildProgressBar status={behaviorType === 'think' ? buildStatus : null} />");
 		expect(above.indexOf('<BuildProgressBar')).toBeLessThan(above.indexOf('<ModelUnavailableNotice'));
 	});
 });

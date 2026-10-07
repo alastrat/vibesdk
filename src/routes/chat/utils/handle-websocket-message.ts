@@ -1165,6 +1165,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'model_unavailable': {
+                setBuildStatus(null);
                 setModelUnavailable({
                     modelId: message.modelId,
                     reason: message.reason,
