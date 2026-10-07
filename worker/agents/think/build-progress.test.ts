@@ -34,7 +34,7 @@ describe('ToolInputScanner', () => {
 	});
 
 	it('does not read the hex digits of a unicode escape as text', () => {
-		// n is the letter n.
+		// The escape encodes the letter n, not a newline.
 		expect(scan('{"content":"a\\u006eb"}').lines).toBe(1);
 	});
 

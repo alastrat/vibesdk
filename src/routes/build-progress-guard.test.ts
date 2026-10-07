@@ -94,6 +94,12 @@ describe('build progress: bar', () => {
 		expect(live).not.toContain('describeBuildHeadline');
 	});
 
+	it('stops the spinner when reduced motion is requested', () => {
+		const bar = source(BAR);
+		expect(bar).toContain('motion-safe:animate-spin');
+		expect(bar).not.toMatch(/(^|\s)animate-spin/);
+	});
+
 	it('shows the bar above the chat input, before the failure card', () => {
 		const above = source(CHAT).slice(source(CHAT).indexOf('aboveContent={'));
 		expect(above).toContain("<BuildProgressBar status={behaviorType === 'think' ? buildStatus : null} />");

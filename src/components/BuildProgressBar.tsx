@@ -23,7 +23,7 @@ export function BuildProgressBar({ status }: BuildProgressBarProps) {
 				{describeBuildHeadline(status.step, elapsedSeconds)}
 			</p>
 			<div className="mt-1 flex min-w-0 items-center gap-2">
-				<LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin text-kumo-brand" />
+				<LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 motion-safe:animate-spin text-kumo-brand" />
 				<p role="status" className="min-w-0 truncate text-kumo-strong">
 					{describeBuildActivityLabel(status.activity)}
 				</p>
