@@ -8,6 +8,8 @@
  * Start with `npm run dev:browser`. Binds to 127.0.0.1 only; never
  * exposed to the network. If the worker can't reach this sidecar in
  * dev, the tool returns a structured warning rather than throwing.
+ * When the worker drops a capture request (Stop), the capture stops
+ * and its page closes.
  */
 
 import http from 'node:http';
@@ -19,6 +21,7 @@ import type {
 	CapturePage,
 	CapturePayload,
 } from '../worker/services/browser-capture/types';
+import { abortWhenClientLeaves } from './dev-browser-sidecar-signal';
 
 const PORT = Number(process.env.PORT ?? 9223);
 const HOST = '127.0.0.1';
@@ -47,11 +50,12 @@ async function getBrowser(): Promise<Browser> {
 	return browserPromise;
 }
 
-async function handleCapture(payload: CapturePayload) {
+async function handleCapture(payload: CapturePayload, signal: AbortSignal) {
 	const browser = await getBrowser();
+	signal.throwIfAborted();
 	const page: Page = await browser.newPage();
 	// puppeteer's Page satisfies the CapturePage structural type.
-	return runCapture(page as unknown as CapturePage, payload);
+	return runCapture(page as unknown as CapturePage, payload, signal);
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
@@ -75,6 +79,7 @@ const server = http.createServer(async (req, res) => {
 			return sendJson(res, 200, { ok: true, version: 1 });
 		}
 		if (req.method === 'POST' && req.url === '/capture-console-logs') {
+			const signal = abortWhenClientLeaves(res);
 			const raw = await readBody(req);
 			let payload: CapturePayload;
 			try {
@@ -87,8 +92,15 @@ const server = http.createServer(async (req, res) => {
 			if (!payload?.url) {
 				return sendJson(res, 400, { error: 'missing required field: url' });
 			}
-			const result = await handleCapture(payload);
-			return sendJson(res, 200, result);
+			try {
+				const result = await handleCapture(payload, signal);
+				return sendJson(res, 200, result);
+			} catch (e) {
+				if (!signal.aborted) throw e;
+				// The worker is gone, so there is no one to answer.
+				console.log(`[dev-browser-sidecar] capture of ${payload.url} stopped: the worker dropped the request`);
+				return;
+			}
 		}
 		res.statusCode = 404;
 		res.end();

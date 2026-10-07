@@ -48,12 +48,15 @@ export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: stri
 				.optional()
 				.describe('Optional JS string evaluated in the page after load to trigger interactions.'),
 		}),
-		execute: async (args: {
-			url?: string;
-			wait_seconds?: number;
-			max_lines?: number;
-			interact_script?: string;
-		}) => {
+		execute: async (
+			args: {
+				url?: string;
+				wait_seconds?: number;
+				max_lines?: number;
+				interact_script?: string;
+			},
+			{ abortSignal },
+		) => {
 			const targetUrl = args.url ?? defaultUrl;
 			if (!targetUrl) {
 				return JSON.stringify({
@@ -65,13 +68,17 @@ export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: stri
 			const client = getBrowserCaptureClient(env, logger);
 			let result;
 			try {
-				result = await client.captureConsoleLogs({
-					url: targetUrl,
-					waitSeconds: Math.min(Math.max(args.wait_seconds ?? 5, 0), 25),
-					viewport: { width: 1280, height: 800 },
-					interactScript: args.interact_script,
-				});
+				result = await client.captureConsoleLogs(
+					{
+						url: targetUrl,
+						waitSeconds: Math.min(Math.max(args.wait_seconds ?? 5, 0), 25),
+						viewport: { width: 1280, height: 800 },
+						interactScript: args.interact_script,
+					},
+					abortSignal,
+				);
 			} catch (e) {
+				abortSignal?.throwIfAborted();
 				return JSON.stringify({
 					error: `Browser console capture failed: ${e instanceof Error ? e.message : String(e)}`,
 				});

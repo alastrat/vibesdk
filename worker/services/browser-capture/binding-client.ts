@@ -22,7 +22,9 @@ export class BindingCaptureClient implements BrowserCaptureClient {
 
 	async captureConsoleLogs(
 		payload: CapturePayload,
+		signal?: AbortSignal,
 	): Promise<BrowserConsoleCaptureResult> {
+		signal?.throwIfAborted();
 		this.logger.info('Launching Browser Run via BROWSER binding', {
 			url: payload.url,
 		});
@@ -32,8 +34,9 @@ export class BindingCaptureClient implements BrowserCaptureClient {
 			this.env.BROWSER as unknown as Parameters<typeof puppeteer.launch>[0],
 		);
 		try {
+			signal?.throwIfAborted();
 			const page = (await browser.newPage()) as unknown as CapturePage;
-			return await runCapture(page, payload);
+			return await runCapture(page, payload, signal);
 		} finally {
 			try {
 				await browser.close();

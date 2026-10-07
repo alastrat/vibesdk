@@ -29,14 +29,17 @@ export function createCommitTool(opts: { getStub: () => SpaceWorkspaceStub }): T
 				.string()
 				.describe('Short, descriptive commit message in imperative mood.'),
 		}),
-		execute: async (args: { message: string }) => {
+		execute: async (args: { message: string }, { abortSignal }) => {
 			const message = (args.message ?? '').trim() || 'Update project';
 			try {
-				const result = await withDurableObjectResetRetry(getStub, (stub) =>
-					stub.gitCommit(message),
+				const result = await withDurableObjectResetRetry(
+					getStub,
+					(stub) => stub.gitCommit(message),
+					abortSignal,
 				);
 				return JSON.stringify({ ok: true, commit_hash: result.sha, message: result.message });
 			} catch {
+				abortSignal?.throwIfAborted();
 				// `gitCommit` throws when the tree is clean — surface as a benign
 				// "nothing to commit" result rather than a tool error.
 				return JSON.stringify({ ok: true, nothing_to_commit: true });

@@ -163,7 +163,7 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
 | A tracker exception | Logged once; no more progress for that build; the build continues |
 | Several tool calls in one step | Activity follows the most recent open call; `thinking` only when none are open |
 | Provider failure | `model_unavailable` clears the bar and the failure card takes the slot; `build()` exits and drops the tracker |
-| Stop | Stop does not end a Think build today: it aborts a controller the ThinkAgent never uses (pre-existing). The bar keeps showing the build, truthfully, until it ends. Making Stop reach the ThinkAgent is separate work. |
+| Stop | The host cancels the running ThinkAgent turn with `cancelChat`, using the request id from `onStart`. `build()` exits without running queued inputs and drops the tracker; `generation_complete` clears the bar. Tools get the same abort: `deploy_space` and `commit` stop waiting for their SpaceDO call, which still finishes, and the console-log capture closes its page. |
 | No `build_progress` arrives (a provider that sends no argument deltas, or an older server during a deploy) | The bar shows from `generation_started` with the local clock and `Thinking…` |
 | Model sends `content` before `path` | `Writing file · 340 lines` until the path arrives |
 | Provider sends all the arguments in one chunk (Gemini can) | The path and count appear at once |
@@ -208,7 +208,7 @@ function buildStatusFromConnect(progress: BuildProgress | undefined, now: number
   - the file names and line counts move during long steps;
   - the final step number matches the AI Gateway request count;
   - a reload mid-build keeps the elapsed time;
-  - the bar clears on completion and when the failure card appears.
+  - the bar clears on completion, on Stop, and when the failure card appears.
 
 ## Out of scope
 

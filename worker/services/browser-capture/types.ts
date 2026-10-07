@@ -97,5 +97,6 @@ export interface CapturePage {
 }
 
 export interface BrowserCaptureClient {
-	captureConsoleLogs(payload: CapturePayload): Promise<BrowserConsoleCaptureResult>;
+	/** Rejects with the abort reason once `signal` aborts, ending the capture early. */
+	captureConsoleLogs(payload: CapturePayload, signal?: AbortSignal): Promise<BrowserConsoleCaptureResult>;
 }

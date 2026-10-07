@@ -30,19 +30,23 @@ export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub 
 				.optional()
 				.describe("Git branch to deploy. Defaults to 'main'."),
 		}),
-		execute: async (args: { branch?: string }) => {
+		execute: async (args: { branch?: string }, { abortSignal }) => {
 			const branch = args.branch && args.branch.length > 0 ? args.branch : 'main';
 			try {
-				await withDurableObjectResetRetry(getStub, (stub) =>
-					stub.gitCommit('deploy: snapshot working tree'),
+				await withDurableObjectResetRetry(
+					getStub,
+					(stub) => stub.gitCommit('deploy: snapshot working tree'),
+					abortSignal,
 				);
 			} catch {
-				// No changes to commit (clean tree) — proceed to deploy the existing HEAD.
+				// A stopped turn ends here. Otherwise the tree was clean: deploy the existing HEAD.
+				abortSignal?.throwIfAborted();
 			}
 			try {
-				const result = await withDurableObjectResetRetry(getStub, (stub) => stub.deploy(branch));
+				const result = await withDurableObjectResetRetry(getStub, (stub) => stub.deploy(branch), abortSignal);
 				return JSON.stringify({ branch, ...(result as Record<string, unknown>) }, null, 2);
 			} catch (e) {
+				abortSignal?.throwIfAborted();
 				return JSON.stringify({
 					branch,
 					error: `Deploy failed: ${e instanceof Error ? e.message : String(e)}`,
