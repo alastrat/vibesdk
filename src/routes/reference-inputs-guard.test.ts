@@ -20,3 +20,19 @@ describe('reference inputs: attachments', () => {
 		expect(source('/src/hooks/use-image-upload.ts')).toContain('await downscaleImageFile(file)');
 	});
 });
+
+describe('reference inputs: chat', () => {
+	it('adds reference cards and skipped-link notices to the turn', () => {
+		const handler = source('/src/routes/chat/utils/handle-websocket-message.ts');
+		expect(handler).toContain("case 'reference_captured':");
+		expect(handler).toContain('appendReferencePart(prev, message.conversationId, message.reference)');
+		expect(handler).toContain("case 'references_skipped':");
+		expect(handler).toContain('skippedReferenceCard(url)');
+	});
+
+	it('renders reference parts as cards', () => {
+		const messages = source('/src/routes/chat/components/messages.tsx');
+		expect(messages).toContain("if (part.type === 'reference')");
+		expect(messages).toContain('<ReferenceCard key={unit.key} reference={unit.reference} />');
+	});
+});

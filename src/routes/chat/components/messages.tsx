@@ -13,7 +13,8 @@ import {
 	getToolSummary,
 } from '../utils/tool-display';
 import { useRollback } from '../contexts/rollback-context';
-import type { ConversationMessage } from '@/api-types';
+import type { ConversationMessage, ReferenceCard as ReferenceCardData } from '@/api-types';
+import { ReferenceCard } from '@/components/ReferenceCard';
 import { useState, useEffect, useRef } from 'react';
 import { DebugSessionBubble } from './debug-session-bubble';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
@@ -416,7 +417,8 @@ function isTracePart(part: MessagePart): part is TracePart {
 
 type RenderUnit =
 	| { kind: 'text'; text: string; key: string }
-	| { kind: 'trace'; items: TracePart[]; key: string };
+	| { kind: 'trace'; items: TracePart[]; key: string }
+	| { kind: 'reference'; reference: ReferenceCardData; key: string };
 
 /**
  * Walk an assistant turn's ordered parts and group contiguous reasoning/tool
@@ -438,6 +440,11 @@ function bucketParts(parts: MessagePart[]): RenderUnit[] {
 		if (isTracePart(part)) {
 			if (buffer.length === 0) bufferStart = i;
 			buffer.push(part);
+			return;
+		}
+		if (part.type === 'reference') {
+			flush();
+			units.push({ kind: 'reference', reference: part.reference, key: `reference-${i}` });
 			return;
 		}
 		const text = sanitizeMessageForDisplay(part.text);
@@ -779,11 +786,11 @@ function AssistantParts({ parts, streaming }: { parts: MessagePart[]; streaming:
 	if (units.length === 0) return null;
 	return (
 		<div className="flex flex-col gap-2">
-			{units.map(unit =>
-				unit.kind === 'text'
-					? <Markdown key={unit.key} className="a-tag">{unit.text}</Markdown>
-					: <TraceGroup key={unit.key} items={unit.items} streaming={streaming} />,
-			)}
+			{units.map((unit) => {
+				if (unit.kind === 'text') return <Markdown key={unit.key} className="a-tag">{unit.text}</Markdown>;
+				if (unit.kind === 'reference') return <ReferenceCard key={unit.key} reference={unit.reference} />;
+				return <TraceGroup key={unit.key} items={unit.items} streaming={streaming} />;
+			})}
 		</div>
 	);
 }

@@ -1,6 +1,6 @@
 import { toast } from 'sonner';
 import { generateId } from '@/utils/id-generator';
-import type { RateLimitError, ConversationMessage } from '@/api-types';
+import type { RateLimitError, ConversationMessage, ReferenceCard } from '@/api-types';
 
 export type ToolEvent = {
     name: string;
@@ -85,7 +85,8 @@ export function hasAnswerAfterMessage(messages: ChatMessage[], messageIndex: num
 export type MessagePart =
     | { type: 'text'; text: string }
     | { type: 'reasoning'; text: string; done?: boolean }
-    | { type: 'tool'; event: ToolEvent };
+    | { type: 'tool'; event: ToolEvent }
+    | { type: 'reference'; reference: ReferenceCard };
 
 export type ChatMessage = Omit<ConversationMessage, 'content'> & {
     content: string;
@@ -382,4 +383,29 @@ export function appendToolEvent(
         }
         return [...parts, { type: 'tool', event: mkEvent() }];
     });
+}
+
+/** Add a reference card to a turn, in emission order. */
+export function appendReferencePart(
+    messages: ChatMessage[],
+    conversationId: string,
+    reference: ReferenceCard,
+): ChatMessage[] {
+    const part: MessagePart = { type: 'reference', reference };
+    const idx = findAssistant(messages, conversationId);
+    if (idx === -1) {
+        return [...messages, createAssistantFromParts(conversationId, [part])];
+    }
+    return updateAssistant(messages, idx, (parts) => [...parts, part]);
+}
+
+/** The card for a link beyond the per-message capture limit. */
+export function skippedReferenceCard(url: string): ReferenceCard {
+    let host = url;
+    try {
+        host = new URL(url).hostname.replace(/^www\./, '');
+    } catch {
+        // keep the raw text as the host
+    }
+    return { url, host, ok: false, reason: 'only the first 3 links are captured; this one stays as text' };
 }

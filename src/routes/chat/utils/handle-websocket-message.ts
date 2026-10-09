@@ -20,6 +20,8 @@ import {
     appendReasoningDelta,
     setAssistantText,
     appendToolEvent,
+    appendReferencePart,
+    skippedReferenceCard,
     type ChatMessage,
     type MessagePart,
     type ToolEvent,
@@ -700,6 +702,21 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
             case 'build_progress': {
                 setBuildStatus((prev) => applyBuildProgress(prev, message.progress, Date.now()));
+                break;
+            }
+
+            case 'reference_captured': {
+                setMessages((prev) => appendReferencePart(prev, message.conversationId, message.reference));
+                break;
+            }
+
+            case 'references_skipped': {
+                setMessages((prev) =>
+                    message.urls.reduce(
+                        (acc, url) => appendReferencePart(acc, message.conversationId, skippedReferenceCard(url)),
+                        prev,
+                    ),
+                );
                 break;
             }
 

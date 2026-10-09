@@ -3,6 +3,8 @@ import {
 	appendTextDelta,
 	appendReasoningDelta,
 	appendToolEvent,
+	appendReferencePart,
+	skippedReferenceCard,
 	setAssistantText,
 	getMessageText,
 	type ChatMessage,
@@ -16,6 +18,7 @@ function shape(parts: MessagePart[] | undefined) {
 	return (parts ?? []).map((p) => {
 		if (p.type === 'text') return { type: p.type, text: p.text };
 		if (p.type === 'reasoning') return { type: p.type, text: p.text, done: p.done };
+		if (p.type === 'reference') return { type: p.type, url: p.reference.url };
 		return { type: p.type, name: p.event.name, status: p.event.status, result: p.event.result };
 	});
 }
@@ -67,5 +70,33 @@ describe('message parts appenders', () => {
 		messages = setAssistantText(messages, CONV, 'Part A \n\nPart B');
 		const after = shape(messages.find((m) => m.conversationId === CONV)!.parts);
 		expect(after).toEqual(before);
+	});
+});
+
+describe('reference parts', () => {
+	const CARD = { url: 'https://stripe.com', host: 'stripe.com', ok: true as const, summary: 'Desktop + mobile', thumbnailUrl: 'https://t' };
+
+	it('starts an assistant message with the reference card', () => {
+		const messages = appendReferencePart([], CONV, CARD);
+		expect(messages).toHaveLength(1);
+		expect(messages[0].role).toBe('assistant');
+		expect(messages[0].parts).toEqual([{ type: 'reference', reference: CARD }]);
+		expect(messages[0].content).toBe('');
+	});
+
+	it('appends to the turn the card belongs to', () => {
+		let messages: ChatMessage[] = appendTextDelta([], CONV, 'Working on it');
+		messages = appendReferencePart(messages, CONV, CARD);
+		expect(messages[0].parts?.map((part) => part.type)).toEqual(['text', 'reference']);
+		expect(messages[0].content).toBe('Working on it');
+	});
+
+	it('explains links beyond the limit', () => {
+		expect(skippedReferenceCard('https://www.example.com/x')).toEqual({
+			url: 'https://www.example.com/x',
+			host: 'example.com',
+			ok: false,
+			reason: 'only the first 3 links are captured; this one stays as text',
+		});
 	});
 });
