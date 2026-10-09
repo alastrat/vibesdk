@@ -66,7 +66,8 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 				size: resized.size,
 				dimensions: { width: resized.width, height: resized.height },
 			};
-		} catch {
+		} catch (error) {
+			console.error('Failed to process image:', error);
 			const errorMsg = `Could not read image: ${file.name}`;
 			toast.error(errorMsg);
 			onError?.(errorMsg);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_IMAGE_EDGE, fitWithin } from './image-resize';
+import { MAX_IMAGE_EDGE, fitWithin, jpegFallbackFor } from './image-resize';
 
 describe('fitWithin', () => {
 	it('keeps images that already fit', () => {
@@ -14,5 +14,17 @@ describe('fitWithin', () => {
 
 	it('never collapses a side to zero', () => {
 		expect(fitWithin(10_000, 3)).toEqual({ width: 1600, height: 1 });
+	});
+});
+
+describe('jpegFallbackFor', () => {
+	it('keeps WebP output, which preserves transparency', () => {
+		expect(jpegFallbackFor('image/webp')).toBeNull();
+	});
+
+	it('re-encodes as JPEG on a white backdrop when the browser could not encode WebP', () => {
+		const expected = { mimeType: 'image/jpeg', backdrop: '#ffffff' };
+		expect(jpegFallbackFor('image/png')).toEqual(expected);
+		expect(jpegFallbackFor('')).toEqual(expected);
 	});
 });

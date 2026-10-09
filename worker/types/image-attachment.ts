@@ -23,7 +23,7 @@ export interface ImageAttachment {
 	mimeType: SupportedImageMimeType;
 	/** Base64-encoded image data (without data URL prefix) */
 	base64Data: string;
-	/** Size of the original file in bytes */
+	/** Size in bytes of the image data as sent, after any downscaling */
 	size?: number;
 	/** Optional dimensions if available */
 	dimensions?: {

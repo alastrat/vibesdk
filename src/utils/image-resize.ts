@@ -18,6 +18,14 @@ export interface ResizedImage {
 	size: number;
 }
 
+/**
+ * JPEG has no alpha channel, so the fallback re-encode needs a backdrop or
+ * transparent pixels turn black. Null when the output is already WebP.
+ */
+export function jpegFallbackFor(webpAttemptType: string): { mimeType: 'image/jpeg'; backdrop: string } | null {
+	return webpAttemptType === 'image/webp' ? null : { mimeType: 'image/jpeg', backdrop: '#ffffff' };
+}
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
 	return new Promise((resolve, reject) =>
 		canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Could not encode the image'))), type, quality),
@@ -58,10 +66,17 @@ export async function downscaleImageFile(file: File): Promise<ResizedImage> {
 		bitmap.close();
 		throw new Error('Canvas is not available');
 	}
+	context.imageSmoothingQuality = 'high';
 	context.drawImage(bitmap, 0, 0, target.width, target.height);
 	bitmap.close();
 	let blob = await canvasToBlob(canvas, 'image/webp', 0.85);
-	if (blob.type !== 'image/webp') blob = await canvasToBlob(canvas, 'image/jpeg', 0.85);
+	const fallback = jpegFallbackFor(blob.type);
+	if (fallback) {
+		context.globalCompositeOperation = 'destination-over';
+		context.fillStyle = fallback.backdrop;
+		context.fillRect(0, 0, target.width, target.height);
+		blob = await canvasToBlob(canvas, fallback.mimeType, 0.85);
+	}
 	return {
 		base64Data: await blobToBase64(blob),
 		mimeType: blob.type as ResizedImage['mimeType'],
