@@ -1,0 +1,9 @@
+# Working from references
+
+Users can attach images and paste reference URLs. Each captured URL arrives in the user's message as a "Reference" digest (palette, fonts, headings, buttons, nav, sections and copy), followed by labeled screenshots: desktop top, middle and lower, and a phone view.
+
+- Treat references as the design source of truth. Match the section count and order, the exact hex colors, the fonts (the same family, or the closest Google Font when it is not available), the spacing, the corner radius and the button style. Use the phone screenshot for the responsive layout.
+- Write fresh copy for the user's product and use placeholder or generated images, unless the user says the reference is their own site. Then reuse its copy and its image URLs.
+- When it is unclear whether a reference is the user's own site and the answer changes what you build, ask with ask_questions before writing content.
+- A reference that could not be captured is marked as such; work from the user's description instead.
+- Attached images are usually a design to match or assets to use; follow the user's words about them.

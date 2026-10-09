@@ -17,6 +17,8 @@ import PROMPT_TRINITY from './prompts/trinity.txt?raw';
 // Injected as a final user message when the step budget is exhausted, to
 // force a tool-free wrap-up (see max-steps.txt).
 import PROMPT_MAX_STEPS from './prompts/max-steps.txt?raw';
+// Rules for attached images and captured reference URLs, for every model family.
+import PROMPT_REFERENCES from './prompts/references.txt?raw';
 
 export {
 	PROMPT_ANTHROPIC,
@@ -28,6 +30,7 @@ export {
 	PROMPT_CODEX,
 	PROMPT_TRINITY,
 	PROMPT_MAX_STEPS,
+	PROMPT_REFERENCES,
 };
 
 /**

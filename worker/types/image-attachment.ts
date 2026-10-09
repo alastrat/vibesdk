@@ -73,3 +73,9 @@ export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024;
  * Maximum number of images per message
  */
 export const MAX_IMAGES_PER_MESSAGE = 2;
+
+/** An uploaded image waiting to be sent with the next Think turn. */
+export interface PendingImage {
+	r2Key: string;
+	mimeType: SupportedImageMimeType;
+}

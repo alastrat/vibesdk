@@ -13,6 +13,7 @@
  */
 import type { ConversationMessage, ConversationState, ToolCall } from '../../inferutils/common';
 import type { UIMessage } from 'ai';
+import { isHiddenPart } from '../../think/turn-message';
 
 export abstract class ConversationMessageLoader {
 	abstract load(): Promise<ConversationState>;
@@ -107,6 +108,7 @@ export class ThinkMessageLoader extends ConversationMessageLoader {
 type AnyUIPart = UIMessage['parts'][number];
 
 function partText(part: AnyUIPart): string {
+	if (isHiddenPart(part)) return '';
 	return part.type === 'text' && typeof (part as { text?: string }).text === 'string'
 		? (part as { text: string }).text
 		: '';

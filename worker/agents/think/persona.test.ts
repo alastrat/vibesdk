@@ -13,9 +13,9 @@ describe('PERSONA_PROMPT', () => {
 });
 
 describe('composeSystemPrompt', () => {
-	it('places the persona between the base prompt and the project context', () => {
-		expect(composeSystemPrompt('BASE', 'CONTEXT')).toBe(
-			`BASE\n\n${PERSONA_PROMPT}\n\nCONTEXT`,
+	it('places the persona and the references rules between the base prompt and the project context', () => {
+		expect(composeSystemPrompt('BASE', 'REFS', 'CONTEXT')).toBe(
+			`BASE\n\n${PERSONA_PROMPT}\n\nREFS\n\nCONTEXT`,
 		);
 	});
 });
