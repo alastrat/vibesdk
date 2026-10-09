@@ -13,6 +13,65 @@ const VALID = {
 	images: ['https://images.example.com/hero.png', 'data:image/png;base64,AAAA'],
 };
 
+interface FakeElement {
+	style: Record<string, string>;
+	children: FakeElement[];
+	getBoundingClientRect(): { width: number; height: number };
+	querySelector(selector: string): null;
+	querySelectorAll(selector: string): FakeElement[];
+}
+
+const RGBA: Record<string, number[]> = {
+	'#000': [0, 0, 0, 255],
+	'rgb(0, 0, 0)': [0, 0, 0, 255],
+	'rgb(255, 255, 255)': [255, 255, 255, 255],
+	'rgb(17, 24, 39)': [17, 24, 39, 255],
+	'rgba(0, 0, 0, 0)': [0, 0, 0, 0],
+};
+
+function box(colors: { color?: string; backgroundColor?: string } = {}): FakeElement {
+	return {
+		style: {
+			visibility: 'visible',
+			display: 'block',
+			opacity: '1',
+			fontFamily: 'Inter, sans-serif',
+			color: colors.color ?? 'rgb(0, 0, 0)',
+			backgroundColor: colors.backgroundColor ?? 'rgba(0, 0, 0, 0)',
+		},
+		children: [],
+		getBoundingClientRect: () => ({ width: 100, height: 40 }),
+		querySelector: () => null,
+		querySelectorAll: () => [],
+	};
+}
+
+/** Runs the extraction script against a minimal DOM whose canvas resolves a fixed set of color strings. */
+function extractPalette(html: FakeElement, body: FakeElement, descendants: FakeElement[]): string[] {
+	const canvas = {
+		rgba: RGBA['#000'],
+		clearRect: () => undefined,
+		fillRect: () => undefined,
+		getImageData: () => ({ data: canvas.rgba }),
+		set fillStyle(value: string) {
+			if (RGBA[value]) canvas.rgba = RGBA[value];
+		},
+	};
+	body.querySelectorAll = (selector) => (selector === '*' ? descendants : []);
+	const fakeDocument = {
+		documentElement: html,
+		body,
+		title: 'Fixture',
+		images: [] as FakeElement[],
+		createElement: () => ({ getContext: () => canvas }),
+		querySelector: () => null,
+		querySelectorAll: () => [] as FakeElement[],
+	};
+	const run = new Function('document', 'getComputedStyle', `return ${REFERENCE_EXTRACT_SCRIPT}`);
+	const result: unknown = run(fakeDocument, (el: FakeElement) => el.style);
+	return normalizeReferenceDesign(result).palette;
+}
+
 describe('normalizeReferenceDesign', () => {
 	it('keeps valid fields and drops invalid colors and non-http images', () => {
 		const design = normalizeReferenceDesign(VALID);
@@ -91,5 +150,27 @@ describe('normalizeReferenceDesign', () => {
 	it('resolves colors through a canvas rather than parsing rgb() strings', () => {
 		expect(REFERENCE_EXTRACT_SCRIPT).toContain('getImageData');
 		expect(REFERENCE_EXTRACT_SCRIPT).not.toContain('rgba?\\(');
+	});
+});
+
+describe('REFERENCE_EXTRACT_SCRIPT palette', () => {
+	const WHITE = 'rgb(255, 255, 255)';
+	const DARK = 'rgb(17, 24, 39)';
+	const busyPage = () => Array.from({ length: 6 }, () => box({ color: WHITE, backgroundColor: WHITE }));
+
+	it('counts the body background and ranks it above element colors', () => {
+		const palette = extractPalette(box(), box({ backgroundColor: DARK }), busyPage());
+		expect(palette[0]).toBe('#111827');
+		expect(palette).toContain('#ffffff');
+	});
+
+	it('counts the html background when the body is transparent', () => {
+		const palette = extractPalette(box({ backgroundColor: DARK }), box(), busyPage());
+		expect(palette[0]).toBe('#111827');
+	});
+
+	it('adds no background color when the page sets none', () => {
+		const palette = extractPalette(box(), box(), busyPage());
+		expect(palette).toEqual(['#ffffff', '#000000']);
 	});
 });

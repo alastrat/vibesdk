@@ -34,12 +34,21 @@ export const REFERENCE_EXTRACT_SCRIPT = `(() => {
 
 	const elements = Array.from(document.body ? document.body.querySelectorAll('*') : []).slice(0, 4000).filter(isVisible);
 	const counts = new Map();
+	const vote = (value, weight) => {
+		const hex = toHex(value);
+		if (hex) counts.set(hex, (counts.get(hex) || 0) + weight);
+	};
 	for (const el of elements) {
 		const style = getComputedStyle(el);
-		for (const value of [style.color, style.backgroundColor]) {
-			const hex = toHex(value);
-			if (hex) counts.set(hex, (counts.get(hex) || 0) + 1);
-		}
+		vote(style.color, 1);
+		vote(style.backgroundColor, 1);
+	}
+	// The page background paints behind every element, so it outweighs any color the elements can cast (two each).
+	for (const el of [document.documentElement, document.body]) {
+		if (!el) continue;
+		const style = getComputedStyle(el);
+		vote(style.color, 1);
+		vote(style.backgroundColor, elements.length * 2 + 1);
 	}
 	const palette = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8).map((entry) => entry[0]);
 
