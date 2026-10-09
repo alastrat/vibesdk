@@ -62,35 +62,44 @@ function isPrivateIpv4(octets: number[]): boolean {
 	);
 }
 
-function parseIpv6Groups(host: string): number[] | null {
-	const parts = host.split(':');
-	const groups: number[] = [];
-	let hasDoubleColon = false;
-	let doubleColonIndex = -1;
+export function parseIpv6Groups(host: string): number[] | null {
+	const doubleColonCount = (host.match(/::/g) || []).length;
+	if (doubleColonCount > 1) return null;
 
-	for (let i = 0; i < parts.length; i++) {
-		if (parts[i] === '') {
-			if (i > 0 && i < parts.length - 1 && parts[i - 1] === '') {
-				if (hasDoubleColon) return null;
-				hasDoubleColon = true;
-				doubleColonIndex = i - 1;
-			}
-		} else {
-			const val = parseInt(parts[i], 16);
-			if (isNaN(val) || val < 0 || val > 0xffff) return null;
-			groups.push(val);
+	if (doubleColonCount === 0) {
+		const parts = host.split(':');
+		if (parts.length !== 8) return null;
+		const groups: number[] = [];
+		for (const part of parts) {
+			if (!/^[0-9a-f]{1,4}$/i.test(part)) return null;
+			groups.push(parseInt(part, 16));
 		}
+		return groups;
 	}
 
-	if (hasDoubleColon) {
-		const before = groups.slice(0, doubleColonIndex);
-		const after = doubleColonIndex < groups.length ? groups.slice(doubleColonIndex) : [];
-		const zeros = 8 - before.length - after.length;
-		if (zeros < 0) return null;
-		return [...before, ...Array(zeros).fill(0), ...after];
+	const [head, tail] = host.split('::');
+	const headParts = head ? head.split(':') : [];
+	const tailParts = tail ? tail.split(':') : [];
+
+	if (headParts.length + tailParts.length > 7) return null;
+
+	const groups: number[] = [];
+	for (const part of headParts) {
+		if (!/^[0-9a-f]{1,4}$/i.test(part)) return null;
+		groups.push(parseInt(part, 16));
 	}
 
-	return groups.length === 8 ? groups : null;
+	const zeroCount = 8 - headParts.length - tailParts.length;
+	for (let i = 0; i < zeroCount; i++) {
+		groups.push(0);
+	}
+
+	for (const part of tailParts) {
+		if (!/^[0-9a-f]{1,4}$/i.test(part)) return null;
+		groups.push(parseInt(part, 16));
+	}
+
+	return groups;
 }
 
 function isPrivateIpv6(host: string): boolean {
@@ -123,7 +132,7 @@ function isPrivateIpv6(host: string): boolean {
 		if (isPrivateIpv4(octets)) return true;
 	}
 
-	if ((groups[0] & 0xff00) === 0x2000) {
+	if (groups[0] === 0x2002) {
 		const octets = [(groups[1] >> 8) & 0xff, groups[1] & 0xff, (groups[2] >> 8) & 0xff, groups[2] & 0xff];
 		if (isPrivateIpv4(octets)) return true;
 	}

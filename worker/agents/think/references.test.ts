@@ -4,6 +4,7 @@ import {
 	describeReferenceSummary,
 	extractReferenceUrls,
 	formatReferenceDigest,
+	parseIpv6Groups,
 	referenceHost,
 	referenceShotLabel,
 	validateReferenceUrl,
@@ -127,6 +128,27 @@ describe('validateReferenceUrl', () => {
 
 	it('accepts userinfo with public domain', () => {
 		expect(validateReferenceUrl('http://estori.app@example.com').ok).toBe(true);
+	});
+
+	it('accepts public IPv6 addresses (middle and trailing ::)', () => {
+		expect(validateReferenceUrl('http://[2001:4860:4860::8888]').ok).toBe(true);
+		expect(validateReferenceUrl('http://[2606:4700::1111]').ok).toBe(true);
+		expect(validateReferenceUrl('http://[2001:db8::]').ok).toBe(true);
+		expect(validateReferenceUrl('http://[1::]').ok).toBe(true);
+		expect(validateReferenceUrl('http://[2001:a18:1:2:3:4:5:6]').ok).toBe(true);
+	});
+
+	it('rejects private IPv6 ranges parsed correctly', () => {
+		expect(validateReferenceUrl('http://[fd12:3456::1]')).toEqual({ ok: false, reason: 'private-address' });
+		expect(validateReferenceUrl('http://[fe80::1]')).toEqual({ ok: false, reason: 'private-address' });
+		expect(validateReferenceUrl('http://[64:ff9b::a9fe:a9fe]')).toEqual({ ok: false, reason: 'private-address' });
+		expect(validateReferenceUrl('http://[2002:a9fe:a9fe::]')).toEqual({ ok: false, reason: 'private-address' });
+	});
+});
+
+describe('IPv6 group parser', () => {
+	it('expands :: correctly at any position', () => {
+		expect(parseIpv6Groups('2001:db8::1')).toEqual([0x2001, 0xdb8, 0, 0, 0, 0, 0, 1]);
 	});
 });
 
