@@ -32,6 +32,48 @@ export interface ScreenshotPayload {
 	settleMs: number;
 }
 
+export interface ReferencePayload {
+	url: string;
+	/** Navigation timeout in milliseconds. */
+	timeoutMs: number;
+	/** Milliseconds to wait after each load or scroll before capturing. */
+	settleMs: number;
+}
+
+export type ReferenceShotKind = 'desktop-top' | 'desktop-middle' | 'desktop-lower' | 'mobile-top';
+
+export interface ReferenceShot {
+	kind: ReferenceShotKind;
+	/** JPEG, base64 without a data URL prefix. */
+	jpegBase64: string;
+	width: number;
+	height: number;
+}
+
+/** Design data read from a reference page's rendered styles. */
+export interface ReferenceDesign {
+	title: string;
+	/** Hex colors, most used first, up to 8. */
+	palette: string[];
+	fonts: { body: string; headings: string; buttons: string };
+	headings: { tag: string; size: string; weight: string }[];
+	button: { background: string; color: string; radius: string } | null;
+	/** Up to 12 navigation labels. */
+	nav: string[];
+	/** Top-level sections, top to bottom, up to 15. */
+	sections: { heading: string; columns: number; hasImage: boolean }[];
+	/** Visible text, up to 6,000 characters. */
+	copy: string;
+	/** Absolute image URLs, up to 12. */
+	images: string[];
+}
+
+export interface ReferenceCaptureResult {
+	finalUrl: string;
+	shots: ReferenceShot[];
+	design: ReferenceDesign;
+}
+
 export interface BrowserConsoleEntry {
 	level: string;
 	text: string;
