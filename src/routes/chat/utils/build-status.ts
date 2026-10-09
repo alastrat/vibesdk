@@ -35,6 +35,7 @@ export function describeBuildHeadline(step: number, elapsedSeconds: number): str
 /** The activity without its line count, e.g. "Writing src/App.tsx". Safe to announce. */
 export function describeBuildActivityLabel(activity: BuildActivity): string {
 	if (activity.kind === 'thinking') return 'Thinking…';
+	if (activity.kind === 'capturing') return `Capturing ${activity.host} · ${activity.index} of ${activity.total}`;
 	return getToolActivityLabel(activity.toolName, activity.path ? { path: activity.path } : undefined);
 }
 

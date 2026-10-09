@@ -153,6 +153,7 @@ export type {
   CloudflareDeploymentErrorCode,
   BuildActivity,
   BuildProgress,
+  ReferenceCard,
 } from 'worker/api/websocketTypes';
 
 // Database/Schema Types commonly used in frontend

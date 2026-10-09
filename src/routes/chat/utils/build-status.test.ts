@@ -74,6 +74,12 @@ describe('build status wording', () => {
 		expect(describeBuildActivity({ kind: 'tool', toolName: 'edit', path: 'src/App.tsx' })).toBe('Editing src/App.tsx');
 		expect(describeBuildActivity({ kind: 'tool', toolName: 'deploy_space' })).toBe('Deploying');
 	});
+
+	it('names the reference being captured', () => {
+		expect(describeBuildActivity({ kind: 'capturing', host: 'stripe.com', index: 1, total: 2 })).toBe(
+			'Capturing stripe.com · 1 of 2',
+		);
+	});
 });
 
 describe('build status wording split for the live region', () => {

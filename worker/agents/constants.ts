@@ -92,6 +92,10 @@ export const WebSocketMessageResponses: Record<string, WebSocketMessageType> = {
 
     // Live progress of a running build (think only)
     BUILD_PROGRESS: 'build_progress',
+
+    // Reference URLs captured for a turn (think only)
+    REFERENCE_CAPTURED: 'reference_captured',
+    REFERENCES_SKIPPED: 'references_skipped',
 } as const satisfies Record<string, WebSocketMessageType>;
 
 // WebSocket message types

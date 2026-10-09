@@ -237,4 +237,30 @@ describe('BuildProgressTracker', () => {
 		tracker.onChunk(delta('c1', '{"path":"/a.ts","content":"1'), START);
 		expect(tracker.onChunk(delta('c1', 'more text on the same line'), START + 5_000)).toBeNull();
 	});
+
+	it('shows reference capture as the activity until it ends', () => {
+		const tracker = new BuildProgressTracker(START);
+		expect(tracker.beginCapture('stripe.com', 1, 2, START + 100).activity).toEqual({
+			kind: 'capturing',
+			host: 'stripe.com',
+			index: 1,
+			total: 2,
+		});
+		expect(tracker.beginCapture('linear.app', 2, 2, START + 200).activity).toEqual({
+			kind: 'capturing',
+			host: 'linear.app',
+			index: 2,
+			total: 2,
+		});
+		expect(tracker.endCapture(START + 300)?.activity).toEqual({ kind: 'thinking' });
+	});
+
+	it('returns to the build activity after capture', () => {
+		const tracker = new BuildProgressTracker(START);
+		expect(tracker.endCapture(START)).toBeNull();
+		tracker.beginCapture('stripe.com', 1, 1, START);
+		tracker.endCapture(START);
+		expect(tracker.onChunk(STEP, START)?.activity).toEqual({ kind: 'thinking' });
+		expect(tracker.onChunk(open('c1', 'write'), START)?.activity).toEqual({ kind: 'tool', toolName: 'write' });
+	});
 });

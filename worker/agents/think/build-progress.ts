@@ -184,6 +184,8 @@ export class BuildProgressTracker {
 	/** Open tool calls in the order they opened. */
 	private readonly calls = new Map<string, OpenCall>();
 	private lastSent: { key: string; lines: number | undefined; at: number } | undefined;
+	/** Set while the host captures reference URLs, before the turn starts. */
+	private capturing: { host: string; index: number; total: number } | null = null;
 
 	constructor(private readonly startedAt: number) {}
 
@@ -191,17 +193,32 @@ export class BuildProgressTracker {
 	onChunk(chunk: ProgressChunk, now: number): BuildProgress | null {
 		if (!this.apply(chunk)) return null;
 		const progress = this.snapshot(now);
+		const key = progressKey(progress);
 		const { activity } = progress;
-		const key =
-			activity.kind === 'tool'
-				? `${progress.step}|tool|${activity.toolName}|${activity.path ?? ''}`
-				: `${progress.step}|thinking`;
 		const lines = activity.kind === 'tool' ? activity.lines : undefined;
 		const last = this.lastSent;
 		if (last && last.key === key && (last.lines === lines || now - last.at < LINE_UPDATE_INTERVAL_MS)) {
 			return null;
 		}
 		this.lastSent = { key, lines, at: now };
+		return progress;
+	}
+
+	/** Shows reference capture as the activity; the host sends every returned snapshot. */
+	beginCapture(host: string, index: number, total: number, now: number): BuildProgress {
+		this.capturing = { host, index, total };
+		return this.remember(this.snapshot(now), now);
+	}
+
+	/** Ends the capture state; null when no capture was shown. */
+	endCapture(now: number): BuildProgress | null {
+		if (!this.capturing) return null;
+		this.capturing = null;
+		return this.remember(this.snapshot(now), now);
+	}
+
+	private remember(progress: BuildProgress, now: number): BuildProgress {
+		this.lastSent = { key: progressKey(progress), lines: undefined, at: now };
 		return progress;
 	}
 
@@ -253,6 +270,7 @@ export class BuildProgressTracker {
 	}
 
 	private activity(): BuildActivity {
+		if (this.capturing) return { kind: 'capturing', ...this.capturing };
 		let current: OpenCall | undefined;
 		for (const call of this.calls.values()) current = call;
 		if (!current) return { kind: 'thinking' };
@@ -264,6 +282,19 @@ export class BuildProgressTracker {
 			...(path ? { path: path.replace(/^\/+/, '') } : {}),
 			...(lines ? { lines } : {}),
 		};
+	}
+}
+
+/** What makes two snapshots different enough to send at once. */
+function progressKey(progress: BuildProgress): string {
+	const { activity } = progress;
+	switch (activity.kind) {
+		case 'tool':
+			return `${progress.step}|tool|${activity.toolName}|${activity.path ?? ''}`;
+		case 'capturing':
+			return `${progress.step}|capturing|${activity.host}|${activity.index}`;
+		default:
+			return `${progress.step}|thinking`;
 	}
 }
 

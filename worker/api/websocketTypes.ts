@@ -490,7 +490,8 @@ type ModelUnavailableMessage = { type: 'model_unavailable' } & ModelUnavailableN
 /** What a running Think build is doing right now. */
 export type BuildActivity =
 	| { kind: 'thinking' }
-	| { kind: 'tool'; toolName: string; path?: string; lines?: number };
+	| { kind: 'tool'; toolName: string; path?: string; lines?: number }
+	| { kind: 'capturing'; host: string; index: number; total: number };
 
 /** A snapshot of a running Think build. */
 export type BuildProgress = {
@@ -502,6 +503,15 @@ export type BuildProgress = {
 };
 
 type BuildProgressMessage = { type: 'build_progress'; progress: BuildProgress };
+
+/** A reference URL as the chat shows it: captured with a thumbnail, or failed with a reason. */
+export type ReferenceCard =
+	| { url: string; host: string; ok: true; summary: string; thumbnailUrl: string }
+	| { url: string; host: string; ok: false; reason: string };
+
+type ReferenceCapturedMessage = { type: 'reference_captured'; conversationId: string; reference: ReferenceCard };
+
+type ReferencesSkippedMessage = { type: 'references_skipped'; conversationId: string; urls: string[] };
 
 // ========== VAULT WEBSOCKET MESSAGES (sent to vault DO) ==========
 
@@ -674,7 +684,9 @@ export type WebSocketMessage =
 	| VaultLockedMessage
 	| VaultRequiredMessage
 	| ModelUnavailableMessage
-	| BuildProgressMessage;
+	| BuildProgressMessage
+	| ReferenceCapturedMessage
+	| ReferencesSkippedMessage;
 
 // A type representing all possible message type strings (e.g., 'generation_started', 'file_generating', etc.)
 export type WebSocketMessageType = WebSocketMessage['type'];
