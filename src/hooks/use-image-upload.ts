@@ -7,6 +7,7 @@ import {
 	MAX_IMAGES_PER_MESSAGE,
 	SUPPORTED_IMAGE_MIME_TYPES
 } from '@/api-types';
+import { downscaleImageFile } from '@/utils/image-resize';
 
 export interface UseImageUploadOptions {
 	maxImages?: number;
@@ -55,59 +56,22 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 			return null;
 		}
 
-		return new Promise((resolve, reject) => {
-			const reader = new FileReader();
-
-			reader.onload = (e) => {
-				try {
-					const result = e.target?.result as string;
-					if (!result) {
-						reject(new Error('Failed to read file'));
-						return;
-					}
-
-					// Extract base64 data (remove data URL prefix)
-					const base64Data = result.split(',')[1];
-
-					// Try to get image dimensions
-					const img = new Image();
-					img.onload = () => {
-						resolve({
-							id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-							filename: file.name,
-							mimeType: file.type as ImageAttachment['mimeType'],
-							base64Data,
-							size: file.size,
-							dimensions: {
-								width: img.width,
-								height: img.height,
-							},
-						});
-					};
-
-					img.onerror = () => {
-						// Fallback without dimensions if image loading fails
-						resolve({
-							id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-							filename: file.name,
-							mimeType: file.type as ImageAttachment['mimeType'],
-							base64Data,
-							size: file.size,
-						});
-					};
-
-					img.src = result;
-				} catch (error) {
-					reject(error);
-				}
+		try {
+			const resized = await downscaleImageFile(file);
+			return {
+				id: `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+				filename: file.name,
+				mimeType: resized.mimeType,
+				base64Data: resized.base64Data,
+				size: resized.size,
+				dimensions: { width: resized.width, height: resized.height },
 			};
-
-			reader.onerror = () => {
-				reject(new Error(`Failed to read file: ${file.name}`));
-			};
-
-			reader.readAsDataURL(file);
-		});
+		} catch {
+			const errorMsg = `Could not read image: ${file.name}`;
+			toast.error(errorMsg);
+			onError?.(errorMsg);
+			return null;
+		}
 	}, [maxSizeBytes, onError]);
 
 	const addImages = useCallback(async (files: File[]) => {
