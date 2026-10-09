@@ -96,6 +96,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         phasesCounter: MAX_PHASES,
     } as AgentState;
 
+    /** Agent state is owned by the server; connected clients only receive it. */
+    override validateStateChange(_nextState: AgentState, source: Connection | 'server'): void {
+        if (source !== 'server') throw new Error('Agent state can only be changed by the server');
+    }
+
     constructor(ctx: AgentContext, env: Env) {
         super(ctx, env);
                 
