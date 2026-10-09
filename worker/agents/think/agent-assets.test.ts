@@ -197,6 +197,15 @@ describe('inlineAgentAssets', () => {
 		expect(out.messages[1].content[1]).toEqual({ type: 'text', text: '[image too large]' });
 	});
 
+	it.each([
+		[(MAX_INLINE_IMAGE_BYTES / 4) * 3, { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw==' } }],
+		[(MAX_INLINE_IMAGE_BYTES / 4) * 3 + 1, { type: 'text', text: '[image too large]' }],
+	])('compares the base64 size of a %i-byte image with the limit', async (size, expected) => {
+		const { bucket } = fakeBucket({ [KEY]: { bytes: PNG_BYTES, contentType: 'image/png', size } });
+		const out = await inlineAgentAssets(chatBody(agentAssetUrl(KEY)), bucket, createAssetCache(1_000_000));
+		expect(firstImagePart(out)).toEqual(expected);
+	});
+
 	it('reads each image from R2 once across requests', async () => {
 		const { bucket, reads } = fakeBucket({ [KEY]: { bytes: PNG_BYTES, contentType: 'image/png' } });
 		const cache = createAssetCache(1_000_000);

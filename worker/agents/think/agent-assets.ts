@@ -7,8 +7,12 @@
 export const AGENT_ASSET_HOST = 'assets.estori.internal';
 const AGENT_ASSET_PREFIX = `https://${AGENT_ASSET_HOST}/`;
 
-/** Larger images are left out of the request; Claude rejects images over 5 MB. */
+/** Images whose base64 form is larger are left out; Claude rejects base64 images over 5 MB. */
 export const MAX_INLINE_IMAGE_BYTES = 5 * 1024 * 1024;
+
+function base64Size(bytes: number): number {
+	return Math.ceil(bytes / 3) * 4;
+}
 
 export interface AssetBucket {
 	get(key: string): Promise<{
@@ -102,7 +106,7 @@ async function loadAsset(url: string, bucket: AssetBucket, cache: AssetCache): P
 	try {
 		const object = await bucket.get(key);
 		if (!object) return UNAVAILABLE;
-		if (object.size > MAX_INLINE_IMAGE_BYTES) return { kind: 'text', text: '[image too large]' };
+		if (base64Size(object.size) > MAX_INLINE_IMAGE_BYTES) return { kind: 'text', text: '[image too large]' };
 		const mediaType = object.httpMetadata?.contentType ?? 'image/jpeg';
 		const dataUrl = `data:${mediaType};base64,${Buffer.from(await object.arrayBuffer()).toString('base64')}`;
 		cache.set(key, dataUrl);

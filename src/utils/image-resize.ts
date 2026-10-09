@@ -1,12 +1,21 @@
 /** Longest edge, in pixels, of images uploaded for the model. */
 export const MAX_IMAGE_EDGE = 1600;
 
+/** Largest file uploaded unchanged; base64-encoded, it stays under the provider's 5 MB image limit. */
+export const MAX_ORIGINAL_IMAGE_BYTES = 3.5 * 1024 * 1024;
+
 /** The largest size within `maxEdge` that keeps the aspect ratio; never upscales. */
 export function fitWithin(width: number, height: number, maxEdge = MAX_IMAGE_EDGE): { width: number; height: number } {
 	const longest = Math.max(width, height);
 	if (longest <= maxEdge || longest === 0) return { width, height };
 	const scale = maxEdge / longest;
 	return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
+/** Whether an image can be uploaded as its original file instead of being re-encoded. */
+export function keepsOriginalFile(width: number, height: number, size: number): boolean {
+	const target = fitWithin(width, height);
+	return target.width === width && target.height === height && size <= MAX_ORIGINAL_IMAGE_BYTES;
 }
 
 export interface ResizedImage {
@@ -43,12 +52,13 @@ function blobToBase64(blob: Blob): Promise<string> {
 
 /**
  * Downscales an image to at most MAX_IMAGE_EDGE on its long edge, as WebP, or
- * JPEG where the browser cannot encode WebP. Images that already fit keep their file.
+ * JPEG where the browser cannot encode WebP. Images that already fit keep their
+ * file unless it is over MAX_ORIGINAL_IMAGE_BYTES; those are re-encoded at their size.
  */
 export async function downscaleImageFile(file: File): Promise<ResizedImage> {
 	const bitmap = await createImageBitmap(file);
 	const target = fitWithin(bitmap.width, bitmap.height);
-	if (target.width === bitmap.width && target.height === bitmap.height) {
+	if (keepsOriginalFile(bitmap.width, bitmap.height, file.size)) {
 		bitmap.close();
 		return {
 			base64Data: await blobToBase64(file),
