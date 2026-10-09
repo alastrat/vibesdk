@@ -136,6 +136,8 @@ describe('validateReferenceUrl', () => {
 		expect(validateReferenceUrl('http://[2001:db8::]').ok).toBe(true);
 		expect(validateReferenceUrl('http://[1::]').ok).toBe(true);
 		expect(validateReferenceUrl('http://[2001:a18:1:2:3:4:5:6]').ok).toBe(true);
+		expect(validateReferenceUrl('http://[fd::1]').ok).toBe(true);
+		expect(validateReferenceUrl('http://[fe8::1]').ok).toBe(true);
 	});
 
 	it('rejects private IPv6 ranges parsed correctly', () => {
