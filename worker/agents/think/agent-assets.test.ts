@@ -8,6 +8,7 @@ import {
 	agentAssetUrl,
 	createAssetCache,
 	inlineAgentAssets,
+	isInlinableAssetKey,
 	type AssetBucket,
 } from './agent-assets';
 
@@ -51,13 +52,22 @@ function chatBody(...urls: string[]): string {
 }
 
 const KEY = 'screenshots/app-1/ref-abc-desktop-top.jpg';
+const UPLOAD_KEY = 'uploads/img-1760000000000-ab12cd34e/photo%20(2).png';
 const PNG_BYTES = new Uint8Array([137, 80, 78, 71]);
+
+function firstImagePart(body: string): unknown {
+	return JSON.parse(body).messages[1].content[1];
+}
 
 describe('agent asset URLs', () => {
 	it('round-trips an R2 key through the reserved host', () => {
 		const url = agentAssetUrl(KEY);
 		expect(url).toBe(`https://${AGENT_ASSET_HOST}/${KEY}`);
 		expect(agentAssetKey(url)).toBe(KEY);
+	});
+
+	it.each([KEY, UPLOAD_KEY])('round-trips %s through URL normalization', (key) => {
+		expect(agentAssetKey(new URL(agentAssetUrl(key)).toString())).toBe(key);
 	});
 
 	it('encodes path segments but keeps the slashes', () => {
@@ -68,6 +78,42 @@ describe('agent asset URLs', () => {
 
 	it('ignores URLs on other hosts', () => {
 		expect(agentAssetKey('https://example.com/a.png')).toBeNull();
+	});
+});
+
+describe('isInlinableAssetKey', () => {
+	it.each([
+		UPLOAD_KEY,
+		'uploads/V1StGXR8_Z5jdHi6B-myT/image',
+		KEY,
+		'screenshots/0b6c2f8e-3a4d-4f5e-9c1b-2d3e4f5a6b7c/ref-V1StGXR8_Z5jdHi6B-myT-desktop-middle.jpg',
+		'screenshots/app-1/ref-c1-desktop-lower.jpg',
+		'screenshots/app-1/ref-c1-mobile-top.jpg',
+	])('accepts %s', (key) => {
+		expect(isInlinableAssetKey(key)).toBe(true);
+	});
+
+	it.each([
+		'uploads/../screenshots/app-2/latest.png',
+		'uploads/img-1/..',
+		'uploads/img-1/.',
+		'uploads/img-1/',
+		'uploads//photo.png',
+		'uploads/img.1/photo.png',
+		'uploads/img-1/a/b.png',
+		'uploads/photo.png',
+		`uploads/${'x'.repeat(65)}/photo.png`,
+		'/uploads/img-1/photo.png',
+		'screenshots/app-2/latest.png',
+		'screenshots/../ref-abc-desktop-top.jpg',
+		'screenshots/app-2/ref-abc-desktop-top.png',
+		'screenshots/app-2/ref-abc-tablet-top.jpg',
+		'screenshots/app-2/ref-a.b-desktop-top.jpg',
+		'screenshots/app-2/extra/ref-abc-desktop-top.jpg',
+		'templates/react/index.html',
+		'',
+	])('rejects %s', (key) => {
+		expect(isInlinableAssetKey(key)).toBe(false);
 	});
 });
 
@@ -82,6 +128,29 @@ describe('inlineAgentAssets', () => {
 		const { bucket } = fakeBucket({});
 		const out = JSON.parse(await inlineAgentAssets(chatBody(agentAssetUrl(KEY)), bucket, createAssetCache(1_000_000)));
 		expect(out.messages[1].content[1]).toEqual({ type: 'text', text: '[image unavailable]' });
+	});
+
+	it.each(['templates/react/index.html', 'screenshots/app-2/latest.png'])(
+		'treats %s, which is neither an upload nor a reference shot, as missing without reading it',
+		async (key) => {
+			const { bucket, reads } = fakeBucket({ [key]: { bytes: PNG_BYTES, contentType: 'image/png' } });
+			const out = await inlineAgentAssets(chatBody(agentAssetUrl(key)), bucket, createAssetCache(1_000_000));
+			expect(firstImagePart(out)).toEqual({ type: 'text', text: '[image unavailable]' });
+			expect(reads).toEqual([]);
+		},
+	);
+
+	it('never reads a key that climbs out of its folder', async () => {
+		const escaped = 'uploads/../screenshots/app-2/latest.png';
+		const { bucket, reads } = fakeBucket({
+			[escaped]: { bytes: PNG_BYTES, contentType: 'image/png' },
+			'screenshots/app-2/latest.png': { bytes: PNG_BYTES, contentType: 'image/png' },
+		});
+		for (const url of [agentAssetUrl(escaped), new URL(agentAssetUrl(escaped)).toString()]) {
+			const out = await inlineAgentAssets(chatBody(url), bucket, createAssetCache(1_000_000));
+			expect(firstImagePart(out)).toEqual({ type: 'text', text: '[image unavailable]' });
+		}
+		expect(reads).toEqual([]);
 	});
 
 	it('turns an oversized image into a text part without reading it', async () => {

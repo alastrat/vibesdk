@@ -32,6 +32,23 @@ export function agentAssetKey(url: string): string | null {
 	return url.slice(AGENT_ASSET_PREFIX.length).split('/').map(decodeURIComponent).join('/');
 }
 
+const SAFE_ID = '[A-Za-z0-9_-]{1,64}';
+/** `uploads/<id>/<file>`, as written by uploadImageKey. */
+const UPLOAD_KEY = new RegExp(`^uploads/${SAFE_ID}/[^/]+$`);
+/** `screenshots/<appId>/ref-<captureId>-<kind>.jpg`, as written by the reference service. */
+const REFERENCE_SHOT_KEY = new RegExp(
+	`^screenshots/${SAFE_ID}/ref-${SAFE_ID}-(?:desktop-top|desktop-middle|desktop-lower|mobile-top)\\.jpg$`,
+);
+
+/**
+ * Whether the transport may read a key from the shared bucket: only uploaded
+ * images and reference screenshots, never a key with empty or dot segments.
+ */
+export function isInlinableAssetKey(key: string): boolean {
+	if (key.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) return false;
+	return UPLOAD_KEY.test(key) || REFERENCE_SHOT_KEY.test(key);
+}
+
 /** Data URLs by R2 key, evicting the oldest entries beyond `maxBytes`. */
 export function createAssetCache(maxBytes: number): AssetCache {
 	const entries = new Map<string, string>();
@@ -58,6 +75,8 @@ export function createAssetCache(maxBytes: number): AssetCache {
 
 type Inlined = { kind: 'data'; dataUrl: string } | { kind: 'text'; text: string };
 
+const UNAVAILABLE: Inlined = { kind: 'text', text: '[image unavailable]' };
+
 interface ImageUrlPart {
 	type: 'image_url';
 	image_url: { url: string; [key: string]: unknown };
@@ -70,10 +89,11 @@ function assetImageKey(part: unknown): string | null {
 }
 
 async function loadAsset(key: string, bucket: AssetBucket, cache: AssetCache): Promise<Inlined> {
+	if (!isInlinableAssetKey(key)) return UNAVAILABLE;
 	const cached = cache.get(key);
 	if (cached) return { kind: 'data', dataUrl: cached };
 	const object = await bucket.get(key);
-	if (!object) return { kind: 'text', text: '[image unavailable]' };
+	if (!object) return UNAVAILABLE;
 	if (object.size > MAX_INLINE_IMAGE_BYTES) return { kind: 'text', text: '[image too large]' };
 	const mediaType = object.httpMetadata?.contentType ?? 'image/jpeg';
 	const dataUrl = `data:${mediaType};base64,${Buffer.from(await object.arrayBuffer()).toString('base64')}`;

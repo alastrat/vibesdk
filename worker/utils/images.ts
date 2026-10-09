@@ -4,6 +4,7 @@
 // ===============================
 
 import { ImageAttachment, ProcessedImageAttachment, SupportedImageMimeType } from "worker/types/image-attachment";
+import { generateNanoId } from "./idGenerator";
 import { getProtocolForHost } from "./urls";
 
 // ===============================
@@ -137,9 +138,23 @@ export function getPublicUrlForR2Image(env: Env, r2Key: string): string {
     return url;
 }
 
+const SAFE_IMAGE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * R2 key for a stored image. The id and filename come from the client, so an
+ * unsafe id is replaced and a dot-only filename renamed, keeping the key inside
+ * its `<type>/<id>/` folder.
+ */
+export function uploadImageKey(type: ImageType, id: string, filename: string): string {
+    const safeId = SAFE_IMAGE_ID.test(id) ? id : generateNanoId();
+    const encoded = encodeURIComponent(filename);
+    const safeName = encoded === '' || encoded === '.' || encoded === '..' ? 'image' : encoded;
+    return `${type}/${safeId}/${safeName}`;
+}
+
 export async function uploadImageToR2(env: Env, image: ImageAttachment, type: ImageType, cfImagesUrl?: string, bytes?: Uint8Array): Promise<{ url: string; r2Key: string }> {
     const data = bytes ?? base64ToUint8Array(image.base64Data!);
-    const r2Key = `${type}/${image.id}/${encodeURIComponent(image.filename)}`;
+    const r2Key = uploadImageKey(type, image.id, image.filename);
     await env.TEMPLATES_BUCKET.put(r2Key, data, { httpMetadata: { contentType: image.mimeType }, customMetadata: { "cfImagesUrl": cfImagesUrl || '' } });
 
     return { url: getPublicUrlForR2Image(env, r2Key), r2Key };
