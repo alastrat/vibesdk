@@ -136,15 +136,22 @@ export interface CaptureHttpResponse {
 	request(): { method(): string };
 }
 
+export interface CaptureNavigationResponse {
+	status(): number;
+	headers(): Record<string, string>;
+}
+
 export interface CapturePage {
 	on(event: 'console', cb: (msg: CaptureConsoleMessage) => void): unknown;
 	on(event: 'pageerror', cb: (err: { message: string; stack?: string }) => void): unknown;
 	on(event: 'requestfailed', cb: (req: CaptureHttpRequest) => void): unknown;
 	on(event: 'response', cb: (res: CaptureHttpResponse) => void): unknown;
-	setViewport(v: { width: number; height: number }): Promise<void>;
-	goto(url: string, opts?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
+	setViewport(v: { width: number; height: number; isMobile?: boolean; hasTouch?: boolean }): Promise<void>;
+	goto(url: string, opts?: { waitUntil?: string; timeout?: number }): Promise<CaptureNavigationResponse | null>;
+	reload(opts?: { waitUntil?: string; timeout?: number }): Promise<unknown>;
+	url(): string;
 	evaluate(script: string): Promise<unknown>;
-	screenshot(opts: { type: 'png'; fullPage: boolean; encoding: 'base64' }): Promise<string>;
+	screenshot(opts: { type: 'png' | 'jpeg'; fullPage: boolean; encoding: 'base64'; quality?: number }): Promise<string>;
 	close(): Promise<void>;
 }
 
@@ -152,4 +159,6 @@ export interface BrowserCaptureClient {
 	captureConsoleLogs(payload: CapturePayload): Promise<BrowserConsoleCaptureResult>;
 	/** Returns a base64 PNG (no data URL prefix) of the page's viewport; throws on failure. */
 	captureScreenshot(payload: ScreenshotPayload): Promise<string>;
+	/** Captures a reference page: screenshots plus design data; throws on failure. */
+	captureReference(payload: ReferencePayload): Promise<ReferenceCaptureResult>;
 }

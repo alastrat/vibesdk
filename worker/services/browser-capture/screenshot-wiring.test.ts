@@ -83,3 +83,19 @@ describe('server-side thumbnails for Think apps', () => {
 		expect(handler).not.toContain("logger.error('Failed to capture screenshot')");
 	});
 });
+
+describe('reference capture clients', () => {
+	it('captures references through the BROWSER binding', () => {
+		expect(source('/worker/services/browser-capture/binding-client.ts')).toContain('runReferenceCapture(page, payload)');
+	});
+
+	it('sends reference URLs to the dev sidecar unchanged', () => {
+		const client = source('/worker/services/browser-capture/sidecar-client.ts');
+		const reference = between(client, 'async captureReference(', 'async captureConsoleLogs(');
+		expect(reference).toContain('/capture-reference');
+		expect(reference).not.toContain('this.localUrl(');
+		const sidecar = source('/scripts/dev-browser-sidecar.ts');
+		expect(sidecar).toContain("req.url === '/capture-reference'");
+		expect(sidecar).toContain('runReferenceCapture(');
+	});
+});

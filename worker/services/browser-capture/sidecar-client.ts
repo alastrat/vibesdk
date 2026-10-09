@@ -14,6 +14,8 @@ import type {
 	BrowserCaptureClient,
 	BrowserConsoleCaptureResult,
 	CapturePayload,
+	ReferenceCaptureResult,
+	ReferencePayload,
 	ScreenshotPayload,
 } from './types';
 
@@ -72,6 +74,24 @@ export class SidecarCaptureClient implements BrowserCaptureClient {
 			throw new Error('Dev browser sidecar returned no screenshot');
 		}
 		return screenshot;
+	}
+
+	/**
+	 * Reference URLs are public sites, so unlike previews they are sent to the
+	 * sidecar unchanged. Throws on failure, like screenshots.
+	 */
+	async captureReference(payload: ReferencePayload): Promise<ReferenceCaptureResult> {
+		const resp = await fetch(`${this.sidecarBase()}/capture-reference`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(payload),
+			signal: AbortSignal.timeout(CAPTURE_TIMEOUT_MS),
+		});
+		if (!resp.ok) {
+			const text = await resp.text().catch(() => '');
+			throw new Error(`Dev browser sidecar reference capture returned ${resp.status}: ${text.slice(0, 200)}`);
+		}
+		return (await resp.json()) as ReferenceCaptureResult;
 	}
 
 	async captureConsoleLogs(

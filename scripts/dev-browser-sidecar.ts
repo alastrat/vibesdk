@@ -14,10 +14,11 @@ import http from 'node:http';
 import type { Browser, Page } from 'puppeteer';
 import puppeteer from 'puppeteer';
 
-import { runCapture, runScreenshot } from '../worker/services/browser-capture/capture-core';
+import { runCapture, runReferenceCapture, runScreenshot } from '../worker/services/browser-capture/capture-core';
 import type {
 	CapturePage,
 	CapturePayload,
+	ReferencePayload,
 	ScreenshotPayload,
 } from '../worker/services/browser-capture/types';
 
@@ -59,6 +60,12 @@ async function handleScreenshot(payload: ScreenshotPayload): Promise<string> {
 	const browser = await getBrowser();
 	const page: Page = await browser.newPage();
 	return runScreenshot(page as unknown as CapturePage, payload);
+}
+
+async function handleReference(payload: ReferencePayload) {
+	const browser = await getBrowser();
+	const page: Page = await browser.newPage();
+	return runReferenceCapture(page as unknown as CapturePage, payload);
 }
 
 async function readPayload<T extends { url?: string }>(
@@ -112,6 +119,11 @@ const server = http.createServer(async (req, res) => {
 			if (!payload) return;
 			return sendJson(res, 200, { screenshot: await handleScreenshot(payload) });
 		}
+		if (req.method === 'POST' && req.url === '/capture-reference') {
+			const payload = await readPayload<ReferencePayload>(req, res);
+			if (!payload) return;
+			return sendJson(res, 200, await handleReference(payload));
+		}
 		res.statusCode = 404;
 		res.end();
 	} catch (e) {
@@ -124,7 +136,7 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, HOST, () => {
 	console.log(`[dev-browser-sidecar] listening on http://${HOST}:${PORT}`);
-	console.log('[dev-browser-sidecar] endpoints: GET /health, POST /capture-console-logs, POST /capture-screenshot');
+	console.log('[dev-browser-sidecar] endpoints: GET /health, POST /capture-console-logs, POST /capture-screenshot, POST /capture-reference');
 });
 
 async function shutdown(signal: string) {

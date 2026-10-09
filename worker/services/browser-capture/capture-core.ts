@@ -9,14 +9,20 @@
  */
 
 import type {
+	CaptureNavigationResponse,
 	CapturePage,
 	CapturePayload,
 	BrowserConsoleCaptureResult,
 	BrowserConsoleEntry,
 	BrowserConsolePageError,
 	BrowserConsoleRequestFailure,
+	ReferenceCaptureResult,
+	ReferencePayload,
+	ReferenceShot,
+	ReferenceShotKind,
 	ScreenshotPayload,
 } from './types';
+import { REFERENCE_EXTRACT_SCRIPT, normalizeReferenceDesign } from './reference-extract';
 
 const PAGE_LOAD_TIMEOUT_MS = 30_000;
 
@@ -114,6 +120,72 @@ export async function runScreenshot(
 			await new Promise((r) => setTimeout(r, payload.settleMs));
 		}
 		return await page.screenshot({ type: 'png', fullPage: false, encoding: 'base64' });
+	} finally {
+		try {
+			await page.close();
+		} catch {
+			// ignore close failures
+		}
+	}
+}
+
+/** A reference page that loaded but cannot be used, with the reason as its message. */
+export class ReferenceCaptureError extends Error {}
+
+const DESKTOP = { width: 1280, height: 800 };
+const PHONE = { width: 390, height: 844, isMobile: true, hasTouch: true };
+const REFERENCE_JPEG = { type: 'jpeg', quality: 70, fullPage: false, encoding: 'base64' } as const;
+const SCROLL_STOPS: Array<[ReferenceShotKind, number]> = [
+	['desktop-middle', 0.4],
+	['desktop-lower', 0.8],
+];
+
+function assertHtmlPage(response: CaptureNavigationResponse | null): void {
+	if (!response) return;
+	const status = response.status();
+	if (status >= 400) throw new ReferenceCaptureError(`HTTP ${status}`);
+	const type = response.headers()['content-type'] ?? '';
+	if (type && !type.includes('text/html') && !type.includes('application/xhtml')) {
+		throw new ReferenceCaptureError('not an HTML page');
+	}
+}
+
+/**
+ * Captures a reference page: three desktop screenshots down the page, the
+ * design data from its rendered styles, and a phone screenshot of the top.
+ */
+export async function runReferenceCapture(
+	page: CapturePage,
+	payload: ReferencePayload,
+): Promise<ReferenceCaptureResult> {
+	const settle = () =>
+		payload.settleMs > 0 ? new Promise<void>((r) => setTimeout(r, payload.settleMs)) : Promise.resolve();
+	try {
+		await page.setViewport(DESKTOP);
+		assertHtmlPage(await page.goto(payload.url, { waitUntil: 'networkidle2', timeout: payload.timeoutMs }));
+		await settle();
+		const shots: ReferenceShot[] = [
+			{ kind: 'desktop-top', jpegBase64: await page.screenshot(REFERENCE_JPEG), ...DESKTOP },
+		];
+		for (const [kind, fraction] of SCROLL_STOPS) {
+			await page.evaluate(`window.scrollTo(0, Math.floor(document.documentElement.scrollHeight * ${fraction}))`);
+			await settle();
+			shots.push({ kind, jpegBase64: await page.screenshot(REFERENCE_JPEG), ...DESKTOP });
+		}
+		const design = normalizeReferenceDesign(await page.evaluate(REFERENCE_EXTRACT_SCRIPT));
+		const finalUrl = page.url();
+
+		await page.setViewport(PHONE);
+		await page.reload({ waitUntil: 'networkidle2', timeout: payload.timeoutMs });
+		await settle();
+		await page.evaluate('window.scrollTo(0, 0)');
+		shots.push({
+			kind: 'mobile-top',
+			jpegBase64: await page.screenshot(REFERENCE_JPEG),
+			width: PHONE.width,
+			height: PHONE.height,
+		});
+		return { finalUrl, shots, design };
 	} finally {
 		try {
 			await page.close();

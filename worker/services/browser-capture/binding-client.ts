@@ -6,12 +6,14 @@
 
 import puppeteer from '@cloudflare/puppeteer';
 import type { StructuredLogger } from '../../logger';
-import { runCapture, runScreenshot } from './capture-core';
+import { runCapture, runReferenceCapture, runScreenshot } from './capture-core';
 import type {
 	BrowserCaptureClient,
 	BrowserConsoleCaptureResult,
 	CapturePage,
 	CapturePayload,
+	ReferenceCaptureResult,
+	ReferencePayload,
 	ScreenshotPayload,
 } from './types';
 
@@ -29,6 +31,10 @@ export class BindingCaptureClient implements BrowserCaptureClient {
 
 	async captureScreenshot(payload: ScreenshotPayload): Promise<string> {
 		return this.withPage(payload.url, (page) => runScreenshot(page, payload));
+	}
+
+	async captureReference(payload: ReferencePayload): Promise<ReferenceCaptureResult> {
+		return this.withPage(payload.url, (page) => runReferenceCapture(page, payload));
 	}
 
 	/** Opens one remote Browser Run session for `run` and always closes it. */
