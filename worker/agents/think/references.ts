@@ -62,21 +62,72 @@ function isPrivateIpv4(octets: number[]): boolean {
 	);
 }
 
+function parseIpv6Groups(host: string): number[] | null {
+	const parts = host.split(':');
+	const groups: number[] = [];
+	let hasDoubleColon = false;
+	let doubleColonIndex = -1;
+
+	for (let i = 0; i < parts.length; i++) {
+		if (parts[i] === '') {
+			if (i > 0 && i < parts.length - 1 && parts[i - 1] === '') {
+				if (hasDoubleColon) return null;
+				hasDoubleColon = true;
+				doubleColonIndex = i - 1;
+			}
+		} else {
+			const val = parseInt(parts[i], 16);
+			if (isNaN(val) || val < 0 || val > 0xffff) return null;
+			groups.push(val);
+		}
+	}
+
+	if (hasDoubleColon) {
+		const before = groups.slice(0, doubleColonIndex);
+		const after = doubleColonIndex < groups.length ? groups.slice(doubleColonIndex) : [];
+		const zeros = 8 - before.length - after.length;
+		if (zeros < 0) return null;
+		return [...before, ...Array(zeros).fill(0), ...after];
+	}
+
+	return groups.length === 8 ? groups : null;
+}
+
 function isPrivateIpv6(host: string): boolean {
-	if (host === '::' || host === '::1') return true;
-	if (/^f[cd][0-9a-f]{0,2}:/.test(host)) return true;
-	if (/^fe[89ab][0-9a-f]?:/.test(host)) return true;
-	const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
-	if (mapped) {
-		const high = parseInt(mapped[1], 16);
-		const low = parseInt(mapped[2], 16);
-		return isPrivateIpv4([high >> 8, high & 255, low >> 8, low & 255]);
+	const groups = parseIpv6Groups(host);
+	if (!groups) return true;
+
+	if (groups[0] === 0 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0 && groups[6] === 0 && groups[7] === 1) return true;
+	if (groups[0] === 0 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0 && groups[6] === 0 && groups[7] === 0) return true;
+
+	if ((groups[0] & 0xfe00) === 0xfc00) return true;
+	if ((groups[0] & 0xffc0) === 0xfe80) return true;
+
+	if (groups[0] === 0 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0) {
+		const octets = [(groups[6] >> 8) & 0xff, groups[6] & 0xff, (groups[7] >> 8) & 0xff, groups[7] & 0xff];
+		if (isPrivateIpv4(octets)) return true;
 	}
-	const dotted = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(host);
-	if (dotted) {
-		const octets = ipv4Octets(dotted[1]);
-		return octets ? isPrivateIpv4(octets) : false;
+
+	if (groups[0] === 0 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0xffff) {
+		const octets = [(groups[6] >> 8) & 0xff, groups[6] & 0xff, (groups[7] >> 8) & 0xff, groups[7] & 0xff];
+		if (isPrivateIpv4(octets)) return true;
 	}
+
+	if (groups[0] === 0 && groups[1] === 0 && groups[2] === 0 && groups[3] === 0 && groups[4] === 0xffff && groups[5] === 0) {
+		const octets = [(groups[6] >> 8) & 0xff, groups[6] & 0xff, (groups[7] >> 8) & 0xff, groups[7] & 0xff];
+		if (isPrivateIpv4(octets)) return true;
+	}
+
+	if (groups[0] === 0x64 && groups[1] === 0xff9b && groups[2] === 0 && groups[3] === 0 && groups[4] === 0 && groups[5] === 0) {
+		const octets = [(groups[6] >> 8) & 0xff, groups[6] & 0xff, (groups[7] >> 8) & 0xff, groups[7] & 0xff];
+		if (isPrivateIpv4(octets)) return true;
+	}
+
+	if ((groups[0] & 0xff00) === 0x2000) {
+		const octets = [(groups[1] >> 8) & 0xff, groups[1] & 0xff, (groups[2] >> 8) & 0xff, groups[2] & 0xff];
+		if (isPrivateIpv4(octets)) return true;
+	}
+
 	return false;
 }
 
@@ -89,7 +140,7 @@ export function validateReferenceUrl(raw: string): { ok: true; url: URL } | { ok
 		return { ok: false, reason: 'invalid' };
 	}
 	if (url.protocol !== 'http:' && url.protocol !== 'https:') return { ok: false, reason: 'not-http' };
-	const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+	const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');
 	if (host === 'estori.app' || host.endsWith('.estori.app')) return { ok: false, reason: 'estori-host' };
 	if (host === 'localhost' || host.endsWith('.localhost')) return { ok: false, reason: 'private-address' };
 	const octets = ipv4Octets(host);
@@ -171,9 +222,13 @@ export function formatReferenceDigest(outcome: ReferenceOutcome, index: number):
 /** One line for the reference card, e.g. "Desktop + mobile · 6 colors · Inter / Playfair Display · 7 sections". */
 export function describeReferenceSummary(design: ReferenceDesign): string {
 	const { body, headings } = design.fonts;
-	const fonts = !headings || headings === body ? body : `${body} / ${headings}`;
-	const parts = ['Desktop + mobile', `${design.palette.length} colors`];
+	const fontList = [body, headings].filter((f) => f && f.trim());
+	const uniqueFonts = [...new Set(fontList)];
+	const fonts = uniqueFonts.join(' / ');
+	const colorLabel = design.palette.length === 1 ? 'color' : 'colors';
+	const sectionLabel = design.sections.length === 1 ? 'section' : 'sections';
+	const parts = ['Desktop + mobile', `${design.palette.length} ${colorLabel}`];
 	if (fonts) parts.push(fonts);
-	parts.push(`${design.sections.length} sections`);
+	parts.push(`${design.sections.length} ${sectionLabel}`);
 	return parts.join(' · ');
 }

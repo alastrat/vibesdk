@@ -87,6 +87,31 @@ describe('validateReferenceUrl', () => {
 		['http://[::ffff:127.0.0.1]', 'private-address'],
 		['https://estori.app', 'estori-host'],
 		['https://preview.estori.app/space/x/preview/main/', 'estori-host'],
+		// Security fix 1: trailing-dot bypass
+		['http://localhost.', 'private-address'],
+		['http://localhost.:3000/x', 'private-address'],
+		['http://LocalHost.', 'private-address'],
+		['http://foo.localhost.', 'private-address'],
+		['http://estori.app.', 'estori-host'],
+		['http://www.estori.app.', 'estori-host'],
+		['http://estori.app%2e', 'estori-host'],
+		['http://localhost。', 'private-address'],
+		['http://localhost..', 'private-address'],
+		// Security fix 2: embedded-IPv4 IPv6 bypass
+		['http://[::127.0.0.1]', 'private-address'],
+		['http://[::a00:1]', 'private-address'],
+		['http://[::a9fe:a9fe]', 'private-address'],
+		['http://[::ffff:0:127.0.0.1]', 'private-address'],
+		['http://[64:ff9b::a9fe:a9fe]', 'private-address'],
+		['http://[2002:a9fe:a9fe::]', 'private-address'],
+		// Normalized IPv4 forms
+		['http://0x7f.1', 'private-address'],
+		['http://017700000001', 'private-address'],
+		['http://127.1', 'private-address'],
+		// Uppercase
+		['http://LOCALHOST', 'private-address'],
+		// Userinfo with private address
+		['http://evil.com@127.0.0.1', 'private-address'],
 	])('rejects %s as %s', (url, reason) => {
 		expect(validateReferenceUrl(url)).toEqual({ ok: false, reason });
 	});
@@ -94,6 +119,14 @@ describe('validateReferenceUrl', () => {
 	it('does not reject public addresses that merely look similar', () => {
 		expect(validateReferenceUrl('http://172.32.0.1').ok).toBe(true);
 		expect(validateReferenceUrl('https://notestori.app').ok).toBe(true);
+	});
+
+	it('accepts IPv4-mapped public address', () => {
+		expect(validateReferenceUrl('http://[::ffff:8.8.8.8]').ok).toBe(true);
+	});
+
+	it('accepts userinfo with public domain', () => {
+		expect(validateReferenceUrl('http://estori.app@example.com').ok).toBe(true);
 	});
 });
 
@@ -138,6 +171,18 @@ describe('reference wording', () => {
 		expect(describeReferenceSummary(DESIGN)).toBe('Desktop + mobile · 3 colors · Inter / Playfair Display · 2 sections');
 		expect(describeReferenceSummary({ ...DESIGN, fonts: { body: 'Inter', headings: 'Inter', buttons: 'Inter' } })).toBe(
 			'Desktop + mobile · 3 colors · Inter · 2 sections',
+		);
+	});
+
+	it('uses singular form for 1 color and 1 section', () => {
+		expect(describeReferenceSummary({ ...DESIGN, palette: ['#ffffff'], sections: [{ heading: 'Hero', columns: 1, hasImage: false }] })).toBe(
+			'Desktop + mobile · 1 color · Inter / Playfair Display · 1 section',
+		);
+	});
+
+	it('handles empty body font in summary', () => {
+		expect(describeReferenceSummary({ ...DESIGN, fonts: { body: '', headings: 'Playfair Display', buttons: 'Inter' } })).toBe(
+			'Desktop + mobile · 3 colors · Playfair Display · 2 sections',
 		);
 	});
 });
