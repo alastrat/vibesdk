@@ -114,6 +114,21 @@ describe('captureReferences', () => {
 		expect(seen).toEqual(['a.com 1/2', 'b.com 2/2']);
 	});
 
+	it('keeps every outcome when the progress callback throws', async () => {
+		const d = deps(async () => RESULT);
+		const outcomes = await captureReferences(['https://a.com', 'https://localhost:3000'], d.value, () => {
+			throw new Error('socket closed');
+		});
+		expect(outcomes.map((o) => [o.host, o.ok])).toEqual([
+			['a.com', true],
+			['localhost', false],
+		]);
+		expect(d.puts.map((p) => p.key)).toEqual([
+			'screenshots/app-1/ref-c1-desktop-top.jpg',
+			'screenshots/app-1/ref-c1-mobile-top.jpg',
+		]);
+	});
+
 	it('fails a page whose screenshots cannot be stored', async () => {
 		const d = deps(async () => RESULT, new Error('R2 unavailable'));
 		const [outcome] = await captureReferences(['https://stripe.com'], d.value, () => undefined);

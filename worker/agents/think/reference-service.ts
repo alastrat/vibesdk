@@ -106,7 +106,11 @@ export async function captureReferences(
 		const next = urls.findIndex((_, i) => !finished.has(i));
 		if (next === -1 || next === announced) return;
 		announced = next;
-		onStart(referenceHost(urls[next]), next + 1, urls.length);
+		try {
+			onStart(referenceHost(urls[next]), next + 1, urls.length);
+		} catch {
+			// Progress is cosmetic; a failed announcement must not lose the captures.
+		}
 	};
 	announceNext();
 	return Promise.all(
