@@ -27,9 +27,14 @@ export function agentAssetUrl(r2Key: string): string {
 	return AGENT_ASSET_PREFIX + r2Key.split('/').map(encodeURIComponent).join('/');
 }
 
+/** The R2 key behind a reserved-host URL; null for other hosts and malformed escapes. */
 export function agentAssetKey(url: string): string | null {
 	if (!url.startsWith(AGENT_ASSET_PREFIX)) return null;
-	return url.slice(AGENT_ASSET_PREFIX.length).split('/').map(decodeURIComponent).join('/');
+	try {
+		return url.slice(AGENT_ASSET_PREFIX.length).split('/').map(decodeURIComponent).join('/');
+	} catch {
+		return null;
+	}
 }
 
 const SAFE_ID = '[A-Za-z0-9_-]{1,64}';
@@ -82,23 +87,29 @@ interface ImageUrlPart {
 	image_url: { url: string; [key: string]: unknown };
 }
 
-function assetImageKey(part: unknown): string | null {
+function assetImageUrl(part: unknown): string | null {
 	const p = part as { type?: unknown; image_url?: { url?: unknown } };
 	if (p?.type !== 'image_url' || typeof p.image_url?.url !== 'string') return null;
-	return agentAssetKey(p.image_url.url);
+	return p.image_url.url.startsWith(AGENT_ASSET_PREFIX) ? p.image_url.url : null;
 }
 
-async function loadAsset(key: string, bucket: AssetBucket, cache: AssetCache): Promise<Inlined> {
-	if (!isInlinableAssetKey(key)) return UNAVAILABLE;
+/** Any failure degrades this one image to a text part, so the turn still runs. */
+async function loadAsset(url: string, bucket: AssetBucket, cache: AssetCache): Promise<Inlined> {
+	const key = agentAssetKey(url);
+	if (!key || !isInlinableAssetKey(key)) return UNAVAILABLE;
 	const cached = cache.get(key);
 	if (cached) return { kind: 'data', dataUrl: cached };
-	const object = await bucket.get(key);
-	if (!object) return UNAVAILABLE;
-	if (object.size > MAX_INLINE_IMAGE_BYTES) return { kind: 'text', text: '[image too large]' };
-	const mediaType = object.httpMetadata?.contentType ?? 'image/jpeg';
-	const dataUrl = `data:${mediaType};base64,${Buffer.from(await object.arrayBuffer()).toString('base64')}`;
-	cache.set(key, dataUrl);
-	return { kind: 'data', dataUrl };
+	try {
+		const object = await bucket.get(key);
+		if (!object) return UNAVAILABLE;
+		if (object.size > MAX_INLINE_IMAGE_BYTES) return { kind: 'text', text: '[image too large]' };
+		const mediaType = object.httpMetadata?.contentType ?? 'image/jpeg';
+		const dataUrl = `data:${mediaType};base64,${Buffer.from(await object.arrayBuffer()).toString('base64')}`;
+		cache.set(key, dataUrl);
+		return { kind: 'data', dataUrl };
+	} catch {
+		return UNAVAILABLE;
+	}
 }
 
 /**
@@ -115,26 +126,26 @@ export async function inlineAgentAssets(body: string, bucket: AssetBucket, cache
 	}
 	if (!Array.isArray(json.messages)) return body;
 
-	const keys = new Set<string>();
+	const urls = new Set<string>();
 	for (const message of json.messages) {
 		const content = (message as { content?: unknown })?.content;
 		if (!Array.isArray(content)) continue;
 		for (const part of content) {
-			const key = assetImageKey(part);
-			if (key) keys.add(key);
+			const url = assetImageUrl(part);
+			if (url) urls.add(url);
 		}
 	}
-	if (keys.size === 0) return body;
+	if (urls.size === 0) return body;
 
 	const loaded = new Map(
-		await Promise.all([...keys].map(async (key) => [key, await loadAsset(key, bucket, cache)] as const)),
+		await Promise.all([...urls].map(async (url) => [url, await loadAsset(url, bucket, cache)] as const)),
 	);
 	for (const message of json.messages) {
 		const content = (message as { content?: unknown })?.content;
 		if (!Array.isArray(content)) continue;
 		for (let i = 0; i < content.length; i++) {
-			const key = assetImageKey(content[i]);
-			const inlined = key ? loaded.get(key) : undefined;
+			const url = assetImageUrl(content[i]);
+			const inlined = url ? loaded.get(url) : undefined;
 			if (!inlined) continue;
 			const part = content[i] as ImageUrlPart;
 			content[i] =

@@ -79,6 +79,10 @@ describe('agent asset URLs', () => {
 	it('ignores URLs on other hosts', () => {
 		expect(agentAssetKey('https://example.com/a.png')).toBeNull();
 	});
+
+	it('has no key for a malformed escape instead of throwing', () => {
+		expect(agentAssetKey(`https://${AGENT_ASSET_HOST}/uploads/img-1/bad%E0%A4%A.png`)).toBeNull();
+	});
 });
 
 describe('isInlinableAssetKey', () => {
@@ -139,6 +143,38 @@ describe('inlineAgentAssets', () => {
 			expect(reads).toEqual([]);
 		},
 	);
+
+	it.each<[string, AssetBucket['get']]>([
+		['the read fails', async () => {
+			throw new Error('R2 internal error');
+		}],
+		['the body cannot be read', async () => ({
+			size: PNG_BYTES.byteLength,
+			httpMetadata: { contentType: 'image/png' },
+			arrayBuffer: async () => {
+				throw new Error('stream reset');
+			},
+		})],
+	])('turns an image into a text part when %s, keeping the rest of the turn', async (_, get) => {
+		const { bucket: healthy } = fakeBucket({ [KEY]: { bytes: PNG_BYTES, contentType: 'image/png' } });
+		const bucket: AssetBucket = { get: (key) => (key === KEY ? healthy.get(key) : get(key)) };
+		const out = JSON.parse(
+			await inlineAgentAssets(chatBody(agentAssetUrl(UPLOAD_KEY), agentAssetUrl(KEY)), bucket, createAssetCache(1_000_000)),
+		);
+		expect(out.messages[1].content[1]).toEqual({ type: 'text', text: '[image unavailable]' });
+		expect(out.messages[1].content[2]).toEqual({ type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw==' } });
+	});
+
+	it('turns a URL with a malformed escape into a text part without reading it', async () => {
+		const { bucket, reads } = fakeBucket({});
+		const out = await inlineAgentAssets(
+			chatBody(`https://${AGENT_ASSET_HOST}/uploads/img-1/bad%E0%A4%A.png`),
+			bucket,
+			createAssetCache(1_000_000),
+		);
+		expect(firstImagePart(out)).toEqual({ type: 'text', text: '[image unavailable]' });
+		expect(reads).toEqual([]);
+	});
 
 	it('never reads a key that climbs out of its folder', async () => {
 		const escaped = 'uploads/../screenshots/app-2/latest.png';
