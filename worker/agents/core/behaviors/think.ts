@@ -8,8 +8,8 @@ import { WebSocketMessageResponses } from '../../constants';
 import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
 import { OperationOptions } from '../../operations/common';
 import { GenerationContext, AgenticGenerationContext } from '../../domain/values/GenerationContext';
-import { ImageAttachment, ProcessedImageAttachment } from 'worker/types/image-attachment';
-import { ImageType, uploadImage } from 'worker/utils/images';
+import { ImageAttachment, ProcessedImageAttachment, type PendingImage } from 'worker/types/image-attachment';
+import { ImageType, getPublicUrlForR2Image, uploadImage } from 'worker/utils/images';
 import { IdGenerator } from '../../utils/idGenerator';
 import { generateNanoId } from '../../../utils/idGenerator';
 import { generateProjectName } from '../../utils/templateCustomizer';
@@ -36,7 +36,12 @@ import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
 import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
-import type { BuildProgress, CloudflareDeploymentErrorCode } from '../../../api/websocketTypes';
+import type { BuildProgress, CloudflareDeploymentErrorCode, ReferenceCard } from '../../../api/websocketTypes';
+import { ScreenshotSecurity } from 'worker/utils/screenshot-security';
+import { getBrowserCaptureClient } from '../../../services/browser-capture/factory';
+import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome } from '../../think/references';
+import { captureReferences } from '../../think/reference-service';
+import { buildTurnMessage } from '../../think/turn-message';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -44,7 +49,7 @@ import type { BuildProgress, CloudflareDeploymentErrorCode } from '../../../api/
  */
 type ThinkAgentStub = {
 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
-	chat: (userMessage: string, callback: RpcTarget) => Promise<void>;
+	chat: (userMessage: string | UIMessage, callback: RpcTarget) => Promise<void>;
 	getMessages: () => Promise<UIMessage[]>;
 	clearMessages: () => Promise<void>;
 	getProviderFailure: () => Promise<ProviderFailure | null>;
@@ -208,6 +213,7 @@ export class ThinkCodingBehavior
 			behaviorType: 'think',
 			thinkAgentName: agentName,
 			thinkModelId,
+			pendingImages: (initArgs.images ?? []).map(toPendingImage),
 			currentBranch: 'main',
 		});
 
@@ -474,7 +480,13 @@ export class ThinkCodingBehavior
 				images.map((image) => uploadImage(this.env, image, ImageType.UPLOADS)),
 			);
 		}
-		await this.queueUserRequest(userMessage, processedImages);
+		await this.queueUserRequest(userMessage);
+		if (processedImages && processedImages.length > 0) {
+			this.setState({
+				...this.state,
+				pendingImages: [...(this.state.pendingImages ?? []), ...processedImages.map(toPendingImage)],
+			});
+		}
 
 		if (this.isCodeGenerating()) {
 			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
@@ -500,12 +512,16 @@ export class ThinkCodingBehavior
 
 			while (this.state.pendingUserInputs.length > 0) {
 				const pending = this.state.pendingUserInputs.slice();
-				this.setState({ ...this.state, pendingUserInputs: [] });
+				const images = this.state.pendingImages ?? [];
+				this.setState({ ...this.state, pendingUserInputs: [], pendingImages: [] });
 
 				const compiled = pending.join('\n');
+				const conversationId = IdGenerator.generateConversationId();
 				let completed: boolean;
 				try {
-					completed = await this.runPrompt(compiled);
+					const references = await this.captureTurnReferences(compiled, conversationId);
+					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references });
+					completed = await this.runPrompt(message, conversationId);
 				} catch (e) {
 					this.logger.error('Think prompt failed', e);
 					await this.reportTurnError(e instanceof Error ? e.message : String(e));
@@ -531,12 +547,11 @@ export class ThinkCodingBehavior
 	}
 
 	/**
-	 * Submit a prompt to the ThinkAgent and translate its streamed
+	 * Submit a turn's message to the ThinkAgent and translate its streamed
 	 * `UIMessageChunk`s into VibeSDK WebSocket events. Resolves to whether the
 	 * turn completed; a failed turn is reported to the user before it resolves.
 	 */
-	private async runPrompt(text: string): Promise<boolean> {
-		const conversationId = IdGenerator.generateConversationId();
+	private async runPrompt(message: UIMessage, conversationId: string): Promise<boolean> {
 		this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 			message: '',
 			conversationId,
@@ -566,7 +581,7 @@ export class ThinkCodingBehavior
 
 		const stub = await this.getThinkStub();
 		try {
-			await stub.chat(text, forwarder);
+			await stub.chat(message, forwarder);
 		} finally {
 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
 				message: 'Usage data updated',
@@ -590,6 +605,57 @@ export class ThinkCodingBehavior
 			await this.reportTurnError(turnError);
 		}
 		return turnError === undefined;
+	}
+
+	/**
+	 * Captures the reference URLs in a turn's text before the model runs, shows
+	 * each one in the chat, and returns the outcomes for the turn message.
+	 */
+	private async captureTurnReferences(text: string, conversationId: string): Promise<ReferenceOutcome[]> {
+		const { urls, skipped } = extractReferenceUrls(text);
+		if (skipped.length > 0) {
+			this.broadcast(WebSocketMessageResponses.REFERENCES_SKIPPED, { conversationId, urls: skipped });
+		}
+		if (urls.length === 0) return [];
+		const outcomes = await captureReferences(
+			urls,
+			{
+				client: getBrowserCaptureClient(this.env, this.logger),
+				bucket: this.env.TEMPLATES_BUCKET,
+				appId: this.getAgentId(),
+				newCaptureId: () => generateNanoId(),
+			},
+			(host, index, total) => this.sendBuildProgress(this.buildProgress?.beginCapture(host, index, total, Date.now())),
+		);
+		this.sendBuildProgress(this.buildProgress?.endCapture(Date.now()));
+		for (const outcome of outcomes) {
+			this.broadcast(WebSocketMessageResponses.REFERENCE_CAPTURED, {
+				conversationId,
+				reference: await this.referenceCard(outcome),
+			});
+		}
+		return outcomes;
+	}
+
+	private async referenceCard(outcome: ReferenceOutcome): Promise<ReferenceCard> {
+		if (!outcome.ok) return { url: outcome.url, host: outcome.host, ok: false, reason: outcome.reason };
+		const top = outcome.shots.find((shot) => shot.kind === 'desktop-top') ?? outcome.shots[0];
+		let thumbnailUrl = '';
+		if (top) {
+			try {
+				thumbnailUrl = await new ScreenshotSecurity(this.env).signUrl(
+					getPublicUrlForR2Image(this.env, top.r2Key),
+					this.getAgentId(),
+				);
+			} catch (e) {
+				this.logger.warn('Could not sign a reference thumbnail', e);
+			}
+		}
+		return { url: outcome.url, host: outcome.host, ok: true, summary: describeReferenceSummary(outcome.design), thumbnailUrl };
+	}
+
+	private sendBuildProgress(progress: BuildProgress | null | undefined): void {
+		if (progress) this.broadcast(WebSocketMessageResponses.BUILD_PROGRESS, { progress });
 	}
 
 	/**
@@ -1181,6 +1247,10 @@ function pickStringField(obj: Record<string, unknown>, ...keys: string[]): strin
 function isFileWriteTool(name: string): boolean {
 	const n = name.toLowerCase();
 	return n === 'write' || n === 'edit' || n === 'patch' || n === 'create';
+}
+
+function toPendingImage(image: ProcessedImageAttachment): PendingImage {
+	return { r2Key: image.r2Key, mimeType: image.mimeType };
 }
 
 function isFileDeleteTool(name: string): boolean {

@@ -55,9 +55,9 @@ describe('think model wiring', () => {
 	it('stops draining queued inputs after a failed turn', () => {
 		const behavior = source('/worker/agents/core/behaviors/think.ts');
 		const build = behavior.slice(behavior.indexOf('async build()'), behavior.indexOf('private async runPrompt('));
-		expect(behavior).toContain('private async runPrompt(text: string): Promise<boolean>');
+		expect(behavior).toContain('private async runPrompt(message: UIMessage, conversationId: string): Promise<boolean>');
 		expect(behavior).toContain('return turnError === undefined;');
-		expect(build).toContain('completed = await this.runPrompt(compiled);');
+		expect(build).toContain('completed = await this.runPrompt(message, conversationId);');
 		expect(build).toMatch(/if \(!completed\) break;/);
 		// The MVP flag is still set for a failed turn, as before; only the loop stops.
 		expect(build.indexOf('this.setMVPGenerated()')).toBeLessThan(build.indexOf('if (!completed) break;'));

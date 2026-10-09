@@ -4,6 +4,7 @@ import type { PhasicBlueprint, AgenticBlueprint, PhaseConceptType ,
 } from '../schemas';
 import type { InferenceMetadata } from '../inferutils/config.types';
 import { BehaviorType, Plan, ProjectType } from './types';
+import type { PendingImage } from '../../types/image-attachment';
 
 export interface FileState extends FileOutputType {
     lastDiff: string;
@@ -139,6 +140,8 @@ export interface ThinkState extends BaseProjectState {
     lastDeployedCommit?: string;
     /** Deployed commit the stored app thumbnail shows. */
     screenshotCommit?: string;
+    /** Uploaded images waiting for the next turn; kept in state so a restart does not drop them. */
+    pendingImages?: PendingImage[];
     cloudflareDeploymentUrl?: string;
 }
 
