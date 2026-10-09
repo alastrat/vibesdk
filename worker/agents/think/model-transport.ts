@@ -18,8 +18,8 @@ export interface ProviderFailure {
 export interface ModelTransportOptions {
 	/** How long to wait for response headers before treating the provider as failed. */
 	timeoutMs: number;
-	/** Rewrites each outgoing body for its target model. */
-	prepareBody?: (body: string) => string;
+	/** Rewrites each outgoing body for its target model; may read storage, so it can be async. */
+	prepareBody?: (body: string) => Promise<string> | string;
 	/** Called after every answered request: the failure, or null when the provider responded normally. */
 	onProviderStatus?: (failure: ProviderFailure | null) => void;
 	fetchImpl?: typeof fetch;
@@ -41,7 +41,7 @@ export function createModelTransport(options: ModelTransportOptions): typeof fet
 		const modelId = (typeof body === 'string' ? modelOf(body) : undefined) ?? 'unknown';
 		const prepared: RequestInit = {
 			...(init ?? {}),
-			body: typeof body === 'string' && prepareBody ? prepareBody(body) : body,
+			body: typeof body === 'string' && prepareBody ? await prepareBody(body) : body,
 		};
 
 		const attempt = await fetchWithTimeout(fetchImpl, input, prepared, timeoutMs);

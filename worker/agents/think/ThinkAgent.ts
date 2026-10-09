@@ -29,9 +29,13 @@ import type { RateLimitSettings } from '../../services/rate-limit/config';
 import { resolveThinkModel } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
+import { createAssetCache, inlineAgentAssets } from './agent-assets';
 
 /** How long a provider may take to start responding before the request counts as failed. */
 const MODEL_RESPONSE_TIMEOUT_MS = 60_000;
+
+/** Memory for conversation images already read from R2, so later steps skip the read. */
+const ASSET_CACHE_BYTES = 20 * 1024 * 1024;
 
 /** Retries per turn after the first attempt (about 6 seconds of backoff) before the user is asked. */
 const TURN_MAX_RETRIES = 2;
@@ -170,6 +174,7 @@ export class ThinkAgent extends Think<Env> {
 	 * the `extra_content` Google requires for multi-step function calling).
 	 */
 	private readonly thoughtSignatures = new Map<string, string>();
+	private readonly assetCache = createAssetCache(ASSET_CACHE_BYTES);
 	/** Last provider failure in the current turn; the host reads it when a turn fails. */
 	private providerFailure: ProviderFailure | null = null;
 	/** Metering inputs fixed when the turn starts, so a mid-turn model switch cannot reprice steps. */
@@ -199,12 +204,14 @@ export class ThinkAgent extends Think<Env> {
 		// (which omit `index`) satisfy the OpenAI provider's chunk schema; and
 		// (3) round-trip Gemini `thought_signature`s — harvest them from the
 		// response and re-inject them into outgoing request history (the AI SDK
-		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`); and
+		// drops them, which Gemini 3 rejects with `400 INVALID_ARGUMENT`);
 		// (4) end requests a provider never answers and record provider
-		// failures, so the host can offer the user a switch.
+		// failures, so the host can offer the user a switch; and (5) inline
+		// conversation images stored in R2, since providers can't reach them.
 		const transport = createModelTransport({
 			timeoutMs: MODEL_RESPONSE_TIMEOUT_MS,
-			prepareBody: (body) => injectThoughtSignatures(body, this.thoughtSignatures),
+			prepareBody: async (body) =>
+				injectThoughtSignatures(await inlineAgentAssets(body, this.env.TEMPLATES_BUCKET, this.assetCache), this.thoughtSignatures),
 			onProviderStatus: (failure) => {
 				this.providerFailure = failure;
 			},

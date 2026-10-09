@@ -61,6 +61,23 @@ describe('createModelTransport', () => {
 		expect(JSON.parse(sent).messages[0].content).toBe('hello');
 	});
 
+	it('awaits an async body hook before sending', async () => {
+		let sent = '';
+		const transport = createModelTransport({
+			timeoutMs: 1000,
+			prepareBody: async (body) => {
+				await Promise.resolve();
+				return body.replace('"hi"', '"inlined"');
+			},
+			fetchImpl: async (_input, request) => {
+				sent = String(request?.body);
+				return new Response('ok');
+			},
+		});
+		await transport(URL, init());
+		expect(JSON.parse(sent).messages[0].content).toBe('inlined');
+	});
+
 	it('records an overloaded provider with its own message and returns the response for retrying', async () => {
 		const { statuses, onProviderStatus } = recorder();
 		const googleError = JSON.stringify([{ error: { code: 503, message: 'This model is currently experiencing high demand.', status: 'UNAVAILABLE' } }]);
