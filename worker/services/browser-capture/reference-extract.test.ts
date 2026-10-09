@@ -58,9 +58,38 @@ describe('normalizeReferenceDesign', () => {
 		expect(design.images).toHaveLength(12);
 	});
 
+	it('rejects hex colors with an alpha channel instead of truncating them', () => {
+		const design = normalizeReferenceDesign({ palette: ['#aabbccdd', ' #AABBCC ', '#aabbc'] });
+		expect(design.palette).toEqual(['#aabbcc']);
+	});
+
+	it('drops image URLs over 2000 characters instead of clipping them', () => {
+		const long = `https://img.example.com/${'a'.repeat(2000)}.png`;
+		const design = normalizeReferenceDesign({ images: [long, 'https://img.example.com/ok.png'] });
+		expect(design.images).toEqual(['https://img.example.com/ok.png']);
+	});
+
+	it('builds a button only from an object', () => {
+		expect(normalizeReferenceDesign({ button: 'yes' }).button).toBeNull();
+		expect(normalizeReferenceDesign({ button: ['x'] }).button).toBeNull();
+		expect(normalizeReferenceDesign({ button: null }).button).toBeNull();
+		expect(normalizeReferenceDesign({ button: {} }).button).toEqual({ background: '', color: '', radius: '' });
+	});
+
 	it('is an expression a page can evaluate', () => {
 		expect(REFERENCE_EXTRACT_SCRIPT.trim().startsWith('(() => {')).toBe(true);
 		expect(REFERENCE_EXTRACT_SCRIPT.trim().endsWith('})()')).toBe(true);
 		expect(REFERENCE_EXTRACT_SCRIPT).toContain('getComputedStyle');
+		expect(() => new Function(`return ${REFERENCE_EXTRACT_SCRIPT}`)).not.toThrow();
+	});
+
+	it('keeps single backslashes in the evaluated regexes', () => {
+		expect(REFERENCE_EXTRACT_SCRIPT).toContain('/\\s+/g');
+		expect(REFERENCE_EXTRACT_SCRIPT).not.toContain('\\\\');
+	});
+
+	it('resolves colors through a canvas rather than parsing rgb() strings', () => {
+		expect(REFERENCE_EXTRACT_SCRIPT).toContain('getImageData');
+		expect(REFERENCE_EXTRACT_SCRIPT).not.toContain('rgba?\\(');
 	});
 });

@@ -14,12 +14,20 @@ export const REFERENCE_EXTRACT_SCRIPT = `(() => {
 		const style = getComputedStyle(el);
 		return style.visibility !== 'hidden' && style.display !== 'none' && Number(style.opacity) > 0;
 	};
+	// A 1x1 canvas resolves any CSS color syntax (rgb, oklch, lab, color()) that computed styles may return.
+	const ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+	const hexCache = new Map();
 	const toHex = (value) => {
-		const match = /rgba?\\(([^)]+)\\)/.exec(value || '');
-		if (!match) return null;
-		const parts = match[1].split(',').map((part) => part.trim());
-		if (parts.length === 4 && Number(parts[3]) === 0) return null;
-		return '#' + parts.slice(0, 3).map((part) => Math.round(Number(part)).toString(16).padStart(2, '0')).join('');
+		if (!ctx || !value) return null;
+		if (hexCache.has(value)) return hexCache.get(value);
+		ctx.clearRect(0, 0, 1, 1);
+		ctx.fillStyle = '#000';
+		ctx.fillStyle = value;
+		ctx.fillRect(0, 0, 1, 1);
+		const data = ctx.getImageData(0, 0, 1, 1).data;
+		const hex = data[3] === 0 ? null : '#' + [data[0], data[1], data[2]].map((n) => n.toString(16).padStart(2, '0')).join('');
+		hexCache.set(value, hex);
+		return hex;
 	};
 	const firstFamily = (el) => (el ? getComputedStyle(el).fontFamily.split(',')[0].replace(/["']/g, '').trim() : '');
 	const clean = (text) => (text || '').replace(/\\s+/g, ' ').trim();
@@ -52,7 +60,16 @@ export const REFERENCE_EXTRACT_SCRIPT = `(() => {
 
 	const root = document.querySelector('main') || document.body;
 	let candidates = root ? Array.from(root.querySelectorAll('section')) : [];
-	if (candidates.length < 2 && root) candidates = Array.from(root.children);
+	if (candidates.length < 2 && root) {
+		// Skip single-child wrappers such as body > #root > div so the page's real blocks are the candidates.
+		let container = root;
+		for (let depth = 0; depth < 4; depth++) {
+			const visibleChildren = Array.from(container.children).filter(isVisible);
+			if (visibleChildren.length !== 1 || visibleChildren[0].children.length === 0) break;
+			container = visibleChildren[0];
+		}
+		candidates = Array.from(container.children);
+	}
 	const blocks = candidates.filter((el) => isVisible(el) && el.getBoundingClientRect().height > 120);
 	const topLevel = blocks.filter((el) => !blocks.some((other) => other !== el && other.contains(el))).slice(0, 15);
 	const columnsOf = (el) => {
@@ -93,6 +110,7 @@ export const REFERENCE_EXTRACT_SCRIPT = `(() => {
 })()`;
 
 const HEX = /^#[0-9a-f]{6}$/;
+const MAX_IMAGE_URL_LENGTH = 2000;
 
 function text(value: unknown, max: number): string {
 	return typeof value === 'string' ? value.trim().slice(0, max) : '';
@@ -102,8 +120,12 @@ function list(value: unknown): unknown[] {
 	return Array.isArray(value) ? value : [];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 function record(value: unknown): Record<string, unknown> {
-	return value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+	return isRecord(value) ? value : {};
 }
 
 export function normalizeReferenceDesign(raw: unknown): ReferenceDesign {
@@ -113,7 +135,7 @@ export function normalizeReferenceDesign(raw: unknown): ReferenceDesign {
 	return {
 		title: text(data.title, 200),
 		palette: list(data.palette)
-			.map((color) => text(color, 7).toLowerCase())
+			.map((color) => (typeof color === 'string' ? color.trim().toLowerCase() : ''))
 			.filter((color) => HEX.test(color))
 			.slice(0, 8),
 		fonts: { body: text(fonts.body, 80), headings: text(fonts.headings, 80), buttons: text(fonts.buttons, 80) },
@@ -122,7 +144,7 @@ export function normalizeReferenceDesign(raw: unknown): ReferenceDesign {
 			.map((h) => ({ tag: text(h.tag, 4), size: text(h.size, 16), weight: text(h.weight, 8) }))
 			.filter((h) => /^h[1-6]$/.test(h.tag))
 			.slice(0, 3),
-		button: data.button ? { background: text(button.background, 32), color: text(button.color, 32), radius: text(button.radius, 32) } : null,
+		button: isRecord(data.button) ? { background: text(button.background, 32), color: text(button.color, 32), radius: text(button.radius, 32) } : null,
 		nav: list(data.nav).map((label) => text(label, 40)).filter((label) => label.length > 0).slice(0, 12),
 		sections: list(data.sections)
 			.map(record)
@@ -134,8 +156,8 @@ export function normalizeReferenceDesign(raw: unknown): ReferenceDesign {
 			.slice(0, 15),
 		copy: text(data.copy, 6000),
 		images: list(data.images)
-			.map((url) => text(url, 2000))
-			.filter((url) => /^https?:\/\//.test(url))
+			.map((url) => (typeof url === 'string' ? url.trim() : ''))
+			.filter((url) => url.length <= MAX_IMAGE_URL_LENGTH && /^https?:\/\//.test(url))
 			.slice(0, 12),
 	};
 }
