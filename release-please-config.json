@@ -11,7 +11,8 @@
       "changelog-path": "CHANGELOG.md",
       "extra-files": [
         "bun.lock"
-      ]
+      ],
+      "initial-version": "0.1.0"
     }
   }
 }
