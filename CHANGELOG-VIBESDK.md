@@ -1,6 +1,6 @@
 # VibeSDK Changelog
 
-History of the upstream [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk) project up to the point Estori forked from it. Estori's own releases are in [CHANGELOG.md](CHANGELOG.md).
+History of the upstream [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk) project up to the point Estori forked from it. Estori's own releases are in [CHANGELOG.md](CHANGELOG.md), which release-please creates with the first release.
 
 ## [1.5.0](https://github.com/cloudflare/vibesdk/compare/v1.4.0...v1.5.0) (2026-02-03)
 
