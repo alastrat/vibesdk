@@ -11,6 +11,7 @@ import type { Env } from "../env"
 import { ArtifactsFileSystem } from "./artifacts-fs"
 import { ArtifactsSync, type ArtifactsRemoteStore } from "./artifacts-sync"
 import { CheckpointStore } from "./checkpoint"
+import { withErrorCodes } from "./fs-error-codes"
 import { createArtifactsBaseSource } from "./git-objects"
 
 export const ARTIFACTS_REMOTE_URL_KEY = "artifacts:remoteUrl"
@@ -94,7 +95,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
       read: () => ctx.storage.get<string>(ARTIFACTS_REMOTE_URL_KEY).then((value) => value ?? null),
       write: (url) => ctx.storage.put(ARTIFACTS_REMOTE_URL_KEY, url).then(() => undefined),
     }
-    const fetchSync = new ArtifactsSync(env.ARTIFACTS, createGit(overlay), repoName, this.remoteStore)
+    const fetchSync = new ArtifactsSync(env.ARTIFACTS, createGit(withErrorCodes(overlay)), repoName, this.remoteStore)
     const source = createArtifactsBaseSource({
       overlay,
       branch: ARTIFACTS_BASE_BRANCH,
@@ -114,7 +115,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
       checkpoint: this.checkpointStore,
       onChange: (path) => this.noteCheckpointDirty(path),
     })
-    this.git = createGit(this.fs)
+    this.git = createGit(withErrorCodes(this.fs))
     this.stateBackend = new FileSystemStateBackend(overlay)
   }
 
@@ -205,7 +206,7 @@ export class SqlBackend implements SpaceFsBackend {
     const fs = new WorkspaceFileSystem(workspace)
     this.overlay = fs
     this.fs = fs
-    this.git = createGit(fs)
+    this.git = createGit(withErrorCodes(fs))
     this.stateBackend = createWorkspaceStateBackend(workspace)
   }
 

@@ -10,6 +10,7 @@
  */
 import * as git from "isomorphic-git"
 import type { FileSystem } from "@cloudflare/shell"
+import { errorCodeFromMessage, hasErrorCode, type CodedError } from "./fs-error-codes"
 
 /** Metadata for one file in the Artifacts base tree. */
 export interface BaseEntry {
@@ -70,18 +71,14 @@ class GitStat {
   }
 }
 
-interface CodedError extends Error {
-  code: string
-}
-
-/** Ensure a thrown error carries a `.code` isomorphic-git can dispatch on. */
+/**
+ * Ensure a thrown error carries a `.code` isomorphic-git can dispatch on: its
+ * own, else the message's leading code, else ENOENT.
+ */
 function fsError(path: string, cause: unknown): CodedError {
-  if (cause instanceof Error && "code" in cause && typeof (cause as CodedError).code === "string") {
-    return cause as CodedError
-  }
-  const err = new Error(cause instanceof Error ? cause.message : `ENOENT: ${path}`) as CodedError
-  err.code = "ENOENT"
-  return err
+  if (hasErrorCode(cause)) return cause
+  const message = cause instanceof Error ? cause.message : `ENOENT: ${path}`
+  return Object.assign(new Error(message), { code: errorCodeFromMessage(message) ?? "ENOENT" })
 }
 
 /**
@@ -121,14 +118,26 @@ export function createGitFs(fs: FileSystem): git.FsClient {
         }
       },
       async readdir(path: string) {
-        return fs.readdir(path)
+        try {
+          return await fs.readdir(path)
+        } catch (err) {
+          throw fsError(path, err)
+        }
       },
       async mkdir(path: string, mode?: { recursive?: boolean }) {
         const recursive = typeof mode === "object" ? Boolean(mode.recursive) : false
-        await fs.mkdir(path, { recursive })
+        try {
+          await fs.mkdir(path, { recursive })
+        } catch (err) {
+          throw fsError(path, err)
+        }
       },
       async rmdir(path: string) {
-        await fs.rm(path)
+        try {
+          await fs.rm(path)
+        } catch (err) {
+          throw fsError(path, err)
+        }
       },
       async stat(path: string) {
         try {
