@@ -1,0 +1,17 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "9da158d82c597a0e8f4bf033cdccd1053fb6fb15",
+  "include-component-in-tag": false,
+  "bump-minor-pre-major": true,
+  "bump-patch-for-minor-pre-major": false,
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "estori",
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        "bun.lock"
+      ]
+    }
+  }
+}
