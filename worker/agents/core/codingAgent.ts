@@ -461,7 +461,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             framework: this.state.blueprint.frameworks.join(','),
             fromTemplateVersionId,
             visibility: 'private',
-            status: 'generating',
+            status: this.state.mvpGenerated ? 'completed' : 'generating',
                 createdAt: new Date(),
             updatedAt: new Date()
             });

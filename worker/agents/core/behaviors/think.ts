@@ -43,7 +43,7 @@ import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome }
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
 import { readTemplateSnapshot } from 'worker/services/templates/store';
-import { initialProjectTitle } from '../../think/template-start';
+import { initialProjectTitle, templateCopyQuery } from '../../think/template-start';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -188,6 +188,8 @@ export class ThinkCodingBehavior
 		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId, templateSeed } = initArgs;
 
 		const baseName = (query || templateSeed?.name || 'project').toString();
+		const described = query.trim().length > 0;
+		const storedQuery = !described && templateSeed ? templateCopyQuery(templateSeed.name) : query;
 		const projectName = generateProjectName(
 			baseName,
 			generateNanoId(),
@@ -200,11 +202,11 @@ export class ThinkCodingBehavior
 		this.setState({
 			...this.state,
 			projectName,
-			query,
+			query: storedQuery,
 			blueprint: {
 				title: initialProjectTitle(query, templateSeed?.name, deriveProjectTitle),
 				projectName,
-				description: query,
+				description: storedQuery,
 				colorPalette: ['#1e1e1e'],
 				frameworks: [],
 				plan: [],
@@ -229,7 +231,7 @@ export class ThinkCodingBehavior
 
 		const seedStartedAt = performance.now();
 		if (templateSeed) {
-			await this.seedFromTemplate(templateSeed);
+			await this.seedFromTemplate(templateSeed, described);
 		} else {
 			await this.seedEmptySpace();
 		}
@@ -400,7 +402,7 @@ export class ThinkCodingBehavior
 	 * copy before any model turn. Throws when the copy cannot be made, which
 	 * fails initialization before the app is saved.
 	 */
-	private async seedFromTemplate(seed: TemplateSeed): Promise<void> {
+	private async seedFromTemplate(seed: TemplateSeed, described: boolean): Promise<void> {
 		await this.seedEmptySpace();
 		const files = await readTemplateSnapshot(this.env.TEMPLATES_BUCKET, seed.snapshotKey);
 		await this.callSpace((space) => space.importFiles(files, `Start from template ${seed.name} v${seed.version}`));
@@ -410,7 +412,7 @@ export class ThinkCodingBehavior
 			...this.state,
 			templateStart: { templateId: seed.templateId, versionId: seed.versionId, name: seed.name },
 		});
-		if (!this.state.query) this.setMVPGenerated();
+		if (!described) this.setMVPGenerated();
 	}
 
 	// ──────────────────────────────────────────────────────────────

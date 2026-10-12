@@ -32,9 +32,10 @@ describe('starting an app from a template', () => {
 	});
 
 	it('seeds the workspace from the template instead of an empty space', () => {
-		expect(think).toContain('await this.seedFromTemplate(templateSeed)');
+		expect(think).toContain('await this.seedFromTemplate(templateSeed, described)');
 		expect(think).toContain('space.importFiles(files, `Start from template ${seed.name} v${seed.version}`)');
-		expect(think).toContain('if (!this.state.query) this.setMVPGenerated()');
+		expect(think).toContain('if (!described) this.setMVPGenerated()');
+		expect(think).toContain('templateCopyQuery(templateSeed.name)');
 	});
 
 	it('personalizes only the first turn', () => {
@@ -43,5 +44,9 @@ describe('starting an app from a template', () => {
 
 	it('records the template version on the saved app', () => {
 		expect(source('/worker/agents/core/codingAgent.ts')).toContain('fromTemplateVersionId');
+	});
+
+	it('saves a finished exact copy as completed', () => {
+		expect(source('/worker/agents/core/codingAgent.ts')).toContain("status: this.state.mvpGenerated ? 'completed' : 'generating'");
 	});
 });
