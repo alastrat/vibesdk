@@ -30,7 +30,9 @@ let browserPromise: Promise<Browser> | undefined;
 async function getBrowser(): Promise<Browser> {
 	if (!browserPromise) {
 		browserPromise = puppeteer.launch({
-			headless: true,
+			// chrome-headless-shell: the new headless mode never resolves
+			// page.screenshot on macOS with Chrome 148, so every capture timed out.
+			headless: 'shell',
 			args: ['--no-sandbox', '--disable-setuid-sandbox'],
 		});
 		browserPromise.then(
