@@ -158,6 +158,7 @@ export class TemplatesController extends BaseController {
                     readTree: (commit) => space.readTreeAtCommit(commit),
                     captureShot: createTemplateShotCapturer(env, TemplatesController.logger),
                     store: r2TemplateStore(env.TEMPLATES_BUCKET),
+                    onCleanupError: (error) => TemplatesController.logger.warn('Template submission cleanup failed', error),
                     recordVersion: (submission) =>
                         templates.insertSubmission({
                             template: newTemplate,
@@ -188,6 +189,7 @@ export class TemplatesController extends BaseController {
             });
         } catch (error) {
             if (error instanceof TemplateSubmissionError) {
+                this.logger.warn('Template submission failed', { status: error.status, message: error.message, cause: error.cause });
                 return TemplatesController.createErrorResponse<SubmitTemplateData>(error.message, error.status);
             }
             this.logger.error('Error submitting template', error);
