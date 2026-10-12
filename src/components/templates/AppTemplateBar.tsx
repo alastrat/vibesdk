@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { Badge, Button } from '@cloudflare/kumo';
-import { useAppTemplate, useSetTemplateListing, useWithdrawTemplateVersion } from '@/hooks/use-templates';
+import { useAppTemplate } from '@/hooks/use-templates';
 import { templateStatusView } from '@/lib/template-display';
 import type { AppTemplateData, TemplateOrigin } from '@/api-types';
 import { SubmitTemplateDialog } from './SubmitTemplateDialog';
+import { TemplateManageButtons } from './TemplateManageButtons';
 import { TemplateOriginLine } from './TemplateOriginLine';
 
 interface AppTemplateBarProps {
@@ -31,8 +31,6 @@ export function AppTemplateBar({ appId, appTitle, origin, canManage }: AppTempla
 }
 
 function TemplateActions({ appId, appTitle, data }: { appId: string; appTitle: string; data: AppTemplateData }) {
-	const withdraw = useWithdrawTemplateVersion();
-	const listing = useSetTemplateListing();
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const template = data.template;
 	const view = template ? templateStatusView(template) : null;
@@ -48,36 +46,7 @@ function TemplateActions({ appId, appTitle, data }: { appId: string; appTitle: s
 					{view.detail && <span className="text-sm text-kumo-subtle">{view.detail}</span>}
 				</>
 			)}
-			{template && pendingVersionId && (
-				<Button
-					size="sm"
-					variant="ghost"
-					loading={withdraw.isPending}
-					onClick={() =>
-						withdraw.mutate(
-							{ templateId: template.id, versionId: pendingVersionId },
-							{ onError: (error) => toast.error(error.message) },
-						)
-					}
-				>
-					Withdraw
-				</Button>
-			)}
-			{template && view?.canUnlist && (
-				<Button
-					size="sm"
-					variant="ghost"
-					loading={listing.isPending}
-					onClick={() =>
-						listing.mutate(
-							{ templateId: template.id, listed: false },
-							{ onError: (error) => toast.error(error.message) },
-						)
-					}
-				>
-					Unlist
-				</Button>
-			)}
+			{template && <TemplateManageButtons template={template} />}
 			{canSubmit && (
 				<Button size="sm" variant="secondary" onClick={() => setDialogOpen(true)}>
 					{template ? 'Submit new version' : 'Submit as template'}

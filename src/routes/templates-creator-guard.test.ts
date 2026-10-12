@@ -6,6 +6,9 @@ const sources = import.meta.glob<string>(
 		'/src/routes/chat/chat.tsx',
 		'/src/routes/profile.tsx',
 		'/src/components/templates/SubmitTemplateDialog.tsx',
+		'/src/components/templates/AppTemplateBar.tsx',
+		'/src/components/templates/MyTemplatesList.tsx',
+		'/src/components/templates/TemplateManageButtons.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -39,6 +42,15 @@ describe('templates: creators', () => {
 		const profile = source('/src/routes/profile.tsx');
 		expect(profile).toContain("{ value: 'templates', label: 'Templates' }");
 		expect(profile).toContain('<MyTemplatesList />');
+	});
+
+	it('offers Withdraw and Unlist on the app page and on every My templates row', () => {
+		expect(source('/src/components/templates/AppTemplateBar.tsx')).toContain('<TemplateManageButtons template={template} />');
+		expect(source('/src/components/templates/MyTemplatesList.tsx')).toContain('<TemplateManageButtons template={template} />');
+		const buttons = source('/src/components/templates/TemplateManageButtons.tsx');
+		expect(buttons).toContain('view.pendingVersionId');
+		expect(buttons).toContain('view.canUnlist');
+		expect(buttons).toContain('listed: false');
 	});
 
 	it('requires the rights confirmation before submitting', () => {

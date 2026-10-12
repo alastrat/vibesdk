@@ -6,6 +6,8 @@ import { pageTitle } from '@/brand';
 import {
 	usePendingTemplateVersions,
 	useReviewTemplateVersion,
+	useSetTemplateListing,
+	useTemplateGallery,
 	useTemplateVersionFile,
 	useTemplateVersionFiles,
 } from '@/hooks/use-templates';
@@ -16,6 +18,7 @@ import {
 	SecurityErrorType,
 	TEMPLATE_CATEGORY_LABELS,
 	type PendingTemplateVersion,
+	type PublicTemplateCard,
 } from '@/api-types';
 
 function isForbidden(error: unknown): boolean {
@@ -47,6 +50,7 @@ export default function AdminTemplatesPage() {
 						) : (
 							<Empty title="Nothing to review" description="New submissions will show up here." />
 						)}
+						<PublishedTemplates />
 					</>
 				) : pending.isLoading ? (
 					<div className="flex justify-center py-16">
@@ -178,6 +182,75 @@ function PendingVersionCard({ version }: { version: PendingTemplateVersion }) {
 				</div>
 			</LayerCard.Primary>
 		</LayerCard>
+	);
+}
+
+/** The templates in the gallery, so an admin can take one out of it. */
+function PublishedTemplates() {
+	const gallery = useTemplateGallery({ category: null, search: '', limit: 24 });
+	const templates = gallery.data?.pages.flatMap((page) => page.templates) ?? [];
+
+	return (
+		<section className="grid gap-3 pt-4">
+			<div className="grid gap-1">
+				<h2 className="text-xl font-semibold text-kumo-strong">Published templates</h2>
+				<p className="text-sm text-kumo-subtle">Unlisting takes a template out of the gallery.</p>
+			</div>
+			{gallery.isLoading ? (
+				<div className="flex justify-center py-8">
+					<Loader />
+				</div>
+			) : gallery.isError ? (
+				<Empty size="sm" title="Published templates didn't load" description={gallery.error.message} />
+			) : templates.length === 0 ? (
+				<Empty size="sm" title="No published templates" description="Approved templates will show up here." />
+			) : (
+				templates.map((template) => <PublishedTemplateRow key={template.id} template={template} />)
+			)}
+			{gallery.hasNextPage && (
+				<Button
+					size="sm"
+					variant="secondary"
+					className="w-fit justify-self-center"
+					loading={gallery.isFetchingNextPage}
+					onClick={() => void gallery.fetchNextPage()}
+				>
+					Load more
+				</Button>
+			)}
+		</section>
+	);
+}
+
+function PublishedTemplateRow({ template }: { template: PublicTemplateCard }) {
+	const listing = useSetTemplateListing();
+
+	const unlist = () =>
+		listing.mutate(
+			{ templateId: template.id, listed: false },
+			{
+				onSuccess: () => toast.success(`${template.name} is unlisted`),
+				onError: (error) => toast.error(error.message),
+			},
+		);
+
+	return (
+		<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-3 ring ring-kumo-hairline">
+			<div className="grid min-w-0 gap-0.5">
+				<Link
+					to={`/templates/${template.slug}`}
+					className="truncate text-sm font-medium text-kumo-default underline-offset-2 hover:underline"
+				>
+					{template.name}
+				</Link>
+				<p className="text-sm text-kumo-subtle">
+					By {template.creatorName} · {formatTemplatePrice(template.priceCents)} · {template.useCount} uses
+				</p>
+			</div>
+			<Button size="sm" variant="secondary-destructive" loading={listing.isPending} onClick={unlist}>
+				Unlist
+			</Button>
+		</div>
 	);
 }
 

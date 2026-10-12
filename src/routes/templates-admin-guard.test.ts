@@ -26,6 +26,13 @@ describe('templates: admin review', () => {
 		expect(page).toContain('disabled={!reason.trim()}');
 	});
 
+	it('lets admins unlist published templates', () => {
+		const page = source('/src/routes/admin/templates.tsx');
+		expect(page).toContain('Published templates');
+		expect(page).toContain("useTemplateGallery({ category: null, search: '', limit: 24 })");
+		expect(page).toContain('listed: false');
+	});
+
 	it('keeps the queue on screen when a refresh fails, and surfaces read errors', () => {
 		const page = source('/src/routes/admin/templates.tsx');
 		expect(page).toContain("Couldn't load the review queue");

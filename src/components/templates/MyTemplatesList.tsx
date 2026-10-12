@@ -4,6 +4,7 @@ import { SquaresFourIcon } from '@phosphor-icons/react';
 import { useMyTemplates } from '@/hooks/use-templates';
 import { templateStatusView } from '@/lib/template-display';
 import { formatTemplatePrice } from '@/api-types';
+import { TemplateManageButtons } from './TemplateManageButtons';
 
 export function MyTemplatesList() {
 	const navigate = useNavigate();
@@ -48,13 +49,14 @@ export function MyTemplatesList() {
 								{template.useCount} uses{view.detail ? ` · ${view.detail}` : ''}
 							</p>
 						</div>
-						<div className="flex items-center gap-2">
+						<div className="flex flex-wrap items-center gap-2">
 							<Badge variant={view.variant}>{view.label}</Badge>
 							{template.status === 'listed' && (
 								<Button size="sm" variant="ghost" onClick={() => navigate(`/templates/${template.slug}`)}>
 									View
 								</Button>
 							)}
+							<TemplateManageButtons template={template} />
 						</div>
 					</div>
 				);
