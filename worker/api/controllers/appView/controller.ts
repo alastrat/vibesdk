@@ -4,6 +4,7 @@ import { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { getAgentStubLightweight } from '../../../agents';
 import { AppService } from '../../../database/services/AppService';
+import { TemplateService } from '../../../database';
 import { 
     AppDetailsData, 
     AppStarToggleData,
@@ -12,6 +13,7 @@ import {
 } from './types';
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { toPublicAppDetail } from '../apps/publicAppDto';
+import { toTemplateOrigin } from '../templates/templateDto';
 import { createLogger } from '../../../logger';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
@@ -103,11 +105,16 @@ export class AppViewController extends BaseController {
             // visible to all viewers of a public app (intended feature).
             const isOwner = !!userId && appResult.userId === userId;
 
+            const origin = appResult.fromTemplateVersionId
+                ? await new TemplateService(env).getTemplateOrigin(appResult.fromTemplateVersionId)
+                : null;
+
             const responseData: AppDetailsData = {
                 ...toPublicAppDetail(appResult, isOwner),
                 cloudflareUrl: cloudflareUrl,
                 previewUrl: previewUrl || cloudflareUrl,
                 behaviorType,
+                fromTemplate: origin ? toTemplateOrigin(origin) : null,
                 user: {
                     id: isOwner ? appResult.userId! : '',
                     displayName: appResult.userName || 'Unknown',

@@ -5,6 +5,7 @@
 
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { PublicAppDetailData } from '../../../database/types';
+import type { TemplateOrigin } from '../templates/types';
 
 /**
  * Generated code file structure
@@ -24,6 +25,8 @@ export interface AppDetailsData extends PublicAppDetailData {
     cloudflareUrl: string | null;
     previewUrl: string | null;
     behaviorType: BehaviorType | null;
+    /** The template this app started from, if any. */
+    fromTemplate: TemplateOrigin | null;
     user: {
         id: string;
         displayName: string;
