@@ -120,6 +120,10 @@ describe('slugs', () => {
 		);
 	});
 
+	it('suffixes a reserved route name even when it is free', async () => {
+		await expect(uniqueTemplateSlug('Mine', async () => false, () => 'k3x9')).resolves.toBe('mine-k3x9');
+	});
+
 	it('makes 4-character lowercase suffixes', () => {
 		expect(randomSlugSuffix()).toMatch(/^[a-z0-9]{4}$/);
 	});
@@ -129,6 +133,10 @@ describe('slugs', () => {
 		expect(isTemplateSlug('Fernwood')).toBe(false);
 		expect(isTemplateSlug('a--b')).toBe(false);
 		expect(isTemplateSlug('../x')).toBe(false);
+	});
+
+	it('rejects a reserved route name as a slug', () => {
+		expect(isTemplateSlug('mine')).toBe(false);
 	});
 });
 

@@ -116,6 +116,9 @@ export function slugifyTemplateName(name: string): string {
 	return slug || 'template';
 }
 
+// Collide with static routes under /api/templates, so a template could not be fetched by these slugs.
+const RESERVED_TEMPLATE_SLUGS: ReadonlySet<string> = new Set(['mine']);
+
 const SLUG_SUFFIX_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 
 export function randomSlugSuffix(): string {
@@ -130,7 +133,7 @@ export async function uniqueTemplateSlug(
 	suffix: () => string = randomSlugSuffix,
 ): Promise<string> {
 	const base = slugifyTemplateName(name);
-	if (!(await isTaken(base))) return base;
+	if (!RESERVED_TEMPLATE_SLUGS.has(base) && !(await isTaken(base))) return base;
 	for (let attempt = 0; attempt < 5; attempt++) {
 		const candidate = `${base}-${suffix()}`;
 		if (!(await isTaken(candidate))) return candidate;
@@ -139,7 +142,7 @@ export async function uniqueTemplateSlug(
 }
 
 export function isTemplateSlug(value: string): boolean {
-	return value.length <= 64 && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
+	return value.length <= 64 && !RESERVED_TEMPLATE_SLUGS.has(value) && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
 }
 
 /** Why an app cannot be submitted as a template, or null when it can. */
