@@ -64,6 +64,56 @@ describe('templateStatusView', () => {
 		).toMatchObject({ label: 'Rejected', variant: 'error', detail: 'Uses a real brand logo', canUnlist: false });
 	});
 
+	it('shows the reviewer reason when an update to a published template was rejected', () => {
+		const view = templateStatusView(
+			template({
+				status: 'listed',
+				currentVersionId: 'v1',
+				versions: [
+					version({ id: 'v2', version: 2, status: 'rejected', rejectionReason: 'Uses a real brand logo' }),
+					version({ id: 'v1' }),
+				],
+			}),
+		);
+		expect(view).toEqual({
+			label: 'Published',
+			variant: 'success',
+			detail: 'Version 2 was rejected: Uses a real brand logo',
+			pendingVersionId: null,
+			canUnlist: true,
+		});
+	});
+
+	it('shows a rejected update without a reason', () => {
+		const view = templateStatusView(
+			template({
+				status: 'listed',
+				currentVersionId: 'v1',
+				versions: [version({ id: 'v2', version: 2, status: 'rejected' }), version({ id: 'v1' })],
+			}),
+		);
+		expect(view.detail).toBe('Version 2 was rejected');
+	});
+
+	it('shows the reviewer reason when an update to an unlisted template was rejected', () => {
+		const view = templateStatusView(
+			template({
+				currentVersionId: 'v1',
+				versions: [
+					version({ id: 'v2', version: 2, status: 'rejected', rejectionReason: 'Copies another site' }),
+					version({ id: 'v1' }),
+				],
+			}),
+		);
+		expect(view).toEqual({
+			label: 'Unlisted',
+			variant: 'secondary',
+			detail: 'Version 2 was rejected: Copies another site',
+			pendingVersionId: null,
+			canUnlist: false,
+		});
+	});
+
 	it('shows an approved template that was unlisted', () => {
 		expect(templateStatusView(template({ currentVersionId: 'v1', versions: [version({})] }))).toMatchObject({
 			label: 'Unlisted',

@@ -13,12 +13,16 @@ async function unwrap<T>(request: Promise<ApiResponse<T>>, fallback: string): Pr
 	return response.data;
 }
 
-/** Any template change can move a template between lists, so every template query refreshes. */
+/** Any template change can move a template between lists, so the public and the private template queries refresh. */
 function useTemplateMutation<TInput, TOutput>(mutationFn: (input: TInput) => Promise<TOutput>) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn,
-		onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.templates.all }),
+		onSuccess: () =>
+			Promise.all([
+				queryClient.invalidateQueries({ queryKey: queryKeys.templates.all }),
+				queryClient.invalidateQueries({ queryKey: queryKeys.account.templates.all() }),
+			]),
 	});
 }
 
@@ -53,7 +57,7 @@ export function useTemplateDetail(slug: string | undefined) {
 export function useMyTemplates() {
 	const { user } = useAuth();
 	return useQuery({
-		queryKey: queryKeys.templates.mine(user?.id),
+		queryKey: queryKeys.account.templates.mine(user?.id),
 		queryFn: () => unwrap(apiClient.getMyTemplates(), 'Failed to load your templates'),
 		enabled: !!user,
 	});
@@ -61,7 +65,7 @@ export function useMyTemplates() {
 
 export function useAppTemplate(appId: string | undefined, enabled: boolean) {
 	return useQuery({
-		queryKey: queryKeys.templates.app(appId ?? ''),
+		queryKey: queryKeys.account.templates.app(appId ?? ''),
 		queryFn: () => unwrap(apiClient.getAppTemplate(appId!), 'Failed to load the template status'),
 		enabled: enabled && !!appId,
 		retry: false,
@@ -94,7 +98,7 @@ export function usePurchaseTemplate() {
 
 export function usePendingTemplateVersions() {
 	return useQuery({
-		queryKey: queryKeys.templates.pending(),
+		queryKey: queryKeys.account.templates.pending(),
 		queryFn: () => unwrap(apiClient.getPendingTemplateVersions(), 'Failed to load the review queue'),
 		retry: false,
 	});
@@ -102,7 +106,7 @@ export function usePendingTemplateVersions() {
 
 export function useTemplateVersionFiles(versionId: string | null) {
 	return useQuery({
-		queryKey: queryKeys.templates.versionFiles(versionId ?? ''),
+		queryKey: queryKeys.account.templates.versionFiles(versionId ?? ''),
 		queryFn: () => unwrap(apiClient.getTemplateVersionFiles(versionId!), 'Failed to load the files'),
 		enabled: !!versionId,
 	});
@@ -110,7 +114,7 @@ export function useTemplateVersionFiles(versionId: string | null) {
 
 export function useTemplateVersionFile(versionId: string, path: string | null) {
 	return useQuery({
-		queryKey: queryKeys.templates.versionFile(versionId, path ?? ''),
+		queryKey: queryKeys.account.templates.versionFile(versionId, path ?? ''),
 		queryFn: () => unwrap(apiClient.getTemplateVersionFile(versionId, path!), 'Failed to load the file'),
 		enabled: !!path,
 	});
