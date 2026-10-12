@@ -28,6 +28,7 @@ import {
 	Globe,
 	Lock,
 	LockOpen,
+	SquaresFourIcon,
 } from '@phosphor-icons/react';
 import {
 	Badge,
@@ -69,6 +70,7 @@ import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
+import { SubmitTemplateDialog } from '@/components/templates/SubmitTemplateDialog';
 import { ModelUnavailableNotice } from '@/components/ModelUnavailableNotice';
 import { BuildProgressBar } from '@/components/BuildProgressBar';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
@@ -368,6 +370,7 @@ function ChatSession() {
 
 	const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
+	const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
 
 	// Deploy target for think apps: user-account deploys are gated behind the
 	// platform's ENABLE_USER_ACCOUNT_DEPLOY flag (surfaced via capabilities).
@@ -513,6 +516,14 @@ function ChatSession() {
 										onClick={handleToggleVisibility}
 									>
 										Make private
+									</DropdownMenu.Item>
+								)}
+								{isOwner && behaviorType === 'think' && (
+									<DropdownMenu.Item
+										icon={SquaresFourIcon}
+										onClick={() => setIsTemplateDialogOpen(true)}
+									>
+										Submit as template
 									</DropdownMenu.Item>
 								)}
 								<DropdownMenu.Item
@@ -1518,6 +1529,15 @@ function ChatSession() {
 
 				{/* Usage limit dialogs */}
 				{showLimitDialog}
+
+				{app && isOwner && (
+					<SubmitTemplateDialog
+						appId={app.id}
+						appTitle={app.title}
+						open={isTemplateDialogOpen}
+						onOpenChange={setIsTemplateDialogOpen}
+					/>
+				)}
 
 				{/* Deploy gate dialog (backend-reported CF connection failure) */}
 				{showDeployGateDialog}

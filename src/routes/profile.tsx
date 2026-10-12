@@ -13,6 +13,7 @@ import {
 	Text,
 } from '@cloudflare/kumo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { MyTemplatesList } from '@/components/templates/MyTemplatesList';
 import {
 	CalendarBlank,
 	Code,
@@ -280,6 +281,7 @@ export default function Profile() {
 						tabs={[
 							{ value: 'about', label: 'About' },
 							{ value: 'apps', label: 'Apps' },
+							{ value: 'templates', label: 'Templates' },
 							{ value: 'achievements', label: 'Achievements' },
 							{ value: 'activity', label: 'Activity' },
 						]}
@@ -496,6 +498,17 @@ export default function Profile() {
 										}
 									/>
 								)}
+							</LayerCard.Primary>
+						</LayerCard>
+					)}
+
+					{activeTab === 'templates' && (
+						<LayerCard>
+							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
+								My templates
+							</LayerCard.Secondary>
+							<LayerCard.Primary>
+								<MyTemplatesList />
 							</LayerCard.Primary>
 						</LayerCard>
 					)}

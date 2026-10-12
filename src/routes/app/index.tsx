@@ -3,6 +3,7 @@ import { MonacoEditor } from '@/components/monaco-editor/lazy-monaco-editor';
 import { AppLoadingSkeleton } from '@/components/shared/AppLoadingSkeleton';
 import { FloatingBackgroundIcons } from '@/components/shared/FloatingBackgroundIcons';
 import { GitCloneModal } from '@/components/shared/GitCloneModal';
+import { AppTemplateBar } from '@/components/templates/AppTemplateBar';
 import {
 	useApp,
 	useAppPreviewToken,
@@ -661,6 +662,12 @@ export default function AppView() {
 	return (
 		<div className="size-full flex flex-col min-h-0">
 			<title>{pageTitle(app.title || 'App')}</title>
+			<AppTemplateBar
+				appId={app.id}
+				appTitle={app.title}
+				origin={app.fromTemplate}
+				canManage={isOwner && isThink}
+			/>
 			<div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-2 border-b bg-kumo-base">
 				<Tabs
 					value={activeTab}
