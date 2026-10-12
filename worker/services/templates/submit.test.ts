@@ -98,14 +98,17 @@ describe('submitTemplateVersion', () => {
 	});
 
 	it('fails with the capture message and leaves nothing behind when a capture fails twice', async () => {
+		let calls = 0;
 		const { deps, recorded, store } = setup({
 			captureShot: async () => {
-				throw new Error('blank page');
+				calls++;
+				throw new Error(calls === 1 ? 'first timeout' : 'blank page');
 			},
 		});
 		const error = await submitTemplateVersion(deps, SOURCE, IDS).catch((e: unknown) => e);
 		expect(error).toBeInstanceOf(TemplateSubmissionError);
 		expect(error).toMatchObject({ message: SCREENSHOT_FAILED_MESSAGE, status: 400 });
+		expect((error as TemplateSubmissionError).cause).toMatchObject({ message: 'blank page' });
 		expect(store.objects.size).toBe(0);
 		expect(recorded).toEqual([]);
 	});
@@ -129,12 +132,26 @@ describe('submitTemplateVersion', () => {
 
 	it('removes stored objects and records nothing when a write fails', async () => {
 		const { deps, recorded, store } = setup({ store: new MemoryStore('templates/tpl1/ver1/mobile.jpg') });
-		await expect(submitTemplateVersion(deps, SOURCE, IDS)).rejects.toMatchObject({
-			status: 500,
-			message: SAVE_FAILED_MESSAGE,
-		});
+		const error = await submitTemplateVersion(deps, SOURCE, IDS).catch((e: unknown) => e);
+		expect(error).toMatchObject({ status: 500, message: SAVE_FAILED_MESSAGE });
+		expect((error as TemplateSubmissionError).cause).toMatchObject({ message: 'R2 unavailable' });
 		expect(store.objects.size).toBe(0);
 		expect(recorded).toEqual([]);
+	});
+
+	it('still reports the save failure and surfaces the cleanup error when removing objects fails', async () => {
+		const cleanupErrors: unknown[] = [];
+		const cleanupFailure = new Error('delete rejected');
+		const store = new MemoryStore('templates/tpl1/ver1/mobile.jpg');
+		store.delete = async () => {
+			throw cleanupFailure;
+		};
+		const { deps } = setup({ store, onCleanupError: (error) => cleanupErrors.push(error) });
+		const error = await submitTemplateVersion(deps, SOURCE, IDS).catch((e: unknown) => e);
+		expect(error).toBeInstanceOf(TemplateSubmissionError);
+		expect(error).toMatchObject({ status: 500, message: SAVE_FAILED_MESSAGE });
+		expect((error as TemplateSubmissionError).cause).toMatchObject({ message: 'R2 unavailable' });
+		expect(cleanupErrors).toEqual([cleanupFailure]);
 	});
 
 	it('removes stored objects when recording the version fails', async () => {
@@ -156,10 +173,9 @@ describe('submitTemplateVersion', () => {
 				throw new Error('missing object');
 			},
 		});
-		await expect(submitTemplateVersion(deps, SOURCE, IDS)).rejects.toMatchObject({
-			status: 500,
-			message: READ_FAILED_MESSAGE,
-		});
+		const error = await submitTemplateVersion(deps, SOURCE, IDS).catch((e: unknown) => e);
+		expect(error).toMatchObject({ status: 500, message: READ_FAILED_MESSAGE });
+		expect((error as TemplateSubmissionError).cause).toMatchObject({ message: 'missing object' });
 		expect(store.objects.size).toBe(0);
 	});
 });

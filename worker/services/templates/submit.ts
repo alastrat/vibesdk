@@ -41,14 +41,17 @@ export interface SubmissionDeps {
 	captureShot(url: string, device: ShotDevice): Promise<Uint8Array>;
 	store: TemplateObjectStore;
 	recordVersion(record: SubmissionRecord): Promise<void>;
+	/** Called when removing stored objects after a failed submission itself fails. */
+	onCleanupError?(error: unknown): void;
 }
 
 export class TemplateSubmissionError extends Error {
 	constructor(
 		message: string,
 		readonly status: 400 | 500,
+		cause?: unknown,
 	) {
-		super(message);
+		super(message, cause === undefined ? undefined : { cause });
 		this.name = 'TemplateSubmissionError';
 	}
 }
@@ -68,8 +71,8 @@ async function captureWithRetry(deps: SubmissionDeps, url: string, device: ShotD
 	} catch {
 		try {
 			return await deps.captureShot(url, device);
-		} catch {
-			throw new TemplateSubmissionError(SCREENSHOT_FAILED_MESSAGE, 400);
+		} catch (error) {
+			throw new TemplateSubmissionError(SCREENSHOT_FAILED_MESSAGE, 400, error);
 		}
 	}
 }
@@ -86,8 +89,8 @@ export async function submitTemplateVersion(
 	let files: TreeFile[];
 	try {
 		files = await deps.readTree(source.commit);
-	} catch {
-		throw new TemplateSubmissionError(READ_FAILED_MESSAGE, 500);
+	} catch (error) {
+		throw new TemplateSubmissionError(READ_FAILED_MESSAGE, 500, error);
 	}
 
 	const snapshot = buildSnapshot(files);
@@ -110,8 +113,8 @@ export async function submitTemplateVersion(
 		};
 		await deps.recordVersion(record);
 		return record;
-	} catch {
-		await deps.store.delete(Object.values(keys)).catch(() => undefined);
-		throw new TemplateSubmissionError(SAVE_FAILED_MESSAGE, 500);
+	} catch (error) {
+		await deps.store.delete(Object.values(keys)).catch((cleanupError: unknown) => deps.onCleanupError?.(cleanupError));
+		throw new TemplateSubmissionError(SAVE_FAILED_MESSAGE, 500, error);
 	}
 }
