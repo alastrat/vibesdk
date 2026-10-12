@@ -38,6 +38,23 @@ describe('starting an app from a template', () => {
 		expect(think).toContain('templateCopyQuery(templateSeed.name)');
 	});
 
+	it('records the template start before the system prompt is built', () => {
+		const initialize = think.slice(think.indexOf('async initialize('), think.indexOf('private async configureThinkAgent('));
+		const record = initialize.indexOf(
+			'templateStart: templateSeed ? { templateId: templateSeed.templateId, versionId: templateSeed.versionId, name: templateSeed.name } : undefined,',
+		);
+		expect(record).toBeGreaterThan(-1);
+		expect(record).toBeLessThan(initialize.indexOf('await this.configureThinkAgent();'));
+	});
+
+	it('tells the model to rewrite a template copy instead of asking clarifying questions', () => {
+		const prompt = think.slice(think.indexOf('private buildSystemPrompt('), think.indexOf('private async seedEmptySpace('));
+		expect(prompt).toContain('this.state.templateStart');
+		expect(prompt).toContain("'## Started from a template'");
+		expect(prompt).toContain('rewrite the existing site for it in that same turn without calling \\`ask_questions\\`');
+		expect(prompt).toContain("'## Clarify before building'");
+	});
+
 	it('personalizes only the first turn', () => {
 		expect(think).toContain('const templateStart = this.isMVPGenerated() ? undefined : this.state.templateStart;');
 	});

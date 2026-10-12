@@ -223,6 +223,8 @@ export class ThinkCodingBehavior
 			thinkModelId,
 			pendingImages: (initArgs.images ?? []).map(toPendingImage),
 			currentBranch: 'main',
+			// Set before the agent is configured, because the system prompt depends on it.
+			templateStart: templateSeed ? { templateId: templateSeed.templateId, versionId: templateSeed.versionId, name: templateSeed.name } : undefined,
 		});
 
 		const configureStartedAt = performance.now();
@@ -344,6 +346,20 @@ export class ThinkCodingBehavior
 	 * files don't know about — the environment and custom instructions for the run.
 	 */
 	private buildSystemPrompt(modelName: string): string {
+		const templateStart = this.state.templateStart;
+		const startGuidance = templateStart
+			? [
+					'## Started from a template',
+					`This app started as a copy of the template "${templateStart.name}". Its files already contain a complete, working site. When the user describes their business, rewrite the existing site for it in that same turn without calling \`ask_questions\`: infer anything they did not say and invent plausible business names, product names, prices and copy that fit their description. Keep the layout, components, styles and working features.`,
+				]
+			: [
+					'## Clarify before building',
+					'If the request is underspecified or ambiguous (e.g. a one-line idea with no details on features, scope, data, or design), do NOT start writing files yet. Instead, on this turn:',
+					'1. Briefly state the assumptions you would make to proceed.',
+					'2. Call the `ask_questions` tool with all the concise, targeted clarifying questions you need answered. Each question can include predefined options and can allow multiple selections and/or a custom free-text answer.',
+					'3. End your turn after calling `ask_questions`. Do not write/edit files or deploy until the scope is clear or the user tells you to proceed with your assumptions.',
+					'If the request is already clear and specific, skip this and go straight to building.',
+				];
 		return [
 			`You are powered by the model with the exact ID ${modelName}.`,
 			'<env>',
@@ -359,12 +375,7 @@ export class ThinkCodingBehavior
 			'## Naming',
 			'If this project does not yet have a clear name (e.g. the request is a long or vague description rather than a concise product name), call the `set_title` tool once, early, with a short human-friendly title (Title Case, under ~60 characters). Skip it if a good title already exists; do not rename on every turn.',
 			'',
-			'## Clarify before building',
-			'If the request is underspecified or ambiguous (e.g. a one-line idea with no details on features, scope, data, or design), do NOT start writing files yet. Instead, on this turn:',
-			'1. Briefly state the assumptions you would make to proceed.',
-			'2. Call the `ask_questions` tool with all the concise, targeted clarifying questions you need answered. Each question can include predefined options and can allow multiple selections and/or a custom free-text answer.',
-			'3. End your turn after calling `ask_questions`. Do not write/edit files or deploy until the scope is clear or the user tells you to proceed with your assumptions.',
-			'If the request is already clear and specific, skip this and go straight to building.',
+			...startGuidance,
 			'',
 			'## Deploy & verify workflow (platform-specific)',
 			'Once you are actively building (the scope is clear or the user confirmed), this app is previewed on Cloudflare Workers via SpaceDO — there is no shell. In a building turn, do NOT end after only writing files:',
@@ -408,10 +419,6 @@ export class ThinkCodingBehavior
 		await this.callSpace((space) => space.importFiles(files, `Start from template ${seed.name} v${seed.version}`));
 		const previewUrl = await this.deployCurrentBranch();
 		if (!previewUrl) throw new Error(`The template ${seed.name} could not be deployed`);
-		this.setState({
-			...this.state,
-			templateStart: { templateId: seed.templateId, versionId: seed.versionId, name: seed.name },
-		});
 		if (!described) this.setMVPGenerated();
 	}
 
