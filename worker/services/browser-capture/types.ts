@@ -25,11 +25,13 @@ export interface CapturePayload {
 
 export interface ScreenshotPayload {
 	url: string;
-	viewport: { width: number; height: number };
+	viewport: { width: number; height: number; isMobile?: boolean; hasTouch?: boolean };
 	/** Navigation timeout in milliseconds. */
 	timeoutMs: number;
 	/** Milliseconds to wait after the network goes idle, so late renders land in the image. */
 	settleMs: number;
+	/** Image format of the returned base64 data; PNG when omitted. */
+	format?: 'png' | 'jpeg';
 }
 
 export interface ReferencePayload {
@@ -157,7 +159,7 @@ export interface CapturePage {
 
 export interface BrowserCaptureClient {
 	captureConsoleLogs(payload: CapturePayload): Promise<BrowserConsoleCaptureResult>;
-	/** Returns a base64 PNG (no data URL prefix) of the page's viewport; throws on failure. */
+	/** Returns a base64 image (no data URL prefix) of the page's viewport, PNG unless the payload asks for JPEG; throws on failure. */
 	captureScreenshot(payload: ScreenshotPayload): Promise<string>;
 	/** Captures a reference page: screenshots plus design data; throws on failure. */
 	captureReference(payload: ReferencePayload): Promise<ReferenceCaptureResult>;
