@@ -155,8 +155,8 @@ export class TemplateService extends BaseService {
 
     /**
      * Publish a version: approve it, supersede the previous one, and list the
-     * template. Returns false, and changes nothing, when the version was no
-     * longer pending.
+     * template. Returns false when the version was no longer pending; a version
+     * that is not approved never becomes the template's current version.
      */
     async approveVersion(input: {
         templateId: string;
