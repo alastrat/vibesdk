@@ -153,45 +153,64 @@ export class TemplateService extends BaseService {
         return row ?? null;
     }
 
-    /** Publish a version: approve it, supersede the previous one, and list the template. */
+    /**
+     * Publish a version: approve it, supersede the previous one, and list the
+     * template. Returns false, and changes nothing, when the version was no
+     * longer pending.
+     */
     async approveVersion(input: {
         templateId: string;
         versionId: string;
         supersedeVersionId: string | null;
         reviewerId: string;
-    }): Promise<void> {
+    }): Promise<boolean> {
         const now = new Date();
+        // Evaluated inside the batch, so the follow-up statements only apply
+        // when the approval above them took effect.
+        const nowApproved = sql`exists (select 1 from template_versions as approved_version where approved_version.id = ${input.versionId} and approved_version.status = 'approved')`;
         const approve = this.database
             .update(schema.templateVersions)
             .set({ status: 'approved', reviewedBy: input.reviewerId, reviewedAt: now })
-            .where(eq(schema.templateVersions.id, input.versionId));
+            .where(and(eq(schema.templateVersions.id, input.versionId), eq(schema.templateVersions.status, 'pending')))
+            .returning({ id: schema.templateVersions.id });
         const publish = this.database
             .update(schema.templates)
             .set({ currentVersionId: input.versionId, status: 'listed', updatedAt: now })
-            .where(eq(schema.templates.id, input.templateId));
+            .where(and(eq(schema.templates.id, input.templateId), nowApproved));
         if (input.supersedeVersionId) {
             const supersede = this.database
                 .update(schema.templateVersions)
                 .set({ status: 'superseded' })
-                .where(eq(schema.templateVersions.id, input.supersedeVersionId));
-            await this.database.batch([approve, supersede, publish]);
-            return;
+                .where(and(
+                    eq(schema.templateVersions.id, input.supersedeVersionId),
+                    eq(schema.templateVersions.status, 'approved'),
+                    nowApproved,
+                ));
+            const [approved] = await this.database.batch([approve, supersede, publish]);
+            return approved.length > 0;
         }
-        await this.database.batch([approve, publish]);
+        const [approved] = await this.database.batch([approve, publish]);
+        return approved.length > 0;
     }
 
-    async rejectVersion(versionId: string, reviewerId: string, reason: string): Promise<void> {
-        await this.database
+    /** Returns false when the version was no longer pending. */
+    async rejectVersion(versionId: string, reviewerId: string, reason: string): Promise<boolean> {
+        const changed = await this.database
             .update(schema.templateVersions)
             .set({ status: 'rejected', reviewedBy: reviewerId, reviewedAt: new Date(), rejectionReason: reason })
-            .where(and(eq(schema.templateVersions.id, versionId), eq(schema.templateVersions.status, 'pending')));
+            .where(and(eq(schema.templateVersions.id, versionId), eq(schema.templateVersions.status, 'pending')))
+            .returning({ id: schema.templateVersions.id });
+        return changed.length > 0;
     }
 
-    async withdrawVersion(versionId: string): Promise<void> {
-        await this.database
+    /** Returns false when the version was no longer pending. */
+    async withdrawVersion(versionId: string): Promise<boolean> {
+        const changed = await this.database
             .update(schema.templateVersions)
             .set({ status: 'withdrawn' })
-            .where(and(eq(schema.templateVersions.id, versionId), eq(schema.templateVersions.status, 'pending')));
+            .where(and(eq(schema.templateVersions.id, versionId), eq(schema.templateVersions.status, 'pending')))
+            .returning({ id: schema.templateVersions.id });
+        return changed.length > 0;
     }
 
     async setListing(templateId: string, listed: boolean): Promise<void> {
