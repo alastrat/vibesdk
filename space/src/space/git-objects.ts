@@ -220,6 +220,40 @@ export async function readBlobBytes(fs: FileSystem, oid: string): Promise<Uint8A
   return blob
 }
 
+/** Every file in the tree of `commitOid` with its bytes, sorted by path. */
+export async function readCommitFiles(
+  fs: FileSystem,
+  commitOid: string,
+): Promise<Array<{ path: string; bytes: Uint8Array }>> {
+  const tree = await walkTreeFiles(fs, commitOid)
+  const files: Array<{ path: string; bytes: Uint8Array }> = []
+  for (const [path, entry] of tree) {
+    files.push({ path, bytes: await readBlobBytes(fs, entry.oid) })
+  }
+  return files.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/**
+ * Write `files` into the working tree as raw bytes, creating parent
+ * directories and skipping reserved paths. Returns how many were written.
+ */
+export async function writeWorkdirFiles(
+  fs: FileSystem,
+  files: Array<{ path: string; bytes: Uint8Array }>,
+  isReserved: (path: string) => boolean,
+): Promise<number> {
+  let written = 0
+  for (const file of files) {
+    const path = file.path.startsWith("/") ? file.path : `/${file.path}`
+    if (isReserved(path)) continue
+    const dir = path.slice(0, path.lastIndexOf("/"))
+    if (dir) await fs.mkdir(dir, { recursive: true })
+    await fs.writeFileBytes(path, file.bytes)
+    written++
+  }
+  return written
+}
+
 /**
  * Point the local branch at the fetched head when it is unborn (the cold-start
  * case). isomorphic-git's `fetch` only updates the remote-tracking ref, so

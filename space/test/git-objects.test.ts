@@ -16,10 +16,13 @@ import { createGit } from "@cloudflare/shell/git"
 import {
   createArtifactsBaseSource,
   createGitFs,
+  readCommitFiles,
   resolveHead,
   stageWorkdir,
   walkTreeFiles,
+  writeWorkdirFiles,
 } from "../src/space/git-objects"
+import { withErrorCodes } from "../src/space/fs-error-codes"
 
 const AUTHOR = { name: "Test", email: "test@vibesdk.local" }
 const isReserved = (p: string) => p === "/.afs" || p.startsWith("/.afs/") || p === "/.git" || p.startsWith("/.git/")
@@ -53,7 +56,7 @@ function baseSource(fs: FileSystem, opts?: { hasRemote?: boolean; fetchOk?: bool
 
 describe("createArtifactsBaseSource.loadSnapshot", () => {
   it("reconciles an unborn local branch onto the fetched head", async () => {
-    const fs = new InMemoryFs()
+    const fs = withErrorCodes(new InMemoryFs())
     const g = createGit(fs)
     await g.init({ defaultBranch: "main" })
     await fs.writeFile("/app.ts", "v1")
@@ -76,7 +79,7 @@ describe("createArtifactsBaseSource.loadSnapshot", () => {
   })
 
   it("never clobbers an existing local branch", async () => {
-    const fs = new InMemoryFs()
+    const fs = withErrorCodes(new InMemoryFs())
     const g = createGit(fs)
     await g.init({ defaultBranch: "main" })
     await fs.writeFile("/app.ts", "v1")
@@ -95,7 +98,7 @@ describe("createArtifactsBaseSource.loadSnapshot", () => {
   })
 
   it("returns null without fetching when no remote repo is known", async () => {
-    const fs = new InMemoryFs()
+    const fs = withErrorCodes(new InMemoryFs())
     await createGit(fs).init({ defaultBranch: "main" })
     let fetches = 0
     const source = createArtifactsBaseSource({
@@ -112,7 +115,7 @@ describe("createArtifactsBaseSource.loadSnapshot", () => {
   })
 
   it("throws on a failed fetch so the caller can retry later", async () => {
-    const fs = new InMemoryFs()
+    const fs = withErrorCodes(new InMemoryFs())
     await createGit(fs).init({ defaultBranch: "main" })
     await expect(baseSource(fs, { fetchOk: false }).loadSnapshot()).rejects.toThrow(/fetch failed/i)
   })
@@ -120,7 +123,7 @@ describe("createArtifactsBaseSource.loadSnapshot", () => {
 
 describe("stageWorkdir", () => {
   it("stages new files but never reserved bookkeeping paths", async () => {
-    const fs = new InMemoryFs()
+    const fs = withErrorCodes(new InMemoryFs())
     const g = createGit(fs)
     await g.init({ defaultBranch: "main" })
     await fs.mkdir("/.afs", { recursive: true })
@@ -136,7 +139,7 @@ describe("stageWorkdir", () => {
   })
 
   it("stages deletions of tracked files", async () => {
-    const fs = new InMemoryFs()
+    const fs = withErrorCodes(new InMemoryFs())
     const g = createGit(fs)
     await g.init({ defaultBranch: "main" })
     await fs.writeFile("/keep.ts", "k")
@@ -149,5 +152,46 @@ describe("stageWorkdir", () => {
 
     const files = await walkTreeFiles(fs, oid)
     expect([...files.keys()]).toEqual(["/keep.ts"])
+  })
+})
+
+describe("readCommitFiles", () => {
+  it("returns the committed bytes, not later working-tree edits", async () => {
+    const fs = withErrorCodes(new InMemoryFs())
+    await createGit(fs).init({ defaultBranch: "main" })
+    const logo = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x00, 0xff])
+    await fs.writeFile("/index.html", "<h1>v1</h1>")
+    await fs.mkdir("/public", { recursive: true })
+    await fs.writeFileBytes("/public/logo.png", logo)
+    const commit = await commitAll(fs, "first")
+    await fs.writeFile("/index.html", "<h1>uncommitted</h1>")
+
+    const files = await readCommitFiles(fs, commit)
+
+    expect(files.map((file) => file.path)).toEqual(["/index.html", "/public/logo.png"])
+    expect(new TextDecoder().decode(files[0].bytes)).toBe("<h1>v1</h1>")
+    expect(files[1].bytes).toEqual(logo)
+  })
+})
+
+describe("writeWorkdirFiles", () => {
+  it("writes nested files byte-for-byte and skips reserved paths", async () => {
+    const fs = withErrorCodes(new InMemoryFs())
+    const font = new Uint8Array([0, 1, 2, 250])
+
+    const written = await writeWorkdirFiles(
+      fs,
+      [
+        { path: "src/components/Hero.tsx", bytes: new TextEncoder().encode("export {}") },
+        { path: "/fonts/a.woff2", bytes: font },
+        { path: ".git/config", bytes: new TextEncoder().encode("[core]") },
+      ],
+      isReserved,
+    )
+
+    expect(written).toBe(2)
+    expect(await fs.readFile("/src/components/Hero.tsx")).toBe("export {}")
+    expect(await fs.readFileBytes("/fonts/a.woff2")).toEqual(font)
+    expect(await fs.exists("/.git/config")).toBe(false)
   })
 })
