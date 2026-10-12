@@ -2,7 +2,7 @@ import { WebSocketMessageResponses } from '../../../agents/constants';
 import { BaseController } from '../baseController';
 import { generateId } from '../../../utils/idGenerator';
 import { AgentState } from '../../../agents/core/state';
-import { BehaviorType, ProjectType } from '../../../agents/core/types';
+import { BehaviorType, ProjectType, type TemplateSeed } from '../../../agents/core/types';
 import { getBehaviorTypeForProject } from '../../../agents/core/features';
 import { getAgentStub, getTemplateForQuery } from '../../../agents';
 import { isThinkModelId, resolveThinkModel } from '../../../agents/think/model-config';
@@ -15,7 +15,8 @@ import {
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
 import { ApiResponse, ControllerResponse } from '../types';
 import { RouteContext } from '../../types/route-context';
-import { AppService, ModelConfigService } from '../../../database';
+import { AppService, ModelConfigService, TemplateService } from '../../../database';
+import { resolveTemplateStart } from '../../../services/templates/start';
 import { ModelConfig, credentialsToRuntimeOverrides } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { validateWebSocketOrigin } from '../../../middleware/security/websocket';
@@ -71,7 +72,8 @@ export class CodingAgentController extends BaseController {
             }
 
             const query = body.query;
-            if (typeof query !== 'string' || query.trim().length === 0) {
+            const startsFromTemplate = body.templateId !== undefined;
+            if (typeof query !== 'string' || (query.trim().length === 0 && !startsFromTemplate)) {
                 return CodingAgentController.createErrorResponse('Missing "query" field in request body', 400);
             }
             if (query.length > MAX_AGENT_QUERY_LENGTH) {
@@ -97,6 +99,14 @@ export class CodingAgentController extends BaseController {
             const writer = writable.getWriter();
             // Check if user is authenticated (required for app creation)
             const user = context.user!;
+            let templateSeed: TemplateSeed | undefined;
+            if (startsFromTemplate) {
+                const start = await resolveTemplateStart(new TemplateService(env), body.templateId, user.id);
+                if (!start.ok) {
+                    return CodingAgentController.createErrorResponse(start.error, start.status);
+                }
+                templateSeed = start.seed;
+            }
             try {
                 await RateLimitService.enforceAppCreationRateLimit(env, context.config.security.rateLimit, user, request);
             } catch (error) {
@@ -111,7 +121,7 @@ export class CodingAgentController extends BaseController {
             const agentId = generateId();
             const modelConfigService = new ModelConfigService(env);
             const projectType = resolveProjectType(body);
-            const behaviorType = resolveBehaviorType(body);
+            const behaviorType: BehaviorType = templateSeed ? 'think' : resolveBehaviorType(body);
 
             this.logger.info(`Resolved behaviorType: ${behaviorType}, projectType: ${projectType} for agent ${agentId}`);
                                 
@@ -256,13 +266,18 @@ export class CodingAgentController extends BaseController {
             }
 
             const initArgs = isThink
-                ? { ...baseInitArgs, thinkModelId: thinkModel.id }
+                ? { ...baseInitArgs, thinkModelId: thinkModel.id, templateSeed }
                 : { ...baseInitArgs, templateInfo: { templateDetails: templateResult!.templateDetails, selection: templateResult!.selection } };
 
             const agentPromise = agentInstance.initialize(initArgs) as Promise<AgentState>;
             void (async () => {
                 try {
                     await agentPromise;
+                    if (templateSeed) {
+                        await new TemplateService(env).incrementUseCount(templateSeed.templateId).catch((error: unknown) => {
+                            this.logger.warn('Failed to count a template use', error);
+                        });
+                    }
                     this.logger.info(`Agent ${agentId} initialized successfully`);
                 } catch (error) {
                     const message = error instanceof Error ? error.message : String(error);

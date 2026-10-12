@@ -119,6 +119,13 @@ export interface AgenticState extends BaseProjectState {
     currentPlan: Plan;
 }
 
+/** The template a Think app started from. */
+export interface TemplateStart {
+    templateId: string;
+    versionId: string;
+    name: string;
+}
+
 /**
  * Think agent state — backed by `@cloudflare/think` (ThinkAgent DO) for the
  * agentic loop and `@space-do/space` SpaceDO for files/preview/deploy.
@@ -143,6 +150,8 @@ export interface ThinkState extends BaseProjectState {
     /** Uploaded images waiting for the next turn; kept in state so a restart does not drop them. */
     pendingImages?: PendingImage[];
     cloudflareDeploymentUrl?: string;
+    /** Set when the app started from a template; its first turn personalizes the copy. */
+    templateStart?: TemplateStart;
 }
 
 export type AgentState = PhasicState | AgenticState | ThinkState;

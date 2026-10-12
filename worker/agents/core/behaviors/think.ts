@@ -2,7 +2,7 @@ import { RpcTarget } from 'cloudflare:workers';
 import { getAgentByName } from 'agents';
 import type { UIMessage } from 'ai';
 import { ThinkState } from '../state';
-import { AgentInitArgs, DeploymentTarget, TemplateSource } from '../types';
+import { AgentInitArgs, DeploymentTarget, TemplateSeed, TemplateSource } from '../types';
 import { BaseCodingBehavior } from './base';
 import { WebSocketMessageResponses } from '../../constants';
 import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
@@ -42,6 +42,8 @@ import { getBrowserCaptureClient } from '../../../services/browser-capture/facto
 import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome } from '../../think/references';
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
+import { readTemplateSnapshot } from 'worker/services/templates/store';
+import { initialProjectTitle } from '../../think/template-start';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -69,6 +71,10 @@ type SpaceRpcStub = {
 	) => Promise<{ preview_url?: string; commit_hash?: string; error?: string; details?: string }>;
 	getDeploymentBundle: (branch: string) => Promise<BranchDeploymentBundle>;
 	rollbackToCommit: (branch: string, commitHash: string) => Promise<unknown>;
+	importFiles: (
+		files: Array<{ path: string; bytes: Uint8Array }>,
+		message: string,
+	) => Promise<{ sha: string; message: string }>;
 };
 
 /** Subset of AI-SDK `UIMessageChunk` shapes this behavior reacts to. */
@@ -179,9 +185,9 @@ export class ThinkCodingBehavior
 		await super.initialize(initArgs);
 		// Think projects are template-free: SpaceDO + the agent's own file tools
 		// own scaffolding entirely. We intentionally ignore `templateInfo`.
-		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId } = initArgs;
+		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId, templateSeed } = initArgs;
 
-		const baseName = (query || 'project').toString();
+		const baseName = (query || templateSeed?.name || 'project').toString();
 		const projectName = generateProjectName(
 			baseName,
 			generateNanoId(),
@@ -196,7 +202,7 @@ export class ThinkCodingBehavior
 			projectName,
 			query,
 			blueprint: {
-				title: deriveProjectTitle(baseName),
+				title: initialProjectTitle(query, templateSeed?.name, deriveProjectTitle),
 				projectName,
 				description: query,
 				colorPalette: ['#1e1e1e'],
@@ -222,7 +228,11 @@ export class ThinkCodingBehavior
 		const configureDurationMs = performance.now() - configureStartedAt;
 
 		const seedStartedAt = performance.now();
-		await this.seedEmptySpace();
+		if (templateSeed) {
+			await this.seedFromTemplate(templateSeed);
+		} else {
+			await this.seedEmptySpace();
+		}
 		const seedDurationMs = performance.now() - seedStartedAt;
 
 		this.logger.info(
@@ -384,6 +394,25 @@ export class ThinkCodingBehavior
 		}
 	}
 
+	/**
+	 * Start the workspace from a template snapshot: the usual empty seed, the
+	 * template's files as one commit, then a deploy so the preview shows the
+	 * copy before any model turn. Throws when the copy cannot be made, which
+	 * fails initialization before the app is saved.
+	 */
+	private async seedFromTemplate(seed: TemplateSeed): Promise<void> {
+		await this.seedEmptySpace();
+		const files = await readTemplateSnapshot(this.env.TEMPLATES_BUCKET, seed.snapshotKey);
+		await this.callSpace((space) => space.importFiles(files, `Start from template ${seed.name} v${seed.version}`));
+		const previewUrl = await this.deployCurrentBranch();
+		if (!previewUrl) throw new Error(`The template ${seed.name} could not be deployed`);
+		this.setState({
+			...this.state,
+			templateStart: { templateId: seed.templateId, versionId: seed.versionId, name: seed.name },
+		});
+		if (!this.state.query) this.setMVPGenerated();
+	}
+
 	// ──────────────────────────────────────────────────────────────
 	// Generation orchestration
 
@@ -526,7 +555,8 @@ export class ThinkCodingBehavior
 				let completed: boolean;
 				try {
 					const references = await this.captureTurnReferences(compiled, conversationId);
-					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references });
+					const templateStart = this.isMVPGenerated() ? undefined : this.state.templateStart;
+					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references, templateStart });
 					completed = await this.runPrompt(message, conversationId);
 				} catch (e) {
 					this.logger.error('Think prompt failed', e);

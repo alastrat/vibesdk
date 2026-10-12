@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { agentAssetUrl } from './agent-assets';
 import type { ReferenceOutcome } from './references';
+import { templateStartInstruction } from './template-start';
 import { buildTurnMessage, isHiddenPart } from './turn-message';
 
 const CAPTURED: ReferenceOutcome = {
@@ -76,5 +77,26 @@ describe('isHiddenPart', () => {
 		expect(isHiddenPart({ type: 'text', text: 'x' })).toBe(false);
 		expect(isHiddenPart({ type: 'file', url: 'https://x' })).toBe(false);
 		expect(isHiddenPart(null)).toBe(false);
+	});
+});
+
+describe('buildTurnMessage on a template start', () => {
+	it('adds the hidden template instruction right after the visible text', () => {
+		const message = buildTurnMessage({
+			id: 'm1',
+			text: 'A bakery in Lisbon',
+			images: [],
+			references: [],
+			templateStart: { name: 'Fernwood' },
+		});
+		expect(message.parts).toEqual([
+			{ type: 'text', text: 'A bakery in Lisbon' },
+			{
+				type: 'text',
+				text: templateStartInstruction('Fernwood', 'A bakery in Lisbon'),
+				providerMetadata: { estori: { hidden: true } },
+			},
+		]);
+		expect(isHiddenPart(message.parts[1])).toBe(true);
 	});
 });

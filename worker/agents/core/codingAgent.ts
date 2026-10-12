@@ -448,6 +448,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         this.logger().info(`Saving agent ${this.getAgentId()} to database`);
         // Save the app to database (authenticated users only)
         const appService = new AppService(this.env);
+        const state = this.state;
+        const fromTemplateVersionId = 'templateStart' in state ? state.templateStart?.versionId ?? null : null;
         await appService.createApp({
             id: this.state.metadata.agentId,
             userId: this.state.metadata.userId,
@@ -457,6 +459,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             originalPrompt: this.state.query,
             finalPrompt: this.state.query,
             framework: this.state.blueprint.frameworks.join(','),
+            fromTemplateVersionId,
             visibility: 'private',
             status: 'generating',
                 createdAt: new Date(),

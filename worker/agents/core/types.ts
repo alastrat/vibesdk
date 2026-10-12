@@ -65,6 +65,8 @@ interface ThinkAgentInitArgs extends BaseAgentInitArgs {
     };
     /** Catalog id of the build model (already resolved by the caller). */
     thinkModelId?: string;
+    /** Start from this template version instead of an empty workspace. */
+    templateSeed?: TemplateSeed;
 }
 
 /** Generic initialization arguments based on state type */
@@ -78,6 +80,15 @@ export type AgentInitArgs<TState extends PhasicState | AgenticState | ThinkState
 export interface TemplateSource {
     commit: string;
     previewUrl: string;
+}
+
+/** A template version to copy into a new Think app's workspace. */
+export interface TemplateSeed {
+    templateId: string;
+    versionId: string;
+    name: string;
+    version: number;
+    snapshotKey: string;
 }
 
 export type Plan = string;
