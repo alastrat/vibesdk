@@ -2064,7 +2064,7 @@ class CloudflareDeploymentManager {
             execSync('bun run db:migrate:remote', { stdio: 'inherit', cwd: PROJECT_ROOT, encoding: 'utf8' });
         } catch (error) {
             throw new DeploymentError(
-                'Remote database migrations failed - the deployed Worker may be running against an unmigrated database',
+                'Remote database migrations failed - the new Worker was not deployed',
                 error instanceof Error ? error : new Error(String(error)),
             );
         }
@@ -2166,28 +2166,31 @@ class CloudflareDeploymentManager {
 
 			let deploymentSucceeded = false;
 			try {
-				// Step 5: Deploy with Wrangler (now without conflicts)
-				console.log('\n📋 Step 5: Deploying to Cloudflare Workers...');
+				// Step 5: Run database migrations before the new Worker goes live. The new
+				// Worker reads the new schema, while migrations are additive and safe for
+				// the Worker still running. A failed migration throws here, so the deploy
+				// stops before a Worker that needs the new schema is live.
+				console.log('\n📋 Step 5: Running database migrations...');
+				await this.runDatabaseMigrations();
+
+				// Step 6: Deploy with Wrangler (now without conflicts)
+				console.log('\n📋 Step 6: Deploying to Cloudflare Workers...');
 				await this.wranglerDeploy();
 
-				// Step 6: Update secrets (now no conflicts)
-				console.log('\n📋 Step 6: Updating production secrets...');
+				// Step 7: Update secrets (now no conflicts)
+				console.log('\n📋 Step 7: Updating production secrets...');
 				await this.updateSecrets();
 
 				deploymentSucceeded = true;
 			} finally {
-				// Step 7: Always restore original vars (even if deployment failed)
-				console.log('\n📋 Step 7: Restoring original configuration...');
+				// Step 8: Always restore original vars (even if deployment failed)
+				console.log('\n📋 Step 8: Restoring original configuration...');
 				await this.restoreOriginalVars(conflictingVars);
 				this.restoreArtifactsBinding();
 				
 				// Clear the backup since we've restored
 				this.conflictingVarsForCleanup = null;
 			}
-
-            // Step 8: Run database migrations
-            console.log('\n📋 Step 8: Running database migrations...');
-            await this.runDatabaseMigrations();
 
 			// Deployment complete
 			if (deploymentSucceeded) {
