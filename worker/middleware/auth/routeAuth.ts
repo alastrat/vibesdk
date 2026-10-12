@@ -5,7 +5,7 @@
 import { createMiddleware } from 'hono/factory';
 import { AuthUser } from '../../types/auth-types';
 import { createLogger } from '../../logger';
-import { AppService } from '../../database';
+import { AppService, UserService } from '../../database';
 import { authMiddleware } from './auth';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { errorResponse } from '../../api/responses';
@@ -21,15 +21,17 @@ const logger = createLogger('RouteAuth');
 /**
  * Authentication levels for route protection
  */
-export type AuthLevel = 'public' | 'authenticated' | 'owner-only';
+export type AuthLevel = 'public' | 'authenticated' | 'owner-only' | 'admin';
 
 /**
  * Authentication requirement configuration
  */
 export interface AuthRequirement {
     required: boolean;
-    level: 'public' | 'authenticated' | 'owner-only';
+    level: AuthLevel;
     resourceOwnershipCheck?: (user: AuthUser, params: Record<string, string>, env: Env) => Promise<boolean>;
+    /** Platform role check for admin routes; reads the role on every request. */
+    roleCheck?: (user: AuthUser, env: Env) => Promise<boolean>;
 }
 
 /**
@@ -73,6 +75,13 @@ export const AuthConfig = {
         required: true, 
         level: 'owner-only' as const,
         resourceOwnershipCheck: checkAppOwnership
+    },
+
+    // Require the platform admin role (template review)
+    admin: {
+        required: true,
+        level: 'admin' as const,
+        roleCheck: checkAdminRole
     },
     
     // Public read access, but owner required for modifications
@@ -136,6 +145,21 @@ export async function routeAuthChecks(
             return { success: true };
         }
 
+        // For admin routes
+        if (requirement.level === 'admin') {
+            if (!user) {
+                return {
+                    success: false,
+                    response: createAuthRequiredResponse()
+                };
+            }
+            const isAdmin = requirement.roleCheck ? await requirement.roleCheck(user, env) : false;
+            return {
+                success: isAdmin,
+                response: isAdmin ? undefined : createForbiddenResponse('Admin access required')
+            };
+        }
+
         // Default fallback
         return { success: true };
     } catch (error) {
@@ -168,7 +192,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
     }
     
     // Only perform auth if we need it or don't have user yet
-    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only')) {
+    if (!user && (requirement.level === 'authenticated' || requirement.level === 'owner-only' || requirement.level === 'admin')) {
         const request = c.req.raw;
         const env = c.env;
         const params = c.req.param();
@@ -290,6 +314,19 @@ export async function checkAppOwnership(user: AuthUser, params: Record<string, s
         return ownershipResult.isOwner;
     } catch (error) {
         logger.error('Error checking app ownership', error);
+        return false;
+    }
+}
+
+/**
+ * Check the platform admin role in D1. Read on every request, so a role
+ * change takes effect without a new session.
+ */
+export async function checkAdminRole(user: AuthUser, env: Env): Promise<boolean> {
+    try {
+        return (await new UserService(env).getRole(user.id)) === 'admin';
+    } catch (error) {
+        logger.error('Error checking admin role', error);
         return false;
     }
 }

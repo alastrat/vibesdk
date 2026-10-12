@@ -7,6 +7,7 @@ import { BaseService } from './BaseService';
 import * as schema from '../schema';
 import { eq, and, sql, lt, ne } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
+import type { UserRole } from '../../../shared/types/templates';
 
 /**
  * User Service Class
@@ -53,6 +54,16 @@ export class UserService extends BaseService {
             .limit(1);
             
         return users[0] || null;
+    }
+
+    /** The user's platform role, or null when the user does not exist. */
+    async getRole(userId: string): Promise<UserRole | null> {
+        const row = await this.database
+            .select({ role: schema.users.role })
+            .from(schema.users)
+            .where(eq(schema.users.id, userId))
+            .get();
+        return row?.role ?? null;
     }
 
     async updateUserActivity(userId: string): Promise<void> {

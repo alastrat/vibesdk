@@ -333,6 +333,33 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Per-user cap on template submissions. Throws RateLimitExceededError when
+	 * the user has submitted too many templates in the last 24 hours.
+	 */
+	static async enforceTemplateSubmissionRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		user: AuthUser,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.TEMPLATE_SUBMISSION];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const identifier = await this.getUserIdentifier(user);
+		const key = this.buildRateLimitKey(RateLimitType.TEMPLATE_SUBMISSION, identifier);
+		const result = await this.enforce(env, key, config, RateLimitType.TEMPLATE_SUBMISSION);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Template submission rate limit exceeded. Maximum ${limitConfig.limit} submissions per day`,
+				RateLimitType.TEMPLATE_SUBMISSION,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again tomorrow.'],
+			);
+		}
+	}
+
+	/**
 	 * Get remaining credits for LLM calls without incrementing (for pre-flight checks)
 	 * Works in both dev and prod - uses local DO in dev mode
 	 */
