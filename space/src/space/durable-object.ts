@@ -387,9 +387,18 @@ export class SpaceDO extends DurableObject<Env> {
   /**
    * Every file in the tree of `commit`, as bytes. Reads git objects, so the
    * result is the committed content even when the working tree has edits.
+   *
+   * A best-effort fetch first brings in the commit's objects when the startup
+   * fetch of the Artifacts base did not complete.
    */
   async readTreeAtCommit(commit: string): Promise<Array<{ path: string; bytes: Uint8Array }>> {
     await this.ensureInit()
+    try {
+      const branch = (await this.currentBranch()) ?? "main"
+      await this.backend.fetch(branch)
+    } catch {
+      // Best-effort: read whatever is already local.
+    }
     const files = await readCommitFiles(this.fs, commit)
     return files.filter((file) => !isReservedPath(file.path))
   }
