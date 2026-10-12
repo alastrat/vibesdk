@@ -1533,7 +1533,7 @@ function ChatSession() {
 				{app && isOwner && (
 					<SubmitTemplateDialog
 						appId={app.id}
-						appTitle={app.title}
+						appTitle={headerTitle || app.title}
 						open={isTemplateDialogOpen}
 						onOpenChange={setIsTemplateDialogOpen}
 					/>

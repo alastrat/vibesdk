@@ -30,6 +30,11 @@ describe('templates: creators', () => {
 		expect(chat).toContain('<SubmitTemplateDialog');
 	});
 
+	it('passes the live header title to the submit dialog', () => {
+		const chat = source('/src/routes/chat/chat.tsx');
+		expect(chat).toContain('appTitle={headerTitle || app.title}');
+	});
+
 	it('lists the creator templates on the profile', () => {
 		const profile = source('/src/routes/profile.tsx');
 		expect(profile).toContain("{ value: 'templates', label: 'Templates' }");
@@ -40,5 +45,11 @@ describe('templates: creators', () => {
 		const dialog = source('/src/components/templates/SubmitTemplateDialog.tsx');
 		expect(dialog).toContain('I own the rights to this content and allow others to copy and adapt it.');
 		expect(dialog).toContain('disabled={!rightsConfirmed}');
+	});
+
+	it('starts the name from the current title within the server limit and warns it is permanent', () => {
+		const dialog = source('/src/components/templates/SubmitTemplateDialog.tsx');
+		expect(dialog).toContain('slice(0, 60)');
+		expect(dialog).toContain("Name, description, category and price can't be changed after you submit.");
 	});
 });
