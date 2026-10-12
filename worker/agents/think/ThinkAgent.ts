@@ -21,6 +21,7 @@ import { createBrowserConsoleLogsTool } from './browser-logs-tool';
 import { createDeploySpaceTool } from './deploy-tool';
 import { createCommitTool } from './commit-tool';
 import { createSetTitleTool } from './set-title-tool';
+import { serializeTools } from './serial-tools';
 import { selectThinkContextMessages } from './context-selector';
 import { getUserConfigurableSettings } from '../../config';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
@@ -313,25 +314,30 @@ export class ThinkAgent extends Think<Env> {
 		// versions win the tool-merge. Bash is disabled via `workspaceBash`.
 		return {
 			read: createReadTool({ ops }),
-			write: createWriteTool({ ops }),
-			edit: createEditTool({ ops }),
 			list: createListTool({ ops }),
 			find: createFindTool({ ops }),
 			grep: createGrepTool({ ops }),
-			delete: createDeleteTool({ ops }),
-			// Save a restore point without deploying. The model decides when.
-			commit: createCommitTool({ getStub: () => this.getSpaceStub() }),
-			// Commit + deploy the SpaceDO branch so the preview rebuilds.
-			deploy_space: createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
+			// Tools that change, commit, deploy or inspect the deployed workspace
+			// run in call order, so a deploy never ships before a write in the
+			// same step lands.
+			...serializeTools({
+				write: createWriteTool({ ops }),
+				edit: createEditTool({ ops }),
+				delete: createDeleteTool({ ops }),
+				// Save a restore point without deploying. The model decides when.
+				commit: createCommitTool({ getStub: () => this.getSpaceStub() }),
+				// Commit + deploy the SpaceDO branch so the preview rebuilds.
+				deploy_space: createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
+				// Client-side debugging via a real headless browser.
+				get_browser_console_logs: createBrowserConsoleLogsTool({
+					env: this.env,
+					defaultUrl: previewUrl,
+				}),
+			}),
 			// Set the project's short display title (host observes the output).
 			set_title: createSetTitleTool(),
 			// Ask the user clarifying questions via a frontend popup.
 			ask_questions: createAskQuestionsTool(),
-			// Client-side debugging via a real headless browser.
-			get_browser_console_logs: createBrowserConsoleLogsTool({
-				env: this.env,
-				defaultUrl: previewUrl,
-			}),
 		} as unknown as ToolSet;
 	}
 
