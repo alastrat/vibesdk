@@ -227,6 +227,38 @@ export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/t
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
 
+export type {
+	AppTemplateData,
+	CreatorTemplate,
+	CreatorTemplateVersion,
+	MyTemplatesData,
+	PendingTemplateVersion,
+	PendingTemplateVersionsData,
+	PublicTemplateCard,
+	PublicTemplateDetail,
+	RejectTemplateRequest,
+	SubmitTemplateData,
+	SubmitTemplateRequest,
+	TemplateDetailData,
+	TemplateGalleryData,
+	TemplateGalleryParams,
+	TemplateListingData,
+	TemplateListingRequest,
+	TemplateOrigin,
+	TemplatePurchaseData,
+	TemplateVersionActionData,
+	TemplateVersionFileData,
+	TemplateVersionFilesData,
+	TemplateViewerAccess,
+} from 'worker/api/controllers/templates/types';
+export type { TemplateCategory, TemplateListingStatus, TemplateVersionStatus } from '../shared/types/templates.js';
+export {
+	TEMPLATE_CATEGORIES,
+	TEMPLATE_CATEGORY_LABELS,
+	TEMPLATE_PRICE_OPTIONS_CENTS,
+	formatTemplatePrice,
+} from '../shared/types/templates.js';
+
 export type { AIModels } from 'worker/agents/inferutils/config.types';
 // Model selection types
 export type ModelSelectionMode = 'platform' | 'byok' | 'custom';

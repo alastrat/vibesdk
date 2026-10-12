@@ -1,8 +1,16 @@
+import type { TemplateCategory } from '@/api-types';
+
 export type PaginatedAppsListFilters = {
 	sort: string;
 	period: string;
 	framework: string;
 	visibility: string;
+	search: string;
+	limit: number;
+};
+
+export type TemplateGalleryFilters = {
+	category: TemplateCategory | null;
 	search: string;
 	limit: number;
 };
@@ -22,6 +30,18 @@ export const queryKeys = {
 		userAll: () => [...queryKeys.apps.all, 'user'] as const,
 		user: (filters: PaginatedAppsListFilters) =>
 			[...queryKeys.apps.userAll(), filters] as const,
+	},
+	templates: {
+		all: ['templates'] as const,
+		gallery: (filters: TemplateGalleryFilters) => [...queryKeys.templates.all, 'gallery', filters] as const,
+		detail: (slug: string, userId?: string | null) =>
+			[...queryKeys.templates.all, 'detail', slug, userId ?? 'anonymous'] as const,
+		mine: (userId?: string | null) => [...queryKeys.templates.all, 'mine', userId ?? 'anonymous'] as const,
+		app: (appId: string) => [...queryKeys.templates.all, 'app', appId] as const,
+		pending: () => [...queryKeys.templates.all, 'pending'] as const,
+		versionFiles: (versionId: string) => [...queryKeys.templates.all, 'version-files', versionId] as const,
+		versionFile: (versionId: string, path: string) =>
+			[...queryKeys.templates.all, 'version-file', versionId, path] as const,
 	},
 	account: {
 		all: ['account'] as const,

@@ -6,6 +6,20 @@
 
 import type{
 	ApiResponse,
+	AppTemplateData,
+	MyTemplatesData,
+	PendingTemplateVersionsData,
+	RejectTemplateRequest,
+	SubmitTemplateData,
+	SubmitTemplateRequest,
+	TemplateDetailData,
+	TemplateGalleryData,
+	TemplateGalleryParams,
+	TemplateListingData,
+	TemplatePurchaseData,
+	TemplateVersionActionData,
+	TemplateVersionFileData,
+	TemplateVersionFilesData,
 	AppsListData,
 	PublicAppsData,
 	FavoriteToggleData,
@@ -555,6 +569,84 @@ class ApiClient {
 	 */
 	async getAppDetails(appId: string): Promise<ApiResponse<AppDetailsData>> {
 		return this.request<AppDetailsData>(`/api/apps/${appId}`);
+	}
+
+	// ===============================
+	// Template API Methods
+	// ===============================
+
+	async getTemplates(params: TemplateGalleryParams = {}): Promise<ApiResponse<TemplateGalleryData>> {
+		const query = new URLSearchParams();
+		if (params.page) query.set('page', String(params.page));
+		if (params.limit) query.set('limit', String(params.limit));
+		if (params.category) query.set('category', params.category);
+		if (params.search) query.set('search', params.search);
+		const suffix = query.toString();
+		return this.request<TemplateGalleryData>(`/api/templates${suffix ? `?${suffix}` : ''}`);
+	}
+
+	async getTemplate(slug: string): Promise<ApiResponse<TemplateDetailData>> {
+		return this.request<TemplateDetailData>(`/api/templates/${encodeURIComponent(slug)}`);
+	}
+
+	/** Buy a paid template. Payments are in test mode: the purchase is recorded without a charge. */
+	async purchaseTemplate(templateId: string): Promise<ApiResponse<TemplatePurchaseData>> {
+		return this.request<TemplatePurchaseData>(`/api/templates/${templateId}/purchases`, { method: 'POST' });
+	}
+
+	async getMyTemplates(): Promise<ApiResponse<MyTemplatesData>> {
+		return this.request<MyTemplatesData>('/api/templates/mine');
+	}
+
+	/** Template status for one of the owner's apps; quiet because non-owners get 403. */
+	async getAppTemplate(appId: string): Promise<ApiResponse<AppTemplateData>> {
+		return this.request<AppTemplateData>(`/api/apps/${appId}/template`, {}, true);
+	}
+
+	async submitTemplate(appId: string, body: SubmitTemplateRequest): Promise<ApiResponse<SubmitTemplateData>> {
+		return this.request<SubmitTemplateData>(`/api/apps/${appId}/template-submissions`, { method: 'POST', body });
+	}
+
+	async withdrawTemplateVersion(templateId: string, versionId: string): Promise<ApiResponse<TemplateVersionActionData>> {
+		return this.request<TemplateVersionActionData>(`/api/templates/${templateId}/versions/${versionId}/withdraw`, {
+			method: 'POST',
+		});
+	}
+
+	async setTemplateListing(templateId: string, listed: boolean): Promise<ApiResponse<TemplateListingData>> {
+		return this.request<TemplateListingData>(`/api/templates/${templateId}/listing`, {
+			method: 'PUT',
+			body: { listed },
+		});
+	}
+
+	/** Review queue; quiet because non-admins get 403 and the page explains it. */
+	async getPendingTemplateVersions(): Promise<ApiResponse<PendingTemplateVersionsData>> {
+		return this.request<PendingTemplateVersionsData>('/api/admin/templates/pending', {}, true);
+	}
+
+	async getTemplateVersionFiles(versionId: string): Promise<ApiResponse<TemplateVersionFilesData>> {
+		return this.request<TemplateVersionFilesData>(`/api/admin/template-versions/${versionId}/files`);
+	}
+
+	async getTemplateVersionFile(versionId: string, path: string): Promise<ApiResponse<TemplateVersionFileData>> {
+		return this.request<TemplateVersionFileData>(
+			`/api/admin/template-versions/${versionId}/file?path=${encodeURIComponent(path)}`,
+		);
+	}
+
+	async approveTemplateVersion(versionId: string): Promise<ApiResponse<TemplateVersionActionData>> {
+		return this.request<TemplateVersionActionData>(`/api/admin/template-versions/${versionId}/approve`, {
+			method: 'POST',
+		});
+	}
+
+	async rejectTemplateVersion(versionId: string, reason: string): Promise<ApiResponse<TemplateVersionActionData>> {
+		const body: RejectTemplateRequest = { reason };
+		return this.request<TemplateVersionActionData>(`/api/admin/template-versions/${versionId}/reject`, {
+			method: 'POST',
+			body,
+		});
 	}
 
 	/**
