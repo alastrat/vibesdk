@@ -25,4 +25,11 @@ describe('templates: admin review', () => {
 		expect(page).toContain("decision: 'reject', reason");
 		expect(page).toContain('disabled={!reason.trim()}');
 	});
+
+	it('keeps the queue on screen when a refresh fails, and surfaces read errors', () => {
+		const page = source('/src/routes/admin/templates.tsx');
+		expect(page).toContain("Couldn't load the review queue");
+		expect(page).toContain('file.isError');
+		expect(page).not.toContain('dangerouslySetInnerHTML');
+	});
 });

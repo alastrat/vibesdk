@@ -10,7 +10,17 @@ import {
 	useTemplateVersionFiles,
 } from '@/hooks/use-templates';
 import { formatFileSize } from '@/lib/template-display';
-import { formatTemplatePrice, TEMPLATE_CATEGORY_LABELS, type PendingTemplateVersion } from '@/api-types';
+import {
+	formatTemplatePrice,
+	SecurityError,
+	SecurityErrorType,
+	TEMPLATE_CATEGORY_LABELS,
+	type PendingTemplateVersion,
+} from '@/api-types';
+
+function isForbidden(error: unknown): boolean {
+	return error instanceof SecurityError && error.type === SecurityErrorType.FORBIDDEN;
+}
 
 export default function AdminTemplatesPage() {
 	const pending = usePendingTemplateVersions();
@@ -25,16 +35,35 @@ export default function AdminTemplatesPage() {
 						Approve templates that belong in the gallery. A rejection needs a reason the creator will see.
 					</p>
 				</div>
-				{pending.isLoading ? (
+				{pending.data ? (
+					<>
+						{pending.isError && (
+							<p className="text-sm text-kumo-danger">{`Couldn't refresh the queue: ${pending.error.message}`}</p>
+						)}
+						{pending.data.versions.length > 0 ? (
+							pending.data.versions.map((version) => (
+								<PendingVersionCard key={version.versionId} version={version} />
+							))
+						) : (
+							<Empty title="Nothing to review" description="New submissions will show up here." />
+						)}
+					</>
+				) : pending.isLoading ? (
 					<div className="flex justify-center py-16">
 						<Loader />
 					</div>
-				) : pending.isError ? (
-					<Empty title="Admins only" description={pending.error.message} />
-				) : pending.data && pending.data.versions.length > 0 ? (
-					pending.data.versions.map((version) => <PendingVersionCard key={version.versionId} version={version} />)
+				) : isForbidden(pending.error) ? (
+					<Empty title="Admins only" description={pending.error?.message} />
 				) : (
-					<Empty title="Nothing to review" description="New submissions will show up here." />
+					<Empty
+						title="Couldn't load the review queue"
+						description={pending.error?.message}
+						contents={
+							<Button size="sm" variant="secondary" onClick={() => pending.refetch()}>
+								Try again
+							</Button>
+						}
+					/>
 				)}
 			</div>
 		</div>
@@ -184,6 +213,8 @@ function SnapshotFiles({ versionId }: { versionId: string }) {
 					<div className="p-3">
 						<Loader />
 					</div>
+				) : file.isError ? (
+					<p className="p-3 text-sm text-kumo-subtle">{file.error.message}</p>
 				) : file.data?.binary ? (
 					<p className="p-3 text-sm text-kumo-subtle">Binary file ({formatFileSize(file.data.bytes)})</p>
 				) : (
