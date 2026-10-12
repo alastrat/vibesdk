@@ -7,6 +7,7 @@ import {
 	LockKeyIcon,
 	MagnifyingGlassIcon,
 	PlusIcon,
+	SquaresFourIcon,
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { isValid } from 'date-fns';
@@ -301,6 +302,23 @@ export function AppSidebar() {
 							)}
 							icon={<CompassIcon className="size-4" />}
 						/>
+						<Button
+							shape="square"
+							size="base"
+							variant="ghost"
+							aria-label="Templates"
+							title="Templates"
+							aria-current={
+								pathname.startsWith('/templates') ? 'page' : undefined
+							}
+							onClick={() => navigate('/templates')}
+							className={cn(
+								'text-kumo-subtle hover:text-kumo-default',
+								pathname.startsWith('/templates') &&
+									'bg-(--sidebar-active-bg) text-kumo-default',
+							)}
+							icon={<SquaresFourIcon className="size-4" />}
+						/>
 					</div>
 				) : (
 					<div className="flex flex-col gap-1.5">
@@ -336,6 +354,19 @@ export function AppSidebar() {
 								onClick={() => navigate('/discover')}
 							>
 								Discover
+							</Sidebar.MenuButton>
+							<Sidebar.MenuButton
+								active={pathname.startsWith('/templates')}
+								icon={
+									<SquaresFourIcon
+										weight="duotone"
+										className="size-4 -mr-1"
+									/>
+								}
+								tooltip="Templates"
+								onClick={() => navigate('/templates')}
+							>
+								Templates
 							</Sidebar.MenuButton>
 						</Sidebar.Menu>
 

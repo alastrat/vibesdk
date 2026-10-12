@@ -58,6 +58,7 @@ export function useChat({
 	projectType = 'app',
 	behaviorType: explicitBehaviorType,
 	modelId,
+	templateId,
 	autoStart = true,
 	onDebugMessage,
 	onTerminalMessage,
@@ -70,6 +71,8 @@ export function useChat({
 	behaviorType?: BehaviorType;
 	/** Build model for a new think session (a capabilities `thinkModels` id). */
 	modelId?: string;
+	/** Start a new session from this gallery template; the query may then be empty. */
+	templateId?: string;
 	/**
 	 * Whether a brand-new session may be created automatically on mount.
 	 * In-app navigation (e.g. the home prompt box) sets this true. Sessions
@@ -555,15 +558,16 @@ export function useChat({
 
 			try {
 				if (urlChatId === 'new') {
-					if (!userQuery) {
+					if (!userQuery && !templateId) {
 						const errorMsg = 'Please enter a description of what you want to build';
 						logger.error('Query is required for new code generation');
 						toast.error(errorMsg);
 						return;
 					}
 
-					if (userQuery.length > MAX_AGENT_QUERY_LENGTH) {
-						const errorMsg = `Prompt too large (${userQuery.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`;
+					const query = userQuery ?? '';
+					if (query.length > MAX_AGENT_QUERY_LENGTH) {
+						const errorMsg = `Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`;
 						toast.error(errorMsg);
 						setMessages(() => [createAIMessage('main', errorMsg)]);
 						return;
@@ -582,10 +586,11 @@ export function useChat({
 
 					// Start new code generation using API client
 					const response = await apiClient.createAgentSession({
-						query: userQuery,
+						query,
 						projectType,
 						behaviorType: explicitBehaviorType,
 						modelId,
+						templateId,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
 
@@ -682,8 +687,8 @@ export function useChat({
 					
 					// Emit app-created event for sidebar updates
 					appEvents.emitAppCreated(result.agentId, {
-						title: userQuery || 'New App',
-						description: userQuery,
+						title: query || 'New App',
+						description: query,
 					});
 				} else if (connectionStatus.current === 'idle') {
 					// Prevent duplicate connect calls on rerenders
@@ -736,6 +741,7 @@ export function useChat({
 		projectType,
 		explicitBehaviorType,
 		modelId,
+		templateId,
 		connectWithRetry,
 		loadBootstrapFiles,
 		onDebugMessage,

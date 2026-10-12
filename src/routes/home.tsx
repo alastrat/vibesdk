@@ -25,6 +25,7 @@ import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
+import { TemplateStrip } from '@/components/templates/TemplateStrip';
 import { InfoIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { pageTitle } from '@/brand';
@@ -265,6 +266,7 @@ export default function Home() {
 							}
 						/>
 					</motion.div>
+					<TemplateStrip />
 				</div>
 
 				<AnimatePresence mode="popLayout">
