@@ -10,6 +10,7 @@ import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
 import TemplatesPage from './routes/templates';
 import TemplateDetailPage from './routes/templates/detail';
+import AdminTemplatesPage from './routes/admin/templates';
 import { ProtectedRoute } from './routes/protected-route';
 
 const routes = [
@@ -64,6 +65,14 @@ const routes = [
 			{
 				path: 'templates/:slug',
 				Component: TemplateDetailPage,
+			},
+			{
+				path: 'admin/templates',
+				element: (
+					<ProtectedRoute>
+						<AdminTemplatesPage />
+					</ProtectedRoute>
+				),
 			},
 		],
 	},
