@@ -556,6 +556,8 @@ export function useChat({
 		async function init() {
 			if (!urlChatId || connectionStatus.current !== 'idle') return;
 
+			// createAgentSession reports its own request failures; later failures are reported below.
+			let sessionStreamOpened = false;
 			try {
 				if (urlChatId === 'new') {
 					if (!userQuery && !templateId) {
@@ -593,6 +595,7 @@ export function useChat({
 						templateId,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
+					sessionStreamOpened = true;
 
 					const parser = createRepairingJSONParser();
 
@@ -624,6 +627,11 @@ export function useChat({
 
 					for await (const obj of ndjsonStream(response.stream)) {
                         logger.debug('Received chunk from server:', obj);
+						if (obj.error) {
+							// The server streams agent initialization failures after the session ids.
+							const streamError: { message?: string } = obj.error;
+							throw new Error(streamError.message || 'Failed to start your app');
+						}
 						if (obj.chunk) {
 							if (!startedBlueprintStream) {
 								sendMessage(createAIMessage('main', 'Blueprint is being generated...', true));
@@ -682,7 +690,8 @@ export function useChat({
 
 					// Connect to WebSocket
 					logger.debug('connecting to ws with created id');
-					connectWithRetry(result.websocketUrl);
+					// An exact template copy runs no model turn, so nothing would end generation.
+					connectWithRetry(result.websocketUrl, { disableGenerate: Boolean(templateId) && query.length === 0 });
 					setChatId(result.agentId); // This comes from the server response
 					
 					// Emit app-created event for sidebar updates
@@ -733,6 +742,12 @@ export function useChat({
 				if (error instanceof RateLimitExceededError) {
 					const rateLimitMessage = handleRateLimitError(error.details, onDebugMessage);
 					setMessages(prev => [...prev, rateLimitMessage]);
+				} else if (urlChatId === 'new') {
+					const message = error instanceof Error ? error.message : 'Failed to start your app';
+					if (sessionStreamOpened) toast.error(message);
+					sendMessage(createAIMessage('main', `Couldn't start your app: ${message}`));
+					setIsBootstrapping(false);
+					setIsGeneratingBlueprint(false);
 				}
 			}
 		}

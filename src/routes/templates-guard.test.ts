@@ -37,6 +37,12 @@ describe('templates: gallery and use', () => {
 		expect(useChat).toContain('templateId,');
 	});
 
+	it('surfaces a failed template start and finishes an exact copy without generating', () => {
+		const useChat = source('/src/routes/chat/hooks/use-chat.ts');
+		expect(useChat).toContain('if (obj.error)');
+		expect(useChat).toContain('disableGenerate: Boolean(templateId) && query.length === 0');
+	});
+
 	it('asks for a purchase before a paid template can be used, in test mode', () => {
 		const detail = source('/src/routes/templates/detail.tsx');
 		expect(detail).toContain('viewer.canUse');
