@@ -17,7 +17,7 @@ import { PhasicCodingBehavior } from './behaviors/phasic';
 import { AgenticCodingBehavior } from './behaviors/agentic';
 import { SqlExecutor } from '../git';
 import { AgentInfrastructure } from "./AgentCore";
-import { ProjectType } from './types';
+import { ProjectType, TemplateSource } from './types';
 import { Connection } from 'agents';
 import { handleWebSocketMessage, handleWebSocketClose, broadcastToConnections, sendToConnection } from './websocket';
 import { WebSocketMessageData, WebSocketMessageType } from "worker/api/websocketTypes";
@@ -388,6 +388,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
 
     async getSummary(): Promise<AgentSummary> {
         return this.behavior.getSummary();
+    }
+
+    /** Deployed commit and preview URL for a template submission; null unless a deployed Think app. */
+    async getTemplateSource(): Promise<TemplateSource | null> {
+        return this.behavior.getTemplateSource();
     }
 
     getBehaviorType(): BehaviorType {

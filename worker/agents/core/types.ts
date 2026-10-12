@@ -74,6 +74,12 @@ export type AgentInitArgs<TState extends PhasicState | AgenticState | ThinkState
     TState extends ThinkState ? ThinkAgentInitArgs :
     PhasicAgentInitArgs | AgenticAgentInitArgs | ThinkAgentInitArgs;
 
+/** What a template submission needs from an app: its deployed commit and a capturable preview URL. */
+export interface TemplateSource {
+    commit: string;
+    previewUrl: string;
+}
+
 export type Plan = string;
 
 export interface AllIssues {

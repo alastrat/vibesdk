@@ -2,7 +2,7 @@ import { RpcTarget } from 'cloudflare:workers';
 import { getAgentByName } from 'agents';
 import type { UIMessage } from 'ai';
 import { ThinkState } from '../state';
-import { AgentInitArgs, DeploymentTarget } from '../types';
+import { AgentInitArgs, DeploymentTarget, TemplateSource } from '../types';
 import { BaseCodingBehavior } from './base';
 import { WebSocketMessageResponses } from '../../constants';
 import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
@@ -425,6 +425,12 @@ export class ThinkCodingBehavior
 			previewVersion,
 		});
 		return `${previewBaseUrl}?t=${encodeURIComponent(token)}`;
+	}
+
+	override async getTemplateSource(): Promise<TemplateSource | null> {
+		const commit = this.state.lastDeployedCommit;
+		if (!commit) return null;
+		return { commit, previewUrl: await this.getBrowserPreviewURL() };
 	}
 
 	public getTemplateDetails(): TemplateDetails {

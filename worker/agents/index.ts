@@ -50,9 +50,23 @@ export interface SpaceGitExportStub extends DurableObjectStub {
  * from here. The SpaceDO instance is always keyed by the agent id.
  */
 export function getSpaceGitStub(env: Env, agentId: string): SpaceGitExportStub | null {
+    return getSpaceStub<SpaceGitExportStub>(env, agentId);
+}
+
+/** Read access to a think app's committed files, for template submissions. */
+export interface SpaceTemplateStub extends DurableObjectStub {
+    readTreeAtCommit(commit: string): Promise<Array<{ path: string; bytes: Uint8Array }>>;
+}
+
+export function getSpaceTemplateStub(env: Env, agentId: string): SpaceTemplateStub | null {
+    return getSpaceStub<SpaceTemplateStub>(env, agentId);
+}
+
+/** The SpaceDO for an app; the instance is always keyed by the agent id. */
+function getSpaceStub<T extends DurableObjectStub>(env: Env, agentId: string): T | null {
     const ns = (env as unknown as { SPACE_DO?: DurableObjectNamespace }).SPACE_DO;
     if (!ns) return null;
-    return ns.get(ns.idFromName(agentId)) as unknown as SpaceGitExportStub;
+    return ns.get(ns.idFromName(agentId)) as unknown as T;
 }
 
 /** Whether an app uses the think behavior (repo lives in SpaceDO/Artifacts). */
