@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+// Relative on purpose: drizzle-kit loads this file without the `shared` alias.
+import {
+    TEMPLATE_CATEGORIES,
+    TEMPLATE_LISTING_STATUSES,
+    TEMPLATE_PAYMENT_PROVIDERS,
+    TEMPLATE_VERSION_STATUSES,
+    USER_ROLES,
+} from '../../shared/types/templates';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -40,6 +48,9 @@ export const users = sqliteTable('users', {
     // Nullable on purpose: null means "use the derived default" (off for users who
     // signed in with Cloudflare, on for everyone else who explicitly connected).
     aiGatewayEnabled: integer('ai_gateway_enabled', { mode: 'boolean' }),
+
+    // Platform role; admins review template submissions.
+    role: text('role', { enum: USER_ROLES }).notNull().default('user'),
     
     // Account Status
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
@@ -198,6 +209,7 @@ export const apps = sqliteTable('apps', {
     // Versioning (for future support)
     version: integer('version').default(1),
     parentAppId: text('parent_app_id'), // If forked from another app
+    fromTemplateVersionId: text('from_template_version_id'), // Template version this app started from
 
     // Preview-token revocation epoch. Incremented on every visibility change so
     // outstanding space-preview tokens (which embed the value at mint) are
@@ -224,6 +236,77 @@ export const apps = sqliteTable('apps', {
     visibilityStatusIdx: index('apps_visibility_status_idx').on(table.visibility, table.status),
     createdAtIdx: index('apps_created_at_idx').on(table.createdAt),
     updatedAtIdx: index('apps_updated_at_idx').on(table.updatedAt),
+}));
+
+// ========================================
+// TEMPLATES
+// ========================================
+
+/**
+ * Templates table - Catalog entries, stable across versions. One per source app.
+ */
+export const templates = sqliteTable('templates', {
+    id: text('id').primaryKey(),
+    slug: text('slug').notNull().unique(),
+    creatorUserId: text('creator_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    sourceAppId: text('source_app_id').references(() => apps.id, { onDelete: 'set null' }),
+    name: text('name').notNull(),
+    description: text('description').notNull(),
+    category: text('category', { enum: TEMPLATE_CATEGORIES }).notNull(),
+    // Null until an admin approves the first version.
+    currentVersionId: text('current_version_id'),
+    status: text('status', { enum: TEMPLATE_LISTING_STATUSES }).notNull().default('unlisted'),
+    // US cents; 0 is free.
+    priceCents: integer('price_cents').notNull().default(0),
+    useCount: integer('use_count').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    creatorIdx: index('templates_creator_idx').on(table.creatorUserId),
+    sourceAppIdx: uniqueIndex('templates_source_app_unique_idx').on(table.sourceAppId),
+    statusCategoryIdx: index('templates_status_category_idx').on(table.status, table.category),
+}));
+
+/**
+ * Template versions table - One row per submission. Files and screenshots are
+ * frozen in R2 under templates/<templateId>/<versionId>/.
+ */
+export const templateVersions = sqliteTable('template_versions', {
+    id: text('id').primaryKey(),
+    templateId: text('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    sourceCommit: text('source_commit').notNull(),
+    snapshotKey: text('snapshot_key').notNull(),
+    fileCount: integer('file_count').notNull(),
+    totalBytes: integer('total_bytes').notNull(),
+    desktopShotKey: text('desktop_shot_key').notNull(),
+    mobileShotKey: text('mobile_shot_key').notNull(),
+    status: text('status', { enum: TEMPLATE_VERSION_STATUSES }).notNull().default('pending'),
+    rightsConfirmedAt: integer('rights_confirmed_at', { mode: 'timestamp' }).notNull(),
+    reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: integer('reviewed_at', { mode: 'timestamp' }),
+    rejectionReason: text('rejection_reason'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    templateVersionIdx: uniqueIndex('template_versions_template_version_unique_idx').on(table.templateId, table.version),
+    statusIdx: index('template_versions_status_idx').on(table.status),
+}));
+
+/**
+ * Template purchases table - Who may use a paid template. Purchases are
+ * recorded with the `test` provider (no charge) until a payment provider is
+ * connected.
+ */
+export const templatePurchases = sqliteTable('template_purchases', {
+    id: text('id').primaryKey(),
+    templateId: text('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    priceCents: integer('price_cents').notNull(),
+    provider: text('provider', { enum: TEMPLATE_PAYMENT_PROVIDERS }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    templateUserIdx: uniqueIndex('template_purchases_template_user_unique_idx').on(table.templateId, table.userId),
+    userIdx: index('template_purchases_user_idx').on(table.userId),
 }));
 
 /**
@@ -673,3 +756,10 @@ export type NewUserModelProvider = typeof userModelProviders.$inferInsert;
 
 export type Star = typeof stars.$inferSelect;
 export type NewStar = typeof stars.$inferInsert;
+
+export type Template = typeof templates.$inferSelect;
+export type NewTemplate = typeof templates.$inferInsert;
+export type TemplateVersion = typeof templateVersions.$inferSelect;
+export type NewTemplateVersion = typeof templateVersions.$inferInsert;
+export type TemplatePurchase = typeof templatePurchases.$inferSelect;
+export type NewTemplatePurchase = typeof templatePurchases.$inferInsert;
