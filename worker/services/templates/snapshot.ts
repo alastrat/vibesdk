@@ -42,7 +42,7 @@ const SECRET_PATTERNS: readonly RegExp[] = [
 	/\b[sr]k_live_[A-Za-z0-9]{16,}/,
 	/\bsk-ant-[A-Za-z0-9_-]{32,}/,
 	/\bsk-(?:proj-)?[A-Za-z0-9_-]{32,}/,
-	/[A-Za-z_]*(?:api[_-]?key|secret)[A-Za-z_]*\s*[:=]\s*["'][^"'\s]{20,}["']/i,
+	/(?:api[_-]?key|secret)[A-Za-z_]{0,40}\s*[:=]\s*["'][^"'\s]{20,}["']/i,
 ];
 
 function stripLeadingSlashes(path: string): string {
@@ -52,9 +52,9 @@ function stripLeadingSlashes(path: string): string {
 /** Paths that never enter a snapshot: git and agent bookkeeping, and env files. */
 export function isExcludedFromSnapshot(path: string): boolean {
 	const segments = stripLeadingSlashes(path).split('/');
-	if (segments.some((segment) => EXCLUDED_SEGMENTS.has(segment))) return true;
+	if (segments.some((segment) => EXCLUDED_SEGMENTS.has(segment) || segment.startsWith('.env'))) return true;
 	const name = segments[segments.length - 1] ?? '';
-	return name === '.dev.vars' || name.startsWith('.env');
+	return name.startsWith('.dev.vars');
 }
 
 export function containsSecret(text: string): boolean {

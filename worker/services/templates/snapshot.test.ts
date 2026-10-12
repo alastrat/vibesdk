@@ -20,7 +20,17 @@ function text(path: string, content: string): TreeFile {
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0xff, 0xfe]);
 
 describe('isExcludedFromSnapshot', () => {
-	it.each(['/.git/HEAD', '/.think/space.json', '/.afs/state.json', '/.env', '/.env.local', '/worker/.dev.vars', '/nested/.git/config'])(
+	it.each([
+		'/.git/HEAD',
+		'/.think/space.json',
+		'/.afs/state.json',
+		'/.env',
+		'/.env.local',
+		'/worker/.dev.vars',
+		'/nested/.git/config',
+		'/.dev.vars.production',
+		'/.env/secrets.txt',
+	])(
 		'drops %s',
 		(path) => {
 			expect(isExcludedFromSnapshot(path)).toBe(true);
@@ -130,6 +140,18 @@ describe('buildSnapshot', () => {
 			ok: false,
 			error: 'src/config.ts looks like it contains a secret key; remove it and redeploy',
 		});
+	});
+
+	it('scans pathological inputs in linear time', () => {
+		const longLetterRun = performance.now();
+		expect(buildSnapshot([text('/letters.txt', 'a'.repeat(200_000))])).toMatchObject({ ok: true });
+		const letterRunMs = performance.now() - longLetterRun;
+		expect(letterRunMs).toBeLessThan(1000);
+
+		const repeatedKeyword = performance.now();
+		expect(buildSnapshot([text('/keyword.txt', 'secret'.repeat(100_000))])).toMatchObject({ ok: true });
+		const keywordMs = performance.now() - repeatedKeyword;
+		expect(keywordMs).toBeLessThan(1000);
 	});
 
 	it.each([
