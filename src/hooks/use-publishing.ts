@@ -27,12 +27,18 @@ function usePublishingMutation<TInput, TOutput>(mutationFn: (input: TInput) => P
 	});
 }
 
-export function useSitePublishing(appId: string | undefined, enabled: boolean) {
+/** `refetchOnMount: 'always'` makes a consumer that seeds form state from the result wait for fresh data. */
+export function useSitePublishing(
+	appId: string | undefined,
+	enabled: boolean,
+	options?: { refetchOnMount?: 'always' },
+) {
 	return useQuery({
 		queryKey: queryKeys.account.publishing.app(appId ?? ''),
 		queryFn: () => unwrap(apiClient.getSitePublishing(appId!), 'Failed to load publishing settings'),
 		enabled: enabled && !!appId,
 		retry: false,
+		...options,
 	});
 }
 

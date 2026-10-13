@@ -31,10 +31,7 @@ interface PublishDialogProps {
 
 /** Make an app public with consent, a category and a price; change those settings; or make it private. */
 export function PublishDialog({ appId, open, onOpenChange }: PublishDialogProps) {
-	const publishing = useSitePublishing(appId, open);
 	const publish = usePublishSite(appId);
-	const data = publishing.data;
-	const isPublic = data?.visibility === 'public';
 
 	const submit = (body: PublishSiteRequest) =>
 		publish.mutate(body, {
@@ -48,26 +45,49 @@ export function PublishDialog({ appId, open, onOpenChange }: PublishDialogProps)
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-lg">
-				<DialogHeader>
-					<DialogTitle>{isPublic ? 'Publishing settings' : 'Make public'}</DialogTitle>
-					<DialogDescription>
-						Public sites appear in Discover, where anyone can start a new app from a copy of yours. A paid site can be
-						used once an Estori admin approves its price.
-					</DialogDescription>
-				</DialogHeader>
-				{publishing.isLoading ? (
-					<div className="flex justify-center py-6">
-						<Loader />
-					</div>
-				) : publishing.isError ? (
-					<p className="text-sm text-kumo-subtle">{publishing.error.message}</p>
-				) : data && !isPublic && data.ineligibleReason ? (
-					<p className="text-sm text-kumo-subtle">{data.ineligibleReason}</p>
-				) : data ? (
-					<PublishForm data={data} pending={publish.isPending} onSubmit={submit} />
-				) : null}
+				<PublishDialogBody appId={appId} pending={publish.isPending} onSubmit={submit} />
 			</DialogContent>
 		</Dialog>
+	);
+}
+
+interface PublishDialogBodyProps {
+	appId: string;
+	pending: boolean;
+	onSubmit: (body: PublishSiteRequest) => void;
+}
+
+/**
+ * Mounted with the dialog content, so every open refetches the settings. The form seeds its state from them,
+ * so it waits for the fresh result instead of the cache a make-private elsewhere may have left behind.
+ */
+function PublishDialogBody({ appId, pending, onSubmit }: PublishDialogBodyProps) {
+	const publishing = useSitePublishing(appId, true, { refetchOnMount: 'always' });
+	const ready = publishing.isFetchedAfterMount;
+	const data = publishing.data;
+	const isPublic = ready && data?.visibility === 'public';
+
+	return (
+		<>
+			<DialogHeader>
+				<DialogTitle>{isPublic ? 'Publishing settings' : 'Make public'}</DialogTitle>
+				<DialogDescription>
+					Public sites appear in Discover, where anyone can start a new app from a copy of yours. A paid site can be
+					used once an Estori admin approves its price.
+				</DialogDescription>
+			</DialogHeader>
+			{!ready ? (
+				<div className="flex justify-center py-6">
+					<Loader />
+				</div>
+			) : publishing.isError ? (
+				<p className="text-sm text-kumo-subtle">{publishing.error.message}</p>
+			) : data && !isPublic && data.ineligibleReason ? (
+				<p className="text-sm text-kumo-subtle">{data.ineligibleReason}</p>
+			) : data ? (
+				<PublishForm key={appId} data={data} pending={pending} onSubmit={onSubmit} />
+			) : null}
+		</>
 	);
 }
 
