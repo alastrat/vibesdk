@@ -1,6 +1,7 @@
 /** Drafting page text with a model, checked against the shared limits, with one corrective retry. */
 
 import z from 'zod';
+import { RateLimitExceededError } from 'shared/types/errors';
 import { createUserMessage, type Message } from '../../agents/inferutils/common';
 import { validatePageCopy, type SitePageCopy } from '../../../shared/types/site-page';
 import { buildDraftMessages, type DraftRequest } from './draft-input';
@@ -27,6 +28,8 @@ async function ask(complete: PageCopyCompleter, messages: Message[]): Promise<un
 	try {
 		return await complete(messages);
 	} catch (error) {
+		// Running out of AI credits is not a draft failure; the controller answers it with a 429.
+		if (error instanceof RateLimitExceededError) throw error;
 		throw new PageCopyDraftError('The drafting call failed', { cause: error });
 	}
 }
