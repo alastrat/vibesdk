@@ -38,8 +38,9 @@ export interface StripePurchaseRecord {
 
 export interface SaleRow {
     purchaseId: string;
-    appId: string;
-    appTitle: string;
+    appId: string | null;
+    /** Null once the site has been deleted. */
+    appTitle: string | null;
     buyerEmail: string | null;
     priceCents: number;
     platformFeeCents: number | null;
@@ -323,12 +324,12 @@ export class TemplateService extends BaseService {
         return inserted.length > 0;
     }
 
-    /** The latest Stripe sales, newest first, for the admin sales list. */
+    /** The latest Stripe sales, newest first, including those of deleted sites, so the list matches `sumPlatformFees`. */
     async listRecentSales(limit: number): Promise<SaleRow[]> {
         return this.database
             .select({
                 purchaseId: schema.templatePurchases.id,
-                appId: schema.apps.id,
+                appId: schema.templatePurchases.sourceAppId,
                 appTitle: schema.apps.title,
                 buyerEmail: schema.users.email,
                 priceCents: schema.templatePurchases.priceCents,
@@ -336,8 +337,7 @@ export class TemplateService extends BaseService {
                 createdAt: schema.templatePurchases.createdAt,
             })
             .from(schema.templatePurchases)
-            .innerJoin(schema.templates, eq(schema.templates.id, schema.templatePurchases.templateId))
-            .innerJoin(schema.apps, eq(schema.apps.id, schema.templates.sourceAppId))
+            .leftJoin(schema.apps, eq(schema.apps.id, schema.templatePurchases.sourceAppId))
             .leftJoin(schema.users, eq(schema.users.id, schema.templatePurchases.userId))
             .where(eq(schema.templatePurchases.provider, 'stripe'))
             .orderBy(desc(schema.templatePurchases.createdAt))
