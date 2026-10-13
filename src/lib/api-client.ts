@@ -6,25 +6,10 @@
 
 import type{
 	ApiResponse,
-	AppTemplateData,
-	MyTemplatesData,
-	PendingTemplateVersionsData,
-	RejectTemplateRequest,
-	SubmitTemplateData,
-	SubmitTemplateRequest,
-	TemplateDetailData,
-	TemplateGalleryData,
-	TemplateGalleryParams,
-	TemplateListingData,
-	TemplatePurchaseData,
-	TemplateVersionActionData,
-	TemplateVersionFileData,
-	TemplateVersionFilesData,
 	AppsListData,
 	PublicAppsData,
 	FavoriteToggleData,
 	CreateAppData,
-	UpdateAppVisibilityData,
 	AppDeleteData,
 	AppDetailsData,
 	AppStarToggleData,
@@ -56,7 +41,6 @@ import type{
 	SecretTemplatesData,
 	AgentConnectionData,
 	AgentStreamingResponse,
-	App,
 	ActiveSessionsData,
 	ApiKeysData,
 	LinkedIdentitiesData,
@@ -79,6 +63,20 @@ import type{
 	QueryAppTableResponse,
 	WipeAppDatabaseResponse,
 	ListAppBranchesResponse,
+	DiscoverPricing,
+	DiscoverRemovalData,
+	DiscoverRemovalRequest,
+	MyPaidListingsData,
+	PaidVersionActionData,
+	PendingReviewsData,
+	PublishSiteData,
+	PublishSiteRequest,
+	RejectVersionRequest,
+	ReviewVersionFileData,
+	ReviewVersionFilesData,
+	SitePublishingData,
+	SitePurchaseData,
+	TemplateCategory,
 } from '@/api-types';
 import {
 	RateLimitExceededError,
@@ -160,6 +158,9 @@ interface PublicAppsParams extends PaginationParams {
 	framework?: string;
 	search?: string;
 	boardId?: string;
+	category?: TemplateCategory;
+	pricing?: DiscoverPricing;
+	reusableOnly?: boolean;
 }
 
 /**
@@ -505,6 +506,9 @@ class ApiClient {
 		if (params?.period) queryParams.set('period', params.period);
 		if (params?.framework) queryParams.set('framework', params.framework);
 		if (params?.search) queryParams.set('search', params.search);
+		if (params?.category) queryParams.set('category', params.category);
+		if (params?.pricing && params.pricing !== 'all') queryParams.set('pricing', params.pricing);
+		if (params?.reusableOnly) queryParams.set('reusableOnly', 'true');
 		if (params?.boardId) queryParams.set('boardId', params.boardId);
 
 		const endpoint = `/api/apps/public${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
@@ -536,22 +540,6 @@ class ApiClient {
 	}
 
 	/**
-	 * Update app visibility
-	 */
-	async updateAppVisibility(
-		appId: string,
-		visibility: App['visibility'],
-	): Promise<ApiResponse<UpdateAppVisibilityData>> {
-		return this.request<UpdateAppVisibilityData>(
-			`/api/apps/${appId}/visibility`,
-			{
-				method: 'PUT',
-				body: { visibility },
-			},
-		);
-	}
-
-	/**
 	 * Delete an app
 	 */
 	async deleteApp(appId: string): Promise<ApiResponse<AppDeleteData>> {
@@ -572,81 +560,68 @@ class ApiClient {
 	}
 
 	// ===============================
-	// Template API Methods
+	// Publishing and reuse API Methods
 	// ===============================
 
-	async getTemplates(params: TemplateGalleryParams = {}): Promise<ApiResponse<TemplateGalleryData>> {
-		const query = new URLSearchParams();
-		if (params.page) query.set('page', String(params.page));
-		if (params.limit) query.set('limit', String(params.limit));
-		if (params.category) query.set('category', params.category);
-		if (params.search) query.set('search', params.search);
-		const suffix = query.toString();
-		return this.request<TemplateGalleryData>(`/api/templates${suffix ? `?${suffix}` : ''}`);
+	/** Make an app public (with consent, category and price) or private. */
+	async publishSite(appId: string, body: PublishSiteRequest): Promise<ApiResponse<PublishSiteData>> {
+		return this.request<PublishSiteData>(`/api/apps/${appId}/visibility`, { method: 'PUT', body });
 	}
 
-	async getTemplate(slug: string): Promise<ApiResponse<TemplateDetailData>> {
-		return this.request<TemplateDetailData>(`/api/templates/${encodeURIComponent(slug)}`);
+	/** Publishing settings for one of the owner's apps; quiet because non-owners get 403. */
+	async getSitePublishing(appId: string): Promise<ApiResponse<SitePublishingData>> {
+		return this.request<SitePublishingData>(`/api/apps/${appId}/publishing`, {}, true);
 	}
 
-	/** Buy a paid template. Payments are in test mode: the purchase is recorded without a charge. */
-	async purchaseTemplate(templateId: string): Promise<ApiResponse<TemplatePurchaseData>> {
-		return this.request<TemplatePurchaseData>(`/api/templates/${templateId}/purchases`, { method: 'POST' });
+	async submitPaidUpdate(appId: string): Promise<ApiResponse<PaidVersionActionData>> {
+		return this.request<PaidVersionActionData>(`/api/apps/${appId}/paid-listing/versions`, { method: 'POST' });
 	}
 
-	async getMyTemplates(): Promise<ApiResponse<MyTemplatesData>> {
-		return this.request<MyTemplatesData>('/api/templates/mine');
-	}
-
-	/** Template status for one of the owner's apps; quiet because non-owners get 403. */
-	async getAppTemplate(appId: string): Promise<ApiResponse<AppTemplateData>> {
-		return this.request<AppTemplateData>(`/api/apps/${appId}/template`, {}, true);
-	}
-
-	async submitTemplate(appId: string, body: SubmitTemplateRequest): Promise<ApiResponse<SubmitTemplateData>> {
-		return this.request<SubmitTemplateData>(`/api/apps/${appId}/template-submissions`, { method: 'POST', body });
-	}
-
-	async withdrawTemplateVersion(templateId: string, versionId: string): Promise<ApiResponse<TemplateVersionActionData>> {
-		return this.request<TemplateVersionActionData>(`/api/templates/${templateId}/versions/${versionId}/withdraw`, {
+	async withdrawPaidVersion(appId: string, versionId: string): Promise<ApiResponse<PaidVersionActionData>> {
+		return this.request<PaidVersionActionData>(`/api/apps/${appId}/paid-listing/versions/${versionId}/withdraw`, {
 			method: 'POST',
 		});
 	}
 
-	async setTemplateListing(templateId: string, listed: boolean): Promise<ApiResponse<TemplateListingData>> {
-		return this.request<TemplateListingData>(`/api/templates/${templateId}/listing`, {
-			method: 'PUT',
-			body: { listed },
-		});
+	/** Buy a paid site. Payments are in test mode: the purchase is recorded without a charge. */
+	async purchaseSite(appId: string): Promise<ApiResponse<SitePurchaseData>> {
+		return this.request<SitePurchaseData>(`/api/apps/${appId}/purchases`, { method: 'POST' });
+	}
+
+	async getMyPaidListings(): Promise<ApiResponse<MyPaidListingsData>> {
+		return this.request<MyPaidListingsData>('/api/paid-listings/mine');
 	}
 
 	/** Review queue; quiet because non-admins get 403 and the page explains it. */
-	async getPendingTemplateVersions(): Promise<ApiResponse<PendingTemplateVersionsData>> {
-		return this.request<PendingTemplateVersionsData>('/api/admin/templates/pending', {}, true);
+	async getPendingReviews(): Promise<ApiResponse<PendingReviewsData>> {
+		return this.request<PendingReviewsData>('/api/admin/reviews', {}, true);
 	}
 
-	async getTemplateVersionFiles(versionId: string): Promise<ApiResponse<TemplateVersionFilesData>> {
-		return this.request<TemplateVersionFilesData>(`/api/admin/template-versions/${versionId}/files`);
+	async getReviewVersionFiles(versionId: string): Promise<ApiResponse<ReviewVersionFilesData>> {
+		return this.request<ReviewVersionFilesData>(`/api/admin/template-versions/${versionId}/files`);
 	}
 
-	async getTemplateVersionFile(versionId: string, path: string): Promise<ApiResponse<TemplateVersionFileData>> {
-		return this.request<TemplateVersionFileData>(
+	async getReviewVersionFile(versionId: string, path: string): Promise<ApiResponse<ReviewVersionFileData>> {
+		return this.request<ReviewVersionFileData>(
 			`/api/admin/template-versions/${versionId}/file?path=${encodeURIComponent(path)}`,
 		);
 	}
 
-	async approveTemplateVersion(versionId: string): Promise<ApiResponse<TemplateVersionActionData>> {
-		return this.request<TemplateVersionActionData>(`/api/admin/template-versions/${versionId}/approve`, {
-			method: 'POST',
-		});
+	async approveReviewVersion(versionId: string): Promise<ApiResponse<PaidVersionActionData>> {
+		return this.request<PaidVersionActionData>(`/api/admin/template-versions/${versionId}/approve`, { method: 'POST' });
 	}
 
-	async rejectTemplateVersion(versionId: string, reason: string): Promise<ApiResponse<TemplateVersionActionData>> {
-		const body: RejectTemplateRequest = { reason };
-		return this.request<TemplateVersionActionData>(`/api/admin/template-versions/${versionId}/reject`, {
+	async rejectReviewVersion(versionId: string, reason: string): Promise<ApiResponse<PaidVersionActionData>> {
+		const body: RejectVersionRequest = { reason };
+		return this.request<PaidVersionActionData>(`/api/admin/template-versions/${versionId}/reject`, {
 			method: 'POST',
 			body,
 		});
+	}
+
+	/** Admins only: hide a public site from Discover and block its reuse, or restore it. */
+	async setDiscoverRemoval(appId: string, body: DiscoverRemovalRequest): Promise<ApiResponse<DiscoverRemovalData>> {
+		return this.request<DiscoverRemovalData>(`/api/admin/apps/${appId}/discover`, { method: 'PUT', body });
 	}
 
 	/**

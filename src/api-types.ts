@@ -36,10 +36,12 @@ export type {
 
 export type {
   AppDetailsData,
+  AppReuseView,
   AppStarToggleData,
   GeneratedCodeFile,
   GitCloneTokenData,
-  PreviewTokenData
+  PreviewTokenData,
+  StartedFromView
 } from 'worker/api/controllers/appView/types';
 
 // User-related API Types
@@ -228,31 +230,31 @@ export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
 
 export type {
-	AppTemplateData,
-	CreatorTemplate,
-	CreatorTemplateVersion,
-	MyTemplatesData,
-	PendingTemplateVersion,
-	PendingTemplateVersionsData,
-	PublicTemplateCard,
-	PublicTemplateDetail,
-	RejectTemplateRequest,
-	SubmitTemplateData,
-	SubmitTemplateRequest,
-	TemplateDetailData,
-	TemplateGalleryData,
-	TemplateGalleryParams,
-	TemplateListingData,
-	TemplateListingRequest,
-	TemplateOrigin,
-	TemplatePurchaseData,
-	TemplateVersionActionData,
-	TemplateVersionFileData,
-	TemplateVersionFilesData,
-	TemplateViewerAccess,
-} from 'worker/api/controllers/templates/types';
-export type { TemplateCategory, TemplateListingStatus, TemplateVersionStatus } from '../shared/types/templates.js';
+	DiscoverRemovalData,
+	DiscoverRemovalRequest,
+	MyPaidListing,
+	MyPaidListingsData,
+	OwnerPaidListing,
+	PaidListingVersionView,
+	PaidVersionActionData,
+	PendingReview,
+	PendingReviewsData,
+	PublishSiteData,
+	PublishSiteRequest,
+	RejectVersionRequest,
+	ReviewVersionFileData,
+	ReviewVersionFilesData,
+	SitePublishingData,
+	SitePurchaseData,
+} from 'worker/api/controllers/publishing/types';
+export type {
+	DiscoverPricing,
+	TemplateCategory,
+	TemplateListingStatus,
+	TemplateVersionStatus,
+} from '../shared/types/templates.js';
 export {
+	DISCOVER_PRICING_FILTERS,
 	TEMPLATE_CATEGORIES,
 	TEMPLATE_CATEGORY_LABELS,
 	TEMPLATE_PRICE_OPTIONS_CENTS,

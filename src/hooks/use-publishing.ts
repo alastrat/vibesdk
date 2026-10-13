@@ -1,0 +1,111 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
+import { queryKeys } from '@/lib/query-keys';
+import { useAuth } from '@/contexts/auth-context';
+import type { ApiResponse, DiscoverRemovalRequest, PublishSiteRequest } from '@/api-types';
+
+/** The data of a successful response, or an error carrying the server's message. */
+async function unwrap<T>(request: Promise<ApiResponse<T>>, fallback: string): Promise<T> {
+	const response = await request;
+	if (!response.success || response.data === undefined) {
+		throw new Error(response.error?.message || fallback);
+	}
+	return response.data;
+}
+
+/** Publishing changes Discover, app details and the owner's lists, so all three refresh. */
+function usePublishingMutation<TInput, TOutput>(mutationFn: (input: TInput) => Promise<TOutput>) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn,
+		onSuccess: () =>
+			Promise.all([
+				queryClient.invalidateQueries({ queryKey: queryKeys.account.publishing.all() }),
+				queryClient.invalidateQueries({ queryKey: queryKeys.account.apps.all() }),
+				queryClient.invalidateQueries({ queryKey: queryKeys.apps.all }),
+			]),
+	});
+}
+
+export function useSitePublishing(appId: string | undefined, enabled: boolean) {
+	return useQuery({
+		queryKey: queryKeys.account.publishing.app(appId ?? ''),
+		queryFn: () => unwrap(apiClient.getSitePublishing(appId!), 'Failed to load publishing settings'),
+		enabled: enabled && !!appId,
+		retry: false,
+	});
+}
+
+export function usePublishSite(appId: string | undefined) {
+	return usePublishingMutation((body: PublishSiteRequest) => {
+		if (!appId) throw new Error('App ID is required');
+		return unwrap(apiClient.publishSite(appId, body), 'Failed to update app visibility');
+	});
+}
+
+export function useSubmitPaidUpdate(appId: string) {
+	return usePublishingMutation((_input: void) =>
+		unwrap(apiClient.submitPaidUpdate(appId), 'Failed to send the update for review'),
+	);
+}
+
+export function useWithdrawPaidVersion(appId: string) {
+	return usePublishingMutation((versionId: string) =>
+		unwrap(apiClient.withdrawPaidVersion(appId, versionId), 'Failed to withdraw the version'),
+	);
+}
+
+export function usePurchaseSite() {
+	return usePublishingMutation((appId: string) => unwrap(apiClient.purchaseSite(appId), 'Failed to buy the site'));
+}
+
+export function useMyPaidListings() {
+	const { user } = useAuth();
+	return useQuery({
+		queryKey: queryKeys.account.publishing.mine(user?.id),
+		queryFn: () => unwrap(apiClient.getMyPaidListings(), 'Failed to load your paid listings'),
+		enabled: !!user,
+	});
+}
+
+export function usePendingReviews() {
+	return useQuery({
+		queryKey: queryKeys.account.publishing.reviews(),
+		queryFn: () => unwrap(apiClient.getPendingReviews(), 'Failed to load the review queue'),
+		retry: false,
+	});
+}
+
+export function useReviewVersionFiles(versionId: string | null) {
+	return useQuery({
+		queryKey: queryKeys.account.publishing.versionFiles(versionId ?? ''),
+		queryFn: () => unwrap(apiClient.getReviewVersionFiles(versionId!), 'Failed to load the files'),
+		enabled: !!versionId,
+	});
+}
+
+export function useReviewVersionFile(versionId: string, path: string | null) {
+	return useQuery({
+		queryKey: queryKeys.account.publishing.versionFile(versionId, path ?? ''),
+		queryFn: () => unwrap(apiClient.getReviewVersionFile(versionId, path!), 'Failed to load the file'),
+		enabled: !!path,
+	});
+}
+
+export type VersionReview =
+	| { versionId: string; decision: 'approve' }
+	| { versionId: string; decision: 'reject'; reason: string };
+
+export function useReviewVersion() {
+	return usePublishingMutation((review: VersionReview) =>
+		review.decision === 'approve'
+			? unwrap(apiClient.approveReviewVersion(review.versionId), 'Failed to approve the version')
+			: unwrap(apiClient.rejectReviewVersion(review.versionId, review.reason), 'Failed to reject the version'),
+	);
+}
+
+export function useSetDiscoverRemoval() {
+	return usePublishingMutation((input: { appId: string; body: DiscoverRemovalRequest }) =>
+		unwrap(apiClient.setDiscoverRemoval(input.appId, input.body), 'Failed to change the removal'),
+	);
+}

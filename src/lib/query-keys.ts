@@ -1,17 +1,11 @@
-import type { TemplateCategory } from '@/api-types';
-
 export type PaginatedAppsListFilters = {
 	sort: string;
 	period: string;
 	framework: string;
 	visibility: string;
 	search: string;
-	limit: number;
-};
-
-export type TemplateGalleryFilters = {
-	category: TemplateCategory | null;
-	search: string;
+	category: string;
+	pricing: string;
 	limit: number;
 };
 
@@ -30,13 +24,7 @@ export const queryKeys = {
 		userAll: () => [...queryKeys.apps.all, 'user'] as const,
 		user: (filters: PaginatedAppsListFilters) =>
 			[...queryKeys.apps.userAll(), filters] as const,
-	},
-	/** Public template catalog; user-private template data lives under `account.templates`. */
-	templates: {
-		all: ['templates'] as const,
-		gallery: (filters: TemplateGalleryFilters) => [...queryKeys.templates.all, 'gallery', filters] as const,
-		detail: (slug: string, userId?: string | null) =>
-			[...queryKeys.templates.all, 'detail', slug, userId ?? 'anonymous'] as const,
+		strip: () => [...queryKeys.apps.all, 'strip'] as const,
 	},
 	account: {
 		all: ['account'] as const,
@@ -103,17 +91,16 @@ export const queryKeys = {
 					userId ?? 'anonymous',
 				] as const,
 		},
-		/** Creator and reviewer data: never persisted, and dropped on logout with the rest of `account`. */
-		templates: {
-			all: () => [...queryKeys.account.all, 'templates'] as const,
+		/** Publishing, paid-listing and review data: never persisted, and dropped on logout with the rest of `account`. */
+		publishing: {
+			all: () => [...queryKeys.account.all, 'publishing'] as const,
+			app: (appId: string) => [...queryKeys.account.publishing.all(), 'app', appId] as const,
 			mine: (userId?: string | null) =>
-				[...queryKeys.account.templates.all(), 'mine', userId ?? 'anonymous'] as const,
-			app: (appId: string) => [...queryKeys.account.templates.all(), 'app', appId] as const,
-			pending: () => [...queryKeys.account.templates.all(), 'pending'] as const,
-			versionFiles: (versionId: string) =>
-				[...queryKeys.account.templates.all(), 'version-files', versionId] as const,
+				[...queryKeys.account.publishing.all(), 'mine', userId ?? 'anonymous'] as const,
+			reviews: () => [...queryKeys.account.publishing.all(), 'reviews'] as const,
+			versionFiles: (versionId: string) => [...queryKeys.account.publishing.all(), 'version-files', versionId] as const,
 			versionFile: (versionId: string, path: string) =>
-				[...queryKeys.account.templates.all(), 'version-file', versionId, path] as const,
+				[...queryKeys.account.publishing.all(), 'version-file', versionId, path] as const,
 		},
 		limits: {
 			all: () => [...queryKeys.account.all, 'limits'] as const,
