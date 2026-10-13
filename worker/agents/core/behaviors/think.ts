@@ -2,7 +2,7 @@ import { RpcTarget } from 'cloudflare:workers';
 import { getAgentByName } from 'agents';
 import type { UIMessage } from 'ai';
 import { ThinkState } from '../state';
-import { AgentInitArgs, DeploymentTarget, TemplateSeed, TemplateSource } from '../types';
+import { AgentInitArgs, DeploymentTarget, ReuseSeed, TemplateSource } from '../types';
 import { BaseCodingBehavior } from './base';
 import { WebSocketMessageResponses } from '../../constants';
 import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
@@ -42,8 +42,7 @@ import { getBrowserCaptureClient } from '../../../services/browser-capture/facto
 import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome } from '../../think/references';
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
-import { readTemplateSnapshot } from 'worker/services/templates/store';
-import { initialProjectTitle, templateCopyQuery } from '../../think/template-start';
+import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -185,11 +184,11 @@ export class ThinkCodingBehavior
 		await super.initialize(initArgs);
 		// Think projects are template-free: SpaceDO + the agent's own file tools
 		// own scaffolding entirely. We intentionally ignore `templateInfo`.
-		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId, templateSeed } = initArgs;
+		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId, reuseSeed } = initArgs;
 
-		const baseName = (query || templateSeed?.name || 'project').toString();
+		const baseName = (query || reuseSeed?.sourceTitle || 'project').toString();
 		const described = query.trim().length > 0;
-		const storedQuery = !described && templateSeed ? templateCopyQuery(templateSeed.name) : query;
+		const storedQuery = !described && reuseSeed ? siteCopyQuery(reuseSeed.sourceTitle) : query;
 		const projectName = generateProjectName(
 			baseName,
 			generateNanoId(),
@@ -204,7 +203,7 @@ export class ThinkCodingBehavior
 			projectName,
 			query: storedQuery,
 			blueprint: {
-				title: initialProjectTitle(query, templateSeed?.name, deriveProjectTitle),
+				title: initialProjectTitle(query, reuseSeed?.sourceTitle, deriveProjectTitle),
 				projectName,
 				description: storedQuery,
 				colorPalette: ['#1e1e1e'],
@@ -224,7 +223,9 @@ export class ThinkCodingBehavior
 			pendingImages: (initArgs.images ?? []).map(toPendingImage),
 			currentBranch: 'main',
 			// Set before the agent is configured, because the system prompt depends on it.
-			templateStart: templateSeed ? { templateId: templateSeed.templateId, versionId: templateSeed.versionId, name: templateSeed.name } : undefined,
+			reuseStart: reuseSeed
+				? { sourceAppId: reuseSeed.sourceAppId, sourceTitle: reuseSeed.sourceTitle, versionId: reuseSeed.versionId }
+				: undefined,
 		});
 
 		const configureStartedAt = performance.now();
@@ -232,8 +233,8 @@ export class ThinkCodingBehavior
 		const configureDurationMs = performance.now() - configureStartedAt;
 
 		const seedStartedAt = performance.now();
-		if (templateSeed) {
-			await this.seedFromTemplate(templateSeed, described);
+		if (reuseSeed) {
+			await this.seedFromSite(reuseSeed, described);
 		} else {
 			await this.seedEmptySpace();
 		}
@@ -346,11 +347,11 @@ export class ThinkCodingBehavior
 	 * files don't know about — the environment and custom instructions for the run.
 	 */
 	private buildSystemPrompt(modelName: string): string {
-		const templateStart = this.state.templateStart;
-		const startGuidance = templateStart
+		const reuseStart = this.state.reuseStart;
+		const startGuidance = reuseStart
 			? [
-					'## Started from a template',
-					`This app started as a copy of the template "${templateStart.name}". Its files already contain a complete, working site. When the user describes their business, rewrite the existing site for it in that same turn without calling \`ask_questions\`: infer anything they did not say and invent plausible business names, product names, prices and copy that fit their description. Keep the layout, components, styles and working features.`,
+					'## Started from a published site',
+					`This app started as a copy of the published site "${reuseStart.sourceTitle}". Its files already contain a complete, working site. When the user describes their business, rewrite the existing site for it in that same turn without calling \`ask_questions\`: infer anything they did not say and invent plausible business names, product names, prices and copy that fit their description. Keep the layout, components, styles and working features.`,
 				]
 			: [
 					'## Clarify before building',
@@ -408,17 +409,16 @@ export class ThinkCodingBehavior
 	}
 
 	/**
-	 * Start the workspace from a template snapshot: the usual empty seed, the
-	 * template's files as one commit, then a deploy so the preview shows the
-	 * copy before any model turn. Throws when the copy cannot be made, which
-	 * fails initialization before the app is saved.
+	 * Start the workspace from a published site: the usual empty seed, the
+	 * site's files as one commit, then a deploy so the preview shows the copy
+	 * before any model turn. Throws when the copy cannot be made, which fails
+	 * initialization before the app is saved.
 	 */
-	private async seedFromTemplate(seed: TemplateSeed, described: boolean): Promise<void> {
+	private async seedFromSite(seed: ReuseSeed, described: boolean): Promise<void> {
 		await this.seedEmptySpace();
-		const files = await readTemplateSnapshot(this.env.TEMPLATES_BUCKET, seed.snapshotKey);
-		await this.callSpace((space) => space.importFiles(files, `Start from template ${seed.name} v${seed.version}`));
+		await this.callSpace((space) => space.importFiles(seed.files, `Start from ${seed.sourceTitle}`));
 		const previewUrl = await this.deployCurrentBranch();
-		if (!previewUrl) throw new Error(`The template ${seed.name} could not be deployed`);
+		if (!previewUrl) throw new Error(`${seed.sourceTitle} could not be deployed`);
 		if (!described) this.setMVPGenerated();
 	}
 
@@ -469,6 +469,16 @@ export class ThinkCodingBehavior
 		const commit = this.state.lastDeployedCommit;
 		if (!commit) return null;
 		return { commit, previewUrl: await this.getBrowserPreviewURL() };
+	}
+
+	override async getDeployedCommit(): Promise<string | null> {
+		return this.state.lastDeployedCommit ?? null;
+	}
+
+	/** Remember the deployed commit and stamp the app row; Discover reads the stamp to know the site is deployed. */
+	private recordDeployedCommit(commit: string): void {
+		this.setState({ ...this.state, lastDeployedCommit: commit });
+		void new AppService(this.env).updateApp(this.getAgentId(), { lastDeployedAt: new Date() });
 	}
 
 	public getTemplateDetails(): TemplateDetails {
@@ -564,8 +574,9 @@ export class ThinkCodingBehavior
 				let completed: boolean;
 				try {
 					const references = await this.captureTurnReferences(compiled, conversationId);
-					const templateStart = this.isMVPGenerated() ? undefined : this.state.templateStart;
-					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references, templateStart });
+					const siteStart =
+						this.isMVPGenerated() || !this.state.reuseStart ? undefined : { title: this.state.reuseStart.sourceTitle };
+					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references, siteStart });
 					completed = await this.runPrompt(message, conversationId);
 				} catch (e) {
 					this.logger.error('Think prompt failed', e);
@@ -956,7 +967,7 @@ export class ThinkCodingBehavior
 
 		const commitHash = parsed && typeof parsed.commit_hash === 'string' ? parsed.commit_hash : undefined;
 		if (commitHash) {
-			this.setState({ ...this.state, lastDeployedCommit: commitHash });
+			this.recordDeployedCommit(commitHash);
 		}
 		try {
 			const url = await this.getBrowserPreviewURL();
@@ -1121,7 +1132,7 @@ export class ThinkCodingBehavior
 			}
 
 			if (result?.commit_hash) {
-				this.setState({ ...this.state, lastDeployedCommit: result.commit_hash });
+				this.recordDeployedCommit(result.commit_hash);
 			}
 
 			const url = await this.getBrowserPreviewURL();

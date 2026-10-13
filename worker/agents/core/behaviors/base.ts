@@ -1179,6 +1179,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return null;
     }
 
+    /** The last deployed commit; only Think apps record one. */
+    public async getDeployedCommit(): Promise<string | null> {
+        return null;
+    }
+
     // A wrapper for LLM tool to deploy to sandbox
     async deployPreview(clearLogs: boolean = true, forceRedeploy: boolean = false): Promise<string> {
         const response = await this.deployToSandbox([], forceRedeploy, undefined, clearLogs);

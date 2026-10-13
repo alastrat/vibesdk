@@ -119,11 +119,12 @@ export interface AgenticState extends BaseProjectState {
     currentPlan: Plan;
 }
 
-/** The template a Think app started from. */
-export interface TemplateStart {
-    templateId: string;
-    versionId: string;
-    name: string;
+/** The published site a Think app was copied from. */
+export interface ReuseStart {
+    sourceAppId: string;
+    sourceTitle: string;
+    /** The approved paid version copied, or null for a free site's latest deploy. */
+    versionId: string | null;
 }
 
 /**
@@ -150,8 +151,8 @@ export interface ThinkState extends BaseProjectState {
     /** Uploaded images waiting for the next turn; kept in state so a restart does not drop them. */
     pendingImages?: PendingImage[];
     cloudflareDeploymentUrl?: string;
-    /** Set when the app started from a template; its first turn personalizes the copy. */
-    templateStart?: TemplateStart;
+    /** Set when the app was copied from a published site; its first turn personalizes the copy. */
+    reuseStart?: ReuseStart;
 }
 
 export type AgentState = PhasicState | AgenticState | ThinkState;

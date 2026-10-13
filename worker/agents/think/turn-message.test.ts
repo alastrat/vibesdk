@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { agentAssetUrl } from './agent-assets';
 import type { ReferenceOutcome } from './references';
-import { templateStartInstruction } from './template-start';
+import { siteStartInstruction } from './site-start';
 import { buildTurnMessage, isHiddenPart } from './turn-message';
 
 const CAPTURED: ReferenceOutcome = {
@@ -80,20 +80,20 @@ describe('isHiddenPart', () => {
 	});
 });
 
-describe('buildTurnMessage on a template start', () => {
-	it('adds the hidden template instruction right after the visible text', () => {
+describe('buildTurnMessage on a site start', () => {
+	it('adds the hidden personalization instruction right after the visible text', () => {
 		const message = buildTurnMessage({
 			id: 'm1',
 			text: 'A bakery in Lisbon',
 			images: [],
 			references: [],
-			templateStart: { name: 'Fernwood' },
+			siteStart: { title: 'Fernwood' },
 		});
 		expect(message.parts).toEqual([
 			{ type: 'text', text: 'A bakery in Lisbon' },
 			{
 				type: 'text',
-				text: templateStartInstruction('Fernwood', 'A bakery in Lisbon'),
+				text: siteStartInstruction('Fernwood', 'A bakery in Lisbon'),
 				providerMetadata: { estori: { hidden: true } },
 			},
 		]);

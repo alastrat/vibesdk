@@ -395,6 +395,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.behavior.getTemplateSource();
     }
 
+    /** The last deployed commit; null unless a deployed Think app. */
+    async getDeployedCommit(): Promise<string | null> {
+        return this.behavior.getDeployedCommit();
+    }
+
     getBehaviorType(): BehaviorType {
         return this.state.behaviorType;
     }
@@ -449,7 +454,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         // Save the app to database (authenticated users only)
         const appService = new AppService(this.env);
         const state = this.state;
-        const fromTemplateVersionId = 'templateStart' in state ? state.templateStart?.versionId ?? null : null;
+        const reuseStart = 'reuseStart' in state ? state.reuseStart : undefined;
         await appService.createApp({
             id: this.state.metadata.agentId,
             userId: this.state.metadata.userId,
@@ -459,9 +464,12 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             originalPrompt: this.state.query,
             finalPrompt: this.state.query,
             framework: this.state.blueprint.frameworks.join(','),
-            fromTemplateVersionId,
+            parentAppId: reuseStart?.sourceAppId ?? null,
+            fromTemplateVersionId: reuseStart?.versionId ?? null,
             visibility: 'private',
             status: this.state.mvpGenerated ? 'completed' : 'generating',
+            // A site copy is deployed during initialization, before this row exists to be stamped.
+            lastDeployedAt: 'lastDeployedCommit' in state && state.lastDeployedCommit ? new Date() : null,
                 createdAt: new Date(),
             updatedAt: new Date()
             });

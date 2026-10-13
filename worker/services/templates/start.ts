@@ -63,7 +63,12 @@ export async function resolveReuseStart(
 	if (decision.source === 'snapshot') {
 		const version = await lookup.getVersion(decision.versionId);
 		if (!version || version.status !== 'approved') return UNAVAILABLE;
-		const files = await lookup.readSnapshot(version.snapshotKey);
+		let files: TreeFile[];
+		try {
+			files = await lookup.readSnapshot(version.snapshotKey);
+		} catch {
+			return { ok: false, status: 500, error: SITE_READ_FAILED_MESSAGE };
+		}
 		return { ok: true, seed: { sourceAppId: app.id, sourceTitle: app.title, versionId: version.id, files } };
 	}
 

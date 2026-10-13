@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Template, TemplateVersion } from '../../database/schema';
-import { resolveReuseStart, type ReuseLookup, type ReuseSourceApp } from './start';
+import { SITE_READ_FAILED_MESSAGE, resolveReuseStart, type ReuseLookup, type ReuseSourceApp } from './start';
 import {
 	SITE_NOT_REUSABLE_MESSAGE,
 	SITE_NOT_YET_AVAILABLE_MESSAGE,
@@ -68,6 +68,8 @@ interface Setup {
 	behaviorType?: string;
 	deployedCommit?: string | null;
 	liveFiles?: TreeFile[];
+	liveReadFails?: boolean;
+	snapshotReadFails?: boolean;
 }
 
 function lookup(setup: Setup = {}) {
@@ -84,8 +86,14 @@ function lookup(setup: Setup = {}) {
 			behaviorType: setup.behaviorType ?? 'think',
 			deployedCommit: setup.deployedCommit === undefined ? 'c9' : setup.deployedCommit,
 		}),
-		readLiveTree: async () => setup.liveFiles ?? LIVE_FILES,
-		readSnapshot: async () => SNAPSHOT_FILES,
+		readLiveTree: async () => {
+			if (setup.liveReadFails) throw new Error('workspace unavailable');
+			return setup.liveFiles ?? LIVE_FILES;
+		},
+		readSnapshot: async () => {
+			if (setup.snapshotReadFails) throw new Error('bucket unavailable');
+			return SNAPSHOT_FILES;
+		},
 	};
 	return { value, purchaseChecks };
 }
@@ -180,6 +188,23 @@ describe('resolveReuseStart', () => {
 			ok: false,
 			status: 404,
 			error: SITE_UNAVAILABLE_MESSAGE,
+		});
+	});
+
+	it('answers 500 when the live site files cannot be read', async () => {
+		expect(await resolveReuseStart(lookup({ liveReadFails: true }).value, 'app1', 'buyer')).toEqual({
+			ok: false,
+			status: 500,
+			error: SITE_READ_FAILED_MESSAGE,
+		});
+	});
+
+	it('answers 500 when the approved snapshot cannot be read', async () => {
+		const paid = lookup({ listing: listing(), purchased: true, snapshotReadFails: true });
+		expect(await resolveReuseStart(paid.value, 'app1', 'buyer')).toEqual({
+			ok: false,
+			status: 500,
+			error: SITE_READ_FAILED_MESSAGE,
 		});
 	});
 });
