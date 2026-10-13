@@ -1428,7 +1428,7 @@ Create `worker/services/payments/checkout.test.ts`:
 import { describe, expect, it } from 'vitest';
 import { checkoutDecision, confirmDecision, type CheckoutInput } from './checkout';
 import { ALREADY_OWNED_MESSAGE, PAYMENT_INCOMPLETE_MESSAGE, SELLER_NOT_READY_MESSAGE } from './config';
-import { SITE_UNAVAILABLE_MESSAGE } from '../templates/reuse';
+import { SITE_NOT_YET_AVAILABLE_MESSAGE, SITE_UNAVAILABLE_MESSAGE } from '../templates/reuse';
 import type { StripeCheckoutSession } from './stripe-client';
 
 const READY: CheckoutInput = {
@@ -1445,11 +1445,16 @@ describe('checkoutDecision', () => {
 		expect(checkoutDecision(READY)).toEqual({ ok: true });
 	});
 
-	it('refuses hidden, free, own and already-owned sites', () => {
+	it('refuses hidden, free, not-yet-approved, own and already-owned sites', () => {
 		expect(checkoutDecision({ ...READY, appPublic: false })).toEqual({ ok: false, status: 404, error: SITE_UNAVAILABLE_MESSAGE });
 		expect(checkoutDecision({ ...READY, removed: true })).toEqual({ ok: false, status: 404, error: SITE_UNAVAILABLE_MESSAGE });
 		expect(checkoutDecision({ ...READY, listing: null })).toEqual({ ok: false, status: 400, error: 'This site is free' });
 		expect(checkoutDecision({ ...READY, listing: { status: 'listed', currentVersionId: null, priceCents: 0 } })).toEqual({
+			ok: false,
+			status: 409,
+			error: SITE_NOT_YET_AVAILABLE_MESSAGE,
+		});
+		expect(checkoutDecision({ ...READY, listing: { status: 'unlisted', currentVersionId: 'v1', priceCents: 2900 } })).toEqual({
 			ok: false,
 			status: 400,
 			error: 'This site is free',
@@ -1534,7 +1539,7 @@ Create `worker/services/payments/checkout.ts`:
 /** Who may pay for a site, and whether a returning buyer's Checkout session is theirs and paid. Pure. */
 
 import type { TemplateListingStatus } from '../../../shared/types/templates';
-import { SITE_UNAVAILABLE_MESSAGE } from '../templates/reuse';
+import { SITE_NOT_YET_AVAILABLE_MESSAGE, SITE_UNAVAILABLE_MESSAGE } from '../templates/reuse';
 import { ALREADY_OWNED_MESSAGE, PAYMENT_INCOMPLETE_MESSAGE, SELLER_NOT_READY_MESSAGE } from './config';
 import type { StripeCheckoutSession } from './stripe-client';
 
@@ -1552,6 +1557,9 @@ export type ConfirmDecision = { ok: true } | { ok: false; status: 403 | 409; err
 
 export function checkoutDecision(input: CheckoutInput): CheckoutDecision {
 	if (!input.appPublic || input.removed) return { ok: false, status: 404, error: SITE_UNAVAILABLE_MESSAGE };
+	if (input.listing?.status === 'listed' && input.listing.currentVersionId === null) {
+		return { ok: false, status: 409, error: SITE_NOT_YET_AVAILABLE_MESSAGE };
+	}
 	const paid = input.listing !== null && input.listing.status === 'listed' && input.listing.currentVersionId !== null;
 	if (!paid) return { ok: false, status: 400, error: 'This site is free' };
 	if (input.isCreator) return { ok: false, status: 400, error: 'You published this site' };
