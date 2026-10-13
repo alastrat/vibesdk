@@ -27,6 +27,7 @@ export const SITE_NOT_REUSABLE_MESSAGE = "This site can't be reused right now";
 export const REUSE_CONSENT_REQUIRED_MESSAGE = 'Confirm that others may copy and adapt this site';
 export const NOT_THINK_REASON = 'Only apps built with the current builder can be published';
 export const NOT_DEPLOYED_REASON = 'Deploy your app before publishing it';
+export const PUBLISHING_CHECK_FAILED_MESSAGE = "Couldn't check this app right now; try again";
 
 export type PublishRequest =
 	| { visibility: 'private' }

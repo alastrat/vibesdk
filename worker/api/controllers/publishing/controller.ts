@@ -16,6 +16,7 @@ import { generateId } from '../../../utils/idGenerator';
 import { VERSION_IN_REVIEW_ERROR, canSubmitNewVersion, canWithdraw, purchaseDecision } from '../../../services/templates/catalog';
 import {
     NOT_DEPLOYED_REASON,
+    PUBLISHING_CHECK_FAILED_MESSAGE,
     SITE_UNAVAILABLE_MESSAGE,
     parsePublishRequest,
     publishEligibilityReason,
@@ -105,7 +106,9 @@ export class PublishingController extends BaseController {
             return PublishingController.createSuccessResponse<SitePublishingData>({
                 visibility: state.visibility,
                 category: state.category,
-                ineligibleReason: publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null),
+                ineligibleReason: facts.unavailable
+                    ? PUBLISHING_CHECK_FAILED_MESSAGE
+                    : publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null),
                 listing: listing ? toOwnerPaidListing(listing, versions, buyerCount) : null,
                 removedFromDiscover: state.removedFromDiscoverAt ? { reason: state.removedFromDiscoverReason } : null,
             });
@@ -243,13 +246,17 @@ export class PublishingController extends BaseController {
         }
     }
 
-    private static async loadFacts(env: Env, appId: string): Promise<{ behaviorType: string; deployedCommit: string | null }> {
+    private static async loadFacts(
+        env: Env,
+        appId: string,
+    ): Promise<{ behaviorType: string; deployedCommit: string | null; unavailable: boolean }> {
         try {
             const agent = await getAgentStubLightweight(env, appId);
             const [behaviorType, deployedCommit] = await Promise.all([agent.getBehaviorType(), agent.getDeployedCommit()]);
-            return { behaviorType, deployedCommit };
-        } catch {
-            return { behaviorType: 'unknown', deployedCommit: null };
+            return { behaviorType, deployedCommit, unavailable: false };
+        } catch (error) {
+            PublishingController.logger.warn('Could not load publishing facts', { appId, error });
+            return { behaviorType: 'unknown', deployedCommit: null, unavailable: true };
         }
     }
 
