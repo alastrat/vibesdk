@@ -260,3 +260,53 @@ describe('parseDiscoverFilters', () => {
 		});
 	});
 });
+
+describe('page text in publish requests', () => {
+	const COPY = {
+		tagline: 'A calm site',
+		about: ['About it.'],
+		features: ['a', 'b', 'c'],
+		includes: [{ name: 'Home', detail: 'The one page' }],
+		madeFor: ['Studios', 'Teachers'],
+	};
+	const BASE = { visibility: 'public', reuseConsent: true, category: 'landing', priceCents: 0 };
+
+	it('keeps the saved text when a request has no pageCopy', () => {
+		const parsed = parsePublishRequest(BASE);
+		expect(parsed.ok && parsed.value.visibility === 'public' && 'pageCopy' in parsed.value).toBe(false);
+	});
+
+	it('accepts valid text, a clear, and rejects text that breaks a rule', () => {
+		expect(parsePublishRequest({ ...BASE, pageCopy: COPY })).toEqual({
+			ok: true,
+			value: { visibility: 'public', category: 'landing', priceCents: 0, pageCopy: COPY },
+		});
+		expect(parsePublishRequest({ ...BASE, pageCopy: null })).toEqual({
+			ok: true,
+			value: { visibility: 'public', category: 'landing', priceCents: 0, pageCopy: null },
+		});
+		expect(parsePublishRequest({ ...BASE, pageCopy: { ...COPY, features: ['one'] } })).toEqual({
+			ok: false,
+			error: 'List 3 to 8 features',
+		});
+	});
+});
+
+describe('planPublish with page text', () => {
+	const APPROVED = { status: 'listed' as const, currentVersionId: 'v1', priceCents: 2900, pendingPriceCents: null };
+
+	it('sends an approved paid site back to review when only its text changed', () => {
+		expect(planPublish(APPROVED, 2900, false)).toEqual({ kind: 'paid', submitVersion: false, listListing: false });
+		expect(planPublish(APPROVED, 2900, true)).toEqual({ kind: 'paid', submitVersion: true, listListing: false });
+	});
+
+	it('refuses a text change while a version is in review', () => {
+		const pending = { ...APPROVED, pendingPriceCents: 2900 };
+		expect(planPublish(pending, 2900, false)).toEqual({ kind: 'paid', submitVersion: false, listListing: false });
+		expect(planPublish(pending, 2900, true)).toEqual({ kind: 'conflict', error: VERSION_IN_REVIEW_ERROR });
+	});
+
+	it('ignores text for free sites', () => {
+		expect(planPublish(APPROVED, 0, true)).toEqual({ kind: 'free', unlistListing: true });
+	});
+});

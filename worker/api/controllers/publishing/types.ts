@@ -1,5 +1,6 @@
 /** API types for publishing sites, paid listings, purchases and admin review. */
 
+import type { SitePageCopy } from '../../../../shared/types/site-page';
 import type {
     TemplateCategory,
     TemplateListingStatus,
@@ -11,6 +12,8 @@ export interface PublishSiteRequest {
     reuseConsent?: boolean;
     category?: TemplateCategory | null;
     priceCents?: number;
+    /** Undefined keeps the saved page text; null clears it. */
+    pageCopy?: SitePageCopy | null;
 }
 
 export interface PublishSiteData {
@@ -50,6 +53,10 @@ export interface SitePublishingData {
     ineligibleReason: string | null;
     listing: OwnerPaidListing | null;
     removedFromDiscover: { reason: string | null } | null;
+    /** The creator's saved page text. */
+    pageCopy: SitePageCopy | null;
+    /** A paid version carrying page text is waiting for review. */
+    pageCopyInReview: boolean;
 }
 
 export interface PaidVersionActionData {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TemplateSource } from '../../agents/core/types';
 import { NOT_DEPLOYED_REASON, NOT_THINK_REASON, type ListingState, type PublishRequest } from './reuse';
 import { VERSION_IN_REVIEW_ERROR } from './catalog';
+import type { SitePageCopy } from '../../../shared/types/site-page';
 import { publishSite, type PublishDeps } from './publish';
 import { SCREENSHOT_FAILED_MESSAGE, TemplateSubmissionError } from './submit';
 import type { TreeFile } from './snapshot';
@@ -13,7 +14,8 @@ const FREE: PublishRequest = { visibility: 'public', category: 'landing', priceC
 const PAID: PublishRequest = { visibility: 'public', category: 'store', priceCents: 2900 };
 
 interface Setup {
-	listing?: { id: string; state: ListingState } | null;
+	listing?: { id: string; state: ListingState; reviewedCopy?: SitePageCopy | null } | null;
+	savedCopy?: SitePageCopy | null;
 	behaviorType?: string;
 	source?: TemplateSource | null;
 	files?: TreeFile[];
@@ -23,8 +25,10 @@ interface Setup {
 
 function harness(setup: Setup = {}) {
 	const calls: string[] = [];
+	const saved: Array<SitePageCopy | null> = [];
+	const versionCopies: Array<SitePageCopy | null> = [];
 	const deps: PublishDeps = {
-		loadListing: async () => setup.listing ?? null,
+		loadListing: async () => (setup.listing ? { reviewedCopy: null, ...setup.listing } : null),
 		loadSource: async () => ({
 			behaviorType: setup.behaviorType ?? 'think',
 			source: setup.source === undefined ? SOURCE : setup.source,
@@ -37,16 +41,21 @@ function harness(setup: Setup = {}) {
 		setListingStatus: async (listingId, status) => {
 			calls.push(`setListingStatus:${listingId}:${status}`);
 		},
-		submitVersion: async (listingId, _source, priceCents) => {
+		submitVersion: async (listingId, _source, priceCents, pageCopy) => {
 			calls.push(`submitVersion:${listingId}:${priceCents}`);
+			versionCopies.push(pageCopy);
 			if (setup.submitError) throw setup.submitError;
+		},
+		loadSavedCopy: async () => setup.savedCopy ?? null,
+		savePageCopy: async (copy) => {
+			saved.push(copy);
 		},
 		applyVisibility: async (request) => {
 			calls.push(`applyVisibility:${request.visibility}`);
 		},
 		sellerPayouts: async () => setup.sellerPayouts ?? 'ready',
 	};
-	return { deps, calls };
+	return { deps, calls, saved, versionCopies };
 }
 
 const APPROVED: { id: string; state: ListingState } = {
@@ -138,5 +147,44 @@ describe('publishSite', () => {
 	it('publishes a free site without asking about payouts', async () => {
 		const { deps } = harness({ sellerPayouts: 'not-configured' });
 		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false });
+	});
+
+	const COPY: SitePageCopy = {
+		tagline: 'A calm site',
+		about: ['About it.'],
+		features: ['a', 'b', 'c'],
+		includes: [{ name: 'Home', detail: 'The one page' }],
+		madeFor: ['Studios', 'Teachers'],
+	};
+
+	it('saves a free site text with the publish and leaves it alone when the request has none', async () => {
+		const withText = harness();
+		expect(await publishSite(withText.deps, { ...FREE, pageCopy: COPY })).toEqual({ ok: true, inReview: false });
+		expect(withText.saved).toEqual([COPY]);
+		const without = harness();
+		await publishSite(without.deps, FREE);
+		expect(without.saved).toEqual([]);
+	});
+
+	it('sends changed text on an approved paid site for review, with the text attached', async () => {
+		const { deps, calls, versionCopies, saved } = harness({ listing: { ...APPROVED, reviewedCopy: null } });
+		expect(await publishSite(deps, { ...PAID, pageCopy: COPY })).toEqual({ ok: true, inReview: true });
+		expect(calls).toEqual(['submitVersion:l1:2900', 'applyVisibility:public']);
+		expect(versionCopies).toEqual([COPY]);
+		expect(saved).toEqual([COPY]);
+	});
+
+	it('keeps an approved paid site out of review when its text is unchanged or omitted', async () => {
+		const same = harness({ listing: { ...APPROVED, reviewedCopy: COPY } });
+		expect(await publishSite(same.deps, { ...PAID, pageCopy: COPY })).toEqual({ ok: true, inReview: false });
+		const omitted = harness({ listing: { ...APPROVED, reviewedCopy: COPY } });
+		expect(await publishSite(omitted.deps, PAID)).toEqual({ ok: true, inReview: false });
+		expect([...same.calls, ...omitted.calls]).toEqual(['applyVisibility:public', 'applyVisibility:public']);
+	});
+
+	it('attaches the saved text to a first paid version when the request has none', async () => {
+		const { deps, versionCopies } = harness({ savedCopy: COPY });
+		await publishSite(deps, PAID);
+		expect(versionCopies).toEqual([COPY]);
 	});
 });

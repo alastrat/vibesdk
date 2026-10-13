@@ -8,7 +8,8 @@ import { BaseController } from '../baseController';
 import type { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
-import { AppService, StripeConnectService, TemplateService } from '../../../database';
+import { AppService, SitePageService, StripeConnectService, TemplateService } from '../../../database';
+import { parseStoredPageCopy, type SitePageCopy } from '../../../../shared/types/site-page';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { getAgentStub, getAgentStubLightweight, getSpaceTemplateStub, type SpaceTemplateStub } from '../../../agents';
@@ -108,10 +109,11 @@ export class PublishingController extends BaseController {
         try {
             const appId = context.pathParams.id;
             const listings = new TemplateService(env);
-            const [state, listing, facts] = await Promise.all([
+            const [state, listing, facts, savedCopy] = await Promise.all([
                 new AppService(env).getPublishingState(appId),
                 listings.getListingByApp(appId),
                 PublishingController.loadFacts(env, appId),
+                new SitePageService(env).getCopy(appId),
             ]);
             if (!state) {
                 return PublishingController.createErrorResponse<SitePublishingData>('App not found', 404);
@@ -128,6 +130,8 @@ export class PublishingController extends BaseController {
                     : publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null),
                 listing: listing ? toOwnerPaidListing(listing, versions, buyerCount) : null,
                 removedFromDiscover: state.removedFromDiscoverAt ? { reason: state.removedFromDiscoverReason } : null,
+                pageCopy: savedCopy,
+                pageCopyInReview: versions.some((version) => version.status === 'pending' && version.pageCopy !== null),
             });
         } catch (error) {
             this.logger.error('Error loading publishing state', error);
@@ -158,12 +162,14 @@ export class PublishingController extends BaseController {
                 return PublishingController.createErrorResponse<PaidVersionActionData>(NOT_DEPLOYED_REASON, 400);
             }
             const priceCents = paidUpdatePrice(listing, versions);
+            const pageCopy = await new SitePageService(env).getCopy(appId);
             const versionId = await PublishingController.submitVersion(
                 env,
                 context,
                 listing.id,
                 source,
                 priceCents,
+                pageCopy,
                 getSpaceTemplateStub(env, appId),
             );
             return PublishingController.createSuccessResponse<PaidVersionActionData>({ versionId, status: 'pending' });
@@ -386,12 +392,16 @@ export class PublishingController extends BaseController {
         const userId = context.user!.id;
         const apps = new AppService(env);
         const listings = new TemplateService(env);
+        const pages = new SitePageService(env);
         const space = getSpaceTemplateStub(env, appId);
         return {
             async loadListing() {
                 const listing = await listings.getListingByApp(appId);
                 if (!listing) return null;
-                const pending = await listings.getPendingVersion(listing.id);
+                const [pending, approved] = await Promise.all([
+                    listings.getPendingVersion(listing.id),
+                    listing.currentVersionId ? listings.getVersion(listing.currentVersionId) : Promise.resolve(null),
+                ]);
                 return {
                     id: listing.id,
                     state: {
@@ -400,6 +410,7 @@ export class PublishingController extends BaseController {
                         priceCents: listing.priceCents,
                         pendingPriceCents: pending?.priceCents ?? null,
                     },
+                    reviewedCopy: parseStoredPageCopy((pending ?? approved)?.pageCopy ?? null),
                 };
             },
             async loadSource() {
@@ -413,9 +424,11 @@ export class PublishingController extends BaseController {
             },
             createListing: () => listings.createListing({ sourceAppId: appId, creatorUserId: userId }),
             setListingStatus: (listingId, status) => listings.setListingStatus(listingId, status),
-            async submitVersion(listingId, source, priceCents) {
-                await PublishingController.submitVersion(env, context, listingId, source, priceCents, space);
+            async submitVersion(listingId, source, priceCents, pageCopy) {
+                await PublishingController.submitVersion(env, context, listingId, source, priceCents, pageCopy, space);
             },
+            loadSavedCopy: () => pages.getCopy(appId),
+            savePageCopy: (copy) => pages.saveCopy(appId, copy),
             async applyVisibility(request) {
                 const result = await apps.updateAppVisibility(
                     appId,
@@ -440,6 +453,7 @@ export class PublishingController extends BaseController {
         listingId: string,
         source: TemplateSource,
         priceCents: number,
+        pageCopy: SitePageCopy | null,
         space: SpaceTemplateStub | null,
     ): Promise<string> {
         if (!space) throw new TemplateSubmissionError(READ_FAILED_MESSAGE, 500);
@@ -459,6 +473,7 @@ export class PublishingController extends BaseController {
                         templateId: submission.templateId,
                         version,
                         priceCents,
+                        pageCopy: pageCopy ? JSON.stringify(pageCopy) : null,
                         sourceCommit: submission.sourceCommit,
                         snapshotKey: submission.snapshotKey,
                         fileCount: submission.fileCount,

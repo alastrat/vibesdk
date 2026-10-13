@@ -6,6 +6,7 @@
  * Pure, so every rule is unit-tested.
  */
 
+import { validatePageCopy, type SitePageCopy } from '../../../shared/types/site-page';
 import {
 	DISCOVER_PRICING_FILTERS,
 	type DiscoverPricing,
@@ -31,7 +32,13 @@ export const PUBLISHING_CHECK_FAILED_MESSAGE = "Couldn't check this app right no
 
 export type PublishRequest =
 	| { visibility: 'private' }
-	| { visibility: 'public'; category: TemplateCategory | null; priceCents: number };
+	| {
+			visibility: 'public';
+			category: TemplateCategory | null;
+			priceCents: number;
+			/** The page text to save; undefined keeps the saved text, null clears it. */
+			pageCopy?: SitePageCopy | null;
+	  };
 
 /** A paid listing as publishing sees it. */
 export interface ListingState {
@@ -97,9 +104,24 @@ export function parsePublishRequest(body: unknown): Validation<PublishRequest> {
 	const priceCents = rawPrice === undefined ? 0 : rawPrice;
 	if (!isTemplatePrice(priceCents)) return { ok: false, error: 'Choose a price' };
 
+	const rawCopy = field(body, 'pageCopy');
+	let pageCopy: SitePageCopy | null | undefined;
+	if (rawCopy === null) {
+		pageCopy = null;
+	} else if (rawCopy !== undefined) {
+		const checked = validatePageCopy(rawCopy);
+		if (!checked.ok) return { ok: false, error: checked.error };
+		pageCopy = checked.value;
+	}
+
 	return {
 		ok: true,
-		value: { visibility: 'public', category: isTemplateCategory(category) ? category : null, priceCents },
+		value: {
+			visibility: 'public',
+			category: isTemplateCategory(category) ? category : null,
+			priceCents,
+			...(pageCopy !== undefined ? { pageCopy } : {}),
+		},
 	};
 }
 
@@ -109,17 +131,20 @@ export function publishEligibilityReason(behaviorType: string, hasDeployedCommit
 	return hasDeployedCommit ? null : NOT_DEPLOYED_REASON;
 }
 
-/** What publishing an app as public at `priceCents` does to its paid listing. */
-export function planPublish(listing: ListingState | null, priceCents: number): PublishPlan {
+/**
+ * What publishing an app as public at `priceCents` does to its paid listing.
+ * `textChanged`: the request's page text differs from the text last sent for review.
+ */
+export function planPublish(listing: ListingState | null, priceCents: number, textChanged = false): PublishPlan {
 	if (priceCents === 0) return { kind: 'free', unlistListing: listing?.status === 'listed' };
 	if (!listing || listing.status === 'unlisted') return { kind: 'paid', submitVersion: true, listListing: true };
 	if (listing.pendingPriceCents !== null) {
-		return listing.pendingPriceCents === priceCents
+		return listing.pendingPriceCents === priceCents && !textChanged
 			? { kind: 'paid', submitVersion: false, listListing: false }
 			: { kind: 'conflict', error: VERSION_IN_REVIEW_ERROR };
 	}
 	const approvedAtThisPrice = listing.currentVersionId !== null && listing.priceCents === priceCents;
-	return { kind: 'paid', submitVersion: !approvedAtThisPrice, listListing: false };
+	return { kind: 'paid', submitVersion: !approvedAtThisPrice || textChanged, listListing: false };
 }
 
 /** Whether a user can start a new app from a site, and which files it copies. */
