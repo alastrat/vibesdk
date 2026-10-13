@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
 import { Button, Loader } from '@cloudflare/kumo';
@@ -25,8 +25,20 @@ export default function SitePage() {
 	const [useOpen, setUseOpen] = useState(false);
 	const [editOpen, setEditOpen] = useState(false);
 	const actionsRef = useRef<HTMLDivElement>(null);
+	const resetCheckout = checkout.reset;
 
-	if (!appId || page.isError) {
+	// A page restored from the back-forward cache (Back from Stripe) would keep Buy spinning.
+	useEffect(() => {
+		const onPageShow = (event: PageTransitionEvent) => {
+			if (event.persisted) resetCheckout();
+		};
+		window.addEventListener('pageshow', onPageShow);
+		return () => window.removeEventListener('pageshow', onPageShow);
+	}, [resetCheckout]);
+
+	// A failed background refetch keeps the page it already loaded.
+	const data = page.data;
+	if (!appId || (page.isError && !data)) {
 		const unavailable = !page.error || page.error.message === SITE_PAGE_UNAVAILABLE_MESSAGE;
 		return (
 			<div className="mx-auto grid max-w-md justify-items-center gap-3 px-4 py-24 text-center">
@@ -44,7 +56,8 @@ export default function SitePage() {
 		);
 	}
 
-	if (page.isPending) {
+	// No data and no error yet: the session or the first fetch is still pending.
+	if (!data) {
 		return (
 			<div className="flex justify-center py-24">
 				<Loader />
@@ -52,7 +65,6 @@ export default function SitePage() {
 		);
 	}
 
-	const data = page.data;
 	const intendedUrl = `/discover/${data.id}`;
 	const actions: SiteActions = {
 		use: () => {

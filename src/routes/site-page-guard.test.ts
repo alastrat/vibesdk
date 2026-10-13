@@ -39,9 +39,24 @@ describe('the product page', () => {
 
 	it('waits for the session before judging the page unavailable', () => {
 		const page = source('/src/routes/discover/site.tsx');
-		expect(page).toContain('page.isPending');
+		expect(page).toContain('if (!data)');
 		expect(page).not.toContain('page.isLoading');
-		expect(page).toContain('!appId || page.isError');
+		expect(page).toContain('!appId || (page.isError && !data)');
+	});
+
+	it('keeps a loaded page on screen when a background refetch fails', () => {
+		const page = source('/src/routes/discover/site.tsx');
+		expect(page).toContain('const data = page.data;');
+		expect(page).not.toContain('!appId || page.isError');
+		expect(page.indexOf('const data = page.data;')).toBeLessThan(page.indexOf('page.isError && !data'));
+	});
+
+	it('resets Buy when the browser restores the page from its back-forward cache', () => {
+		const page = source('/src/routes/discover/site.tsx');
+		expect(page).toContain("window.addEventListener('pageshow', onPageShow);");
+		expect(page).toContain('if (event.persisted) resetCheckout();');
+		expect(page).toContain("window.removeEventListener('pageshow', onPageShow);");
+		expect(page).toContain('const resetCheckout = checkout.reset;');
 	});
 
 	it('keeps the live preview from reloading on refetch, with a stale time under the 30-minute token', () => {
