@@ -359,6 +359,29 @@ export class RateLimitService {
 		}
 	}
 
+	static async enforcePageCopyDraftRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		user: AuthUser,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.PAGE_COPY_DRAFT];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const identifier = await this.getUserIdentifier(user);
+		const key = this.buildRateLimitKey(RateLimitType.PAGE_COPY_DRAFT, identifier);
+		const result = await this.enforce(env, key, config, RateLimitType.PAGE_COPY_DRAFT);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Page drafting limit reached. Maximum ${limitConfig.limit} drafts per hour`,
+				RateLimitType.PAGE_COPY_DRAFT,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
 	/**
 	 * Get remaining credits for LLM calls without incrementing (for pre-flight checks)
 	 * Works in both dev and prod - uses local DO in dev mode

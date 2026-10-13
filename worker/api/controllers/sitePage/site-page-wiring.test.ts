@@ -5,6 +5,7 @@ const sources = import.meta.glob<string>(
 		'/worker/api/routes/sitePageRoutes.ts',
 		'/worker/api/routes/index.ts',
 		'/worker/api/controllers/sitePage/controller.ts',
+		'/worker/api/controllers/sitePage/draftController.ts',
 		'/worker/api/controllers/appView/controller.ts',
 		'/worker/agents/core/behaviors/think.ts',
 		'/worker/agents/core/behaviors/base.ts',
@@ -61,5 +62,17 @@ describe('public preview subject', () => {
 	it('exposes the public preview from the coding agent to its behavior, and the base behavior has none', () => {
 		expect(source('/worker/agents/core/codingAgent.ts')).toContain('this.behavior.getPublicPreviewURL()');
 		expect(source('/worker/agents/core/behaviors/base.ts')).toMatch(/getPublicPreviewURL\(\): Promise<string \| null> \{\s*return null;/);
+	});
+});
+
+describe('drafting page text', () => {
+	it('is owner-only, rate limited before the model call, and uses the lite model', () => {
+		const routes = source('/worker/api/routes/sitePageRoutes.ts').split('\n');
+		expect(routes.find((line) => line.includes("'/api/apps/:id/page-copy/draft'"))).toContain('setAuthLevel(AuthConfig.ownerOnly)');
+		const draft = source('/worker/api/controllers/sitePage/draftController.ts');
+		expect(draft.indexOf('enforcePageCopyDraftRateLimit(')).toBeGreaterThan(-1);
+		expect(draft.indexOf('enforcePageCopyDraftRateLimit(')).toBeLessThan(draft.indexOf('draftPageCopy('));
+		expect(draft).toContain("agentActionName: 'templateSelection'");
+		expect(draft).toContain('PAGE_DRAFT_FAILED_MESSAGE');
 	});
 });

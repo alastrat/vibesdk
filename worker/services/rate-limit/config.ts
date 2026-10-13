@@ -56,6 +56,7 @@ export enum RateLimitType {
 	PUBLIC_APPS = 'publicApps',
 	SPACE_PREVIEW = 'spacePreview',
 	TEMPLATE_SUBMISSION = 'templateSubmission',
+	PAGE_COPY_DRAFT = 'pageCopyDraft',
 }
 
 export interface RateLimitSettings {
@@ -66,6 +67,7 @@ export interface RateLimitSettings {
 	[RateLimitType.PUBLIC_APPS]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.SPACE_PREVIEW]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.TEMPLATE_SUBMISSION]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.PAGE_COPY_DRAFT]: DORateLimitConfig | KVRateLimitConfig;
 }
 
 export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
@@ -124,5 +126,12 @@ export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
 		store: RateLimitStore.DURABLE_OBJECT,
 		limit: 5,
 		period: 24 * 60 * 60,
+	},
+	// Per-user cap on AI drafts of product page text; each one is a model call.
+	pageCopyDraft: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 10,
+		period: 60 * 60,
 	},
 };
