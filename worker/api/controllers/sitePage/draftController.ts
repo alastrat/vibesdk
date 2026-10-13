@@ -16,6 +16,8 @@ import { PageCopyDraftError, PageCopyDraftSchema, draftPageCopy, type PageCopyCo
 import type { PageCopyDraftData } from './types';
 
 const DRAFT_MAX_TOKENS = 2000;
+// The cheapest current Think model; the template-selection defaults point at retired Gemini 2.5 models.
+const PAGE_DRAFT_MODEL_ID = 'google-ai-studio/gemini-3.6-flash';
 
 export class PageCopyDraftController extends BaseController {
     static logger = createLogger('PageCopyDraftController');
@@ -58,7 +60,7 @@ export class PageCopyDraftController extends BaseController {
         }
     }
 
-    /** The platform's lite model, the same one template selection uses, with structured output. */
+    /** Structured output from a current Gemini model; the action name supplies the token and temperature settings. */
     private static completer(env: Env, appId: string, userId: string): PageCopyCompleter {
         const context: InferenceContext = {
             metadata: { agentId: appId, userId },
@@ -70,9 +72,12 @@ export class PageCopyDraftController extends BaseController {
                 env,
                 messages,
                 agentActionName: 'templateSelection',
+                modelName: PAGE_DRAFT_MODEL_ID,
                 schema: PageCopyDraftSchema,
                 context,
                 maxTokens: DRAFT_MAX_TOKENS,
+                // One attempt: a later attempt would swap in the action's retired fallback or cheaper-model Gemini 2.5.
+                retryLimit: 1,
             });
             return result?.object ?? null;
         };

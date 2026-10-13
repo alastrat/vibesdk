@@ -114,6 +114,17 @@ const MODELS_MASTER = {
             contextSize: 1048576, // 1M Context
         }
     },
+    // Same entry as in THINK_MODELS (think/model-config.ts); inference needs it here to reach the gateway.
+    GEMINI_3_6_FLASH: {
+        id: 'google-ai-studio/gemini-3.6-flash',
+        config: {
+            name: 'Gemini 3.6 Flash',
+            size: ModelSize.REGULAR,
+            provider: 'google-ai-studio',
+            creditCost: 3,
+            contextSize: 1_048_576,
+        }
+    },
 
     // --- Anthropic Models ---
     CLAUDE_3_7_SONNET_20250219: {

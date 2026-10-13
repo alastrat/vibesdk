@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { AI_MODEL_CONFIG, isValidAIModel } from '../../../agents/inferutils/config.types';
+import { THINK_MODELS } from '../../../agents/think/model-config';
 
 const sources = import.meta.glob<string>(
 	[
@@ -74,5 +76,25 @@ describe('drafting page text', () => {
 		expect(draft.indexOf('enforcePageCopyDraftRateLimit(')).toBeLessThan(draft.indexOf('draftPageCopy('));
 		expect(draft).toContain("agentActionName: 'templateSelection'");
 		expect(draft).toContain('PAGE_DRAFT_FAILED_MESSAGE');
+	});
+});
+
+describe('the model that drafts page text', () => {
+	const draft = source('/worker/api/controllers/sitePage/draftController.ts');
+	const modelId = /const PAGE_DRAFT_MODEL_ID = '([^']+)';/.exec(draft)?.[1];
+
+	it('is the cheapest current Think model, passed explicitly with a single attempt', () => {
+		expect(modelId).toBe('google-ai-studio/gemini-3.6-flash');
+		const cheapest = [...THINK_MODELS].sort((a, b) => a.config.creditCost - b.config.creditCost)[0];
+		expect(cheapest.id).toBe(modelId);
+		expect(draft).toContain('modelName: PAGE_DRAFT_MODEL_ID');
+		// One attempt: later attempts would swap in the retired fallback models.
+		expect(draft).toContain('retryLimit: 1');
+	});
+
+	it('is known to the inference catalog, which inference needs to reach the gateway', () => {
+		expect(modelId && isValidAIModel(modelId)).toBe(true);
+		const thinkModel = THINK_MODELS.find((model) => model.id === modelId);
+		expect(modelId && isValidAIModel(modelId) ? AI_MODEL_CONFIG[modelId] : undefined).toEqual(thinkModel?.config);
 	});
 });
