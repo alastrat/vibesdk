@@ -8,6 +8,7 @@ import Settings from './routes/settings/index';
 import AppsPage from './routes/apps';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
+import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
 import { ProtectedRoute } from './routes/protected-route';
 
@@ -55,6 +56,10 @@ const routes = [
 			{
 				path: 'discover',
 				Component: DiscoverPage,
+			},
+			{
+				path: 'discover/:appId',
+				Component: SitePage,
 			},
 			{
 				path: 'templates',
