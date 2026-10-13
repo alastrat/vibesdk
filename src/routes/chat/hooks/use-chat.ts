@@ -58,7 +58,7 @@ export function useChat({
 	projectType = 'app',
 	behaviorType: explicitBehaviorType,
 	modelId,
-	templateId,
+	sourceAppId,
 	autoStart = true,
 	onDebugMessage,
 	onTerminalMessage,
@@ -71,8 +71,8 @@ export function useChat({
 	behaviorType?: BehaviorType;
 	/** Build model for a new think session (a capabilities `thinkModels` id). */
 	modelId?: string;
-	/** Start a new session from this gallery template; the query may then be empty. */
-	templateId?: string;
+	/** Start a new session from this published site; the query may then be empty. */
+	sourceAppId?: string;
 	/**
 	 * Whether a brand-new session may be created automatically on mount.
 	 * In-app navigation (e.g. the home prompt box) sets this true. Sessions
@@ -560,7 +560,7 @@ export function useChat({
 			let sessionStreamOpened = false;
 			try {
 				if (urlChatId === 'new') {
-					if (!userQuery && !templateId) {
+					if (!userQuery && !sourceAppId) {
 						const errorMsg = 'Please enter a description of what you want to build';
 						logger.error('Query is required for new code generation');
 						toast.error(errorMsg);
@@ -592,7 +592,7 @@ export function useChat({
 						projectType,
 						behaviorType: explicitBehaviorType,
 						modelId,
-						templateId,
+						sourceAppId,
 						images: userImages, // Pass images from URL params for multi-modal blueprint
 					});
 					sessionStreamOpened = true;
@@ -690,8 +690,8 @@ export function useChat({
 
 					// Connect to WebSocket
 					logger.debug('connecting to ws with created id');
-					// An exact template copy runs no model turn, so nothing would end generation.
-					connectWithRetry(result.websocketUrl, { disableGenerate: Boolean(templateId) && query.length === 0 });
+					// An exact copy of a site runs no model turn, so nothing would end generation.
+					connectWithRetry(result.websocketUrl, { disableGenerate: Boolean(sourceAppId) && query.length === 0 });
 					setChatId(result.agentId); // This comes from the server response
 					
 					// Emit app-created event for sidebar updates
@@ -756,7 +756,7 @@ export function useChat({
 		projectType,
 		explicitBehaviorType,
 		modelId,
-		templateId,
+		sourceAppId,
 		connectWithRetry,
 		loadBootstrapFiles,
 		onDebugMessage,

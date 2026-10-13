@@ -5,6 +5,7 @@ import { FloatingBackgroundIcons } from '@/components/shared/FloatingBackgroundI
 import { GitCloneModal } from '@/components/shared/GitCloneModal';
 import { PublishDialog } from '@/components/publishing/PublishDialog';
 import { SiteReuseBar } from '@/components/publishing/SiteReuseBar';
+import { UseSiteButton } from '@/components/publishing/UseSiteButton';
 import {
 	useApp,
 	useAppPreviewToken,
@@ -440,6 +441,10 @@ export default function AppView() {
 			),
 			trailing: (
 				<>
+					<UseSiteButton
+						app={app}
+						autoOpen={searchParams.get('use') === '1'}
+					/>
 					{isSignedIn && isOwner && (
 						<Button
 							variant="secondary"
@@ -551,6 +556,7 @@ export default function AppView() {
 		isSignedIn,
 		isOwner,
 		navigate,
+		searchParams,
 	]);
 
 	usePageHeader(headerContent);

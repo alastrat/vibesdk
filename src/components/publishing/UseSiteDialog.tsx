@@ -10,16 +10,17 @@ import {
 } from '@/components/ui/dialog';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { useFeature } from '@/features';
-import { MAX_AGENT_QUERY_LENGTH, type PublicTemplateDetail } from '@/api-types';
-import { templateStartPath } from '@/lib/template-start';
+import { MAX_AGENT_QUERY_LENGTH } from '@/api-types';
+import { reuseStartPath } from '@/lib/reuse-start';
 
-interface UseTemplateDialogProps {
-	template: PublicTemplateDetail;
+interface UseSiteDialogProps {
+	sourceAppId: string;
+	sourceTitle: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }
 
-export function UseTemplateDialog({ template, open, onOpenChange }: UseTemplateDialogProps) {
+export function UseSiteDialog({ sourceAppId, sourceTitle, open, onOpenChange }: UseSiteDialogProps) {
 	const navigate = useNavigate();
 	const { capabilities } = useFeature();
 	const [description, setDescription] = useState('');
@@ -28,24 +29,23 @@ export function UseTemplateDialog({ template, open, onOpenChange }: UseTemplateD
 
 	const start = () => {
 		onOpenChange(false);
-		navigate(
-			templateStartPath({ templateId: template.id, description, modelId: effectiveModel || undefined }),
-			{ state: { fromPrompt: true } },
-		);
+		navigate(reuseStartPath({ sourceAppId, description, modelId: effectiveModel || undefined }), {
+			state: { fromPrompt: true },
+		});
 	};
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>Use {template.name}</DialogTitle>
+					<DialogTitle>Use {sourceTitle}</DialogTitle>
 					<DialogDescription>
-						Your new app starts as a copy of this template. Describe your business and the agent rewrites the
-						text, names, prices and images for you, or leave it empty to keep an exact copy.
+						Your new app starts as a copy of this site. Describe your business and the agent rewrites the text,
+						names, prices and images for you, or leave it empty to keep an exact copy.
 					</DialogDescription>
 				</DialogHeader>
 				<InputArea
-					id="template-description"
+					id="reuse-description"
 					label="Describe your business (optional)"
 					placeholder="A family bakery in Lisbon that sells sourdough and pastries"
 					value={description}
