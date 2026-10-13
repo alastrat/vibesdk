@@ -2,7 +2,7 @@ import { RpcTarget } from 'cloudflare:workers';
 import { getAgentByName } from 'agents';
 import type { UIMessage } from 'ai';
 import { ThinkState } from '../state';
-import { AgentInitArgs, DeploymentTarget } from '../types';
+import { AgentInitArgs, DeploymentTarget, ReuseSeed, TemplateSource } from '../types';
 import { BaseCodingBehavior } from './base';
 import { WebSocketMessageResponses } from '../../constants';
 import { ICodingAgent } from '../../services/interfaces/ICodingAgent';
@@ -22,7 +22,7 @@ import {
 	resolvePreviewHost,
 } from 'worker/utils/urls';
 import { isDev } from 'worker/utils/envs';
-import { signSpacePreviewToken } from 'worker/utils/spacePreviewToken';
+import { PUBLIC_PREVIEW_SUBJECT, signSpacePreviewToken } from 'worker/utils/spacePreviewToken';
 import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
@@ -42,6 +42,7 @@ import { getBrowserCaptureClient } from '../../../services/browser-capture/facto
 import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome } from '../../think/references';
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
+import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -69,6 +70,10 @@ type SpaceRpcStub = {
 	) => Promise<{ preview_url?: string; commit_hash?: string; error?: string; details?: string }>;
 	getDeploymentBundle: (branch: string) => Promise<BranchDeploymentBundle>;
 	rollbackToCommit: (branch: string, commitHash: string) => Promise<unknown>;
+	importFiles: (
+		files: Array<{ path: string; bytes: Uint8Array }>,
+		message: string,
+	) => Promise<{ sha: string; message: string }>;
 };
 
 /** Subset of AI-SDK `UIMessageChunk` shapes this behavior reacts to. */
@@ -179,9 +184,11 @@ export class ThinkCodingBehavior
 		await super.initialize(initArgs);
 		// Think projects are template-free: SpaceDO + the agent's own file tools
 		// own scaffolding entirely. We intentionally ignore `templateInfo`.
-		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId } = initArgs;
+		const { query, hostname, inferenceContext, sandboxSessionId, thinkModelId, reuseSeed } = initArgs;
 
-		const baseName = (query || 'project').toString();
+		const baseName = (query || reuseSeed?.sourceTitle || 'project').toString();
+		const described = query.trim().length > 0;
+		const storedQuery = !described && reuseSeed ? siteCopyQuery(reuseSeed.sourceTitle) : query;
 		const projectName = generateProjectName(
 			baseName,
 			generateNanoId(),
@@ -194,11 +201,11 @@ export class ThinkCodingBehavior
 		this.setState({
 			...this.state,
 			projectName,
-			query,
+			query: storedQuery,
 			blueprint: {
-				title: deriveProjectTitle(baseName),
+				title: initialProjectTitle(query, reuseSeed?.sourceTitle, deriveProjectTitle),
 				projectName,
-				description: query,
+				description: storedQuery,
 				colorPalette: ['#1e1e1e'],
 				frameworks: [],
 				plan: [],
@@ -215,6 +222,10 @@ export class ThinkCodingBehavior
 			thinkModelId,
 			pendingImages: (initArgs.images ?? []).map(toPendingImage),
 			currentBranch: 'main',
+			// Set before the agent is configured, because the system prompt depends on it.
+			reuseStart: reuseSeed
+				? { sourceAppId: reuseSeed.sourceAppId, sourceTitle: reuseSeed.sourceTitle, versionId: reuseSeed.versionId }
+				: undefined,
 		});
 
 		const configureStartedAt = performance.now();
@@ -222,7 +233,11 @@ export class ThinkCodingBehavior
 		const configureDurationMs = performance.now() - configureStartedAt;
 
 		const seedStartedAt = performance.now();
-		await this.seedEmptySpace();
+		if (reuseSeed) {
+			await this.seedFromSite(reuseSeed, described);
+		} else {
+			await this.seedEmptySpace();
+		}
 		const seedDurationMs = performance.now() - seedStartedAt;
 
 		this.logger.info(
@@ -332,6 +347,20 @@ export class ThinkCodingBehavior
 	 * files don't know about — the environment and custom instructions for the run.
 	 */
 	private buildSystemPrompt(modelName: string): string {
+		const reuseStart = this.state.reuseStart;
+		const startGuidance = reuseStart
+			? [
+					'## Started from a published site',
+					`This app started as a copy of the published site "${reuseStart.sourceTitle}". Its files already contain a complete, working site. When the user describes their business, rewrite the existing site for it in that same turn without calling \`ask_questions\`: infer anything they did not say and invent plausible business names, product names, prices and copy that fit their description. Keep the layout, components, styles and working features.`,
+				]
+			: [
+					'## Clarify before building',
+					'If the request is underspecified or ambiguous (e.g. a one-line idea with no details on features, scope, data, or design), do NOT start writing files yet. Instead, on this turn:',
+					'1. Briefly state the assumptions you would make to proceed.',
+					'2. Call the `ask_questions` tool with all the concise, targeted clarifying questions you need answered. Each question can include predefined options and can allow multiple selections and/or a custom free-text answer.',
+					'3. End your turn after calling `ask_questions`. Do not write/edit files or deploy until the scope is clear or the user tells you to proceed with your assumptions.',
+					'If the request is already clear and specific, skip this and go straight to building.',
+				];
 		return [
 			`You are powered by the model with the exact ID ${modelName}.`,
 			'<env>',
@@ -347,12 +376,7 @@ export class ThinkCodingBehavior
 			'## Naming',
 			'If this project does not yet have a clear name (e.g. the request is a long or vague description rather than a concise product name), call the `set_title` tool once, early, with a short human-friendly title (Title Case, under ~60 characters). Skip it if a good title already exists; do not rename on every turn.',
 			'',
-			'## Clarify before building',
-			'If the request is underspecified or ambiguous (e.g. a one-line idea with no details on features, scope, data, or design), do NOT start writing files yet. Instead, on this turn:',
-			'1. Briefly state the assumptions you would make to proceed.',
-			'2. Call the `ask_questions` tool with all the concise, targeted clarifying questions you need answered. Each question can include predefined options and can allow multiple selections and/or a custom free-text answer.',
-			'3. End your turn after calling `ask_questions`. Do not write/edit files or deploy until the scope is clear or the user tells you to proceed with your assumptions.',
-			'If the request is already clear and specific, skip this and go straight to building.',
+			...startGuidance,
 			'',
 			'## Deploy & verify workflow (platform-specific)',
 			'Once you are actively building (the scope is clear or the user confirmed), this app is previewed on Cloudflare Workers via SpaceDO — there is no shell. In a building turn, do NOT end after only writing files:',
@@ -384,6 +408,20 @@ export class ThinkCodingBehavior
 		}
 	}
 
+	/**
+	 * Start the workspace from a published site: the usual empty seed, the
+	 * site's files as one commit, then a deploy so the preview shows the copy
+	 * before any model turn. Throws when the copy cannot be made, which fails
+	 * initialization before the app is saved.
+	 */
+	private async seedFromSite(seed: ReuseSeed, described: boolean): Promise<void> {
+		await this.seedEmptySpace();
+		await this.callSpace((space) => space.importFiles(seed.files, `Start from ${seed.sourceTitle}`));
+		const previewUrl = await this.deployCurrentBranch();
+		if (!previewUrl) throw new Error(`${seed.sourceTitle} could not be deployed`);
+		if (!described) this.setMVPGenerated();
+	}
+
 	// ──────────────────────────────────────────────────────────────
 	// Generation orchestration
 
@@ -406,7 +444,8 @@ export class ThinkCodingBehavior
 		return `https://${host}`;
 	}
 
-	public async getBrowserPreviewURL(previewVersionOverride?: number): Promise<string> {
+	/** `subject` replaces the owner's id in the token claims, for previews shown to people other than the owner. */
+	public async getBrowserPreviewURL(previewVersionOverride?: number, subject?: string): Promise<string> {
 		const spaceName = this.getAgentId();
 		const branch = this.state.currentBranch || 'main';
 		const previewBaseUrl = `${await this.getPublicOrigin()}${buildSpacePreviewPath(spaceName, branch)}`;
@@ -421,10 +460,31 @@ export class ThinkCodingBehavior
 		const token = await signSpacePreviewToken(this.env, {
 			spaceName,
 			branch,
-			userId: this.state.metadata.userId,
+			userId: subject ?? this.state.metadata.userId,
 			previewVersion,
 		});
 		return `${previewBaseUrl}?t=${encodeURIComponent(token)}`;
+	}
+
+	override async getTemplateSource(): Promise<TemplateSource | null> {
+		const commit = this.state.lastDeployedCommit;
+		if (!commit) return null;
+		return { commit, previewUrl: await this.getBrowserPreviewURL() };
+	}
+
+	override async getDeployedCommit(): Promise<string | null> {
+		return this.state.lastDeployedCommit ?? null;
+	}
+
+	override async getPublicPreviewURL(): Promise<string | null> {
+		if (!this.state.lastDeployedCommit) return null;
+		return this.getBrowserPreviewURL(undefined, PUBLIC_PREVIEW_SUBJECT);
+	}
+
+	/** Remember the deployed commit and stamp the app row; Discover reads the stamp to know the site is deployed. */
+	private recordDeployedCommit(commit: string): void {
+		this.setState({ ...this.state, lastDeployedCommit: commit });
+		void new AppService(this.env).updateApp(this.getAgentId(), { lastDeployedAt: new Date() });
 	}
 
 	public getTemplateDetails(): TemplateDetails {
@@ -520,7 +580,9 @@ export class ThinkCodingBehavior
 				let completed: boolean;
 				try {
 					const references = await this.captureTurnReferences(compiled, conversationId);
-					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references });
+					const siteStart =
+						this.isMVPGenerated() || !this.state.reuseStart ? undefined : { title: this.state.reuseStart.sourceTitle };
+					const message = buildTurnMessage({ id: generateNanoId(), text: compiled, images, references, siteStart });
 					completed = await this.runPrompt(message, conversationId);
 				} catch (e) {
 					this.logger.error('Think prompt failed', e);
@@ -911,7 +973,7 @@ export class ThinkCodingBehavior
 
 		const commitHash = parsed && typeof parsed.commit_hash === 'string' ? parsed.commit_hash : undefined;
 		if (commitHash) {
-			this.setState({ ...this.state, lastDeployedCommit: commitHash });
+			this.recordDeployedCommit(commitHash);
 		}
 		try {
 			const url = await this.getBrowserPreviewURL();
@@ -1076,7 +1138,7 @@ export class ThinkCodingBehavior
 			}
 
 			if (result?.commit_hash) {
-				this.setState({ ...this.state, lastDeployedCommit: result.commit_hash });
+				this.recordDeployedCommit(result.commit_hash);
 			}
 
 			const url = await this.getBrowserPreviewURL();

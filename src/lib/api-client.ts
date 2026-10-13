@@ -10,7 +10,6 @@ import type{
 	PublicAppsData,
 	FavoriteToggleData,
 	CreateAppData,
-	UpdateAppVisibilityData,
 	AppDeleteData,
 	AppDetailsData,
 	AppStarToggleData,
@@ -42,7 +41,6 @@ import type{
 	SecretTemplatesData,
 	AgentConnectionData,
 	AgentStreamingResponse,
-	App,
 	ActiveSessionsData,
 	ApiKeysData,
 	LinkedIdentitiesData,
@@ -65,6 +63,27 @@ import type{
 	QueryAppTableResponse,
 	WipeAppDatabaseResponse,
 	ListAppBranchesResponse,
+	AdminSalesData,
+	ConfirmPurchaseData,
+	ConfirmPurchaseRequest,
+	DiscoverPricing,
+	DiscoverRemovalData,
+	DiscoverRemovalRequest,
+	MyPaidListingsData,
+	PageCopyDraftData,
+	PaidVersionActionData,
+	PendingReviewsData,
+	PublishSiteData,
+	PublishSiteRequest,
+	RejectVersionRequest,
+	ReviewVersionFileData,
+	ReviewVersionFilesData,
+	SiteCheckoutData,
+	SitePageData,
+	SitePublishingData,
+	StripeConnectStatusData,
+	StripeLinkData,
+	TemplateCategory,
 } from '@/api-types';
 import {
 	RateLimitExceededError,
@@ -146,6 +165,9 @@ interface PublicAppsParams extends PaginationParams {
 	framework?: string;
 	search?: string;
 	boardId?: string;
+	category?: TemplateCategory;
+	pricing?: DiscoverPricing;
+	reusableOnly?: boolean;
 }
 
 /**
@@ -491,6 +513,9 @@ class ApiClient {
 		if (params?.period) queryParams.set('period', params.period);
 		if (params?.framework) queryParams.set('framework', params.framework);
 		if (params?.search) queryParams.set('search', params.search);
+		if (params?.category) queryParams.set('category', params.category);
+		if (params?.pricing && params.pricing !== 'all') queryParams.set('pricing', params.pricing);
+		if (params?.reusableOnly) queryParams.set('reusableOnly', 'true');
 		if (params?.boardId) queryParams.set('boardId', params.boardId);
 
 		const endpoint = `/api/apps/public${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
@@ -522,22 +547,6 @@ class ApiClient {
 	}
 
 	/**
-	 * Update app visibility
-	 */
-	async updateAppVisibility(
-		appId: string,
-		visibility: App['visibility'],
-	): Promise<ApiResponse<UpdateAppVisibilityData>> {
-		return this.request<UpdateAppVisibilityData>(
-			`/api/apps/${appId}/visibility`,
-			{
-				method: 'PUT',
-				body: { visibility },
-			},
-		);
-	}
-
-	/**
 	 * Delete an app
 	 */
 	async deleteApp(appId: string): Promise<ApiResponse<AppDeleteData>> {
@@ -555,6 +564,104 @@ class ApiClient {
 	 */
 	async getAppDetails(appId: string): Promise<ApiResponse<AppDetailsData>> {
 		return this.request<AppDetailsData>(`/api/apps/${appId}`);
+	}
+
+	// ===============================
+	// Publishing and reuse API Methods
+	// ===============================
+
+	/** Make an app public (with consent, category and price) or private. */
+	async publishSite(appId: string, body: PublishSiteRequest): Promise<ApiResponse<PublishSiteData>> {
+		return this.request<PublishSiteData>(`/api/apps/${appId}/visibility`, { method: 'PUT', body });
+	}
+
+	/** Publishing settings for one of the owner's apps; quiet because non-owners get 403. */
+	async getSitePublishing(appId: string): Promise<ApiResponse<SitePublishingData>> {
+		return this.request<SitePublishingData>(`/api/apps/${appId}/publishing`, {}, true);
+	}
+
+	/** A Discover site's product page; quiet because the page shows its own unavailable state. */
+	async getSitePage(appId: string): Promise<ApiResponse<SitePageData>> {
+		return this.request<SitePageData>(`/api/discover/${appId}`, {}, true);
+	}
+
+	/** An AI draft of a site's page text, for its owner; quiet because the dialog shows the failure inline. */
+	async draftPageCopy(appId: string): Promise<ApiResponse<PageCopyDraftData>> {
+		return this.request<PageCopyDraftData>(`/api/apps/${appId}/page-copy/draft`, { method: 'POST' }, true);
+	}
+
+	async submitPaidUpdate(appId: string): Promise<ApiResponse<PaidVersionActionData>> {
+		return this.request<PaidVersionActionData>(`/api/apps/${appId}/paid-listing/versions`, { method: 'POST' });
+	}
+
+	async withdrawPaidVersion(appId: string, versionId: string): Promise<ApiResponse<PaidVersionActionData>> {
+		return this.request<PaidVersionActionData>(`/api/apps/${appId}/paid-listing/versions/${versionId}/withdraw`, {
+			method: 'POST',
+		});
+	}
+
+	/** Start Stripe Checkout for a paid site; the response carries the Checkout page URL. */
+	async createSiteCheckout(appId: string): Promise<ApiResponse<SiteCheckoutData>> {
+		return this.request<SiteCheckoutData>(`/api/apps/${appId}/purchases`, { method: 'POST' });
+	}
+
+	/** Record the purchase after the buyer returns from Stripe Checkout. */
+	async confirmSitePurchase(appId: string, sessionId: string): Promise<ApiResponse<ConfirmPurchaseData>> {
+		const body: ConfirmPurchaseRequest = { sessionId };
+		return this.request<ConfirmPurchaseData>(`/api/apps/${appId}/purchases/confirm`, { method: 'POST', body });
+	}
+
+	async startStripeOnboarding(): Promise<ApiResponse<StripeLinkData>> {
+		return this.request<StripeLinkData>('/api/stripe/connect/onboarding', { method: 'POST' });
+	}
+
+	async getStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
+	}
+
+	async getStripeDashboardLink(): Promise<ApiResponse<StripeLinkData>> {
+		return this.request<StripeLinkData>('/api/stripe/connect/dashboard', { method: 'POST' });
+	}
+
+	/** Admins only; quiet because non-admins get 403. */
+	async getAdminSales(): Promise<ApiResponse<AdminSalesData>> {
+		return this.request<AdminSalesData>('/api/admin/sales', {}, true);
+	}
+
+	async getMyPaidListings(): Promise<ApiResponse<MyPaidListingsData>> {
+		return this.request<MyPaidListingsData>('/api/paid-listings/mine');
+	}
+
+	/** Review queue; quiet because non-admins get 403 and the page explains it. */
+	async getPendingReviews(): Promise<ApiResponse<PendingReviewsData>> {
+		return this.request<PendingReviewsData>('/api/admin/reviews', {}, true);
+	}
+
+	async getReviewVersionFiles(versionId: string): Promise<ApiResponse<ReviewVersionFilesData>> {
+		return this.request<ReviewVersionFilesData>(`/api/admin/template-versions/${versionId}/files`);
+	}
+
+	async getReviewVersionFile(versionId: string, path: string): Promise<ApiResponse<ReviewVersionFileData>> {
+		return this.request<ReviewVersionFileData>(
+			`/api/admin/template-versions/${versionId}/file?path=${encodeURIComponent(path)}`,
+		);
+	}
+
+	async approveReviewVersion(versionId: string): Promise<ApiResponse<PaidVersionActionData>> {
+		return this.request<PaidVersionActionData>(`/api/admin/template-versions/${versionId}/approve`, { method: 'POST' });
+	}
+
+	async rejectReviewVersion(versionId: string, reason: string): Promise<ApiResponse<PaidVersionActionData>> {
+		const body: RejectVersionRequest = { reason };
+		return this.request<PaidVersionActionData>(`/api/admin/template-versions/${versionId}/reject`, {
+			method: 'POST',
+			body,
+		});
+	}
+
+	/** Admins only: hide a public site from Discover and block its reuse, or restore it. */
+	async setDiscoverRemoval(appId: string, body: DiscoverRemovalRequest): Promise<ApiResponse<DiscoverRemovalData>> {
+		return this.request<DiscoverRemovalData>(`/api/admin/apps/${appId}/discover`, { method: 'PUT', body });
 	}
 
 	/**

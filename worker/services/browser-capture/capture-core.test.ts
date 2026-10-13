@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { REFERENCE_EXTRACT_SCRIPT } from './reference-extract';
-import { ReferenceCaptureError, runReferenceCapture, runScreenshot } from './capture-core';
+import { PHONE_VIEWPORT, ReferenceCaptureError, runReferenceCapture, runScreenshot } from './capture-core';
 import type { CapturePage, ReferencePayload, ScreenshotPayload } from './types';
 
 interface FakePage {
@@ -8,16 +8,19 @@ interface FakePage {
 	calls: string[];
 	screenshotOptions: unknown[];
 	gotoOptions: unknown[];
+	viewports: unknown[];
 }
 
 function fakePage(options: { gotoError?: Error; screenshot?: string } = {}): FakePage {
 	const calls: string[] = [];
 	const screenshotOptions: unknown[] = [];
 	const gotoOptions: unknown[] = [];
+	const viewports: unknown[] = [];
 	const page: CapturePage = {
 		on: () => undefined,
 		setViewport: async (v) => {
 			calls.push(`viewport ${v.width}x${v.height}`);
+			viewports.push(v);
 		},
 		goto: async (url, opts) => {
 			calls.push(`goto ${url}`);
@@ -37,7 +40,7 @@ function fakePage(options: { gotoError?: Error; screenshot?: string } = {}): Fak
 			calls.push('close');
 		},
 	};
-	return { page, calls, screenshotOptions, gotoOptions };
+	return { page, calls, screenshotOptions, gotoOptions, viewports };
 }
 
 const PAYLOAD: ScreenshotPayload = {
@@ -54,6 +57,14 @@ describe('runScreenshot', () => {
 		expect(fake.calls).toEqual(['viewport 1280x720', `goto ${PAYLOAD.url}`, 'screenshot', 'close']);
 		expect(fake.gotoOptions).toEqual([{ waitUntil: 'networkidle2', timeout: 15_000 }]);
 		expect(fake.screenshotOptions).toEqual([{ type: 'png', fullPage: false, encoding: 'base64' }]);
+	});
+
+	it('emulates a phone and returns a JPEG when the payload asks for one', async () => {
+		const fake = fakePage({ screenshot: 'base64-jpeg' });
+		const payload: ScreenshotPayload = { ...PAYLOAD, viewport: PHONE_VIEWPORT, format: 'jpeg' };
+		await expect(runScreenshot(fake.page, payload)).resolves.toBe('base64-jpeg');
+		expect(fake.viewports).toEqual([{ width: 390, height: 844, isMobile: true, hasTouch: true }]);
+		expect(fake.screenshotOptions).toEqual([{ type: 'jpeg', quality: 80, fullPage: false, encoding: 'base64' }]);
 	});
 
 	it('closes the page and rethrows when navigation fails', async () => {

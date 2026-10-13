@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, forwardRef, useCallback } from 'react';
 import { RefreshCw, AlertCircle } from 'lucide-react';
 import { WebSocket } from 'partysocket';
+import { PREVIEW_IFRAME_SANDBOX } from '@/lib/preview-sandbox';
 
 interface PreviewIframeProps {
     src: string;
@@ -336,7 +337,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 		if (loadState.status === 'loaded' && loadState.loadedSrc) {
 			return (
 				<iframe
-                    sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-orientation-lock	allow-popups allow-presentation"
+                    sandbox={PREVIEW_IFRAME_SANDBOX}
 					ref={ref}
 					src={loadState.loadedSrc}
 					className={className}
@@ -363,7 +364,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 				<div className={`${className} relative flex flex-col items-center justify-center bg-kumo-base border border-text/10 rounded-lg`}>
                     {loadState.status === 'postload' && loadState.loadedSrc && (
                         <iframe
-                            sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-forms allow-modals allow-orientation-lock	allow-popups allow-presentation"
+                            sandbox={PREVIEW_IFRAME_SANDBOX}
                             ref={ref}
                             src={loadState.loadedSrc}
                             className="absolute inset-0 opacity-0 pointer-events-none"

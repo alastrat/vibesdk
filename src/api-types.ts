@@ -36,10 +36,12 @@ export type {
 
 export type {
   AppDetailsData,
+  AppReuseView,
   AppStarToggleData,
   GeneratedCodeFile,
   GitCloneTokenData,
-  PreviewTokenData
+  PreviewTokenData,
+  StartedFromView
 } from 'worker/api/controllers/appView/types';
 
 // User-related API Types
@@ -227,6 +229,57 @@ export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/t
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
 
+export type {
+	AdminSalesData,
+	ConfirmPurchaseData,
+	ConfirmPurchaseRequest,
+	DiscoverRemovalData,
+	DiscoverRemovalRequest,
+	MyPaidListing,
+	MyPaidListingsData,
+	OwnerPaidListing,
+	PaidListingVersionView,
+	PaidVersionActionData,
+	PendingReview,
+	PendingReviewsData,
+	PublishSiteData,
+	PublishSiteRequest,
+	RejectVersionRequest,
+	ReviewVersionFileData,
+	ReviewVersionFilesData,
+	SaleView,
+	SiteCheckoutData,
+	SitePublishingData,
+} from 'worker/api/controllers/publishing/types';
+export type { StripeConnectStatusData, StripeLinkData } from 'worker/api/controllers/payments/types';
+export type {
+	DiscoverPricing,
+	TemplateCategory,
+	TemplateListingStatus,
+	TemplateVersionStatus,
+} from '../shared/types/templates.js';
+export {
+	DISCOVER_PRICING_FILTERS,
+	PLATFORM_FEE_PERCENT,
+	TEMPLATE_CATEGORIES,
+	TEMPLATE_CATEGORY_LABELS,
+	TEMPLATE_PRICE_OPTIONS_CENTS,
+	formatTemplatePrice,
+	platformFeeCents,
+} from '../shared/types/templates.js';
+export type {
+	PageCopyValidation,
+	SitePageCopy,
+	SitePageField,
+	SitePageInclude,
+} from '../shared/types/site-page.js';
+export {
+	PAGE_DRAFT_FAILED_MESSAGE,
+	SITE_PAGE_LIMITS,
+	SITE_PAGE_UNAVAILABLE_MESSAGE,
+	validatePageCopy,
+} from '../shared/types/site-page.js';
+
 export type { AIModels } from 'worker/agents/inferutils/config.types';
 // Model selection types
 export type ModelSelectionMode = 'platform' | 'byok' | 'custom';
@@ -347,3 +400,10 @@ export type {
     GitHubExportOptions,
     GitHubExportResult,
 } from 'worker/services/github/types';
+
+export type {
+    PageCopyDraftData,
+    SitePageCard,
+    SitePageData,
+    SitePageOffer,
+} from 'worker/api/controllers/sitePage/types';

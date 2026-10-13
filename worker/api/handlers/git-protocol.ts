@@ -11,6 +11,7 @@ import { GitCloneService } from '../../agents/git/git-clone-service';
 import type { MemFS } from '../../agents/git/memfs';
 import type { TemplateDetails } from '../../services/sandbox/sandboxTypes';
 import { AppService } from '../../database/services/AppService';
+import { TemplateService } from '../../database/services/TemplateService';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { GitCache } from './git-cache';
 
@@ -97,7 +98,7 @@ function extractAgentHeadOid(gitObjects: Array<{ path: string; data: Uint8Array 
 }
 
 /**
- * Verify git access (public apps or owner with valid token)
+ * Verify git access (public apps without a listed paid listing, or owner with valid token)
  */
 async function verifyGitAccess(
     request: Request,
@@ -116,14 +117,18 @@ async function verifyGitAccess(
         return { hasAccess: false };
     }
 
-    // Public apps: anyone can clone
+    // Public apps: anyone can clone, unless a paid listing is in effect or in review
     if (app.visibility === 'public') {
-        return { hasAccess: true, appCreatedAt: app.createdAt || undefined };
+        const listing = await new TemplateService(env).getListingByApp(appId);
+        if (listing?.status !== 'listed') {
+            return { hasAccess: true, appCreatedAt: app.createdAt || undefined };
+        }
+        logger.info('Paid listing - only the owner may clone', { appId });
     }
 
-    // Private apps: require authentication
+    // Private apps and paid listings: require the owner's token
     const authHeader = request.headers.get('Authorization');
-    logger.info('Private app - checking auth header', { hasAuthHeader: !!authHeader, authType: authHeader?.split(' ')[0] });
+    logger.info('Owner-only clone - checking auth header', { hasAuthHeader: !!authHeader, authType: authHeader?.split(' ')[0] });
     
     let token: string | null = null;
 

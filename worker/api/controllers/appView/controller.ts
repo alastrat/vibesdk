@@ -4,18 +4,25 @@ import { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { getAgentStubLightweight } from '../../../agents';
 import { AppService } from '../../../database/services/AppService';
+import { TemplateService, UserService } from '../../../database';
+import type { EnhancedAppData } from '../../../database/types';
+import type { Template } from '../../../database/schema';
 import { 
     AppDetailsData, 
     AppStarToggleData,
     GitCloneTokenData,
     PreviewTokenData,
+    AppReuseView,
+    StartedFromView,
 } from './types';
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { toPublicAppDetail } from '../apps/publicAppDto';
 import { createLogger } from '../../../logger';
+import { canReadSource, reuseDecision } from '../../../services/templates/reuse';
+import { toStartedFromView } from './started-from';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
-import { extractRequestMetadata } from '../../../utils/authUtils';
+import { recordVisit } from './record-visit';
 import { buildUserWorkerUrl, buildGitCloneUrl } from 'worker/utils/urls';
 import { JWTUtils } from '../../../utils/jwtUtils';
 import {
@@ -24,11 +31,16 @@ import {
     signOwnerPreviewToken,
 } from '../../../utils/ownerPreviewToken';
 
+interface ListingAccess {
+    listing: Template | null;
+    hasPurchase: boolean;
+}
+
 export class AppViewController extends BaseController {
     static logger = createLogger('AppViewController');
     
     // Get single app details (public endpoint, auth optional for ownership check)
-    static async getAppDetails(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDetailsData>>> {
+    static async getAppDetails(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDetailsData>>> {
         try {
             const appId = context.pathParams.id;
             if (!appId) {
@@ -65,32 +77,27 @@ export class AppViewController extends BaseController {
             // Views are deduplicated per viewer per time bucket by AppService,
             // so anonymous viewers are identified by request metadata rather
             // than a unique-per-request token.
-            if (userId) {
-                await appService.recordAppView(appId, { userId });
-            } else {
-                const metadata = extractRequestMetadata(request);
-                await appService.recordAppView(appId, {
-                    ipAddress: metadata.ipAddress,
-                    userAgent: metadata.userAgent,
-                });
-            }
+            await recordVisit(appService, appId, userId, request);
 
             // Try to fetch current agent state to get latest generated code
             let agentSummary: AgentSummary | null = null;
             let previewUrl: string = '';
             let behaviorType: BehaviorType | null = null;
+            let deployedCommit: string | null = null;
             
             try {
                 // Use lightweight stub for read-only operations (faster - skips template loading)
                 const agentStub = await getAgentStubLightweight(env, appResult.id);
-                const [summary, previewUrlCache, agentBehaviorType] = await Promise.all([
+                const [summary, previewUrlCache, agentBehaviorType, agentDeployedCommit] = await Promise.all([
                     agentStub.getSummary(),
                     agentStub.getPreviewUrlCache(),
                     agentStub.getBehaviorType(),
+                    agentStub.getDeployedCommit(),
                 ]);
                 agentSummary = summary;
                 previewUrl = previewUrlCache;
                 behaviorType = agentBehaviorType;
+                deployedCommit = agentDeployedCommit;
             } catch (agentError) {
                 // If agent doesn't exist or error occurred, fall back to database stored files
                 this.logger.warn('Could not fetch agent state, using stored files:', agentError);
@@ -99,27 +106,105 @@ export class AppViewController extends BaseController {
             const cloudflareUrl = appResult.deploymentId ? buildUserWorkerUrl(env, appResult.deploymentId) : '';
 
             // Only the owner may see operational fields (userId, deploymentId,
-            // private-repo GitHub URL). The prompt + generated code remain
-            // visible to all viewers of a public app (intended feature).
+            // private-repo GitHub URL). The prompt stays visible to all viewers
+            // of a public app; the generated code only to those who may read
+            // the source.
             const isOwner = !!userId && appResult.userId === userId;
+
+            const [access, startedFromView, canModerate] = await Promise.all([
+                AppViewController.loadListingAccess(env, appResult, userId, isOwner),
+                AppViewController.loadStartedFrom(env, appResult.parentAppId),
+                userId ? new UserService(env).isPlatformAdmin(userId) : Promise.resolve(false),
+            ]);
+            if (behaviorType === 'think' && deployedCommit && !appResult.lastDeployedAt) {
+                ctx.waitUntil(appService.updateApp(appResult.id, { lastDeployedAt: new Date() }));
+            }
+            const reuse = AppViewController.toReuseView(appResult, access, isOwner, behaviorType, deployedCommit);
+            const paidListingListed = access.listing?.status === 'listed';
+            const codeVisible = canReadSource({
+                visibility: appResult.visibility,
+                isOwner,
+                paidListingListed,
+                hasPurchase: access.hasPurchase,
+            });
 
             const responseData: AppDetailsData = {
                 ...toPublicAppDetail(appResult, isOwner),
                 cloudflareUrl: cloudflareUrl,
                 previewUrl: previewUrl || cloudflareUrl,
                 behaviorType,
+                reuse,
+                startedFrom: startedFromView,
+                canModerate,
+                removedFromDiscover:
+                    (isOwner || canModerate) && appResult.removedFromDiscoverAt
+                        ? { reason: appResult.removedFromDiscoverReason }
+                        : null,
+                codeVisible,
+                cloneNeedsToken: appResult.visibility === 'private' || paidListingListed,
                 user: {
                     id: isOwner ? appResult.userId! : '',
                     displayName: appResult.userName || 'Unknown',
                     avatarUrl: appResult.userAvatar
                 },
-                agentSummary,
+                agentSummary: codeVisible ? agentSummary : null,
             };
 
             return AppViewController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching app details:', error);
             return AppViewController.createErrorResponse<AppDetailsData>('Internal server error', 500);
+        }
+    }
+
+    /** A public app's paid listing and whether the viewer bought it; reuse and source access both read it. */
+    private static async loadListingAccess(
+        env: Env,
+        app: EnhancedAppData,
+        userId: string | undefined,
+        isOwner: boolean,
+    ): Promise<ListingAccess> {
+        if (app.visibility !== 'public') return { listing: null, hasPurchase: false };
+        const listings = new TemplateService(env);
+        const listing = await listings.getListingByApp(app.id);
+        const hasPurchase =
+            listing?.status === 'listed' && userId && !isOwner ? await listings.hasPurchase(listing.id, userId) : false;
+        return { listing, hasPurchase };
+    }
+
+    private static toReuseView(
+        app: EnhancedAppData,
+        { listing, hasPurchase }: ListingAccess,
+        isOwner: boolean,
+        behaviorType: BehaviorType | null,
+        deployedCommit: string | null,
+    ): AppReuseView | null {
+        if (app.visibility !== 'public') return null;
+        const paid = listing !== null && listing.status === 'listed' && listing.currentVersionId !== null;
+        const decision = reuseDecision({
+            visibility: app.visibility,
+            removedFromDiscover: app.removedFromDiscoverAt !== null,
+            isThink: behaviorType === 'think',
+            deployedCommit,
+            listing: listing ? { status: listing.status, currentVersionId: listing.currentVersionId } : null,
+            isOwner,
+            hasPurchase,
+        });
+        return {
+            canUse: decision.ok,
+            needsPurchase: !decision.ok && decision.status === 402,
+            priceCents: paid ? listing.priceCents : null,
+            unavailableReason: decision.ok || decision.status === 402 ? null : decision.error,
+        };
+    }
+
+    private static async loadStartedFrom(env: Env, parentAppId: string | null): Promise<StartedFromView | null> {
+        if (!parentAppId) return null;
+        try {
+            return toStartedFromView(await new AppService(env).getStartedFrom(parentAppId));
+        } catch (error) {
+            AppViewController.logger.warn('Could not load the source of a copied app', error);
+            return null;
         }
     }
 

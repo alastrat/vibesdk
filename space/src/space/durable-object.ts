@@ -15,7 +15,7 @@ import {
   VIBE_APP_MODULE,
 } from "./inspector-wrapper"
 import { ArtifactsBackend, resolveSpaceFsBackendMode, SqlBackend, type SpaceFsBackend } from "./fs-backend"
-import { stageWorkdir, stagedTreeMatchesHead, resolveHead } from "./git-objects"
+import { readCommitFiles, resolveHead, stageWorkdir, stagedTreeMatchesHead, writeWorkdirFiles } from "./git-objects"
 import { stripPreviewSecurityHeaders } from "./preview-headers"
 
 // ─── Inspector result types ────────────────────────────────────────────────
@@ -382,6 +382,38 @@ export class SpaceDO extends DurableObject<Env> {
     )
 
     return { sha: result.oid, message: result.message }
+  }
+
+  /**
+   * Every file in the tree of `commit`, as bytes. Reads git objects, so the
+   * result is the committed content even when the working tree has edits.
+   *
+   * A best-effort fetch first brings in the commit's objects when the startup
+   * fetch of the Artifacts base did not complete.
+   */
+  async readTreeAtCommit(commit: string): Promise<Array<{ path: string; bytes: Uint8Array }>> {
+    await this.ensureInit()
+    try {
+      const branch = (await this.currentBranch()) ?? "main"
+      await this.backend.fetch(branch)
+    } catch {
+      // Best-effort: read whatever is already local.
+    }
+    const files = await readCommitFiles(this.fs, commit)
+    return files.filter((file) => !isReservedPath(file.path))
+  }
+
+  /**
+   * Write `files` into the working tree and commit them as one restore point.
+   * Starts a new app from a template snapshot.
+   */
+  async importFiles(
+    files: Array<{ path: string; bytes: Uint8Array }>,
+    message: string,
+  ): Promise<{ sha: string; message: string }> {
+    await this.ensureInit()
+    await writeWorkdirFiles(this.fs, files, isReservedPath)
+    return this.gitCommit(message)
   }
 
   async gitLog(limit?: number): Promise<GitLogEntry[]> {

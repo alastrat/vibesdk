@@ -11,6 +11,8 @@ import type {
 	PaginationInfo,
 	TimePeriod,
 	AppSortOption,
+	DiscoverPricing,
+	TemplateCategory,
 } from '@/api-types';
 import { appEvents } from '@/lib/app-events';
 import {
@@ -30,6 +32,9 @@ interface UsePaginatedAppsOptions {
 	includeVisibility?: boolean;
 	limit?: number;
 	autoFetch?: boolean;
+	/** Discover's category and pricing filters; ignored for user lists. */
+	category?: TemplateCategory | null;
+	pricing?: DiscoverPricing;
 }
 
 interface FilterState {
@@ -90,6 +95,7 @@ async function fetchPaginatedAppsPage(
 		searchQuery: string;
 		limit: number;
 	},
+	discover: { category: TemplateCategory | null; pricing: DiscoverPricing },
 	page: number,
 ): Promise<PaginatedAppsPage> {
 	const params = {
@@ -102,6 +108,8 @@ async function fetchPaginatedAppsPage(
 				? undefined
 				: filters.filterFramework,
 		search: filters.searchQuery || undefined,
+		category: type === 'public' ? discover.category ?? undefined : undefined,
+		pricing: type === 'public' ? discover.pricing : undefined,
 		visibility:
 			includeVisibility && filters.filterVisibility !== 'all'
 				? filters.filterVisibility
@@ -199,6 +207,8 @@ export function usePaginatedApps(
 				? filterState.filterVisibility
 				: 'all',
 			search: debouncedSearchQuery,
+			category: options.category ?? 'all',
+			pricing: options.pricing ?? 'all',
 			limit,
 		}),
 		[
@@ -207,6 +217,8 @@ export function usePaginatedApps(
 			filterState.filterFramework,
 			filterState.filterVisibility,
 			options.includeVisibility,
+			options.category,
+			options.pricing,
 			debouncedSearchQuery,
 			limit,
 		],
@@ -231,6 +243,7 @@ export function usePaginatedApps(
 					searchQuery: debouncedSearchQuery,
 					limit,
 				},
+				{ category: options.category ?? null, pricing: options.pricing ?? 'all' },
 				pageParam,
 			),
 		initialPageParam: 1,

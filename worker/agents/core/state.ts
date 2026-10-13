@@ -119,6 +119,14 @@ export interface AgenticState extends BaseProjectState {
     currentPlan: Plan;
 }
 
+/** The published site a Think app was copied from. */
+export interface ReuseStart {
+    sourceAppId: string;
+    sourceTitle: string;
+    /** The approved paid version copied, or null for a free site's latest deploy. */
+    versionId: string | null;
+}
+
 /**
  * Think agent state — backed by `@cloudflare/think` (ThinkAgent DO) for the
  * agentic loop and `@space-do/space` SpaceDO for files/preview/deploy.
@@ -143,6 +151,8 @@ export interface ThinkState extends BaseProjectState {
     /** Uploaded images waiting for the next turn; kept in state so a restart does not drop them. */
     pendingImages?: PendingImage[];
     cloudflareDeploymentUrl?: string;
+    /** Set when the app was copied from a published site; its first turn personalizes the copy. */
+    reuseStart?: ReuseStart;
 }
 
 export type AgentState = PhasicState | AgenticState | ThinkState;

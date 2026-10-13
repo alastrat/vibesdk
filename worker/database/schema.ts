@@ -1,5 +1,13 @@
 import { sql } from 'drizzle-orm';
 import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+// Relative on purpose: drizzle-kit loads this file without the `shared` alias.
+import {
+    TEMPLATE_CATEGORIES,
+    TEMPLATE_LISTING_STATUSES,
+    TEMPLATE_PAYMENT_PROVIDERS,
+    TEMPLATE_VERSION_STATUSES,
+    USER_ROLES,
+} from '../../shared/types/templates';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -40,6 +48,9 @@ export const users = sqliteTable('users', {
     // Nullable on purpose: null means "use the derived default" (off for users who
     // signed in with Cloudflare, on for everyone else who explicitly connected).
     aiGatewayEnabled: integer('ai_gateway_enabled', { mode: 'boolean' }),
+
+    // Platform role; admins review template submissions.
+    role: text('role', { enum: USER_ROLES }).notNull().default('user'),
     
     // Account Status
     isActive: integer('is_active', { mode: 'boolean' }).default(true),
@@ -197,7 +208,15 @@ export const apps = sqliteTable('apps', {
     
     // Versioning (for future support)
     version: integer('version').default(1),
-    parentAppId: text('parent_app_id'), // If forked from another app
+    parentAppId: text('parent_app_id'), // Forked from, or started from by reuse
+    fromTemplateVersionId: text('from_template_version_id'), // Approved paid version this app was copied from
+
+    // Discover: the owner's category and consent to reuse, and admin removal.
+    category: text('category', { enum: TEMPLATE_CATEGORIES }),
+    reuseConsentAt: integer('reuse_consent_at', { mode: 'timestamp' }),
+    removedFromDiscoverAt: integer('removed_from_discover_at', { mode: 'timestamp' }),
+    removedFromDiscoverBy: text('removed_from_discover_by'),
+    removedFromDiscoverReason: text('removed_from_discover_reason'),
 
     // Preview-token revocation epoch. Incremented on every visibility change so
     // outstanding space-preview tokens (which embed the value at mint) are
@@ -225,6 +244,111 @@ export const apps = sqliteTable('apps', {
     createdAtIdx: index('apps_created_at_idx').on(table.createdAt),
     updatedAtIdx: index('apps_updated_at_idx').on(table.updatedAt),
 }));
+
+// ========================================
+// TEMPLATES
+// ========================================
+
+/**
+ * Paid listings - one per app whose owner set a price. Name, description and
+ * category come from the app; the approved version and its price live here.
+ */
+export const templates = sqliteTable('templates', {
+    id: text('id').primaryKey(),
+    sourceAppId: text('source_app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    creatorUserId: text('creator_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // Null until an admin approves the first version.
+    currentVersionId: text('current_version_id'),
+    // `unlisted` while the app is free again; a new listing starts unlisted until its first submission is stored.
+    status: text('status', { enum: TEMPLATE_LISTING_STATUSES }).notNull().default('listed'),
+    // The approved version's price in US cents; 0 before the first approval.
+    priceCents: integer('price_cents').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    creatorIdx: index('templates_creator_idx').on(table.creatorUserId),
+    sourceAppIdx: uniqueIndex('templates_source_app_unique_idx').on(table.sourceAppId),
+}));
+
+/**
+ * Template versions table - One row per submission. Files and screenshots are
+ * frozen in R2 under templates/<templateId>/<versionId>/.
+ */
+export const templateVersions = sqliteTable('template_versions', {
+    id: text('id').primaryKey(),
+    templateId: text('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    sourceCommit: text('source_commit').notNull(),
+    snapshotKey: text('snapshot_key').notNull(),
+    fileCount: integer('file_count').notNull(),
+    totalBytes: integer('total_bytes').notNull(),
+    desktopShotKey: text('desktop_shot_key').notNull(),
+    mobileShotKey: text('mobile_shot_key').notNull(),
+    pageCopy: text('page_copy'), // Page text sent for review with this version (JSON)
+    // The price this submission asks for; approval copies it to the listing.
+    priceCents: integer('price_cents').notNull(),
+    status: text('status', { enum: TEMPLATE_VERSION_STATUSES }).notNull().default('pending'),
+    rightsConfirmedAt: integer('rights_confirmed_at', { mode: 'timestamp' }).notNull(),
+    reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
+    reviewedAt: integer('reviewed_at', { mode: 'timestamp' }),
+    rejectionReason: text('rejection_reason'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    templateVersionIdx: uniqueIndex('template_versions_template_version_unique_idx').on(table.templateId, table.version),
+    statusIdx: index('template_versions_status_idx').on(table.status),
+    // A listing holds at most one version in review.
+    onePendingIdx: uniqueIndex('template_versions_one_pending_idx').on(table.templateId).where(sql`${table.status} = 'pending'`),
+}));
+
+/**
+ * Template purchases table - Who may use a paid site. Recorded with the 'test' provider (no charge) until a payment provider is connected.
+ */
+export const templatePurchases = sqliteTable('template_purchases', {
+    id: text('id').primaryKey(),
+    // Kept when the listing is deleted with its app.
+    templateId: text('template_id').references(() => templates.id, { onDelete: 'set null' }),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    priceCents: integer('price_cents').notNull(),
+    provider: text('provider', { enum: TEMPLATE_PAYMENT_PROVIDERS }).notNull(),
+    // Stripe purchases: the Checkout session (unique, so webhook and confirm record it once) and the money split.
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    stripePaymentIntentId: text('stripe_payment_intent_id'),
+    platformFeeCents: integer('platform_fee_cents'),
+    sellerAmountCents: integer('seller_amount_cents'),
+    currency: text('currency').notNull().default('usd'),
+    sellerStripeAccountId: text('seller_stripe_account_id'),
+    // What was bought, kept when the listing is deleted with its app.
+    sourceAppId: text('source_app_id'),
+    versionId: text('version_id'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+}, (table) => ({
+    templateUserIdx: uniqueIndex('template_purchases_template_user_unique_idx').on(table.templateId, table.userId),
+    userIdx: index('template_purchases_user_idx').on(table.userId),
+    // SQLite cannot add a UNIQUE column with ALTER TABLE, so uniqueness comes from this index.
+    checkoutSessionIdx: uniqueIndex('template_purchases_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),
+}));
+
+/** A site's product page text as the creator last saved it (JSON). Paid sites show their approved version's text instead. */
+export const sitePages = sqliteTable('site_pages', {
+    appId: text('app_id').primaryKey().references(() => apps.id, { onDelete: 'cascade' }),
+    copy: text('copy').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/**
+ * Stripe Connect accounts - the Express account a seller is paid through,
+ * with the readiness flags Stripe reports (refreshed by webhook and status checks).
+ */
+export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
+    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    stripeAccountId: text('stripe_account_id').notNull().unique(),
+    detailsSubmitted: integer('details_submitted', { mode: 'boolean' }).notNull().default(false),
+    chargesEnabled: integer('charges_enabled', { mode: 'boolean' }).notNull().default(false),
+    payoutsEnabled: integer('payouts_enabled', { mode: 'boolean' }).notNull().default(false),
+    transfersActive: integer('transfers_active', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+});
 
 /**
  * Favorites table - Track user favorite apps
@@ -673,3 +797,12 @@ export type NewUserModelProvider = typeof userModelProviders.$inferInsert;
 
 export type Star = typeof stars.$inferSelect;
 export type NewStar = typeof stars.$inferInsert;
+
+export type Template = typeof templates.$inferSelect;
+export type NewTemplate = typeof templates.$inferInsert;
+export type TemplateVersion = typeof templateVersions.$inferSelect;
+export type NewTemplateVersion = typeof templateVersions.$inferInsert;
+export type TemplatePurchase = typeof templatePurchases.$inferSelect;
+export type NewTemplatePurchase = typeof templatePurchases.$inferInsert;
+export type SitePage = typeof sitePages.$inferSelect;
+export type StripeConnectAccount = typeof stripeConnectAccounts.$inferSelect;

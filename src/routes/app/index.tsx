@@ -3,6 +3,9 @@ import { MonacoEditor } from '@/components/monaco-editor/lazy-monaco-editor';
 import { AppLoadingSkeleton } from '@/components/shared/AppLoadingSkeleton';
 import { FloatingBackgroundIcons } from '@/components/shared/FloatingBackgroundIcons';
 import { GitCloneModal } from '@/components/shared/GitCloneModal';
+import { PublishDialog } from '@/components/publishing/PublishDialog';
+import { SiteReuseBar } from '@/components/publishing/SiteReuseBar';
+import { UseSiteButton } from '@/components/publishing/UseSiteButton';
 import {
 	useApp,
 	useAppPreviewToken,
@@ -10,9 +13,9 @@ import {
 	useDeployPreview,
 	useToggleAppFavorite,
 	useToggleAppStar,
-	useUpdateAppVisibility,
 } from '@/hooks/use-app';
 import { useAuth } from '@/contexts/auth-context';
+import { useConfirmCheckoutReturn } from '@/hooks/use-payments';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { ApiError } from '@/lib/api-client';
@@ -92,6 +95,7 @@ export default function AppView() {
 	const { user } = useAuth();
 	const { requireAuth } = useAuthGuard();
 	const { app, loading, error } = useApp(id);
+	useConfirmCheckoutReturn(app);
 	const { copied: urlCopied, copy: copyUrl } = useCopyToClipboard();
 	const { copy: copyFile } = useCopyToClipboard({
 		successMessage: 'Code copied to clipboard',
@@ -104,6 +108,7 @@ export default function AppView() {
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [deleteError, setDeleteError] = useState<string>();
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
+	const [publishOpen, setPublishOpen] = useState(false);
 	const [activeFilePath, setActiveFilePath] = useState<string>();
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
 	const autoDeployAppIdRef = useRef<string | undefined>(undefined);
@@ -132,8 +137,6 @@ export default function AppView() {
 
 	const { mutateAsync: toggleFavorite } = useToggleAppFavorite(app?.id);
 	const { mutateAsync: toggleStar } = useToggleAppStar(app?.id);
-	const { mutateAsync: updateVisibility, isPending: isUpdatingVisibility } =
-		useUpdateAppVisibility(app?.id);
 	const { mutateAsync: deleteApp, isPending: isDeleting } = useDeleteApp();
 	const { mutateAsync: deployPreview, isPending: isDeploying } =
 		useDeployPreview(app?.id);
@@ -411,38 +414,6 @@ export default function AppView() {
 			});
 	}, [app, thinkPreviewUrl, deployPreview, toast, user]);
 
-	const handleToggleVisibility = useCallback(async () => {
-		if (!app || !user || !isOwner) {
-			toast.add({
-				title: 'You can only change visibility of your own apps',
-				variant: 'error',
-			});
-			return;
-		}
-
-		try {
-			const newVisibility =
-				app.visibility === 'private' ? 'public' : 'private';
-			const result = await updateVisibility(newVisibility);
-
-			toast.add({
-				title:
-					result.message ||
-					`App is now ${newVisibility === 'private' ? 'private' : 'public'}`,
-				variant: 'success',
-			});
-		} catch (error) {
-			console.error('Error updating app visibility:', error);
-			toast.add({
-				title:
-					error instanceof ApiError
-						? error.message
-						: 'Failed to update visibility',
-				variant: 'error',
-			});
-		}
-	}, [app, user, isOwner, updateVisibility, toast]);
-
 	const headerContent = useMemo(() => {
 		if (loading || error || !app) return null;
 
@@ -472,13 +443,15 @@ export default function AppView() {
 			),
 			trailing: (
 				<>
+					<UseSiteButton
+						app={app}
+						autoOpen={searchParams.get('use') === '1'}
+					/>
 					{isSignedIn && isOwner && (
 						<Button
 							variant="secondary"
 							size="sm"
-							onClick={handleToggleVisibility}
-							disabled={isUpdatingVisibility}
-							loading={isUpdatingVisibility}
+							onClick={() => setPublishOpen(true)}
 							icon={
 								app.visibility === 'private' ? (
 									<LockOpen
@@ -495,7 +468,7 @@ export default function AppView() {
 						>
 							{app.visibility === 'private'
 								? 'Make public'
-								: 'Make private'}
+								: 'Publishing'}
 						</Button>
 					)}
 
@@ -584,9 +557,8 @@ export default function AppView() {
 		app,
 		isSignedIn,
 		isOwner,
-		isUpdatingVisibility,
-		handleToggleVisibility,
 		navigate,
+		searchParams,
 	]);
 
 	usePageHeader(headerContent);
@@ -658,12 +630,26 @@ export default function AppView() {
 		);
 	}
 
+	// Viewers who may not read the source get the preview in place of the code.
+	const shownTab =
+		activeTab === 'code' && !app.codeVisible ? 'preview' : activeTab;
+	// A paid listing's repository can only be cloned with the owner's token.
+	const canClone = app.codeVisible && (isOwner || !app.cloneNeedsToken);
+
 	return (
 		<div className="size-full flex flex-col min-h-0">
 			<title>{pageTitle(app.title || 'App')}</title>
+			<SiteReuseBar app={app} isOwner={isOwner} />
+			{isOwner && (
+				<PublishDialog
+					appId={app.id}
+					open={publishOpen}
+					onOpenChange={setPublishOpen}
+				/>
+			)}
 			<div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-2 border-b bg-kumo-base">
 				<Tabs
-					value={activeTab}
+					value={shownTab}
 					onValueChange={setActiveTab}
 					className="w-fit"
 					tabs={[
@@ -676,20 +662,24 @@ export default function AppView() {
 								</span>
 							),
 						},
-						{
-							value: 'code',
-							label: (
-								<span className="inline-flex items-center gap-1.5">
-									<Code2 className="size-3.5" />
-									Code
-									{files.length > 0 && (
-										<span className="text-kumo-subtle tabular-nums">
-											{files.length}
-										</span>
-									)}
-								</span>
-							),
-						},
+						...(app.codeVisible
+							? [
+									{
+										value: 'code',
+										label: (
+											<span className="inline-flex items-center gap-1.5">
+												<Code2 className="size-3.5" />
+												Code
+												{files.length > 0 && (
+													<span className="text-kumo-subtle tabular-nums">
+														{files.length}
+													</span>
+												)}
+											</span>
+										),
+									},
+								]
+							: []),
 						{
 							value: 'prompt',
 							label: (
@@ -742,22 +732,24 @@ export default function AppView() {
 						</>
 					)}
 
-					<Button
-						variant="secondary"
-						size="sm"
-						icon={
-							<GitBranch className="size-3.5" weight="duotone" />
-						}
-						onClick={() => setIsGitCloneModalOpen(true)}
-					>
-						Clone
-					</Button>
+					{canClone && (
+						<Button
+							variant="secondary"
+							size="sm"
+							icon={
+								<GitBranch className="size-3.5" weight="duotone" />
+							}
+							onClick={() => setIsGitCloneModalOpen(true)}
+						>
+							Clone
+						</Button>
+					)}
 				</div>
 			</div>
 
 			{/* Full-bleed workspace */}
 			<div className="flex-1 min-h-0 flex flex-col">
-				{activeTab === 'preview' && (
+				{shownTab === 'preview' && (
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 						<div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-kumo-line bg-kumo-elevated/40">
 							<span className="text-sm font-medium text-text-primary shrink-0">
@@ -867,7 +859,7 @@ export default function AppView() {
 					</div>
 				)}
 
-				{activeTab === 'code' && (
+				{shownTab === 'code' && (
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 						<div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-kumo-line bg-kumo-elevated/40">
 							<div className="min-w-0 flex items-center gap-2">
@@ -958,7 +950,7 @@ export default function AppView() {
 					</div>
 				)}
 
-				{activeTab === 'prompt' && (
+				{shownTab === 'prompt' && (
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
 						<div className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center p-6 sm:p-10">
 							{promptText ? (
@@ -1044,7 +1036,7 @@ export default function AppView() {
 				onOpenChange={setIsGitCloneModalOpen}
 				appId={app.id}
 				appTitle={app.title}
-				isPublic={app.visibility === 'public'}
+				isPublic={!app.cloneNeedsToken}
 				isOwner={isOwner}
 			/>
 		</div>

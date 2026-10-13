@@ -7,6 +7,8 @@ import { BaseService } from './BaseService';
 import * as schema from '../schema';
 import { eq, and, sql, lt, ne } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
+import type { UserRole } from '../../../shared/types/templates';
+import { isPlatformAdminDecision } from '../../services/auth/admin-access';
 
 /**
  * User Service Class
@@ -53,6 +55,32 @@ export class UserService extends BaseService {
             .limit(1);
             
         return users[0] || null;
+    }
+
+    /** The user's platform role, or null when the user does not exist. */
+    async getRole(userId: string): Promise<UserRole | null> {
+        const row = await this.database
+            .select({ role: schema.users.role })
+            .from(schema.users)
+            .where(eq(schema.users.id, userId))
+            .get();
+        return row?.role ?? null;
+    }
+
+    /** Admin by role, or by a Google or GitHub sign-in that verified a platform admin email. */
+    async isPlatformAdmin(userId: string): Promise<boolean> {
+        const role = await this.getRole(userId);
+        if (role === 'admin') return true;
+        const identities = await this.database
+            .select({
+                provider: schema.userOauthIdentities.provider,
+                email: schema.userOauthIdentities.email,
+                emailVerified: schema.userOauthIdentities.emailVerified,
+            })
+            .from(schema.userOauthIdentities)
+            .where(eq(schema.userOauthIdentities.userId, userId))
+            .all();
+        return isPlatformAdminDecision(role, identities);
     }
 
     async updateUserActivity(userId: string): Promise<void> {

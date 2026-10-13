@@ -39,3 +39,13 @@ export function base64ToUint8Array(base64: string): Uint8Array {
 	}
 	return bytes;
 }
+
+/** Encode a Uint8Array as base64, in chunks so large files do not overflow the call stack. */
+export function uint8ArrayToBase64(bytes: Uint8Array): string {
+	let binary = '';
+	const chunkSize = 0x8000;
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+	}
+	return btoa(binary);
+}

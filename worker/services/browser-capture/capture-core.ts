@@ -105,7 +105,9 @@ export async function runCapture(
 	};
 }
 
-/** Loads the page at the payload's viewport and returns a base64 PNG of that viewport. */
+const SCREENSHOT_JPEG_QUALITY = 80;
+
+/** Loads the page at the payload's viewport and returns a base64 PNG (or JPEG) of that viewport. */
 export async function runScreenshot(
 	page: CapturePage,
 	payload: ScreenshotPayload,
@@ -119,7 +121,11 @@ export async function runScreenshot(
 		if (payload.settleMs > 0) {
 			await new Promise((r) => setTimeout(r, payload.settleMs));
 		}
-		return await page.screenshot({ type: 'png', fullPage: false, encoding: 'base64' });
+		return await page.screenshot(
+			payload.format === 'jpeg'
+				? { type: 'jpeg', quality: SCREENSHOT_JPEG_QUALITY, fullPage: false, encoding: 'base64' }
+				: { type: 'png', fullPage: false, encoding: 'base64' },
+		);
 	} finally {
 		try {
 			await page.close();
@@ -132,8 +138,8 @@ export async function runScreenshot(
 /** A reference page that loaded but cannot be used, with the reason as its message. */
 export class ReferenceCaptureError extends Error {}
 
-const DESKTOP = { width: 1280, height: 800 };
-const PHONE = { width: 390, height: 844, isMobile: true, hasTouch: true };
+export const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
+export const PHONE_VIEWPORT = { width: 390, height: 844, isMobile: true, hasTouch: true };
 const REFERENCE_JPEG = { type: 'jpeg', quality: 70, fullPage: false, encoding: 'base64' } as const;
 const SCROLL_STOPS: Array<[ReferenceShotKind, number]> = [
 	['desktop-middle', 0.4],
@@ -161,29 +167,29 @@ export async function runReferenceCapture(
 	const settle = () =>
 		payload.settleMs > 0 ? new Promise<void>((r) => setTimeout(r, payload.settleMs)) : Promise.resolve();
 	try {
-		await page.setViewport(DESKTOP);
+		await page.setViewport(DESKTOP_VIEWPORT);
 		assertHtmlPage(await page.goto(payload.url, { waitUntil: 'networkidle2', timeout: payload.timeoutMs }));
 		await settle();
 		const shots: ReferenceShot[] = [
-			{ kind: 'desktop-top', jpegBase64: await page.screenshot(REFERENCE_JPEG), ...DESKTOP },
+			{ kind: 'desktop-top', jpegBase64: await page.screenshot(REFERENCE_JPEG), ...DESKTOP_VIEWPORT },
 		];
 		for (const [kind, fraction] of SCROLL_STOPS) {
 			await page.evaluate(`window.scrollTo(0, Math.floor(document.documentElement.scrollHeight * ${fraction}))`);
 			await settle();
-			shots.push({ kind, jpegBase64: await page.screenshot(REFERENCE_JPEG), ...DESKTOP });
+			shots.push({ kind, jpegBase64: await page.screenshot(REFERENCE_JPEG), ...DESKTOP_VIEWPORT });
 		}
 		const design = normalizeReferenceDesign(await page.evaluate(REFERENCE_EXTRACT_SCRIPT));
 		const finalUrl = page.url();
 
-		await page.setViewport(PHONE);
+		await page.setViewport(PHONE_VIEWPORT);
 		await page.reload({ waitUntil: 'networkidle2', timeout: payload.timeoutMs });
 		await settle();
 		await page.evaluate('window.scrollTo(0, 0)');
 		shots.push({
 			kind: 'mobile-top',
 			jpegBase64: await page.screenshot(REFERENCE_JPEG),
-			width: PHONE.width,
-			height: PHONE.height,
+			width: PHONE_VIEWPORT.width,
+			height: PHONE_VIEWPORT.height,
 		});
 		return { finalUrl, shots, design };
 	} finally {

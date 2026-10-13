@@ -43,10 +43,12 @@ export function createIDBPersister(
 // would survive the full-page reload of the OAuth callback and, because the
 // session query is still within its staleTime, would not refetch — leaving the
 // user looking signed out after a successful Cloudflare/OAuth login. It also
-// avoids leaking user-scoped data across account switches.
+// avoids leaking user-scoped data across account switches. Product pages carry
+// a signed preview URL and a per-viewer offer, so they stay out of storage too.
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
 	queryKeys.auth.all,
 	queryKeys.account.all,
+	queryKeys.apps.sitePageAll(),
 ];
 
 function hasKeyPrefix(

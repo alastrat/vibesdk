@@ -20,6 +20,13 @@ import type {
     PaginationParams
 } from '../types';
 import { ScreenshotSecurity } from 'worker/utils/screenshot-security';
+import type { TemplateCategory } from '../../../shared/types/templates';
+import type { DiscoverFilters } from '../../services/templates/reuse';
+import { discoverConditions, paidInReviewSubquery, paidPriceSubquery } from '../discover-conditions';
+import { omitInternalAppFields } from '../app-fields';
+
+/** Apps copied from this one; the "uses" count Discover and the product page show. */
+const forkCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`;
 
 // Type definitions
 type WhereCondition = ReturnType<typeof eq> | ReturnType<typeof and> | ReturnType<typeof or> | undefined;
@@ -30,6 +37,8 @@ type RankedAppQueryResult = {
     viewCount: number;
     starCount: number;
     forkCount: number;
+    paidPriceCents: number | null;
+    paidInReview: number;
     recentViews?: number;
     recentStars?: number;
 };
@@ -102,11 +111,12 @@ export class AppService extends BaseService {
             period = 'all',
             framework,
             search,
-            userId
+            userId,
+            discover
         } = options;
 
         try {
-            const whereConditions = this.buildPublicAppConditions(framework, search);
+            const whereConditions = this.buildPublicAppConditions(framework, search, discover);
             const whereClause = this.buildWhereConditions(whereConditions);
             const readDb = this.getReadDb('fast');
             
@@ -175,6 +185,8 @@ export class AppService extends BaseService {
                     viewCount: row.viewCount || 0,
                     starCount: row.starCount || 0,
                     forkCount: row.forkCount || 0,
+                    paidPriceCents: row.paidPriceCents ?? null,
+                    paidInReview: Boolean(row.paidInReview),
                     likeCount: 0,
                     userStarred: isStarred,
                     userFavorited: isFavorited
@@ -230,8 +242,9 @@ export class AppService extends BaseService {
      * Helper to build public app query conditions
      */
     private buildPublicAppConditions(
-        framework?: string, 
-        search?: string
+        framework?: string,
+        search?: string,
+        discover?: DiscoverFilters,
     ): WhereCondition[] {
         const whereConditions: WhereCondition[] = [
             // Only show public apps or apps from anonymous users
@@ -245,6 +258,7 @@ export class AppService extends BaseService {
             ),
             // Use shared helper for common filters
             ...this.buildCommonAppFilters(framework, search),
+            ...discoverConditions(discover),
         ];
 
         return whereConditions.filter(Boolean);
@@ -354,7 +368,7 @@ export class AppService extends BaseService {
         const favoriteSet = new Set(favorites.map(f => f.appId));
 
         const result = apps.map(app => ({
-            ...app,
+            ...omitInternalAppFields(app),
             isFavorite: favoriteSet.has(app.id),
             updatedAtFormatted: formatRelativeTime(app.updatedAt)
         }));
@@ -407,7 +421,7 @@ export class AppService extends BaseService {
             } = app;
 
             return {
-                ...safeApp,
+                ...omitInternalAppFields(safeApp),
                 // Provide safe defaults for type compatibility
                 sessionToken: null,
                 originalPrompt: '',
@@ -519,7 +533,7 @@ export class AppService extends BaseService {
             .get();
 
         const result = {
-            ...app,
+            ...omitInternalAppFields(app),
             isFavorite: !!favorite,
             updatedAtFormatted: formatRelativeTime(app.updatedAt)
         };
@@ -528,12 +542,14 @@ export class AppService extends BaseService {
     }
 
     /**
-     * Update app visibility with ownership check
+     * Update app visibility with ownership check. Publishing also records the
+     * owner's category and consent to reuse.
      */
     async updateAppVisibility(
         appId: string,
         userId: string,
-        visibility: 'private' | 'public'
+        visibility: 'private' | 'public',
+        publishing?: { category: TemplateCategory | null; reuseConsentAt: Date },
     ): Promise<AppVisibilityUpdateResult> {
         // Check if app exists and user owns it
         const existingApp = await this.database
@@ -555,13 +571,14 @@ export class AppService extends BaseService {
             return { success: false, error: 'You can only change visibility of your own apps' };
         }
 
-        // Update the app visibility. Bump `previewVersion` on every visibility
-        // change so outstanding space-preview tokens (which embed the value at
-        // mint) are revoked immediately after a public->private toggle.
+        // Bump `previewVersion` on every visibility change so outstanding
+        // space-preview tokens (which embed the value at mint) are revoked
+        // immediately after a public->private toggle.
         const updatedApps = await this.database
             .update(schema.apps)
             .set({
                 visibility,
+                ...(publishing ? { category: publishing.category, reuseConsentAt: publishing.reuseConsentAt } : {}),
                 previewVersion: sql`${schema.apps.previewVersion} + 1`,
                 updatedAt: new Date()
             })
@@ -578,6 +595,85 @@ export class AppService extends BaseService {
         }
 
         return { success: true, app: updatedApps[0] };
+    }
+
+    /** What resolving a reuse start needs from the source app. */
+    async getReuseSource(appId: string): Promise<{
+        id: string;
+        userId: string | null;
+        title: string;
+        visibility: 'private' | 'public';
+        removedFromDiscoverAt: Date | null;
+    } | null> {
+        const row = await this.database
+            .select({
+                id: schema.apps.id,
+                userId: schema.apps.userId,
+                title: schema.apps.title,
+                visibility: schema.apps.visibility,
+                removedFromDiscoverAt: schema.apps.removedFromDiscoverAt,
+            })
+            .from(schema.apps)
+            .where(eq(schema.apps.id, appId))
+            .get();
+        return row ?? null;
+    }
+
+    /** The owner's publishing choices and consent, and any admin removal. */
+    async getPublishingState(appId: string): Promise<{
+        visibility: 'private' | 'public';
+        category: TemplateCategory | null;
+        reuseConsentAt: Date | null;
+        removedFromDiscoverAt: Date | null;
+        removedFromDiscoverReason: string | null;
+    } | null> {
+        const row = await this.database
+            .select({
+                visibility: schema.apps.visibility,
+                category: schema.apps.category,
+                reuseConsentAt: schema.apps.reuseConsentAt,
+                removedFromDiscoverAt: schema.apps.removedFromDiscoverAt,
+                removedFromDiscoverReason: schema.apps.removedFromDiscoverReason,
+            })
+            .from(schema.apps)
+            .where(eq(schema.apps.id, appId))
+            .get();
+        return row ?? null;
+    }
+
+    /** Hide an app from Discover and block its reuse, or restore it. False when the app doesn't exist. */
+    async setRemovedFromDiscover(appId: string, removal: { by: string; reason: string } | null): Promise<boolean> {
+        const changed = await this.database
+            .update(schema.apps)
+            .set(removal
+                ? { removedFromDiscoverAt: new Date(), removedFromDiscoverBy: removal.by, removedFromDiscoverReason: removal.reason }
+                : { removedFromDiscoverAt: null, removedFromDiscoverBy: null, removedFromDiscoverReason: null })
+            .where(eq(schema.apps.id, appId))
+            .returning({ id: schema.apps.id });
+        return changed.length > 0;
+    }
+
+    /** The app another app was started from, for its "Started from" line. */
+    async getStartedFrom(appId: string): Promise<{
+        id: string;
+        title: string;
+        creatorName: string | null;
+        visibility: 'private' | 'public';
+        removedFromDiscoverAt: Date | null;
+    } | null> {
+        const row = await this.database
+            .select({
+                id: schema.apps.id,
+                title: schema.apps.title,
+                creatorName: schema.users.displayName,
+                visibility: schema.apps.visibility,
+                removedFromDiscoverAt: schema.apps.removedFromDiscoverAt,
+            })
+            .from(schema.apps)
+            .leftJoin(schema.users, eq(schema.users.id, schema.apps.userId))
+            .where(eq(schema.apps.id, appId))
+            .get();
+        return row ?? null;
     }
 
     /**
@@ -644,6 +740,7 @@ export class AppService extends BaseService {
                 app: schema.apps,
                 userName: schema.users.displayName,
                 userAvatar: schema.users.avatarUrl,
+                forkCount: forkCountSubquery,
             })
             .from(schema.apps)
             .leftJoin(schema.users, eq(schema.apps.userId, schema.users.id))
@@ -707,7 +804,8 @@ export class AppService extends BaseService {
             starCount,
             userStarred: userHasStarred,
             userFavorited: isFavorite,
-            viewCount
+            viewCount,
+            forkCount: appResult.forkCount,
         };
         const [enriched] = await this.enrichScreenshotUrls([result]);
         return enriched;
@@ -946,7 +1044,6 @@ export class AppService extends BaseService {
             // hash so retroactive/repeated views cannot re-inflate rankings.
             const viewCountSubquery = sql<number>`(SELECT COUNT(DISTINCT ${schema.appViews.viewerHash}) FROM ${schema.appViews} WHERE ${schema.appViews.appId} = ${schema.apps.id})`;
             const starCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id})`;
-            const forkCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`;
             
             if (sort === 'popular') {
                 // Popular algorithm: (views*1 + stars*3) DESC
@@ -963,6 +1060,8 @@ export class AppService extends BaseService {
                         viewCount: viewCountSubquery,
                         starCount: starCountSubquery,
                         forkCount: forkCountSubquery,
+                        paidPriceCents: paidPriceSubquery,
+                        paidInReview: paidInReviewSubquery,
                     })
                     .from(schema.apps)
                     .leftJoin(schema.users, eq(schema.apps.userId, schema.users.id))
@@ -991,6 +1090,8 @@ export class AppService extends BaseService {
                         viewCount: viewCountSubquery,
                         starCount: starCountSubquery,
                         forkCount: forkCountSubquery,
+                        paidPriceCents: paidPriceSubquery,
+                        paidInReview: paidInReviewSubquery,
                         recentViews: recentViewsSubquery,
                         recentStars: recentStarsSubquery,
                     })
@@ -1014,6 +1115,8 @@ export class AppService extends BaseService {
                     userName: schema.users.displayName,
                     userAvatar: schema.users.avatarUrl,
                     ...this.getCountSubqueries(),
+                    paidPriceCents: paidPriceSubquery,
+                    paidInReview: paidInReviewSubquery,
                 })
                 .from(schema.apps)
                 .leftJoin(schema.users, eq(schema.apps.userId, schema.users.id))
@@ -1028,7 +1131,7 @@ export class AppService extends BaseService {
         return {
             viewCount: sql<number>`(SELECT COUNT(DISTINCT ${schema.appViews.viewerHash}) FROM ${schema.appViews} WHERE ${schema.appViews.appId} = ${schema.apps.id})`,
             starCount: sql<number>`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id})`,
-            forkCount: sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`
+            forkCount: forkCountSubquery
         };
     }
 

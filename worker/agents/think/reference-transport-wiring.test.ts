@@ -68,7 +68,7 @@ describe('Think host: references and images', () => {
 		const run = build.indexOf('await this.runPrompt(message, conversationId)');
 		expect(capture).toBeGreaterThan(-1);
 		expect(run).toBeGreaterThan(capture);
-		expect(build).toContain('buildTurnMessage({ id: generateNanoId(), text: compiled, images, references })');
+		expect(build).toContain('buildTurnMessage({ id: generateNanoId(), text: compiled, images, references, siteStart })');
 	});
 
 	it('sends the full message to the agent', () => {

@@ -4,6 +4,8 @@ export type PaginatedAppsListFilters = {
 	framework: string;
 	visibility: string;
 	search: string;
+	category: string;
+	pricing: string;
 	limit: number;
 };
 
@@ -22,6 +24,11 @@ export const queryKeys = {
 		userAll: () => [...queryKeys.apps.all, 'user'] as const,
 		user: (filters: PaginatedAppsListFilters) =>
 			[...queryKeys.apps.userAll(), filters] as const,
+		strip: () => [...queryKeys.apps.all, 'strip'] as const,
+		sitePageAll: () => [...queryKeys.apps.all, 'site-page'] as const,
+		/** A Discover product page; its offer depends on the viewer. */
+		sitePage: (appId: string, userId?: string | null) =>
+			[...queryKeys.apps.sitePageAll(), appId, userId ?? 'anonymous'] as const,
 	},
 	account: {
 		all: ['account'] as const,
@@ -87,6 +94,23 @@ export const queryKeys = {
 					...queryKeys.account.apps.previewTokenAll(appId),
 					userId ?? 'anonymous',
 				] as const,
+		},
+		/** Publishing, paid-listing and review data: never persisted, and dropped on logout with the rest of `account`. */
+		publishing: {
+			all: () => [...queryKeys.account.all, 'publishing'] as const,
+			app: (appId: string) => [...queryKeys.account.publishing.all(), 'app', appId] as const,
+			mine: (userId?: string | null) =>
+				[...queryKeys.account.publishing.all(), 'mine', userId ?? 'anonymous'] as const,
+			reviews: () => [...queryKeys.account.publishing.all(), 'reviews'] as const,
+			versionFiles: (versionId: string) => [...queryKeys.account.publishing.all(), 'version-files', versionId] as const,
+			versionFile: (versionId: string, path: string) =>
+				[...queryKeys.account.publishing.all(), 'version-file', versionId, path] as const,
+		},
+		/** Seller payout status and admin sales: never persisted. */
+		payments: {
+			all: () => [...queryKeys.account.all, 'payments'] as const,
+			status: (userId?: string | null) => [...queryKeys.account.payments.all(), 'status', userId ?? 'anonymous'] as const,
+			sales: () => [...queryKeys.account.payments.all(), 'sales'] as const,
 		},
 		limits: {
 			all: () => [...queryKeys.account.all, 'limits'] as const,

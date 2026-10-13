@@ -8,7 +8,7 @@ import {
 } from '../../schemas';
 import { ExecuteCommandsResponse, PreviewType, RuntimeError, StaticAnalysisResponse, TemplateDetails, TemplateFile } from '../../../services/sandbox/sandboxTypes';
 import { BaseProjectState, AgenticState, FileState } from '../state';
-import { AllIssues, AgentSummary, AgentInitArgs, BehaviorType, DeploymentTarget, ProjectType } from '../types';
+import { AllIssues, AgentSummary, AgentInitArgs, BehaviorType, DeploymentTarget, ProjectType, TemplateSource } from '../types';
 import { WebSocketMessageResponses } from '../../constants';
 import { ProjectSetupAssistant } from '../../assistants/projectsetup';
 import { UserConversationProcessor, RenderToolCall } from '../../operations/UserConversationProcessor';
@@ -1172,6 +1172,21 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
 
         // Format: b-{agentid}-{token}.{previewDomain}
         return `${getProtocolForHost(previewDomain)}://b-${agentId}-${token}.${previewDomain}`;
+    }
+
+    /** The deployed commit and preview URL for a template submission; only Think apps provide one. */
+    public async getTemplateSource(): Promise<TemplateSource | null> {
+        return null;
+    }
+
+    /** The last deployed commit; only Think apps record one. */
+    public async getDeployedCommit(): Promise<string | null> {
+        return null;
+    }
+
+    /** A preview link that names no user, safe to show the public; only a deployed Think app provides one. */
+    public async getPublicPreviewURL(): Promise<string | null> {
+        return null;
     }
 
     // A wrapper for LLM tool to deploy to sandbox

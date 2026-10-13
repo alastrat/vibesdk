@@ -1,4 +1,4 @@
-import type { RouteObject } from 'react-router';
+import { Navigate, type RouteObject } from 'react-router';
 
 import App from './App';
 import Home from './routes/home';
@@ -8,6 +8,8 @@ import Settings from './routes/settings/index';
 import AppsPage from './routes/apps';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
+import SitePage from './routes/discover/site';
+import AdminReviewsPage from './routes/admin/reviews';
 import { ProtectedRoute } from './routes/protected-route';
 
 const routes = [
@@ -54,6 +56,30 @@ const routes = [
 			{
 				path: 'discover',
 				Component: DiscoverPage,
+			},
+			{
+				path: 'discover/:appId',
+				Component: SitePage,
+			},
+			{
+				path: 'templates',
+				element: <Navigate to="/discover" replace />,
+			},
+			{
+				path: 'templates/:slug',
+				element: <Navigate to="/discover" replace />,
+			},
+			{
+				path: 'admin/templates',
+				element: <Navigate to="/admin/reviews" replace />,
+			},
+			{
+				path: 'admin/reviews',
+				element: (
+					<ProtectedRoute>
+						<AdminReviewsPage />
+					</ProtectedRoute>
+				),
 			},
 		],
 	},

@@ -29,6 +29,8 @@ interface DeploymentControlsProps {
 	onStopGeneration: () => void;
 	onResumeGeneration: () => void;
 	onVisibilityUpdate?: (newVisibility: 'public' | 'private') => void;
+	/** Opens the publish dialog; making an app public needs consent, a category and a price. */
+	onPublish?: () => void;
 	deploymentTarget?: 'platform' | 'user';
 }
 
@@ -53,6 +55,7 @@ export function DeploymentControls({
 	appVisibility = 'private',
 	onDeploy,
 	onVisibilityUpdate,
+	onPublish,
 	deploymentTarget = 'platform',
 }: DeploymentControlsProps) {
 	const [isDeployButtonClicked, setIsDeployButtonClicked] = useState(false);
@@ -149,22 +152,18 @@ export function DeploymentControls({
 			toast.error('App ID not found');
 			return;
 		}
+		if (localVisibility === 'private') {
+			onPublish?.();
+			return;
+		}
 
 		try {
 			setIsUpdatingVisibility(true);
-			const newVisibility = localVisibility === 'private' ? 'public' : 'private';
-
-			const response = await apiClient.updateAppVisibility(appId, newVisibility);
-
+			const response = await apiClient.publishSite(appId, { visibility: 'private' });
 			if (response.success && response.data) {
-				setLocalVisibility(newVisibility);
-				onVisibilityUpdate?.(newVisibility);
-
-				if (newVisibility === 'public') {
-					toast.success('🎉 Your app is now public! Share the link with anyone.');
-				} else {
-					toast.success('App is now private');
-				}
+				setLocalVisibility('private');
+				onVisibilityUpdate?.('private');
+				toast.success('App is now private');
 			} else {
 				throw new Error(response.error?.message || 'Failed to update visibility');
 			}

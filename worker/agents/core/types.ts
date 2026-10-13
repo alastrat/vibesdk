@@ -65,6 +65,8 @@ interface ThinkAgentInitArgs extends BaseAgentInitArgs {
     };
     /** Catalog id of the build model (already resolved by the caller). */
     thinkModelId?: string;
+    /** Start from a published site's files instead of an empty workspace. */
+    reuseSeed?: ReuseSeed;
 }
 
 /** Generic initialization arguments based on state type */
@@ -73,6 +75,21 @@ export type AgentInitArgs<TState extends PhasicState | AgenticState | ThinkState
     TState extends AgenticState ? AgenticAgentInitArgs :
     TState extends ThinkState ? ThinkAgentInitArgs :
     PhasicAgentInitArgs | AgenticAgentInitArgs | ThinkAgentInitArgs;
+
+/** What a template submission needs from an app: its deployed commit and a capturable preview URL. */
+export interface TemplateSource {
+    commit: string;
+    previewUrl: string;
+}
+
+/** The site a new Think app is copied from, with the files to copy. */
+export interface ReuseSeed {
+    sourceAppId: string;
+    sourceTitle: string;
+    /** The approved paid version copied, or null for a free site's latest deploy. */
+    versionId: string | null;
+    files: Array<{ path: string; bytes: Uint8Array }>;
+}
 
 export type Plan = string;
 

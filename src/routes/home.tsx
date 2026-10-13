@@ -25,6 +25,7 @@ import { useLimitsContext } from '@/contexts/limits-context';
 import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
+import { DiscoverStrip } from '@/components/publishing/DiscoverStrip';
 import { InfoIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { pageTitle } from '@/brand';
@@ -265,6 +266,7 @@ export default function Home() {
 							}
 						/>
 					</motion.div>
+					<DiscoverStrip />
 				</div>
 
 				<AnimatePresence mode="popLayout">
@@ -343,7 +345,7 @@ export default function Home() {
 												key={app.id}
 												app={app}
 												onClick={() =>
-													navigate(`/app/${app.id}`)
+													navigate(`/discover/${app.id}`)
 												}
 												showStats={true}
 												showUser={true}

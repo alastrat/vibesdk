@@ -8,6 +8,7 @@ import type { UIMessage } from 'ai';
 import type { PendingImage } from '../../types/image-attachment';
 import { agentAssetUrl } from './agent-assets';
 import { formatReferenceDigest, referenceShotLabel, type ReferenceOutcome } from './references';
+import { siteStartInstruction } from './site-start';
 
 type TurnPart = UIMessage['parts'][number];
 
@@ -16,6 +17,8 @@ export interface TurnMessageInput {
 	text: string;
 	images: PendingImage[];
 	references: ReferenceOutcome[];
+	/** The published site this app was copied from; set only on its first turn. */
+	siteStart?: { title: string };
 }
 
 export function isHiddenPart(part: unknown): boolean {
@@ -31,8 +34,9 @@ function image(r2Key: string, mediaType: string): TurnPart {
 	return { type: 'file', mediaType, url: agentAssetUrl(r2Key) };
 }
 
-export function buildTurnMessage({ id, text, images, references }: TurnMessageInput): UIMessage {
+export function buildTurnMessage({ id, text, images, references, siteStart }: TurnMessageInput): UIMessage {
 	const parts: TurnPart[] = [{ type: 'text', text }];
+	if (siteStart) parts.push(hiddenText(siteStartInstruction(siteStart.title, text)));
 	references.forEach((outcome, i) => parts.push(hiddenText(formatReferenceDigest(outcome, i + 1))));
 	images.forEach((attachment, i) => {
 		parts.push(hiddenText(`Attachment ${i + 1}`));

@@ -179,63 +179,6 @@ export function useToggleAppStar(appId: string | undefined) {
 	};
 }
 
-export function useUpdateAppVisibility(appId: string | undefined) {
-	const queryClient = useQueryClient();
-	const { user } = useAuth();
-
-	const mutation = useMutation({
-		mutationFn: async ({
-			appId: targetAppId,
-			visibility,
-		}: {
-			appId: string;
-			visibility: AppDetailsData['visibility'];
-		}) => {
-			const response = await apiClient.updateAppVisibility(
-				targetAppId,
-				visibility,
-			);
-			if (!response.success || !response.data) {
-				throw new Error(
-					response.error?.message || 'Failed to update visibility',
-				);
-			}
-			return {
-				appId: targetAppId,
-				visibility,
-				message: response.data.message,
-			};
-		},
-		onSuccess: ({ appId: targetAppId, visibility }) => {
-			queryClient.setQueryData<AppDetailsData>(
-				queryKeys.account.apps.detail(targetAppId, user?.id),
-				(prev) => (prev ? { ...prev, visibility } : prev),
-			);
-			void invalidateAppsQueries(queryClient);
-			void queryClient.invalidateQueries({
-				queryKey: queryKeys.account.apps.previewTokenAll(targetAppId),
-			});
-		},
-	});
-	const { reset, mutateAsync } = mutation;
-
-	// Route reuses this component across /app/:id — clear stale pending/error.
-	useEffect(() => {
-		reset();
-	}, [appId, reset]);
-
-	return {
-		...mutation,
-		mutateAsync: async (visibility: AppDetailsData['visibility']) => {
-			if (!appId) {
-				throw new Error('App ID is required');
-			}
-			const result = await mutateAsync({ appId, visibility });
-			return { visibility: result.visibility, message: result.message };
-		},
-	};
-}
-
 export function useDeleteApp() {
 	const queryClient = useQueryClient();
 

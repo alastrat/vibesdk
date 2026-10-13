@@ -15,6 +15,26 @@ export interface GeneratedCodeFile {
     explanation?: string;
 }
 
+/** What the viewer can do with a published site. */
+export interface AppReuseView {
+    /** The viewer can start a new app from this site now. */
+    canUse: boolean;
+    /** The site is paid and the viewer hasn't bought it. */
+    needsPurchase: boolean;
+    /** The approved price, or null for a free site. */
+    priceCents: number | null;
+    /** Why the site can't be used, shown to its owner; null when it can be or only needs a purchase. */
+    unavailableReason: string | null;
+}
+
+/**
+ * The published site an app was copied from. A source that is no longer public
+ * or was removed from Discover is reported without its identity.
+ */
+export type StartedFromView =
+    | { available: true; appId: string; title: string; creatorName: string }
+    | { available: false };
+
 /**
  * Response data for getAppDetails - extends the safe public detail projection.
  * Adds only fields unique to app view response; owner-only fields (userId,
@@ -24,6 +44,17 @@ export interface AppDetailsData extends PublicAppDetailData {
     cloudflareUrl: string | null;
     previewUrl: string | null;
     behaviorType: BehaviorType | null;
+    /** Null for private apps. */
+    reuse: AppReuseView | null;
+    startedFrom: StartedFromView | null;
+    /** The viewer is an admin and may remove the site from Discover. */
+    canModerate: boolean;
+    /** Shown to the owner and admins only. */
+    removedFromDiscover: { reason: string | null } | null;
+    /** The viewer may read and clone this app's source. */
+    codeVisible: boolean;
+    /** Cloning needs the owner's token: the app is private or has a paid listing in effect or in review. */
+    cloneNeedsToken: boolean;
     user: {
         id: string;
         displayName: string;

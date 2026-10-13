@@ -47,6 +47,11 @@ export function createApp(env: Env): Hono<AppEnv> {
         if (upgradeHeader?.toLowerCase() === 'websocket') {
             return next();
         }
+
+        // Stripe signs its webhook; it cannot carry a CSRF token.
+        if (new URL(c.req.url).pathname === '/api/stripe/webhook') {
+            return next();
+        }
         
         try {
             // Handle GET requests - establish CSRF token if needed

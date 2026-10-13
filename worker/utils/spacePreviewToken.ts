@@ -3,6 +3,8 @@ import { JWTUtils } from './jwtUtils';
 const PREVIEW_PURPOSE = 'space_preview';
 export const SPACE_PREVIEW_TOKEN_TTL_SECONDS = 30 * 60;
 export const SPACE_PREVIEW_COOKIE_NAME = '__space_preview';
+/** The `userId` claim of a preview shown to the public, so the token never names the app's owner. */
+export const PUBLIC_PREVIEW_SUBJECT = 'public-preview';
 
 export interface SpacePreviewClaims {
 	spaceName: string;

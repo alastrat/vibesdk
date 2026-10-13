@@ -17,7 +17,7 @@ import { PhasicCodingBehavior } from './behaviors/phasic';
 import { AgenticCodingBehavior } from './behaviors/agentic';
 import { SqlExecutor } from '../git';
 import { AgentInfrastructure } from "./AgentCore";
-import { ProjectType } from './types';
+import { ProjectType, TemplateSource } from './types';
 import { Connection } from 'agents';
 import { handleWebSocketMessage, handleWebSocketClose, broadcastToConnections, sendToConnection } from './websocket';
 import { WebSocketMessageData, WebSocketMessageType } from "worker/api/websocketTypes";
@@ -390,6 +390,21 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.behavior.getSummary();
     }
 
+    /** Deployed commit and preview URL for a template submission; null unless a deployed Think app. */
+    async getTemplateSource(): Promise<TemplateSource | null> {
+        return this.behavior.getTemplateSource();
+    }
+
+    /** The last deployed commit; null unless a deployed Think app. */
+    async getDeployedCommit(): Promise<string | null> {
+        return this.behavior.getDeployedCommit();
+    }
+
+    /** A preview link that names no user, for public product pages; null unless a deployed Think app. */
+    async getPublicPreviewURL(): Promise<string | null> {
+        return this.behavior.getPublicPreviewURL();
+    }
+
     getBehaviorType(): BehaviorType {
         return this.state.behaviorType;
     }
@@ -443,6 +458,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         this.logger().info(`Saving agent ${this.getAgentId()} to database`);
         // Save the app to database (authenticated users only)
         const appService = new AppService(this.env);
+        const state = this.state;
+        const reuseStart = 'reuseStart' in state ? state.reuseStart : undefined;
         await appService.createApp({
             id: this.state.metadata.agentId,
             userId: this.state.metadata.userId,
@@ -452,8 +469,12 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             originalPrompt: this.state.query,
             finalPrompt: this.state.query,
             framework: this.state.blueprint.frameworks.join(','),
+            parentAppId: reuseStart?.sourceAppId ?? null,
+            fromTemplateVersionId: reuseStart?.versionId ?? null,
             visibility: 'private',
-            status: 'generating',
+            status: this.state.mvpGenerated ? 'completed' : 'generating',
+            // A site copy is deployed during initialization, before this row exists to be stamped.
+            lastDeployedAt: 'lastDeployedCommit' in state && state.lastDeployedCommit ? new Date() : null,
                 createdAt: new Date(),
             updatedAt: new Date()
             });

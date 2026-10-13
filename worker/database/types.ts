@@ -4,6 +4,8 @@
 
 import * as schema from './schema';
 import type { ModelConfig } from '../agents/inferutils/config.types';
+import type { DiscoverFilters } from '../services/templates/reuse';
+import type { InternalAppField } from './app-fields';
 
 // ========================================
 // CORE SHARED INTERFACES
@@ -33,6 +35,10 @@ export interface EnhancedAppData extends schema.App {
     viewCount?: number;
     forkCount?: number;
     likeCount?: number;
+    /** The approved price of a listed paid listing; null or absent for a free site. */
+    paidPriceCents?: number | null;
+    /** A listed paid listing is waiting for its first approval. */
+    paidInReview?: boolean;
 }
 
 /**
@@ -48,6 +54,7 @@ export type PublicAppListData = Pick<
     | 'description'
     | 'iconUrl'
     | 'framework'
+    | 'category'
     | 'visibility'
     | 'status'
     | 'isFeatured'
@@ -65,23 +72,38 @@ export type PublicAppListData = Pick<
     | 'likeCount'
     | 'userStarred'
     | 'userFavorited'
->;
+> & {
+    /** The approved price of a paid site, or null for a free one. */
+    priceCents: number | null;
+    /** A paid site waiting for its first approval. */
+    inReview: boolean;
+    /** Others can start a new app from it now. */
+    reusable: boolean;
+};
+
+/**
+ * The public fields shared by the listing and the detail endpoint. The price,
+ * review and reusable fields are listing-only: details report them through the
+ * reuse view, which reads the listing itself.
+ */
+export type PublicAppBaseData = Omit<PublicAppListData, 'priceCents' | 'inReview' | 'reusable'>;
 
 /**
  * Safe public projection of an app for the detail endpoint. Adds the original
  * prompt (intended public feature on public apps). Owner-only operational
  * fields (userId, deploymentId) are populated only when the viewer owns the app.
  */
-export type PublicAppDetailData = PublicAppListData &
+export type PublicAppDetailData = PublicAppBaseData &
     Pick<EnhancedAppData, 'originalPrompt'> & {
         userId?: string | null;
         deploymentId?: string | null;
     };
 
 /**
- * App with favorite status for user-specific queries
+ * App with favorite status for user-specific queries, without the internal
+ * moderation and provenance columns.
  */
-export interface AppWithFavoriteStatus extends schema.App {
+export interface AppWithFavoriteStatus extends Omit<schema.App, InternalAppField> {
     isFavorite: boolean;
     updatedAtFormatted: string;
 }
@@ -153,6 +175,7 @@ export interface AppQueryOptions extends BaseAppQueryOptions {
  */
 export interface PublicAppQueryOptions extends BaseAppQueryOptions {
     userId?: string; // For user-specific data like favorites
+    discover?: DiscoverFilters;
 }
 
 /**
