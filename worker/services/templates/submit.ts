@@ -10,7 +10,7 @@ export type ShotDevice = 'desktop' | 'phone';
 
 export const SCREENSHOT_FAILED_MESSAGE = "Couldn't capture your site; make sure it's deployed and loads";
 export const READ_FAILED_MESSAGE = "Couldn't read your app's files; try again";
-export const SAVE_FAILED_MESSAGE = "Couldn't save your template; try again";
+export const SAVE_FAILED_MESSAGE = "Couldn't save your site for review; try again";
 
 export interface TemplateObjectStore {
 	put(key: string, body: string | Uint8Array, contentType: string): Promise<void>;

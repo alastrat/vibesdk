@@ -7,7 +7,7 @@ import { base64ToUint8Array, uint8ArrayToBase64 } from '../../utils/encoding';
 
 export const MAX_TEMPLATE_FILES = 500;
 export const MAX_TEMPLATE_BYTES = 10 * 1024 * 1024;
-export const TEMPLATE_LIMIT_ERROR = 'Templates can have at most 500 files and 10 MB';
+export const TEMPLATE_LIMIT_ERROR = 'Sites can have at most 500 files and 10 MB to be published';
 export const EMPTY_TEMPLATE_ERROR = 'Your app has no files to publish';
 
 /** One file with its exact bytes. Paths read from git start with `/`. */
@@ -123,6 +123,17 @@ function isBundleFile(value: unknown): value is BundleFile {
 	);
 }
 
+/** Decode a bundle into files, validating every path before anything is written. */
+export function bundleToFiles(bundle: TemplateBundle): TreeFile[] {
+	return bundle.files.map((file) => {
+		if (!isSafeSeedPath(file.path)) {
+			throw new Error(`Template snapshot has an unsafe path: ${file.path}`);
+		}
+		const bytes = file.encoding === 'base64' ? base64ToUint8Array(file.content) : new TextEncoder().encode(file.content);
+		return { path: file.path, bytes };
+	});
+}
+
 /** Parse a stored `files.json`, validating every path again before it is used. */
 export function parseBundle(json: string): TreeFile[] {
 	const parsed: unknown = JSON.parse(json);
@@ -131,12 +142,5 @@ export function parseBundle(json: string): TreeFile[] {
 	const entries: unknown[] = candidate;
 	if (!entries.every(isBundleFile)) throw new Error('Template snapshot is malformed');
 	if (entries.length > MAX_TEMPLATE_FILES) throw new Error(TEMPLATE_LIMIT_ERROR);
-
-	return entries.map((file) => {
-		if (!isSafeSeedPath(file.path)) {
-			throw new Error(`Template snapshot has an unsafe path: ${file.path}`);
-		}
-		const bytes = file.encoding === 'base64' ? base64ToUint8Array(file.content) : new TextEncoder().encode(file.content);
-		return { path: file.path, bytes };
-	});
+	return bundleToFiles({ files: entries });
 }

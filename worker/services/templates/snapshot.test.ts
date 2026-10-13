@@ -5,6 +5,7 @@ import {
 	MAX_TEMPLATE_FILES,
 	TEMPLATE_LIMIT_ERROR,
 	buildSnapshot,
+	bundleToFiles,
 	isExcludedFromSnapshot,
 	isSafeSeedPath,
 	parseBundle,
@@ -195,5 +196,28 @@ describe('parseBundle', () => {
 	it('rejects an unsafe path', () => {
 		const json = JSON.stringify({ files: [{ path: '../x', encoding: 'utf8', content: '' }] });
 		expect(() => parseBundle(json)).toThrow('Template snapshot has an unsafe path: ../x');
+	});
+});
+
+describe('bundleToFiles', () => {
+	it('returns the kept files byte for byte', () => {
+		const encoder = new TextEncoder();
+		const files = [
+			{ path: '/index.html', bytes: encoder.encode('<h1>Hi</h1>') },
+			{ path: '/.env', bytes: encoder.encode('SECRET=1') },
+			{ path: '/logo.png', bytes: new Uint8Array([0x89, 0x50, 0x00, 0xff]) },
+		];
+		const snapshot = buildSnapshot(files);
+		if (!snapshot.ok) throw new Error(snapshot.error);
+		expect(bundleToFiles(snapshot.bundle)).toEqual([
+			{ path: 'index.html', bytes: files[0].bytes },
+			{ path: 'logo.png', bytes: files[2].bytes },
+		]);
+	});
+
+	it('refuses an unsafe path', () => {
+		expect(() => bundleToFiles({ files: [{ path: '../x', encoding: 'utf8', content: '' }] })).toThrow(
+			'Template snapshot has an unsafe path: ../x',
+		);
 	});
 });
