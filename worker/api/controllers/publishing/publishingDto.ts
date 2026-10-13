@@ -3,6 +3,7 @@
  * source of truth for which listing fields leave the worker.
  */
 
+import { parseStoredPageCopy } from '../../../../shared/types/site-page';
 import type { TemplateShotKind } from '../../../../shared/types/templates';
 import type { Template, TemplateVersion } from '../../../database/schema';
 import type { PendingVersionRow } from '../../../database/services/TemplateService';
@@ -56,5 +57,6 @@ export function toPendingReview(row: PendingVersionRow): PendingReview {
         submittedAt: isoDate(row.version.createdAt),
         desktopShotUrl: reviewScreenshotUrl(row.version.id, 'desktop'),
         mobileShotUrl: reviewScreenshotUrl(row.version.id, 'mobile'),
+        pageCopy: parseStoredPageCopy(row.version.pageCopy),
     };
 }

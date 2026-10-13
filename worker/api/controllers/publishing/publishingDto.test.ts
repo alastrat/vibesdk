@@ -29,6 +29,7 @@ const version: TemplateVersion = {
 	reviewedBy: null,
 	reviewedAt: null,
 	rejectionReason: null,
+	pageCopy: null,
 	createdAt: new Date(0),
 };
 
@@ -74,5 +75,18 @@ describe('toPendingReview', () => {
 			desktopShotUrl: '/api/admin/template-versions/v1/screenshots/desktop',
 		});
 		expect(JSON.stringify(review)).not.toContain('templates/l1');
+	});
+
+	it('shows the page text submitted with the version', () => {
+		const pageCopy = {
+			tagline: 'A calm site',
+			about: ['About it.'],
+			features: ['a', 'b', 'c'],
+			includes: [{ name: 'Home', detail: 'The one page' }],
+			madeFor: ['Studios', 'Teachers'],
+		};
+		const row = { listing, appTitle: 'North Ridge', creatorName: 'Creator', creatorEmail: null };
+		expect(toPendingReview({ ...row, version: { ...version, pageCopy: JSON.stringify(pageCopy) } }).pageCopy).toEqual(pageCopy);
+		expect(toPendingReview({ ...row, version }).pageCopy).toBeNull();
 	});
 });

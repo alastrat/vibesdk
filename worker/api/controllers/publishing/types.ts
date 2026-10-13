@@ -121,6 +121,8 @@ export interface PendingReview {
     submittedAt: string | null;
     desktopShotUrl: string;
     mobileShotUrl: string;
+    /** The page text submitted with this version. */
+    pageCopy: SitePageCopy | null;
 }
 
 export interface PendingReviewsData {

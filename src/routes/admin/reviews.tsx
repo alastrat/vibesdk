@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge, Button, Empty, InputArea, LayerCard, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
+import { PageCopySections } from '@/components/site-page/PageCopySections';
 import { usePendingReviews, useReviewVersion, useReviewVersionFile, useReviewVersionFiles } from '@/hooks/use-publishing';
 import { useAdminSales } from '@/hooks/use-payments';
 import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
@@ -162,6 +163,17 @@ function PendingReviewCard({ review }: { review: PendingReview }) {
 						<Link to={`/app/${review.appId}`} className="w-fit text-kumo-default underline-offset-2 hover:underline">
 							Open the site
 						</Link>
+					</div>
+					<div className="grid gap-2 rounded-lg p-3 ring ring-kumo-hairline">
+						<span className="text-xs font-medium uppercase tracking-wide text-kumo-subtle">Page text</span>
+						{review.pageCopy ? (
+							<>
+								<p className="text-sm font-medium text-kumo-default">{review.pageCopy.tagline}</p>
+								<PageCopySections copy={review.pageCopy} fallbackDescription={null} />
+							</>
+						) : (
+							<p className="text-sm text-kumo-subtle">No page text</p>
+						)}
 					</div>
 					<div className="grid gap-2">
 						<Button size="sm" variant="ghost" className="w-fit" onClick={() => setShowFiles((open) => !open)}>
