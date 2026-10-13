@@ -15,6 +15,7 @@ import {
 	useToggleAppStar,
 } from '@/hooks/use-app';
 import { useAuth } from '@/contexts/auth-context';
+import { useConfirmCheckoutReturn } from '@/hooks/use-payments';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { ApiError } from '@/lib/api-client';
@@ -94,6 +95,7 @@ export default function AppView() {
 	const { user } = useAuth();
 	const { requireAuth } = useAuthGuard();
 	const { app, loading, error } = useApp(id);
+	useConfirmCheckoutReturn(app);
 	const { copied: urlCopied, copy: copyUrl } = useCopyToClipboard();
 	const { copy: copyFile } = useCopyToClipboard({
 		successMessage: 'Code copied to clipboard',

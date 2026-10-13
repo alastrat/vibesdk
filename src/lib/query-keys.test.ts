@@ -25,3 +25,19 @@ describe('publishing query keys', () => {
 		expect(queryKeys.apps.strip().slice(0, queryKeys.apps.all.length)).toEqual(queryKeys.apps.all);
 	});
 });
+
+describe('payments query keys', () => {
+	it.each([
+		['status', queryKeys.account.payments.status('user1')],
+		['sales', queryKeys.account.payments.sales()],
+	])('keeps the private %s cache out of storage and under the account prefix', (_name, key) => {
+		expect(key.slice(0, queryKeys.account.payments.all().length)).toEqual(queryKeys.account.payments.all());
+		expect(key[0]).toBe(queryKeys.account.all[0]);
+		expect(persisted(key)).toBe(false);
+	});
+
+	it('scopes the Stripe status to the signed-in user', () => {
+		expect(queryKeys.account.payments.status('user1')).not.toEqual(queryKeys.account.payments.status('user2'));
+		expect(queryKeys.account.payments.status(null)).toEqual(queryKeys.account.payments.status(undefined));
+	});
+});

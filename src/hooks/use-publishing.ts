@@ -2,16 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useAuth } from '@/contexts/auth-context';
-import type { ApiResponse, DiscoverRemovalRequest, PublishSiteRequest } from '@/api-types';
-
-/** The data of a successful response, or an error carrying the server's message. */
-async function unwrap<T>(request: Promise<ApiResponse<T>>, fallback: string): Promise<T> {
-	const response = await request;
-	if (!response.success || response.data === undefined) {
-		throw new Error(response.error?.message || fallback);
-	}
-	return response.data;
-}
+import { unwrap } from '@/lib/unwrap-response';
+import type { DiscoverRemovalRequest, PublishSiteRequest } from '@/api-types';
 
 /** Publishing changes Discover, app details and the owner's lists, so all three refresh. */
 function usePublishingMutation<TInput, TOutput>(mutationFn: (input: TInput) => Promise<TOutput>) {

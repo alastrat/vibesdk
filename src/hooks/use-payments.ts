@@ -1,17 +1,11 @@
+import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router';
+import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
+import { unwrap } from '@/lib/unwrap-response';
 import { useAuth } from '@/contexts/auth-context';
-import type { ApiResponse } from '@/api-types';
-
-/** The data of a successful response, or an error carrying the server's message. */
-async function unwrap<T>(request: Promise<ApiResponse<T>>, fallback: string): Promise<T> {
-	const response = await request;
-	if (!response.success || response.data === undefined) {
-		throw new Error(response.error?.message || fallback);
-	}
-	return response.data;
-}
 
 export function useStripeConnectStatus(enabled: boolean) {
 	const { user } = useAuth();
@@ -53,8 +47,44 @@ export function useConfirmSitePurchase() {
 			Promise.all([
 				queryClient.invalidateQueries({ queryKey: queryKeys.account.apps.all() }),
 				queryClient.invalidateQueries({ queryKey: queryKeys.account.publishing.all() }),
+				queryClient.invalidateQueries({ queryKey: queryKeys.apps.all }),
 			]),
 	});
+}
+
+/**
+ * Confirms the purchase when Stripe Checkout returns to `?purchase=success&session_id=...`, once per
+ * session, then clears those params. Call it from a component that stays mounted while the app and the
+ * session load: Stripe returns with a full page load, and a component that remounts would confirm twice.
+ */
+export function useConfirmCheckoutReturn(app: { id: string; title: string } | null | undefined) {
+	const { user, isLoading: authLoading } = useAuth();
+	const [searchParams, setSearchParams] = useSearchParams();
+	const { mutateAsync } = useConfirmSitePurchase();
+	const confirmedSession = useRef<string | null>(null);
+	const appId = app?.id;
+	const appTitle = app?.title;
+	const signedIn = !!user;
+	const sessionId = searchParams.get('purchase') === 'success' ? searchParams.get('session_id') : null;
+
+	useEffect(() => {
+		if (!appId || !sessionId || authLoading || !signedIn || confirmedSession.current === sessionId) return;
+		confirmedSession.current = sessionId;
+		mutateAsync({ appId, sessionId })
+			.then(() => toast.success(`Payment received. You can use ${appTitle} now.`))
+			.catch((error: Error) => toast.error(error.message))
+			.finally(() =>
+				setSearchParams(
+					(prev) => {
+						const next = new URLSearchParams(prev);
+						next.delete('purchase');
+						next.delete('session_id');
+						return next;
+					},
+					{ replace: true },
+				),
+			);
+	}, [appId, appTitle, sessionId, authLoading, signedIn, mutateAsync, setSearchParams]);
 }
 
 export function useAdminSales() {
