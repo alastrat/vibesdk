@@ -32,13 +32,8 @@ import { READ_FAILED_MESSAGE, TemplateSubmissionError, submitTemplateVersion } f
 import { r2TemplateStore } from '../../../services/templates/store';
 import { createTemplateShotCapturer } from '../../../services/templates/capture';
 import { StripeApiError, accountFlags } from '../../../services/payments/stripe-client';
-import {
-    PAYMENTS_NOT_CONFIGURED_MESSAGE,
-    SELLER_NOT_READY_MESSAGE,
-    STRIPE_REQUEST_FAILED_MESSAGE,
-    stripeFromEnv,
-} from '../../../services/payments/config';
-import { checkoutDecision, confirmDecision, confirmResponse } from '../../../services/payments/checkout';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
+import { checkoutDecision, confirmDecision, confirmResponse, type CheckoutInput } from '../../../services/payments/checkout';
 import { fulfillCheckoutSession } from '../../../services/payments/fulfill';
 import { platformFeeCents } from '../../../../shared/types/templates';
 import { toOwnerPaidListing } from './publishingDto';
@@ -229,18 +224,24 @@ export class PublishingController extends BaseController {
             const isCreator = app?.userId === user.id;
             const hasPurchase = listing ? await listings.hasPurchase(listing.id, user.id) : false;
             // The seller lookup calls Stripe, so it waits until every other rule allows the purchase.
-            const refusal = checkoutDecision({
+            const checkoutInput: CheckoutInput = {
                 appPublic: app?.visibility === 'public',
                 removed: app?.removedFromDiscoverAt != null,
                 listing: listing ? { status: listing.status, currentVersionId: listing.currentVersionId, priceCents: listing.priceCents } : null,
                 isCreator,
                 hasPurchase,
                 sellerTransfersActive: true,
-            });
+            };
+            const refusal = checkoutDecision(checkoutInput);
             if (!refusal.ok) return PublishingController.createErrorResponse<SiteCheckoutData>(refusal.error, refusal.status);
             if (!app || !listing || !listing.currentVersionId) throw new Error('Checkout decision allowed an incomplete listing');
-            const sellerAccountId = await PublishingController.readySellerAccount(env, listing.creatorUserId);
-            if (!sellerAccountId) return PublishingController.createErrorResponse<SiteCheckoutData>(SELLER_NOT_READY_MESSAGE, 409);
+            // A stored flag can be stale, so every checkout asks Stripe whether the seller can receive transfers.
+            const sellerAccountId = await PublishingController.readySellerAccount(env, listing.creatorUserId, 'always');
+            const sellerRefusal = checkoutDecision({ ...checkoutInput, sellerTransfersActive: sellerAccountId !== null });
+            if (!sellerRefusal.ok) {
+                return PublishingController.createErrorResponse<SiteCheckoutData>(sellerRefusal.error, sellerRefusal.status);
+            }
+            if (!sellerAccountId) throw new Error('Checkout decision allowed a seller without transfers');
             const origin = new URL(request.url).origin;
             const session = await stripe.createCheckoutSession({
                 productName: app.title,
@@ -345,15 +346,20 @@ export class PublishingController extends BaseController {
     }
 
     /**
-     * The seller's Stripe account when it can receive transfers, refreshing a stale flag from Stripe.
-     * An account Stripe no longer has is forgotten, so the seller is not ready.
+     * The seller's Stripe account when it can receive transfers. 'always' asks Stripe (checkout);
+     * 'when-inactive' trusts a stored active flag (the publish gate). An account Stripe no longer has
+     * is forgotten, so the seller is not ready.
      */
-    private static async readySellerAccount(env: Env, userId: string): Promise<string | null> {
+    private static async readySellerAccount(
+        env: Env,
+        userId: string,
+        refresh: 'always' | 'when-inactive',
+    ): Promise<string | null> {
         const stripe = stripeFromEnv(env);
         const accounts = new StripeConnectService(env);
         const stored = await accounts.getByUser(userId);
         if (!stripe || !stored) return null;
-        if (stored.transfersActive) return stored.stripeAccountId;
+        if (refresh === 'when-inactive' && stored.transfersActive) return stored.stripeAccountId;
         const account = await accounts.forgetIfMissing(userId, () => stripe.retrieveAccount(stored.stripeAccountId));
         if (!account) return null;
         const flags = accountFlags(account);
@@ -421,7 +427,7 @@ export class PublishingController extends BaseController {
             },
             async sellerPayouts() {
                 if (!stripeFromEnv(env)) return 'not-configured';
-                return (await PublishingController.readySellerAccount(env, userId)) ? 'ready' : 'not-onboarded';
+                return (await PublishingController.readySellerAccount(env, userId, 'when-inactive')) ? 'ready' : 'not-onboarded';
             },
         };
     }

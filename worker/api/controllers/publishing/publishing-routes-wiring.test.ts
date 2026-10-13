@@ -88,7 +88,28 @@ describe('Stripe calls', () => {
 
 	it('look up the seller for checkout only after every other rule allows the purchase', () => {
 		const checkout = between('static async purchase(', 'static async confirmPurchase(');
-		expect(checkout.indexOf('checkoutDecision(')).toBeGreaterThan(-1);
-		expect(checkout.indexOf('readySellerAccount(')).toBeGreaterThan(checkout.indexOf('checkoutDecision('));
+		const cheapChecks = checkout.indexOf('checkoutDecision(checkoutInput)');
+		expect(cheapChecks).toBeGreaterThan(-1);
+		expect(checkout).toContain('sellerTransfersActive: true,');
+		expect(checkout.indexOf('readySellerAccount(')).toBeGreaterThan(cheapChecks);
+	});
+
+	it('refresh the seller from Stripe on every checkout and let the decision refuse a seller who is not ready', () => {
+		const checkout = between('static async purchase(', 'static async confirmPurchase(');
+		const refresh = checkout.indexOf("readySellerAccount(env, listing.creatorUserId, 'always')");
+		expect(refresh).toBeGreaterThan(-1);
+		const sellerCheck = checkout.indexOf('checkoutDecision({ ...checkoutInput, sellerTransfersActive: sellerAccountId !== null })');
+		expect(sellerCheck).toBeGreaterThan(refresh);
+		expect(checkout.indexOf('stripe.createCheckoutSession(')).toBeGreaterThan(sellerCheck);
+		expect(checkout).not.toContain('SELLER_NOT_READY_MESSAGE');
+		expect(checkout).toContain('error instanceof StripeApiError');
+		expect(checkout).toContain('STRIPE_REQUEST_FAILED_MESSAGE, 502');
+	});
+
+	it('trust a stored active seller when publishing, and ask Stripe only when it is not active', () => {
+		expect(controller).toContain("readySellerAccount(env, userId, 'when-inactive')");
+		const ready = between('private static async readySellerAccount(', 'private static async loadFacts(');
+		expect(ready).toContain("refresh: 'always' | 'when-inactive'");
+		expect(ready).toContain("if (refresh === 'when-inactive' && stored.transfersActive) return stored.stripeAccountId;");
 	});
 });
