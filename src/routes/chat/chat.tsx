@@ -28,7 +28,6 @@ import {
 	Globe,
 	Lock,
 	LockOpen,
-	SquaresFourIcon,
 } from '@phosphor-icons/react';
 import {
 	Badge,
@@ -62,15 +61,15 @@ import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import {
 	useApp,
 	useToggleAppFavorite,
-	useUpdateAppVisibility,
 } from '@/hooks/use-app';
+import { usePublishSite } from '@/hooks/use-publishing';
 import { useAuth } from '@/contexts/auth-context';
 import { useGitHubExport } from '@/hooks/use-github-export';
 import { useAutoScroll } from '@/hooks/use-auto-scroll';
 import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
-import { SubmitTemplateDialog } from '@/components/templates/SubmitTemplateDialog';
+import { PublishDialog } from '@/components/publishing/PublishDialog';
 import { ModelUnavailableNotice } from '@/components/ModelUnavailableNotice';
 import { BuildProgressBar } from '@/components/BuildProgressBar';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
@@ -159,8 +158,8 @@ function ChatSession() {
 
 	// Load existing app data if chatId is provided
 	const { app, loading: appLoading, refetch: refetchApp } = useApp(urlChatId);
-	const { mutateAsync: updateVisibility, isPending: isUpdatingVisibility } =
-		useUpdateAppVisibility(app?.id);
+	const { mutateAsync: publishSite, isPending: isUpdatingVisibility } =
+		usePublishSite(app?.id);
 	const { mutateAsync: toggleFavorite } = useToggleAppFavorite(app?.id);
 	const toast = useKumoToastManager();
 
@@ -293,7 +292,7 @@ function ChatSession() {
 	const queryClient = useQueryClient();
 	const isOwner = !!app && app.userId === user?.id;
 
-	const handleToggleVisibility = useCallback(async () => {
+	const handleMakePrivate = useCallback(async () => {
 		if (!app || !user || !isOwner) {
 			toast.add({
 				title: 'You can only change visibility of your own apps',
@@ -303,27 +302,19 @@ function ChatSession() {
 		}
 
 		try {
-			const newVisibility =
-				app.visibility === 'private' ? 'public' : 'private';
-			const result = await updateVisibility(newVisibility);
-
-			toast.add({
-				title:
-					result.message ||
-					`App is now ${newVisibility === 'private' ? 'private' : 'public'}`,
-				variant: 'success',
-			});
+			const result = await publishSite({ visibility: 'private' });
+			toast.add({ title: result.message, variant: 'success' });
 		} catch (error) {
 			console.error('Error updating app visibility:', error);
 			toast.add({
 				title:
-					error instanceof ApiError
+					error instanceof Error
 						? error.message
 						: 'Failed to update visibility',
 				variant: 'error',
 			});
 		}
-	}, [app, user, isOwner, updateVisibility, toast]);
+	}, [app, user, isOwner, publishSite, toast]);
 
 	const handleFavorite = useCallback(async () => {
 		if (!app) return;
@@ -370,7 +361,7 @@ function ChatSession() {
 
 	const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
-	const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false);
+	const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
 
 	// Deploy target for think apps: user-account deploys are gated behind the
 	// platform's ENABLE_USER_ACCOUNT_DEPLOY flag (surfaced via capabilities).
@@ -465,7 +456,7 @@ function ChatSession() {
 						<Button
 							variant="secondary"
 							size="sm"
-							onClick={handleToggleVisibility}
+							onClick={() => setIsPublishDialogOpen(true)}
 							disabled={isUpdatingVisibility}
 							loading={isUpdatingVisibility}
 							icon={
@@ -513,17 +504,9 @@ function ChatSession() {
 								{isOwner && app.visibility === 'public' && (
 									<DropdownMenu.Item
 										icon={Lock}
-										onClick={handleToggleVisibility}
+										onClick={handleMakePrivate}
 									>
 										Make private
-									</DropdownMenu.Item>
-								)}
-								{isOwner && behaviorType === 'think' && (
-									<DropdownMenu.Item
-										icon={SquaresFourIcon}
-										onClick={() => setIsTemplateDialogOpen(true)}
-									>
-										Submit as template
 									</DropdownMenu.Item>
 								)}
 								<DropdownMenu.Item
@@ -546,7 +529,7 @@ function ChatSession() {
 		isOwner,
 		navigate,
 		isUpdatingVisibility,
-		handleToggleVisibility,
+		handleMakePrivate,
 		handleFavorite,
 		isFavorited,
 		behaviorType,
@@ -1319,6 +1302,7 @@ function ChatSession() {
 												}
 												appId={app?.id || chatId}
 												appVisibility={app?.visibility}
+												onPublish={() => setIsPublishDialogOpen(true)}
 												isGenerating={
 													isGenerating ||
 													isGeneratingBlueprint
@@ -1531,11 +1515,10 @@ function ChatSession() {
 				{showLimitDialog}
 
 				{app && isOwner && (
-					<SubmitTemplateDialog
+					<PublishDialog
 						appId={app.id}
-						appTitle={headerTitle || app.title}
-						open={isTemplateDialogOpen}
-						onOpenChange={setIsTemplateDialogOpen}
+						open={isPublishDialogOpen}
+						onOpenChange={setIsPublishDialogOpen}
 					/>
 				)}
 

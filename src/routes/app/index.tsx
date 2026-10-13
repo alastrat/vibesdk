@@ -3,7 +3,8 @@ import { MonacoEditor } from '@/components/monaco-editor/lazy-monaco-editor';
 import { AppLoadingSkeleton } from '@/components/shared/AppLoadingSkeleton';
 import { FloatingBackgroundIcons } from '@/components/shared/FloatingBackgroundIcons';
 import { GitCloneModal } from '@/components/shared/GitCloneModal';
-import { AppTemplateBar } from '@/components/templates/AppTemplateBar';
+import { PublishDialog } from '@/components/publishing/PublishDialog';
+import { SiteReuseBar } from '@/components/publishing/SiteReuseBar';
 import {
 	useApp,
 	useAppPreviewToken,
@@ -11,7 +12,6 @@ import {
 	useDeployPreview,
 	useToggleAppFavorite,
 	useToggleAppStar,
-	useUpdateAppVisibility,
 } from '@/hooks/use-app';
 import { useAuth } from '@/contexts/auth-context';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -105,6 +105,7 @@ export default function AppView() {
 	const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 	const [deleteError, setDeleteError] = useState<string>();
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
+	const [publishOpen, setPublishOpen] = useState(false);
 	const [activeFilePath, setActiveFilePath] = useState<string>();
 	const previewIframeRef = useRef<HTMLIFrameElement>(null);
 	const autoDeployAppIdRef = useRef<string | undefined>(undefined);
@@ -133,8 +134,6 @@ export default function AppView() {
 
 	const { mutateAsync: toggleFavorite } = useToggleAppFavorite(app?.id);
 	const { mutateAsync: toggleStar } = useToggleAppStar(app?.id);
-	const { mutateAsync: updateVisibility, isPending: isUpdatingVisibility } =
-		useUpdateAppVisibility(app?.id);
 	const { mutateAsync: deleteApp, isPending: isDeleting } = useDeleteApp();
 	const { mutateAsync: deployPreview, isPending: isDeploying } =
 		useDeployPreview(app?.id);
@@ -412,38 +411,6 @@ export default function AppView() {
 			});
 	}, [app, thinkPreviewUrl, deployPreview, toast, user]);
 
-	const handleToggleVisibility = useCallback(async () => {
-		if (!app || !user || !isOwner) {
-			toast.add({
-				title: 'You can only change visibility of your own apps',
-				variant: 'error',
-			});
-			return;
-		}
-
-		try {
-			const newVisibility =
-				app.visibility === 'private' ? 'public' : 'private';
-			const result = await updateVisibility(newVisibility);
-
-			toast.add({
-				title:
-					result.message ||
-					`App is now ${newVisibility === 'private' ? 'private' : 'public'}`,
-				variant: 'success',
-			});
-		} catch (error) {
-			console.error('Error updating app visibility:', error);
-			toast.add({
-				title:
-					error instanceof ApiError
-						? error.message
-						: 'Failed to update visibility',
-				variant: 'error',
-			});
-		}
-	}, [app, user, isOwner, updateVisibility, toast]);
-
 	const headerContent = useMemo(() => {
 		if (loading || error || !app) return null;
 
@@ -477,9 +444,7 @@ export default function AppView() {
 						<Button
 							variant="secondary"
 							size="sm"
-							onClick={handleToggleVisibility}
-							disabled={isUpdatingVisibility}
-							loading={isUpdatingVisibility}
+							onClick={() => setPublishOpen(true)}
 							icon={
 								app.visibility === 'private' ? (
 									<LockOpen
@@ -496,7 +461,7 @@ export default function AppView() {
 						>
 							{app.visibility === 'private'
 								? 'Make public'
-								: 'Make private'}
+								: 'Publishing'}
 						</Button>
 					)}
 
@@ -585,8 +550,6 @@ export default function AppView() {
 		app,
 		isSignedIn,
 		isOwner,
-		isUpdatingVisibility,
-		handleToggleVisibility,
 		navigate,
 	]);
 
@@ -662,12 +625,14 @@ export default function AppView() {
 	return (
 		<div className="size-full flex flex-col min-h-0">
 			<title>{pageTitle(app.title || 'App')}</title>
-			<AppTemplateBar
-				appId={app.id}
-				appTitle={app.title}
-				origin={app.fromTemplate}
-				canManage={isOwner && isThink}
-			/>
+			<SiteReuseBar app={app} isOwner={isOwner} />
+			{isOwner && (
+				<PublishDialog
+					appId={app.id}
+					open={publishOpen}
+					onOpenChange={setPublishOpen}
+				/>
+			)}
 			<div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-2 border-b bg-kumo-base">
 				<Tabs
 					value={activeTab}
