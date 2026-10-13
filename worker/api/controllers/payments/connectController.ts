@@ -43,7 +43,7 @@ export class StripeConnectController extends BaseController {
             const stored = await accounts.getByUser(user.id);
             if (stored) {
                 // A stored account Stripe no longer has is deleted, and onboarding starts over with a fresh one below.
-                const link = await accounts.forgetIfMissing(user.id, () => linkFor(stored.stripeAccountId));
+                const link = await accounts.forgetIfMissing(stored, linkFor);
                 if (link) return StripeConnectController.createSuccessResponse<StripeLinkData>({ url: link.url });
             }
             let accountId: string | undefined;
@@ -95,7 +95,7 @@ export class StripeConnectController extends BaseController {
                 transfersActive: stored.transfersActive,
             };
             try {
-                const account = await accounts.forgetIfMissing(stored.userId, () => stripe.retrieveAccount(stored.stripeAccountId));
+                const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
                 if (!account) {
                     return StripeConnectController.createSuccessResponse<StripeConnectStatusData>({ configured: true, ...NOT_CONNECTED });
                 }
@@ -133,7 +133,7 @@ export class StripeConnectController extends BaseController {
             if (!stored || !stored.detailsSubmitted) {
                 return StripeConnectController.createErrorResponse<StripeLinkData>(FINISH_ONBOARDING_MESSAGE, 400);
             }
-            const link = await accounts.forgetIfMissing(userId, () => stripe.createLoginLink(stored.stripeAccountId));
+            const link = await accounts.forgetIfMissing(stored, (accountId) => stripe.createLoginLink(accountId));
             if (!link) return StripeConnectController.createErrorResponse<StripeLinkData>(FINISH_ONBOARDING_MESSAGE, 400);
             return StripeConnectController.createSuccessResponse<StripeLinkData>({ url: link.url });
         } catch (error) {

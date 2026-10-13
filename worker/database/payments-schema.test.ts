@@ -82,11 +82,13 @@ describe('payments schema', () => {
 });
 
 describe('StripeConnectService', () => {
+	const STORED = { userId: 'u1', stripeAccountId: 'acct_1' };
+
 	it('passes a Stripe result through without touching the stored account', async () => {
 		const { d1, statements } = recordingD1();
 		const accounts = new StripeConnectService({ DB: d1 } as unknown as Env);
 
-		expect(await accounts.forgetIfMissing('u1', async () => 'acct_1')).toBe('acct_1');
+		expect(await accounts.forgetIfMissing(STORED, async (accountId) => accountId)).toBe('acct_1');
 		expect(statements).toHaveLength(0);
 	});
 
@@ -95,10 +97,13 @@ describe('StripeConnectService', () => {
 		const accounts = new StripeConnectService({ DB: d1 } as unknown as Env);
 		const missing = new StripeApiError('No such account', 404, 'resource_missing', 'invalid_request_error');
 
-		expect(await accounts.forgetIfMissing('u1', async () => Promise.reject(missing))).toBeNull();
+		expect(await accounts.forgetIfMissing(STORED, async () => Promise.reject(missing))).toBeNull();
 		expect(statements).toHaveLength(1);
-		expect(statements[0].sql.toLowerCase()).toBe('delete from "stripe_connect_accounts" where "stripe_connect_accounts"."user_id" = ?');
-		expect(statements[0].params).toEqual(['u1']);
+		// Only the account Stripe reported missing: a row a concurrent onboarding just stored survives.
+		expect(statements[0].sql.toLowerCase()).toBe(
+			'delete from "stripe_connect_accounts" where ("stripe_connect_accounts"."user_id" = ? and "stripe_connect_accounts"."stripe_account_id" = ?)',
+		);
+		expect(statements[0].params).toEqual(['u1', 'acct_1']);
 	});
 
 	it('keeps the stored account and rethrows any other failure', async () => {
@@ -106,8 +111,8 @@ describe('StripeConnectService', () => {
 		const accounts = new StripeConnectService({ DB: d1 } as unknown as Env);
 		const rateLimited = new StripeApiError('Too many requests', 429, 'rate_limit', 'invalid_request_error');
 
-		await expect(accounts.forgetIfMissing('u1', async () => Promise.reject(rateLimited))).rejects.toBe(rateLimited);
-		await expect(accounts.forgetIfMissing('u1', async () => Promise.reject(new Error('Network connection lost')))).rejects.toThrow(
+		await expect(accounts.forgetIfMissing(STORED, async () => Promise.reject(rateLimited))).rejects.toBe(rateLimited);
+		await expect(accounts.forgetIfMissing(STORED, async () => Promise.reject(new Error('Network connection lost')))).rejects.toThrow(
 			'Network connection lost',
 		);
 		expect(statements).toHaveLength(0);

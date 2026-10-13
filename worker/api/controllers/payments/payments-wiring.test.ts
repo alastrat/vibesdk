@@ -45,7 +45,7 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 
 	it('reads as not connected in the status, not as the stale stored flags', () => {
 		const status = method('getStatus', 'dashboardLink');
-		expect(status).toContain('accounts.forgetIfMissing(stored.userId, () => stripe.retrieveAccount(stored.stripeAccountId))');
+		expect(status).toContain('accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId))');
 		const missing = status.indexOf('if (!account)');
 		expect(missing).toBeGreaterThan(status.indexOf('accounts.forgetIfMissing('));
 		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeGreaterThan(missing);
@@ -54,7 +54,7 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 
 	it('is replaced by one fresh Express account when onboarding', () => {
 		const onboarding = method('startOnboarding', 'getStatus');
-		const forget = onboarding.indexOf('accounts.forgetIfMissing(user.id, () => linkFor(stored.stripeAccountId))');
+		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, linkFor)');
 		expect(forget).toBeGreaterThan(-1);
 		expect(onboarding.match(/createExpressAccount\(/g)).toHaveLength(1);
 		expect(onboarding.indexOf('createExpressAccount(')).toBeGreaterThan(forget);
@@ -62,7 +62,7 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 
 	it('sends the seller back to onboarding instead of opening the dashboard', () => {
 		const dashboard = method('dashboardLink');
-		const forget = dashboard.indexOf('accounts.forgetIfMissing(userId, () => stripe.createLoginLink(stored.stripeAccountId))');
+		const forget = dashboard.indexOf('accounts.forgetIfMissing(stored, (accountId) => stripe.createLoginLink(accountId))');
 		expect(forget).toBeGreaterThan(-1);
 		expect(dashboard.indexOf('FINISH_ONBOARDING_MESSAGE, 400', forget)).toBeGreaterThan(forget);
 		expect(controller).toContain("const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';");

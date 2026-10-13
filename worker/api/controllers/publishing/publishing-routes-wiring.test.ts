@@ -81,7 +81,7 @@ describe('Stripe calls', () => {
 
 	it('treat a seller whose Stripe account no longer exists as not ready', () => {
 		const ready = between('private static async readySellerAccount(', 'private static async loadFacts(');
-		const forget = ready.indexOf('accounts.forgetIfMissing(userId, () => stripe.retrieveAccount(stored.stripeAccountId))');
+		const forget = ready.indexOf('accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId))');
 		expect(forget).toBeGreaterThan(-1);
 		expect(ready.indexOf('if (!account) return null;', forget)).toBeGreaterThan(forget);
 	});

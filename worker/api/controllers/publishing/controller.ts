@@ -361,7 +361,7 @@ export class PublishingController extends BaseController {
         const stored = await accounts.getByUser(userId);
         if (!stripe || !stored) return null;
         if (refresh === 'when-inactive' && stored.transfersActive) return stored.stripeAccountId;
-        const account = await accounts.forgetIfMissing(userId, () => stripe.retrieveAccount(stored.stripeAccountId));
+        const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
         if (!account) return null;
         const flags = accountFlags(account);
         await accounts.updateFlags(stored.stripeAccountId, flags);

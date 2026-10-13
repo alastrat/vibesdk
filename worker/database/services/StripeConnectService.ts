@@ -1,6 +1,6 @@
 /** D1 reads and writes for sellers' Stripe Connect accounts. */
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { isMissingAccountError, type SellerFlags } from '../../services/payments/stripe-client';
@@ -38,20 +38,27 @@ export class StripeConnectService extends BaseService {
             .where(eq(schema.stripeConnectAccounts.stripeAccountId, stripeAccountId));
     }
 
-    async deleteByUser(userId: string): Promise<void> {
-        await this.database.delete(schema.stripeConnectAccounts).where(eq(schema.stripeConnectAccounts.userId, userId));
-    }
-
     /**
-     * Runs a Stripe call on the seller's stored account. When Stripe no longer has that account, the row is
+     * Runs a Stripe call on the seller's stored account. When Stripe no longer has that account, its row is
      * deleted and the result is null, so the seller reads as not connected; other failures are rethrown.
+     * The delete matches the account id too, so a row a concurrent onboarding just stored survives.
      */
-    async forgetIfMissing<T>(userId: string, call: () => Promise<T>): Promise<T | null> {
+    async forgetIfMissing<T>(
+        stored: { userId: string; stripeAccountId: string },
+        call: (stripeAccountId: string) => Promise<T>,
+    ): Promise<T | null> {
         try {
-            return await call();
+            return await call(stored.stripeAccountId);
         } catch (error) {
             if (!isMissingAccountError(error)) throw error;
-            await this.deleteByUser(userId);
+            await this.database
+                .delete(schema.stripeConnectAccounts)
+                .where(
+                    and(
+                        eq(schema.stripeConnectAccounts.userId, stored.userId),
+                        eq(schema.stripeConnectAccounts.stripeAccountId, stored.stripeAccountId),
+                    ),
+                );
             return null;
         }
     }
