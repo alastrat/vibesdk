@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EnhancedAppData } from '../../../database/types';
-import { toPublicAppListItem } from './publicAppDto';
+import { toPublicAppDetail, toPublicAppListItem } from './publicAppDto';
 
 function app(overrides: Partial<EnhancedAppData> = {}): EnhancedAppData {
 	return {
@@ -62,5 +62,23 @@ describe('toPublicAppListItem for Discover', () => {
 		expect(item).not.toContain('secret prompt');
 		expect(item).not.toContain('dep1');
 		expect(item).not.toContain('"userId"');
+	});
+});
+
+describe('toPublicAppDetail for Discover', () => {
+	it('leaves the list-only price, review and reusable fields to the reuse view', () => {
+		const detail = toPublicAppDetail(app({ paidPriceCents: 2900, paidInReview: true }), false);
+		expect(detail).not.toHaveProperty('priceCents');
+		expect(detail).not.toHaveProperty('inReview');
+		expect(detail).not.toHaveProperty('reusable');
+		expect(detail).toMatchObject({ id: 'app1', category: 'landing', originalPrompt: 'secret prompt' });
+	});
+
+	it('keeps the same shape for the owner', () => {
+		const detail = toPublicAppDetail(app(), true);
+		expect(detail).not.toHaveProperty('priceCents');
+		expect(detail).not.toHaveProperty('inReview');
+		expect(detail).not.toHaveProperty('reusable');
+		expect(detail).toMatchObject({ userId: 'owner', deploymentId: 'dep1' });
 	});
 });

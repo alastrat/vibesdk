@@ -27,14 +27,13 @@ export interface AppReuseView {
     unavailableReason: string | null;
 }
 
-/** The published site an app was copied from. */
-export interface StartedFromView {
-    appId: string;
-    title: string;
-    creatorName: string;
-    /** The source is still public and in Discover. */
-    available: boolean;
-}
+/**
+ * The published site an app was copied from. A source that is no longer public
+ * or was removed from Discover is reported without its identity.
+ */
+export type StartedFromView =
+    | { available: true; appId: string; title: string; creatorName: string }
+    | { available: false };
 
 /**
  * Response data for getAppDetails - extends the safe public detail projection.

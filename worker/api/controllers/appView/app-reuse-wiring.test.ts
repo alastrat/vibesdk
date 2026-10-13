@@ -25,6 +25,10 @@ describe('app details for reuse', () => {
 		expect(view).not.toContain('fromTemplate');
 	});
 
+	it('maps the source app through the view that hides unavailable sources', () => {
+		expect(view).toContain('toStartedFromView(');
+	});
+
 	it('records a deploy the app row has not seen yet', () => {
 		expect(view).toContain("ctx.waitUntil(appService.updateApp(appResult.id, { lastDeployedAt: new Date() }))");
 	});

@@ -81,11 +81,18 @@ export type PublicAppListData = Pick<
 };
 
 /**
+ * The public fields shared by the listing and the detail endpoint. The price,
+ * review and reusable fields are listing-only: details report them through the
+ * reuse view, which reads the listing itself.
+ */
+export type PublicAppBaseData = Omit<PublicAppListData, 'priceCents' | 'inReview' | 'reusable'>;
+
+/**
  * Safe public projection of an app for the detail endpoint. Adds the original
  * prompt (intended public feature on public apps). Owner-only operational
  * fields (userId, deploymentId) are populated only when the viewer owns the app.
  */
-export type PublicAppDetailData = PublicAppListData &
+export type PublicAppDetailData = PublicAppBaseData &
     Pick<EnhancedAppData, 'originalPrompt'> & {
         userId?: string | null;
         deploymentId?: string | null;

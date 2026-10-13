@@ -10,6 +10,7 @@
 
 import type {
     EnhancedAppData,
+    PublicAppBaseData,
     PublicAppListData,
     PublicAppDetailData,
 } from '../../../database/types';
@@ -28,11 +29,8 @@ function publicGithubFields(
     };
 }
 
-/**
- * Whitelist an enhanced app row for the public listing response. Drops every
- * sensitive/operational column; exposes GitHub fields only for public repos.
- */
-export function toPublicAppListItem(app: EnhancedAppData): PublicAppListData {
+/** The public fields the listing and the details share. */
+function toPublicAppBase(app: EnhancedAppData): PublicAppBaseData {
     return {
         id: app.id,
         title: app.title,
@@ -40,9 +38,6 @@ export function toPublicAppListItem(app: EnhancedAppData): PublicAppListData {
         iconUrl: app.iconUrl,
         framework: app.framework,
         category: app.category,
-        priceCents: app.paidPriceCents ?? null,
-        inReview: app.paidInReview ?? false,
-        reusable: app.visibility === 'public' && app.lastDeployedAt !== null && !(app.paidInReview ?? false),
         visibility: app.visibility,
         status: app.status,
         isFeatured: app.isFeatured,
@@ -63,6 +58,19 @@ export function toPublicAppListItem(app: EnhancedAppData): PublicAppListData {
 }
 
 /**
+ * Whitelist an enhanced app row for the public listing response. Drops every
+ * sensitive/operational column; exposes GitHub fields only for public repos.
+ */
+export function toPublicAppListItem(app: EnhancedAppData): PublicAppListData {
+    return {
+        ...toPublicAppBase(app),
+        priceCents: app.paidPriceCents ?? null,
+        inReview: app.paidInReview ?? false,
+        reusable: app.visibility === 'public' && app.lastDeployedAt !== null && !(app.paidInReview ?? false),
+    };
+}
+
+/**
  * Whitelist an enhanced app row for the detail response.
  *
  * The original prompt and generated code are intended to be visible on public
@@ -73,7 +81,7 @@ export function toPublicAppDetail(
     app: EnhancedAppData,
     isOwner: boolean,
 ): PublicAppDetailData {
-    const base = toPublicAppListItem(app);
+    const base = toPublicAppBase(app);
     const github = isOwner
         ? {
               githubRepositoryUrl: app.githubRepositoryUrl,

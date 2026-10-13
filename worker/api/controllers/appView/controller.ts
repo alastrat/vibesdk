@@ -18,6 +18,7 @@ import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { toPublicAppDetail } from '../apps/publicAppDto';
 import { createLogger } from '../../../logger';
 import { reuseDecision } from '../../../services/templates/reuse';
+import { toStartedFromView } from './started-from';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { extractRequestMetadata } from '../../../utils/authUtils';
@@ -180,14 +181,7 @@ export class AppViewController extends BaseController {
     private static async loadStartedFrom(env: Env, parentAppId: string | null): Promise<StartedFromView | null> {
         if (!parentAppId) return null;
         try {
-            const row = await new AppService(env).getStartedFrom(parentAppId);
-            if (!row) return null;
-            return {
-                appId: row.id,
-                title: row.title,
-                creatorName: row.creatorName ?? 'Unknown',
-                available: row.visibility === 'public' && row.removedFromDiscoverAt === null,
-            };
+            return toStartedFromView(await new AppService(env).getStartedFrom(parentAppId));
         } catch (error) {
             AppViewController.logger.warn('Could not load the source of a copied app', error);
             return null;
