@@ -25,6 +25,9 @@ export const queryKeys = {
 		user: (filters: PaginatedAppsListFilters) =>
 			[...queryKeys.apps.userAll(), filters] as const,
 		strip: () => [...queryKeys.apps.all, 'strip'] as const,
+		/** A Discover product page; its offer depends on the viewer. */
+		sitePage: (appId: string, userId?: string | null) =>
+			[...queryKeys.apps.all, 'site-page', appId, userId ?? 'anonymous'] as const,
 	},
 	account: {
 		all: ['account'] as const,

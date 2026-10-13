@@ -70,6 +70,7 @@ import type{
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
 	MyPaidListingsData,
+	PageCopyDraftData,
 	PaidVersionActionData,
 	PendingReviewsData,
 	PublishSiteData,
@@ -78,6 +79,7 @@ import type{
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
 	SiteCheckoutData,
+	SitePageData,
 	SitePublishingData,
 	StripeConnectStatusData,
 	StripeLinkData,
@@ -576,6 +578,16 @@ class ApiClient {
 	/** Publishing settings for one of the owner's apps; quiet because non-owners get 403. */
 	async getSitePublishing(appId: string): Promise<ApiResponse<SitePublishingData>> {
 		return this.request<SitePublishingData>(`/api/apps/${appId}/publishing`, {}, true);
+	}
+
+	/** A Discover site's product page; quiet because the page shows its own unavailable state. */
+	async getSitePage(appId: string): Promise<ApiResponse<SitePageData>> {
+		return this.request<SitePageData>(`/api/discover/${appId}`, {}, true);
+	}
+
+	/** An AI draft of a site's page text, for its owner; quiet because the dialog shows the failure inline. */
+	async draftPageCopy(appId: string): Promise<ApiResponse<PageCopyDraftData>> {
+		return this.request<PageCopyDraftData>(`/api/apps/${appId}/page-copy/draft`, { method: 'POST' }, true);
 	}
 
 	async submitPaidUpdate(appId: string): Promise<ApiResponse<PaidVersionActionData>> {

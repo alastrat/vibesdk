@@ -24,6 +24,12 @@ describe('publishing query keys', () => {
 	it('keeps the Discover strip under the public apps prefix', () => {
 		expect(queryKeys.apps.strip().slice(0, queryKeys.apps.all.length)).toEqual(queryKeys.apps.all);
 	});
+
+	it('keeps product pages under the public apps prefix, per viewer', () => {
+		const page = queryKeys.apps.sitePage('app1', 'u1');
+		expect(page.slice(0, queryKeys.apps.all.length)).toEqual(queryKeys.apps.all);
+		expect(queryKeys.apps.sitePage('app1', null)).not.toEqual(page);
+	});
 });
 
 describe('payments query keys', () => {
