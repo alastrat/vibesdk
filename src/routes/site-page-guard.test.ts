@@ -4,6 +4,7 @@ const sources = import.meta.glob<string>(
 	[
 		'/src/routes.tsx',
 		'/src/routes/discover/site.tsx',
+		'/src/hooks/use-site-page.ts',
 		'/src/components/site-page/SiteMainButton.tsx',
 		'/src/components/site-page/SiteHeader.tsx',
 		'/src/components/site-page/DevicePreview.tsx',
@@ -41,6 +42,12 @@ describe('the product page', () => {
 		expect(page).toContain('page.isPending');
 		expect(page).not.toContain('page.isLoading');
 		expect(page).toContain('!appId || page.isError');
+	});
+
+	it('keeps the live preview from reloading on refetch, with a stale time under the 30-minute token', () => {
+		const hook = source('/src/hooks/use-site-page.ts');
+		expect(hook).toContain('refetchOnWindowFocus: false');
+		expect(hook).toContain('staleTime: 20 * 60 * 1000');
 	});
 
 	it('offers the right action for each viewer', () => {

@@ -13,6 +13,9 @@ export function useSitePage(appId: string | undefined) {
 		queryFn: () => unwrap(apiClient.getSitePage(appId!), SITE_PAGE_UNAVAILABLE_MESSAGE),
 		enabled: !!appId && !isLoading,
 		retry: false,
+		// Each fetch signs a new preview URL, which reloads the frame; keep the stale time under the 30-minute token.
+		refetchOnWindowFocus: false,
+		staleTime: 20 * 60 * 1000,
 	});
 }
 
