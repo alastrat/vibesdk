@@ -64,4 +64,21 @@ describe('SitePageService', () => {
 		expect(sql).toContain('order by "apps"."updated_at" desc');
 		expect(statements[0].params).toEqual(expect.arrayContaining(['u1', 'public', 'app1', 4]));
 	});
+
+	it('marks a creator site paid while any paid listing is listed, approved or not', async () => {
+		const { d1, statements } = recordingD1([
+			['a1', 'Free site', null, null, 0],
+			['a2', 'Paid, in review', null, null, 1],
+			['a3', 'Paid, approved', 'https://shots.test/a3.png', 2900, 1],
+		]);
+		const sites = await new SitePageService({ DB: d1 } as unknown as Env).listCreatorSites('u1', 'app1', 4);
+		expect(statements[0].sql).toContain(
+			`exists (select 1 from templates as listing where listing.source_app_id = "apps"."id" and listing.status = 'listed')`,
+		);
+		expect(sites).toEqual([
+			{ id: 'a1', title: 'Free site', screenshotUrl: null, priceCents: null, paid: false },
+			{ id: 'a2', title: 'Paid, in review', screenshotUrl: null, priceCents: null, paid: true },
+			{ id: 'a3', title: 'Paid, approved', screenshotUrl: 'https://shots.test/a3.png', priceCents: 2900, paid: true },
+		]);
+	});
 });

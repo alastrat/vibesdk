@@ -1,5 +1,5 @@
-/** A D1 stand-in that records each statement a service prepares and returns no rows. */
-export function recordingD1() {
+/** A D1 stand-in that records each statement a service prepares; `rawRows` are the rows a select returns. */
+export function recordingD1(rawRows: unknown[][] = []) {
 	const statements: { sql: string; params: unknown[] }[] = [];
 	const d1 = {
 		batch: async () => [],
@@ -13,7 +13,7 @@ export function recordingD1() {
 					return statement;
 				},
 				all: async () => ({ results: [], success: true, meta: {} }),
-				raw: async () => [],
+				raw: async () => rawRows,
 				run: async () => ({ results: [], success: true, meta: {} }),
 				first: async () => null,
 			};

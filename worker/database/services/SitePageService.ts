@@ -3,7 +3,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
-import { discoverConditions, paidPriceSubquery } from '../discover-conditions';
+import { discoverConditions, paidListedSubquery, paidPriceSubquery } from '../discover-conditions';
 import { parseStoredPageCopy, type SitePageCopy } from '../../../shared/types/site-page';
 
 export interface CreatorSiteRow {
@@ -12,6 +12,8 @@ export interface CreatorSiteRow {
     screenshotUrl: string | null;
     /** The approved price of a listed paid listing; null for a free site. */
     priceCents: number | null;
+    /** A paid listing is listed, approved or not. */
+    paid: boolean;
 }
 
 export class SitePageService extends BaseService {
@@ -45,6 +47,7 @@ export class SitePageService extends BaseService {
                 title: schema.apps.title,
                 screenshotUrl: schema.apps.screenshotUrl,
                 priceCents: paidPriceSubquery,
+                paid: paidListedSubquery,
             })
             .from(schema.apps)
             .where(

@@ -12,6 +12,9 @@ const listedListing = sql`select 1 from templates as listing where listing.sourc
 /** The approved price of a listed paid listing, or null for a free site. */
 export const paidPriceSubquery = sql<number | null>`(select listing.price_cents from templates as listing where listing.source_app_id = ${schema.apps.id} and listing.status = 'listed' and listing.current_version_id is not null)`;
 
+/** True while a paid listing is listed, approved or not. */
+export const paidListedSubquery = sql<boolean>`exists (${listedListing})`.mapWith(Boolean);
+
 /** 1 while a listed paid listing waits for its first approval. */
 export const paidInReviewSubquery = sql<number>`exists (${listedListing} and listing.current_version_id is null)`;
 

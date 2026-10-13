@@ -91,7 +91,7 @@ describe('toSitePageData', () => {
 		approvedVersion: VERSION,
 		savedCopy: SAVED,
 		previewUrl: 'https://preview.test/?t=1',
-		moreFromCreator: [{ id: 'app2', title: 'Lumen', screenshotUrl: null, priceCents: null }],
+		moreFromCreator: [{ id: 'app2', title: 'Lumen', screenshotUrl: null, priceCents: null, paid: false }],
 	};
 
 	it('assembles a paid page with the approved text, price, screenshots and stats', () => {
@@ -114,7 +114,7 @@ describe('toSitePageData', () => {
 				desktop: '/api/discover/app1/screenshots/desktop?v=v2',
 				mobile: '/api/discover/app1/screenshots/mobile?v=v2',
 			},
-			moreFromCreator: [{ id: 'app2', title: 'Lumen', screenshotUrl: null, priceCents: null }],
+			moreFromCreator: [{ id: 'app2', title: 'Lumen', screenshotUrl: null, priceCents: null, paid: false }],
 		});
 	});
 

@@ -74,7 +74,7 @@ describe('the product page', () => {
 	});
 
 	it('prices every surface through the one label helper', () => {
-		for (const file of ['SiteHeader', 'SiteDetailsCard', 'StickyBuyBar']) {
+		for (const file of ['SiteHeader', 'SiteDetailsCard', 'StickyBuyBar', 'MoreFromCreator']) {
 			const text = source(`/src/components/site-page/${file}.tsx`);
 			expect(text).toContain('sitePriceLabel(');
 			expect(text).not.toContain("'Free'");
@@ -87,6 +87,12 @@ describe('the product page', () => {
 		expect(details).toContain('Secure checkout with Stripe');
 		expect(source('/src/components/site-page/StickyBuyBar.tsx')).toContain('IntersectionObserver');
 		expect(source('/src/components/site-page/MoreFromCreator.tsx')).toContain('/discover/${site.id}');
+	});
+
+	it('omits the price on a creator card whose paid site is not approved yet', () => {
+		const more = source('/src/components/site-page/MoreFromCreator.tsx');
+		expect(more).toContain('const price = sitePriceLabel(site);');
+		expect(more).toContain('{price && ');
 	});
 
 	it('renders page text as plain text only', () => {

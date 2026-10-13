@@ -15,7 +15,9 @@ export interface SitePageCard {
     id: string;
     title: string;
     screenshotUrl: string | null;
-    /** The approved price of a paid site; null for a free site. */
+    /** The site has a listed paid listing, approved or not. */
+    paid: boolean;
+    /** The approved price of a paid site; null for a free site or one not approved yet. */
     priceCents: number | null;
 }
 
