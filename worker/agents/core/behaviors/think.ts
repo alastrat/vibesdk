@@ -22,7 +22,7 @@ import {
 	resolvePreviewHost,
 } from 'worker/utils/urls';
 import { isDev } from 'worker/utils/envs';
-import { signSpacePreviewToken } from 'worker/utils/spacePreviewToken';
+import { PUBLIC_PREVIEW_SUBJECT, signSpacePreviewToken } from 'worker/utils/spacePreviewToken';
 import { AppService } from 'worker/database/services/AppService';
 import { getConfigurationForModel } from '../../inferutils/core';
 import type { ThinkAgentConfig } from '../../think/ThinkAgent';
@@ -444,7 +444,8 @@ export class ThinkCodingBehavior
 		return `https://${host}`;
 	}
 
-	public async getBrowserPreviewURL(previewVersionOverride?: number): Promise<string> {
+	/** `subject` replaces the owner's id in the token claims, for previews shown to people other than the owner. */
+	public async getBrowserPreviewURL(previewVersionOverride?: number, subject?: string): Promise<string> {
 		const spaceName = this.getAgentId();
 		const branch = this.state.currentBranch || 'main';
 		const previewBaseUrl = `${await this.getPublicOrigin()}${buildSpacePreviewPath(spaceName, branch)}`;
@@ -459,7 +460,7 @@ export class ThinkCodingBehavior
 		const token = await signSpacePreviewToken(this.env, {
 			spaceName,
 			branch,
-			userId: this.state.metadata.userId,
+			userId: subject ?? this.state.metadata.userId,
 			previewVersion,
 		});
 		return `${previewBaseUrl}?t=${encodeURIComponent(token)}`;
@@ -473,6 +474,11 @@ export class ThinkCodingBehavior
 
 	override async getDeployedCommit(): Promise<string | null> {
 		return this.state.lastDeployedCommit ?? null;
+	}
+
+	override async getPublicPreviewURL(): Promise<string | null> {
+		if (!this.state.lastDeployedCommit) return null;
+		return this.getBrowserPreviewURL(undefined, PUBLIC_PREVIEW_SUBJECT);
 	}
 
 	/** Remember the deployed commit and stamp the app row; Discover reads the stamp to know the site is deployed. */

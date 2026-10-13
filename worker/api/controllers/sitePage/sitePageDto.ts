@@ -37,7 +37,7 @@ export interface SitePageSource {
         | 'userName'
         | 'userAvatar'
         | 'viewCount'
-        | 'likeCount'
+        | 'starCount'
         | 'forkCount'
     >;
     isOwner: boolean;
@@ -117,7 +117,7 @@ export function toSitePageData(source: SitePageSource): SitePageData {
         offer: siteOffer(source),
         priceCents: approved && listed ? listed.priceCents : null,
         creator: { displayName: app.userName ?? 'Unknown', avatarUrl: app.userAvatar },
-        stats: { uses: app.forkCount ?? 0, views: app.viewCount ?? 0, likes: app.likeCount ?? 0 },
+        stats: { uses: app.forkCount ?? 0, views: app.viewCount ?? 0, likes: app.starCount },
         publishedAt: isoDate(app.reuseConsentAt ?? app.createdAt),
         updatedAt: isoDate(approved ? approved.reviewedAt : app.lastDeployedAt),
         previewUrl: source.previewUrl,

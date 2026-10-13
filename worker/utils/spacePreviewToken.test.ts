@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { JWTUtils } from './jwtUtils';
 import {
 	buildPreviewCookie,
+	PUBLIC_PREVIEW_SUBJECT,
 	readPreviewCookie,
 	signSpacePreviewToken,
 	SPACE_PREVIEW_COOKIE_NAME,
@@ -28,6 +29,19 @@ describe('spacePreviewToken', () => {
 			userId: 'user-a',
 			previewVersion: 3,
 		});
+	});
+
+	it('verifies a public preview token whose subject names no user', async () => {
+		const token = await signSpacePreviewToken(testEnv, {
+			spaceName: 'space-a',
+			branch: 'main',
+			userId: PUBLIC_PREVIEW_SUBJECT,
+			previewVersion: 0,
+		});
+
+		const claims = await verifySpacePreviewToken(testEnv, token, 'space-a', 'main');
+		expect(claims?.userId).toBe('public-preview');
+		expect(token.split('.')[1]).not.toContain('user-a');
 	});
 
 	it('rejects a token missing previewVersion', async () => {

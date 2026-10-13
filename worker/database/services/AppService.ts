@@ -25,6 +25,9 @@ import type { DiscoverFilters } from '../../services/templates/reuse';
 import { discoverConditions, paidInReviewSubquery, paidPriceSubquery } from '../discover-conditions';
 import { omitInternalAppFields } from '../app-fields';
 
+/** Apps copied from this one; the "uses" count Discover and the product page show. */
+const forkCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`;
+
 // Type definitions
 type WhereCondition = ReturnType<typeof eq> | ReturnType<typeof and> | ReturnType<typeof or> | undefined;
 type RankedAppQueryResult = {
@@ -737,6 +740,7 @@ export class AppService extends BaseService {
                 app: schema.apps,
                 userName: schema.users.displayName,
                 userAvatar: schema.users.avatarUrl,
+                forkCount: forkCountSubquery,
             })
             .from(schema.apps)
             .leftJoin(schema.users, eq(schema.apps.userId, schema.users.id))
@@ -800,7 +804,8 @@ export class AppService extends BaseService {
             starCount,
             userStarred: userHasStarred,
             userFavorited: isFavorite,
-            viewCount
+            viewCount,
+            forkCount: appResult.forkCount,
         };
         const [enriched] = await this.enrichScreenshotUrls([result]);
         return enriched;
@@ -1039,7 +1044,6 @@ export class AppService extends BaseService {
             // hash so retroactive/repeated views cannot re-inflate rankings.
             const viewCountSubquery = sql<number>`(SELECT COUNT(DISTINCT ${schema.appViews.viewerHash}) FROM ${schema.appViews} WHERE ${schema.appViews.appId} = ${schema.apps.id})`;
             const starCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id})`;
-            const forkCountSubquery = sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`;
             
             if (sort === 'popular') {
                 // Popular algorithm: (views*1 + stars*3) DESC
@@ -1127,7 +1131,7 @@ export class AppService extends BaseService {
         return {
             viewCount: sql<number>`(SELECT COUNT(DISTINCT ${schema.appViews.viewerHash}) FROM ${schema.appViews} WHERE ${schema.appViews.appId} = ${schema.apps.id})`,
             starCount: sql<number>`(SELECT COUNT(*) FROM ${schema.stars} WHERE ${schema.stars.appId} = ${schema.apps.id})`,
-            forkCount: sql<number>`(SELECT COUNT(*) FROM ${schema.apps} AS forks WHERE forks.parent_app_id = ${schema.apps.id})`
+            forkCount: forkCountSubquery
         };
     }
 

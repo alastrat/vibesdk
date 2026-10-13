@@ -1184,6 +1184,11 @@ export abstract class BaseCodingBehavior<TState extends BaseProjectState>
         return null;
     }
 
+    /** A preview link that names no user, safe to show the public; only a deployed Think app provides one. */
+    public async getPublicPreviewURL(): Promise<string | null> {
+        return null;
+    }
+
     // A wrapper for LLM tool to deploy to sandbox
     async deployPreview(clearLogs: boolean = true, forceRedeploy: boolean = false): Promise<string> {
         const response = await this.deployToSandbox([], forceRedeploy, undefined, clearLogs);

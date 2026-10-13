@@ -81,7 +81,7 @@ describe('toSitePageData', () => {
 			userName: 'Template Creator',
 			userAvatar: null,
 			viewCount: 15,
-			likeCount: 2,
+			starCount: 2,
 			forkCount: 3,
 		},
 		isOwner: false,
@@ -125,7 +125,7 @@ describe('toSitePageData', () => {
 			savedCopy: null,
 			previewUrl: null,
 			reusable: false,
-			app: { ...source.app, reuseConsentAt: null, viewCount: undefined, likeCount: undefined, forkCount: undefined },
+			app: { ...source.app, reuseConsentAt: null, viewCount: undefined, starCount: 0, forkCount: undefined },
 		});
 		expect(page.copy).toBeNull();
 		expect(page.offer).toEqual({ kind: 'not-yet-available' });

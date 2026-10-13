@@ -400,6 +400,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.behavior.getDeployedCommit();
     }
 
+    /** A preview link that names no user, for public product pages; null unless a deployed Think app. */
+    async getPublicPreviewURL(): Promise<string | null> {
+        return this.behavior.getPublicPreviewURL();
+    }
+
     getBehaviorType(): BehaviorType {
         return this.state.behaviorType;
     }

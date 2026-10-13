@@ -6,6 +6,9 @@ const sources = import.meta.glob<string>(
 		'/worker/api/routes/index.ts',
 		'/worker/api/controllers/sitePage/controller.ts',
 		'/worker/api/controllers/appView/controller.ts',
+		'/worker/agents/core/behaviors/think.ts',
+		'/worker/agents/core/behaviors/base.ts',
+		'/worker/agents/core/codingAgent.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -33,5 +36,30 @@ describe('product page routes', () => {
 		expect(controller).not.toContain('getSummary(');
 		expect(controller).not.toContain('agentSummary');
 		expect(source('/worker/api/controllers/appView/controller.ts')).toContain('recordVisit(');
+	});
+
+	it('signs the creator thumbnails so the images load', () => {
+		expect(source('/worker/api/controllers/sitePage/controller.ts')).toContain('enrichUrls(');
+	});
+
+	it('previews through the anonymous public preview and never mints an owner-bearing source', () => {
+		const controller = source('/worker/api/controllers/sitePage/controller.ts');
+		expect(controller).toContain('getPublicPreviewURL(');
+		expect(controller).toContain('getDeployedCommit(');
+		expect(controller).not.toContain('getTemplateSource(');
+	});
+});
+
+describe('public preview subject', () => {
+	it('signs the public preview with the anonymous subject, and every other preview with the owner', () => {
+		const think = source('/worker/agents/core/behaviors/think.ts');
+		expect(think).toContain('getBrowserPreviewURL(previewVersionOverride?: number, subject?: string)');
+		expect(think).toContain('userId: subject ?? this.state.metadata.userId');
+		expect(think).toContain('getBrowserPreviewURL(undefined, PUBLIC_PREVIEW_SUBJECT)');
+	});
+
+	it('exposes the public preview from the coding agent to its behavior, and the base behavior has none', () => {
+		expect(source('/worker/agents/core/codingAgent.ts')).toContain('this.behavior.getPublicPreviewURL()');
+		expect(source('/worker/agents/core/behaviors/base.ts')).toMatch(/getPublicPreviewURL\(\): Promise<string \| null> \{\s*return null;/);
 	});
 });

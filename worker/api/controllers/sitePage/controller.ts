@@ -6,9 +6,9 @@ import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
 import { AppService, SitePageService, TemplateService } from '../../../database';
 import { getAgentStubLightweight } from '../../../agents';
-import type { TemplateSource } from '../../../agents/core/types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
+import { ScreenshotSecurity } from '../../../utils/screenshot-security';
 import { isTemplateShotKind } from '../../../services/templates/catalog';
 import { templateImageResponse } from '../../../services/templates/store';
 import { SITE_PAGE_UNAVAILABLE_MESSAGE } from '../../../../shared/types/site-page';
@@ -49,24 +49,25 @@ export class SitePageController extends BaseController {
             const pages = new SitePageService(env);
             const listing = await listings.getListingByApp(app.id);
             const listed = listing?.status === 'listed' ? listing : null;
-            const [hasPurchase, approvedVersion, savedCopy, source, moreFromCreator] = await Promise.all([
+            const [hasPurchase, approvedVersion, savedCopy, deployment, creatorSites] = await Promise.all([
                 listed && user && !isOwner ? listings.hasPurchase(listed.id, user.id) : Promise.resolve(false),
                 listed?.currentVersionId ? listings.getVersion(listed.currentVersionId) : Promise.resolve(null),
                 pages.getCopy(app.id),
-                SitePageController.loadSource(env, app.id),
+                SitePageController.loadDeployment(env, app.id),
                 app.userId ? pages.listCreatorSites(app.userId, app.id, MORE_FROM_CREATOR_LIMIT) : Promise.resolve([]),
             ]);
+            const moreFromCreator = await new ScreenshotSecurity(env).enrichUrls(creatorSites);
             await recordVisit(apps, app.id, user?.id, request);
             return SitePageController.createSuccessResponse<SitePageData>(
                 toSitePageData({
                     app,
                     isOwner,
                     hasPurchase,
-                    reusable: source !== null,
+                    reusable: deployment.reusable,
                     listing,
                     approvedVersion,
                     savedCopy,
-                    previewUrl: source?.previewUrl ?? null,
+                    previewUrl: deployment.previewUrl,
                     moreFromCreator,
                 }),
             );
@@ -106,15 +107,16 @@ export class SitePageController extends BaseController {
         }
     }
 
-    /** The deployed Think source with a fresh signed preview URL; null when the site can't be copied or previewed. */
-    private static async loadSource(env: Env, appId: string): Promise<TemplateSource | null> {
+    /** Whether a free copy can start from the site, and an anonymous signed preview of it; neither when it can't be copied or reached. */
+    private static async loadDeployment(env: Env, appId: string): Promise<{ reusable: boolean; previewUrl: string | null }> {
         try {
             const agent = await getAgentStubLightweight(env, appId);
-            const behaviorType = await agent.getBehaviorType();
-            return behaviorType === 'think' ? await agent.getTemplateSource() : null;
+            if ((await agent.getBehaviorType()) !== 'think') return { reusable: false, previewUrl: null };
+            const [commit, previewUrl] = await Promise.all([agent.getDeployedCommit(), agent.getPublicPreviewURL()]);
+            return { reusable: Boolean(commit), previewUrl };
         } catch (error) {
             SitePageController.logger.warn('Could not load the site preview', { appId, error });
-            return null;
+            return { reusable: false, previewUrl: null };
         }
     }
 }

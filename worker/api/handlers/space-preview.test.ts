@@ -16,6 +16,7 @@ vi.mock('../../database/services/AppService', () => ({
 const { handleSpacePreview } = await import('./space-preview');
 const {
 	buildPreviewCookie,
+	PUBLIC_PREVIEW_SUBJECT,
 	signSpacePreviewToken,
 	SPACE_PREVIEW_COOKIE_NAME,
 } = await import('../../utils/spacePreviewToken');
@@ -81,6 +82,19 @@ describe('handleSpacePreview', () => {
 		expect(setCookie).toContain('HttpOnly');
 		expect(setCookie).toContain('Path=/space/space-a/preview/main');
 		expect(setCookie).toContain('SameSite=Lax');
+	});
+
+	it('forwards a public preview token, which names no user', async () => {
+		const env = makeEnv();
+		const token = await signSpacePreviewToken(env, {
+			spaceName: 'space-a',
+			branch: 'main',
+			userId: PUBLIC_PREVIEW_SUBJECT,
+			previewVersion: 0,
+		});
+
+		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		expect(res.status).toBe(200);
 	});
 
 	it('forwards a request carrying a valid preview cookie (no ?t=)', async () => {
