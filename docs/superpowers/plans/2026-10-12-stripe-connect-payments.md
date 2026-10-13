@@ -530,7 +530,8 @@ git commit -m "feat(payments): stripe client, webhook verification and the 5% fe
 **Interfaces:**
 - Produces:
   - **`stripeConnectAccounts` table:** `userId` (primary key), `stripeAccountId` (unique), `detailsSubmitted`, `chargesEnabled`, `payoutsEnabled`, `transfersActive`, `createdAt` and `updatedAt`.
-  - **`templatePurchases` gains:** `stripeCheckoutSessionId` (unique index), `stripePaymentIntentId`, `platformFeeCents`, `sellerAmountCents`, `currency` (default `'usd'`) and `sellerStripeAccountId`.
+  - **`templatePurchases` gains:** `stripeCheckoutSessionId` (unique index), `stripePaymentIntentId`, `platformFeeCents`, `sellerAmountCents`, `currency` (default `'usd'`), `sellerStripeAccountId`, plus provenance columns `sourceAppId` and `versionId`, both nullable text.
+  - **`templateVersions` gains** a partial unique index `template_versions_one_pending_idx` on `templateId` where `status = 'pending'`, so a listing can never hold two versions in review.
   - **`StripeConnectService`:** `getByUser(userId)`, `getByAccountId(accountId)`, `create({ userId, stripeAccountId, flags })` and `updateFlags(stripeAccountId, flags)`.
   - **`TemplateService`:**
     - `recordStripePurchase(input: StripePurchaseRecord): Promise<boolean>`, which returns true when a new row was inserted;
@@ -568,6 +569,16 @@ describe('payments schema', () => {
 		expect(schema.templatePurchases.platformFeeCents.notNull).toBe(false);
 	});
 
+	it('records what each purchase bought, even after its listing is deleted', () => {
+		expect(schema.templatePurchases.sourceAppId.notNull).toBe(false);
+		expect(schema.templatePurchases.versionId.notNull).toBe(false);
+	});
+
+	it('allows at most one version in review per listing', () => {
+		expect(indexNamed(schema.templateVersions, 'template_versions_one_pending_idx')?.config.unique).toBe(true);
+		expect(allMigrationSql).toMatch(/CREATE UNIQUE INDEX `template_versions_one_pending_idx`[^;]*WHERE/);
+	});
+
 	it('ships the table and columns in a migration', () => {
 		expect(allMigrationSql).toContain('CREATE TABLE `stripe_connect_accounts`');
 		expect(allMigrationSql).toContain('ALTER TABLE `template_purchases` ADD `stripe_checkout_session_id` text');
@@ -595,6 +606,16 @@ In `worker/database/schema.ts`:
     sellerAmountCents: integer('seller_amount_cents'),
     currency: text('currency').notNull().default('usd'),
     sellerStripeAccountId: text('seller_stripe_account_id'),
+    // What was bought, kept when the listing is deleted with its app.
+    sourceAppId: text('source_app_id'),
+    versionId: text('version_id'),
+```
+
+  In `templateVersions`, add to its index callback:
+
+```ts
+    // A listing holds at most one version in review.
+    onePendingIdx: uniqueIndex('template_versions_one_pending_idx').on(table.templateId).where(sql`${table.status} = 'pending'`),
 ```
 
   and add to its index callback `checkoutSessionIdx: uniqueIndex('template_purchases_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),`. SQLite cannot add a UNIQUE column with `ALTER TABLE`, so uniqueness must come from this index, not from `.unique()`.
@@ -626,7 +647,13 @@ export type StripeConnectAccount = typeof stripeConnectAccounts.$inferSelect;
 - [ ] **Step 4: Generate migration 0010 and apply it locally**
 
 Run: `npm run db:generate`
-Expected: one new `migrations/0010_<name>.sql` containing the `stripe_connect_accounts` table, six `ALTER TABLE template_purchases ADD` statements and the unique index. If drizzle-kit asks about renames, choose create; nothing is renamed.
+Expected: one new `migrations/0010_<name>.sql` containing:
+- the `stripe_connect_accounts` table;
+- eight `ALTER TABLE template_purchases ADD` statements;
+- the checkout-session unique index;
+- the partial `template_versions_one_pending_idx` index with its `WHERE`.
+
+If drizzle-kit does not emit the `WHERE` clause, append it to that `CREATE UNIQUE INDEX` statement by hand in the generated SQL. If drizzle-kit asks about renames, choose create; nothing is renamed.
 
 Apply it locally with the global wrangler, because the project's wrangler cannot open the local D1 file:
 
@@ -690,6 +717,8 @@ In `worker/database/services/TemplateService.ts`, add these exported types:
 ```ts
 export interface StripePurchaseRecord {
     listingId: string;
+    sourceAppId: string;
+    versionId: string | null;
     userId: string;
     priceCents: number;
     platformFeeCents: number;
@@ -729,6 +758,8 @@ Add these methods:
             .values({
                 id: generateId(),
                 templateId: input.listingId,
+                sourceAppId: input.sourceAppId,
+                versionId: input.versionId,
                 userId: input.userId,
                 priceCents: input.priceCents,
                 provider: 'stripe',
@@ -982,6 +1013,8 @@ describe('fulfillCheckoutSession', () => {
 		expect(records).toEqual([
 			{
 				listingId: 'l1',
+				sourceAppId: 'app1',
+				versionId: 'v2',
 				userId: 'buyer1',
 				priceCents: 2900,
 				platformFeeCents: 145,
@@ -1103,9 +1136,10 @@ export type FulfillResult = 'recorded' | 'already-recorded' | 'not-paid' | 'not-
 export async function fulfillCheckoutSession(deps: FulfillDeps, session: StripeCheckoutSession): Promise<FulfillResult> {
 	const metadata = session.metadata ?? {};
 	const listingId = metadata.listingId;
+	const appId = metadata.appId;
 	const buyerUserId = metadata.buyerUserId;
 	const sellerStripeAccountId = metadata.sellerStripeAccountId;
-	if (!listingId || !buyerUserId || !sellerStripeAccountId || session.amount_total === null) return 'not-ours';
+	if (!listingId || !appId || !buyerUserId || !sellerStripeAccountId || session.amount_total === null) return 'not-ours';
 	if (session.payment_status !== 'paid') return 'not-paid';
 	if (!(await deps.listingExists(listingId))) return 'not-ours';
 
@@ -1113,6 +1147,8 @@ export async function fulfillCheckoutSession(deps: FulfillDeps, session: StripeC
 	const fee = platformFeeCents(priceCents);
 	const recorded = await deps.recordStripePurchase({
 		listingId,
+		sourceAppId: appId,
+		versionId: metadata.versionId ?? null,
 		userId: buyerUserId,
 		priceCents,
 		platformFeeCents: fee,
