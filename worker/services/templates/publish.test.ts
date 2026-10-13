@@ -66,7 +66,7 @@ const APPROVED: { id: string; state: ListingState } = {
 describe('publishSite', () => {
 	it('makes an app private without touching its listing', async () => {
 		const { deps, calls } = harness({ listing: APPROVED });
-		expect(await publishSite(deps, { visibility: 'private' })).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(deps, { visibility: 'private' })).toEqual({ ok: true, inReview: false, approvedLive: false });
 		expect(calls).toEqual(['applyVisibility:private']);
 	});
 
@@ -80,7 +80,7 @@ describe('publishSite', () => {
 
 	it('publishes a free site after checking its files', async () => {
 		const { deps, calls } = harness();
-		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false, approvedLive: false });
 		expect(calls).toEqual(['applyVisibility:public']);
 	});
 
@@ -97,13 +97,13 @@ describe('publishSite', () => {
 
 	it('unlists the paid listing when the owner switches to free', async () => {
 		const { deps, calls } = harness({ listing: APPROVED });
-		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false, approvedLive: true });
 		expect(calls).toEqual(['setListingStatus:l1:unlisted', 'applyVisibility:public']);
 	});
 
 	it('submits, lists and publishes on the first paid publish', async () => {
 		const { deps, calls } = harness();
-		expect(await publishSite(deps, PAID)).toEqual({ ok: true, inReview: true });
+		expect(await publishSite(deps, PAID)).toEqual({ ok: true, inReview: true, approvedLive: false });
 		expect(calls).toEqual([
 			'createListing',
 			'submitVersion:new-listing:2900',
@@ -120,7 +120,7 @@ describe('publishSite', () => {
 
 	it('saves settings without a new review when the approved price stays', async () => {
 		const { deps, calls } = harness({ listing: APPROVED });
-		expect(await publishSite(deps, PAID)).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(deps, PAID)).toEqual({ ok: true, inReview: false, approvedLive: true });
 		expect(calls).toEqual(['applyVisibility:public']);
 	});
 
@@ -146,7 +146,7 @@ describe('publishSite', () => {
 
 	it('publishes a free site without asking about payouts', async () => {
 		const { deps } = harness({ sellerPayouts: 'not-configured' });
-		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false, approvedLive: false });
 	});
 
 	const COPY: SitePageCopy = {
@@ -159,7 +159,7 @@ describe('publishSite', () => {
 
 	it('saves a free site text with the publish and leaves it alone when the request has none', async () => {
 		const withText = harness();
-		expect(await publishSite(withText.deps, { ...FREE, pageCopy: COPY })).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(withText.deps, { ...FREE, pageCopy: COPY })).toEqual({ ok: true, inReview: false, approvedLive: false });
 		expect(withText.saved).toEqual([COPY]);
 		const without = harness();
 		await publishSite(without.deps, FREE);
@@ -168,17 +168,24 @@ describe('publishSite', () => {
 
 	it('sends changed text on an approved paid site for review, with the text attached', async () => {
 		const { deps, calls, versionCopies, saved } = harness({ listing: { ...APPROVED, reviewedCopy: null } });
-		expect(await publishSite(deps, { ...PAID, pageCopy: COPY })).toEqual({ ok: true, inReview: true });
+		expect(await publishSite(deps, { ...PAID, pageCopy: COPY })).toEqual({ ok: true, inReview: true, approvedLive: true });
 		expect(calls).toEqual(['submitVersion:l1:2900', 'applyVisibility:public']);
 		expect(versionCopies).toEqual([COPY]);
 		expect(saved).toEqual([COPY]);
 	});
 
+	it('reports the approved version as still live when a new price goes to review, and not on a first publish', async () => {
+		const repriced = harness({ listing: APPROVED });
+		expect(await publishSite(repriced.deps, { ...PAID, priceCents: 4900 })).toEqual({ ok: true, inReview: true, approvedLive: true });
+		const unlisted = harness({ listing: { id: 'l1', state: { ...APPROVED.state, status: 'unlisted', currentVersionId: null, priceCents: 0 } } });
+		expect(await publishSite(unlisted.deps, PAID)).toEqual({ ok: true, inReview: true, approvedLive: false });
+	});
+
 	it('keeps an approved paid site out of review when its text is unchanged or omitted', async () => {
 		const same = harness({ listing: { ...APPROVED, reviewedCopy: COPY } });
-		expect(await publishSite(same.deps, { ...PAID, pageCopy: COPY })).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(same.deps, { ...PAID, pageCopy: COPY })).toEqual({ ok: true, inReview: false, approvedLive: true });
 		const omitted = harness({ listing: { ...APPROVED, reviewedCopy: COPY } });
-		expect(await publishSite(omitted.deps, PAID)).toEqual({ ok: true, inReview: false });
+		expect(await publishSite(omitted.deps, PAID)).toEqual({ ok: true, inReview: false, approvedLive: true });
 		expect([...same.calls, ...omitted.calls]).toEqual(['applyVisibility:public', 'applyVisibility:public']);
 	});
 

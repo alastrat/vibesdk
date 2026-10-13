@@ -32,14 +32,15 @@ export interface PublishDeps {
 	sellerPayouts(): Promise<'ready' | 'not-configured' | 'not-onboarded'>;
 }
 
+/** `approvedLive`: the listing already had an approved version when the publish started. */
 export type PublishOutcome =
-	| { ok: true; inReview: boolean }
+	| { ok: true; inReview: boolean; approvedLive: boolean }
 	| { ok: false; status: 400 | 409 | 500; error: string };
 
 export async function publishSite(deps: PublishDeps, request: PublishRequest): Promise<PublishOutcome> {
 	if (request.visibility === 'private') {
 		await deps.applyVisibility(request);
-		return { ok: true, inReview: false };
+		return { ok: true, inReview: false, approvedLive: false };
 	}
 
 	const { behaviorType, source } = await deps.loadSource();
@@ -47,6 +48,7 @@ export async function publishSite(deps: PublishDeps, request: PublishRequest): P
 	if (ineligible || !source) return { ok: false, status: 400, error: ineligible ?? NOT_DEPLOYED_REASON };
 
 	const listing = await deps.loadListing();
+	const approvedLive = (listing?.state.currentVersionId ?? null) !== null;
 	const textChanged =
 		request.pageCopy !== undefined && !samePageCopy(request.pageCopy, listing?.reviewedCopy ?? null);
 	const plan = planPublish(listing?.state ?? null, request.priceCents, textChanged);
@@ -64,7 +66,7 @@ export async function publishSite(deps: PublishDeps, request: PublishRequest): P
 		if (plan.unlistListing && listing) await deps.setListingStatus(listing.id, 'unlisted');
 		if (request.pageCopy !== undefined) await deps.savePageCopy(request.pageCopy);
 		await deps.applyVisibility(request);
-		return { ok: true, inReview: false };
+		return { ok: true, inReview: false, approvedLive };
 	}
 
 	const payouts = await deps.sellerPayouts();
@@ -84,5 +86,5 @@ export async function publishSite(deps: PublishDeps, request: PublishRequest): P
 	}
 	if (request.pageCopy !== undefined) await deps.savePageCopy(request.pageCopy);
 	await deps.applyVisibility(request);
-	return { ok: true, inReview: plan.submitVersion || (listing?.state.pendingPriceCents ?? null) !== null };
+	return { ok: true, inReview: plan.submitVersion || (listing?.state.pendingPriceCents ?? null) !== null, approvedLive };
 }

@@ -62,6 +62,15 @@ describe('paid updates', () => {
 	});
 });
 
+describe('publish messages', () => {
+	it('come from the shared wording, which needs to know whether an approved version is live', () => {
+		const controller = source('/worker/api/controllers/publishing/controller.ts');
+		expect(controller).toContain("import { publishMessage } from './publishMessage';");
+		expect(controller).toContain('message: publishMessage(parsed.value, outcome),');
+		expect(controller).not.toContain('function publishMessage(');
+	});
+});
+
 describe('publishing settings', () => {
 	it('report whether the owner recorded consent to reuse', () => {
 		const controller = source('/worker/api/controllers/publishing/controller.ts');

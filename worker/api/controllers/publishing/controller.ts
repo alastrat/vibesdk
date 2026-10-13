@@ -26,7 +26,6 @@ import {
     PUBLISHING_CHECK_FAILED_MESSAGE,
     parsePublishRequest,
     publishEligibilityReason,
-    type PublishRequest,
 } from '../../../services/templates/reuse';
 import { publishSite, type PublishDeps } from '../../../services/templates/publish';
 import { READ_FAILED_MESSAGE, TemplateSubmissionError, submitTemplateVersion } from '../../../services/templates/submit';
@@ -38,6 +37,7 @@ import { checkoutDecision, confirmDecision, confirmResponse, type CheckoutInput 
 import { fulfillCheckoutSession } from '../../../services/payments/fulfill';
 import { platformFeeCents } from '../../../../shared/types/templates';
 import { toOwnerPaidListing } from './publishingDto';
+import { publishMessage } from './publishMessage';
 import type {
     ConfirmPurchaseData,
     ConfirmPurchaseRequest,
@@ -48,12 +48,6 @@ import type {
     SiteCheckoutData,
     SitePublishingData,
 } from './types';
-
-function publishMessage(request: PublishRequest, inReview: boolean): string {
-    if (request.visibility === 'private') return 'Your site is private';
-    if (inReview) return 'Your site is public. Others can use it once an admin approves the price.';
-    return request.priceCents > 0 ? 'Your publishing settings are saved' : 'Your site is public and others can reuse it';
-}
 
 export class PublishingController extends BaseController {
     static logger = createLogger('PublishingController');
@@ -84,7 +78,7 @@ export class PublishingController extends BaseController {
             return PublishingController.createSuccessResponse<PublishSiteData>({
                 visibility: parsed.value.visibility,
                 inReview: outcome.inReview,
-                message: publishMessage(parsed.value, outcome.inReview),
+                message: publishMessage(parsed.value, outcome),
             });
         } catch (error) {
             if (error instanceof RateLimitExceededError) {
