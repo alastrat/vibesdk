@@ -2399,7 +2399,7 @@ describe('page copy form', () => {
 		});
 		expect(copy.features).toEqual(['A', 'B']);
 		expect(copy.includes).toEqual([
-			{ name: 'Home', detail: ' Hero: big' },
+			{ name: 'Home', detail: 'Hero: big' },
 			{ name: 'About', detail: '' },
 		]);
 	});
@@ -2412,8 +2412,6 @@ describe('page copy form', () => {
 	});
 });
 ```
-
-The `' Hero: big'` detail keeps its leading space on purpose: `validatePageCopy` normalizes it on save.
 
 Append to `src/lib/query-keys.test.ts`:
 
@@ -2480,7 +2478,9 @@ export function fromPageCopyForm(form: PageCopyForm): SitePageCopy {
 		features: lines(form.features),
 		includes: lines(form.includes).map((line) => {
 			const colon = line.indexOf(':');
-			return colon === -1 ? { name: line, detail: '' } : { name: line.slice(0, colon), detail: line.slice(colon + 1) };
+			return colon === -1
+				? { name: line, detail: '' }
+				: { name: line.slice(0, colon).trim(), detail: line.slice(colon + 1).trim() };
 		}),
 		madeFor: lines(form.madeFor),
 	};
@@ -3047,7 +3047,7 @@ export default function SitePage() {
 		const unavailable = !page.error || page.error.message === SITE_PAGE_UNAVAILABLE_MESSAGE;
 		return (
 			<div className="mx-auto grid max-w-md justify-items-center gap-3 px-4 py-24 text-center">
-				<p className="text-kumo-default">{unavailable ? SITE_PAGE_UNAVAILABLE_MESSAGE : page.error.message}</p>
+				<p className="text-kumo-default">{unavailable ? SITE_PAGE_UNAVAILABLE_MESSAGE : page.error?.message}</p>
 				{unavailable ? (
 					<Link to="/discover" className="text-sm text-kumo-subtle underline-offset-2 hover:underline">
 						Back to Discover
