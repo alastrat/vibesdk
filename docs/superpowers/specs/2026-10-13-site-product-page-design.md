@@ -39,7 +39,7 @@ The button is chosen from what the visitor can do:
 | Free site | "Use this site" opens the existing Use site dialog |
 | Paid site with an approved price, not yet owned | "Buy for $X" starts Stripe Checkout, and the return lands on `/app/:id` as today |
 | Paid site the visitor bought | "Use this site" |
-| The visitor's own site | "Use this site", plus "Edit page", which opens the publish dialog on the app page |
+| The visitor's own site | "Use this site", plus "Edit page", which opens the publish dialog on the product page |
 | Paid site whose first price isn't approved yet | "Not available yet", disabled |
 | Signed-out visitor | The same buttons; acting on one asks them to sign in first, as today |
 
@@ -55,7 +55,7 @@ A secondary button, "Open live site ↗", opens the live preview in a new tab.
 2. **Live site:**
    - The deployed site, scrollable and clickable, in a device frame with a Desktop/Phone toggle.
    - Desktop renders the site at 1280 px wide, scaled to fit; Phone renders it at 390 px.
-   - If the preview fails to load, the site's screenshot is shown instead, with "Open live site".
+   - If there is no preview, or it hasn't loaded within 15 seconds, the site's screenshot is shown instead, with "Open live site".
 3. **Two columns:**
    - **Left:**
      - About, as paragraphs;
@@ -103,7 +103,7 @@ Validation happens in two places with the same rules: one shared function on the
   - the title, category and the site's `description` (its original build prompt);
   - the latest deployed tree: the full list of file paths, plus the text of the main page and component files (`.html`, `.tsx`, `.jsx`, `.ts`, `.vue`, `.svelte`).
   - The entry files go first (`index.html`, `src/App.*`, `src/main.*`), then pages, then components. Styles, configs, lockfiles and assets are left out, and the total is capped at 40 KB.
-- **Model:** a new AI operation, `sitePageCopy`, in `AGENT_CONFIG`. It is a fast, inexpensive model through the existing AI Gateway, with structured output validated against the shape above.
+- **Model:** the platform's lite model that template selection already uses (`agentActionName: 'templateSelection'`), through the existing AI Gateway, with structured output validated against the shape above. A new `AGENT_CONFIG` operation would have to be added to every config variant and to the user model settings.
 - **Instructions to the model:**
   - describe only what the files show;
   - never claim features, integrations, a CMS, support, prices or contact details that aren't in the files;
@@ -116,7 +116,7 @@ Validation happens in two places with the same rules: one shared function on the
 - **New "Page" section,** below category and price, with:
   - a Tagline field;
   - an About field;
-  - list editors for Features, What's included and Made for, where lines can be added, removed and reordered.
+  - plain-text fields for Features, What's included and Made for, one item per line (What's included as `Name: line`), so lines are added, removed and reordered by editing.
 - **First draft:**
   - The first time the dialog opens for a site with no saved text, it requests a draft automatically and shows "Drafting…".
   - It drafts only while the dialog is set to make the site public; a private save doesn't need page text.
@@ -146,7 +146,7 @@ Validation happens in two places with the same rules: one shared function on the
 - **New table `site_pages`:**
   - `app_id`: primary key, references apps, cascade delete;
   - `copy`: JSON text in the shape above;
-  - `drafted_at` and `updated_at`.
+  - `updated_at`. Drafts are never stored, so there is no `drafted_at`.
 - **`template_versions` gains `page_copy`:** JSON text, nullable. It holds the text submitted with that version; older versions have none.
 
 ### Server
@@ -164,7 +164,7 @@ Validation happens in two places with the same rules: one shared function on the
   - It records a view the same way the app details page does, once per visitor hash.
   - It returns 404 "This site isn't available" for private, removed or missing sites.
   - It never returns source code, the generated files, or internal moderation and provenance fields.
-- **Screenshot route:** `GET /api/discover/:appId/screenshots/:kind`, public, where `kind` is `desktop` or `phone`.
+- **Screenshot route:** `GET /api/discover/:appId/screenshots/:kind`, public, where `kind` is `desktop` or `mobile`, the existing screenshot kinds.
   - It serves the current approved version's screenshot from R2, but only while the paid listing is listed and has an approved version.
   - URLs carry the version id, so images can be cached for a long time with `Cache-Control: public, max-age=86400`.
 - **Draft route:** `POST /api/apps/:id/page-copy/draft`, owner only, rate-limited.
