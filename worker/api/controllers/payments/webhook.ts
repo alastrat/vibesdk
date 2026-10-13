@@ -14,7 +14,11 @@ const logger = createLogger('StripeWebhook');
 
 export async function handleStripeWebhook(request: Request, env: Env): Promise<Response> {
     const secret = env.STRIPE_WEBHOOK_SECRET;
-    if (!secret) return new Response('Payments are not configured', { status: 400 });
+    if (!secret) {
+        // Stripe retries a rejected delivery and eventually disables the endpoint, so make the missing secret visible.
+        logger.error('Stripe webhook rejected: STRIPE_WEBHOOK_SECRET is not set');
+        return new Response('Payments are not configured', { status: 400 });
+    }
     const payload = await request.text();
     const valid = await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), secret, Math.floor(Date.now() / 1000));
     if (!valid) return new Response('Invalid signature', { status: 400 });

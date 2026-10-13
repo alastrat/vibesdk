@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleStripeWebhook } from './webhook';
 
 /** An env that holds only the webhook secret; touching the database fails the test. */
@@ -22,6 +22,10 @@ function webhookRequest(signature: string | null): Request {
 }
 
 describe('handleStripeWebhook', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it('rejects a bad signature with 400 before touching the database', async () => {
 		const { env, databaseReads } = envWithoutDatabase('whsec_fake');
 		const now = Math.floor(Date.now() / 1000);
@@ -37,11 +41,14 @@ describe('handleStripeWebhook', () => {
 		expect(databaseReads()).toBe(0);
 	});
 
-	it('returns 400 when no webhook secret is configured', async () => {
+	it('returns 400 and logs an error when no webhook secret is configured', async () => {
+		const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const { env, databaseReads } = envWithoutDatabase(undefined);
 		const now = Math.floor(Date.now() / 1000);
 		const response = await handleStripeWebhook(webhookRequest(`t=${now},v1=${'0'.repeat(64)}`), env);
 		expect(response.status).toBe(400);
 		expect(databaseReads()).toBe(0);
+		expect(errorLog).toHaveBeenCalledTimes(1);
+		expect(String(errorLog.mock.calls[0][0])).toContain('STRIPE_WEBHOOK_SECRET is not set');
 	});
 });
