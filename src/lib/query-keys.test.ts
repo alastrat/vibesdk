@@ -29,6 +29,7 @@ describe('publishing query keys', () => {
 		const page = queryKeys.apps.sitePage('app1', 'u1');
 		expect(page.slice(0, queryKeys.apps.all.length)).toEqual(queryKeys.apps.all);
 		expect(queryKeys.apps.sitePage('app1', null)).not.toEqual(page);
+		expect(page.slice(0, queryKeys.apps.sitePageAll().length)).toEqual(queryKeys.apps.sitePageAll());
 	});
 });
 
