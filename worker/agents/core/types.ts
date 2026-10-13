@@ -91,6 +91,15 @@ export interface TemplateSeed {
     snapshotKey: string;
 }
 
+/** The site a new Think app is copied from, with the files to copy. */
+export interface ReuseSeed {
+    sourceAppId: string;
+    sourceTitle: string;
+    /** The approved paid version copied, or null for a free site's latest deploy. */
+    versionId: string | null;
+    files: Array<{ path: string; bytes: Uint8Array }>;
+}
+
 export type Plan = string;
 
 export interface AllIssues {
