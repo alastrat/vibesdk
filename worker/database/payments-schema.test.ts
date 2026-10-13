@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { getTableConfig } from 'drizzle-orm/sqlite-core';
 import * as schema from './schema';
 import { TemplateService } from './services/TemplateService';
+import { StripeConnectService } from './services/StripeConnectService';
+import { StripeApiError } from '../services/payments/stripe-client';
 
 const migrations = import.meta.glob<string>('/migrations/*.sql', { query: '?raw', import: 'default', eager: true });
 const allMigrationSql = Object.values(migrations).join('\n');
@@ -76,5 +78,38 @@ describe('payments schema', () => {
 		expect(sql).toMatch(/left join "apps" on "apps"\."id" = "template_purchases"\."source_app_id"/);
 		expect(sql).toMatch(/left join "users"/);
 		expect(statements[0].params).toEqual(['stripe', 25]);
+	});
+});
+
+describe('StripeConnectService', () => {
+	it('passes a Stripe result through without touching the stored account', async () => {
+		const { d1, statements } = recordingD1();
+		const accounts = new StripeConnectService({ DB: d1 } as unknown as Env);
+
+		expect(await accounts.forgetIfMissing('u1', async () => 'acct_1')).toBe('acct_1');
+		expect(statements).toHaveLength(0);
+	});
+
+	it('forgets a seller whose Stripe account no longer exists', async () => {
+		const { d1, statements } = recordingD1();
+		const accounts = new StripeConnectService({ DB: d1 } as unknown as Env);
+		const missing = new StripeApiError('No such account', 404, 'resource_missing', 'invalid_request_error');
+
+		expect(await accounts.forgetIfMissing('u1', async () => Promise.reject(missing))).toBeNull();
+		expect(statements).toHaveLength(1);
+		expect(statements[0].sql.toLowerCase()).toBe('delete from "stripe_connect_accounts" where "stripe_connect_accounts"."user_id" = ?');
+		expect(statements[0].params).toEqual(['u1']);
+	});
+
+	it('keeps the stored account and rethrows any other failure', async () => {
+		const { d1, statements } = recordingD1();
+		const accounts = new StripeConnectService({ DB: d1 } as unknown as Env);
+		const rateLimited = new StripeApiError('Too many requests', 429, 'rate_limit', 'invalid_request_error');
+
+		await expect(accounts.forgetIfMissing('u1', async () => Promise.reject(rateLimited))).rejects.toBe(rateLimited);
+		await expect(accounts.forgetIfMissing('u1', async () => Promise.reject(new Error('Network connection lost')))).rejects.toThrow(
+			'Network connection lost',
+		);
+		expect(statements).toHaveLength(0);
 	});
 });

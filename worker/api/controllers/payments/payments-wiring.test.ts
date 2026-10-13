@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/worker/api/routes/paymentsRoutes.ts', '/worker/api/routes/index.ts', '/worker/app.ts', '/worker/api/controllers/payments/webhook.ts'],
+	[
+		'/worker/api/routes/paymentsRoutes.ts',
+		'/worker/api/routes/index.ts',
+		'/worker/app.ts',
+		'/worker/api/controllers/payments/webhook.ts',
+		'/worker/api/controllers/payments/connectController.ts',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -29,5 +35,36 @@ describe('payments routes', () => {
 		const webhook = source('/worker/api/controllers/payments/webhook.ts');
 		expect(webhook.indexOf('verifyStripeSignature(')).toBeGreaterThan(-1);
 		expect(webhook.indexOf('verifyStripeSignature(')).toBeLessThan(webhook.indexOf('parseStripeEvent('));
+	});
+});
+
+describe('a stored Stripe account that Stripe no longer has', () => {
+	const controller = source('/worker/api/controllers/payments/connectController.ts');
+	const method = (name: string, next?: string): string =>
+		controller.slice(controller.indexOf(`static async ${name}(`), next ? controller.indexOf(`static async ${next}(`) : undefined);
+
+	it('reads as not connected in the status, not as the stale stored flags', () => {
+		const status = method('getStatus', 'dashboardLink');
+		expect(status).toContain('accounts.forgetIfMissing(stored.userId, () => stripe.retrieveAccount(stored.stripeAccountId))');
+		const missing = status.indexOf('if (!account)');
+		expect(missing).toBeGreaterThan(status.indexOf('accounts.forgetIfMissing('));
+		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeGreaterThan(missing);
+		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
+	});
+
+	it('is replaced by one fresh Express account when onboarding', () => {
+		const onboarding = method('startOnboarding', 'getStatus');
+		const forget = onboarding.indexOf('accounts.forgetIfMissing(user.id, () => linkFor(stored.stripeAccountId))');
+		expect(forget).toBeGreaterThan(-1);
+		expect(onboarding.match(/createExpressAccount\(/g)).toHaveLength(1);
+		expect(onboarding.indexOf('createExpressAccount(')).toBeGreaterThan(forget);
+	});
+
+	it('sends the seller back to onboarding instead of opening the dashboard', () => {
+		const dashboard = method('dashboardLink');
+		const forget = dashboard.indexOf('accounts.forgetIfMissing(userId, () => stripe.createLoginLink(stored.stripeAccountId))');
+		expect(forget).toBeGreaterThan(-1);
+		expect(dashboard.indexOf('FINISH_ONBOARDING_MESSAGE, 400', forget)).toBeGreaterThan(forget);
+		expect(controller).toContain("const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';");
 	});
 });

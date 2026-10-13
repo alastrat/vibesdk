@@ -9,6 +9,8 @@ import { StripeApiError, accountFlags } from '../../../services/payments/stripe-
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
 
+const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';
+
 const NOT_CONNECTED: Omit<StripeConnectStatusData, 'configured'> = {
     connected: false,
     detailsSubmitted: false,
@@ -31,24 +33,30 @@ export class StripeConnectController extends BaseController {
             if (!stripe) return StripeConnectController.createErrorResponse<StripeLinkData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
             const user = context.user!;
             const accounts = new StripeConnectService(env);
-            let accountId = (await accounts.getByUser(user.id))?.stripeAccountId;
-            if (!accountId) {
-                const created = await stripe.createExpressAccount({ email: user.email, userId: user.id, nowMs: Date.now() });
-                try {
-                    await accounts.create({ userId: user.id, stripeAccountId: created.id, flags: accountFlags(created) });
-                    accountId = created.id;
-                } catch (error) {
-                    // A concurrent request stored the account first; use that one.
-                    accountId = (await accounts.getByUser(user.id))?.stripeAccountId;
-                    if (!accountId) throw error;
-                }
-            }
             const origin = new URL(request.url).origin;
-            const link = await stripe.createAccountLink({
-                accountId,
-                refreshUrl: `${origin}/profile?tab=paid&stripe=refresh`,
-                returnUrl: `${origin}/profile?tab=paid&stripe=return`,
-            });
+            const linkFor = (accountId: string) =>
+                stripe.createAccountLink({
+                    accountId,
+                    refreshUrl: `${origin}/profile?tab=paid&stripe=refresh`,
+                    returnUrl: `${origin}/profile?tab=paid&stripe=return`,
+                });
+            const stored = await accounts.getByUser(user.id);
+            if (stored) {
+                // A stored account Stripe no longer has is deleted, and onboarding starts over with a fresh one below.
+                const link = await accounts.forgetIfMissing(user.id, () => linkFor(stored.stripeAccountId));
+                if (link) return StripeConnectController.createSuccessResponse<StripeLinkData>({ url: link.url });
+            }
+            let accountId: string | undefined;
+            const created = await stripe.createExpressAccount({ email: user.email, userId: user.id, nowMs: Date.now() });
+            try {
+                await accounts.create({ userId: user.id, stripeAccountId: created.id, flags: accountFlags(created) });
+                accountId = created.id;
+            } catch (error) {
+                // A concurrent request stored the account first; use that one.
+                accountId = (await accounts.getByUser(user.id))?.stripeAccountId;
+                if (!accountId) throw error;
+            }
+            const link = await linkFor(accountId);
             return StripeConnectController.createSuccessResponse<StripeLinkData>({ url: link.url });
         } catch (error) {
             if (error instanceof StripeApiError) {
@@ -60,7 +68,10 @@ export class StripeConnectController extends BaseController {
         }
     }
 
-    /** The seller's payout readiness, refreshed from Stripe; falls back to the stored flags if Stripe fails. */
+    /**
+     * The seller's payout readiness, refreshed from Stripe; falls back to the stored flags if Stripe fails,
+     * and reads as not connected when Stripe no longer has the account.
+     */
     static async getStatus(
         _request: Request,
         env: Env,
@@ -84,7 +95,11 @@ export class StripeConnectController extends BaseController {
                 transfersActive: stored.transfersActive,
             };
             try {
-                flags = accountFlags(await stripe.retrieveAccount(stored.stripeAccountId));
+                const account = await accounts.forgetIfMissing(stored.userId, () => stripe.retrieveAccount(stored.stripeAccountId));
+                if (!account) {
+                    return StripeConnectController.createSuccessResponse<StripeConnectStatusData>({ configured: true, ...NOT_CONNECTED });
+                }
+                flags = accountFlags(account);
                 await accounts.updateFlags(stored.stripeAccountId, flags);
             } catch (error) {
                 this.logger.warn('Could not refresh the Stripe account; using stored flags', error);
@@ -112,11 +127,14 @@ export class StripeConnectController extends BaseController {
         try {
             const stripe = stripeFromEnv(env);
             if (!stripe) return StripeConnectController.createErrorResponse<StripeLinkData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
-            const stored = await new StripeConnectService(env).getByUser(context.user!.id);
+            const userId = context.user!.id;
+            const accounts = new StripeConnectService(env);
+            const stored = await accounts.getByUser(userId);
             if (!stored || !stored.detailsSubmitted) {
-                return StripeConnectController.createErrorResponse<StripeLinkData>('Finish Stripe onboarding first', 400);
+                return StripeConnectController.createErrorResponse<StripeLinkData>(FINISH_ONBOARDING_MESSAGE, 400);
             }
-            const link = await stripe.createLoginLink(stored.stripeAccountId);
+            const link = await accounts.forgetIfMissing(userId, () => stripe.createLoginLink(stored.stripeAccountId));
+            if (!link) return StripeConnectController.createErrorResponse<StripeLinkData>(FINISH_ONBOARDING_MESSAGE, 400);
             return StripeConnectController.createSuccessResponse<StripeLinkData>({ url: link.url });
         } catch (error) {
             if (error instanceof StripeApiError) {

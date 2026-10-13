@@ -344,14 +344,19 @@ export class PublishingController extends BaseController {
         }
     }
 
-    /** The seller's Stripe account when it can receive transfers, refreshing a stale flag from Stripe. */
+    /**
+     * The seller's Stripe account when it can receive transfers, refreshing a stale flag from Stripe.
+     * An account Stripe no longer has is forgotten, so the seller is not ready.
+     */
     private static async readySellerAccount(env: Env, userId: string): Promise<string | null> {
         const stripe = stripeFromEnv(env);
         const accounts = new StripeConnectService(env);
         const stored = await accounts.getByUser(userId);
         if (!stripe || !stored) return null;
         if (stored.transfersActive) return stored.stripeAccountId;
-        const flags = accountFlags(await stripe.retrieveAccount(stored.stripeAccountId));
+        const account = await accounts.forgetIfMissing(userId, () => stripe.retrieveAccount(stored.stripeAccountId));
+        if (!account) return null;
+        const flags = accountFlags(account);
         await accounts.updateFlags(stored.stripeAccountId, flags);
         return flags.transfersActive ? stored.stripeAccountId : null;
     }

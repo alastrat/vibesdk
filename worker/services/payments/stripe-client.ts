@@ -22,6 +22,13 @@ export class StripeApiError extends Error {
 	}
 }
 
+const MISSING_ACCOUNT_CODES: readonly string[] = ['resource_missing', 'account_invalid'];
+
+/** Stripe no longer has the account, or this key cannot reach it (for example after a switch from test to live keys). */
+export function isMissingAccountError(error: unknown): boolean {
+	return error instanceof StripeApiError && error.code !== null && MISSING_ACCOUNT_CODES.includes(error.code);
+}
+
 export interface StripeAccount {
 	id: string;
 	details_submitted: boolean;

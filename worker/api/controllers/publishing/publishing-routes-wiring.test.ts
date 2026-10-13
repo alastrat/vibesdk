@@ -79,6 +79,13 @@ describe('Stripe calls', () => {
 		expect(publishing).toContain('STRIPE_REQUEST_FAILED_MESSAGE, 502');
 	});
 
+	it('treat a seller whose Stripe account no longer exists as not ready', () => {
+		const ready = between('private static async readySellerAccount(', 'private static async loadFacts(');
+		const forget = ready.indexOf('accounts.forgetIfMissing(userId, () => stripe.retrieveAccount(stored.stripeAccountId))');
+		expect(forget).toBeGreaterThan(-1);
+		expect(ready.indexOf('if (!account) return null;', forget)).toBeGreaterThan(forget);
+	});
+
 	it('look up the seller for checkout only after every other rule allows the purchase', () => {
 		const checkout = between('static async purchase(', 'static async confirmPurchase(');
 		expect(checkout.indexOf('checkoutDecision(')).toBeGreaterThan(-1);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { platformFeeCents } from '../../../shared/types/templates';
-import { StripeApiError, accountFlags, createStripeClient, encodeForm, type StripeAccount } from './stripe-client';
+import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, type StripeAccount } from './stripe-client';
 
 describe('platformFeeCents', () => {
 	it('keeps 5% of every price option', () => {
@@ -44,6 +44,21 @@ describe('accountFlags', () => {
 			transfersActive: true,
 		});
 		expect(accountFlags({ ...account, capabilities: undefined }).transfersActive).toBe(false);
+	});
+});
+
+describe('isMissingAccountError', () => {
+	it('recognizes a stored account that Stripe no longer has', () => {
+		expect(isMissingAccountError(new StripeApiError('No such account', 404, 'resource_missing', 'invalid_request_error'))).toBe(true);
+		expect(isMissingAccountError(new StripeApiError('No access to account', 403, 'account_invalid', 'invalid_request_error'))).toBe(true);
+	});
+
+	it('leaves every other failure alone', () => {
+		expect(isMissingAccountError(new StripeApiError('Too many requests', 429, 'rate_limit', 'invalid_request_error'))).toBe(false);
+		expect(isMissingAccountError(new StripeApiError('Stripe request failed', 500, null, null))).toBe(false);
+		expect(isMissingAccountError(Object.assign(new Error('No such account'), { code: 'resource_missing' }))).toBe(false);
+		expect(isMissingAccountError({ code: 'resource_missing' })).toBe(false);
+		expect(isMissingAccountError(null)).toBe(false);
 	});
 });
 

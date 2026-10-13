@@ -3,7 +3,7 @@
 import { eq } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
-import type { SellerFlags } from '../../services/payments/stripe-client';
+import { isMissingAccountError, type SellerFlags } from '../../services/payments/stripe-client';
 
 export class StripeConnectService extends BaseService {
     async getByUser(userId: string): Promise<schema.StripeConnectAccount | null> {
@@ -36,5 +36,23 @@ export class StripeConnectService extends BaseService {
             .update(schema.stripeConnectAccounts)
             .set({ ...flags, updatedAt: new Date() })
             .where(eq(schema.stripeConnectAccounts.stripeAccountId, stripeAccountId));
+    }
+
+    async deleteByUser(userId: string): Promise<void> {
+        await this.database.delete(schema.stripeConnectAccounts).where(eq(schema.stripeConnectAccounts.userId, userId));
+    }
+
+    /**
+     * Runs a Stripe call on the seller's stored account. When Stripe no longer has that account, the row is
+     * deleted and the result is null, so the seller reads as not connected; other failures are rethrown.
+     */
+    async forgetIfMissing<T>(userId: string, call: () => Promise<T>): Promise<T | null> {
+        try {
+            return await call();
+        } catch (error) {
+            if (!isMissingAccountError(error)) throw error;
+            await this.deleteByUser(userId);
+            return null;
+        }
     }
 }
