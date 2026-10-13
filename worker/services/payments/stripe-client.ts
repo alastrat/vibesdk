@@ -68,7 +68,7 @@ export interface SellerFlags {
 }
 
 export interface StripeClient {
-	createExpressAccount(input: { email: string; userId: string }): Promise<StripeAccount>;
+	createExpressAccount(input: { email?: string; userId: string }): Promise<StripeAccount>;
 	retrieveAccount(accountId: string): Promise<StripeAccount>;
 	createAccountLink(input: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<StripeAccountLink>;
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
@@ -109,14 +109,21 @@ interface StripeErrorBody {
 }
 
 export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = fetch): StripeClient {
-	async function request<T>(method: 'GET' | 'POST', path: string, params?: Record<string, FormValue>): Promise<T> {
+	async function request<T>(
+		method: 'GET' | 'POST',
+		path: string,
+		params?: Record<string, FormValue>,
+		idempotencyKey?: string,
+	): Promise<T> {
 		const body = params ? encodeForm(params) : undefined;
+		const headers: Record<string, string> = {
+			Authorization: `Bearer ${secretKey}`,
+			'Content-Type': 'application/x-www-form-urlencoded',
+		};
+		if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
 		const response = await fetchImpl(`${STRIPE_API}${path}`, {
 			method,
-			headers: {
-				Authorization: `Bearer ${secretKey}`,
-				'Content-Type': 'application/x-www-form-urlencoded',
-			},
+			headers,
 			body: method === 'POST' ? body : undefined,
 		});
 		const json: unknown = await response.json();
@@ -128,14 +135,20 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 	}
 
 	return {
+		// The per-user key makes a double click create one account; an empty email is left out.
 		createExpressAccount: ({ email, userId }) =>
-			request<StripeAccount>('POST', '/accounts', {
-				type: 'express',
-				country: 'US',
-				email,
-				capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
-				metadata: { estoriUserId: userId },
-			}),
+			request<StripeAccount>(
+				'POST',
+				'/accounts',
+				{
+					type: 'express',
+					country: 'US',
+					email: email || undefined,
+					capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
+					metadata: { estoriUserId: userId },
+				},
+				`connect-account-${userId}`,
+			),
 		retrieveAccount: (accountId) => request<StripeAccount>('GET', `/accounts/${encodeURIComponent(accountId)}`),
 		createAccountLink: ({ accountId, refreshUrl, returnUrl }) =>
 			request<StripeAccountLink>('POST', '/account_links', {

@@ -79,6 +79,33 @@ describe('createStripeClient', () => {
 		expect(body).toContain('client_reference_id=u1');
 	});
 
+	it('sends an idempotency key when creating an Express account, so a double click makes one account', async () => {
+		const calls: Array<{ url: string; init: RequestInit }> = [];
+		const fakeFetch: typeof fetch = async (input, init) => {
+			calls.push({ url: String(input), init: init ?? {} });
+			return new Response(JSON.stringify({ id: 'acct_1', details_submitted: false, charges_enabled: false, payouts_enabled: false }), { status: 200 });
+		};
+		const client = createStripeClient('sk_test_fake', fakeFetch);
+		await client.createExpressAccount({ email: 'seller@example.test', userId: 'u1' });
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('connect-account-u1');
+		await client.retrieveAccount('acct_1');
+		expect(new Headers(calls[1].init.headers).has('Idempotency-Key')).toBe(false);
+	});
+
+	it('leaves the email out of a new Express account when the user has none', async () => {
+		const bodies: string[] = [];
+		const fakeFetch: typeof fetch = async (_input, init) => {
+			bodies.push(decodeURIComponent(String(init?.body)));
+			return new Response(JSON.stringify({ id: 'acct_1', details_submitted: false, charges_enabled: false, payouts_enabled: false }), { status: 200 });
+		};
+		const client = createStripeClient('sk_test_fake', fakeFetch);
+		await client.createExpressAccount({ email: '', userId: 'u1' });
+		await client.createExpressAccount({ email: 'seller@example.test', userId: 'u2' });
+		expect(bodies[0]).not.toContain('email=');
+		expect(bodies[1]).toContain('email=seller@example.test');
+	});
+
 	it('turns Stripe errors into StripeApiError', async () => {
 		const fakeFetch: typeof fetch = async () =>
 			new Response(JSON.stringify({ error: { message: 'No such account', type: 'invalid_request_error', code: 'resource_missing' } }), {
