@@ -9,7 +9,6 @@ import {
 	type PageCopyForm,
 } from '@/lib/page-copy-form';
 import {
-	PAGE_DRAFT_FAILED_MESSAGE,
 	SITE_PAGE_LIMITS,
 	validatePageCopy,
 	type SitePageCopy,
@@ -31,11 +30,49 @@ interface PageCopyFieldsProps {
 	onChange: (state: PageCopyState) => void;
 }
 
-const FIELDS: Array<{ key: SitePageField; label: string; hint: string; rows: number }> = [
-	{ key: 'about', label: 'About', hint: 'Up to 3 paragraphs, separated by a blank line', rows: 5 },
-	{ key: 'features', label: 'Features', hint: 'One per line, 3 to 8', rows: 4 },
-	{ key: 'includes', label: "What's included", hint: 'One per line, as "Name: what it has"', rows: 4 },
-	{ key: 'madeFor', label: 'Made for', hint: 'One per line, 2 to 5', rows: 3 },
+interface FieldSpec {
+	key: SitePageField;
+	label: string;
+	hint: string;
+	rows: number;
+	/** What the counter measures: characters for About, items for the lists. */
+	count: (copy: SitePageCopy) => number;
+	max: number;
+}
+
+const FIELDS: FieldSpec[] = [
+	{
+		key: 'about',
+		label: 'About',
+		hint: `Up to ${SITE_PAGE_LIMITS.aboutParagraphs.max} paragraphs, separated by a blank line`,
+		rows: 5,
+		count: (copy) => copy.about.join('').length,
+		max: SITE_PAGE_LIMITS.aboutTotal,
+	},
+	{
+		key: 'features',
+		label: 'Features',
+		hint: `One per line, ${SITE_PAGE_LIMITS.features.min} to ${SITE_PAGE_LIMITS.features.max}, each up to ${SITE_PAGE_LIMITS.features.each} characters`,
+		rows: 4,
+		count: (copy) => copy.features.length,
+		max: SITE_PAGE_LIMITS.features.max,
+	},
+	{
+		key: 'includes',
+		label: "What's included",
+		hint: `One per line, as "Name: what it has", name up to ${SITE_PAGE_LIMITS.includes.name} and line up to ${SITE_PAGE_LIMITS.includes.detail} characters`,
+		rows: 4,
+		count: (copy) => copy.includes.length,
+		max: SITE_PAGE_LIMITS.includes.max,
+	},
+	{
+		key: 'madeFor',
+		label: 'Made for',
+		hint: `One per line, ${SITE_PAGE_LIMITS.madeFor.min} to ${SITE_PAGE_LIMITS.madeFor.max}, each up to ${SITE_PAGE_LIMITS.madeFor.each} characters`,
+		rows: 3,
+		count: (copy) => copy.madeFor.length,
+		max: SITE_PAGE_LIMITS.madeFor.max,
+	},
 ];
 
 /** The product page text: drafted by AI on first open, edited by the creator, checked against the shared limits. */
@@ -44,7 +81,8 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 	const [form, setForm] = useState<PageCopyForm>(() => toPageCopyForm(initialCopy));
 	const [lastDraft, setLastDraft] = useState<PageCopyForm | null>(null);
 	const empty = isEmptyPageCopyForm(form);
-	const validation = useMemo(() => validatePageCopy(fromPageCopyForm(form)), [form]);
+	const parsed = useMemo(() => fromPageCopyForm(form), [form]);
+	const validation = useMemo(() => validatePageCopy(parsed), [parsed]);
 
 	useEffect(() => {
 		if (empty) onChange({ payload: null, valid: true });
@@ -72,8 +110,9 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 		requestDraft();
 	};
 
+	const edit = (key: keyof PageCopyForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
+
 	const error = !empty && !validation.ok ? validation : null;
-	const aboutLength = fromPageCopyForm(form).about.join('').length;
 
 	return (
 		<div className="grid gap-3 rounded-lg p-3 ring ring-kumo-hairline">
@@ -88,7 +127,7 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 				<p className="text-xs text-kumo-subtle">Changes to the page text go to review with the price.</p>
 			)}
 			{draft.isPending && <p className="text-xs text-kumo-subtle">Drafting…</p>}
-			{draft.isError && <p className="text-xs text-kumo-subtle">{PAGE_DRAFT_FAILED_MESSAGE}</p>}
+			{draft.isError && <p className="text-xs text-kumo-subtle">{draft.error.message}</p>}
 			<label className="grid gap-1">
 				<span className="flex justify-between text-xs text-kumo-subtle">
 					<span>Tagline</span>
@@ -98,7 +137,8 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 				</span>
 				<input
 					value={form.tagline}
-					onChange={(event) => setForm({ ...form, tagline: event.target.value })}
+					readOnly={draft.isPending}
+					onChange={(event) => edit('tagline', event.target.value)}
 					className="rounded-md bg-kumo-base px-2 py-1.5 text-sm text-kumo-default ring ring-kumo-hairline"
 				/>
 				{error?.field === 'tagline' && <span className="text-xs text-kumo-danger">{error.error}</span>}
@@ -109,16 +149,15 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 						<span>
 							{field.label} · {field.hint}
 						</span>
-						{field.key === 'about' && (
-							<span>
-								{aboutLength}/{SITE_PAGE_LIMITS.aboutTotal}
-							</span>
-						)}
+						<span>
+							{field.count(parsed)}/{field.max}
+						</span>
 					</span>
 					<textarea
 						rows={field.rows}
 						value={form[field.key]}
-						onChange={(event) => setForm({ ...form, [field.key]: event.target.value })}
+						readOnly={draft.isPending}
+						onChange={(event) => edit(field.key, event.target.value)}
 						className="rounded-md bg-kumo-base px-2 py-1.5 text-sm text-kumo-default ring ring-kumo-hairline"
 					/>
 					{error?.field === field.key && <span className="text-xs text-kumo-danger">{error.error}</span>}

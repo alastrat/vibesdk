@@ -69,10 +69,25 @@ describe('page text in the publish dialog', () => {
 		const fields = source('/src/components/publishing/PageCopyFields.tsx');
 		expect(fields).toContain('Drafting…');
 		expect(fields).toContain('Redraft with AI');
-		expect(fields).toContain('PAGE_DRAFT_FAILED_MESSAGE');
+		expect(fields).toContain('draft.error.message');
+		expect(fields).not.toContain('PAGE_DRAFT_FAILED_MESSAGE');
 		expect(fields).toContain('validatePageCopy(');
 		expect(fields).toContain('SITE_PAGE_LIMITS');
 		expect(fields).toContain('Your page text is in review');
+	});
+
+	it('shows every field against its limit and locks the fields while a draft is in flight', () => {
+		const fields = source('/src/components/publishing/PageCopyFields.tsx');
+		expect(fields).toContain('SITE_PAGE_LIMITS.features.max');
+		expect(fields).toContain('SITE_PAGE_LIMITS.includes.max');
+		expect(fields).toContain('SITE_PAGE_LIMITS.madeFor.max');
+		expect(fields).toContain('SITE_PAGE_LIMITS.features.each');
+		expect(fields).toContain('SITE_PAGE_LIMITS.includes.name');
+		expect(fields).toContain('SITE_PAGE_LIMITS.includes.detail');
+		expect(fields).toContain('SITE_PAGE_LIMITS.madeFor.each');
+		expect(fields).toContain('readOnly={draft.isPending}');
+		expect(fields).toContain('setForm((current) =>');
+		expect(fields).not.toContain('setForm({ ...form');
 	});
 
 	it('tells creators the format of What is included and that a paid change goes to review', () => {
