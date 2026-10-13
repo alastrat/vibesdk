@@ -12,5 +12,6 @@ export { BaseService } from './services/BaseService';
 export { UserService } from './services/UserService';
 export { AppService } from './services/AppService';
 export { TemplateService } from './services/TemplateService';
+export { StripeConnectService } from './services/StripeConnectService';
 export { ModelConfigService } from './services/ModelConfigService';
 export { ModelTestService } from './services/ModelTestService';

@@ -22,10 +22,37 @@ export interface PendingVersionRow extends ListingVersionRow {
     creatorEmail: string | null;
 }
 
+export interface StripePurchaseRecord {
+    listingId: string;
+    sourceAppId: string;
+    versionId: string | null;
+    userId: string;
+    priceCents: number;
+    platformFeeCents: number;
+    sellerAmountCents: number;
+    currency: string;
+    checkoutSessionId: string;
+    paymentIntentId: string | null;
+    sellerStripeAccountId: string;
+}
+
+export interface SaleRow {
+    purchaseId: string;
+    appId: string;
+    appTitle: string;
+    buyerEmail: string | null;
+    priceCents: number;
+    platformFeeCents: number | null;
+    createdAt: Date | null;
+}
+
 export interface CreatorListingRow {
     listing: schema.Template;
     appTitle: string;
     buyerCount: number;
+    grossCents: number;
+    feeCents: number;
+    earningsCents: number;
     /** Newest first. */
     versions: schema.TemplateVersion[];
 }
@@ -127,7 +154,14 @@ export class TemplateService extends BaseService {
 
     async listByCreator(userId: string): Promise<CreatorListingRow[]> {
         const listings = await this.database
-            .select({ listing: schema.templates, appTitle: schema.apps.title, buyerCount: buyerCountSql })
+            .select({
+                listing: schema.templates,
+                appTitle: schema.apps.title,
+                buyerCount: buyerCountSql,
+                grossCents: sql<number>`(select coalesce(sum(purchase.price_cents), 0) from template_purchases as purchase where purchase.template_id = ${schema.templates.id} and purchase.provider = 'stripe')`,
+                feeCents: sql<number>`(select coalesce(sum(purchase.platform_fee_cents), 0) from template_purchases as purchase where purchase.template_id = ${schema.templates.id} and purchase.provider = 'stripe')`,
+                earningsCents: sql<number>`(select coalesce(sum(purchase.seller_amount_cents), 0) from template_purchases as purchase where purchase.template_id = ${schema.templates.id} and purchase.provider = 'stripe')`,
+            })
             .from(schema.templates)
             .innerJoin(schema.apps, eq(schema.apps.id, schema.templates.sourceAppId))
             .where(eq(schema.templates.creatorUserId, userId))
@@ -262,5 +296,61 @@ export class TemplateService extends BaseService {
                 createdAt: new Date(),
             })
             .onConflictDoNothing();
+    }
+
+    /** Record a paid Stripe Checkout session; false when this session or this buyer's purchase already exists. */
+    async recordStripePurchase(input: StripePurchaseRecord): Promise<boolean> {
+        const inserted = await this.database
+            .insert(schema.templatePurchases)
+            .values({
+                id: generateId(),
+                templateId: input.listingId,
+                sourceAppId: input.sourceAppId,
+                versionId: input.versionId,
+                userId: input.userId,
+                priceCents: input.priceCents,
+                provider: 'stripe',
+                stripeCheckoutSessionId: input.checkoutSessionId,
+                stripePaymentIntentId: input.paymentIntentId,
+                platformFeeCents: input.platformFeeCents,
+                sellerAmountCents: input.sellerAmountCents,
+                currency: input.currency,
+                sellerStripeAccountId: input.sellerStripeAccountId,
+                createdAt: new Date(),
+            })
+            .onConflictDoNothing()
+            .returning({ id: schema.templatePurchases.id });
+        return inserted.length > 0;
+    }
+
+    /** The latest Stripe sales, newest first, for the admin sales list. */
+    async listRecentSales(limit: number): Promise<SaleRow[]> {
+        return this.database
+            .select({
+                purchaseId: schema.templatePurchases.id,
+                appId: schema.apps.id,
+                appTitle: schema.apps.title,
+                buyerEmail: schema.users.email,
+                priceCents: schema.templatePurchases.priceCents,
+                platformFeeCents: schema.templatePurchases.platformFeeCents,
+                createdAt: schema.templatePurchases.createdAt,
+            })
+            .from(schema.templatePurchases)
+            .innerJoin(schema.templates, eq(schema.templates.id, schema.templatePurchases.templateId))
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.templates.sourceAppId))
+            .leftJoin(schema.users, eq(schema.users.id, schema.templatePurchases.userId))
+            .where(eq(schema.templatePurchases.provider, 'stripe'))
+            .orderBy(desc(schema.templatePurchases.createdAt))
+            .limit(limit)
+            .all();
+    }
+
+    async sumPlatformFees(): Promise<number> {
+        const row = await this.database
+            .select({ total: sql<number>`coalesce(sum(${schema.templatePurchases.platformFeeCents}), 0)` })
+            .from(schema.templatePurchases)
+            .where(eq(schema.templatePurchases.provider, 'stripe'))
+            .get();
+        return row?.total ?? 0;
     }
 }

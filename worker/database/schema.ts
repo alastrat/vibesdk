@@ -295,6 +295,8 @@ export const templateVersions = sqliteTable('template_versions', {
 }, (table) => ({
     templateVersionIdx: uniqueIndex('template_versions_template_version_unique_idx').on(table.templateId, table.version),
     statusIdx: index('template_versions_status_idx').on(table.status),
+    // A listing holds at most one version in review.
+    onePendingIdx: uniqueIndex('template_versions_one_pending_idx').on(table.templateId).where(sql`${table.status} = 'pending'`),
 }));
 
 /**
@@ -307,11 +309,38 @@ export const templatePurchases = sqliteTable('template_purchases', {
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     priceCents: integer('price_cents').notNull(),
     provider: text('provider', { enum: TEMPLATE_PAYMENT_PROVIDERS }).notNull(),
+    // Stripe purchases: the Checkout session (unique, so webhook and confirm record it once) and the money split.
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    stripePaymentIntentId: text('stripe_payment_intent_id'),
+    platformFeeCents: integer('platform_fee_cents'),
+    sellerAmountCents: integer('seller_amount_cents'),
+    currency: text('currency').notNull().default('usd'),
+    sellerStripeAccountId: text('seller_stripe_account_id'),
+    // What was bought, kept when the listing is deleted with its app.
+    sourceAppId: text('source_app_id'),
+    versionId: text('version_id'),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     templateUserIdx: uniqueIndex('template_purchases_template_user_unique_idx').on(table.templateId, table.userId),
     userIdx: index('template_purchases_user_idx').on(table.userId),
+    // SQLite cannot add a UNIQUE column with ALTER TABLE, so uniqueness comes from this index.
+    checkoutSessionIdx: uniqueIndex('template_purchases_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),
 }));
+
+/**
+ * Stripe Connect accounts - the Express account a seller is paid through,
+ * with the readiness flags Stripe reports (refreshed by webhook and status checks).
+ */
+export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
+    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    stripeAccountId: text('stripe_account_id').notNull().unique(),
+    detailsSubmitted: integer('details_submitted', { mode: 'boolean' }).notNull().default(false),
+    chargesEnabled: integer('charges_enabled', { mode: 'boolean' }).notNull().default(false),
+    payoutsEnabled: integer('payouts_enabled', { mode: 'boolean' }).notNull().default(false),
+    transfersActive: integer('transfers_active', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
+});
 
 /**
  * Favorites table - Track user favorite apps
@@ -767,3 +796,4 @@ export type TemplateVersion = typeof templateVersions.$inferSelect;
 export type NewTemplateVersion = typeof templateVersions.$inferInsert;
 export type TemplatePurchase = typeof templatePurchases.$inferSelect;
 export type NewTemplatePurchase = typeof templatePurchases.$inferInsert;
+export type StripeConnectAccount = typeof stripeConnectAccounts.$inferSelect;
