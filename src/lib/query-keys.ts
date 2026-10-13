@@ -102,6 +102,12 @@ export const queryKeys = {
 			versionFile: (versionId: string, path: string) =>
 				[...queryKeys.account.publishing.all(), 'version-file', versionId, path] as const,
 		},
+		/** Seller payout status and admin sales: never persisted. */
+		payments: {
+			all: () => [...queryKeys.account.all, 'payments'] as const,
+			status: (userId?: string | null) => [...queryKeys.account.payments.all(), 'status', userId ?? 'anonymous'] as const,
+			sales: () => [...queryKeys.account.payments.all(), 'sales'] as const,
+		},
 		limits: {
 			all: () => [...queryKeys.account.all, 'limits'] as const,
 			usageAll: () =>

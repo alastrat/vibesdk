@@ -61,10 +61,6 @@ export function useWithdrawPaidVersion(appId: string) {
 	);
 }
 
-export function usePurchaseSite() {
-	return usePublishingMutation((appId: string) => unwrap(apiClient.purchaseSite(appId), 'Failed to buy the site'));
-}
-
 export function useMyPaidListings() {
 	const { user } = useAuth();
 	return useQuery({

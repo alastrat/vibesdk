@@ -63,6 +63,9 @@ import type{
 	QueryAppTableResponse,
 	WipeAppDatabaseResponse,
 	ListAppBranchesResponse,
+	AdminSalesData,
+	ConfirmPurchaseData,
+	ConfirmPurchaseRequest,
 	DiscoverPricing,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
@@ -74,8 +77,10 @@ import type{
 	RejectVersionRequest,
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
+	SiteCheckoutData,
 	SitePublishingData,
-	SitePurchaseData,
+	StripeConnectStatusData,
+	StripeLinkData,
 	TemplateCategory,
 } from '@/api-types';
 import {
@@ -583,9 +588,32 @@ class ApiClient {
 		});
 	}
 
-	/** Buy a paid site. Payments are in test mode: the purchase is recorded without a charge. */
-	async purchaseSite(appId: string): Promise<ApiResponse<SitePurchaseData>> {
-		return this.request<SitePurchaseData>(`/api/apps/${appId}/purchases`, { method: 'POST' });
+	/** Start Stripe Checkout for a paid site; the response carries the Checkout page URL. */
+	async createSiteCheckout(appId: string): Promise<ApiResponse<SiteCheckoutData>> {
+		return this.request<SiteCheckoutData>(`/api/apps/${appId}/purchases`, { method: 'POST' });
+	}
+
+	/** Record the purchase after the buyer returns from Stripe Checkout. */
+	async confirmSitePurchase(appId: string, sessionId: string): Promise<ApiResponse<ConfirmPurchaseData>> {
+		const body: ConfirmPurchaseRequest = { sessionId };
+		return this.request<ConfirmPurchaseData>(`/api/apps/${appId}/purchases/confirm`, { method: 'POST', body });
+	}
+
+	async startStripeOnboarding(): Promise<ApiResponse<StripeLinkData>> {
+		return this.request<StripeLinkData>('/api/stripe/connect/onboarding', { method: 'POST' });
+	}
+
+	async getStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
+	}
+
+	async getStripeDashboardLink(): Promise<ApiResponse<StripeLinkData>> {
+		return this.request<StripeLinkData>('/api/stripe/connect/dashboard', { method: 'POST' });
+	}
+
+	/** Admins only; quiet because non-admins get 403. */
+	async getAdminSales(): Promise<ApiResponse<AdminSalesData>> {
+		return this.request<AdminSalesData>('/api/admin/sales', {}, true);
 	}
 
 	async getMyPaidListings(): Promise<ApiResponse<MyPaidListingsData>> {

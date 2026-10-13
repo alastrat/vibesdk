@@ -230,6 +230,9 @@ export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
 
 export type {
+	AdminSalesData,
+	ConfirmPurchaseData,
+	ConfirmPurchaseRequest,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
 	MyPaidListing,
@@ -244,9 +247,11 @@ export type {
 	RejectVersionRequest,
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
+	SaleView,
+	SiteCheckoutData,
 	SitePublishingData,
-	SitePurchaseData,
 } from 'worker/api/controllers/publishing/types';
+export type { StripeConnectStatusData, StripeLinkData } from 'worker/api/controllers/payments/types';
 export type {
 	DiscoverPricing,
 	TemplateCategory,
@@ -255,10 +260,12 @@ export type {
 } from '../shared/types/templates.js';
 export {
 	DISCOVER_PRICING_FILTERS,
+	PLATFORM_FEE_PERCENT,
 	TEMPLATE_CATEGORIES,
 	TEMPLATE_CATEGORY_LABELS,
 	TEMPLATE_PRICE_OPTIONS_CENTS,
 	formatTemplatePrice,
+	platformFeeCents,
 } from '../shared/types/templates.js';
 
 export type { AIModels } from 'worker/agents/inferutils/config.types';

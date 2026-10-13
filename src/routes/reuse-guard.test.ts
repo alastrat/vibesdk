@@ -25,7 +25,7 @@ describe('using a published site', () => {
 		const button = source('/src/components/publishing/UseSiteButton.tsx');
 		expect(button).toContain('reuse.needsPurchase');
 		expect(button).toContain('Use this site');
-		expect(button).toContain("Payments are in test mode. You won't be charged.");
+		expect(button).toContain('Secure checkout with Stripe');
 		expect(button).toContain('requireAuth(');
 	});
 
