@@ -54,7 +54,7 @@ export interface CheckoutSessionInput {
 	feeCents: number;
 	destinationAccountId: string;
 	buyerUserId: string;
-	buyerEmail: string;
+	buyerEmail?: string;
 	successUrl: string;
 	cancelUrl: string;
 	metadata: Record<string, string>;
@@ -174,7 +174,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					metadata: input.metadata,
 				},
 				client_reference_id: input.buyerUserId,
-				customer_email: input.buyerEmail,
+				// Stripe rejects an empty customer_email, so a buyer without one is left out.
+				customer_email: input.buyerEmail || undefined,
 				metadata: input.metadata,
 				success_url: input.successUrl,
 				cancel_url: input.cancelUrl,

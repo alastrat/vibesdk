@@ -57,15 +57,43 @@ export interface PaidVersionActionData {
     status: TemplateVersionStatus;
 }
 
-export interface SitePurchaseData {
-    appId: string;
+export interface SiteCheckoutData {
+    /** Stripe Checkout page to send the buyer to. */
+    checkoutUrl: string;
+}
+
+export interface ConfirmPurchaseRequest {
+    sessionId: string;
+}
+
+export interface ConfirmPurchaseData {
     purchased: true;
-    testMode: true;
+}
+
+export interface SaleView {
+    purchaseId: string;
+    /** Null once the site has been deleted. */
+    appId: string | null;
+    /** Null once the site has been deleted. */
+    appTitle: string | null;
+    buyerEmail: string | null;
+    priceCents: number;
+    platformFeeCents: number;
+    soldAt: string | null;
+}
+
+export interface AdminSalesData {
+    sales: SaleView[];
+    totalFeesCents: number;
 }
 
 export interface MyPaidListing extends OwnerPaidListing {
     appId: string;
     appTitle: string;
+    /** Stripe sales to date, in cents: what buyers paid, Estori's fee, and what the seller receives. */
+    grossCents: number;
+    feeCents: number;
+    earningsCents: number;
 }
 
 export interface MyPaidListingsData {

@@ -1,13 +1,14 @@
 /**
  * Publishing endpoints: make an app public or private, manage its paid
- * listing, and buy a paid site. Review endpoints live in adminController.ts.
+ * listing, and buy a paid site through Stripe Checkout. Review endpoints live
+ * in adminController.ts.
  */
 
 import { BaseController } from '../baseController';
 import type { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
-import { AppService, TemplateService } from '../../../database';
+import { AppService, StripeConnectService, TemplateService } from '../../../database';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { getAgentStub, getAgentStubLightweight, getSpaceTemplateStub, type SpaceTemplateStub } from '../../../agents';
@@ -18,12 +19,10 @@ import {
     canSubmitNewVersion,
     canWithdraw,
     paidUpdatePrice,
-    purchaseDecision,
 } from '../../../services/templates/catalog';
 import {
     NOT_DEPLOYED_REASON,
     PUBLISHING_CHECK_FAILED_MESSAGE,
-    SITE_UNAVAILABLE_MESSAGE,
     parsePublishRequest,
     publishEligibilityReason,
     type PublishRequest,
@@ -32,14 +31,21 @@ import { publishSite, type PublishDeps } from '../../../services/templates/publi
 import { READ_FAILED_MESSAGE, TemplateSubmissionError, submitTemplateVersion } from '../../../services/templates/submit';
 import { r2TemplateStore } from '../../../services/templates/store';
 import { createTemplateShotCapturer } from '../../../services/templates/capture';
+import { StripeApiError, accountFlags } from '../../../services/payments/stripe-client';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
+import { checkoutDecision, confirmDecision } from '../../../services/payments/checkout';
+import { fulfillCheckoutSession } from '../../../services/payments/fulfill';
+import { platformFeeCents } from '../../../../shared/types/templates';
 import { toOwnerPaidListing } from './publishingDto';
 import type {
+    ConfirmPurchaseData,
+    ConfirmPurchaseRequest,
     MyPaidListingsData,
     PaidVersionActionData,
     PublishSiteData,
     PublishSiteRequest,
+    SiteCheckoutData,
     SitePublishingData,
-    SitePurchaseData,
 } from './types';
 
 function publishMessage(request: PublishRequest, inReview: boolean): string {
@@ -196,39 +202,102 @@ export class PublishingController extends BaseController {
         }
     }
 
-    /** Record a test-mode purchase (no charge) of an approved paid site. */
+    /** Start a Stripe Checkout session for an approved paid site; the seller gets the price minus Estori's 5%. */
     static async purchase(
-        _request: Request,
+        request: Request,
         env: Env,
         _ctx: ExecutionContext,
         context: RouteContext,
-    ): Promise<ControllerResponse<ApiResponse<SitePurchaseData>>> {
+    ): Promise<ControllerResponse<ApiResponse<SiteCheckoutData>>> {
         try {
+            const stripe = stripeFromEnv(env);
+            if (!stripe) return PublishingController.createErrorResponse<SiteCheckoutData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
             const user = context.user!;
             const appId = context.pathParams.id;
             const app = await new AppService(env).getReuseSource(appId);
-            if (!app || app.visibility !== 'public' || app.removedFromDiscoverAt) {
-                return PublishingController.createErrorResponse<SitePurchaseData>(SITE_UNAVAILABLE_MESSAGE, 404);
-            }
             const listings = new TemplateService(env);
-            const listing = await listings.getListingByApp(appId);
-            const paid = listing !== null && listing.status === 'listed' && listing.currentVersionId !== null;
-            const hasPurchase = paid ? await listings.hasPurchase(listing.id, user.id) : false;
-            const decision = purchaseDecision({
-                priceCents: paid ? listing.priceCents : 0,
-                isCreator: app.userId === user.id,
+            const listing = app ? await listings.getListingByApp(appId) : null;
+            const isCreator = app?.userId === user.id;
+            const hasPurchase = listing ? await listings.hasPurchase(listing.id, user.id) : false;
+            const sellerAccountId =
+                listing && !isCreator && !hasPurchase ? await PublishingController.readySellerAccount(env, listing.creatorUserId) : null;
+            const decision = checkoutDecision({
+                appPublic: app?.visibility === 'public',
+                removed: app?.removedFromDiscoverAt != null,
+                listing: listing ? { status: listing.status, currentVersionId: listing.currentVersionId, priceCents: listing.priceCents } : null,
+                isCreator,
                 hasPurchase,
+                sellerTransfersActive: sellerAccountId !== null,
             });
-            if (!decision.ok) {
-                return PublishingController.createErrorResponse<SitePurchaseData>(decision.error, decision.status);
+            if (!decision.ok) return PublishingController.createErrorResponse<SiteCheckoutData>(decision.error, decision.status);
+            if (!app || !listing || !listing.currentVersionId || !sellerAccountId) {
+                throw new Error('Checkout decision allowed an incomplete listing');
             }
-            if (paid && !decision.alreadyOwned) {
-                await listings.recordPurchase({ listingId: listing.id, userId: user.id, priceCents: listing.priceCents });
-            }
-            return PublishingController.createSuccessResponse<SitePurchaseData>({ appId, purchased: true, testMode: true });
+            const origin = new URL(request.url).origin;
+            const session = await stripe.createCheckoutSession({
+                productName: app.title,
+                priceCents: listing.priceCents,
+                feeCents: platformFeeCents(listing.priceCents),
+                destinationAccountId: sellerAccountId,
+                buyerUserId: user.id,
+                buyerEmail: user.email || undefined,
+                successUrl: `${origin}/app/${appId}?purchase=success&session_id={CHECKOUT_SESSION_ID}`,
+                cancelUrl: `${origin}/app/${appId}`,
+                metadata: {
+                    appId,
+                    listingId: listing.id,
+                    versionId: listing.currentVersionId,
+                    buyerUserId: user.id,
+                    sellerStripeAccountId: sellerAccountId,
+                },
+            });
+            if (!session.url) throw new Error('Stripe returned no Checkout URL');
+            return PublishingController.createSuccessResponse<SiteCheckoutData>({ checkoutUrl: session.url });
         } catch (error) {
-            this.logger.error('Error buying site', error);
-            return PublishingController.createErrorResponse<SitePurchaseData>('Failed to buy the site', 500);
+            if (error instanceof StripeApiError) {
+                this.logger.warn('Stripe checkout failed', { status: error.status, code: error.code, message: error.message });
+                return PublishingController.createErrorResponse<SiteCheckoutData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
+            }
+            this.logger.error('Error starting checkout', error);
+            return PublishingController.createErrorResponse<SiteCheckoutData>('Failed to start checkout', 500);
+        }
+    }
+
+    /** Record the purchase when a buyer returns from Stripe Checkout; the webhook does the same, once. */
+    static async confirmPurchase(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<ConfirmPurchaseData>>> {
+        try {
+            const stripe = stripeFromEnv(env);
+            if (!stripe) return PublishingController.createErrorResponse<ConfirmPurchaseData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
+            const bodyResult = await PublishingController.parseJsonBody<ConfirmPurchaseRequest>(request);
+            if (!bodyResult.success) return bodyResult.response! as ControllerResponse<ApiResponse<ConfirmPurchaseData>>;
+            const sessionId = bodyResult.data?.sessionId;
+            if (typeof sessionId !== 'string' || !sessionId.startsWith('cs_')) {
+                return PublishingController.createErrorResponse<ConfirmPurchaseData>('sessionId is required', 400);
+            }
+            const session = await stripe.retrieveCheckoutSession(sessionId);
+            const decision = confirmDecision(session, { appId: context.pathParams.id, userId: context.user!.id });
+            if (!decision.ok) return PublishingController.createErrorResponse<ConfirmPurchaseData>(decision.error, decision.status);
+            const listings = new TemplateService(env);
+            await fulfillCheckoutSession(
+                {
+                    listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
+                    recordStripePurchase: (record) => listings.recordStripePurchase(record),
+                },
+                session,
+            );
+            return PublishingController.createSuccessResponse<ConfirmPurchaseData>({ purchased: true });
+        } catch (error) {
+            if (error instanceof StripeApiError) {
+                this.logger.warn('Stripe confirmation failed', { status: error.status, code: error.code });
+                return PublishingController.createErrorResponse<ConfirmPurchaseData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
+            }
+            this.logger.error('Error confirming purchase', error);
+            return PublishingController.createErrorResponse<ConfirmPurchaseData>('Failed to confirm the purchase', 500);
         }
     }
 
@@ -245,12 +314,27 @@ export class PublishingController extends BaseController {
                     ...toOwnerPaidListing(row.listing, row.versions, row.buyerCount),
                     appId: row.listing.sourceAppId,
                     appTitle: row.appTitle,
+                    grossCents: row.grossCents,
+                    feeCents: row.feeCents,
+                    earningsCents: row.earningsCents,
                 })),
             });
         } catch (error) {
             this.logger.error('Error loading paid listings', error);
             return PublishingController.createErrorResponse<MyPaidListingsData>('Failed to load your paid listings', 500);
         }
+    }
+
+    /** The seller's Stripe account when it can receive transfers, refreshing a stale flag from Stripe. */
+    private static async readySellerAccount(env: Env, userId: string): Promise<string | null> {
+        const stripe = stripeFromEnv(env);
+        const accounts = new StripeConnectService(env);
+        const stored = await accounts.getByUser(userId);
+        if (!stripe || !stored) return null;
+        if (stored.transfersActive) return stored.stripeAccountId;
+        const flags = accountFlags(await stripe.retrieveAccount(stored.stripeAccountId));
+        await accounts.updateFlags(stored.stripeAccountId, flags);
+        return flags.transfersActive ? stored.stripeAccountId : null;
     }
 
     private static async loadFacts(
@@ -310,6 +394,10 @@ export class PublishingController extends BaseController {
                 );
                 if (!result.success) throw new Error(result.error ?? 'Failed to update app visibility');
                 if (request.visibility === 'public') await apps.updateApp(appId, { lastDeployedAt: new Date() });
+            },
+            async sellerPayouts() {
+                if (!stripeFromEnv(env)) return 'not-configured';
+                return (await PublishingController.readySellerAccount(env, userId)) ? 'ready' : 'not-onboarded';
             },
         };
     }

@@ -22,7 +22,7 @@ describe('publishing routes', () => {
 
 	it('puts every admin route behind the admin auth level', () => {
 		const adminLines = lines.filter((line) => line.includes("'/api/admin/"));
-		expect(adminLines).toHaveLength(7);
+		expect(adminLines).toHaveLength(8);
 		for (const line of adminLines) expect(line).toContain('setAuthLevel(AuthConfig.admin)');
 	});
 
@@ -35,6 +35,13 @@ describe('publishing routes', () => {
 		]) {
 			const line = lines.find((candidate) => candidate.includes(path));
 			expect(line).toContain('setAuthLevel(AuthConfig.ownerOnly)');
+		}
+	});
+
+	it('keeps checkout and its confirmation behind sign-in', () => {
+		for (const path of ["'/api/apps/:id/purchases'", "'/api/apps/:id/purchases/confirm'"]) {
+			const line = lines.find((candidate) => candidate.includes(path));
+			expect(line).toContain('setAuthLevel(AuthConfig.authenticated)');
 		}
 	});
 

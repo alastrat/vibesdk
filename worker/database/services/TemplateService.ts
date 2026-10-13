@@ -284,21 +284,6 @@ export class TemplateService extends BaseService {
         return row !== undefined;
     }
 
-    /** Record a test-mode purchase (no charge). Buying twice keeps the first record. */
-    async recordPurchase(input: { listingId: string; userId: string; priceCents: number }): Promise<void> {
-        await this.database
-            .insert(schema.templatePurchases)
-            .values({
-                id: generateId(),
-                templateId: input.listingId,
-                userId: input.userId,
-                priceCents: input.priceCents,
-                provider: 'test',
-                createdAt: new Date(),
-            })
-            .onConflictDoNothing();
-    }
-
     /** Record a paid Stripe Checkout session; false when this session or this buyer's purchase already exists. */
     async recordStripePurchase(input: StripePurchaseRecord): Promise<boolean> {
         const inserted = await this.database

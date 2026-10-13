@@ -106,6 +106,31 @@ describe('createStripeClient', () => {
 		expect(bodies[1]).toContain('email=seller@example.test');
 	});
 
+	it('leaves customer_email out of a Checkout session when the buyer has no email', async () => {
+		const bodies: string[] = [];
+		const fakeFetch: typeof fetch = async (_input, init) => {
+			bodies.push(decodeURIComponent(String(init?.body)));
+			return new Response(JSON.stringify({ id: 'cs_1', url: 'https://checkout.stripe.test/cs_1', payment_status: 'unpaid', status: 'open', client_reference_id: 'u1', metadata: {}, amount_total: 2900, currency: 'usd', payment_intent: null }), { status: 200 });
+		};
+		const client = createStripeClient('sk_test_fake', fakeFetch);
+		const input = {
+			productName: 'Lumen Yoga',
+			priceCents: 2900,
+			feeCents: 145,
+			destinationAccountId: 'acct_1',
+			buyerUserId: 'u1',
+			successUrl: 'http://localhost/app/a1?purchase=success&session_id={CHECKOUT_SESSION_ID}',
+			cancelUrl: 'http://localhost/app/a1',
+			metadata: { appId: 'a1' },
+		};
+		await client.createCheckoutSession({ ...input, buyerEmail: '' });
+		await client.createCheckoutSession(input);
+		await client.createCheckoutSession({ ...input, buyerEmail: 'buyer@example.test' });
+		expect(bodies[0]).not.toContain('customer_email');
+		expect(bodies[1]).not.toContain('customer_email');
+		expect(bodies[2]).toContain('customer_email=buyer@example.test');
+	});
+
 	it('turns Stripe errors into StripeApiError', async () => {
 		const fakeFetch: typeof fetch = async () =>
 			new Response(JSON.stringify({ error: { message: 'No such account', type: 'invalid_request_error', code: 'resource_missing' } }), {

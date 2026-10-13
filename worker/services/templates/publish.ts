@@ -8,6 +8,7 @@
 import type { TemplateSource } from '../../agents/core/types';
 import { buildSnapshot, type TreeFile } from './snapshot';
 import { READ_FAILED_MESSAGE, TemplateSubmissionError } from './submit';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, SELLER_NOT_ONBOARDED_MESSAGE } from '../payments/config';
 import { NOT_DEPLOYED_REASON, planPublish, publishEligibilityReason, type ListingState, type PublishRequest } from './reuse';
 
 export interface PublishDeps {
@@ -22,6 +23,8 @@ export interface PublishDeps {
 	/** Store the deployed commit as a pending version at this price; throws TemplateSubmissionError. */
 	submitVersion(listingId: string, source: TemplateSource, priceCents: number): Promise<void>;
 	applyVisibility(request: PublishRequest): Promise<void>;
+	/** Whether the owner can be paid: Stripe configured and their account able to receive transfers. */
+	sellerPayouts(): Promise<'ready' | 'not-configured' | 'not-onboarded'>;
 }
 
 export type PublishOutcome =
@@ -55,6 +58,10 @@ export async function publishSite(deps: PublishDeps, request: PublishRequest): P
 		await deps.applyVisibility(request);
 		return { ok: true, inReview: false };
 	}
+
+	const payouts = await deps.sellerPayouts();
+	if (payouts === 'not-configured') return { ok: false, status: 400, error: PAYMENTS_NOT_CONFIGURED_MESSAGE };
+	if (payouts === 'not-onboarded') return { ok: false, status: 400, error: SELLER_NOT_ONBOARDED_MESSAGE };
 
 	try {
 		const listingId = listing?.id ?? (await deps.createListing());

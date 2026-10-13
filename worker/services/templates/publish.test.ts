@@ -5,6 +5,7 @@ import { VERSION_IN_REVIEW_ERROR } from './catalog';
 import { publishSite, type PublishDeps } from './publish';
 import { SCREENSHOT_FAILED_MESSAGE, TemplateSubmissionError } from './submit';
 import type { TreeFile } from './snapshot';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, SELLER_NOT_ONBOARDED_MESSAGE } from '../payments/config';
 
 const SOURCE: TemplateSource = { commit: 'c1', previewUrl: 'https://preview.test/' };
 const FILES: TreeFile[] = [{ path: '/index.html', bytes: new TextEncoder().encode('<h1>Hi</h1>') }];
@@ -17,6 +18,7 @@ interface Setup {
 	source?: TemplateSource | null;
 	files?: TreeFile[];
 	submitError?: Error;
+	sellerPayouts?: 'ready' | 'not-configured' | 'not-onboarded';
 }
 
 function harness(setup: Setup = {}) {
@@ -42,6 +44,7 @@ function harness(setup: Setup = {}) {
 		applyVisibility: async (request) => {
 			calls.push(`applyVisibility:${request.visibility}`);
 		},
+		sellerPayouts: async () => setup.sellerPayouts ?? 'ready',
 	};
 	return { deps, calls };
 }
@@ -122,5 +125,18 @@ describe('publishSite', () => {
 	it('lets errors other than submission errors reach the caller', async () => {
 		const { deps } = harness({ submitError: new Error('R2 down') });
 		await expect(publishSite(deps, PAID)).rejects.toThrow('R2 down');
+	});
+
+	it('refuses a paid publish until the seller can receive payments', async () => {
+		const notOnboarded = harness({ sellerPayouts: 'not-onboarded' });
+		expect(await publishSite(notOnboarded.deps, PAID)).toEqual({ ok: false, status: 400, error: SELLER_NOT_ONBOARDED_MESSAGE });
+		const notConfigured = harness({ sellerPayouts: 'not-configured' });
+		expect(await publishSite(notConfigured.deps, PAID)).toEqual({ ok: false, status: 400, error: PAYMENTS_NOT_CONFIGURED_MESSAGE });
+		expect([...notOnboarded.calls, ...notConfigured.calls]).toEqual([]);
+	});
+
+	it('publishes a free site without asking about payouts', async () => {
+		const { deps } = harness({ sellerPayouts: 'not-configured' });
+		expect(await publishSite(deps, FREE)).toEqual({ ok: true, inReview: false });
 	});
 });

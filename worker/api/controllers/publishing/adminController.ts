@@ -20,6 +20,7 @@ import { decodeText, type TreeFile } from '../../../services/templates/snapshot'
 import { readTemplateSnapshot, templateImageResponse } from '../../../services/templates/store';
 import { toPendingReview } from './publishingDto';
 import type {
+    AdminSalesData,
     DiscoverRemovalData,
     DiscoverRemovalRequest,
     PaidVersionActionData,
@@ -49,6 +50,34 @@ export class ReviewAdminController extends BaseController {
         } catch (error) {
             this.logger.error('Error listing pending templates', error);
             return ReviewAdminController.createErrorResponse<PendingReviewsData>('Failed to load the review queue', 500);
+        }
+    }
+
+    /** The latest Stripe sales and Estori's total fees. */
+    static async listSales(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        _context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<AdminSalesData>>> {
+        try {
+            const listings = new TemplateService(env);
+            const [rows, totalFeesCents] = await Promise.all([listings.listRecentSales(50), listings.sumPlatformFees()]);
+            return ReviewAdminController.createSuccessResponse<AdminSalesData>({
+                sales: rows.map((row) => ({
+                    purchaseId: row.purchaseId,
+                    appId: row.appId,
+                    appTitle: row.appTitle,
+                    buyerEmail: row.buyerEmail,
+                    priceCents: row.priceCents,
+                    platformFeeCents: row.platformFeeCents ?? 0,
+                    soldAt: row.createdAt ? row.createdAt.toISOString() : null,
+                })),
+                totalFeesCents,
+            });
+        } catch (error) {
+            this.logger.error('Error listing sales', error);
+            return ReviewAdminController.createErrorResponse<AdminSalesData>('Failed to load sales', 500);
         }
     }
 
