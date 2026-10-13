@@ -30,7 +30,7 @@ export function DiscoverStrip() {
 				{apps.map((app) => (
 					<Link
 						key={app.id}
-						to={`/app/${app.id}?use=1`}
+						to={`/discover/${app.id}`}
 						className="group grid gap-2 rounded-xl p-2 ring ring-kumo-hairline hover:ring-kumo-line"
 					>
 						<div className="aspect-[16/10] overflow-hidden rounded-lg bg-kumo-recessed">

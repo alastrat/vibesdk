@@ -37,7 +37,11 @@ describe('one Discover gallery', () => {
 		const strip = source('/src/components/publishing/DiscoverStrip.tsx');
 		expect(strip).toContain('reusableOnly: true');
 		expect(strip).toContain('Start from a published site');
-		expect(strip).toContain('?use=1');
+		expect(strip).toContain('to={`/discover/${app.id}`}');
+	});
+
+	it('opens product pages from Discover', () => {
+		expect(source('/src/routes/discover/index.tsx')).toContain('navigate(`/discover/${appId}`)');
 	});
 
 	it('redirects the old template URLs and drops the Templates entry', () => {

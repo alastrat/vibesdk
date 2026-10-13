@@ -194,7 +194,7 @@ export default function DiscoverPage() {
 						hasMore={hasMore}
 						totalCount={totalCount}
 						sortBy={sortBy}
-						onAppClick={(appId) => navigate(`/app/${appId}`)}
+						onAppClick={(appId) => navigate(`/discover/${appId}`)}
 						onLoadMore={loadMore}
 						onRetry={refetch}
 						showUser={true}

@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+import { useNavigate } from 'react-router';
 import { Button } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
-import { useCreateSiteCheckout } from '@/hooks/use-payments';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { formatTemplatePrice, type AppDetailsData } from '@/api-types';
 import { UseSiteDialog } from './UseSiteDialog';
@@ -16,7 +15,7 @@ interface UseSiteButtonProps {
 /** "Use this site", or "Buy for $X" first on a paid site the viewer doesn't own. */
 export function UseSiteButton({ app, autoOpen = false }: UseSiteButtonProps) {
 	const reuse = app.reuse;
-	const checkout = useCreateSiteCheckout();
+	const navigate = useNavigate();
 	const { isLoading: authLoading } = useAuth();
 	const { requireAuth } = useAuthGuard();
 	const [open, setOpen] = useState(false);
@@ -38,20 +37,11 @@ export function UseSiteButton({ app, autoOpen = false }: UseSiteButtonProps) {
 
 	if (reuse.needsPurchase && reuse.priceCents !== null) {
 		const price = formatTemplatePrice(reuse.priceCents);
-		const buy = () => {
-			if (!requireAuth({ requireFullAuth: true, actionContext: 'to buy this site', intendedUrl })) return;
-			checkout.mutate(app.id, {
-				onSuccess: (result) => window.location.assign(result.checkoutUrl),
-				onError: (error) => toast.error(error.message),
-			});
-		};
+		// The product page describes the site before Stripe Checkout.
 		return (
-			<div className="flex items-center gap-2">
-				<span className="text-xs text-kumo-subtle">Secure checkout with Stripe</span>
-				<Button size="sm" variant="primary" loading={checkout.isPending || checkout.isSuccess} onClick={buy}>
-					Buy for {price}
-				</Button>
-			</div>
+			<Button size="sm" variant="primary" onClick={() => navigate(`/discover/${app.id}`)}>
+				Buy for {price}
+			</Button>
 		);
 	}
 

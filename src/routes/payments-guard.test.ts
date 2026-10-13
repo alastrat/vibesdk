@@ -17,13 +17,11 @@ function source(path: string): string {
 }
 
 describe('paying for a site', () => {
-	it('sends the buyer to Stripe Checkout and keeps the button busy until the browser leaves', () => {
+	it('sends a buyer from the app page to the product page, which starts Stripe Checkout', () => {
 		const button = source('/src/components/publishing/UseSiteButton.tsx');
-		expect(button).toContain('window.location.assign(result.checkoutUrl)');
-		expect(button).toContain('checkout.isPending || checkout.isSuccess');
-		expect(button).toContain('Secure checkout with Stripe');
+		expect(button).toContain('navigate(`/discover/${app.id}`)');
+		expect(button).not.toContain('useCreateSiteCheckout');
 		expect(button).not.toContain('test mode');
-		expect(button).not.toContain('session_id');
 	});
 
 	it('confirms the return from Stripe once, from the app page that stays mounted', () => {

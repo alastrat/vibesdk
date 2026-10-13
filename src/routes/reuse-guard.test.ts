@@ -25,7 +25,7 @@ describe('using a published site', () => {
 		const button = source('/src/components/publishing/UseSiteButton.tsx');
 		expect(button).toContain('reuse.needsPurchase');
 		expect(button).toContain('Use this site');
-		expect(button).toContain('Secure checkout with Stripe');
+		expect(button).toContain('navigate(`/discover/${app.id}`)');
 		expect(button).toContain('requireAuth(');
 	});
 
