@@ -24,6 +24,20 @@ export function useStartStripeOnboarding() {
 	});
 }
 
+/**
+ * Starts Stripe onboarding and sends the browser to Stripe, or toasts the error. `isPending` stays true after
+ * success, so the button stays busy until the browser leaves.
+ */
+export function useStripeOnboardingRedirect() {
+	const { mutate, isPending, isSuccess } = useStartStripeOnboarding();
+	const start = () =>
+		mutate(undefined, {
+			onSuccess: (link) => window.location.assign(link.url),
+			onError: (error) => toast.error(error.message),
+		});
+	return { start, isPending: isPending || isSuccess };
+}
+
 export function useStripeDashboardLink() {
 	return useMutation({
 		mutationFn: () => unwrap(apiClient.getStripeDashboardLink(), 'Failed to open the Stripe dashboard'),

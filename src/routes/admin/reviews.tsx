@@ -64,7 +64,10 @@ export default function AdminReviewsPage() {
 function SalesSection() {
 	const sales = useAdminSales();
 	if (sales.isLoading) return <Loader />;
-	if (sales.isError || !sales.data) return null;
+	if (sales.isError) {
+		return <p className="pt-4 text-sm text-kumo-subtle">{`Couldn't load sales: ${sales.error.message}`}</p>;
+	}
+	if (!sales.data) return null;
 	const { sales: rows, totalFeesCents } = sales.data;
 	return (
 		<section className="grid gap-3 pt-4">

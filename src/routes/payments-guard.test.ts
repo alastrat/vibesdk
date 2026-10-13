@@ -83,7 +83,37 @@ describe('getting paid', () => {
 		expect(card).toContain('Connect Stripe');
 		expect(card).toContain('Open Stripe dashboard');
 		expect(card).toContain('window.location.assign(');
+		expect(card).toContain('useStripeOnboardingRedirect()');
+		expect(card).not.toContain('useStartStripeOnboarding');
 		expect(sellerSource('/src/routes/profile.tsx')).toContain('<PayoutsCard />');
+	});
+
+	it('sends the seller to Stripe onboarding from one hook, with one error toast', () => {
+		const hook = source('/src/hooks/use-payments.ts');
+		expect(hook).toContain('export function useStripeOnboardingRedirect(');
+		expect(hook).toContain('window.location.assign(link.url)');
+		expect(hook).toContain('toast.error(error.message)');
+		expect(sellerSource('/src/components/publishing/PublishDialog.tsx')).toContain('useStripeOnboardingRedirect()');
+	});
+
+	it('tells a seller whose details Stripe is still verifying', () => {
+		const card = sellerSource('/src/components/payments/PayoutsCard.tsx');
+		expect(card).toContain('data.detailsSubmitted');
+		expect(card).toContain('Waiting for Stripe');
+		expect(card).toContain('Stripe is verifying your details.');
+		expect(card).toContain('Continue Stripe setup');
+	});
+
+	it('lets the seller retry a failed Stripe status', () => {
+		expect(sellerSource('/src/components/payments/PayoutsCard.tsx')).toContain('status.refetch()');
+	});
+
+	it('shares one not-configured message', () => {
+		for (const path of ['/src/components/payments/PayoutsCard.tsx', '/src/components/publishing/PublishDialog.tsx']) {
+			const text = sellerSource(path);
+			expect(text).toContain('PAYMENTS_NOT_CONFIGURED_MESSAGE');
+			expect(text).not.toContain("Payments aren't set up");
+		}
 	});
 
 	it('asks for Stripe before a paid publish and states the fee', () => {
@@ -93,10 +123,21 @@ describe('getting paid', () => {
 		expect(dialog).not.toContain('test mode');
 	});
 
+	it('explains and recovers a Stripe status that is loading or failed on a paid publish', () => {
+		const dialog = sellerSource('/src/components/publishing/PublishDialog.tsx');
+		expect(dialog).toContain('payouts.isError');
+		expect(dialog).toContain('payouts.error.message');
+		expect(dialog).toContain('payouts.refetch()');
+		expect(dialog).toContain('payouts.isPending');
+		expect(dialog).toContain('Checking your Stripe account');
+		expect(dialog).toContain('disabled={!consent || !sellerReady}');
+	});
+
 	it('shows sellers their earnings and admins the sales and fees', () => {
 		expect(sellerSource('/src/components/publishing/PaidListingsList.tsx')).toContain('listing.earningsCents');
 		const reviews = sellerSource('/src/routes/admin/reviews.tsx');
 		expect(reviews).toContain('useAdminSales()');
 		expect(reviews).toContain('totalFeesCents');
+		expect(reviews).toContain("Couldn't load sales");
 	});
 });

@@ -10,9 +10,9 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useStartStripeOnboarding, useStripeConnectStatus } from '@/hooks/use-payments';
+import { useStripeConnectStatus, useStripeOnboardingRedirect } from '@/hooks/use-payments';
 import { usePublishSite, useSitePublishing } from '@/hooks/use-publishing';
-import { savedListingPrice } from '@/lib/paid-listing-display';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, savedListingPrice } from '@/lib/paid-listing-display';
 import {
 	formatTemplatePrice,
 	PLATFORM_FEE_PERCENT,
@@ -109,7 +109,7 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 	const [consent, setConsent] = useState(data.visibility === 'public' && data.hasReuseConsent);
 	const paid = priceCents > 0;
 	const payouts = useStripeConnectStatus(paid);
-	const onboarding = useStartStripeOnboarding();
+	const onboarding = useStripeOnboardingRedirect();
 	const sellerReady = !paid || payouts.data?.transfersActive === true;
 
 	const publish = () =>
@@ -172,8 +172,17 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 					sale.
 				</p>
 			)}
+			{paid && payouts.isPending && <p className="text-sm text-kumo-subtle">Checking your Stripe account…</p>}
+			{paid && payouts.isError && (
+				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
+					<span className="text-sm text-kumo-subtle">{payouts.error.message}</span>
+					<Button size="sm" variant="secondary" onClick={() => payouts.refetch()}>
+						Try again
+					</Button>
+				</div>
+			)}
 			{paid && payouts.data && !payouts.data.configured && (
-				<p className="text-sm text-kumo-subtle">Payments aren't set up on this deployment.</p>
+				<p className="text-sm text-kumo-subtle">{PAYMENTS_NOT_CONFIGURED_MESSAGE}</p>
 			)}
 			{paid && payouts.data?.configured && !payouts.data.transfersActive && (
 				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
@@ -182,12 +191,7 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 						size="sm"
 						variant="secondary"
 						loading={onboarding.isPending}
-						onClick={() =>
-							onboarding.mutate(undefined, {
-								onSuccess: (link) => window.location.assign(link.url),
-								onError: (error) => toast.error(error.message),
-							})
-						}
+						onClick={onboarding.start}
 					>
 						{payouts.data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
 					</Button>

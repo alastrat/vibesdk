@@ -1,5 +1,7 @@
 import { formatTemplatePrice, type OwnerPaidListing, type PaidListingVersionView } from '@/api-types';
 
+export const PAYMENTS_NOT_CONFIGURED_MESSAGE = "Payments aren't set up on this deployment.";
+
 export interface PaidListingStatusView {
 	label: string;
 	variant: 'warning' | 'success' | 'error' | 'secondary';

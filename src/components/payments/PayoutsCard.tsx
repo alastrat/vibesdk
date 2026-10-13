@@ -1,19 +1,15 @@
 import { toast } from 'sonner';
 import { Badge, Button, Loader } from '@cloudflare/kumo';
-import { useStartStripeOnboarding, useStripeConnectStatus, useStripeDashboardLink } from '@/hooks/use-payments';
+import { useStripeConnectStatus, useStripeDashboardLink, useStripeOnboardingRedirect } from '@/hooks/use-payments';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE } from '@/lib/paid-listing-display';
 import { PLATFORM_FEE_PERCENT } from '@/api-types';
 
 /** "Get paid with Stripe": connect or finish Stripe onboarding, then open the Stripe dashboard. */
 export function PayoutsCard() {
 	const status = useStripeConnectStatus(true);
-	const onboarding = useStartStripeOnboarding();
+	const onboarding = useStripeOnboardingRedirect();
 	const dashboard = useStripeDashboardLink();
 
-	const startOnboarding = () =>
-		onboarding.mutate(undefined, {
-			onSuccess: (link) => window.location.assign(link.url),
-			onError: (error) => toast.error(error.message),
-		});
 	const openDashboard = () =>
 		dashboard.mutate(undefined, {
 			onSuccess: (link) => window.location.assign(link.url),
@@ -21,11 +17,21 @@ export function PayoutsCard() {
 		});
 
 	if (status.isLoading) return <Loader />;
-	if (status.isError) return <p className="text-sm text-kumo-subtle">{status.error.message}</p>;
+	if (status.isError) {
+		return (
+			<div className="flex flex-wrap items-center justify-between gap-2">
+				<p className="text-sm text-kumo-subtle">{status.error.message}</p>
+				<Button size="sm" variant="secondary" onClick={() => status.refetch()}>
+					Try again
+				</Button>
+			</div>
+		);
+	}
 	const data = status.data;
 	if (!data?.configured) {
-		return <p className="text-sm text-kumo-subtle">Payments aren't set up on this deployment.</p>;
+		return <p className="text-sm text-kumo-subtle">{PAYMENTS_NOT_CONFIGURED_MESSAGE}</p>;
 	}
+	const verifying = data.connected && data.detailsSubmitted && !data.transfersActive;
 
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg px-3 py-3 ring ring-kumo-hairline">
@@ -34,6 +40,7 @@ export function PayoutsCard() {
 				<span className="text-sm text-kumo-subtle">
 					Buyers pay through Stripe. You receive the price minus Estori's {PLATFORM_FEE_PERCENT}% fee.
 				</span>
+				{verifying && <span className="text-sm text-kumo-subtle">Stripe is verifying your details.</span>}
 			</div>
 			{data.transfersActive ? (
 				<div className="flex items-center gap-2">
@@ -44,8 +51,12 @@ export function PayoutsCard() {
 				</div>
 			) : (
 				<div className="flex items-center gap-2">
-					{data.connected && <Badge variant="warning">Setup incomplete</Badge>}
-					<Button size="sm" variant="primary" loading={onboarding.isPending} onClick={startOnboarding}>
+					{verifying ? (
+						<Badge variant="info">Waiting for Stripe</Badge>
+					) : (
+						data.connected && <Badge variant="warning">Setup incomplete</Badge>
+					)}
+					<Button size="sm" variant="primary" loading={onboarding.isPending} onClick={onboarding.start}>
 						{data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
 					</Button>
 				</div>
