@@ -58,6 +58,14 @@ export interface ReuseInput {
 	hasPurchase: boolean;
 }
 
+export interface SourceAccessInput {
+	visibility: 'private' | 'public';
+	isOwner: boolean;
+	/** The app's paid listing is in effect or in review. */
+	paidListingListed: boolean;
+	hasPurchase: boolean;
+}
+
 export type ReuseDecision =
 	| { ok: true; source: 'live'; commit: string }
 	| { ok: true; source: 'snapshot'; versionId: string }
@@ -131,6 +139,13 @@ export function reuseDecision(input: ReuseInput): ReuseDecision {
 		return { ok: false, status: 400, error: SITE_NOT_REUSABLE_MESSAGE };
 	}
 	return { ok: true, source: 'live', commit: input.deployedCommit };
+}
+
+/** Whether a viewer may read and clone an app's source: a listed paid listing limits it to the owner and buyers. */
+export function canReadSource(input: SourceAccessInput): boolean {
+	if (input.isOwner) return true;
+	if (input.visibility !== 'public') return false;
+	return input.paidListingListed ? input.hasPurchase : true;
 }
 
 export function parseDiscoverRemoval(body: unknown): Validation<DiscoverRemoval> {

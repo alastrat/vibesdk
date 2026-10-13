@@ -29,6 +29,13 @@ describe('app details for reuse', () => {
 		expect(view).toContain('toStartedFromView(');
 	});
 
+	it('withholds the source from viewers who may not read it, reading the listing once', () => {
+		expect(view).toContain('canReadSource({');
+		expect(view).toContain('agentSummary: codeVisible ? agentSummary : null');
+		expect(view.match(/getListingByApp\(/g)).toHaveLength(1);
+		expect(view.match(/hasPurchase\(/g)).toHaveLength(1);
+	});
+
 	it('records a deploy the app row has not seen yet', () => {
 		expect(view).toContain("ctx.waitUntil(appService.updateApp(appResult.id, { lastDeployedAt: new Date() }))");
 	});

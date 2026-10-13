@@ -7,6 +7,7 @@ import {
 	SITE_NOT_YET_AVAILABLE_MESSAGE,
 	SITE_PURCHASE_REQUIRED_MESSAGE,
 	SITE_UNAVAILABLE_MESSAGE,
+	canReadSource,
 	parseDiscoverFilters,
 	parseDiscoverRemoval,
 	parsePublishRequest,
@@ -187,6 +188,30 @@ describe('reuseDecision', () => {
 			listing: { status: 'listed', currentVersionId: 'v2' },
 		};
 		expect(reuseDecision(paid)).toEqual({ ok: true, source: 'snapshot', versionId: 'v2' });
+	});
+});
+
+describe('canReadSource', () => {
+	const visitor = { visibility: 'public', isOwner: false, paidListingListed: false, hasPurchase: false } as const;
+
+	it('lets the owner read the source of any app', () => {
+		expect(canReadSource({ ...visitor, isOwner: true })).toBe(true);
+		expect(canReadSource({ ...visitor, isOwner: true, visibility: 'private' })).toBe(true);
+		expect(canReadSource({ ...visitor, isOwner: true, paidListingListed: true })).toBe(true);
+	});
+
+	it('hides a private app from everyone else', () => {
+		expect(canReadSource({ ...visitor, visibility: 'private' })).toBe(false);
+		expect(canReadSource({ ...visitor, visibility: 'private', hasPurchase: true })).toBe(false);
+	});
+
+	it('shows a public app without a listed paid listing to anyone', () => {
+		expect(canReadSource(visitor)).toBe(true);
+	});
+
+	it('shows a public app with a listed paid listing to its buyers only', () => {
+		expect(canReadSource({ ...visitor, paidListingListed: true })).toBe(false);
+		expect(canReadSource({ ...visitor, paidListingListed: true, hasPurchase: true })).toBe(true);
 	});
 });
 

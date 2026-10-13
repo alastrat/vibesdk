@@ -29,6 +29,12 @@ describe('using a published site', () => {
 		expect(button).toContain('requireAuth(');
 	});
 
+	it('hides the code and clone from viewers who may not read the source', () => {
+		const app = source('/src/routes/app/index.tsx');
+		expect(app).toContain('app.codeVisible');
+		expect(app).toContain('app.cloneNeedsToken');
+	});
+
 	it('starts a chat session from the site in the URL', () => {
 		expect(source('/src/components/publishing/UseSiteDialog.tsx')).toContain('reuseStartPath(');
 		expect(source('/src/routes/chat/chat.tsx')).toContain("searchParams.get('source')");

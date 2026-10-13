@@ -6,6 +6,7 @@ import { getAgentStubLightweight } from '../../../agents';
 import { AppService } from '../../../database/services/AppService';
 import { TemplateService, UserService } from '../../../database';
 import type { EnhancedAppData } from '../../../database/types';
+import type { Template } from '../../../database/schema';
 import { 
     AppDetailsData, 
     AppStarToggleData,
@@ -17,7 +18,7 @@ import {
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { toPublicAppDetail } from '../apps/publicAppDto';
 import { createLogger } from '../../../logger';
-import { reuseDecision } from '../../../services/templates/reuse';
+import { canReadSource, reuseDecision } from '../../../services/templates/reuse';
 import { toStartedFromView } from './started-from';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
@@ -29,6 +30,11 @@ import {
     OWNER_PREVIEW_TOKEN_TTL_SECONDS,
     signOwnerPreviewToken,
 } from '../../../utils/ownerPreviewToken';
+
+interface ListingAccess {
+    listing: Template | null;
+    hasPurchase: boolean;
+}
 
 export class AppViewController extends BaseController {
     static logger = createLogger('AppViewController');
@@ -108,18 +114,27 @@ export class AppViewController extends BaseController {
             const cloudflareUrl = appResult.deploymentId ? buildUserWorkerUrl(env, appResult.deploymentId) : '';
 
             // Only the owner may see operational fields (userId, deploymentId,
-            // private-repo GitHub URL). The prompt + generated code remain
-            // visible to all viewers of a public app (intended feature).
+            // private-repo GitHub URL). The prompt stays visible to all viewers
+            // of a public app; the generated code only to those who may read
+            // the source.
             const isOwner = !!userId && appResult.userId === userId;
 
-            const [reuse, startedFromView, canModerate] = await Promise.all([
-                AppViewController.loadReuseView(env, appResult, userId, behaviorType, deployedCommit),
+            const [access, startedFromView, canModerate] = await Promise.all([
+                AppViewController.loadListingAccess(env, appResult, userId, isOwner),
                 AppViewController.loadStartedFrom(env, appResult.parentAppId),
                 userId ? new UserService(env).getRole(userId).then((role) => role === 'admin') : Promise.resolve(false),
             ]);
             if (behaviorType === 'think' && deployedCommit && !appResult.lastDeployedAt) {
                 ctx.waitUntil(appService.updateApp(appResult.id, { lastDeployedAt: new Date() }));
             }
+            const reuse = AppViewController.toReuseView(appResult, access, isOwner, behaviorType, deployedCommit);
+            const paidListingListed = access.listing?.status === 'listed';
+            const codeVisible = canReadSource({
+                visibility: appResult.visibility,
+                isOwner,
+                paidListingListed,
+                hasPurchase: access.hasPurchase,
+            });
 
             const responseData: AppDetailsData = {
                 ...toPublicAppDetail(appResult, isOwner),
@@ -133,12 +148,14 @@ export class AppViewController extends BaseController {
                     (isOwner || canModerate) && appResult.removedFromDiscoverAt
                         ? { reason: appResult.removedFromDiscoverReason }
                         : null,
+                codeVisible,
+                cloneNeedsToken: appResult.visibility === 'private' || paidListingListed,
                 user: {
                     id: isOwner ? appResult.userId! : '',
                     displayName: appResult.userName || 'Unknown',
                     avatarUrl: appResult.userAvatar
                 },
-                agentSummary,
+                agentSummary: codeVisible ? agentSummary : null,
             };
 
             return AppViewController.createSuccessResponse(responseData);
@@ -148,19 +165,30 @@ export class AppViewController extends BaseController {
         }
     }
 
-    private static async loadReuseView(
+    /** A public app's paid listing and whether the viewer bought it; reuse and source access both read it. */
+    private static async loadListingAccess(
         env: Env,
         app: EnhancedAppData,
         userId: string | undefined,
-        behaviorType: BehaviorType | null,
-        deployedCommit: string | null,
-    ): Promise<AppReuseView | null> {
-        if (app.visibility !== 'public') return null;
+        isOwner: boolean,
+    ): Promise<ListingAccess> {
+        if (app.visibility !== 'public') return { listing: null, hasPurchase: false };
         const listings = new TemplateService(env);
         const listing = await listings.getListingByApp(app.id);
+        const hasPurchase =
+            listing?.status === 'listed' && userId && !isOwner ? await listings.hasPurchase(listing.id, userId) : false;
+        return { listing, hasPurchase };
+    }
+
+    private static toReuseView(
+        app: EnhancedAppData,
+        { listing, hasPurchase }: ListingAccess,
+        isOwner: boolean,
+        behaviorType: BehaviorType | null,
+        deployedCommit: string | null,
+    ): AppReuseView | null {
+        if (app.visibility !== 'public') return null;
         const paid = listing !== null && listing.status === 'listed' && listing.currentVersionId !== null;
-        const isOwner = !!userId && app.userId === userId;
-        const hasPurchase = paid && userId && !isOwner ? await listings.hasPurchase(listing.id, userId) : false;
         const decision = reuseDecision({
             visibility: app.visibility,
             removedFromDiscover: app.removedFromDiscoverAt !== null,

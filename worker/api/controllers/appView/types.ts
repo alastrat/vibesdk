@@ -51,6 +51,10 @@ export interface AppDetailsData extends PublicAppDetailData {
     canModerate: boolean;
     /** Shown to the owner and admins only. */
     removedFromDiscover: { reason: string | null } | null;
+    /** The viewer may read and clone this app's source. */
+    codeVisible: boolean;
+    /** Cloning needs the owner's token: the app is private or has a paid listing in effect or in review. */
+    cloneNeedsToken: boolean;
     user: {
         id: string;
         displayName: string;

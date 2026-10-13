@@ -628,6 +628,12 @@ export default function AppView() {
 		);
 	}
 
+	// Viewers who may not read the source get the preview in place of the code.
+	const shownTab =
+		activeTab === 'code' && !app.codeVisible ? 'preview' : activeTab;
+	// A paid listing's repository can only be cloned with the owner's token.
+	const canClone = app.codeVisible && (isOwner || !app.cloneNeedsToken);
+
 	return (
 		<div className="size-full flex flex-col min-h-0">
 			<title>{pageTitle(app.title || 'App')}</title>
@@ -641,7 +647,7 @@ export default function AppView() {
 			)}
 			<div className="shrink-0 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 py-2 border-b bg-kumo-base">
 				<Tabs
-					value={activeTab}
+					value={shownTab}
 					onValueChange={setActiveTab}
 					className="w-fit"
 					tabs={[
@@ -654,20 +660,24 @@ export default function AppView() {
 								</span>
 							),
 						},
-						{
-							value: 'code',
-							label: (
-								<span className="inline-flex items-center gap-1.5">
-									<Code2 className="size-3.5" />
-									Code
-									{files.length > 0 && (
-										<span className="text-kumo-subtle tabular-nums">
-											{files.length}
-										</span>
-									)}
-								</span>
-							),
-						},
+						...(app.codeVisible
+							? [
+									{
+										value: 'code',
+										label: (
+											<span className="inline-flex items-center gap-1.5">
+												<Code2 className="size-3.5" />
+												Code
+												{files.length > 0 && (
+													<span className="text-kumo-subtle tabular-nums">
+														{files.length}
+													</span>
+												)}
+											</span>
+										),
+									},
+								]
+							: []),
 						{
 							value: 'prompt',
 							label: (
@@ -720,22 +730,24 @@ export default function AppView() {
 						</>
 					)}
 
-					<Button
-						variant="secondary"
-						size="sm"
-						icon={
-							<GitBranch className="size-3.5" weight="duotone" />
-						}
-						onClick={() => setIsGitCloneModalOpen(true)}
-					>
-						Clone
-					</Button>
+					{canClone && (
+						<Button
+							variant="secondary"
+							size="sm"
+							icon={
+								<GitBranch className="size-3.5" weight="duotone" />
+							}
+							onClick={() => setIsGitCloneModalOpen(true)}
+						>
+							Clone
+						</Button>
+					)}
 				</div>
 			</div>
 
 			{/* Full-bleed workspace */}
 			<div className="flex-1 min-h-0 flex flex-col">
-				{activeTab === 'preview' && (
+				{shownTab === 'preview' && (
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 						<div className="shrink-0 flex items-center gap-2 px-3 py-2 border-b border-kumo-line bg-kumo-elevated/40">
 							<span className="text-sm font-medium text-text-primary shrink-0">
@@ -845,7 +857,7 @@ export default function AppView() {
 					</div>
 				)}
 
-				{activeTab === 'code' && (
+				{shownTab === 'code' && (
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden">
 						<div className="shrink-0 flex items-center justify-between gap-2 px-3 py-2 border-b border-kumo-line bg-kumo-elevated/40">
 							<div className="min-w-0 flex items-center gap-2">
@@ -936,7 +948,7 @@ export default function AppView() {
 					</div>
 				)}
 
-				{activeTab === 'prompt' && (
+				{shownTab === 'prompt' && (
 					<div className="flex-1 min-h-0 flex flex-col overflow-hidden relative">
 						<div className="flex-1 min-h-0 overflow-y-auto flex items-center justify-center p-6 sm:p-10">
 							{promptText ? (
@@ -1022,7 +1034,7 @@ export default function AppView() {
 				onOpenChange={setIsGitCloneModalOpen}
 				appId={app.id}
 				appTitle={app.title}
-				isPublic={app.visibility === 'public'}
+				isPublic={!app.cloneNeedsToken}
 				isOwner={isOwner}
 			/>
 		</div>
