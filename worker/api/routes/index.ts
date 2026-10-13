@@ -1,6 +1,7 @@
 import { setupAuthRoutes } from './authRoutes';
 import { setupAppRoutes } from './appRoutes';
 import { setupPublishingRoutes } from './publishingRoutes';
+import { setupSitePageRoutes } from './sitePageRoutes';
 import { setupPaymentsRoutes } from './paymentsRoutes';
 import { setupUserRoutes } from './userRoutes';
 import { setupStatsRoutes } from './statsRoutes';
@@ -54,6 +55,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
     
     // Publishing, paid listings and review (before app routes so the visibility route is matched here)
     setupPublishingRoutes(app);
+
+    // Discover product pages
+    setupSitePageRoutes(app);
 
     // Stripe Connect onboarding and webhook
     setupPaymentsRoutes(app);

@@ -22,7 +22,7 @@ import { canReadSource, reuseDecision } from '../../../services/templates/reuse'
 import { toStartedFromView } from './started-from';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
-import { extractRequestMetadata } from '../../../utils/authUtils';
+import { recordVisit } from './record-visit';
 import { buildUserWorkerUrl, buildGitCloneUrl } from 'worker/utils/urls';
 import { JWTUtils } from '../../../utils/jwtUtils';
 import {
@@ -77,15 +77,7 @@ export class AppViewController extends BaseController {
             // Views are deduplicated per viewer per time bucket by AppService,
             // so anonymous viewers are identified by request metadata rather
             // than a unique-per-request token.
-            if (userId) {
-                await appService.recordAppView(appId, { userId });
-            } else {
-                const metadata = extractRequestMetadata(request);
-                await appService.recordAppView(appId, {
-                    ipAddress: metadata.ipAddress,
-                    userAgent: metadata.userAgent,
-                });
-            }
+            await recordVisit(appService, appId, userId, request);
 
             // Try to fetch current agent state to get latest generated code
             let agentSummary: AgentSummary | null = null;

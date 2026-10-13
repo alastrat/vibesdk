@@ -400,3 +400,10 @@ export type {
     GitHubExportOptions,
     GitHubExportResult,
 } from 'worker/services/github/types';
+
+export type {
+    PageCopyDraftData,
+    SitePageCard,
+    SitePageData,
+    SitePageOffer,
+} from 'worker/api/controllers/sitePage/types';
