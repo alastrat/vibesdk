@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkoutDecision, confirmDecision, type CheckoutInput } from './checkout';
+import { checkoutDecision, confirmDecision, confirmResponse, type CheckoutInput } from './checkout';
 import { ALREADY_OWNED_MESSAGE, PAYMENT_INCOMPLETE_MESSAGE, SELLER_NOT_READY_MESSAGE } from './config';
 import { SITE_NOT_YET_AVAILABLE_MESSAGE, SITE_UNAVAILABLE_MESSAGE } from '../templates/reuse';
 import type { StripeCheckoutSession } from './stripe-client';
@@ -74,5 +74,26 @@ describe('confirmDecision', () => {
 			status: 409,
 			error: PAYMENT_INCOMPLETE_MESSAGE,
 		});
+	});
+});
+
+describe('confirmResponse', () => {
+	it('confirms a recorded or already recorded purchase', () => {
+		expect(confirmResponse('recorded')).toEqual({ ok: true });
+		expect(confirmResponse('already-recorded')).toEqual({ ok: true });
+	});
+
+	it('confirms a duplicate payment, because the buyer already owns the site', () => {
+		expect(confirmResponse('duplicate-purchase')).toEqual({ ok: true });
+	});
+
+	it('reports a deleted listing as unavailable', () => {
+		expect(confirmResponse('listing-missing')).toEqual({ ok: false, status: 404, error: SITE_UNAVAILABLE_MESSAGE });
+	});
+
+	it('does not confirm a session that recorded nothing', () => {
+		const incomplete = { ok: false, status: 409, error: PAYMENT_INCOMPLETE_MESSAGE };
+		expect(confirmResponse('not-ours')).toEqual(incomplete);
+		expect(confirmResponse('not-paid')).toEqual(incomplete);
 	});
 });

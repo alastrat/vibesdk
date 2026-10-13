@@ -68,3 +68,20 @@ describe('publishing settings', () => {
 		expect(controller).toContain('hasReuseConsent: state.reuseConsentAt !== null');
 	});
 });
+
+describe('Stripe calls', () => {
+	const controller = source('/worker/api/controllers/publishing/controller.ts');
+	const between = (from: string, to: string): string => controller.slice(controller.indexOf(from), controller.indexOf(to));
+
+	it('answer 502 when publishing, because the payout check calls Stripe', () => {
+		const publishing = between('static async updateVisibility(', 'static async getPublishing(');
+		expect(publishing).toContain('error instanceof StripeApiError');
+		expect(publishing).toContain('STRIPE_REQUEST_FAILED_MESSAGE, 502');
+	});
+
+	it('look up the seller for checkout only after every other rule allows the purchase', () => {
+		const checkout = between('static async purchase(', 'static async confirmPurchase(');
+		expect(checkout.indexOf('checkoutDecision(')).toBeGreaterThan(-1);
+		expect(checkout.indexOf('readySellerAccount(')).toBeGreaterThan(checkout.indexOf('checkoutDecision('));
+	});
+});

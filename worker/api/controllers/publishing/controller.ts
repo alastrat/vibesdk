@@ -32,8 +32,13 @@ import { READ_FAILED_MESSAGE, TemplateSubmissionError, submitTemplateVersion } f
 import { r2TemplateStore } from '../../../services/templates/store';
 import { createTemplateShotCapturer } from '../../../services/templates/capture';
 import { StripeApiError, accountFlags } from '../../../services/payments/stripe-client';
-import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
-import { checkoutDecision, confirmDecision } from '../../../services/payments/checkout';
+import {
+    PAYMENTS_NOT_CONFIGURED_MESSAGE,
+    SELLER_NOT_READY_MESSAGE,
+    STRIPE_REQUEST_FAILED_MESSAGE,
+    stripeFromEnv,
+} from '../../../services/payments/config';
+import { checkoutDecision, confirmDecision, confirmResponse } from '../../../services/payments/checkout';
 import { fulfillCheckoutSession } from '../../../services/payments/fulfill';
 import { platformFeeCents } from '../../../../shared/types/templates';
 import { toOwnerPaidListing } from './publishingDto';
@@ -88,6 +93,10 @@ export class PublishingController extends BaseController {
         } catch (error) {
             if (error instanceof RateLimitExceededError) {
                 return PublishingController.createErrorResponse<PublishSiteData>(error, 429);
+            }
+            if (error instanceof StripeApiError) {
+                this.logger.warn('Stripe payout check failed while publishing', { status: error.status, code: error.code });
+                return PublishingController.createErrorResponse<PublishSiteData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error publishing site', error);
             return PublishingController.createErrorResponse<PublishSiteData>('Failed to update app visibility', 500);
@@ -219,20 +228,19 @@ export class PublishingController extends BaseController {
             const listing = app ? await listings.getListingByApp(appId) : null;
             const isCreator = app?.userId === user.id;
             const hasPurchase = listing ? await listings.hasPurchase(listing.id, user.id) : false;
-            const sellerAccountId =
-                listing && !isCreator && !hasPurchase ? await PublishingController.readySellerAccount(env, listing.creatorUserId) : null;
-            const decision = checkoutDecision({
+            // The seller lookup calls Stripe, so it waits until every other rule allows the purchase.
+            const refusal = checkoutDecision({
                 appPublic: app?.visibility === 'public',
                 removed: app?.removedFromDiscoverAt != null,
                 listing: listing ? { status: listing.status, currentVersionId: listing.currentVersionId, priceCents: listing.priceCents } : null,
                 isCreator,
                 hasPurchase,
-                sellerTransfersActive: sellerAccountId !== null,
+                sellerTransfersActive: true,
             });
-            if (!decision.ok) return PublishingController.createErrorResponse<SiteCheckoutData>(decision.error, decision.status);
-            if (!app || !listing || !listing.currentVersionId || !sellerAccountId) {
-                throw new Error('Checkout decision allowed an incomplete listing');
-            }
+            if (!refusal.ok) return PublishingController.createErrorResponse<SiteCheckoutData>(refusal.error, refusal.status);
+            if (!app || !listing || !listing.currentVersionId) throw new Error('Checkout decision allowed an incomplete listing');
+            const sellerAccountId = await PublishingController.readySellerAccount(env, listing.creatorUserId);
+            if (!sellerAccountId) return PublishingController.createErrorResponse<SiteCheckoutData>(SELLER_NOT_READY_MESSAGE, 409);
             const origin = new URL(request.url).origin;
             const session = await stripe.createCheckoutSession({
                 productName: app.title,
@@ -283,7 +291,7 @@ export class PublishingController extends BaseController {
             const decision = confirmDecision(session, { appId: context.pathParams.id, userId: context.user!.id });
             if (!decision.ok) return PublishingController.createErrorResponse<ConfirmPurchaseData>(decision.error, decision.status);
             const listings = new TemplateService(env);
-            await fulfillCheckoutSession(
+            const result = await fulfillCheckoutSession(
                 {
                     listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
                     recordStripePurchase: (record) => listings.recordStripePurchase(record),
@@ -291,6 +299,16 @@ export class PublishingController extends BaseController {
                 },
                 session,
             );
+            const payment = { sessionId: session.id, paymentIntentId: session.payment_intent };
+            if (result === 'duplicate-purchase') {
+                this.logger.warn('The buyer paid twice for one site; the second payment needs a refund', payment);
+            } else if (result === 'listing-missing') {
+                this.logger.error('The buyer paid for a listing that no longer exists; the payment needs a refund', payment);
+            } else if (result === 'not-ours' || result === 'not-paid') {
+                this.logger.error('A confirmed Checkout session could not be recorded', { ...payment, result });
+            }
+            const response = confirmResponse(result);
+            if (!response.ok) return PublishingController.createErrorResponse<ConfirmPurchaseData>(response.error, response.status);
             return PublishingController.createSuccessResponse<ConfirmPurchaseData>({ purchased: true });
         } catch (error) {
             if (error instanceof StripeApiError) {
