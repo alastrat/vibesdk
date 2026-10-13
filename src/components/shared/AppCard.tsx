@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn } from '@cloudflare/kumo';
+import { Badge, cn } from '@cloudflare/kumo';
 import { motion } from 'framer-motion';
 import {
 	Star,
@@ -16,10 +16,11 @@ import {
 } from 'lucide-react';
 
 import { formatDistanceToNow } from 'date-fns';
-import type {
-	AppWithFavoriteStatus,
-	AppWithUserAndStats,
-	EnhancedAppData,
+import {
+	formatTemplatePrice,
+	type AppWithFavoriteStatus,
+	type AppWithUserAndStats,
+	type EnhancedAppData,
 } from '@/api-types';
 import { AppActionsDropdown } from './AppActionsDropdown';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -226,6 +227,9 @@ const StatsDisplay = ({ stats }: { stats: StatsData }) => (
 	<div className="flex items-center gap-3">
 		<StatItem icon={STATS_ICONS.starCount} value={stats.starCount || 0} />
 		<StatItem icon={STATS_ICONS.viewCount} value={stats.viewCount || 0} />
+		<span title="Apps started from this site" className="inline-flex">
+			<StatItem icon={STATS_ICONS.forkCount} value={stats.forkCount || 0} />
+		</span>
 	</div>
 );
 
@@ -532,6 +536,12 @@ export const AppCard = React.memo<AppCardProps>(
 								<div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-full bg-kumo-base/90 px-2 py-1 text-kumo-subtle shadow-sm ring-1 ring-kumo-hairline backdrop-blur-md">
 									{getVisibilityIcon(app.visibility)}
 								</div>
+							)}
+
+							{'priceCents' in app && typeof app.priceCents === 'number' && (
+								<Badge variant="info" className="absolute right-3 top-3">
+									{formatTemplatePrice(app.priceCents)}
+								</Badge>
 							)}
 						</div>
 

@@ -1,4 +1,4 @@
-import type { RouteObject } from 'react-router';
+import { Navigate, type RouteObject } from 'react-router';
 
 import App from './App';
 import Home from './routes/home';
@@ -8,9 +8,7 @@ import Settings from './routes/settings/index';
 import AppsPage from './routes/apps';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
-import TemplatesPage from './routes/templates';
-import TemplateDetailPage from './routes/templates/detail';
-import AdminTemplatesPage from './routes/admin/templates';
+import AdminReviewsPage from './routes/admin/reviews';
 import { ProtectedRoute } from './routes/protected-route';
 
 const routes = [
@@ -60,17 +58,21 @@ const routes = [
 			},
 			{
 				path: 'templates',
-				Component: TemplatesPage,
+				element: <Navigate to="/discover" replace />,
 			},
 			{
 				path: 'templates/:slug',
-				Component: TemplateDetailPage,
+				element: <Navigate to="/discover" replace />,
 			},
 			{
 				path: 'admin/templates',
+				element: <Navigate to="/admin/reviews" replace />,
+			},
+			{
+				path: 'admin/reviews',
 				element: (
 					<ProtectedRoute>
-						<AdminTemplatesPage />
+						<AdminReviewsPage />
 					</ProtectedRoute>
 				),
 			},

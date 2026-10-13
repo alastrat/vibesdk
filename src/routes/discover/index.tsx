@@ -4,7 +4,21 @@ import { usePaginatedApps } from '@/hooks/use-paginated-apps';
 import { AppListContainer } from '@/components/shared/AppListContainer';
 import { AppFiltersForm } from '@/components/shared/AppFiltersForm';
 import { AppSortTabs } from '@/components/shared/AppSortTabs';
-import type { AppSortOption } from '@/api-types';
+import {
+	DISCOVER_PRICING_FILTERS,
+	TEMPLATE_CATEGORIES,
+	TEMPLATE_CATEGORY_LABELS,
+	type AppSortOption,
+	type DiscoverPricing,
+	type TemplateCategory,
+} from '@/api-types';
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from '@/components/ui/select';
 import { GlobeIcon } from '@phosphor-icons/react';
 import { BrandEmphasisIcon } from '@/components/shared/BrandEmphasisIcon';
 import { pageTitle } from '@/brand';
@@ -32,6 +46,17 @@ export default function DiscoverPage() {
 			: savedSort && allowedSorts.includes(savedSort)
 				? savedSort
 				: 'popular';
+
+	const categoryParam = searchParams.get('category');
+	const category: TemplateCategory | null = TEMPLATE_CATEGORIES.find((value) => value === categoryParam) ?? null;
+	const pricing: DiscoverPricing =
+		DISCOVER_PRICING_FILTERS.find((value) => value === searchParams.get('pricing')) ?? 'all';
+	const setFilter = (key: 'category' | 'pricing', value: string) => {
+		const next = new URLSearchParams(searchParams);
+		if (value === 'all') next.delete(key);
+		else next.set(key, value);
+		setSearchParams(next, { replace: true });
+	};
 
 	const {
 		// Filter state
@@ -65,6 +90,8 @@ export default function DiscoverPage() {
 		defaultSort: initialSort,
 		defaultPeriod: 'week',
 		limit: 20,
+		category,
+		pricing,
 	});
 
 	return (
@@ -87,7 +114,7 @@ export default function DiscoverPage() {
 							Discover
 						</h1>
 						<p className="text-kumo-subtle text-lg font-funky-mono tracking-tight">
-							Explore apps built by the community
+							Explore sites built by the community, and start your own from any of them
 						</p>
 					</div>
 
@@ -105,6 +132,32 @@ export default function DiscoverPage() {
 							onPeriodChange={handlePeriodChange}
 							sortBy={sortBy}
 						/>
+
+						<div className="flex gap-2">
+							<Select value={category ?? 'all'} onValueChange={(value) => setFilter('category', value)}>
+								<SelectTrigger aria-label="Category" className="w-44">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">All categories</SelectItem>
+									{TEMPLATE_CATEGORIES.map((value) => (
+										<SelectItem key={value} value={value}>
+											{TEMPLATE_CATEGORY_LABELS[value]}
+										</SelectItem>
+									))}
+								</SelectContent>
+							</Select>
+							<Select value={pricing} onValueChange={(value) => setFilter('pricing', value)}>
+								<SelectTrigger aria-label="Price" className="w-32">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="all">Any price</SelectItem>
+									<SelectItem value="free">Free</SelectItem>
+									<SelectItem value="paid">Paid</SelectItem>
+								</SelectContent>
+							</Select>
+						</div>
 
 						{/* Sort Tabs */}
 						<AppSortTabs
