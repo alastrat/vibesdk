@@ -40,8 +40,9 @@ describe('one Discover gallery', () => {
 		expect(strip).toContain('to={`/discover/${app.id}`}');
 	});
 
-	it('opens product pages from Discover', () => {
+	it('opens product pages from Discover and the home page community cards', () => {
 		expect(source('/src/routes/discover/index.tsx')).toContain('navigate(`/discover/${appId}`)');
+		expect(source('/src/routes/home.tsx')).toContain('navigate(`/discover/${app.id}`)');
 	});
 
 	it('redirects the old template URLs and drops the Templates entry', () => {

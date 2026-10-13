@@ -345,7 +345,7 @@ export default function Home() {
 												key={app.id}
 												app={app}
 												onClick={() =>
-													navigate(`/app/${app.id}`)
+													navigate(`/discover/${app.id}`)
 												}
 												showStats={true}
 												showUser={true}
