@@ -11,6 +11,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { usePublishSite, useSitePublishing } from '@/hooks/use-publishing';
+import { savedListingPrice } from '@/lib/paid-listing-display';
 import {
 	formatTemplatePrice,
 	TEMPLATE_CATEGORIES,
@@ -91,13 +92,6 @@ function PublishDialogBody({ appId, pending, onSubmit }: PublishDialogBodyProps)
 	);
 }
 
-/** The price the owner last asked for, so reopening the dialog never resets a paid site to free. */
-function savedPrice(data: SitePublishingData): number {
-	const listing = data.listing;
-	if (!listing || listing.status !== 'listed') return 0;
-	return listing.versions[0]?.priceCents ?? listing.approvedPriceCents ?? 0;
-}
-
 interface PublishFormProps {
 	data: SitePublishingData;
 	pending: boolean;
@@ -108,7 +102,7 @@ interface PublishFormProps {
 function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 	const isPublic = data.visibility === 'public';
 	const [category, setCategory] = useState<TemplateCategory | typeof NO_CATEGORY>(data.category ?? NO_CATEGORY);
-	const [priceCents, setPriceCents] = useState<number>(savedPrice(data));
+	const [priceCents, setPriceCents] = useState<number>(savedListingPrice(data.listing));
 	// An already-public site was published with consent; changing its settings keeps it.
 	const [consent, setConsent] = useState(isPublic);
 

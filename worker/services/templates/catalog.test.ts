@@ -6,6 +6,7 @@ import {
 	isTemplateCategory,
 	isTemplatePrice,
 	isTemplateShotKind,
+	paidUpdatePrice,
 	parseRejectionReason,
 	purchaseDecision,
 	supersededVersionId,
@@ -66,6 +67,27 @@ describe('version state rules', () => {
 		expect(supersededVersionId('v1', 'v2')).toBe('v1');
 		expect(supersededVersionId('v2', 'v2')).toBeNull();
 		expect(supersededVersionId(null, 'v2')).toBeNull();
+	});
+});
+
+describe('paidUpdatePrice', () => {
+	it('keeps the approved price after a higher price is rejected', () => {
+		expect(
+			paidUpdatePrice({ currentVersionId: 'v1', priceCents: 1900 }, [
+				{ status: 'rejected', priceCents: 4900 },
+				{ status: 'approved', priceCents: 1900 },
+			]),
+		).toBe(1900);
+	});
+
+	it('asks the newest price again before the first approval', () => {
+		expect(paidUpdatePrice({ currentVersionId: null, priceCents: 0 }, [{ status: 'rejected', priceCents: 4900 }])).toBe(
+			4900,
+		);
+	});
+
+	it('falls back to the listing price when there are no versions', () => {
+		expect(paidUpdatePrice({ currentVersionId: null, priceCents: 0 }, [])).toBe(0);
 	});
 });
 

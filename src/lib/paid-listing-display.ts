@@ -41,6 +41,16 @@ export function paidListingStatusView(listing: OwnerPaidListing): PaidListingSta
 	return { label: 'Not submitted', variant: 'secondary', detail: null, pendingVersionId: null };
 }
 
+/**
+ * The price the publish dialog starts from: the one in review, else the approved one, else the newest asked.
+ * Reopening the dialog never resets a paid site to free or back to a rejected price.
+ */
+export function savedListingPrice(listing: OwnerPaidListing | null): number {
+	if (!listing || listing.status !== 'listed') return 0;
+	const pending = listing.versions.find((version) => version.status === 'pending');
+	return pending?.priceCents ?? listing.approvedPriceCents ?? listing.versions[0]?.priceCents ?? 0;
+}
+
 export function formatFileSize(bytes: number): string {
 	if (bytes < 1024) return `${bytes} B`;
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

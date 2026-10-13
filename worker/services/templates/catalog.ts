@@ -72,6 +72,19 @@ export function parseRejectionReason(body: unknown): Validation<string> {
 	return { ok: true, value: reason };
 }
 
+/**
+ * The price a paid update asks for: the approved price once there is one, so a
+ * rejected higher price is never resubmitted; before that, the newest asked price.
+ * `versions` is newest first.
+ */
+export function paidUpdatePrice(
+	listing: { currentVersionId: string | null; priceCents: number },
+	versions: Array<{ status: TemplateVersionStatus; priceCents: number }>,
+): number {
+	if (listing.currentVersionId !== null) return listing.priceCents;
+	return versions[0]?.priceCents ?? listing.priceCents;
+}
+
 /** The version an approval supersedes: the listing's current one, when it differs. */
 export function supersededVersionId(currentVersionId: string | null, approvedVersionId: string): string | null {
 	return currentVersionId && currentVersionId !== approvedVersionId ? currentVersionId : null;

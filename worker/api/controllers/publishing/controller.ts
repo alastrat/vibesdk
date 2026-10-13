@@ -13,7 +13,13 @@ import { RateLimitExceededError } from 'shared/types/errors';
 import { getAgentStub, getAgentStubLightweight, getSpaceTemplateStub, type SpaceTemplateStub } from '../../../agents';
 import type { TemplateSource } from '../../../agents/core/types';
 import { generateId } from '../../../utils/idGenerator';
-import { VERSION_IN_REVIEW_ERROR, canSubmitNewVersion, canWithdraw, purchaseDecision } from '../../../services/templates/catalog';
+import {
+    VERSION_IN_REVIEW_ERROR,
+    canSubmitNewVersion,
+    canWithdraw,
+    paidUpdatePrice,
+    purchaseDecision,
+} from '../../../services/templates/catalog';
 import {
     NOT_DEPLOYED_REASON,
     PUBLISHING_CHECK_FAILED_MESSAGE,
@@ -140,7 +146,7 @@ export class PublishingController extends BaseController {
             if (!source) {
                 return PublishingController.createErrorResponse<PaidVersionActionData>(NOT_DEPLOYED_REASON, 400);
             }
-            const priceCents = versions[0]?.priceCents ?? listing.priceCents;
+            const priceCents = paidUpdatePrice(listing, versions);
             const versionId = await PublishingController.submitVersion(
                 env,
                 context,

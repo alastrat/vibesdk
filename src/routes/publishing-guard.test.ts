@@ -28,6 +28,12 @@ describe('publishing a site', () => {
 		expect(dialog).toContain('disabled={!consent}');
 	});
 
+	it('starts the price from the shared rule that skips rejected prices', () => {
+		const dialog = source('/src/components/publishing/PublishDialog.tsx');
+		expect(dialog).toContain('savedListingPrice(data.listing)');
+		expect(dialog).not.toContain('function savedPrice');
+	});
+
 	it('routes every Make public control through the dialog', () => {
 		expect(source('/src/routes/app/index.tsx')).toContain('<PublishDialog');
 		expect(source('/src/routes/app/index.tsx')).not.toContain('useUpdateAppVisibility');

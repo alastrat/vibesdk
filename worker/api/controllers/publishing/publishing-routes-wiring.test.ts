@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/worker/api/routes/publishingRoutes.ts', '/worker/api/routes/index.ts', '/worker/api/routes/appRoutes.ts'],
+	[
+		'/worker/api/routes/publishingRoutes.ts',
+		'/worker/api/routes/index.ts',
+		'/worker/api/routes/appRoutes.ts',
+		'/worker/api/controllers/publishing/controller.ts',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -39,5 +44,13 @@ describe('publishing routes', () => {
 		expect(index.indexOf('setupPublishingRoutes(app)')).toBeGreaterThan(-1);
 		expect(index.indexOf('setupPublishingRoutes(app)')).toBeLessThan(index.indexOf('setupAppRoutes(app)'));
 		expect(index).not.toContain('setupTemplateRoutes');
+	});
+});
+
+describe('paid updates', () => {
+	it('resubmit the approved price, never a rejected one', () => {
+		const controller = source('/worker/api/controllers/publishing/controller.ts');
+		expect(controller).toContain('const priceCents = paidUpdatePrice(listing, versions);');
+		expect(controller).not.toContain('versions[0]?.priceCents');
 	});
 });
