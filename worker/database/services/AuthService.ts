@@ -28,6 +28,7 @@ import {
 import { mapUserResponse, validateRedirectUrl, enforceAllowedEmail } from '../../utils/authUtils';
 import { createLogger } from '../../logger';
 import { validateEmail, validatePassword } from '../../utils/validationUtils';
+import { isPlatformAdminEmail } from '../../services/auth/admin-access';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
 
@@ -102,6 +103,16 @@ export class AuthService extends BaseService {
                 );
             }
             
+            // Password sign-up marks the email verified unchecked, so an admin
+            // email must be claimed through a provider that verifies it.
+            if (isPlatformAdminEmail(data.email)) {
+                throw new SecurityError(
+                    SecurityErrorType.INVALID_INPUT,
+                    'Sign in with Google or GitHub to use this email',
+                    400
+                );
+            }
+
             // Validate password using centralized utility
             const passwordValidation = validatePassword(data.password, undefined, {
                 email: data.email,

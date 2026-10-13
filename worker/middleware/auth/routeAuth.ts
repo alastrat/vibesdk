@@ -319,8 +319,9 @@ export async function checkAppOwnership(user: AuthUser, params: Record<string, s
 }
 
 /**
- * Check the platform admin role in D1. Read on every request, so a role
- * change takes effect without a new session.
+ * Check platform admin access in D1: the admin role, or a Google or GitHub
+ * identity that verified a platform admin email. Read on every request, so a
+ * role change or an unlinked identity takes effect without a new session.
  */
 export async function checkAdminRole(user: AuthUser, env: Env): Promise<boolean> {
     try {

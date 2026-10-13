@@ -67,16 +67,19 @@ export class UserService extends BaseService {
         return row?.role ?? null;
     }
 
-    /** Admin by role, or by a provider-verified sign-in with a platform admin email. */
+    /** Admin by role, or by a Google or GitHub sign-in that verified a platform admin email. */
     async isPlatformAdmin(userId: string): Promise<boolean> {
-        const [role, identities] = await Promise.all([
-            this.getRole(userId),
-            this.database
-                .select({ email: schema.userOauthIdentities.email, emailVerified: schema.userOauthIdentities.emailVerified })
-                .from(schema.userOauthIdentities)
-                .where(eq(schema.userOauthIdentities.userId, userId))
-                .all(),
-        ]);
+        const role = await this.getRole(userId);
+        if (role === 'admin') return true;
+        const identities = await this.database
+            .select({
+                provider: schema.userOauthIdentities.provider,
+                email: schema.userOauthIdentities.email,
+                emailVerified: schema.userOauthIdentities.emailVerified,
+            })
+            .from(schema.userOauthIdentities)
+            .where(eq(schema.userOauthIdentities.userId, userId))
+            .all();
         return isPlatformAdminDecision(role, identities);
     }
 
