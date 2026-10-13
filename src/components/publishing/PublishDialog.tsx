@@ -10,10 +10,12 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useStartStripeOnboarding, useStripeConnectStatus } from '@/hooks/use-payments';
 import { usePublishSite, useSitePublishing } from '@/hooks/use-publishing';
 import { savedListingPrice } from '@/lib/paid-listing-display';
 import {
 	formatTemplatePrice,
+	PLATFORM_FEE_PERCENT,
 	TEMPLATE_CATEGORIES,
 	TEMPLATE_CATEGORY_LABELS,
 	TEMPLATE_PRICE_OPTIONS_CENTS,
@@ -105,6 +107,10 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 	const [priceCents, setPriceCents] = useState<number>(savedListingPrice(data.listing));
 	// Changing the settings of a site published with consent keeps it; a site public before consent existed must tick it.
 	const [consent, setConsent] = useState(data.visibility === 'public' && data.hasReuseConsent);
+	const paid = priceCents > 0;
+	const payouts = useStripeConnectStatus(paid);
+	const onboarding = useStartStripeOnboarding();
+	const sellerReady = !paid || payouts.data?.transfersActive === true;
 
 	const publish = () =>
 		onSubmit({
@@ -160,11 +166,32 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 					</Select>
 				</div>
 			</div>
-			{priceCents > 0 && (
+			{paid && (
 				<p className="text-xs text-kumo-subtle">
-					An admin reviews the price before anyone can use your site. Payments are in test mode, so buyers aren't
-					charged yet.
+					An admin reviews the price before anyone can use your site. Estori keeps {PLATFORM_FEE_PERCENT}% of each
+					sale.
 				</p>
+			)}
+			{paid && payouts.data && !payouts.data.configured && (
+				<p className="text-sm text-kumo-subtle">Payments aren't set up on this deployment.</p>
+			)}
+			{paid && payouts.data?.configured && !payouts.data.transfersActive && (
+				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
+					<span className="text-sm text-kumo-default">Connect Stripe to sell this site</span>
+					<Button
+						size="sm"
+						variant="secondary"
+						loading={onboarding.isPending}
+						onClick={() =>
+							onboarding.mutate(undefined, {
+								onSuccess: (link) => window.location.assign(link.url),
+								onError: (error) => toast.error(error.message),
+							})
+						}
+					>
+						{payouts.data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
+					</Button>
+				</div>
 			)}
 			<label className="flex items-start gap-2 text-sm text-kumo-default">
 				<Checkbox checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} />
@@ -176,7 +203,7 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 						Make private
 					</Button>
 				)}
-				<Button variant="primary" loading={pending} disabled={!consent} onClick={publish}>
+				<Button variant="primary" loading={pending} disabled={!consent || !sellerReady} onClick={publish}>
 					{isPublic ? 'Save' : 'Publish'}
 				</Button>
 			</div>

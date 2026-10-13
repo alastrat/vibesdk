@@ -56,3 +56,8 @@ export function formatFileSize(bytes: number): string {
 	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
 	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
+
+/** A money amount in dollars; zero reads "$0" because formatTemplatePrice(0) is "Free". */
+export function formatMoney(cents: number): string {
+	return cents === 0 ? '$0' : formatTemplatePrice(cents);
+}

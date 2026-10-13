@@ -13,6 +13,7 @@ import {
 	Text,
 } from '@cloudflare/kumo';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { PayoutsCard } from '@/components/payments/PayoutsCard';
 import { PaidListingsList } from '@/components/publishing/PaidListingsList';
 import {
 	CalendarBlank,
@@ -30,7 +31,7 @@ import {
 	Trophy,
 	X,
 } from '@phosphor-icons/react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { capitalizeFirstLetter, getInitials } from '@/lib/utils';
 import { formatNumber } from '@/utils/analytics';
 import { format } from 'date-fns';
@@ -67,9 +68,23 @@ const STATS = [
 	},
 ] as const;
 
+const PROFILE_TABS = [
+	{ value: 'about', label: 'About' },
+	{ value: 'apps', label: 'Apps' },
+	{ value: 'paid', label: 'Paid listings' },
+	{ value: 'achievements', label: 'Achievements' },
+	{ value: 'activity', label: 'Activity' },
+] as const;
+
+/** The tab named by `?tab=`, so Stripe's return URL opens Paid listings. */
+function tabFromSearch(value: string | null): string {
+	return PROFILE_TABS.find((tab) => tab.value === value)?.value ?? 'about';
+}
+
 export default function Profile() {
 	const { user } = useAuth();
 	const navigate = useNavigate();
+	const [searchParams, setSearchParams] = useSearchParams();
 	const [isEditing, setIsEditing] = React.useState(false);
 	const [profileData, setProfileData] = React.useState({
 		displayName: user?.displayName || '',
@@ -77,7 +92,16 @@ export default function Profile() {
 		bio: user?.bio || '',
 		timezone: user?.timezone || 'UTC',
 	});
-	const [activeTab, setActiveTab] = React.useState('about');
+	const [activeTab, setActiveTab] = React.useState(() => tabFromSearch(searchParams.get('tab')));
+
+	// Back from Stripe onboarding: the payouts card fetches fresh status on mount, so drop the marker and keep the tab.
+	React.useEffect(() => {
+		const stripe = searchParams.get('stripe');
+		if (stripe !== 'return' && stripe !== 'refresh') return;
+		const next = new URLSearchParams(searchParams);
+		next.delete('stripe');
+		setSearchParams(next, { replace: true });
+	}, [searchParams, setSearchParams]);
 
 	// Sync the form from the cached user, but never while editing: a background
 	// session refetch would otherwise overwrite unsaved input mid-edit.
@@ -278,13 +302,7 @@ export default function Profile() {
 						value={activeTab}
 						onValueChange={handleTabChange}
 						className="w-fit"
-						tabs={[
-							{ value: 'about', label: 'About' },
-							{ value: 'apps', label: 'Apps' },
-							{ value: 'paid', label: 'Paid listings' },
-							{ value: 'achievements', label: 'Achievements' },
-							{ value: 'activity', label: 'Activity' },
-						]}
+						tabs={[...PROFILE_TABS]}
 					/>
 
 					{activeTab === 'about' && (
@@ -508,7 +526,10 @@ export default function Profile() {
 								Paid listings
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
-								<PaidListingsList />
+								<div className="grid gap-4">
+									<PayoutsCard />
+									<PaidListingsList />
+								</div>
 							</LayerCard.Primary>
 						</LayerCard>
 					)}

@@ -2,7 +2,7 @@ import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge, Button, Empty, Loader } from '@cloudflare/kumo';
 import { useMyPaidListings, useWithdrawPaidVersion } from '@/hooks/use-publishing';
-import { paidListingStatusView } from '@/lib/paid-listing-display';
+import { formatMoney, paidListingStatusView } from '@/lib/paid-listing-display';
 import type { MyPaidListing } from '@/api-types';
 
 /** The profile's list of the owner's paid sites, with review status and buyers. */
@@ -44,7 +44,8 @@ function PaidListingRow({ listing }: { listing: MyPaidListing }) {
 					{listing.appTitle}
 				</Link>
 				<p className="text-sm text-kumo-subtle">
-					{listing.buyerCount} {listing.buyerCount === 1 ? 'buyer' : 'buyers'}
+					{listing.buyerCount} {listing.buyerCount === 1 ? 'buyer' : 'buyers'} · Sales {formatMoney(listing.grossCents)} ·
+					Estori fee {formatMoney(listing.feeCents)} · You earn {formatMoney(listing.earningsCents)}
 					{view?.detail ? ` · ${view.detail}` : ''}
 				</p>
 			</div>

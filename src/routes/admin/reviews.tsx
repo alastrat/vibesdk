@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import { Badge, Button, Empty, InputArea, LayerCard, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
 import { usePendingReviews, useReviewVersion, useReviewVersionFile, useReviewVersionFiles } from '@/hooks/use-publishing';
-import { formatFileSize } from '@/lib/paid-listing-display';
+import { useAdminSales } from '@/hooks/use-payments';
+import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
 import { formatTemplatePrice, SecurityError, SecurityErrorType, type PendingReview } from '@/api-types';
 
 function isForbidden(error: unknown): boolean {
@@ -35,6 +36,7 @@ export default function AdminReviewsPage() {
 						) : (
 							<Empty title="Nothing to review" description="New paid sites and updates will show up here." />
 						)}
+						<SalesSection />
 					</>
 				) : pending.isLoading ? (
 					<div className="flex justify-center py-16">
@@ -55,6 +57,48 @@ export default function AdminReviewsPage() {
 				)}
 			</div>
 		</div>
+	);
+}
+
+/** The latest Stripe sales and Estori's total fees. */
+function SalesSection() {
+	const sales = useAdminSales();
+	if (sales.isLoading) return <Loader />;
+	if (sales.isError || !sales.data) return null;
+	const { sales: rows, totalFeesCents } = sales.data;
+	return (
+		<section className="grid gap-3 pt-4">
+			<div className="grid gap-1">
+				<h2 className="text-xl font-semibold text-kumo-strong">Sales</h2>
+				<p className="text-sm text-kumo-subtle">Estori fees so far: {formatMoney(totalFeesCents)}</p>
+			</div>
+			{rows.length === 0 ? (
+				<Empty size="sm" title="No sales yet" description="Paid sites bought through Stripe show up here." />
+			) : (
+				rows.map((sale) => (
+					<div
+						key={sale.purchaseId}
+						className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline"
+					>
+						{sale.appId && sale.appTitle ? (
+							<Link
+								to={`/app/${sale.appId}`}
+								className="text-sm font-medium text-kumo-default underline-offset-2 hover:underline"
+							>
+								{sale.appTitle}
+							</Link>
+						) : (
+							<span className="text-sm font-medium text-kumo-default">Deleted site</span>
+						)}
+						<span className="text-sm text-kumo-subtle">
+							{sale.buyerEmail ?? 'Unknown buyer'} · {formatMoney(sale.priceCents)} · fee{' '}
+							{formatMoney(sale.platformFeeCents)}
+							{sale.soldAt ? ` · ${new Date(sale.soldAt).toLocaleString()}` : ''}
+						</span>
+					</div>
+				))
+			)}
+		</section>
 	);
 }
 

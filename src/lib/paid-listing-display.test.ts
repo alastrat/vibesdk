@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { OwnerPaidListing, PaidListingVersionView } from '@/api-types';
-import { formatFileSize, paidListingStatusView, savedListingPrice } from './paid-listing-display';
+import { formatFileSize, formatMoney, paidListingStatusView, savedListingPrice } from './paid-listing-display';
 
 function version(overrides: Partial<PaidListingVersionView>): PaidListingVersionView {
 	return {
@@ -100,5 +100,16 @@ describe('formatFileSize', () => {
 		expect(formatFileSize(512)).toBe('512 B');
 		expect(formatFileSize(2048)).toBe('2.0 KB');
 		expect(formatFileSize(3 * 1024 * 1024)).toBe('3.0 MB');
+	});
+});
+
+describe('formatMoney', () => {
+	it('reads zero as $0 rather than Free', () => {
+		expect(formatMoney(0)).toBe('$0');
+	});
+
+	it('formats whole and fractional dollar amounts', () => {
+		expect(formatMoney(2900)).toBe('$29');
+		expect(formatMoney(145)).toBe('$1.45');
 	});
 });

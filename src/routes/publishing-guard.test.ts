@@ -25,7 +25,7 @@ describe('publishing a site', () => {
 		expect(dialog).toContain('TEMPLATE_PRICE_OPTIONS_CENTS.map');
 		expect(dialog).toContain('TEMPLATE_CATEGORIES.map');
 		expect(dialog).toContain("onSubmit({ visibility: 'private' })");
-		expect(dialog).toContain('disabled={!consent}');
+		expect(dialog).toContain('disabled={!consent || !sellerReady}');
 	});
 
 	it('starts the price from the shared rule that skips rejected prices', () => {
