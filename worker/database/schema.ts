@@ -284,6 +284,7 @@ export const templateVersions = sqliteTable('template_versions', {
     totalBytes: integer('total_bytes').notNull(),
     desktopShotKey: text('desktop_shot_key').notNull(),
     mobileShotKey: text('mobile_shot_key').notNull(),
+    pageCopy: text('page_copy'), // Page text sent for review with this version (JSON)
     // The price this submission asks for; approval copies it to the listing.
     priceCents: integer('price_cents').notNull(),
     status: text('status', { enum: TEMPLATE_VERSION_STATUSES }).notNull().default('pending'),
@@ -326,6 +327,13 @@ export const templatePurchases = sqliteTable('template_purchases', {
     // SQLite cannot add a UNIQUE column with ALTER TABLE, so uniqueness comes from this index.
     checkoutSessionIdx: uniqueIndex('template_purchases_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),
 }));
+
+/** A site's product page text as the creator last saved it (JSON). Paid sites show their approved version's text instead. */
+export const sitePages = sqliteTable('site_pages', {
+    appId: text('app_id').primaryKey().references(() => apps.id, { onDelete: 'cascade' }),
+    copy: text('copy').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
 
 /**
  * Stripe Connect accounts - the Express account a seller is paid through,
@@ -796,4 +804,5 @@ export type TemplateVersion = typeof templateVersions.$inferSelect;
 export type NewTemplateVersion = typeof templateVersions.$inferInsert;
 export type TemplatePurchase = typeof templatePurchases.$inferSelect;
 export type NewTemplatePurchase = typeof templatePurchases.$inferInsert;
+export type SitePage = typeof sitePages.$inferSelect;
 export type StripeConnectAccount = typeof stripeConnectAccounts.$inferSelect;
