@@ -267,6 +267,18 @@ export {
 	formatTemplatePrice,
 	platformFeeCents,
 } from '../shared/types/templates.js';
+export type {
+	PageCopyValidation,
+	SitePageCopy,
+	SitePageField,
+	SitePageInclude,
+} from '../shared/types/site-page.js';
+export {
+	PAGE_DRAFT_FAILED_MESSAGE,
+	SITE_PAGE_LIMITS,
+	SITE_PAGE_UNAVAILABLE_MESSAGE,
+	validatePageCopy,
+} from '../shared/types/site-page.js';
 
 export type { AIModels } from 'worker/agents/inferutils/config.types';
 // Model selection types
