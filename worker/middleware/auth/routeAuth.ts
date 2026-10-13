@@ -324,7 +324,7 @@ export async function checkAppOwnership(user: AuthUser, params: Record<string, s
  */
 export async function checkAdminRole(user: AuthUser, env: Env): Promise<boolean> {
     try {
-        return (await new UserService(env).getRole(user.id)) === 'admin';
+        return await new UserService(env).isPlatformAdmin(user.id);
     } catch (error) {
         logger.error('Error checking admin role', error);
         return false;

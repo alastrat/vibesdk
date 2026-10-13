@@ -122,7 +122,7 @@ export class AppViewController extends BaseController {
             const [access, startedFromView, canModerate] = await Promise.all([
                 AppViewController.loadListingAccess(env, appResult, userId, isOwner),
                 AppViewController.loadStartedFrom(env, appResult.parentAppId),
-                userId ? new UserService(env).getRole(userId).then((role) => role === 'admin') : Promise.resolve(false),
+                userId ? new UserService(env).isPlatformAdmin(userId) : Promise.resolve(false),
             ]);
             if (behaviorType === 'think' && deployedCommit && !appResult.lastDeployedAt) {
                 ctx.waitUntil(appService.updateApp(appResult.id, { lastDeployedAt: new Date() }));

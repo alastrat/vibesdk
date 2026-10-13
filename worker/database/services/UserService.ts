@@ -8,6 +8,7 @@ import * as schema from '../schema';
 import { eq, and, sql, lt, ne } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import type { UserRole } from '../../../shared/types/templates';
+import { isPlatformAdminDecision } from '../../services/auth/admin-access';
 
 /**
  * User Service Class
@@ -64,6 +65,19 @@ export class UserService extends BaseService {
             .where(eq(schema.users.id, userId))
             .get();
         return row?.role ?? null;
+    }
+
+    /** Admin by role, or by a provider-verified sign-in with a platform admin email. */
+    async isPlatformAdmin(userId: string): Promise<boolean> {
+        const [role, identities] = await Promise.all([
+            this.getRole(userId),
+            this.database
+                .select({ email: schema.userOauthIdentities.email, emailVerified: schema.userOauthIdentities.emailVerified })
+                .from(schema.userOauthIdentities)
+                .where(eq(schema.userOauthIdentities.userId, userId))
+                .all(),
+        ]);
+        return isPlatformAdminDecision(role, identities);
     }
 
     async updateUserActivity(userId: string): Promise<void> {
