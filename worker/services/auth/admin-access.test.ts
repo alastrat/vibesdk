@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+	ADMIN_EMAIL_PROVIDER_MESSAGE,
 	EMAIL_VERIFYING_PROVIDERS,
 	PLATFORM_ADMIN_EMAILS,
 	isPlatformAdminDecision,
 	isPlatformAdminEmail,
+	mayClaimEmailByOAuth,
 } from './admin-access';
 
 describe('isPlatformAdminDecision', () => {
@@ -67,5 +69,27 @@ describe('isPlatformAdminEmail', () => {
 		expect(isPlatformAdminEmail('someone@pluriza.com')).toBe(false);
 		expect(isPlatformAdminEmail('alastrat@pluriza.com.evil.test')).toBe(false);
 		expect(isPlatformAdminEmail('')).toBe(false);
+	});
+});
+
+describe('mayClaimEmailByOAuth', () => {
+	it('lets Google and GitHub claim the admin email, because they verify it', () => {
+		expect(mayClaimEmailByOAuth('google', 'alastrat@pluriza.com')).toBe(true);
+		expect(mayClaimEmailByOAuth('github', 'Alastrat@Pluriza.com')).toBe(true);
+	});
+
+	it('keeps Cloudflare from claiming the admin email, in any case', () => {
+		expect(mayClaimEmailByOAuth('cloudflare', 'alastrat@pluriza.com')).toBe(false);
+		expect(mayClaimEmailByOAuth('cloudflare', ' ALASTRAT@pluriza.com ')).toBe(false);
+	});
+
+	it('lets every provider claim any other email', () => {
+		for (const provider of ['google', 'github', 'cloudflare']) {
+			expect(mayClaimEmailByOAuth(provider, 'someone@pluriza.com')).toBe(true);
+		}
+	});
+
+	it('tells the user which providers can claim the email', () => {
+		expect(ADMIN_EMAIL_PROVIDER_MESSAGE).toBe('Sign in with Google or GitHub to use this email');
 	});
 });

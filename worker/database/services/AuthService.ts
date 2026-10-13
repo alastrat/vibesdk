@@ -28,7 +28,7 @@ import {
 import { mapUserResponse, validateRedirectUrl, enforceAllowedEmail } from '../../utils/authUtils';
 import { createLogger } from '../../logger';
 import { validateEmail, validatePassword } from '../../utils/validationUtils';
-import { isPlatformAdminEmail } from '../../services/auth/admin-access';
+import { ADMIN_EMAIL_PROVIDER_MESSAGE, isPlatformAdminEmail, mayClaimEmailByOAuth } from '../../services/auth/admin-access';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
 
@@ -108,7 +108,7 @@ export class AuthService extends BaseService {
             if (isPlatformAdminEmail(data.email)) {
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
-                    'Sign in with Google or GitHub to use this email',
+                    ADMIN_EMAIL_PROVIDER_MESSAGE,
                     400
                 );
             }
@@ -657,6 +657,16 @@ export class AuthService extends BaseService {
                 );
             }
             return user;
+        }
+
+        // An admin email is claimed only through a provider that verifies it,
+        // so no other provider may create or auto-link an account under it.
+        if (!mayClaimEmailByOAuth(provider, email)) {
+            throw new SecurityError(
+                SecurityErrorType.UNAUTHORIZED,
+                ADMIN_EMAIL_PROVIDER_MESSAGE,
+                403
+            );
         }
 
         // 2. No identity match, but a user already exists with this email (local

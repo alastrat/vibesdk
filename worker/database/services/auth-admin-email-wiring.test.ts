@@ -24,9 +24,28 @@ describe('platform admin email reservation', () => {
 
 	it('refuses password sign-up for a platform admin email, after the format check', () => {
 		expect(register).toContain('isPlatformAdminEmail(data.email)');
-		expect(register).toContain("'Sign in with Google or GitHub to use this email'");
+		expect(register).toContain('ADMIN_EMAIL_PROVIDER_MESSAGE');
 		expect(register.indexOf('validateEmail(data.email)')).toBeLessThan(register.indexOf('isPlatformAdminEmail('));
 		expect(register.indexOf('isPlatformAdminEmail(')).toBeLessThan(register.indexOf('validatePassword('));
+	});
+});
+
+describe('OAuth sign-in of a platform admin email', () => {
+	const oauth = methodBody(source('/worker/database/services/AuthService.ts'), 'private async findOrCreateOAuthUser(');
+
+	it('keeps an already linked identity signing in as before', () => {
+		const identityLookup = oauth.indexOf('eq(schema.userOauthIdentities.providerId, oauthUserInfo.id)');
+		expect(identityLookup).toBeGreaterThan(-1);
+		expect(identityLookup).toBeLessThan(oauth.indexOf('mayClaimEmailByOAuth('));
+		expect(oauth.indexOf('return user;')).toBeLessThan(oauth.indexOf('mayClaimEmailByOAuth('));
+	});
+
+	it('refuses providers that do not verify email before auto-linking by email or creating a user', () => {
+		const guard = oauth.indexOf('if (!mayClaimEmailByOAuth(provider, email))');
+		expect(guard).toBeGreaterThan(-1);
+		expect(guard).toBeLessThan(oauth.indexOf('eq(schema.users.email, email)'));
+		expect(guard).toBeLessThan(oauth.indexOf('this.createOAuthUser('));
+		expect(oauth.slice(guard)).toMatch(/^[^;]*SecurityErrorType\.UNAUTHORIZED,\s*ADMIN_EMAIL_PROVIDER_MESSAGE,\s*403/);
 	});
 });
 
