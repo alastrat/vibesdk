@@ -38,9 +38,20 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
             {
                 listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
                 recordStripePurchase: (record) => listings.recordStripePurchase(record),
+                sessionRecorded: (checkoutSessionId) => listings.hasCheckoutSession(checkoutSessionId),
             },
             object,
         );
+        if (result === 'duplicate-purchase' || result === 'listing-missing') {
+            // Stripe captured the payment but nothing was recorded; a retry cannot fix it, so answer 200 and flag it.
+            logger.warn(`Checkout session paid but not recorded (${result}); refund the payment in the Stripe dashboard`, {
+                sessionId: object.id,
+                paymentIntentId: object.payment_intent,
+                buyerUserId: object.metadata?.buyerUserId,
+                amountCents: object.amount_total,
+            });
+            return;
+        }
         logger.info('Checkout session handled', { id: object.id, result });
         return;
     }

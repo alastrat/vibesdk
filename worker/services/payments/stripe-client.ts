@@ -5,6 +5,9 @@
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
+/** Stripe replays a failed request for 24 hours per idempotency key, so keys rotate every 10 minutes. */
+const IDEMPOTENCY_BUCKET_MS = 600_000;
+
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 
 export class StripeApiError extends Error {
@@ -68,7 +71,7 @@ export interface SellerFlags {
 }
 
 export interface StripeClient {
-	createExpressAccount(input: { email?: string; userId: string }): Promise<StripeAccount>;
+	createExpressAccount(input: { email?: string; userId: string; nowMs: number }): Promise<StripeAccount>;
 	retrieveAccount(accountId: string): Promise<StripeAccount>;
 	createAccountLink(input: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<StripeAccountLink>;
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
@@ -135,8 +138,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 	}
 
 	return {
-		// The per-user key makes a double click create one account; an empty email is left out.
-		createExpressAccount: ({ email, userId }) =>
+		// One key per user and time bucket: a double click makes one account, a later retry is not served a cached error. An empty email is left out.
+		createExpressAccount: ({ email, userId, nowMs }) =>
 			request<StripeAccount>(
 				'POST',
 				'/accounts',
@@ -147,7 +150,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					capabilities: { transfers: { requested: true }, card_payments: { requested: true } },
 					metadata: { estoriUserId: userId },
 				},
-				`connect-account-${userId}`,
+				`connect-account-${userId}-${Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS)}`,
 			),
 		retrieveAccount: (accountId) => request<StripeAccount>('GET', `/accounts/${encodeURIComponent(accountId)}`),
 		createAccountLink: ({ accountId, refreshUrl, returnUrl }) =>

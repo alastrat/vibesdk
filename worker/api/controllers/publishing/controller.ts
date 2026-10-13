@@ -287,6 +287,7 @@ export class PublishingController extends BaseController {
                 {
                     listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
                     recordStripePurchase: (record) => listings.recordStripePurchase(record),
+                    sessionRecorded: (checkoutSessionId) => listings.hasCheckoutSession(checkoutSessionId),
                 },
                 session,
             );

@@ -284,6 +284,15 @@ export class TemplateService extends BaseService {
         return row !== undefined;
     }
 
+    async hasCheckoutSession(checkoutSessionId: string): Promise<boolean> {
+        const row = await this.database
+            .select({ id: schema.templatePurchases.id })
+            .from(schema.templatePurchases)
+            .where(eq(schema.templatePurchases.stripeCheckoutSessionId, checkoutSessionId))
+            .get();
+        return row !== undefined;
+    }
+
     /** Record a paid Stripe Checkout session; false when this session or this buyer's purchase already exists. */
     async recordStripePurchase(input: StripePurchaseRecord): Promise<boolean> {
         const inserted = await this.database

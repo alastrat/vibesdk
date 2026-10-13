@@ -17,15 +17,19 @@ const PAID: StripeCheckoutSession = {
 
 function harness(listingExists = true) {
 	const sessions = new Set<string>();
+	const buyers = new Set<string>();
 	const records: StripePurchaseRecord[] = [];
 	const deps: FulfillDeps = {
 		listingExists: async () => listingExists,
 		recordStripePurchase: async (record) => {
-			if (sessions.has(record.checkoutSessionId)) return false;
+			const buyer = `${record.listingId}:${record.userId}`;
+			if (sessions.has(record.checkoutSessionId) || buyers.has(buyer)) return false;
 			sessions.add(record.checkoutSessionId);
+			buyers.add(buyer);
 			records.push(record);
 			return true;
 		},
+		sessionRecorded: async (checkoutSessionId) => sessions.has(checkoutSessionId),
 	};
 	return { deps, records };
 }
@@ -58,10 +62,22 @@ describe('fulfillCheckoutSession', () => {
 		expect(records).toHaveLength(1);
 	});
 
-	it('ignores unpaid sessions, foreign sessions and deleted listings', async () => {
+	it('ignores unpaid sessions and sessions without our metadata', async () => {
 		expect(await fulfillCheckoutSession(harness().deps, { ...PAID, payment_status: 'unpaid' })).toBe('not-paid');
 		expect(await fulfillCheckoutSession(harness().deps, { ...PAID, metadata: {} })).toBe('not-ours');
-		expect(await fulfillCheckoutSession(harness(false).deps, PAID)).toBe('not-ours');
+	});
+
+	it('flags a paid session whose listing was deleted after checkout', async () => {
+		const { deps, records } = harness(false);
+		expect(await fulfillCheckoutSession(deps, PAID)).toBe('listing-missing');
+		expect(records).toHaveLength(0);
+	});
+
+	it('flags a second paid session for a listing the buyer already owns', async () => {
+		const { deps, records } = harness();
+		expect(await fulfillCheckoutSession(deps, PAID)).toBe('recorded');
+		expect(await fulfillCheckoutSession(deps, { ...PAID, id: 'cs_2', payment_intent: 'pi_2' })).toBe('duplicate-purchase');
+		expect(records).toHaveLength(1);
 	});
 });
 

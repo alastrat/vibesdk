@@ -33,7 +33,7 @@ export class StripeConnectController extends BaseController {
             const accounts = new StripeConnectService(env);
             let accountId = (await accounts.getByUser(user.id))?.stripeAccountId;
             if (!accountId) {
-                const created = await stripe.createExpressAccount({ email: user.email, userId: user.id });
+                const created = await stripe.createExpressAccount({ email: user.email, userId: user.id, nowMs: Date.now() });
                 try {
                     await accounts.create({ userId: user.id, stripeAccountId: created.id, flags: accountFlags(created) });
                     accountId = created.id;
