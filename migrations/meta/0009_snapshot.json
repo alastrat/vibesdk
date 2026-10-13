@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "e3a7ab14-de92-4108-98c2-f5e17cb40c40",
+  "id": "3b7bc878-e652-48a9-b48f-ac244f4255db",
   "prevId": "9f5c40d1-1d1b-42f8-9100-e3289c6fb0a1",
   "tables": {
     "ai_gateways": {
@@ -814,6 +814,41 @@
         },
         "from_template_version_id": {
           "name": "from_template_version_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "reuse_consent_at": {
+          "name": "reuse_consent_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "removed_from_discover_at": {
+          "name": "removed_from_discover_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "removed_from_discover_by": {
+          "name": "removed_from_discover_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "removed_from_discover_reason": {
+          "name": "removed_from_discover_reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -2127,7 +2162,7 @@
           "name": "template_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "user_id": {
@@ -2188,7 +2223,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "template_purchases_user_id_users_id_fk": {
@@ -2271,6 +2306,13 @@
         "mobile_shot_key": {
           "name": "mobile_shot_key",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "price_cents": {
+          "name": "price_cents",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2379,8 +2421,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "slug": {
-          "name": "slug",
+        "source_app_id": {
+          "name": "source_app_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -2388,34 +2430,6 @@
         },
         "creator_user_id": {
           "name": "creator_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "source_app_id": {
-          "name": "source_app_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "category": {
-          "name": "category",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -2434,18 +2448,10 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false,
-          "default": "'unlisted'"
+          "default": "'listed'"
         },
         "price_cents": {
           "name": "price_cents",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 0
-        },
-        "use_count": {
-          "name": "use_count",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -2470,13 +2476,6 @@
         }
       },
       "indexes": {
-        "templates_slug_unique": {
-          "name": "templates_slug_unique",
-          "columns": [
-            "slug"
-          ],
-          "isUnique": true
-        },
         "templates_creator_idx": {
           "name": "templates_creator_idx",
           "columns": [
@@ -2490,17 +2489,22 @@
             "source_app_id"
           ],
           "isUnique": true
-        },
-        "templates_status_category_idx": {
-          "name": "templates_status_category_idx",
-          "columns": [
-            "status",
-            "category"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {
+        "templates_source_app_id_apps_id_fk": {
+          "name": "templates_source_app_id_apps_id_fk",
+          "tableFrom": "templates",
+          "tableTo": "apps",
+          "columnsFrom": [
+            "source_app_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
         "templates_creator_user_id_users_id_fk": {
           "name": "templates_creator_user_id_users_id_fk",
           "tableFrom": "templates",
@@ -2512,19 +2516,6 @@
             "id"
           ],
           "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "templates_source_app_id_apps_id_fk": {
-          "name": "templates_source_app_id_apps_id_fk",
-          "tableFrom": "templates",
-          "tableTo": "apps",
-          "columnsFrom": [
-            "source_app_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

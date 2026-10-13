@@ -208,8 +208,15 @@ export const apps = sqliteTable('apps', {
     
     // Versioning (for future support)
     version: integer('version').default(1),
-    parentAppId: text('parent_app_id'), // If forked from another app
-    fromTemplateVersionId: text('from_template_version_id'), // Template version this app started from
+    parentAppId: text('parent_app_id'), // Forked from, or started from by reuse
+    fromTemplateVersionId: text('from_template_version_id'), // Approved paid version this app was copied from
+
+    // Discover: the owner's category and consent to reuse, and admin removal.
+    category: text('category', { enum: TEMPLATE_CATEGORIES }),
+    reuseConsentAt: integer('reuse_consent_at', { mode: 'timestamp' }),
+    removedFromDiscoverAt: integer('removed_from_discover_at', { mode: 'timestamp' }),
+    removedFromDiscoverBy: text('removed_from_discover_by'),
+    removedFromDiscoverReason: text('removed_from_discover_reason'),
 
     // Preview-token revocation epoch. Incremented on every visibility change so
     // outstanding space-preview tokens (which embed the value at mint) are
@@ -243,28 +250,24 @@ export const apps = sqliteTable('apps', {
 // ========================================
 
 /**
- * Templates table - Catalog entries, stable across versions. One per source app.
+ * Paid listings - one per app whose owner set a price. Name, description and
+ * category come from the app; the approved version and its price live here.
  */
 export const templates = sqliteTable('templates', {
     id: text('id').primaryKey(),
-    slug: text('slug').notNull().unique(),
+    sourceAppId: text('source_app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
     creatorUserId: text('creator_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    sourceAppId: text('source_app_id').references(() => apps.id, { onDelete: 'set null' }),
-    name: text('name').notNull(),
-    description: text('description').notNull(),
-    category: text('category', { enum: TEMPLATE_CATEGORIES }).notNull(),
     // Null until an admin approves the first version.
     currentVersionId: text('current_version_id'),
-    status: text('status', { enum: TEMPLATE_LISTING_STATUSES }).notNull().default('unlisted'),
-    // US cents; 0 is free.
+    // `unlisted` while the app is free again; a new listing starts unlisted until its first submission is stored.
+    status: text('status', { enum: TEMPLATE_LISTING_STATUSES }).notNull().default('listed'),
+    // The approved version's price in US cents; 0 before the first approval.
     priceCents: integer('price_cents').notNull().default(0),
-    useCount: integer('use_count').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 }, (table) => ({
     creatorIdx: index('templates_creator_idx').on(table.creatorUserId),
     sourceAppIdx: uniqueIndex('templates_source_app_unique_idx').on(table.sourceAppId),
-    statusCategoryIdx: index('templates_status_category_idx').on(table.status, table.category),
 }));
 
 /**
@@ -281,6 +284,8 @@ export const templateVersions = sqliteTable('template_versions', {
     totalBytes: integer('total_bytes').notNull(),
     desktopShotKey: text('desktop_shot_key').notNull(),
     mobileShotKey: text('mobile_shot_key').notNull(),
+    // The price this submission asks for; approval copies it to the listing.
+    priceCents: integer('price_cents').notNull(),
     status: text('status', { enum: TEMPLATE_VERSION_STATUSES }).notNull().default('pending'),
     rightsConfirmedAt: integer('rights_confirmed_at', { mode: 'timestamp' }).notNull(),
     reviewedBy: text('reviewed_by').references(() => users.id, { onDelete: 'set null' }),
@@ -293,13 +298,12 @@ export const templateVersions = sqliteTable('template_versions', {
 }));
 
 /**
- * Template purchases table - Who may use a paid template. Purchases are
- * recorded with the `test` provider (no charge) until a payment provider is
- * connected.
+ * Template purchases table - Who may use a paid site. Recorded with the 'test' provider (no charge) until a payment provider is connected.
  */
 export const templatePurchases = sqliteTable('template_purchases', {
     id: text('id').primaryKey(),
-    templateId: text('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
+    // Kept when the listing is deleted with its app.
+    templateId: text('template_id').references(() => templates.id, { onDelete: 'set null' }),
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     priceCents: integer('price_cents').notNull(),
     provider: text('provider', { enum: TEMPLATE_PAYMENT_PROVIDERS }).notNull(),

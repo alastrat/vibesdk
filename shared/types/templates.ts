@@ -39,6 +39,10 @@ export const TEMPLATE_PRICE_OPTIONS_CENTS = [0, 900, 1900, 2900, 4900] as const;
 export const TEMPLATE_PAYMENT_PROVIDERS = ['test'] as const;
 export type TemplatePaymentProvider = (typeof TEMPLATE_PAYMENT_PROVIDERS)[number];
 
+/** Discover's pricing filter. */
+export const DISCOVER_PRICING_FILTERS = ['all', 'free', 'paid'] as const;
+export type DiscoverPricing = (typeof DISCOVER_PRICING_FILTERS)[number];
+
 export function formatTemplatePrice(priceCents: number): string {
 	if (priceCents <= 0) return 'Free';
 	const dollars = priceCents / 100;
