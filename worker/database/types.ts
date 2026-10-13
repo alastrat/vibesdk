@@ -53,6 +53,7 @@ export type PublicAppListData = Pick<
     | 'description'
     | 'iconUrl'
     | 'framework'
+    | 'category'
     | 'visibility'
     | 'status'
     | 'isFeatured'
@@ -70,7 +71,14 @@ export type PublicAppListData = Pick<
     | 'likeCount'
     | 'userStarred'
     | 'userFavorited'
->;
+> & {
+    /** The approved price of a paid site, or null for a free one. */
+    priceCents: number | null;
+    /** A paid site waiting for its first approval. */
+    inReview: boolean;
+    /** Others can start a new app from it now. */
+    reusable: boolean;
+};
 
 /**
  * Safe public projection of an app for the detail endpoint. Adds the original

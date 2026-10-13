@@ -5,7 +5,6 @@
 
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { PublicAppDetailData } from '../../../database/types';
-import type { TemplateOrigin } from '../templates/types';
 
 /**
  * Generated code file structure
@@ -14,6 +13,27 @@ export interface GeneratedCodeFile {
     filePath: string;
     fileContents: string;
     explanation?: string;
+}
+
+/** What the viewer can do with a published site. */
+export interface AppReuseView {
+    /** The viewer can start a new app from this site now. */
+    canUse: boolean;
+    /** The site is paid and the viewer hasn't bought it. */
+    needsPurchase: boolean;
+    /** The approved price, or null for a free site. */
+    priceCents: number | null;
+    /** Why the site can't be used, shown to its owner; null when it can be or only needs a purchase. */
+    unavailableReason: string | null;
+}
+
+/** The published site an app was copied from. */
+export interface StartedFromView {
+    appId: string;
+    title: string;
+    creatorName: string;
+    /** The source is still public and in Discover. */
+    available: boolean;
 }
 
 /**
@@ -25,8 +45,13 @@ export interface AppDetailsData extends PublicAppDetailData {
     cloudflareUrl: string | null;
     previewUrl: string | null;
     behaviorType: BehaviorType | null;
-    /** The template this app started from, if any. */
-    fromTemplate: TemplateOrigin | null;
+    /** Null for private apps. */
+    reuse: AppReuseView | null;
+    startedFrom: StartedFromView | null;
+    /** The viewer is an admin and may remove the site from Discover. */
+    canModerate: boolean;
+    /** Shown to the owner and admins only. */
+    removedFromDiscover: { reason: string | null } | null;
     user: {
         id: string;
         displayName: string;

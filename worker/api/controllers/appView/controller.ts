@@ -4,17 +4,20 @@ import { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { getAgentStubLightweight } from '../../../agents';
 import { AppService } from '../../../database/services/AppService';
-import { TemplateService } from '../../../database';
+import { TemplateService, UserService } from '../../../database';
+import type { EnhancedAppData } from '../../../database/types';
 import { 
     AppDetailsData, 
     AppStarToggleData,
     GitCloneTokenData,
     PreviewTokenData,
+    AppReuseView,
+    StartedFromView,
 } from './types';
 import { AgentSummary, BehaviorType } from '../../../agents/core/types';
 import { toPublicAppDetail } from '../apps/publicAppDto';
-import { toTemplateOrigin } from '../templates/templateDto';
 import { createLogger } from '../../../logger';
+import { reuseDecision } from '../../../services/templates/reuse';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { extractRequestMetadata } from '../../../utils/authUtils';
@@ -30,7 +33,7 @@ export class AppViewController extends BaseController {
     static logger = createLogger('AppViewController');
     
     // Get single app details (public endpoint, auth optional for ownership check)
-    static async getAppDetails(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDetailsData>>> {
+    static async getAppDetails(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AppDetailsData>>> {
         try {
             const appId = context.pathParams.id;
             if (!appId) {
@@ -81,18 +84,21 @@ export class AppViewController extends BaseController {
             let agentSummary: AgentSummary | null = null;
             let previewUrl: string = '';
             let behaviorType: BehaviorType | null = null;
+            let deployedCommit: string | null = null;
             
             try {
                 // Use lightweight stub for read-only operations (faster - skips template loading)
                 const agentStub = await getAgentStubLightweight(env, appResult.id);
-                const [summary, previewUrlCache, agentBehaviorType] = await Promise.all([
+                const [summary, previewUrlCache, agentBehaviorType, agentDeployedCommit] = await Promise.all([
                     agentStub.getSummary(),
                     agentStub.getPreviewUrlCache(),
                     agentStub.getBehaviorType(),
+                    agentStub.getDeployedCommit(),
                 ]);
                 agentSummary = summary;
                 previewUrl = previewUrlCache;
                 behaviorType = agentBehaviorType;
+                deployedCommit = agentDeployedCommit;
             } catch (agentError) {
                 // If agent doesn't exist or error occurred, fall back to database stored files
                 this.logger.warn('Could not fetch agent state, using stored files:', agentError);
@@ -105,16 +111,27 @@ export class AppViewController extends BaseController {
             // visible to all viewers of a public app (intended feature).
             const isOwner = !!userId && appResult.userId === userId;
 
-            const origin = appResult.fromTemplateVersionId
-                ? await new TemplateService(env).getTemplateOrigin(appResult.fromTemplateVersionId)
-                : null;
+            const [reuse, startedFromView, canModerate] = await Promise.all([
+                AppViewController.loadReuseView(env, appResult, userId, behaviorType, deployedCommit),
+                AppViewController.loadStartedFrom(env, appResult.parentAppId),
+                userId ? new UserService(env).getRole(userId).then((role) => role === 'admin') : Promise.resolve(false),
+            ]);
+            if (behaviorType === 'think' && deployedCommit && !appResult.lastDeployedAt) {
+                ctx.waitUntil(appService.updateApp(appResult.id, { lastDeployedAt: new Date() }));
+            }
 
             const responseData: AppDetailsData = {
                 ...toPublicAppDetail(appResult, isOwner),
                 cloudflareUrl: cloudflareUrl,
                 previewUrl: previewUrl || cloudflareUrl,
                 behaviorType,
-                fromTemplate: origin ? toTemplateOrigin(origin) : null,
+                reuse,
+                startedFrom: startedFromView,
+                canModerate,
+                removedFromDiscover:
+                    (isOwner || canModerate) && appResult.removedFromDiscoverAt
+                        ? { reason: appResult.removedFromDiscoverReason }
+                        : null,
                 user: {
                     id: isOwner ? appResult.userId! : '',
                     displayName: appResult.userName || 'Unknown',
@@ -127,6 +144,53 @@ export class AppViewController extends BaseController {
         } catch (error) {
             this.logger.error('Error fetching app details:', error);
             return AppViewController.createErrorResponse<AppDetailsData>('Internal server error', 500);
+        }
+    }
+
+    private static async loadReuseView(
+        env: Env,
+        app: EnhancedAppData,
+        userId: string | undefined,
+        behaviorType: BehaviorType | null,
+        deployedCommit: string | null,
+    ): Promise<AppReuseView | null> {
+        if (app.visibility !== 'public') return null;
+        const listings = new TemplateService(env);
+        const listing = await listings.getListingByApp(app.id);
+        const paid = listing !== null && listing.status === 'listed' && listing.currentVersionId !== null;
+        const isOwner = !!userId && app.userId === userId;
+        const hasPurchase = paid && userId && !isOwner ? await listings.hasPurchase(listing.id, userId) : false;
+        const decision = reuseDecision({
+            visibility: app.visibility,
+            removedFromDiscover: app.removedFromDiscoverAt !== null,
+            isThink: behaviorType === 'think',
+            deployedCommit,
+            listing: listing ? { status: listing.status, currentVersionId: listing.currentVersionId } : null,
+            isOwner,
+            hasPurchase,
+        });
+        return {
+            canUse: decision.ok,
+            needsPurchase: !decision.ok && decision.status === 402,
+            priceCents: paid ? listing.priceCents : null,
+            unavailableReason: decision.ok || decision.status === 402 ? null : decision.error,
+        };
+    }
+
+    private static async loadStartedFrom(env: Env, parentAppId: string | null): Promise<StartedFromView | null> {
+        if (!parentAppId) return null;
+        try {
+            const row = await new AppService(env).getStartedFrom(parentAppId);
+            if (!row) return null;
+            return {
+                appId: row.id,
+                title: row.title,
+                creatorName: row.creatorName ?? 'Unknown',
+                available: row.visibility === 'public' && row.removedFromDiscoverAt === null,
+            };
+        } catch (error) {
+            AppViewController.logger.warn('Could not load the source of a copied app', error);
+            return null;
         }
     }
 

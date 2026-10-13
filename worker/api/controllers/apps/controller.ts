@@ -13,6 +13,7 @@ import {
 } from './types';
 import { toPublicAppListItem } from './publicAppDto';
 import { parsePublicAppsQuery } from './publicAppsQuery';
+import { parseDiscoverFilters } from '../../../services/templates/reuse';
 // import { withCache } from '../../../services/cache/wrapper';
 import { createLogger } from '../../../logger';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
@@ -132,6 +133,10 @@ export class AppController extends BaseController {
             if (!parsed.ok) {
                 return AppController.createErrorResponse<PublicAppsData>(parsed.error, 400);
             }
+            const discover = parseDiscoverFilters(url.searchParams);
+            if (!discover.ok) {
+                return AppController.createErrorResponse<PublicAppsData>(discover.error, 400);
+            }
             const { limit, offset, search } = parsed.value;
             const sort = (url.searchParams.get('sort') || 'recent') as AppSortOption;
             const order = (url.searchParams.get('order') || 'desc') as SortOrder;
@@ -150,6 +155,7 @@ export class AppController extends BaseController {
                 period,
                 framework,
                 search,
+                discover: discover.value,
                 userId
             });
             
