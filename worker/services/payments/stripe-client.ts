@@ -8,6 +8,9 @@ const STRIPE_API = 'https://api.stripe.com/v1';
 /** Stripe replays a failed request for 24 hours per idempotency key, so keys rotate every 10 minutes. */
 const IDEMPOTENCY_BUCKET_MS = 600_000;
 
+/** A Checkout session closes 35 minutes after it opens, so a buyer can't pay long after the listing changed. Stripe's minimum is 30. */
+const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
+
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 
 export class StripeApiError extends Error {
@@ -68,6 +71,7 @@ export interface CheckoutSessionInput {
 	successUrl: string;
 	cancelUrl: string;
 	metadata: Record<string, string>;
+	nowMs: number;
 }
 
 export interface SellerFlags {
@@ -189,6 +193,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				metadata: input.metadata,
 				success_url: input.successUrl,
 				cancel_url: input.cancelUrl,
+				expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
 			}),
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),

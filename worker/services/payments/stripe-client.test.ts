@@ -80,6 +80,7 @@ describe('createStripeClient', () => {
 			successUrl: 'http://localhost/app/a1?purchase=success&session_id={CHECKOUT_SESSION_ID}',
 			cancelUrl: 'http://localhost/app/a1',
 			metadata: { appId: 'a1' },
+			nowMs: 1_800_000_000_500,
 		});
 		expect(session.id).toBe('cs_1');
 		expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions');
@@ -92,6 +93,8 @@ describe('createStripeClient', () => {
 		expect(body).toContain('payment_intent_data[transfer_data][destination]=acct_1');
 		expect(body).toContain('line_items[0][price_data][unit_amount]=2900');
 		expect(body).toContain('client_reference_id=u1');
+		// 35 minutes after the pinned time, in Unix seconds; Stripe's minimum is 30.
+		expect(body).toContain('expires_at=1800002100');
 	});
 
 	it('sends a time-bucketed idempotency key when creating an Express account, so a double click makes one account but a retry later does not replay an error', async () => {
@@ -142,6 +145,7 @@ describe('createStripeClient', () => {
 			successUrl: 'http://localhost/app/a1?purchase=success&session_id={CHECKOUT_SESSION_ID}',
 			cancelUrl: 'http://localhost/app/a1',
 			metadata: { appId: 'a1' },
+			nowMs: 0,
 		};
 		await client.createCheckoutSession({ ...input, buyerEmail: '' });
 		await client.createCheckoutSession(input);
