@@ -21,7 +21,8 @@ export function createReuseLookup(env: Env): ReuseLookup {
 				const agent = await getAgentStubLightweight(env, appId);
 				const [behaviorType, deployedCommit] = await Promise.all([agent.getBehaviorType(), agent.getDeployedCommit()]);
 				return { behaviorType, deployedCommit };
-			} catch {
+			} catch (error) {
+				logger.warn('Could not reach the source site agent', { appId, error });
 				return { behaviorType: 'unknown', deployedCommit: null };
 			}
 		},
