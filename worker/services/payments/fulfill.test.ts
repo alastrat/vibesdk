@@ -16,11 +16,12 @@ const PAID: StripeCheckoutSession = {
 };
 
 function harness(listingExists = true) {
+	const listing = { exists: listingExists };
 	const sessions = new Set<string>();
 	const buyers = new Set<string>();
 	const records: StripePurchaseRecord[] = [];
 	const deps: FulfillDeps = {
-		listingExists: async () => listingExists,
+		listingExists: async () => listing.exists,
 		recordStripePurchase: async (record) => {
 			const buyer = `${record.listingId}:${record.userId}`;
 			if (sessions.has(record.checkoutSessionId) || buyers.has(buyer)) return false;
@@ -31,7 +32,7 @@ function harness(listingExists = true) {
 		},
 		sessionRecorded: async (checkoutSessionId) => sessions.has(checkoutSessionId),
 	};
-	return { deps, records };
+	return { deps, records, listing };
 }
 
 describe('fulfillCheckoutSession', () => {
@@ -71,6 +72,14 @@ describe('fulfillCheckoutSession', () => {
 		const { deps, records } = harness(false);
 		expect(await fulfillCheckoutSession(deps, PAID)).toBe('listing-missing');
 		expect(records).toHaveLength(0);
+	});
+
+	it('treats a redelivered session as recorded after its listing is deleted', async () => {
+		const { deps, records, listing } = harness();
+		expect(await fulfillCheckoutSession(deps, PAID)).toBe('recorded');
+		listing.exists = false;
+		expect(await fulfillCheckoutSession(deps, PAID)).toBe('already-recorded');
+		expect(records).toHaveLength(1);
 	});
 
 	it('flags a second paid session for a listing the buyer already owns', async () => {

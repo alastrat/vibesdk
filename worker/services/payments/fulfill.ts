@@ -27,7 +27,10 @@ export async function fulfillCheckoutSession(deps: FulfillDeps, session: StripeC
 	const sellerStripeAccountId = metadata.sellerStripeAccountId;
 	if (!listingId || !appId || !buyerUserId || !sellerStripeAccountId || session.amount_total === null) return 'not-ours';
 	if (session.payment_status !== 'paid') return 'not-paid';
-	if (!(await deps.listingExists(listingId))) return 'listing-missing';
+	// A sale outlives its listing, so a redelivery after deletion is still a recorded session.
+	if (!(await deps.listingExists(listingId))) {
+		return (await deps.sessionRecorded(session.id)) ? 'already-recorded' : 'listing-missing';
+	}
 
 	const priceCents = session.amount_total;
 	const fee = platformFeeCents(priceCents);
