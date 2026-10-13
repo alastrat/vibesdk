@@ -14,6 +14,7 @@
 import { expect } from 'vitest';
 import type { FileSystem } from '@cloudflare/shell';
 import { createGit } from '@cloudflare/shell/git';
+import { withErrorCodes } from '../src/space/fs-error-codes';
 
 export interface FsCase {
 	name: string;
@@ -191,12 +192,17 @@ export const fileSystemContractCases: FsCase[] = [
 	},
 ];
 
+/** Git as the space builds it: over a filesystem whose errors carry errno codes. */
+function gitOver(fs: FileSystem) {
+	return createGit(withErrorCodes(fs));
+}
+
 /** Contract for git operating over any conforming `FileSystem`. */
 export const gitOnFsCases: FsCase[] = [
 	{
 		name: 'init + add + commit produces a retrievable log entry',
 		async run(fs) {
-			const git = createGit(fs);
+			const git = gitOver(fs);
 			await git.init({ defaultBranch: 'main' });
 			await fs.writeFile('/index.ts', 'export const x = 1');
 			await git.add({ filepath: '.' });
@@ -212,7 +218,7 @@ export const gitOnFsCases: FsCase[] = [
 	{
 		name: 'status reflects a newly written, unstaged file',
 		async run(fs) {
-			const git = createGit(fs);
+			const git = gitOver(fs);
 			await git.init({ defaultBranch: 'main' });
 			await fs.writeFile('/new.ts', 'x');
 			const status = await git.status();
@@ -228,7 +234,7 @@ export const gitOnFsCases: FsCase[] = [
 		// files and rewrites bytes explicitly rather than relying on checkout.
 		name: 'checkout repopulates a missing file from the target commit',
 		async run(fs) {
-			const git = createGit(fs);
+			const git = gitOver(fs);
 			await git.init({ defaultBranch: 'main' });
 
 			await fs.writeFile('/app.ts', 'v1');
@@ -247,7 +253,7 @@ export const gitOnFsCases: FsCase[] = [
 	{
 		name: 'branch lists the current branch and creates new ones',
 		async run(fs) {
-			const git = createGit(fs);
+			const git = gitOver(fs);
 			await git.init({ defaultBranch: 'main' });
 			await fs.writeFile('/f.ts', 'x');
 			await git.add({ filepath: '.' });
