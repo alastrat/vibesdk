@@ -35,8 +35,8 @@ export type TemplateShotKind = 'desktop' | 'mobile';
 /** Prices a creator can choose, in US cents. 0 means free. */
 export const TEMPLATE_PRICE_OPTIONS_CENTS = [0, 900, 1900, 2900, 4900] as const;
 
-/** Where a purchase was paid. `test` records a purchase without charging. */
-export const TEMPLATE_PAYMENT_PROVIDERS = ['test'] as const;
+/** Where a purchase was paid. 'test' purchases predate Stripe and charged nothing. */
+export const TEMPLATE_PAYMENT_PROVIDERS = ['test', 'stripe'] as const;
 export type TemplatePaymentProvider = (typeof TEMPLATE_PAYMENT_PROVIDERS)[number];
 
 /** Discover's pricing filter. */
@@ -47,4 +47,12 @@ export function formatTemplatePrice(priceCents: number): string {
 	if (priceCents <= 0) return 'Free';
 	const dollars = priceCents / 100;
 	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+}
+
+/** Estori's share of every sale, in percent. */
+export const PLATFORM_FEE_PERCENT = 5;
+
+/** Estori's fee on a sale, rounded to the nearest cent. */
+export function platformFeeCents(priceCents: number): number {
+	return Math.round((priceCents * PLATFORM_FEE_PERCENT) / 100);
 }

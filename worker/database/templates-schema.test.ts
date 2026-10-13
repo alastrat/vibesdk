@@ -66,7 +66,7 @@ describe('publishing schema', () => {
 			(key) => key.reference().foreignTable === schema.templates,
 		);
 		expect(listingKey?.onDelete).toBe('set null');
-		expect(schema.templatePurchases.provider.enumValues).toEqual(['test']);
+		expect(schema.templatePurchases.provider.enumValues).toEqual(['test', 'stripe']);
 	});
 
 	it('ships the tables and columns in a migration', () => {
