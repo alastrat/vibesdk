@@ -36,6 +36,13 @@ describe('the product page', () => {
 		expect(page).toContain('to="/discover"');
 	});
 
+	it('waits for the session before judging the page unavailable', () => {
+		const page = source('/src/routes/discover/site.tsx');
+		expect(page).toContain('page.isPending');
+		expect(page).not.toContain('page.isLoading');
+		expect(page).toContain('!appId || page.isError');
+	});
+
 	it('offers the right action for each viewer', () => {
 		const button = source('/src/components/site-page/SiteMainButton.tsx');
 		for (const text of ['Buy for', 'Use this site', 'Edit page', 'Not available yet']) {
@@ -51,6 +58,20 @@ describe('the product page', () => {
 		expect(preview).toContain('LOAD_TIMEOUT_MS');
 		expect(preview).toContain('screenshotUrl');
 		expect(source('/src/components/site-page/SiteHeader.tsx')).toContain('Open live site ↗');
+	});
+
+	it('sandboxes both preview frames with the shared token list', () => {
+		const preview = source('/src/components/site-page/DevicePreview.tsx');
+		expect(preview.match(/sandbox=\{PREVIEW_IFRAME_SANDBOX\}/g)).toHaveLength(2);
+		expect(preview).not.toContain('allow-top-navigation');
+	});
+
+	it('prices every surface through the one label helper', () => {
+		for (const file of ['SiteHeader', 'SiteDetailsCard', 'StickyBuyBar']) {
+			const text = source(`/src/components/site-page/${file}.tsx`);
+			expect(text).toContain('sitePriceLabel(');
+			expect(text).not.toContain("'Free'");
+		}
 	});
 
 	it('states what a buyer gets and keeps the action in view', () => {

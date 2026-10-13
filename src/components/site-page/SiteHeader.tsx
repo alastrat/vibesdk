@@ -1,5 +1,6 @@
 import type { Ref } from 'react';
-import { formatTemplatePrice, TEMPLATE_CATEGORY_LABELS, type SitePageData } from '@/api-types';
+import { TEMPLATE_CATEGORY_LABELS, type SitePageData } from '@/api-types';
+import { sitePriceLabel } from '@/lib/site-page-display';
 import { SiteMainButton, type SiteActions } from './SiteMainButton';
 
 interface SiteHeaderProps {
@@ -11,6 +12,7 @@ interface SiteHeaderProps {
 
 export function SiteHeader({ page, actions, actionsRef }: SiteHeaderProps) {
 	const kind = page.category ? TEMPLATE_CATEGORY_LABELS[page.category] : 'Site';
+	const price = sitePriceLabel(page);
 	return (
 		<header className="flex flex-wrap items-start justify-between gap-4">
 			<div className="grid gap-1">
@@ -21,9 +23,7 @@ export function SiteHeader({ page, actions, actionsRef }: SiteHeaderProps) {
 				</p>
 			</div>
 			<div ref={actionsRef} className="flex flex-wrap items-center gap-3">
-				<span className="text-lg font-medium text-kumo-default">
-					{page.priceCents !== null ? formatTemplatePrice(page.priceCents) : 'Free'}
-				</span>
+				{price && <span className="text-lg font-medium text-kumo-default">{price}</span>}
 				{page.previewUrl && (
 					<a
 						href={page.previewUrl}

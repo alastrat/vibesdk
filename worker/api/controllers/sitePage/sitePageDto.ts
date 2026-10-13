@@ -115,6 +115,7 @@ export function toSitePageData(source: SitePageSource): SitePageData {
         description: app.description,
         copy: pageCopyFor(listing, approvedVersion, source.savedCopy),
         offer: siteOffer(source),
+        paid: listed !== null,
         priceCents: approved && listed ? listed.priceCents : null,
         creator: { displayName: app.userName ?? 'Unknown', avatarUrl: app.userAvatar },
         stats: { uses: app.forkCount ?? 0, views: app.viewCount ?? 0, likes: app.starCount },

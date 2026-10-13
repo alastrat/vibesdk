@@ -27,6 +27,8 @@ export interface SitePageData {
     description: string | null;
     copy: SitePageCopy | null;
     offer: SitePageOffer;
+    /** The site has a listed paid listing, approved or not. */
+    paid: boolean;
     /** The approved price of a paid site; null when the site is free or not yet approved. */
     priceCents: number | null;
     creator: { displayName: string; avatarUrl: string | null };

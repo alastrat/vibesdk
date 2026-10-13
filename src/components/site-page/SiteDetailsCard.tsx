@@ -1,4 +1,5 @@
-import { formatTemplatePrice, TEMPLATE_CATEGORY_LABELS, type SitePageData } from '@/api-types';
+import { TEMPLATE_CATEGORY_LABELS, type SitePageData } from '@/api-types';
+import { sitePriceLabel } from '@/lib/site-page-display';
 
 function formatDate(iso: string | null): string | null {
 	return iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : null;
@@ -7,9 +8,10 @@ function formatDate(iso: string | null): string | null {
 export function SiteDetailsCard({ page }: { page: SitePageData }) {
 	const published = formatDate(page.publishedAt);
 	const updated = formatDate(page.updatedAt);
+	const price = sitePriceLabel(page);
 	const rows: Array<[string, string]> = [
 		['Category', page.category ? TEMPLATE_CATEGORY_LABELS[page.category] : 'None'],
-		['Price', page.priceCents !== null ? formatTemplatePrice(page.priceCents) : 'Free'],
+		...(price ? [['Price', price] as [string, string]] : []),
 		['Uses', String(page.stats.uses)],
 		['Views', String(page.stats.views)],
 		['Likes', String(page.stats.likes)],
@@ -48,7 +50,7 @@ export function SiteDetailsCard({ page }: { page: SitePageData }) {
 			<p className="text-sm text-kumo-subtle">
 				What you get: your own copy of the full site, which you can keep editing with the AI.
 			</p>
-			{page.priceCents !== null && <p className="text-xs text-kumo-subtle">Secure checkout with Stripe</p>}
+			{page.paid && <p className="text-xs text-kumo-subtle">Secure checkout with Stripe</p>}
 		</aside>
 	);
 }

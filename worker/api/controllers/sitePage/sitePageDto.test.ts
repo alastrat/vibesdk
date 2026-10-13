@@ -102,6 +102,7 @@ describe('toSitePageData', () => {
 			description: 'A small coffee store.\n\nSix coffees with tasting notes.',
 			copy: COPY,
 			offer: { kind: 'paid', priceCents: 2900 },
+			paid: true,
 			priceCents: 2900,
 			creator: { displayName: 'Template Creator', avatarUrl: null },
 			stats: { uses: 3, views: 15, likes: 2 },
@@ -117,6 +118,21 @@ describe('toSitePageData', () => {
 		});
 	});
 
+	it('marks a paid site before its first approval as paid, with no price yet', () => {
+		const page = toSitePageData({
+			...source,
+			listing: { ...LISTED, currentVersionId: null },
+			approvedVersion: null,
+		});
+		expect(page.paid).toBe(true);
+		expect(page.priceCents).toBeNull();
+		expect(page.offer).toEqual({ kind: 'not-yet-available' });
+	});
+
+	it('does not mark an unlisted listing as paid', () => {
+		expect(toSitePageData({ ...source, listing: { ...LISTED, status: 'unlisted' } }).paid).toBe(false);
+	});
+
 	it('assembles a free page that has no preview, falling back to the description', () => {
 		const page = toSitePageData({
 			...source,
@@ -129,6 +145,7 @@ describe('toSitePageData', () => {
 		});
 		expect(page.copy).toBeNull();
 		expect(page.offer).toEqual({ kind: 'not-yet-available' });
+		expect(page.paid).toBe(false);
 		expect(page.priceCents).toBeNull();
 		expect(page.approvedShots).toBeNull();
 		expect(page.previewUrl).toBeNull();

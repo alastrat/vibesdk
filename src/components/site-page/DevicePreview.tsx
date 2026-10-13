@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PREVIEW_IFRAME_SANDBOX } from '@/lib/preview-sandbox';
 
 const DESKTOP_WIDTH = 1280;
 const PHONE_WIDTH = 390;
@@ -65,6 +66,7 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 					<iframe
 						title={`${title} preview`}
 						src={previewUrl}
+						sandbox={PREVIEW_IFRAME_SANDBOX}
 						onLoad={() => setStatus('loaded')}
 						className="border-0"
 						style={{
@@ -80,6 +82,7 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 						<iframe
 							title={`${title} preview on a phone`}
 							src={previewUrl}
+							sandbox={PREVIEW_IFRAME_SANDBOX}
 							onLoad={() => setStatus('loaded')}
 							className="rounded-[28px] border-0 ring-4 ring-kumo-line"
 							style={{ width: PHONE_WIDTH, height: FRAME_HEIGHT - 32 }}

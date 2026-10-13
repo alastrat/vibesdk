@@ -26,15 +26,7 @@ export default function SitePage() {
 	const [editOpen, setEditOpen] = useState(false);
 	const actionsRef = useRef<HTMLDivElement>(null);
 
-	if (page.isLoading) {
-		return (
-			<div className="flex justify-center py-24">
-				<Loader />
-			</div>
-		);
-	}
-
-	if (page.isError || !page.data) {
+	if (!appId || page.isError) {
 		const unavailable = !page.error || page.error.message === SITE_PAGE_UNAVAILABLE_MESSAGE;
 		return (
 			<div className="mx-auto grid max-w-md justify-items-center gap-3 px-4 py-24 text-center">
@@ -48,6 +40,14 @@ export default function SitePage() {
 						Try again
 					</Button>
 				)}
+			</div>
+		);
+	}
+
+	if (page.isPending) {
+		return (
+			<div className="flex justify-center py-24">
+				<Loader />
 			</div>
 		);
 	}
