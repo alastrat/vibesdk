@@ -23,6 +23,7 @@ import { ScreenshotSecurity } from 'worker/utils/screenshot-security';
 import type { TemplateCategory } from '../../../shared/types/templates';
 import type { DiscoverFilters } from '../../services/templates/reuse';
 import { discoverConditions, paidInReviewSubquery, paidPriceSubquery } from '../discover-conditions';
+import { omitInternalAppFields } from '../app-fields';
 
 // Type definitions
 type WhereCondition = ReturnType<typeof eq> | ReturnType<typeof and> | ReturnType<typeof or> | undefined;
@@ -364,7 +365,7 @@ export class AppService extends BaseService {
         const favoriteSet = new Set(favorites.map(f => f.appId));
 
         const result = apps.map(app => ({
-            ...app,
+            ...omitInternalAppFields(app),
             isFavorite: favoriteSet.has(app.id),
             updatedAtFormatted: formatRelativeTime(app.updatedAt)
         }));
@@ -417,7 +418,7 @@ export class AppService extends BaseService {
             } = app;
 
             return {
-                ...safeApp,
+                ...omitInternalAppFields(safeApp),
                 // Provide safe defaults for type compatibility
                 sessionToken: null,
                 originalPrompt: '',
@@ -529,7 +530,7 @@ export class AppService extends BaseService {
             .get();
 
         const result = {
-            ...app,
+            ...omitInternalAppFields(app),
             isFavorite: !!favorite,
             updatedAtFormatted: formatRelativeTime(app.updatedAt)
         };

@@ -5,6 +5,7 @@
 import * as schema from './schema';
 import type { ModelConfig } from '../agents/inferutils/config.types';
 import type { DiscoverFilters } from '../services/templates/reuse';
+import type { InternalAppField } from './app-fields';
 
 // ========================================
 // CORE SHARED INTERFACES
@@ -99,9 +100,10 @@ export type PublicAppDetailData = PublicAppBaseData &
     };
 
 /**
- * App with favorite status for user-specific queries
+ * App with favorite status for user-specific queries, without the internal
+ * moderation and provenance columns.
  */
-export interface AppWithFavoriteStatus extends schema.App {
+export interface AppWithFavoriteStatus extends Omit<schema.App, InternalAppField> {
     isFavorite: boolean;
     updatedAtFormatted: string;
 }
