@@ -115,6 +115,12 @@ describe('Stripe calls', () => {
 		expect(checkout).toContain('STRIPE_REQUEST_FAILED_MESSAGE, 502');
 	});
 
+	it('return a buyer who cancels to the product page, and a paying buyer to the app page that confirms the purchase', () => {
+		const checkout = between('static async purchase(', 'static async confirmPurchase(');
+		expect(checkout).toContain('cancelUrl: `${origin}/discover/${appId}`,');
+		expect(checkout).toContain('successUrl: `${origin}/app/${appId}?purchase=success&session_id={CHECKOUT_SESSION_ID}`,');
+	});
+
 	it('trust a stored active seller when publishing, and ask Stripe only when it is not active', () => {
 		expect(controller).toContain("readySellerAccount(env, userId, 'when-inactive')");
 		const ready = between('private static async readySellerAccount(', 'private static async loadFacts(');

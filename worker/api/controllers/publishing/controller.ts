@@ -251,7 +251,7 @@ export class PublishingController extends BaseController {
                 buyerUserId: user.id,
                 buyerEmail: user.email || undefined,
                 successUrl: `${origin}/app/${appId}?purchase=success&session_id={CHECKOUT_SESSION_ID}`,
-                cancelUrl: `${origin}/app/${appId}`,
+                cancelUrl: `${origin}/discover/${appId}`,
                 nowMs: Date.now(),
                 metadata: {
                     appId,
