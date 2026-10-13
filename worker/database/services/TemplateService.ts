@@ -1,62 +1,78 @@
 /**
- * D1 reads and writes for templates, their versions and purchases. Decisions
- * (who may do what, which version is superseded) live in
- * services/templates/catalog.ts; this service only moves rows.
+ * D1 reads and writes for paid listings, their versions and purchases. A
+ * listing belongs to one app, which supplies its title and category.
+ * Decisions live in services/templates/catalog.ts and reuse.ts; this service
+ * only moves rows.
  */
 
-import { and, desc, eq, inArray, isNotNull, like, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { generateId } from '../../utils/idGenerator';
-import type { TemplateCategory, TemplateListingStatus } from '../../../shared/types/templates';
+import type { TemplateListingStatus } from '../../../shared/types/templates';
 
-export interface TemplateWithVersion {
-    template: schema.Template;
+export interface ListingVersionRow {
+    listing: schema.Template;
     version: schema.TemplateVersion;
-    creatorName: string | null;
 }
 
-export interface PendingVersionRow extends TemplateWithVersion {
+export interface PendingVersionRow extends ListingVersionRow {
+    appTitle: string;
+    creatorName: string | null;
     creatorEmail: string | null;
 }
 
-export interface CreatorTemplateRow {
-    template: schema.Template;
+export interface CreatorListingRow {
+    listing: schema.Template;
+    appTitle: string;
+    buyerCount: number;
+    /** Newest first. */
     versions: schema.TemplateVersion[];
 }
 
-export interface TemplateOriginRow {
-    slug: string;
-    name: string;
-    creatorName: string | null;
-    status: TemplateListingStatus;
-}
-
-export interface PublishedQuery {
-    category?: TemplateCategory;
-    search?: string;
-    limit: number;
-    offset: number;
-}
+const buyerCountSql = sql<number>`(select count(*) from template_purchases as purchase where purchase.template_id = ${schema.templates.id})`;
 
 export class TemplateService extends BaseService {
-    async getTemplate(templateId: string): Promise<schema.Template | null> {
-        const row = await this.database.select().from(schema.templates).where(eq(schema.templates.id, templateId)).get();
+    async getListing(listingId: string): Promise<schema.Template | null> {
+        const row = await this.database.select().from(schema.templates).where(eq(schema.templates.id, listingId)).get();
         return row ?? null;
     }
 
-    async getTemplateBySourceApp(appId: string): Promise<schema.Template | null> {
+    async getListingByApp(appId: string): Promise<schema.Template | null> {
         const row = await this.database.select().from(schema.templates).where(eq(schema.templates.sourceAppId, appId)).get();
         return row ?? null;
     }
 
-    async isSlugTaken(slug: string): Promise<boolean> {
-        const row = await this.database
-            .select({ id: schema.templates.id })
-            .from(schema.templates)
-            .where(eq(schema.templates.slug, slug))
-            .get();
-        return row !== undefined;
+    /** Create an unlisted listing for an app; it is listed once its first version is stored. */
+    async createListing(input: { sourceAppId: string; creatorUserId: string }): Promise<string> {
+        const id = generateId();
+        const now = new Date();
+        await this.database.insert(schema.templates).values({
+            id,
+            sourceAppId: input.sourceAppId,
+            creatorUserId: input.creatorUserId,
+            status: 'unlisted',
+            createdAt: now,
+            updatedAt: now,
+        });
+        return id;
+    }
+
+    /** List a listing, or unlist it and withdraw any version still in review. */
+    async setListingStatus(listingId: string, status: TemplateListingStatus): Promise<void> {
+        const update = this.database
+            .update(schema.templates)
+            .set({ status, updatedAt: new Date() })
+            .where(eq(schema.templates.id, listingId));
+        if (status === 'listed') {
+            await update;
+            return;
+        }
+        const withdraw = this.database
+            .update(schema.templateVersions)
+            .set({ status: 'withdrawn' })
+            .where(and(eq(schema.templateVersions.templateId, listingId), eq(schema.templateVersions.status, 'pending')));
+        await this.database.batch([update, withdraw]);
     }
 
     async getVersion(versionId: string): Promise<schema.TemplateVersion | null> {
@@ -68,55 +84,65 @@ export class TemplateService extends BaseService {
         return row ?? null;
     }
 
-    /** Versions of a template, newest first. */
-    async listVersions(templateId: string): Promise<schema.TemplateVersion[]> {
+    /** Versions of a listing, newest first. */
+    async listVersions(listingId: string): Promise<schema.TemplateVersion[]> {
         return this.database
             .select()
             .from(schema.templateVersions)
-            .where(eq(schema.templateVersions.templateId, templateId))
+            .where(eq(schema.templateVersions.templateId, listingId))
             .orderBy(desc(schema.templateVersions.version))
             .all();
     }
 
-    async nextVersionNumber(templateId: string): Promise<number> {
+    async getPendingVersion(listingId: string): Promise<schema.TemplateVersion | null> {
+        const row = await this.database
+            .select()
+            .from(schema.templateVersions)
+            .where(and(eq(schema.templateVersions.templateId, listingId), eq(schema.templateVersions.status, 'pending')))
+            .get();
+        return row ?? null;
+    }
+
+    async nextVersionNumber(listingId: string): Promise<number> {
         const row = await this.database
             .select({ latest: sql<number | null>`max(${schema.templateVersions.version})` })
             .from(schema.templateVersions)
-            .where(eq(schema.templateVersions.templateId, templateId))
+            .where(eq(schema.templateVersions.templateId, listingId))
             .get();
         return (row?.latest ?? 0) + 1;
     }
 
-    /** Insert a submitted version, and the template itself on its first submission. */
-    async insertSubmission(input: {
-        template: schema.NewTemplate | null;
-        version: schema.NewTemplateVersion;
-    }): Promise<void> {
-        const insertVersion = this.database.insert(schema.templateVersions).values(input.version);
-        if (input.template) {
-            await this.database.batch([this.database.insert(schema.templates).values(input.template), insertVersion]);
-            return;
-        }
-        await insertVersion;
+    async insertVersion(version: schema.NewTemplateVersion): Promise<void> {
+        await this.database.insert(schema.templateVersions).values(version);
     }
 
-    async listByCreator(userId: string): Promise<CreatorTemplateRow[]> {
-        const templates = await this.database
-            .select()
+    async countBuyers(listingId: string): Promise<number> {
+        const row = await this.database
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.templatePurchases)
+            .where(eq(schema.templatePurchases.templateId, listingId))
+            .get();
+        return row?.count ?? 0;
+    }
+
+    async listByCreator(userId: string): Promise<CreatorListingRow[]> {
+        const listings = await this.database
+            .select({ listing: schema.templates, appTitle: schema.apps.title, buyerCount: buyerCountSql })
             .from(schema.templates)
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.templates.sourceAppId))
             .where(eq(schema.templates.creatorUserId, userId))
             .orderBy(desc(schema.templates.createdAt))
             .all();
-        if (templates.length === 0) return [];
+        if (listings.length === 0) return [];
         const versions = await this.database
             .select()
             .from(schema.templateVersions)
-            .where(inArray(schema.templateVersions.templateId, templates.map((template) => template.id)))
+            .where(inArray(schema.templateVersions.templateId, listings.map((row) => row.listing.id)))
             .orderBy(desc(schema.templateVersions.version))
             .all();
-        return templates.map((template) => ({
-            template,
-            versions: versions.filter((version) => version.templateId === template.id),
+        return listings.map((row) => ({
+            ...row,
+            versions: versions.filter((version) => version.templateId === row.listing.id),
         }));
     }
 
@@ -124,13 +150,15 @@ export class TemplateService extends BaseService {
     async listPending(): Promise<PendingVersionRow[]> {
         return this.database
             .select({
-                template: schema.templates,
+                listing: schema.templates,
                 version: schema.templateVersions,
+                appTitle: schema.apps.title,
                 creatorName: schema.users.displayName,
                 creatorEmail: schema.users.email,
             })
             .from(schema.templateVersions)
             .innerJoin(schema.templates, eq(schema.templates.id, schema.templateVersions.templateId))
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.templates.sourceAppId))
             .leftJoin(schema.users, eq(schema.users.id, schema.templates.creatorUserId))
             .where(eq(schema.templateVersions.status, 'pending'))
             .orderBy(schema.templateVersions.createdAt)
@@ -138,28 +166,23 @@ export class TemplateService extends BaseService {
             .all();
     }
 
-    async getVersionWithTemplate(versionId: string): Promise<TemplateWithVersion | null> {
+    async getVersionWithListing(versionId: string): Promise<ListingVersionRow | null> {
         const row = await this.database
-            .select({
-                template: schema.templates,
-                version: schema.templateVersions,
-                creatorName: schema.users.displayName,
-            })
+            .select({ listing: schema.templates, version: schema.templateVersions })
             .from(schema.templateVersions)
             .innerJoin(schema.templates, eq(schema.templates.id, schema.templateVersions.templateId))
-            .leftJoin(schema.users, eq(schema.users.id, schema.templates.creatorUserId))
             .where(eq(schema.templateVersions.id, versionId))
             .get();
         return row ?? null;
     }
 
     /**
-     * Publish a version: approve it, supersede the previous one, and list the
-     * template. Returns false when the version was no longer pending; a version
-     * that is not approved never becomes the template's current version.
+     * Approve a version: it becomes the listing's current version and its
+     * price the listing's price, and the previous approved version is
+     * superseded. Returns false when the version was no longer pending.
      */
     async approveVersion(input: {
-        templateId: string;
+        listingId: string;
         versionId: string;
         supersedeVersionId: string | null;
         reviewerId: string;
@@ -175,8 +198,12 @@ export class TemplateService extends BaseService {
             .returning({ id: schema.templateVersions.id });
         const publish = this.database
             .update(schema.templates)
-            .set({ currentVersionId: input.versionId, status: 'listed', updatedAt: now })
-            .where(and(eq(schema.templates.id, input.templateId), nowApproved));
+            .set({
+                currentVersionId: input.versionId,
+                priceCents: sql`(select approved_price.price_cents from template_versions as approved_price where approved_price.id = ${input.versionId})`,
+                updatedAt: now,
+            })
+            .where(and(eq(schema.templates.id, input.listingId), nowApproved));
         if (input.supersedeVersionId) {
             const supersede = this.database
                 .update(schema.templateVersions)
@@ -213,118 +240,27 @@ export class TemplateService extends BaseService {
         return changed.length > 0;
     }
 
-    async setListing(templateId: string, listed: boolean): Promise<void> {
-        await this.database
-            .update(schema.templates)
-            .set({ status: listed ? 'listed' : 'unlisted', updatedAt: new Date() })
-            .where(eq(schema.templates.id, templateId));
-    }
-
-    /** Listed templates with their current version, most used first. */
-    async listPublished(query: PublishedQuery): Promise<{ rows: TemplateWithVersion[]; total: number }> {
-        const extra: SQL[] = [];
-        if (query.category) extra.push(eq(schema.templates.category, query.category));
-        if (query.search) {
-            const pattern = `%${query.search}%`;
-            const matches = or(like(schema.templates.name, pattern), like(schema.templates.description, pattern));
-            if (matches) extra.push(matches);
-        }
-        const where = this.publishedConditions(extra);
-        const readDb = this.getReadDb('fast');
-        const rows = await readDb
-            .select({
-                template: schema.templates,
-                version: schema.templateVersions,
-                creatorName: schema.users.displayName,
-            })
-            .from(schema.templates)
-            .innerJoin(schema.templateVersions, eq(schema.templateVersions.id, schema.templates.currentVersionId))
-            .leftJoin(schema.users, eq(schema.users.id, schema.templates.creatorUserId))
-            .where(where)
-            .orderBy(desc(schema.templates.useCount), desc(schema.templates.updatedAt))
-            .limit(query.limit)
-            .offset(query.offset)
-            .all();
-        const totalRow = await readDb
-            .select({ count: sql<number>`count(*)` })
-            .from(schema.templates)
-            .where(where)
-            .get();
-        return { rows, total: totalRow?.count ?? 0 };
-    }
-
-    async getPublishedBySlug(slug: string): Promise<TemplateWithVersion | null> {
-        return this.findPublished(eq(schema.templates.slug, slug));
-    }
-
-    async getPublishedById(templateId: string): Promise<TemplateWithVersion | null> {
-        return this.findPublished(eq(schema.templates.id, templateId));
-    }
-
-    async incrementUseCount(templateId: string): Promise<void> {
-        await this.database
-            .update(schema.templates)
-            .set({ useCount: sql`${schema.templates.useCount} + 1` })
-            .where(eq(schema.templates.id, templateId));
-    }
-
-    /** The template an app started from, for the app page. */
-    async getTemplateOrigin(versionId: string): Promise<TemplateOriginRow | null> {
-        const row = await this.database
-            .select({
-                slug: schema.templates.slug,
-                name: schema.templates.name,
-                creatorName: schema.users.displayName,
-                status: schema.templates.status,
-            })
-            .from(schema.templateVersions)
-            .innerJoin(schema.templates, eq(schema.templates.id, schema.templateVersions.templateId))
-            .leftJoin(schema.users, eq(schema.users.id, schema.templates.creatorUserId))
-            .where(eq(schema.templateVersions.id, versionId))
-            .get();
-        return row ?? null;
-    }
-
-    async hasPurchase(templateId: string, userId: string): Promise<boolean> {
+    async hasPurchase(listingId: string, userId: string): Promise<boolean> {
         const row = await this.database
             .select({ id: schema.templatePurchases.id })
             .from(schema.templatePurchases)
-            .where(and(eq(schema.templatePurchases.templateId, templateId), eq(schema.templatePurchases.userId, userId)))
+            .where(and(eq(schema.templatePurchases.templateId, listingId), eq(schema.templatePurchases.userId, userId)))
             .get();
         return row !== undefined;
     }
 
     /** Record a test-mode purchase (no charge). Buying twice keeps the first record. */
-    async recordPurchase(input: { templateId: string; userId: string; priceCents: number }): Promise<void> {
+    async recordPurchase(input: { listingId: string; userId: string; priceCents: number }): Promise<void> {
         await this.database
             .insert(schema.templatePurchases)
             .values({
                 id: generateId(),
-                templateId: input.templateId,
+                templateId: input.listingId,
                 userId: input.userId,
                 priceCents: input.priceCents,
                 provider: 'test',
                 createdAt: new Date(),
             })
             .onConflictDoNothing();
-    }
-
-    private publishedConditions(extra: SQL[]): SQL | undefined {
-        return and(eq(schema.templates.status, 'listed'), isNotNull(schema.templates.currentVersionId), ...extra);
-    }
-
-    private async findPublished(condition: SQL): Promise<TemplateWithVersion | null> {
-        const row = await this.database
-            .select({
-                template: schema.templates,
-                version: schema.templateVersions,
-                creatorName: schema.users.displayName,
-            })
-            .from(schema.templates)
-            .innerJoin(schema.templateVersions, eq(schema.templateVersions.id, schema.templates.currentVersionId))
-            .leftJoin(schema.users, eq(schema.users.id, schema.templates.creatorUserId))
-            .where(this.publishedConditions([condition]))
-            .get();
-        return row ?? null;
     }
 }

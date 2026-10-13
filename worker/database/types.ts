@@ -4,6 +4,7 @@
 
 import * as schema from './schema';
 import type { ModelConfig } from '../agents/inferutils/config.types';
+import type { DiscoverFilters } from '../services/templates/reuse';
 
 // ========================================
 // CORE SHARED INTERFACES
@@ -33,6 +34,10 @@ export interface EnhancedAppData extends schema.App {
     viewCount?: number;
     forkCount?: number;
     likeCount?: number;
+    /** The approved price of a listed paid listing; null or absent for a free site. */
+    paidPriceCents?: number | null;
+    /** A listed paid listing is waiting for its first approval. */
+    paidInReview?: boolean;
 }
 
 /**
@@ -153,6 +158,7 @@ export interface AppQueryOptions extends BaseAppQueryOptions {
  */
 export interface PublicAppQueryOptions extends BaseAppQueryOptions {
     userId?: string; // For user-specific data like favorites
+    discover?: DiscoverFilters;
 }
 
 /**
