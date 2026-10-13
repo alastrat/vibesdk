@@ -5,6 +5,7 @@ const sources = import.meta.glob<string>(
 		'/src/routes/app/index.tsx',
 		'/src/routes/chat/chat.tsx',
 		'/src/routes/chat/components/deployment-controls.tsx',
+		'/src/components/publishing/PageCopyFields.tsx',
 		'/src/components/publishing/PublishDialog.tsx',
 		'/src/components/publishing/SiteReuseBar.tsx',
 		'/src/hooks/use-app.ts',
@@ -25,7 +26,7 @@ describe('publishing a site', () => {
 		expect(dialog).toContain('TEMPLATE_PRICE_OPTIONS_CENTS.map');
 		expect(dialog).toContain('TEMPLATE_CATEGORIES.map');
 		expect(dialog).toContain("onSubmit({ visibility: 'private' })");
-		expect(dialog).toContain('disabled={!consent || !sellerReady}');
+		expect(dialog).toContain('disabled={!consent || !sellerReady || !pageCopy.valid}');
 	});
 
 	it('starts the price from the shared rule that skips rejected prices', () => {
@@ -60,5 +61,33 @@ describe('publishing a site', () => {
 		expect(bar).toContain('Remove from Discover');
 		expect(bar).toContain('Restore to Discover');
 		expect(source('/src/routes/app/index.tsx')).toContain('<SiteReuseBar');
+	});
+});
+
+describe('page text in the publish dialog', () => {
+	it('drafts on first open, can redraft, and shows the limits', () => {
+		const fields = source('/src/components/publishing/PageCopyFields.tsx');
+		expect(fields).toContain('Drafting…');
+		expect(fields).toContain('Redraft with AI');
+		expect(fields).toContain('PAGE_DRAFT_FAILED_MESSAGE');
+		expect(fields).toContain('validatePageCopy(');
+		expect(fields).toContain('SITE_PAGE_LIMITS');
+		expect(fields).toContain('Your page text is in review');
+	});
+
+	it('tells creators the format of What is included and that a paid change goes to review', () => {
+		const fields = source('/src/components/publishing/PageCopyFields.tsx');
+		expect(fields).toContain('as "Name: what it has"');
+		expect(fields).toContain('Changes to the page text go to review with the price.');
+		expect(source('/src/components/publishing/PublishDialog.tsx')).toContain(
+			'reviewedOnChange={paid && !!data.listing?.currentVersionId}',
+		);
+	});
+
+	it('sends the page text with a public publish and blocks invalid text', () => {
+		const dialog = source('/src/components/publishing/PublishDialog.tsx');
+		expect(dialog).toContain('<PageCopyFields');
+		expect(dialog).toContain('pageCopy: pageCopy.payload');
+		expect(dialog).toContain('!pageCopy.valid');
 	});
 });

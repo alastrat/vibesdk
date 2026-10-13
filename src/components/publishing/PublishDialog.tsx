@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Button, Loader } from '@cloudflare/kumo';
 import {
@@ -23,6 +23,7 @@ import {
 	type SitePublishingData,
 	type TemplateCategory,
 } from '@/api-types';
+import { PageCopyFields, type PageCopyState } from './PageCopyFields';
 
 const NO_CATEGORY = 'none';
 
@@ -47,7 +48,7 @@ export function PublishDialog({ appId, open, onOpenChange }: PublishDialogProps)
 
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent className="sm:max-w-lg">
+			<DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
 				<PublishDialogBody appId={appId} pending={publish.isPending} onSubmit={submit} />
 			</DialogContent>
 		</Dialog>
@@ -88,25 +89,28 @@ function PublishDialogBody({ appId, pending, onSubmit }: PublishDialogBodyProps)
 			) : data && !isPublic && data.ineligibleReason ? (
 				<p className="text-sm text-kumo-subtle">{data.ineligibleReason}</p>
 			) : data ? (
-				<PublishForm key={appId} data={data} pending={pending} onSubmit={onSubmit} />
+				<PublishForm key={appId} appId={appId} data={data} pending={pending} onSubmit={onSubmit} />
 			) : null}
 		</>
 	);
 }
 
 interface PublishFormProps {
+	appId: string;
 	data: SitePublishingData;
 	pending: boolean;
 	onSubmit: (body: PublishSiteRequest) => void;
 }
 
 /** Mounted only while the form shows, so each open starts from the saved settings. */
-function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
+function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 	const isPublic = data.visibility === 'public';
 	const [category, setCategory] = useState<TemplateCategory | typeof NO_CATEGORY>(data.category ?? NO_CATEGORY);
 	const [priceCents, setPriceCents] = useState<number>(savedListingPrice(data.listing));
 	// Changing the settings of a site published with consent keeps it; a site public before consent existed must tick it.
 	const [consent, setConsent] = useState(data.visibility === 'public' && data.hasReuseConsent);
+	const [pageCopy, setPageCopy] = useState<PageCopyState>({ payload: data.pageCopy, valid: true });
+	const updatePageCopy = useCallback((state: PageCopyState) => setPageCopy(state), []);
 	const paid = priceCents > 0;
 	const payouts = useStripeConnectStatus(paid);
 	const onboarding = useStripeOnboardingRedirect();
@@ -118,6 +122,7 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 			reuseConsent: consent,
 			category: category === NO_CATEGORY ? null : category,
 			priceCents,
+			pageCopy: pageCopy.payload,
 		});
 
 	return (
@@ -197,6 +202,13 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 					</Button>
 				</div>
 			)}
+			<PageCopyFields
+				appId={appId}
+				initialCopy={data.pageCopy}
+				inReview={data.pageCopyInReview}
+				reviewedOnChange={paid && !!data.listing?.currentVersionId}
+				onChange={updatePageCopy}
+			/>
 			<label className="flex items-start gap-2 text-sm text-kumo-default">
 				<Checkbox checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} />
 				<span>Others may copy and adapt this site.</span>
@@ -207,7 +219,12 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 						Make private
 					</Button>
 				)}
-				<Button variant="primary" loading={pending} disabled={!consent || !sellerReady} onClick={publish}>
+				<Button
+					variant="primary"
+					loading={pending}
+					disabled={!consent || !sellerReady || !pageCopy.valid}
+					onClick={publish}
+				>
 					{isPublic ? 'Save' : 'Publish'}
 				</Button>
 			</div>

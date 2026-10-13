@@ -130,7 +130,7 @@ describe('getting paid', () => {
 		expect(dialog).toContain('payouts.refetch()');
 		expect(dialog).toContain('payouts.isPending');
 		expect(dialog).toContain('Checking your Stripe account');
-		expect(dialog).toContain('disabled={!consent || !sellerReady}');
+		expect(dialog).toContain('disabled={!consent || !sellerReady || !pageCopy.valid}');
 	});
 
 	it('shows sellers their earnings and admins the sales and fees', () => {
