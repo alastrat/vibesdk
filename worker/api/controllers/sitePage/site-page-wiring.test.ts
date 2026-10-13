@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AI_MODEL_CONFIG, isValidAIModel } from '../../../agents/inferutils/config.types';
+import { AI_MODEL_CONFIG, AIModels, isValidAIModel } from '../../../agents/inferutils/config.types';
 import { THINK_MODELS } from '../../../agents/think/model-config';
 
 const sources = import.meta.glob<string>(
@@ -81,10 +81,13 @@ describe('drafting page text', () => {
 
 describe('the model that drafts page text', () => {
 	const draft = source('/worker/api/controllers/sitePage/draftController.ts');
-	const modelId = /const PAGE_DRAFT_MODEL_ID = '([^']+)';/.exec(draft)?.[1];
+	const modelKey = /const PAGE_DRAFT_MODEL_ID = AIModels\.([A-Z0-9_]+);/.exec(draft)?.[1];
+	const modelId = modelKey && modelKey in AIModels ? AIModels[modelKey as keyof typeof AIModels] : undefined;
 
-	it('is the cheapest current Think model, passed explicitly with a single attempt', () => {
+	it('is the cheapest current Think model, named from the AIModels catalog and passed explicitly with a single attempt', () => {
+		expect(modelKey).toBe('GEMINI_3_6_FLASH');
 		expect(modelId).toBe('google-ai-studio/gemini-3.6-flash');
+		expect(draft).not.toContain("'google-ai-studio/gemini-3.6-flash'");
 		const cheapest = [...THINK_MODELS].sort((a, b) => a.config.creditCost - b.config.creditCost)[0];
 		expect(cheapest.id).toBe(modelId);
 		expect(draft).toContain('modelName: PAGE_DRAFT_MODEL_ID');

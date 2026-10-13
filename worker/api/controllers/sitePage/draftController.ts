@@ -7,7 +7,7 @@ import { createLogger } from '../../../logger';
 import { AppService } from '../../../database';
 import { getAgentStubLightweight, getSpaceTemplateStub } from '../../../agents';
 import { executeInference } from '../../../agents/inferutils/infer';
-import type { InferenceContext } from '../../../agents/inferutils/config.types';
+import { AIModels, type InferenceContext } from '../../../agents/inferutils/config.types';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { NOT_DEPLOYED_REASON } from '../../../services/templates/reuse';
@@ -17,7 +17,7 @@ import type { PageCopyDraftData } from './types';
 
 const DRAFT_MAX_TOKENS = 2000;
 // The cheapest current Think model; the template-selection defaults point at retired Gemini 2.5 models.
-const PAGE_DRAFT_MODEL_ID = 'google-ai-studio/gemini-3.6-flash';
+const PAGE_DRAFT_MODEL_ID = AIModels.GEMINI_3_6_FLASH;
 
 export class PageCopyDraftController extends BaseController {
     static logger = createLogger('PageCopyDraftController');
