@@ -1303,7 +1303,7 @@ export async function publishSite(deps: PublishDeps, request: PublishRequest): P
 		throw error;
 	}
 	await deps.applyVisibility(request);
-	return { ok: true, inReview: plan.submitVersion || listing?.state.pendingPriceCents != null };
+	return { ok: true, inReview: plan.submitVersion || (listing?.state.pendingPriceCents ?? null) !== null };
 }
 ```
 
