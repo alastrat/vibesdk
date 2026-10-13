@@ -1,5 +1,5 @@
 import { AppService } from '../../../database/services/AppService';
-import type { AppSortOption, SortOrder, TimePeriod, Visibility } from '../../../database/types';
+import type { AppSortOption, SortOrder, TimePeriod } from '../../../database/types';
 import { formatRelativeTime } from '../../../utils/timeFormatter';
 import { BaseController } from '../baseController';
 import { ApiResponse, ControllerResponse } from '../types';
@@ -9,7 +9,6 @@ import {
     PublicAppsData,
     SingleAppData,
     FavoriteToggleData,
-    UpdateAppVisibilityData,
     AppDeleteData
 } from './types';
 import { toPublicAppListItem } from './publicAppDto';
@@ -200,53 +199,6 @@ export class AppController extends BaseController {
         } catch (error) {
             this.logger.error('Error fetching app:', error);
             return AppController.createErrorResponse<SingleAppData>('Failed to fetch app', 500);
-        }
-    }
-
-    // Update app visibility
-    static async updateAppVisibility(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<UpdateAppVisibilityData>>> {
-        try {
-            const user = context.user!;
-
-            const appId = context.pathParams.id;
-            if (!appId) {
-                return AppController.createErrorResponse<UpdateAppVisibilityData>('App ID is required', 400);
-            }
-
-            const bodyResult = await AppController.parseJsonBody(request);
-            if (!bodyResult.success) {
-                return bodyResult.response! as ControllerResponse<ApiResponse<UpdateAppVisibilityData>>;
-            }
-            
-            const visibility = (bodyResult.data as { visibility?: string })?.visibility;
-
-            // Validate visibility value
-            if (!visibility || !['private', 'public'].includes(visibility)) {
-                return AppController.createErrorResponse<UpdateAppVisibilityData>('Visibility must be either "private" or "public"', 400);
-            }
-
-            const validVisibility = visibility as Visibility;
-            
-            const appService = new AppService(env);
-            const result = await appService.updateAppVisibility(appId, user.id, validVisibility);
-
-            if (!result.success) {
-                const statusCode = result.error === 'App not found' ? 404 : 
-                                 result.error?.includes('only change visibility of your own apps') ? 403 : 500;
-                return AppController.createErrorResponse<UpdateAppVisibilityData>(result.error || 'Failed to update app visibility', statusCode);
-            }
-
-            const responseData: UpdateAppVisibilityData = { 
-                app: {
-                    ...result.app!,
-                    visibility: result.app!.visibility
-                },
-                message: `App visibility updated to ${validVisibility}`
-            };
-            return AppController.createSuccessResponse(responseData);
-        } catch (error) {
-            this.logger.error('Error updating app visibility:', error);
-            return AppController.createErrorResponse<UpdateAppVisibilityData>('Failed to update app visibility', 500);
         }
     }
 

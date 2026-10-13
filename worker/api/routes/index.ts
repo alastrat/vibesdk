@@ -1,6 +1,6 @@
 import { setupAuthRoutes } from './authRoutes';
 import { setupAppRoutes } from './appRoutes';
-import { setupTemplateRoutes } from './templateRoutes';
+import { setupPublishingRoutes } from './publishingRoutes';
 import { setupUserRoutes } from './userRoutes';
 import { setupStatsRoutes } from './statsRoutes';
 import { setupAnalyticsRoutes } from './analyticsRoutes';
@@ -51,8 +51,8 @@ export function setupRoutes(app: Hono<AppEnv>): void {
     // User dashboard and profile routes
     setupUserRoutes(app);
     
-    // Template routes (registered before the /api/apps router so /api/apps/:id/template resolves here)
-    setupTemplateRoutes(app);
+    // Publishing, paid listings and review (before app routes so the visibility route is matched here)
+    setupPublishingRoutes(app);
 
     // App management routes
     setupAppRoutes(app);
