@@ -54,3 +54,10 @@ describe('paid updates', () => {
 		expect(controller).not.toContain('versions[0]?.priceCents');
 	});
 });
+
+describe('publishing settings', () => {
+	it('report whether the owner recorded consent to reuse', () => {
+		const controller = source('/worker/api/controllers/publishing/controller.ts');
+		expect(controller).toContain('hasReuseConsent: state.reuseConsentAt !== null');
+	});
+});

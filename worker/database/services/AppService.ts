@@ -616,10 +616,11 @@ export class AppService extends BaseService {
         return row ?? null;
     }
 
-    /** The owner's publishing choices and any admin removal. */
+    /** The owner's publishing choices and consent, and any admin removal. */
     async getPublishingState(appId: string): Promise<{
         visibility: 'private' | 'public';
         category: TemplateCategory | null;
+        reuseConsentAt: Date | null;
         removedFromDiscoverAt: Date | null;
         removedFromDiscoverReason: string | null;
     } | null> {
@@ -627,6 +628,7 @@ export class AppService extends BaseService {
             .select({
                 visibility: schema.apps.visibility,
                 category: schema.apps.category,
+                reuseConsentAt: schema.apps.reuseConsentAt,
                 removedFromDiscoverAt: schema.apps.removedFromDiscoverAt,
                 removedFromDiscoverReason: schema.apps.removedFromDiscoverReason,
             })

@@ -103,8 +103,8 @@ function PublishForm({ data, pending, onSubmit }: PublishFormProps) {
 	const isPublic = data.visibility === 'public';
 	const [category, setCategory] = useState<TemplateCategory | typeof NO_CATEGORY>(data.category ?? NO_CATEGORY);
 	const [priceCents, setPriceCents] = useState<number>(savedListingPrice(data.listing));
-	// An already-public site was published with consent; changing its settings keeps it.
-	const [consent, setConsent] = useState(isPublic);
+	// Changing the settings of a site published with consent keeps it; a site public before consent existed must tick it.
+	const [consent, setConsent] = useState(data.visibility === 'public' && data.hasReuseConsent);
 
 	const publish = () =>
 		onSubmit({

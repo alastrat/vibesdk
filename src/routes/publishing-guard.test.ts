@@ -34,6 +34,11 @@ describe('publishing a site', () => {
 		expect(dialog).not.toContain('function savedPrice');
 	});
 
+	it('pre-ticks consent only for a public site whose consent was recorded', () => {
+		const dialog = source('/src/components/publishing/PublishDialog.tsx');
+		expect(dialog).toContain("useState(data.visibility === 'public' && data.hasReuseConsent)");
+	});
+
 	it('routes every Make public control through the dialog', () => {
 		expect(source('/src/routes/app/index.tsx')).toContain('<PublishDialog');
 		expect(source('/src/routes/app/index.tsx')).not.toContain('useUpdateAppVisibility');

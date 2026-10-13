@@ -44,6 +44,8 @@ export interface OwnerPaidListing {
 export interface SitePublishingData {
     visibility: 'private' | 'public';
     category: TemplateCategory | null;
+    /** The owner consented to reuse when publishing; sites public before consent existed have not. */
+    hasReuseConsent: boolean;
     /** Why the app can't be published now, or null when it can. */
     ineligibleReason: string | null;
     listing: OwnerPaidListing | null;

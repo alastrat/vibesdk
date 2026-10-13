@@ -112,6 +112,7 @@ export class PublishingController extends BaseController {
             return PublishingController.createSuccessResponse<SitePublishingData>({
                 visibility: state.visibility,
                 category: state.category,
+                hasReuseConsent: state.reuseConsentAt !== null,
                 ineligibleReason: facts.unavailable
                     ? PUBLISHING_CHECK_FAILED_MESSAGE
                     : publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null),
