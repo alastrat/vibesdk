@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { BRAND } from '@/brand';
 import { AI_ASSISTANT_NAMES, COMPETITORS } from './copy-rules';
 
 const pages = import.meta.glob<string>(
@@ -34,6 +35,11 @@ describe('positioning copy rules', () => {
 		expect(mentions.length).toBeGreaterThan(0);
 		expect(proper.length).toBe(mentions.length);
 		expect(all).not.toMatch(/\bthe (agentic commerce )?standard\b/i);
+	});
+
+	it('describes the site with the new positioning, which is what shared links preview', () => {
+		expect(BRAND.description).toContain('agentic commerce platform');
+		expect(BRAND.description).not.toContain('templates');
 	});
 
 	it('states the explainer copy for agentic commerce in one place', () => {

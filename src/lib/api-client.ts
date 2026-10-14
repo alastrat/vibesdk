@@ -688,8 +688,9 @@ class ApiClient {
 		return this.request<MyEarlyAccessData>('/api/early-access', { method: 'POST', body: { capability } });
 	}
 
+	/** Every early-access request; quiet because non-admins get 403. */
 	async getAdminEarlyAccess(): Promise<ApiResponse<EarlyAccessAdminData>> {
-		return this.request<EarlyAccessAdminData>('/api/admin/early-access');
+		return this.request<EarlyAccessAdminData>('/api/admin/early-access', {}, true);
 	}
 
 	/**

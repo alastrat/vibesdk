@@ -20,10 +20,11 @@ function source(path: string): string {
 }
 
 describe('early access in the app', () => {
-	it('asks signed-out visitors to sign up, records after sign-in, and survives a sign-in that reloads the page', () => {
+	it('records at once when signed in, and otherwise carries the request only in the return URL, so any sign-in records it exactly once', () => {
 		const button = source('/src/components/public-site/EarlyAccessButton.tsx');
+		expect(button).toMatch(/if \(isAuthenticated && !user\?\.isAnonymous\) \{\s*record\(\);\s*return;/);
 		expect(button).toContain('requireAuth({');
-		expect(button).toContain('onSuccess: record');
+		expect(button).not.toContain('onSuccess: record');
 		expect(button).toContain('intendedUrl: earlyAccessReturnUrl(pathname, capability)');
 		expect(button).toContain("You're on the list");
 		expect(source('/src/hooks/use-early-access.ts')).toContain('navigate({ pathname, hash }, { replace: true });');
@@ -33,7 +34,8 @@ describe('early access in the app', () => {
 		const client = source('/src/lib/api-client.ts');
 		expect(client).toContain("'/api/early-access', { method: 'POST', body: { capability } }");
 		expect(client).toContain("this.request<MyEarlyAccessData>('/api/early-access')");
-		expect(client).toContain("'/api/admin/early-access'");
+		// Quiet like the other admin calls: non-admins see "Admins only", not an error toast.
+		expect(client).toContain("this.request<EarlyAccessAdminData>('/api/admin/early-access', {}, true)");
 	});
 
 	it('shows admins the list behind sign-in, and tells everyone else it is for admins', () => {

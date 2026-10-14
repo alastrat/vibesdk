@@ -46,8 +46,6 @@ describe('public chrome', () => {
 		expect(top).toContain("pillClass('blue'");
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
-		expect(top).toContain('<SolutionsMenuPanel');
-		expect(top).toContain('<CreatorsMenuPanel');
 		expect(top).toContain('<MobileMenuGroups />');
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
@@ -69,6 +67,14 @@ describe('public chrome', () => {
 		expect(top).toContain('triggerRefs.current[openPanel]?.focus();');
 		expect(top).toContain("document.addEventListener('pointerdown', onPointerDown);");
 		expect(top).toMatch(/setOpenPanel\(null\);\s*\}, \[pathname, hash, key\]\);/);
+	});
+
+	it('puts each open panel right after its trigger, and closes it when keyboard focus leaves both', () => {
+		const top = source(TOP);
+		expect(top).toMatch(/<\/button>\s*\{openPanel === menu\.id && <MenuPanel id=\{menu\.id\} \/>\}/);
+		expect(top).toContain('event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)');
+		expect(source(NAV)).toContain('export function MenuPanel(');
+		expect(source(NAV)).toMatch(/const PANEL = '[^']*whitespace-normal/);
 	});
 
 	it('builds the menus from the registry, so a launch removes its tag everywhere', () => {

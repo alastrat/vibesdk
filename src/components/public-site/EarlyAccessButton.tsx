@@ -8,8 +8,9 @@ import { cn } from '@/lib/utils';
 import { pillClass, type PillVariant } from './primitives';
 
 /**
- * Requests early access to a program. Signed out, it opens sign-up and records the request after sign-in; the
- * return URL carries it through sign-ins that reload the page.
+ * Requests early access to a program. Signed in, it records at once. Signed out, it opens sign-in with a return URL
+ * that carries the request, and useEarlyAccessFromUrl records it there: one carrier, so every sign-in method records
+ * it exactly once.
  */
 export function EarlyAccessButton({
 	capability,
@@ -24,7 +25,7 @@ export function EarlyAccessButton({
 	listedClassName?: string;
 }) {
 	const { pathname } = useLocation();
-	const { requireAuth } = useAuthGuard();
+	const { isAuthenticated, user, requireAuth } = useAuthGuard();
 	const mine = useMyEarlyAccess();
 	const { mutate, isPending } = useRequestEarlyAccess();
 
@@ -47,14 +48,17 @@ export function EarlyAccessButton({
 			type="button"
 			disabled={isPending}
 			className={pillClass(variant, className)}
-			onClick={() =>
+			onClick={() => {
+				if (isAuthenticated && !user?.isAnonymous) {
+					record();
+					return;
+				}
 				requireAuth({
 					requireFullAuth: true,
 					actionContext: 'to request early access',
-					onSuccess: record,
 					intendedUrl: earlyAccessReturnUrl(pathname, capability),
-				})
-			}
+				});
+			}}
 		>
 			{isPending ? 'Saving…' : 'Request early access'}
 		</button>

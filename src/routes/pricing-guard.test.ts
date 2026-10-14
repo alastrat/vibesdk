@@ -36,6 +36,13 @@ describe('pricing page', () => {
 		expect(page).toContain('<caption className="sr-only">What each plan includes</caption>');
 	});
 
+	it("tells screen readers each row's status, not only the section heading", () => {
+		expect(page).toContain('scope="rowgroup"');
+		expect(page).not.toContain('scope="colgroup"');
+		expect(page).toContain('STATUS_LABELS[');
+		expect(page).toContain('<span className="sr-only">, {note}</span>');
+	});
+
 	it('states the free limits and the template fee from the code that applies them', () => {
 		expect(page).toContain('PLATFORM_FEE_LABEL');
 		expect(page).toContain('sellerKeepsTable()');

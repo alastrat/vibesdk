@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import capabilities from '../lib/capabilities.ts?raw';
 import publicCss from './public-site.css?raw';
 import indexCss from '../index.css?raw';
 
@@ -57,7 +58,8 @@ describe('public site styles', () => {
 	it('styles Coming soon with fixed colors, not app tokens that follow the app theme', () => {
 		const badge = source('/src/components/marketing/ComingSoon.tsx');
 		expect(badge).not.toContain('kumo-');
-		expect(badge).toContain('Coming soon');
+		expect(badge).toContain('STATUS_LABELS[status]');
+		expect(capabilities).toContain("'coming-soon': 'Coming soon'");
 	});
 
 	it('lets app components embedded in a public page keep the app theme', () => {

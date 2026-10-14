@@ -6,7 +6,7 @@ import { AUDIENCES, CREATOR_ITEMS, CREATORS_CAPTION, type NavItem } from '@/lib/
 
 export type MenuId = 'solutions' | 'creators';
 
-const PANEL = 'absolute inset-x-0 top-full border-b border-public-line bg-white shadow-[0_24px_40px_rgba(0,0,0,0.08)]';
+const PANEL = 'absolute inset-x-0 top-full whitespace-normal border-b border-public-line bg-white shadow-[0_24px_40px_rgba(0,0,0,0.08)]';
 const COLUMN_TITLE = 'px-3 text-xs uppercase tracking-[0.02em] text-public-ink/80';
 const ITEM = 'block rounded-lg px-3 py-2.5 text-public-ink hover:bg-[#f4f4f5] focus-visible:outline-2 focus-visible:outline-public-blue';
 
@@ -77,6 +77,11 @@ export function CreatorsMenuPanel({ id }: { id: string }) {
 			</div>
 		</div>
 	);
+}
+
+/** The open panel for a top-bar menu, rendered right after its trigger so keyboard focus moves into it. */
+export function MenuPanel({ id }: { id: MenuId }) {
+	return id === 'solutions' ? <SolutionsMenuPanel id={`menu-${id}`} /> : <CreatorsMenuPanel id={`menu-${id}`} />;
 }
 
 function MobileGroup({ title, children }: { title: string; children: ReactNode }) {

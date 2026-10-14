@@ -1,6 +1,12 @@
 /** How a capability shows on the public site; changing a status here updates every tag, button and menu. */
 export type CapabilityStatus = 'available' | 'coming-soon' | 'early-access';
 
+/** What the badge says for each status that isn't available yet. */
+export const STATUS_LABELS: Readonly<Record<Exclude<CapabilityStatus, 'available'>, string>> = {
+	'coming-soon': 'Coming soon',
+	'early-access': 'Early access',
+};
+
 export type CapabilityId =
 	| 'store-builder'
 	| 'agentic-commerce'

@@ -7,7 +7,7 @@ import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { pillClass, preferredScrollBehavior } from '@/components/public-site/primitives';
 import { cn } from '@/lib/utils';
 import { AnnouncementBar } from './AnnouncementBar';
-import { CreatorsMenuPanel, MobileMenuGroups, SolutionsMenuPanel, type MenuId } from './NavMenu';
+import { MenuPanel, MobileMenuGroups, type MenuId } from './NavMenu';
 
 const MENUS: ReadonlyArray<{ id: MenuId; label: string }> = [
 	{ id: 'solutions', label: 'Solutions' },
@@ -75,23 +75,33 @@ export function PublicTopBar() {
 						</Link>
 						<nav aria-label="Main" className="hidden lg:flex items-center gap-6 whitespace-nowrap text-[15px] text-public-charcoal">
 							{MENUS.map((menu) => (
-								<button
+								<div
 									key={menu.id}
-									ref={(node) => {
-										triggerRefs.current[menu.id] = node;
+									// Keyboard focus leaving the trigger and its panel closes it; clicks elsewhere are the document listener's.
+									onBlur={(event) => {
+										if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) {
+											setOpenPanel((open) => (open === menu.id ? null : open));
+										}
 									}}
-									type="button"
-									aria-expanded={openPanel === menu.id}
-									aria-controls={`menu-${menu.id}`}
-									onClick={() => setOpenPanel((open) => (open === menu.id ? null : menu.id))}
-									className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
 								>
-									{menu.label}
-									<CaretDownIcon
-										className={cn('size-3.5 transition-transform motion-reduce:transition-none', openPanel === menu.id && 'rotate-180')}
-										aria-hidden
-									/>
-								</button>
+									<button
+										ref={(node) => {
+											triggerRefs.current[menu.id] = node;
+										}}
+										type="button"
+										aria-expanded={openPanel === menu.id}
+										aria-controls={`menu-${menu.id}`}
+										onClick={() => setOpenPanel((open) => (open === menu.id ? null : menu.id))}
+										className="inline-flex items-center gap-1 underline-offset-4 hover:underline"
+									>
+										{menu.label}
+										<CaretDownIcon
+											className={cn('size-3.5 transition-transform motion-reduce:transition-none', openPanel === menu.id && 'rotate-180')}
+											aria-hidden
+										/>
+									</button>
+									{openPanel === menu.id && <MenuPanel id={menu.id} />}
+								</div>
 							))}
 							{NAV_LINKS.map((link) => (
 								<Link key={link.to} to={link.to} className="underline-offset-4 hover:underline">
@@ -125,8 +135,6 @@ export function PublicTopBar() {
 						</button>
 					</div>
 				</div>
-				{openPanel === 'solutions' && <SolutionsMenuPanel id="menu-solutions" />}
-				{openPanel === 'creators' && <CreatorsMenuPanel id="menu-creators" />}
 				{menuOpen && (
 					<nav
 						id="public-menu"

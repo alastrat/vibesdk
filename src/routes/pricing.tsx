@@ -10,6 +10,7 @@ import { Eyebrow, HEADING_SECTION, LEAD, PillLink } from '@/components/public-si
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { PageMeta } from '@/components/public-site/solution-page';
 import { usePublicPlan } from '@/hooks/use-public-plan';
+import { CAPABILITIES, STATUS_LABELS, type CapabilityId } from '@/lib/capabilities';
 import { PLANS, PLAN_COMPARISON, formatCredits, liveStoresLabel, type Plan, type PlanCell } from '@/lib/plans';
 import { formatCents, sellerKeepsTable } from '@/lib/pricing';
 import { cn } from '@/lib/utils';
@@ -93,11 +94,19 @@ function Cell({ value }: { value: PlanCell }) {
 	return <>{value}</>;
 }
 
-function ComparisonRowView({ label, cells }: { label: string; cells: readonly PlanCell[] }) {
+/** The status a screen reader hears with each row of a capability that isn't available yet. */
+function statusNote(capability: CapabilityId | null): string | undefined {
+	if (!capability) return undefined;
+	const { status } = CAPABILITIES[capability];
+	return status === 'available' ? undefined : STATUS_LABELS[status];
+}
+
+function ComparisonRowView({ label, note, cells }: { label: string; note?: string; cells: readonly PlanCell[] }) {
 	return (
 		<tr className="border-t border-public-line">
 			<th scope="row" className="py-3 pr-4 text-left font-light text-public-ink">
 				{label}
+				{note && <span className="sr-only">, {note}</span>}
 			</th>
 			{cells.map((cell, index) => (
 				<td key={PLANS[index].id} className="py-3 text-center text-public-ink">
@@ -132,7 +141,7 @@ function Comparison() {
 						{PLAN_COMPARISON.map((section) => (
 							<tbody key={section.title}>
 								<tr>
-									<th scope="colgroup" colSpan={PLANS.length + 1} className="pt-8 pb-2 text-left font-normal">
+									<th scope="rowgroup" colSpan={PLANS.length + 1} className="pt-8 pb-2 text-left font-normal">
 										<span className="inline-flex flex-wrap items-center gap-2 text-public-ink">
 											{section.title}
 											{section.capability && <CapabilityTag id={section.capability} />}
@@ -149,7 +158,12 @@ function Comparison() {
 									</>
 								)}
 								{section.rows.map((row) => (
-									<ComparisonRowView key={row.label} label={row.label} cells={PLANS.map((entry) => row.cells[entry.id])} />
+									<ComparisonRowView
+										key={row.label}
+										label={row.label}
+										note={statusNote(section.capability)}
+										cells={PLANS.map((entry) => row.cells[entry.id])}
+									/>
 								))}
 							</tbody>
 						))}
