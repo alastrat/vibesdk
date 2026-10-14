@@ -20,7 +20,7 @@
 ## Global Constraints
 
 **Email**
-- Sender: `Estori <no-reply@estori.app>`.
+- Sender: `no-reply@estori.app` with the display name `Estori`, passed to the Email Service as `{ email, name }`.
 - Reset links: `/reset-password?token=…`, valid 30 minutes.
 - Confirmation links: `/verify-email?token=…`, valid 24 hours.
 - Link domain:
@@ -79,11 +79,12 @@
 // worker/services/email/types.ts
 export interface OutgoingEmail { to: string; subject: string; html: string; text: string }
 export interface EmailSender { send(email: OutgoingEmail): Promise<void> }
+export interface EmailAddress { email: string; name: string }
 /** The Cloudflare Email Service binding (send_email with remote: true). */
 export interface TransactionalEmailBinding {
-	send(message: { to: string; from: string; subject: string; html: string; text: string }): Promise<{ messageId: string }>;
+	send(message: { to: string; from: string | EmailAddress; subject: string; html: string; text: string }): Promise<{ messageId: string }>;
 }
-export const EMAIL_FROM = 'Estori <no-reply@estori.app>';
+export const EMAIL_FROM: EmailAddress = { email: 'no-reply@estori.app', name: 'Estori' };
 
 // worker/services/email/sender.ts
 export function createEmailSender(env: Env): EmailSender | null;   // binding → Cloudflare; isDev(env) → dev log; else null

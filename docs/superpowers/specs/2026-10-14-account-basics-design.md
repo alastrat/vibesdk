@@ -62,7 +62,7 @@ The chat debug panel's "email this dump" goes to support@estori.app instead of t
 - **Binding:** `send_email: [{ name: "EMAIL", remote: true }]`. It's called with `env.EMAIL.send({ to, from, subject, html, text })` and returns `{ messageId }`.
 - **Onboarding:** the domain is onboarded under Compute > Email Service > Email Sending > Onboard Domain. Cloudflare adds the SPF, DKIM, DMARC and bounce MX records on `cf-bounce`.
 
-**Sender:** `Estori <no-reply@estori.app>`.
+**Sender:** `no-reply@estori.app` with the display name `Estori`, passed as `from: { email, name }`.
 
 **Which sender is used:**
 - With the `EMAIL` binding configured, Estori sends through Cloudflare.

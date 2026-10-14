@@ -31,6 +31,10 @@ describe('createEmailSender', () => {
 		});
 	});
 
+	it('names the sender as an address object, not a display-name string', () => {
+		expect(EMAIL_FROM).toEqual({ email: 'no-reply@estori.app', name: 'Estori' });
+	});
+
 	it('prefers the binding over the dev log in a dev environment', async () => {
 		const send = vi.fn().mockResolvedValue({ messageId: 'm2' });
 		const sender = createEmailSender(envWith({ ENVIRONMENT: 'dev', EMAIL: { send } }));
