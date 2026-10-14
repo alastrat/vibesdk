@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-const sources = import.meta.glob<string>(['/src/routes/pricing.tsx', '/src/routes.tsx'], {
+const sources = import.meta.glob<string>(['/src/routes/pricing.tsx', '/src/routes.tsx', '/src/routes/landing/sections.tsx'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -15,7 +15,28 @@ function source(path: string): string {
 describe('pricing page', () => {
 	const page = source('/src/routes/pricing.tsx');
 
-	it('states the fee and limits from the code that applies them', () => {
+	it('shows the four plans from the plan data, never typed-in prices', () => {
+		expect(page).toContain('PLANS.map');
+		expect(page).toContain('<PlanPrice');
+		expect(page).not.toMatch(/\$(29|79|249)\b/);
+		expect(page).not.toMatch(/10,000|30,000|100,000/);
+	});
+
+	it('offers a button only on plans available today', () => {
+		const card = page.slice(page.indexOf('function PlanCard('), page.indexOf('function Cell('));
+		expect(card.match(/<PillLink/g)).toHaveLength(1);
+		expect(card.indexOf('<PillLink')).toBeGreaterThan(card.indexOf("plan.status === 'available' && ("));
+		expect(card).toContain("plan.status === 'coming-soon' && <ComingSoon />");
+		expect(page).not.toMatch(/Subscribe|Upgrade/);
+	});
+
+	it('compares plans by capability, with tags from the registry', () => {
+		expect(page).toContain('PLAN_COMPARISON.map');
+		expect(page).toContain('<CapabilityTag id={section.capability} />');
+		expect(page).toContain('<caption className="sr-only">What each plan includes</caption>');
+	});
+
+	it('states the free limits and the template fee from the code that applies them', () => {
 		expect(page).toContain('PLATFORM_FEE_LABEL');
 		expect(page).toContain('sellerKeepsTable()');
 		expect(page).toContain('<PlanLimits');
@@ -29,29 +50,31 @@ describe('pricing page', () => {
 	});
 
 	it("doesn't promise store payments yet", () => {
-		expect(page).toContain('<ComingSoon');
 		expect(page).toContain('Accept payments in your store');
 	});
 
-	it('is a public page', () => {
-		const routes = source('/src/routes.tsx');
-		expect(routes.slice(routes.indexOf('Component: PublicShell'))).toContain("path: 'pricing'");
+	it('keeps template selling in its own section that the developer page links to', () => {
+		expect(page).toContain('id="developers"');
+		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
+		const sell = page.slice(page.lastIndexOf('<article', page.indexOf('>Sell</h3>')), page.indexOf('>Sell</h3>'));
+		expect(sell).toMatch(/<article className=\{cn\(CARD, '[^']*\brelative\b/);
 	});
 
-	it('uses the 1Password layout: charcoal hero, white plan cards, the shared FAQ', () => {
+	it('is a public page in the 1Password layout', () => {
+		const routes = source('/src/routes.tsx');
+		expect(routes.slice(routes.indexOf('Component: PublicShell'))).toContain("path: 'pricing'");
 		expect(page).toContain('bg-public-charcoal');
 		expect(page).toContain('<PublicFaq />');
 		expect(page).not.toContain('kumo-');
 	});
+});
 
-	it('keeps the seller table readable by screen readers', () => {
-		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
-		expect(page.match(/scope="col"/g)).toHaveLength(3);
-	});
-
-	it('positions the Sell card, so the absolute sr-only caption cannot add a second page scroll', () => {
-		const sell = page.slice(page.lastIndexOf('<article', page.indexOf('>Sell</h2>')), page.indexOf('>Sell</h2>'));
-		expect(sell).toMatch(/<article className=\{cn\(CARD, '[^']*\brelative\b/);
-		expect(sell.length).toBeLessThan(200);
+describe('landing pricing summary', () => {
+	it('shows the same plans from the same data', () => {
+		const sections = source('/src/routes/landing/sections.tsx');
+		const summary = sections.slice(sections.indexOf('export function PricingSummary'), sections.indexOf('export function ClosingPanel'));
+		expect(summary).toContain('PLANS.map');
+		expect(summary).toContain('<PlanPrice');
+		expect(summary).toContain('<ComingSoon />');
 	});
 });
