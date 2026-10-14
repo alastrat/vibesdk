@@ -6,6 +6,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/components/layout/PublicLayout.tsx',
+		'/src/components/layout/NavMenu.tsx',
 		'/src/components/public-site/primitives.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
@@ -16,6 +17,7 @@ const TOP = '/src/components/layout/PublicTopBar.tsx';
 const FOOTER = '/src/components/layout/SiteFooter.tsx';
 const LAYOUT = '/src/components/layout/PublicLayout.tsx';
 const PRIMITIVES = '/src/components/public-site/primitives.tsx';
+const NAV = '/src/components/layout/NavMenu.tsx';
 
 function source(path: string): string {
 	const text = sources[path];
@@ -24,11 +26,11 @@ function source(path: string): string {
 }
 
 describe('public chrome', () => {
-	it('announces Discover with the fee from the code and links to the creators panel', () => {
+	it('announces Discover with the fee from the code and links to the developers page', () => {
 		const bar = source(ANNOUNCE);
 		expect(bar).toContain('PLATFORM_FEE_LABEL');
 		expect(bar).not.toMatch(/7% \+ \$0\.60/);
-		expect(bar).toContain('to="/#creators"');
+		expect(bar).toContain('to="/creators/developers"');
 		expect(bar).toContain('bg-public-gold');
 		expect(bar).toContain('truncate');
 		expect(bar).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
@@ -39,22 +41,43 @@ describe('public chrome', () => {
 	it('shows the announcement above a white top bar with the blue build action and a phone menu', () => {
 		const top = source(TOP);
 		expect(top).toContain('<AnnouncementBar />');
-		expect(top).toContain('hidden md:flex');
+		expect(top).toContain('hidden lg:flex');
 		expect(top).toContain('Start building free');
 		expect(top).toContain("pillClass('blue'");
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
-		expect(top).toContain("to: '/#creators'");
+		expect(top).toContain('<SolutionsMenuPanel');
+		expect(top).toContain('<CreatorsMenuPanel');
+		expect(top).toContain('<MobileMenuGroups />');
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
-	it('keeps the bar on one line: links move to the menu below md, and nothing in the bar wraps', () => {
+	it('keeps the bar on one line: the menus and links move to the menu below lg, and nothing in the bar wraps', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<nav aria-label="Main" className="hidden md:flex [^"]*whitespace-nowrap/);
+		expect(top).toMatch(/<nav aria-label="Main" className="hidden lg:flex [^"]*whitespace-nowrap/);
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
-		expect(top).toContain('rounded-full p-2 text-public-charcoal md:hidden');
-		expect(top).toMatch(/id="public-menu"[^>]*md:hidden/);
+		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
+		expect(top).toMatch(/id="public-menu"[^>]*lg:hidden/);
 		expect(top).toContain("pillClass('blue', 'mt-3 w-full sm:hidden')");
+	});
+
+	it('opens one menu panel at a time, closes it on Escape, a click outside or navigation, and returns focus', () => {
+		const top = source(TOP);
+		expect(top).toContain('aria-expanded={openPanel === menu.id}');
+		expect(top).toContain('aria-controls={`menu-${menu.id}`}');
+		expect(top).toContain("event.key !== 'Escape'");
+		expect(top).toContain('triggerRefs.current[openPanel]?.focus();');
+		expect(top).toContain("document.addEventListener('pointerdown', onPointerDown);");
+		expect(top).toMatch(/setOpenPanel\(null\);\s*\}, \[pathname, hash, key\]\);/);
+	});
+
+	it('builds the menus from the registry, so a launch removes its tag everywhere', () => {
+		const nav = source(NAV);
+		expect(nav).toContain('PLATFORM_CAPABILITIES.map');
+		expect(nav).toContain('<CapabilityTag');
+		expect(nav).toContain('AUDIENCES.map');
+		expect(nav).toContain('CREATOR_ITEMS.map');
+		expect(nav).not.toContain('<ComingSoon');
 	});
 
 	it('wraps long contact emails instead of scrolling a narrow phone sideways', () => {
@@ -63,7 +86,7 @@ describe('public chrome', () => {
 
 	it('ends every public page with the dark footer: link columns, contacts, wordmark and legal line', () => {
 		const footer = source(FOOTER);
-		for (const text of ['bg-public-charcoal', 'LEGAL_LINKS.map', 'LEGAL_CONTACT', 'legalAddressLine()', 'LEGAL_ENTITY.name', '<EstoriLogo', "to: '/#creators'"]) {
+		for (const text of ['bg-public-charcoal', 'LEGAL_LINKS.map', 'LEGAL_CONTACT', 'legalAddressLine()', 'LEGAL_ENTITY.name', '<EstoriLogo', "to: '/creators/developers'"]) {
 			expect(footer).toContain(text);
 		}
 	});
