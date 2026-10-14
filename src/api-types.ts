@@ -268,6 +268,8 @@ export {
 	formatTemplatePrice,
 	platformFeeCents,
 } from '../shared/types/templates.js';
+export { EARLY_ACCESS_CAPABILITIES, isEarlyAccessCapability } from '../shared/types/early-access.js';
+export type { EarlyAccessCapability } from '../shared/types/early-access.js';
 export {
 	LEGAL_CONTACT,
 	LEGAL_ENTITY,
