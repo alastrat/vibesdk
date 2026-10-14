@@ -69,6 +69,9 @@ import type{
 	DiscoverPricing,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
+	EarlyAccessAdminData,
+	EarlyAccessCapability,
+	MyEarlyAccessData,
 	MyPaidListingsData,
 	PageCopyDraftData,
 	PaidVersionActionData,
@@ -675,6 +678,18 @@ class ApiClient {
 	/** Admins only: capture the showcase images Discover stores are still missing, one batch per call. */
 	async refreshShowcaseScreenshots(): Promise<ApiResponse<ShowcaseRefreshData>> {
 		return this.request<ShowcaseRefreshData>('/api/admin/showcase-screenshots/refresh', { method: 'POST' });
+	}
+
+	async getMyEarlyAccess(): Promise<ApiResponse<MyEarlyAccessData>> {
+		return this.request<MyEarlyAccessData>('/api/early-access');
+	}
+
+	async requestEarlyAccess(capability: EarlyAccessCapability): Promise<ApiResponse<MyEarlyAccessData>> {
+		return this.request<MyEarlyAccessData>('/api/early-access', { method: 'POST', body: { capability } });
+	}
+
+	async getAdminEarlyAccess(): Promise<ApiResponse<EarlyAccessAdminData>> {
+		return this.request<EarlyAccessAdminData>('/api/admin/early-access');
 	}
 
 	/**

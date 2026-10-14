@@ -23,7 +23,7 @@ describe('reviews and paid listings', () => {
 		expect(page).toContain("decision: 'approve'");
 		expect(page).toContain("decision: 'reject', reason");
 		expect(page).toContain('useReviewVersionFiles(');
-		expect(page).toContain('isForbidden(');
+		expect(page).toContain('isForbiddenError(');
 	});
 
 	it('lists the owner paid listings on the profile', () => {

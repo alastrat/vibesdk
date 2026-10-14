@@ -14,11 +14,8 @@ import {
 import { useAdminSales } from '@/hooks/use-payments';
 import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
 import { showcaseRefreshMessage } from '@/lib/showcase-refresh-message';
-import { formatTemplatePrice, SecurityError, SecurityErrorType, type PendingReview } from '@/api-types';
-
-function isForbidden(error: unknown): boolean {
-	return error instanceof SecurityError && error.type === SecurityErrorType.FORBIDDEN;
-}
+import { formatTemplatePrice, type PendingReview } from '@/api-types';
+import { isForbiddenError } from '@/lib/security-error';
 
 export default function AdminReviewsPage() {
 	const pending = usePendingReviews();
@@ -33,6 +30,9 @@ export default function AdminReviewsPage() {
 						Approve prices for paid sites. A rejection needs a reason the creator will see. To take a site out of
 						Discover, open it and use Remove from Discover.
 					</p>
+					<Link to="/admin/early-access" className="w-fit text-sm text-kumo-default underline underline-offset-2">
+						Early access requests
+					</Link>
 				</div>
 				{pending.data ? (
 					<>
@@ -51,7 +51,7 @@ export default function AdminReviewsPage() {
 					<div className="flex justify-center py-16">
 						<Loader />
 					</div>
-				) : isForbidden(pending.error) ? (
+				) : isForbiddenError(pending.error) ? (
 					<Empty title="Admins only" description={pending.error?.message} />
 				) : (
 					<Empty

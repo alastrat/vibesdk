@@ -10,6 +10,7 @@ import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
 import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
+import AdminEarlyAccessPage from './routes/admin/early-access';
 import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
@@ -85,6 +86,14 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<AdminReviewsPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'admin/early-access',
+						element: (
+							<ProtectedRoute>
+								<AdminEarlyAccessPage />
 							</ProtectedRoute>
 						),
 					},
