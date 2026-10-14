@@ -10,16 +10,17 @@ import {
 	cn,
 	Dialog,
 	Input,
-	InputGroup,
 } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
+import { PasswordField } from './PasswordField';
 import { TERMS_REQUIRED_MESSAGE, TERMS_VERSION } from '@/api-types';
+import { apiClient } from '@/lib/api-client';
+import { emailError, newPasswordErrors, passwordError } from '@/lib/auth-validation';
 import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import {
-	EyeIcon,
-	EyeSlashIcon,
+	EnvelopeSimpleIcon,
 	WarningCircleIcon,
 	XIcon,
 } from '@phosphor-icons/react';
@@ -53,9 +54,13 @@ interface LoginModalProps {
 	// Contextual messaging
 	actionContext?: string; // e.g., "to star this app", "to fork this project"
 	showCloseButton?: boolean;
+	/** The view shown each time the window opens. */
+	initialMode?: AuthMode;
 }
 
-type AuthMode = 'login' | 'register';
+export type AuthMode = 'login' | 'register' | 'forgot';
+
+const RESET_LINK_FAILED_MESSAGE = "Couldn't send the reset link. Try again.";
 
 export function LoginModal({
 	isOpen,
@@ -68,11 +73,27 @@ export function LoginModal({
 	onClearError,
 	actionContext,
 	showCloseButton = true,
+	initialMode = 'login',
 }: LoginModalProps) {
 	const { authProviders, hasOAuth } = useAuth();
-	const [mode, setMode] = useState<AuthMode>('login');
+	const [mode, setMode] = useState<AuthMode>(initialMode);
 	const [showPassword, setShowPassword] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
+
+	// Forgot-password view: the server's answer once a link is requested, or the request's error.
+	const [resetLinkMessage, setResetLinkMessage] = useState<string | null>(null);
+	const [forgotError, setForgotError] = useState<string | null>(null);
+
+	// Each opening starts in the requested view; a 401 re-prompt while open keeps the current one.
+	const [wasOpen, setWasOpen] = useState(false);
+	if (isOpen !== wasOpen) {
+		setWasOpen(isOpen);
+		if (isOpen) {
+			setMode(initialMode);
+			setResetLinkMessage(null);
+			setForgotError(null);
+		}
+	}
 
 	// Form state
 	const [email, setEmail] = useState('');
@@ -92,9 +113,11 @@ export function LoginModal({
 	const emailAuthEnabled = authProviders?.email ?? true;
 	const hasEmailAuth = emailAuthEnabled && !!onEmailLogin;
 	const hasRegistration = emailAuthEnabled && !!onRegister;
-	const showGitHub = authProviders?.github && hasOAuth;
-	const showGoogle = authProviders?.google && hasOAuth;
-	const showCloudflare = authProviders?.cloudflare && hasOAuth;
+	const canResetPassword = hasEmailAuth && !!authProviders?.emailSending;
+	const showProviders = hasOAuth && mode !== 'forgot';
+	const showGitHub = authProviders?.github && showProviders;
+	const showGoogle = authProviders?.google && showProviders;
+	const showCloudflare = authProviders?.cloudflare && showProviders;
 
 	const resetForm = () => {
 		setEmail('');
@@ -104,6 +127,8 @@ export function LoginModal({
 		setAgreeToTerms(false);
 		setValidationErrors({});
 		setShowPassword(false);
+		setResetLinkMessage(null);
+		setForgotError(null);
 		if (onClearError) onClearError();
 	};
 
@@ -125,52 +150,51 @@ export function LoginModal({
 		if (onClearError) onClearError();
 	};
 
+	// Carries the typed address over, so the reset link goes where the visitor was signing in.
+	const openForgotPassword = () => {
+		const typedEmail = email;
+		switchMode('forgot');
+		setEmail(typedEmail);
+	};
+
 	const validateForm = (): boolean => {
 		const errors: Record<string, string> = {};
 
-		// Basic email validation
-		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-		if (!email.trim()) {
-			errors.email = 'Email is required';
-		} else if (!emailRegex.test(email)) {
-			errors.email = 'Invalid email format';
-		}
+		const emailProblem = emailError(email);
+		if (emailProblem) errors.email = emailProblem;
 
-		// Basic password validation
-		if (!password) {
-			errors.password = 'Password is required';
-		} else if (password.length < 8) {
-			errors.password = 'Password must be at least 8 characters';
-		}
-
-		// Additional validation for registration
 		if (mode === 'register') {
-			// Name validation
 			if (!name.trim()) {
 				errors.name = 'Name is required';
 			} else if (name.trim().length < 2) {
 				errors.name = 'Name must be at least 2 characters';
 			}
 
-			const passwordStrengthRegex =
-				/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
-			if (!passwordStrengthRegex.test(password)) {
-				errors.password =
-					'Password must include at least one uppercase letter, one lowercase letter, one number, and one special character';
-			}
-
-			// Confirm password validation
-			if (password !== confirmPassword) {
-				errors.confirmPassword = 'Passwords do not match';
-			}
+			Object.assign(errors, newPasswordErrors(password, confirmPassword));
 
 			if (!agreeToTerms) {
 				errors.terms = TERMS_REQUIRED_MESSAGE;
 			}
+		} else if (mode === 'login') {
+			const passwordProblem = passwordError(password);
+			if (passwordProblem) errors.password = passwordProblem;
 		}
 
 		setValidationErrors(errors);
 		return Object.keys(errors).length === 0;
+	};
+
+	const requestResetLink = async () => {
+		setForgotError(null);
+		try {
+			const response = await apiClient.forgotPassword(email.trim());
+			if (!response.success || !response.data) {
+				throw new Error(response.error?.message || RESET_LINK_FAILED_MESSAGE);
+			}
+			setResetLinkMessage(response.data.message);
+		} catch (err) {
+			setForgotError(err instanceof Error && err.message ? err.message : RESET_LINK_FAILED_MESSAGE);
+		}
 	};
 
 	const handleSubmit = async (e: React.FormEvent) => {
@@ -180,7 +204,9 @@ export function LoginModal({
 
 		setIsLoading(true);
 		try {
-			if (mode === 'login' && onEmailLogin) {
+			if (mode === 'forgot') {
+				await requestResetLink();
+			} else if (mode === 'login' && onEmailLogin) {
 				await onEmailLogin({ email, password });
 			} else if (mode === 'register' && onRegister) {
 				await onRegister({ email, password, name: name.trim(), acceptedTermsVersion: TERMS_VERSION });
@@ -206,17 +232,25 @@ export function LoginModal({
 		}
 	};
 
-	const title = actionContext
-		? `Sign in ${actionContext}`
-		: hasEmailAuth && mode === 'register'
-			? 'Create an account'
-			: 'Welcome back';
+	const title =
+		mode === 'forgot'
+			? 'Reset your password'
+			: actionContext
+				? `Sign in ${actionContext}`
+				: hasEmailAuth && mode === 'register'
+					? 'Create an account'
+					: 'Welcome back';
 
-	const description = actionContext
-		? 'Authentication required for this action'
-		: hasEmailAuth && mode === 'register'
-			? 'Join to start building amazing applications'
-			: 'Sign in to save your apps and access your workspace';
+	const description =
+		mode === 'forgot'
+			? "Enter your account's email and we'll send you a link to choose a new password."
+			: actionContext
+				? 'Authentication required for this action'
+				: hasEmailAuth && mode === 'register'
+					? 'Join to start building amazing applications'
+					: 'Sign in to save your apps and access your workspace';
+
+	const bannerError = mode === 'forgot' ? forgotError : error;
 
 	return (
 		<Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
@@ -265,12 +299,12 @@ export function LoginModal({
 				</div>
 
 				{/* Error display */}
-				{error && (
+				{bannerError && (
 					<div className="px-6 mt-4">
 						<Banner
 							variant="error"
 							icon={<WarningCircleIcon />}
-							title={error}
+							title={bannerError}
 						/>
 					</div>
 				)}
@@ -348,7 +382,7 @@ export function LoginModal({
 					)}
 
 					{/* Divider (only if both OAuth and email are available) */}
-					{hasEmailAuth && hasOAuth && (
+					{hasEmailAuth && showProviders && (
 						<div className="relative">
 							<div className="absolute inset-0 flex items-center">
 								<div className="w-full border-t" />
@@ -361,8 +395,27 @@ export function LoginModal({
 						</div>
 					)}
 
+					{/* Reset link requested: the server's answer replaces the form */}
+					{mode === 'forgot' && resetLinkMessage && (
+						<div className="grid gap-4">
+							<Banner
+								variant="default"
+								icon={<EnvelopeSimpleIcon />}
+								description={resetLinkMessage}
+							/>
+							<Button
+								type="button"
+								variant="secondary"
+								className="w-full justify-center"
+								onClick={() => switchMode('login')}
+							>
+								Back to sign in
+							</Button>
+						</div>
+					)}
+
 					{/* Email/Password Form */}
-					{hasEmailAuth && (
+					{hasEmailAuth && !(mode === 'forgot' && resetLinkMessage) && (
 						<form
 							onSubmit={handleSubmit}
 							className="flex w-full flex-col gap-3"
@@ -399,62 +452,35 @@ export function LoginModal({
 								/>
 							</div>
 
-							<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
-								<InputGroup
+							{mode !== 'forgot' && (
+								<PasswordField
 									label="Password"
-									error={
-										validationErrors.password
-											? {
-													message:
-														validationErrors.password,
-													match: true,
-												}
-											: undefined
-									}
+									value={password}
+									onChange={setPassword}
+									error={validationErrors.password}
 									disabled={isLoading}
-								>
-									<InputGroup.Input
-										type={
-											showPassword ? 'text' : 'password'
-										}
-										placeholder="Password"
-										value={password}
-										onChange={(e) =>
-											setPassword(e.target.value)
-										}
-										autoComplete={
-											mode === 'register'
-												? 'new-password'
-												: 'current-password'
-										}
-									/>
-									<InputGroup.Addon align="end">
-										<InputGroup.Button
-											type="button"
-											variant="ghost"
-											tooltip={
-												showPassword
-													? 'Hide password'
-													: 'Show password'
-											}
-											onClick={() =>
-												setShowPassword(!showPassword)
-											}
-											disabled={isLoading}
-											aria-label={
-												showPassword
-													? 'Hide password'
-													: 'Show password'
-											}
-											icon={
-												showPassword
-													? EyeSlashIcon
-													: EyeIcon
-											}
-										/>
-									</InputGroup.Addon>
-								</InputGroup>
-							</div>
+									autoComplete={
+										mode === 'register'
+											? 'new-password'
+											: 'current-password'
+									}
+									visible={showPassword}
+									onVisibleChange={setShowPassword}
+								/>
+							)}
+
+							{mode === 'login' && canResetPassword && (
+								<div className="-mt-1 flex justify-end">
+									<button
+										type="button"
+										onClick={openForgotPassword}
+										disabled={isLoading}
+										className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
+									>
+										Forgot password?
+									</button>
+								</div>
+							)}
 
 							{mode === 'register' && (
 								<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
@@ -497,10 +523,14 @@ export function LoginModal({
 								{isLoading
 									? mode === 'register'
 										? 'Creating account...'
-										: 'Signing in...'
+										: mode === 'forgot'
+											? 'Sending...'
+											: 'Signing in...'
 									: mode === 'register'
 										? 'Create account'
-										: 'Sign in'}
+										: mode === 'forgot'
+											? 'Send reset link'
+											: 'Sign in'}
 							</OrangeButton>
 						</form>
 					)}
@@ -508,8 +538,20 @@ export function LoginModal({
 
 				{/* Footer */}
 				<div className="px-6 pb-6 space-y-4">
+					{mode === 'forgot' && !resetLinkMessage && (
+						<div className="text-center">
+							<button
+								type="button"
+								onClick={() => switchMode('login')}
+								className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
+							>
+								Back to sign in
+							</button>
+						</div>
+					)}
+
 					{/* Mode switching (only if registration is available) */}
-					{hasRegistration && hasEmailAuth && (
+					{mode !== 'forgot' && hasRegistration && hasEmailAuth && (
 						<div className="text-center">
 							<button
 								type="button"

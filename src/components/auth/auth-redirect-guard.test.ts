@@ -28,7 +28,7 @@ describe('returning to the build after email sign-in or sign-up', () => {
 	it('forgets it when the window is dismissed, but keeps it when the window closes on sign-in', () => {
 		expect(callbackBody(provider, 'hideAuthModal')).toContain('clearIntendedUrl()');
 		expect(callbackBody(provider, 'closeAuthModal')).not.toContain('clearIntendedUrl');
-		const onSignedIn = provider.slice(provider.indexOf('if (isAuthenticated && isAuthModalOpen)'));
+		const onSignedIn = provider.slice(provider.indexOf('if (isAuthenticated && isAuthModalOpen'));
 		expect(onSignedIn.slice(0, onSignedIn.indexOf('}, ['))).toContain('closeAuthModal()');
 		expect(provider).toContain('onClose={hideAuthModal}');
 	});

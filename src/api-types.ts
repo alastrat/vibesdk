@@ -276,6 +276,13 @@ export {
 	isCurrentTermsVersion,
 	legalAddressLine,
 } from '../shared/types/legal.js';
+export {
+	CONFIRM_LINK_INVALID_MESSAGE,
+	FORGOT_PASSWORD_MESSAGE,
+	RESET_LINK_INVALID_MESSAGE,
+	RESET_PASSWORD_PATH,
+	VERIFY_EMAIL_PATH,
+} from '../shared/types/account-email.js';
 export type {
 	PageCopyValidation,
 	SitePageCopy,
@@ -350,6 +357,8 @@ export interface AuthProvidersResponseData {
     github: boolean;
     cloudflare: boolean;
     email: boolean;
+    /** Whether the server can send account emails such as reset and confirmation links. */
+    emailSending: boolean;
   };
   hasOAuth: boolean;
   requiresEmailAuth: boolean;

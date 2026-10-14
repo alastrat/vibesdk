@@ -51,12 +51,7 @@ interface AuthContextType {
 	error: string | null;
 
 	// Auth provider configuration
-	authProviders: {
-		google: boolean;
-		github: boolean;
-		cloudflare: boolean;
-		email: boolean;
-	} | null;
+	authProviders: AuthProvidersResponseData['providers'] | null;
 	hasOAuth: boolean;
 	requiresEmailAuth: boolean;
 
@@ -102,6 +97,7 @@ const DEFAULT_AUTH_PROVIDERS: AuthProvidersResponseData = {
 		github: false,
 		cloudflare: false,
 		email: true,
+		emailSending: false,
 	},
 	hasOAuth: false,
 	requiresEmailAuth: true,

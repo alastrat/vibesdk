@@ -3,10 +3,11 @@ import { base64url, sha256Hash } from '../../utils/cryptoUtils';
 export const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 export const VERIFY_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
-export const RESET_LINK_INVALID_MESSAGE = 'This reset link is invalid or has expired.';
-export const CONFIRM_LINK_INVALID_MESSAGE = 'This confirmation link is invalid or has expired.';
-export const FORGOT_PASSWORD_MESSAGE =
-	"If an account exists for that email, we've sent a link to reset your password. It expires in 30 minutes.";
+export {
+	CONFIRM_LINK_INVALID_MESSAGE,
+	FORGOT_PASSWORD_MESSAGE,
+	RESET_LINK_INVALID_MESSAGE,
+} from '../../../shared/types/account-email';
 
 const TOKEN_BYTES = 32;
 

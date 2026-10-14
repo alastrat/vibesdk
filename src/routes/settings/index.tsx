@@ -15,6 +15,7 @@ import {
 	Check,
 	Eye,
 	EyeOff,
+	Mail,
 } from 'lucide-react';
 import type { ActiveSessionsData, ApiKeysData } from '@/api-types';
 import {
@@ -41,6 +42,9 @@ import { CloudflareAccountSelector } from '@/components/cloudflare-account-selec
 import { ConnectedAccounts } from '@/components/connected-accounts';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
+
+const SUCCESS_BADGE_CLASS = 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+const WARNING_BADGE_CLASS = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200';
 
 type CreatedApiKey = {
 	key: string;
@@ -85,7 +89,7 @@ async function fetchApiKeys(): Promise<ApiKeysData> {
 }
 
 export default function SettingsPage() {
-	const { user } = useAuth();
+	const { user, authProviders } = useAuth();
 	const queryClient = useQueryClient();
 	const [searchParams, setSearchParams] = useSearchParams();
 
@@ -138,6 +142,32 @@ export default function SettingsPage() {
 	const apiKeysError = apiKeysQuery.error;
 	const activeSessions = activeSessionsQuery.data?.sessions ?? [];
 	const apiKeys = apiKeysQuery.data?.keys ?? [];
+
+	const emailConfirmed = !!user?.emailVerified;
+	const canResendConfirmation =
+		!emailConfirmed && user?.provider === 'email' && !!authProviders?.emailSending;
+
+	const resendConfirmationMutation = useMutation({
+		mutationFn: async () => {
+			const response = await apiClient.resendVerification();
+			if (!response.success || !response.data) {
+				throw new Error(
+					response.error?.message || "Couldn't send the confirmation email",
+				);
+			}
+			return response.data.message;
+		},
+		onSuccess: (message) => {
+			toast.success(message);
+		},
+		onError: (error) => {
+			toast.error(
+				error instanceof Error && error.message
+					? error.message
+					: "Couldn't send the confirmation email",
+			);
+		},
+	});
 
 	const handleDeleteAccount = async () => {
 		toast.error('Account deletion is not yet implemented');
@@ -262,6 +292,56 @@ export default function SettingsPage() {
 							Manage your account settings and preferences
 						</p>
 					</div>
+
+					<LayerCard id="account">
+						<LayerCard.Secondary className="font-funky-mono tracking-tighter">
+							<div className="flex items-center gap-2">
+								<span className="flex items-center">
+									<Mail className="size-4" />
+								</span>
+								<span>Account</span>
+							</div>
+						</LayerCard.Secondary>
+						<LayerCard.Primary>
+							<div className="flex flex-wrap items-center justify-between gap-4">
+								<div className="grid min-w-0 gap-1.5">
+									<h4 className="text-sm font-medium text-kumo-default">
+										Email
+									</h4>
+									<div className="flex flex-wrap items-center gap-2">
+										<p className="truncate text-sm text-kumo-subtle">
+											{user?.email}
+										</p>
+										{emailConfirmed ? (
+											<Badge
+												variant="secondary"
+												className={SUCCESS_BADGE_CLASS}
+											>
+												Email confirmed
+											</Badge>
+										) : (
+											<Badge
+												variant="secondary"
+												className={WARNING_BADGE_CLASS}
+											>
+												Email not confirmed
+											</Badge>
+										)}
+									</div>
+								</div>
+								{canResendConfirmation && (
+									<Button
+										variant="secondary"
+										size="sm"
+										loading={resendConfirmationMutation.isPending}
+										onClick={() => resendConfirmationMutation.mutate()}
+									>
+										Resend confirmation email
+									</Button>
+								)}
+							</div>
+						</LayerCard.Primary>
+					</LayerCard>
 
 					{/* Cloudflare Account & Gateway Selection */}
 					<CloudflareAccountSelector />
@@ -546,7 +626,7 @@ export default function SettingsPage() {
 																{k.isActive ? (
 																	<Badge
 																		variant="secondary"
-																		className="bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200"
+																		className={SUCCESS_BADGE_CLASS}
 																	>
 																		Active
 																	</Badge>
