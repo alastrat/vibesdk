@@ -24,6 +24,8 @@ export interface AuthUser {
     emailVerified?: boolean;
     createdAt?: Date;
     isAnonymous?: boolean;
+	/** Whether the user agreed to the current terms version; absent when unknown. */
+	termsAccepted?: boolean;
 }
 
 /**

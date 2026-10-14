@@ -6,6 +6,7 @@ import type {  AuthUser, SessionResponse } from '../types/auth-types';
 import type { User } from '../database/schema';
 import { createLogger } from '../logger';
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
+import { TERMS_VERSION } from '../../shared/types/legal';
 
 const logger = createLogger('AuthUtils');
 
@@ -287,6 +288,7 @@ export function mapUserResponse(
 		provider: user.provider || undefined,
 		emailVerified: user.emailVerified || undefined,
 		createdAt: user.createdAt || undefined,
+		...('termsVersion' in user ? { termsAccepted: user.termsVersion === TERMS_VERSION } : {}),
 	};
 }
 
