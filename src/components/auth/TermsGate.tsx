@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/auth-context';
 import { apiClient } from '@/lib/api-client';
-import { TERMS_VERSION } from '@/api-types';
+import { TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '@/api-types';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
 
@@ -61,9 +61,16 @@ function TermsDialog() {
 					<Button variant="secondary" onClick={() => void logout()} disabled={pending}>
 						Sign out
 					</Button>
-					<Button variant="primary" onClick={() => void accept()} disabled={!agreed} loading={pending}>
-						{error ? 'Try again' : 'Continue'}
-					</Button>
+					{/* Terms updated since this page loaded: only a reload fetches the new version. */}
+					{error === TERMS_OUTDATED_MESSAGE ? (
+						<Button variant="primary" onClick={() => window.location.reload()}>
+							Reload
+						</Button>
+					) : (
+						<Button variant="primary" onClick={() => void accept()} disabled={!agreed} loading={pending}>
+							{error ? 'Try again' : 'Continue'}
+						</Button>
+					)}
 				</div>
 			</DialogContent>
 		</Dialog>

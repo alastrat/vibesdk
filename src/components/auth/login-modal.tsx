@@ -15,7 +15,7 @@ import {
 import { useAuth } from '@/contexts/auth-context';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
-import { TERMS_VERSION } from '@/api-types';
+import { TERMS_REQUIRED_MESSAGE, TERMS_VERSION } from '@/api-types';
 import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import {
 	EyeIcon,
@@ -165,7 +165,7 @@ export function LoginModal({
 			}
 
 			if (!agreeToTerms) {
-				errors.terms = 'Agree to the Terms of Service and Privacy Policy to create an account';
+				errors.terms = TERMS_REQUIRED_MESSAGE;
 			}
 		}
 

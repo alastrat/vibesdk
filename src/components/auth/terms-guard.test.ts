@@ -26,6 +26,13 @@ describe('agreeing to the terms', () => {
 		expect(modal).not.toContain('By continuing, you agree to our');
 	});
 
+	it('takes the missing-agreement message from the shared constant', () => {
+		const modal = source('/src/components/auth/login-modal.tsx');
+		expect(modal).toContain('errors.terms = TERMS_REQUIRED_MESSAGE;');
+		expect(modal).toMatch(/import \{[^}]*TERMS_REQUIRED_MESSAGE[^}]*\} from '@\/api-types'/);
+		expect(modal).not.toContain('Agree to the Terms of Service and Privacy Policy to create an account');
+	});
+
 	it('words the agreement once and links both documents', () => {
 		const label = source('/src/components/auth/TermsAgreementLabel.tsx');
 		expect(label).toContain("I'm 18 or older and agree to the");
@@ -46,6 +53,14 @@ describe('agreeing to the terms', () => {
 		expect(gate).toContain('refreshUser()');
 		expect(gate).toContain('Sign out');
 		expect(gate).toContain('showCloseButton={false}');
+	});
+
+	it('offers a reload instead of a retry when the terms changed since the page loaded', () => {
+		const gate = source('/src/components/auth/TermsGate.tsx');
+		expect(gate).toContain('TERMS_OUTDATED_MESSAGE');
+		expect(gate).toContain('window.location.reload()');
+		expect(gate).toContain('Reload');
+		expect(gate).toContain('Try again');
 	});
 
 	it('starts every person from an unticked box and stays out of the way on the legal pages', () => {

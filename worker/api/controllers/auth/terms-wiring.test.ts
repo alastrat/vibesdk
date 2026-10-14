@@ -29,9 +29,8 @@ describe('terms agreement wiring', () => {
 
 	it('refuses a password sign-up without the current terms version, before creating the account', () => {
 		const register = methodBody(source('/worker/database/services/AuthService.ts'), 'async register(');
-		expect(register).toContain('isCurrentTermsVersion(data.acceptedTermsVersion)');
-		expect(register).toContain('TERMS_REQUIRED_MESSAGE');
-		expect(register.indexOf('isCurrentTermsVersion(')).toBeLessThan(register.indexOf('insert(schema.users)'));
+		expect(register).toContain('signUpTermsError(data.acceptedTermsVersion)');
+		expect(register.indexOf('signUpTermsError(')).toBeLessThan(register.indexOf('insert(schema.users)'));
 		expect(register).toContain('termsVersion: TERMS_VERSION');
 	});
 

@@ -74,6 +74,14 @@ export function providerLabel(provider: string | null | undefined): string {
     }
 }
 
+/**
+ * Why a password sign-up can't go ahead with this terms version, or null when it can.
+ * A page loaded before a terms update sends the old version and must reload.
+ */
+export function signUpTermsError(version: unknown): string | null {
+    if (isCurrentTermsVersion(version)) return null;
+    return typeof version === 'string' && version.length > 0 ? TERMS_OUTDATED_MESSAGE : TERMS_REQUIRED_MESSAGE;
+}
 
 /**
  * Main Authentication Service
@@ -110,8 +118,9 @@ export class AuthService extends BaseService {
                 );
             }
 
-            if (!isCurrentTermsVersion(data.acceptedTermsVersion)) {
-                throw new SecurityError(SecurityErrorType.INVALID_INPUT, TERMS_REQUIRED_MESSAGE, 400);
+            const termsError = signUpTermsError(data.acceptedTermsVersion);
+            if (termsError) {
+                throw new SecurityError(SecurityErrorType.INVALID_INPUT, termsError, 400);
             }
             
             // Password sign-up marks the email verified unchecked, so an admin
