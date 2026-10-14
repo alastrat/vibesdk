@@ -2,12 +2,8 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon, CheckIcon } from '@phosphor-icons/react';
 import { PLATFORM_FEE_LABEL, TEMPLATE_PRICE_OPTIONS_CENTS, formatTemplatePrice } from '@/api-types';
-import { BuildBox } from '@/components/build-box';
-import { DiscoverSiteGrid, useDiscoverStripSites } from '@/components/publishing/DiscoverStrip';
 import { PlanLimits } from '@/components/marketing/PlanLimits';
 import { ComingSoon } from '@/components/marketing/ComingSoon';
-
-const STORE_PHRASES = ['a specialty coffee store', 'a handmade ceramics shop', 'a streetwear store', 'a plant shop with local delivery', 'a vintage camera store'];
 
 const PAID_PRICES = TEMPLATE_PRICE_OPTIONS_CENTS.filter((price) => price > 0).map(formatTemplatePrice).join(', ');
 
@@ -26,57 +22,6 @@ function DarkBand({ children, className = '' }: { children: ReactNode; className
 		>
 			{children}
 		</div>
-	);
-}
-
-export function Hero() {
-	return (
-		<DarkBand>
-			<section className="mx-auto max-w-6xl px-4 pt-20 pb-24 text-center sm:px-6 sm:pt-28 sm:pb-32">
-				<Eyebrow dark>AI store builder and store design marketplace</Eyebrow>
-				<h1 className="mx-auto mt-5 max-w-4xl text-5xl font-light leading-[1.05] tracking-[-0.025em] text-balance sm:text-7xl">
-					Build online stores with AI. Sell them as templates.
-				</h1>
-				<p className="mx-auto mt-6 max-w-2xl text-lg font-light text-pretty text-white/75 sm:text-xl">
-					Describe a store and Estori builds and deploys it: catalog, cart, checkout flow and order records. Publish it to Discover and earn when others start from it.
-				</p>
-				{/* The frame resets the band's white text so the box's own controls stay readable. */}
-				<div
-					id="build"
-					className="mx-auto mt-10 max-w-2xl scroll-mt-24 rounded-[24px] bg-white/10 p-1.5 text-left text-kumo-default shadow-2xl shadow-black/40 ring ring-white/15"
-				>
-					<BuildBox placeholder="Build " placeholderPhrases={STORE_PHRASES} />
-				</div>
-				<div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/70">
-					<span>Free to build. No credit card.</span>
-					<Link to="/discover" className="inline-flex items-center gap-1 text-white hover:underline">
-						Browse stores in Discover <ArrowRightIcon className="size-4" />
-					</Link>
-				</div>
-			</section>
-		</DarkBand>
-	);
-}
-
-export function FeaturedStores() {
-	const sites = useDiscoverStripSites();
-	if (!sites.data?.length) return null;
-	return (
-		<section className="mx-auto max-w-6xl px-4 py-20 sm:px-6 sm:py-28">
-			<div className="flex flex-wrap items-end justify-between gap-6">
-				<div className="max-w-2xl">
-					<Eyebrow>Discover</Eyebrow>
-					<h2 className="mt-4 text-4xl font-light tracking-[-0.025em] text-kumo-strong sm:text-5xl text-balance">Start from a store that already works</h2>
-					<p className="mt-4 text-lg font-light text-kumo-subtle">
-						Every store in Discover was built on Estori. Open one, see it live on desktop and phone, and make it yours.
-					</p>
-				</div>
-				<Link to="/discover" className="inline-flex items-center gap-1 rounded-full px-5 py-2 text-sm text-kumo-default ring ring-kumo-line hover:ring-kumo-strong">
-					See all stores <ArrowRightIcon className="size-4" />
-				</Link>
-			</div>
-			<DiscoverSiteGrid apps={sites.data} className="mt-10 gap-4" />
-		</section>
 	);
 }
 

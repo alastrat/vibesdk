@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-const sources = import.meta.glob<string>(
-	[
-		'/src/routes/root-index.tsx',
-		'/src/routes/landing/LandingPage.tsx',
-		'/src/routes/landing/sections.tsx',
-		'/src/routes/pricing.tsx',
-		'/src/components/build-box.tsx',
-		'/src/routes/home.tsx',
-		'/src/routes.tsx',
-	],
+const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src/components/public-site/*.tsx'], {
+	query: '?raw',
+	import: 'default',
+	eager: true,
+});
+const otherSources = import.meta.glob<string>(
+	['/src/routes/root-index.tsx', '/src/routes/pricing.tsx', '/src/components/build-box.tsx', '/src/routes/home.tsx', '/src/routes.tsx'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
 function source(path: string): string {
-	const text = sources[path];
+	const text = pageSources[path] ?? otherSources[path];
 	if (text === undefined) throw new Error(`Source not found: ${path}`);
 	return text;
 }
@@ -22,7 +19,7 @@ function source(path: string): string {
 const COMPETITORS = ['lovable', 'base44', 'amboras', 'shopify', 'wix', 'squarespace', 'webflow', 'framer', 'bolt.new', 'replit', 'v0.dev', 'durable.co'];
 
 describe('landing page', () => {
-	const landing = source('/src/routes/landing/LandingPage.tsx') + source('/src/routes/landing/sections.tsx');
+	const landing = Object.values(pageSources).join('\n');
 
 	it('shows the landing page signed out and the builder home signed in, with a loader in between', () => {
 		const root = source('/src/routes/root-index.tsx');
@@ -50,9 +47,38 @@ describe('landing page', () => {
 		expect(note).not.toMatch(/\bbg-[\w-]+\/\d+/);
 	});
 
-	it('hides the featured stores section when Discover has none', () => {
-		expect(landing).toContain('useDiscoverStripSites()');
-		expect(landing).toContain('if (!sites.data?.length) return null;');
+	it('shows the builder demo on a bundled store image under a neutral address, with motion from Magic UI', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toContain("HERO_STORE_IMAGE = '/marketing/hero-store.jpg'");
+		expect(hero).toContain('url="Live preview"');
+		expect(hero).toContain('<AnimatedList');
+		expect(hero).toContain('<BorderBeam');
+		expect(hero).toContain('id="build"');
+		expect(hero).toMatch(/id="build"\s+className="app-theme-scope /);
+	});
+
+	it('shows Discover stores as wordmarks and as a showcase, and hides both at two stores or fewer', () => {
+		expect(source('/src/routes/landing/LandingPage.tsx')).toContain('useShowcaseStores()');
+		const logos = source('/src/routes/landing/StoreLogos.tsx');
+		expect(logos).toContain('if (!shouldShowShowcase(stores.length)) return null;');
+		expect(logos).toContain('<Marquee');
+		const showcase = source('/src/routes/landing/StoreShowcase.tsx');
+		expect(showcase).toContain('if (!shouldShowShowcase(withImages.length)) return null;');
+		expect(showcase).toContain('<Marquee');
+		expect(showcase).toContain("const activeFilter = filters.includes(filter) ? filter : 'all';");
+		expect(showcase).toContain('aria-pressed={activeFilter === option}');
+		expect(showcase).toContain('to={`/discover/${store.id}`}');
+		expect(showcase).toContain('id="discover"');
+	});
+
+	it('keeps a card readable when its image fails to load', () => {
+		expect(source('/src/routes/landing/StoreShowcase.tsx')).toContain('onError={() => setImageFailed(true)}');
+	});
+
+	it('shows no third-party company logos or testimonials', () => {
+		expect(landing).not.toMatch(/trusted by/i);
+		expect(landing).not.toContain('/img/logos/');
+		expect(landing).not.toMatch(/case study/i);
 	});
 
 	it("doesn't promise store payments, and states the seller fee from the code", () => {
