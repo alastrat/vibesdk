@@ -10,9 +10,9 @@ export function AnnouncementBar() {
 	return (
 		<div className="bg-public-gold text-public-charcoal">
 			<div className="mx-auto flex h-11 max-w-[1248px] items-center justify-between gap-4 px-4 text-[13px] sm:px-6">
-				<p className="min-w-0 truncate">
-					Estori Discover is open: sell the stores you design and keep the price minus {PLATFORM_FEE_LABEL}.{' '}
-					<Link to="/#creators" className="underline underline-offset-4">
+				<p className="flex min-w-0 items-center gap-1">
+					<span className="truncate">Estori Discover is open: sell the stores you design and keep the price minus {PLATFORM_FEE_LABEL}.</span>
+					<Link to="/#creators" className="shrink-0 underline underline-offset-4">
 						Learn more →
 					</Link>
 				</p>

@@ -32,6 +32,8 @@ describe('public chrome', () => {
 		expect(bar).toContain('bg-public-gold');
 		expect(bar).toContain('truncate');
 		expect(bar).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
+		expect(bar).toMatch(/<span className="truncate">Estori Discover is open/);
+		expect(bar).toContain('className="shrink-0 underline');
 	});
 
 	it('shows the announcement above a white top bar with the blue build action and a phone menu', () => {
@@ -43,7 +45,7 @@ describe('public chrome', () => {
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
 		expect(top).toContain("to: '/#creators'");
-		expect(top).toContain('}, [pathname, hash]);');
+		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
 	it('ends every public page with the dark footer: link columns, contacts, wordmark and legal line', () => {
@@ -59,7 +61,8 @@ describe('public chrome', () => {
 
 	it('scrolls to the anchor a link names, else to the top', () => {
 		const layout = source(LAYOUT);
-		expect(layout).toContain('const { pathname, hash } = useLocation();');
+		expect(layout).toContain('const { pathname, hash, key } = useLocation();');
+		expect(layout).toContain('}, [pathname, hash, key]);');
 		expect(layout).toContain('scrollIntoView(');
 		expect(layout).toContain('scrollTo({ top: 0 })');
 	});
@@ -69,5 +72,13 @@ describe('public chrome', () => {
 		expect(primitives).toContain("export const HEADING_HERO = 'text-[44px] leading-[1.1] font-light tracking-[-0.02em] sm:text-[88px]';");
 		expect(primitives).toContain("export const HEADING_SECTION = 'text-4xl leading-[1.1] font-light tracking-[-0.02em] sm:text-[64px]';");
 		expect(primitives).toContain('rounded-full px-6 py-2.5 text-base font-normal');
+	});
+
+	it('scrolls without animation for people who asked for reduced motion', () => {
+		expect(source(PRIMITIVES)).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'");
+		expect(source(LAYOUT)).toContain('behavior: preferredScrollBehavior()');
+		expect(source(TOP)).toContain('behavior: preferredScrollBehavior()');
+		expect(source(LAYOUT)).not.toContain("behavior: 'smooth'");
+		expect(source(TOP)).not.toContain("behavior: 'smooth'");
 	});
 });

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { preload } from 'react-dom';
 import { Outlet, useLocation } from 'react-router';
+import { preferredScrollBehavior } from '@/components/public-site/primitives';
 import { PublicTopBar } from './PublicTopBar';
 import { SiteFooter } from './SiteFooter';
 
@@ -11,14 +12,14 @@ export const PUBLIC_FONT_URL = '/fonts/dm-sans/dm-sans-latin-opsz-normal.woff2';
 export function PublicLayout({ children }: { children?: ReactNode }) {
 	preload(PUBLIC_FONT_URL, { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' });
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const { pathname, hash } = useLocation();
+	const { pathname, hash, key } = useLocation();
 
-	// This container stays mounted across public routes: go to the anchor a link names, else to the top.
+	// This container stays mounted across public routes: go to the anchor a link names (again on a repeat click), else to the top.
 	useEffect(() => {
 		const target = hash ? document.getElementById(hash.slice(1)) : null;
-		if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		if (target) target.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'start' });
 		else scrollRef.current?.scrollTo({ top: 0 });
-	}, [pathname, hash]);
+	}, [pathname, hash, key]);
 
 	return (
 		<div ref={scrollRef} className="public-site h-svh overflow-y-auto">

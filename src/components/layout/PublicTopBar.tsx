@@ -4,7 +4,7 @@ import { ListIcon, XIcon } from '@phosphor-icons/react';
 import { EstoriLogo, BRAND } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
-import { pillClass } from '@/components/public-site/primitives';
+import { pillClass, preferredScrollBehavior } from '@/components/public-site/primitives';
 import { AnnouncementBar } from './AnnouncementBar';
 
 const NAV_LINKS = [
@@ -17,18 +17,18 @@ const NAV_LINKS = [
 export function PublicTopBar() {
 	const { isAuthenticated } = useAuth();
 	const { showAuthModal } = useAuthModal();
-	const { pathname, hash } = useLocation();
+	const { pathname, hash, key } = useLocation();
 	const navigate = useNavigate();
 	const [menuOpen, setMenuOpen] = useState(false);
 
 	useEffect(() => {
 		setMenuOpen(false);
-	}, [pathname, hash]);
+	}, [pathname, hash, key]);
 
 	const startBuilding = () => {
 		setMenuOpen(false);
 		if (pathname === '/') {
-			document.getElementById('build')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+			document.getElementById('build')?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'center' });
 			return;
 		}
 		navigate('/');

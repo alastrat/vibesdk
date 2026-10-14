@@ -8,6 +8,11 @@ export const HEADING_SECTION = 'text-4xl leading-[1.1] font-light tracking-[-0.0
 export const HEADING_CARD = 'text-2xl leading-[1.12] font-light tracking-[-0.015em] sm:text-[30px]';
 export const LEAD = 'text-lg leading-normal font-light sm:text-xl';
 
+/** Smooth scrolling, except for people who asked their system for reduced motion. */
+export function preferredScrollBehavior(): ScrollBehavior {
+	return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+}
+
 export type PillVariant = 'blue' | 'white' | 'charcoal' | 'outline-on-dark' | 'outline-on-light';
 
 const PILL_BASE =
