@@ -15,7 +15,7 @@ import { usePublishSite, useSitePublishing } from '@/hooks/use-publishing';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, savedListingPrice } from '@/lib/paid-listing-display';
 import {
 	formatTemplatePrice,
-	PLATFORM_FEE_PERCENT,
+	PLATFORM_FEE_LABEL,
 	TEMPLATE_CATEGORIES,
 	TEMPLATE_CATEGORY_LABELS,
 	TEMPLATE_PRICE_OPTIONS_CENTS,
@@ -173,7 +173,7 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 			</div>
 			{paid && (
 				<p className="text-xs text-kumo-subtle">
-					An admin reviews the price before anyone can use your site. Estori keeps {PLATFORM_FEE_PERCENT}% of each
+					An admin reviews the price before anyone can use your site. Estori keeps {PLATFORM_FEE_LABEL} of each
 					sale.
 				</p>
 			)}

@@ -209,7 +209,7 @@ export class PublishingController extends BaseController {
         }
     }
 
-    /** Start a Stripe Checkout session for an approved paid site; the seller gets the price minus Estori's 5%. */
+    /** Start a Stripe Checkout session for an approved paid site; the seller gets the price minus Estori's fee. */
     static async purchase(
         request: Request,
         env: Env,

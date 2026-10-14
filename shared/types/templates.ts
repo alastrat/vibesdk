@@ -49,10 +49,15 @@ export function formatTemplatePrice(priceCents: number): string {
 	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
 }
 
-/** Estori's share of every sale, in percent. */
-export const PLATFORM_FEE_PERCENT = 5;
+/** Estori's share of every sale: a percent of the price plus a fixed amount that covers Stripe's card fee. */
+export const PLATFORM_FEE_PERCENT = 7;
+export const PLATFORM_FEE_FIXED_CENTS = 60;
 
-/** Estori's fee on a sale, rounded to the nearest cent. */
+/** The fee as sellers see it: "7% + $0.60". */
+export const PLATFORM_FEE_LABEL = `${PLATFORM_FEE_PERCENT}% + $${(PLATFORM_FEE_FIXED_CENTS / 100).toFixed(2)}`;
+
+/** Estori's fee on a sale, rounded to the nearest cent; a free site has none. */
 export function platformFeeCents(priceCents: number): number {
-	return Math.round((priceCents * PLATFORM_FEE_PERCENT) / 100);
+	if (priceCents <= 0) return 0;
+	return Math.round((priceCents * PLATFORM_FEE_PERCENT) / 100) + PLATFORM_FEE_FIXED_CENTS;
 }

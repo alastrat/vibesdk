@@ -36,7 +36,7 @@ function harness(listingExists = true) {
 }
 
 describe('fulfillCheckoutSession', () => {
-	it('records the price, the 5% fee and the seller amount', async () => {
+	it('records the price, the 7% + 60 cent fee and the seller amount', async () => {
 		const { deps, records } = harness();
 		expect(await fulfillCheckoutSession(deps, PAID)).toBe('recorded');
 		expect(records).toEqual([
@@ -46,8 +46,8 @@ describe('fulfillCheckoutSession', () => {
 				versionId: 'v2',
 				userId: 'buyer1',
 				priceCents: 2900,
-				platformFeeCents: 145,
-				sellerAmountCents: 2755,
+				platformFeeCents: 263,
+				sellerAmountCents: 2637,
 				currency: 'usd',
 				checkoutSessionId: 'cs_1',
 				paymentIntentId: 'pi_1',

@@ -2,7 +2,7 @@
 
 Status: designed with the owner on 2026-10-13. It builds on these specs:
 - `2026-10-12-unified-discover-design.md`: one Discover gallery, and paid sites reviewed by an admin;
-- `2026-10-12-stripe-connect-payments-design.md`: Stripe Checkout and the 5% fee.
+- `2026-10-12-stripe-connect-payments-design.md`: Stripe Checkout and Estori's fee.
 
 ## What the owner asked for
 
