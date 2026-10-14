@@ -1,7 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router';
 
 import App from './App';
-import Home from './routes/home';
+import RootIndex from './routes/root-index';
 import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
@@ -24,14 +24,7 @@ const routes = [
 		path: '/',
 		Component: App,
 		children: [
-			{
-				index: true,
-				element: (
-					<AppLayout>
-						<Home />
-					</AppLayout>
-				),
-			},
+			{ index: true, Component: RootIndex },
 			{
 				Component: AppShell,
 				children: [
