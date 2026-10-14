@@ -140,6 +140,8 @@ export class ReferenceCaptureError extends Error {}
 
 export const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
 export const PHONE_VIEWPORT = { width: 390, height: 844, isMobile: true, hasTouch: true };
+/** Tall desktop view for the landing page's Discover showcase cards: the hero and the sections under it. */
+export const SHOWCASE_VIEWPORT = { width: 1280, height: 1650 };
 const REFERENCE_JPEG = { type: 'jpeg', quality: 70, fullPage: false, encoding: 'base64' } as const;
 const SCROLL_STOPS: Array<[ReferenceShotKind, number]> = [
 	['desktop-middle', 0.4],
