@@ -37,4 +37,15 @@ describe('pricing page', () => {
 		const routes = source('/src/routes.tsx');
 		expect(routes.slice(routes.indexOf('Component: PublicShell'))).toContain("path: 'pricing'");
 	});
+
+	it('uses the 1Password layout: charcoal hero, white plan cards, the shared FAQ', () => {
+		expect(page).toContain('bg-public-charcoal');
+		expect(page).toContain('<PublicFaq />');
+		expect(page).not.toContain('kumo-');
+	});
+
+	it('keeps the seller table readable by screen readers', () => {
+		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
+		expect(page.match(/scope="col"/g)).toHaveLength(3);
+	});
 });
