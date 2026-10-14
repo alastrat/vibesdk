@@ -54,6 +54,8 @@ describe('Magic UI components', () => {
 	});
 
 	it('defines the marquee and cursor animations, loaded by the app stylesheet', () => {
+		// Inline, so the animation resolves var(--duration) on the marquee element rather than on :root.
+		expect(magicCss).toContain('@theme inline {');
 		expect(magicCss).toContain('--animate-marquee: marquee var(--duration) infinite linear;');
 		expect(magicCss).toContain('@keyframes marquee');
 		expect(magicCss).toContain('--animate-blink-cursor: blink-cursor 1.2s step-end infinite;');
