@@ -78,6 +78,7 @@ import type{
 	RejectVersionRequest,
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
+	ShowcaseRefreshData,
 	SiteCheckoutData,
 	PublicPlanLimits,
 	SitePageData,
@@ -669,6 +670,11 @@ class ApiClient {
 	/** Admins only: hide a public site from Discover and block its reuse, or restore it. */
 	async setDiscoverRemoval(appId: string, body: DiscoverRemovalRequest): Promise<ApiResponse<DiscoverRemovalData>> {
 		return this.request<DiscoverRemovalData>(`/api/admin/apps/${appId}/discover`, { method: 'PUT', body });
+	}
+
+	/** Admins only: capture the showcase images Discover stores are still missing, one batch per call. */
+	async refreshShowcaseScreenshots(): Promise<ApiResponse<ShowcaseRefreshData>> {
+		return this.request<ShowcaseRefreshData>('/api/admin/showcase-screenshots/refresh', { method: 'POST' });
 	}
 
 	/**

@@ -153,3 +153,11 @@ export interface DiscoverRemovalData {
     appId: string;
     removed: boolean;
 }
+
+/** One admin batch of showcase captures; `remaining` counts stores still without an image, failures included. */
+export interface ShowcaseRefreshData {
+    attempted: number;
+    captured: number;
+    failed: number;
+    remaining: number;
+}

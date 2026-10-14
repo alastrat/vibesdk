@@ -3,6 +3,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import './styles/estori-theme.css';
+@import './styles/public-site.css';
+@import './styles/magicui.css';
 
 @custom-variant dark (&:where([data-mode=dark], [data-mode=dark] *));
 @plugin '@tailwindcss/typography';

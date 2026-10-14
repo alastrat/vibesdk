@@ -32,6 +32,7 @@ import { publishSite, type PublishDeps } from '../../../services/templates/publi
 import { READ_FAILED_MESSAGE, TemplateSubmissionError, submitTemplateVersion } from '../../../services/templates/submit';
 import { r2TemplateStore } from '../../../services/templates/store';
 import { createTemplateShotCapturer } from '../../../services/templates/capture';
+import { refreshShowcaseScreenshot } from '../../../services/showcase/showcase-refresh';
 import { StripeApiError, accountFlags } from '../../../services/payments/stripe-client';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import { checkoutDecision, confirmDecision, confirmResponse, type CheckoutInput } from '../../../services/payments/checkout';
@@ -57,7 +58,7 @@ export class PublishingController extends BaseController {
     static async updateVisibility(
         request: Request,
         env: Env,
-        _ctx: ExecutionContext,
+        ctx: ExecutionContext,
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<PublishSiteData>>> {
         try {
@@ -75,6 +76,10 @@ export class PublishingController extends BaseController {
             );
             if (!outcome.ok) {
                 return PublishingController.createErrorResponse<PublishSiteData>(outcome.error, outcome.status);
+            }
+            if (parsed.value.visibility === 'public') {
+                // A failed capture never fails the publish; it's retried after the next deploy or from the admin page.
+                ctx.waitUntil(refreshShowcaseScreenshot(env, PublishingController.logger, context.pathParams.id));
             }
             return PublishingController.createSuccessResponse<PublishSiteData>({
                 visibility: parsed.value.visibility,

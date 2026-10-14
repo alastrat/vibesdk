@@ -73,6 +73,12 @@ describe('server-side thumbnails for Think apps', () => {
 		expect(source(THINK)).toContain('screenshotTarget({');
 	});
 
+	it("captures the server's own preview, never the URL an editor sent", () => {
+		const capture = between(source(THINK), 'override async captureScreenshot(', 'private captureDeployedScreenshot(');
+		expect(capture).toContain('super.captureScreenshot(await this.getBrowserPreviewURL(), viewport)');
+		expect(capture).not.toMatch(/super\.captureScreenshot\(url\b/);
+	});
+
 	it('treats a skipped capture as current, not as a failure', () => {
 		const handler = between(
 			source('/worker/agents/core/websocket.ts'),

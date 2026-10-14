@@ -1,20 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
-const sources = import.meta.glob<string>(
-	[
-		'/src/routes/root-index.tsx',
-		'/src/routes/landing/LandingPage.tsx',
-		'/src/routes/landing/sections.tsx',
-		'/src/routes/pricing.tsx',
-		'/src/components/build-box.tsx',
-		'/src/routes/home.tsx',
-		'/src/routes.tsx',
-	],
+const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src/components/public-site/*.tsx'], {
+	query: '?raw',
+	import: 'default',
+	eager: true,
+});
+const otherSources = import.meta.glob<string>(
+	['/src/routes/root-index.tsx', '/src/routes/pricing.tsx', '/src/components/build-box.tsx', '/src/routes/home.tsx', '/src/routes.tsx'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
 function source(path: string): string {
-	const text = sources[path];
+	const text = pageSources[path] ?? otherSources[path];
 	if (text === undefined) throw new Error(`Source not found: ${path}`);
 	return text;
 }
@@ -22,7 +19,7 @@ function source(path: string): string {
 const COMPETITORS = ['lovable', 'base44', 'amboras', 'shopify', 'wix', 'squarespace', 'webflow', 'framer', 'bolt.new', 'replit', 'v0.dev', 'durable.co'];
 
 describe('landing page', () => {
-	const landing = source('/src/routes/landing/LandingPage.tsx') + source('/src/routes/landing/sections.tsx');
+	const landing = Object.values(pageSources).join('\n');
 
 	it('shows the landing page signed out and the builder home signed in, with a loader in between', () => {
 		const root = source('/src/routes/root-index.tsx');
@@ -50,9 +47,107 @@ describe('landing page', () => {
 		expect(note).not.toMatch(/\bbg-[\w-]+\/\d+/);
 	});
 
-	it('hides the featured stores section when Discover has none', () => {
-		expect(landing).toContain('useDiscoverStripSites()');
-		expect(landing).toContain('if (!sites.data?.length) return null;');
+	it('shows the builder demo on a bundled store image under a neutral address, with motion from Magic UI', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toContain("HERO_STORE_IMAGE = '/marketing/hero-store.jpg'");
+		expect(hero).toContain('url="Live preview"');
+		expect(hero).toContain('<AnimatedList');
+		expect(hero).toContain('<BorderBeam');
+		expect(hero).toContain('id="build"');
+		expect(hero).toMatch(/id="build"\s+className="app-theme-scope /);
+		expect(hero).toContain('<section className="overflow-x-clip bg-public-charcoal text-white">');
+	});
+
+	it('always underlines the Discover link under the build box', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*Browse stores in Discover/);
+		expect(hero).not.toMatch(/hover:underline">\s*Browse stores in Discover/);
+	});
+
+	it('reserves the finished step list so the demo never grows while steps arrive', () => {
+		expect(source('/src/routes/landing/Hero.tsx')).toMatch(/<AnimatedList [^>]*className="[^"]*min-h-28/);
+	});
+
+	it('shows Discover stores as wordmarks and as a showcase, and hides both at two stores or fewer', () => {
+		expect(source('/src/routes/landing/LandingPage.tsx')).toContain('useShowcaseStores()');
+		const logos = source('/src/routes/landing/StoreLogos.tsx');
+		expect(logos).toContain('if (!shouldShowShowcase(stores.length)) return null;');
+		expect(logos).toContain('<Marquee');
+		const showcase = source('/src/routes/landing/StoreShowcase.tsx');
+		expect(showcase).toContain('if (!shouldShowShowcase(withImages.length)) return null;');
+		expect(showcase).toContain('<Marquee');
+		expect(showcase).toContain("const activeFilter = filters.includes(filter) ? filter : 'all';");
+		expect(showcase).toContain('aria-pressed={activeFilter === option}');
+		expect(showcase).toContain('to={`/discover/${store.id}`}');
+		expect(showcase).toContain('id="discover"');
+	});
+
+	it('lays the page out in the approved order', () => {
+		const page = source('/src/routes/landing/LandingPage.tsx');
+		const order = ['<Hero />', '<StoreLogos', '<StoreShowcase', '<Features />', '<CreatorsPanel />', '<LivePreview />', '<PricingSummary />', '<PublicFaq />', '<ClosingPanel />'];
+		const positions = order.map((tag) => page.indexOf(tag));
+		expect(positions.every((position) => position > -1)).toBe(true);
+		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+	});
+
+	it('states what a seller keeps from the fee code, with the creators anchor the top bar links to', () => {
+		const creators = source('/src/routes/landing/CreatorsPanel.tsx');
+		expect(creators).toContain('sellerKeepsCents(EXAMPLE_SALE_CENTS)');
+		expect(creators).toContain('<AnimatedBeam');
+		expect(creators).toContain('id="creators"');
+		expect(creators).not.toContain('26.37');
+		// AA contrast on the blue panel: no translucent white text, and a darker node fill.
+		expect(creators).not.toMatch(/text-white\/\d+/);
+		expect(creators).toContain('bg-black/15');
+		expect(creators).not.toContain('bg-white/12');
+	});
+
+	it('uses the 1Password layout: charcoal features, a blue creators panel and a charcoal closing panel', () => {
+		expect(source('/src/routes/landing/Features.tsx')).toContain('bg-public-charcoal');
+		expect(source('/src/routes/landing/CreatorsPanel.tsx')).toContain('bg-public-blue');
+		const sections = source('/src/routes/landing/sections.tsx');
+		expect(sections.slice(sections.indexOf('export function ClosingPanel'))).toContain('bg-public-charcoal');
+	});
+
+	it('shows the live preview on bundled desktop and phone images', () => {
+		const preview = source('/src/routes/landing/LivePreview.tsx');
+		expect(preview).toContain("'/marketing/preview-desktop.jpg'");
+		expect(preview).toContain("'/marketing/preview-phone.jpg'");
+		expect(preview).toContain('<Safari');
+		expect(preview).toContain('<Iphone');
+	});
+
+	it('lets keyboard users reach every store in the marquees once, in view and with a visible focus ring', () => {
+		const logos = source('/src/routes/landing/StoreLogos.tsx');
+		const showcase = source('/src/routes/landing/StoreShowcase.tsx');
+		// The edge fades hide while a link inside their wrapper has focus.
+		expect(source('/src/components/public-site/primitives.tsx').match(/transition-opacity group-focus-within\/edges:opacity-0/g)).toHaveLength(2);
+		expect(logos).toContain('<div className="group/edges relative mt-8">');
+		expect(showcase).toContain('<div className="group/edges relative mt-12">');
+		// Room above and below each row for the focus rings.
+		for (const text of [logos, showcase]) {
+			expect(text).not.toMatch(/<Marquee[^>]*className="p-0 /);
+			expect(text).toMatch(/<Marquee[^>]*className="px-0 py-1 /);
+		}
+		// The reverse row repeats the first, so it stays out of the accessibility tree and the tab order.
+		const rowTwo = showcase.slice(showcase.indexOf('<Marquee pauseOnHover reverse'), showcase.indexOf('</Marquee>', showcase.indexOf('<Marquee pauseOnHover reverse')));
+		expect(rowTwo).toMatch(/<Marquee pauseOnHover reverse aria-hidden /);
+		expect(rowTwo).toContain('focusable={false}');
+		expect(showcase).toContain('focusable = true');
+		expect(showcase).toContain('tabIndex={focusable ? undefined : -1}');
+		expect(showcase).not.toContain('inert');
+	});
+
+	it('keeps a card readable when its image fails to load', () => {
+		const showcase = source('/src/routes/landing/StoreShowcase.tsx');
+		expect(showcase).toContain('onError={() => setFailedImage(store.imageUrl)}');
+		expect(showcase).toContain('failedImage !== store.imageUrl');
+	});
+
+	it('shows no third-party company logos or testimonials', () => {
+		expect(landing).not.toMatch(/trusted by/i);
+		expect(landing).not.toContain('/img/logos/');
+		expect(landing).not.toMatch(/case study/i);
 	});
 
 	it("doesn't promise store payments, and states the seller fee from the code", () => {

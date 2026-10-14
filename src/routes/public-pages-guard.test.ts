@@ -61,10 +61,13 @@ describe('public pages', () => {
 		expect(layout).toContain('scrollTo(');
 	});
 
-	it('keeps the top bar usable on phones and legal text readable in dark mode', () => {
-		expect(source('/src/components/layout/PublicTopBar.tsx')).toContain('hidden sm:flex');
+	it('keeps the top bar usable on phones and the legal pages in the fixed light style', () => {
+		expect(source('/src/components/layout/PublicTopBar.tsx')).toContain('hidden md:flex');
 		const legal = source('/src/routes/legal/LegalPage.tsx');
-		expect(legal).toContain('dark:prose-invert');
+		expect(legal).not.toContain('dark:');
+		expect(legal).not.toContain('kumo-');
 		expect(legal).toContain('pageTitle(document.title)');
+		expect(legal).toContain('document.version');
+		expect(legal).toContain('max-w-[720px]');
 	});
 });

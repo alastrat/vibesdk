@@ -4,9 +4,16 @@ import { toast } from 'sonner';
 import { Badge, Button, Empty, InputArea, LayerCard, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
 import { PageCopySections } from '@/components/site-page/PageCopySections';
-import { usePendingReviews, useReviewVersion, useReviewVersionFile, useReviewVersionFiles } from '@/hooks/use-publishing';
+import {
+	usePendingReviews,
+	useRefreshShowcaseScreenshots,
+	useReviewVersion,
+	useReviewVersionFile,
+	useReviewVersionFiles,
+} from '@/hooks/use-publishing';
 import { useAdminSales } from '@/hooks/use-payments';
 import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
+import { showcaseRefreshMessage } from '@/lib/showcase-refresh-message';
 import { formatTemplatePrice, SecurityError, SecurityErrorType, type PendingReview } from '@/api-types';
 
 function isForbidden(error: unknown): boolean {
@@ -37,6 +44,7 @@ export default function AdminReviewsPage() {
 						) : (
 							<Empty title="Nothing to review" description="New paid sites and updates will show up here." />
 						)}
+						<ShowcaseImagesSection />
 						<SalesSection />
 					</>
 				) : pending.isLoading ? (
@@ -58,6 +66,29 @@ export default function AdminReviewsPage() {
 				)}
 			</div>
 		</div>
+	);
+}
+
+/** Captures the tall Discover showcase images that stores are still missing, a batch per click. */
+function ShowcaseImagesSection() {
+	const refresh = useRefreshShowcaseScreenshots();
+	return (
+		<section className="grid gap-3 pt-4">
+			<div className="grid gap-1">
+				<h2 className="text-xl font-semibold text-kumo-strong">Showcase images</h2>
+				<p className="text-sm text-kumo-subtle">
+					The landing page shows a tall image of each Discover store. Stores get one when they're published or redeployed;
+					this captures the ones still missing.
+				</p>
+			</div>
+			<div className="flex flex-wrap items-center gap-3">
+				<Button size="sm" variant="secondary" disabled={refresh.isPending} onClick={() => refresh.mutate()}>
+					{refresh.isPending ? 'Capturing…' : 'Refresh showcase images'}
+				</Button>
+				{refresh.data && <p className="text-sm text-kumo-subtle">{showcaseRefreshMessage(refresh.data)}</p>}
+				{refresh.isError && <p className="text-sm text-kumo-danger">{refresh.error.message}</p>}
+			</div>
+		</section>
 	);
 }
 

@@ -10,4 +10,8 @@ describe('query persistence', () => {
 			shouldDehydrateQuery({ queryKey: queryKeys.apps.sitePage('app1', 'u1'), state: { status: 'success' } }),
 		).toBe(false);
 	});
+
+	it('never persists the landing showcase, whose screenshot links expire', () => {
+		expect(shouldDehydrateQuery({ queryKey: queryKeys.apps.showcase(), state: { status: 'success' } })).toBe(false);
+	});
 });

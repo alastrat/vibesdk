@@ -103,3 +103,10 @@ export function useSetDiscoverRemoval() {
 		unwrap(apiClient.setDiscoverRemoval(input.appId, input.body), 'Failed to change the removal'),
 	);
 }
+
+/** Admins only: capture the showcase images Discover stores are still missing, one batch per call. */
+export function useRefreshShowcaseScreenshots() {
+	return usePublishingMutation((_input: void) =>
+		unwrap(apiClient.refreshShowcaseScreenshots(), "Couldn't refresh the showcase images"),
+	);
+}

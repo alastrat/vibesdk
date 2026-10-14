@@ -248,6 +248,7 @@ export type {
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
 	SaleView,
+	ShowcaseRefreshData,
 	SiteCheckoutData,
 	SitePublishingData,
 } from 'worker/api/controllers/publishing/types';

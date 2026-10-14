@@ -1,33 +1,64 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EstoriLogo } from '@/brand';
-import { LEGAL_CONTACT, LEGAL_ENTITY } from '@/api-types';
+import { LEGAL_CONTACT, LEGAL_ENTITY, legalAddressLine } from '@/api-types';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 
+const LINK_COLUMNS = [
+	{ title: 'Product', links: [{ to: '/', label: 'Start building' }, { to: '/discover', label: 'Discover' }, { to: '/pricing', label: 'Pricing' }] },
+	{ title: 'Creators', links: [{ to: '/#creators', label: 'Sell your stores' }, { to: '/pricing', label: 'Seller fees' }] },
+] as const;
+
+function FooterColumn({ title, children }: { title: string; children: ReactNode }) {
+	return (
+		<div>
+			<h2 className="text-[15px] font-medium">{title}</h2>
+			<ul className="mt-4 grid gap-3 text-[15px] font-light text-white/75">{children}</ul>
+		</div>
+	);
+}
+
+/** Dark footer of every public page, as on 1Password: link columns, contacts, a large wordmark and the legal line. */
 export function SiteFooter() {
 	return (
-		<footer className="border-t border-kumo-line bg-kumo-canvas">
-			<div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 sm:grid-cols-[1fr_auto] sm:px-6">
-				<div className="grid gap-3">
-					<EstoriLogo className="h-5 w-auto text-kumo-strong" />
-					<p className="max-w-sm text-sm text-kumo-subtle">Build online stores with AI, and sell them as templates.</p>
-					<a href={`mailto:${LEGAL_CONTACT.support}`} className="text-sm text-kumo-default hover:text-kumo-strong">
-						{LEGAL_CONTACT.support}
-					</a>
-				</div>
-				<nav className="flex flex-wrap items-start gap-x-6 gap-y-2 text-sm text-kumo-default">
-					<Link to="/discover" className="hover:text-kumo-strong">Discover</Link>
-					<Link to="/pricing" className="hover:text-kumo-strong">Pricing</Link>
-					{LEGAL_LINKS.map((link) => (
-						<Link key={link.slug} to={link.path} className="hover:text-kumo-strong">
-							{link.label}
-						</Link>
+		<footer className="bg-public-charcoal text-white">
+			<div className="mx-auto max-w-[1248px] px-4 pt-16 pb-8 sm:px-6">
+				<div className="grid grid-cols-2 gap-10 md:grid-cols-4">
+					{LINK_COLUMNS.map((column) => (
+						<FooterColumn key={column.title} title={column.title}>
+							{column.links.map((link) => (
+								<li key={link.label}>
+									<Link to={link.to} className="hover:text-white">{link.label}</Link>
+								</li>
+							))}
+						</FooterColumn>
 					))}
-				</nav>
-			</div>
-			<div className="border-t border-kumo-line">
-				<p className="mx-auto max-w-6xl px-4 py-6 text-xs text-kumo-subtle sm:px-6">
-					© {new Date().getFullYear()} {LEGAL_ENTITY.name}
-				</p>
+					<FooterColumn title="Legal">
+						{LEGAL_LINKS.map((link) => (
+							<li key={link.slug}>
+								<Link to={link.path} className="hover:text-white">{link.label}</Link>
+							</li>
+						))}
+					</FooterColumn>
+					<FooterColumn title="Contact">
+						{Object.values(LEGAL_CONTACT).map((address) => (
+							<li key={address}>
+								<a href={`mailto:${address}`} className="[overflow-wrap:anywhere] hover:text-white">{address}</a>
+							</li>
+						))}
+					</FooterColumn>
+				</div>
+				<EstoriLogo className="mt-16 h-14 w-auto text-white sm:h-[76px]" />
+				<div className="mt-6 flex flex-col gap-4 border-t border-white/15 pt-6 text-[13px] text-white/70 md:flex-row md:items-center md:justify-between">
+					<nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-2">
+						{LEGAL_LINKS.map((link) => (
+							<Link key={link.slug} to={link.path} className="hover:text-white">{link.label}</Link>
+						))}
+					</nav>
+					<p>
+						© {new Date().getFullYear()} {LEGAL_ENTITY.name} · {legalAddressLine()}
+					</p>
+				</div>
 			</div>
 		</footer>
 	);

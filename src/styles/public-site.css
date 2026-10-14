@@ -1,0 +1,38 @@
+/*
+ * Public pages (landing, pricing, legal): 1Password-style palette and DM Sans.
+ * PublicLayout sets .public-site, so the signed-in app keeps its own font and theme.
+ */
+
+@font-face {
+	font-family: 'DM Sans';
+	font-style: normal;
+	font-weight: 100 1000;
+	font-display: swap;
+	src: url('/fonts/dm-sans/dm-sans-latin-opsz-normal.woff2') format('woff2-variations');
+}
+
+@theme {
+	--color-public-charcoal: #1d1d21;
+	--color-public-blue: #145fe4;
+	--color-public-blue-hover: #0f4fc6;
+	--color-public-gold: #cbb88e;
+	--color-public-ink: #000000;
+	--color-public-muted: #5b5b66;
+	--color-public-line: #e5e5e5;
+	--color-public-brand: #11295a;
+	--font-public: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
+.public-site {
+	color-scheme: light;
+	font-family: var(--font-public);
+	font-variation-settings: 'opsz' 14;
+	background-color: #ffffff;
+	color: var(--color-public-ink);
+	-webkit-font-smoothing: antialiased;
+}
+
+/* App components embedded in a public page, such as the landing build box, keep the app's theme. */
+:root[data-mode='dark'] .public-site .app-theme-scope {
+	color-scheme: dark;
+}

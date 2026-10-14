@@ -25,6 +25,8 @@ export const queryKeys = {
 		user: (filters: PaginatedAppsListFilters) =>
 			[...queryKeys.apps.userAll(), filters] as const,
 		strip: () => [...queryKeys.apps.all, 'strip'] as const,
+		/** The landing page's logo strip and showcase; carries signed screenshot links. */
+		showcase: () => [...queryKeys.apps.all, 'showcase'] as const,
 		sitePageAll: () => [...queryKeys.apps.all, 'site-page'] as const,
 		/** A Discover product page; its offer depends on the viewer. */
 		sitePage: (appId: string, userId?: string | null) =>

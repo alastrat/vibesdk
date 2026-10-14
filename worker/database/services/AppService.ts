@@ -4,7 +4,7 @@
 
 import { BaseService } from './BaseService';
 import * as schema from '../schema';
-import { eq, and, or, desc, asc, sql, isNull, inArray } from 'drizzle-orm';
+import { eq, and, or, desc, asc, sql, isNull, isNotNull, inArray } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import { formatRelativeTime } from '../../utils/timeFormatter';
 import type {
@@ -327,6 +327,43 @@ export class AppService extends BaseService {
             screenshotUrl,
             screenshotCapturedAt: new Date()
         });
+    }
+
+    /** Records the tall Discover showcase image of a store. */
+    /** Writes only the image: a capture is not an edit, so `updatedAt` (Discover's "recent" sort) stays as it was. */
+    async updateAppShowcaseScreenshot(appId: string, showcaseScreenshotUrl: string): Promise<boolean> {
+        try {
+            await this.database
+                .update(schema.apps)
+                .set({ showcaseScreenshotUrl })
+                .where(eq(schema.apps.id, appId));
+            return true;
+        } catch (error) {
+            this.logger.error('[AppService] Failed to store showcase screenshot', { appId, error });
+            return false;
+        }
+    }
+
+    /** Deployed public stores still in Discover that have no showcase image yet, in random order so stores that keep failing can't hold every batch. */
+    async listAppsMissingShowcase(limit: number): Promise<{ ids: string[]; remaining: number }> {
+        const missing = and(
+            eq(schema.apps.visibility, 'public'),
+            isNull(schema.apps.removedFromDiscoverAt),
+            isNotNull(schema.apps.lastDeployedAt),
+            isNull(schema.apps.showcaseScreenshotUrl),
+        );
+        const [rows, counts] = await Promise.all([
+            this.database
+                .select({ id: schema.apps.id })
+                .from(schema.apps)
+                .where(missing)
+                .orderBy(sql`random()`)
+                .limit(limit)
+                .all(),
+            this.database.select({ count: sql<number>`count(*)` }).from(schema.apps).where(missing).all(),
+        ]);
+        const total = counts[0]?.count ?? 0;
+        return { ids: rows.map((row) => row.id), remaining: Math.max(0, total - rows.length) };
     }
 
     /**

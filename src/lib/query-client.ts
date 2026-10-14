@@ -45,10 +45,12 @@ export function createIDBPersister(
 // user looking signed out after a successful Cloudflare/OAuth login. It also
 // avoids leaking user-scoped data across account switches. Product pages carry
 // a signed preview URL and a per-viewer offer, so they stay out of storage too.
+// The landing showcase carries screenshot links that expire after six hours.
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
 	queryKeys.auth.all,
 	queryKeys.account.all,
 	queryKeys.apps.sitePageAll(),
+	queryKeys.apps.showcase(),
 ];
 
 function hasKeyPrefix(

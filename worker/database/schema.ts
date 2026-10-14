@@ -230,6 +230,7 @@ export const apps = sqliteTable('apps', {
     // Screenshot Information
     screenshotUrl: text('screenshot_url'), // URL to saved screenshot image
     screenshotCapturedAt: integer('screenshot_captured_at', { mode: 'timestamp' }), // When screenshot was last captured
+    showcaseScreenshotUrl: text('showcase_screenshot_url'), // Tall Discover showcase image, 1280x1650 JPEG
     
     // Metadata
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),

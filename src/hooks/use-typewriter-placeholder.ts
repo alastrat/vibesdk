@@ -1,20 +1,26 @@
 import { useState, useEffect } from 'react';
 
+function prefersReducedMotion(): boolean {
+	return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /**
  * Typewriter effect that cycles through phrases, typing and erasing them.
- * Returns the current text to display as a placeholder.
+ * Returns the current text to display as a placeholder; with reduced motion,
+ * the first phrase in full.
  * Callers should memoize the phrases array to avoid resetting the animation.
  */
 export function useTypewriterPlaceholder(
 	phrases: string[],
 	enabled: boolean,
 ): string {
+	const [reduceMotion] = useState(prefersReducedMotion);
 	const [phraseIndex, setPhraseIndex] = useState(0);
 	const [text, setText] = useState('');
 	const [isTyping, setIsTyping] = useState(true);
 
 	useEffect(() => {
-		if (!enabled || phrases.length === 0) return;
+		if (!enabled || reduceMotion || phrases.length === 0) return;
 
 		const currentPhrase = phrases[phraseIndex];
 
@@ -41,8 +47,9 @@ export function useTypewriterPlaceholder(
 				setIsTyping(true);
 			}
 		}
-	}, [text, phraseIndex, isTyping, phrases, enabled]);
+	}, [text, phraseIndex, isTyping, phrases, enabled, reduceMotion]);
 
 	if (!enabled) return '';
+	if (reduceMotion) return phrases[0] ?? '';
 	return text;
 }

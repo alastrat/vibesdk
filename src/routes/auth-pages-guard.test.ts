@@ -19,6 +19,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/auth/TermsGate.tsx',
 		'/src/routes/auth/ResetPasswordPage.tsx',
 		'/src/routes/auth/VerifyEmailPage.tsx',
+		'/src/routes/auth/AccountEmailCard.tsx',
 		'/src/routes/settings/index.tsx',
 		'/worker/services/email/links.ts',
 		'/worker/services/auth/one-time-token.ts',
@@ -187,6 +188,21 @@ describe('account email pages', () => {
 		expect(settings.indexOf('Email not confirmed')).toBeGreaterThan(gate);
 		expect(settings).toMatch(/const canResendConfirmation =\s*emailSending &&/);
 		expect(settings.indexOf('{canResendConfirmation && (')).toBeLessThan(settings.indexOf('Resend confirmation email'));
+	});
+
+	it('renders the reset and confirm pages in the app theme, though they sit in the light public layout', () => {
+		// .public-site forces a light color-scheme; app-theme-scope gives the Kumo components back the app theme.
+		const card = source('/src/routes/auth/AccountEmailCard.tsx');
+		expect(card.slice(card.indexOf('return ('))).toMatch(/^return \(\s*<section className="app-theme-scope /);
+		for (const path of ['/src/routes/auth/ResetPasswordPage.tsx', '/src/routes/auth/VerifyEmailPage.tsx']) {
+			const body = source(path).slice(source(path).indexOf('return ('));
+			const open = body.indexOf('<AccountEmailCard');
+			const close = body.indexOf('</AccountEmailCard>');
+			expect(open).toBeGreaterThan(-1);
+			expect(close).toBeGreaterThan(open);
+			// Nothing but the page title renders outside the card.
+			expect(body.slice(0, open) + body.slice(close)).not.toMatch(/<[A-Z]/);
+		}
 	});
 
 	it('keeps the terms window off the pages opened from account emails', () => {

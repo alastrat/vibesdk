@@ -16,6 +16,8 @@ import {
     supersededVersionId,
 } from '../../../services/templates/catalog';
 import { parseDiscoverRemoval } from '../../../services/templates/reuse';
+import { SHOWCASE_REFRESH_BATCH, runShowcaseRefresh } from '../../../services/showcase/showcase-screenshot';
+import { refreshShowcaseScreenshot } from '../../../services/showcase/showcase-refresh';
 import { decodeText, type TreeFile } from '../../../services/templates/snapshot';
 import { readTemplateSnapshot, templateImageResponse } from '../../../services/templates/store';
 import { toPendingReview } from './publishingDto';
@@ -28,6 +30,7 @@ import type {
     RejectVersionRequest,
     ReviewVersionFileData,
     ReviewVersionFilesData,
+    ShowcaseRefreshData,
 } from './types';
 
 const REVIEW_SCREENSHOT_CACHE = 'private, max-age=300';
@@ -254,6 +257,28 @@ export class ReviewAdminController extends BaseController {
         } catch (error) {
             this.logger.error('Error changing Discover removal', error);
             return ReviewAdminController.createErrorResponse<DiscoverRemovalData>('Failed to change the removal', 500);
+        }
+    }
+
+    /** Capture showcase images for Discover stores that lack one, one batch per call. */
+    static async refreshShowcaseScreenshots(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        _context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<ShowcaseRefreshData>>> {
+        try {
+            const { ids, remaining } = await new AppService(env).listAppsMissingShowcase(SHOWCASE_REFRESH_BATCH);
+            const { captured, failed } = await runShowcaseRefresh(ids, (appId) => refreshShowcaseScreenshot(env, ReviewAdminController.logger, appId));
+            return ReviewAdminController.createSuccessResponse<ShowcaseRefreshData>({
+                attempted: ids.length,
+                captured,
+                failed,
+                remaining: remaining + failed,
+            });
+        } catch (error) {
+            this.logger.error('Error refreshing showcase screenshots', error);
+            return ReviewAdminController.createErrorResponse<ShowcaseRefreshData>('Failed to refresh the showcase images', 500);
         }
     }
 

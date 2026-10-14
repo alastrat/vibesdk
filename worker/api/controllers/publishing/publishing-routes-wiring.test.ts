@@ -22,7 +22,7 @@ describe('publishing routes', () => {
 
 	it('puts every admin route behind the admin auth level', () => {
 		const adminLines = lines.filter((line) => line.includes("'/api/admin/"));
-		expect(adminLines).toHaveLength(8);
+		expect(adminLines).toHaveLength(9);
 		for (const line of adminLines) expect(line).toContain('setAuthLevel(AuthConfig.admin)');
 	});
 
