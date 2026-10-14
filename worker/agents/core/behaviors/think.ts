@@ -986,21 +986,30 @@ export class ThinkCodingBehavior
 	}
 
 	/**
+	 * An open editor asks for the thumbnail with its preview frame's URL. That
+	 * URL comes from the browser, so it is ignored in favor of the server-built
+	 * preview: a client can't put another site on the app's cards.
+	 */
+	override async captureScreenshot(
+		_url: string,
+		viewport?: { width: number; height: number },
+	): Promise<string | null> {
+		return this.captureThumbnail(viewport);
+	}
+
+	/**
 	 * Captures the app thumbnail once per deployed commit, whether the server or
 	 * an open editor asks. Resolves to null when the stored thumbnail already
 	 * shows the deployed commit or a capture for it is running.
 	 */
-	override async captureScreenshot(
-		url: string,
-		viewport?: { width: number; height: number },
-	): Promise<string | null> {
+	private async captureThumbnail(viewport?: { width: number; height: number }): Promise<string | null> {
 		const commit = this.pendingScreenshotCommit();
 		if (!commit) return null;
 		this.screenshotInFlightCommit = commit;
 		try {
-			const screenshotUrl = await super.captureScreenshot(url, viewport);
+			const screenshotUrl = await super.captureScreenshot(await this.getBrowserPreviewURL(), viewport);
 			this.setState({ ...this.state, screenshotCommit: commit });
-			this.queueShowcaseCapture(url);
+			this.queueShowcaseCapture();
 			return screenshotUrl;
 		} finally {
 			if (this.screenshotInFlightCommit === commit) this.screenshotInFlightCommit = null;
@@ -1013,22 +1022,25 @@ export class ThinkCodingBehavior
 	 * logged and the next editor open retries it.
 	 */
 	private captureDeployedScreenshot(): void {
-		if (!this.pendingScreenshotCommit()) return;
-		void this.getBrowserPreviewURL()
-			.then((url) => this.captureScreenshot(url))
+		void this.captureThumbnail()
 			.catch((e: unknown) => this.logger.warn('Server-side thumbnail capture failed', e));
 	}
 
-	/** Public stores also get the tall Discover showcase image of the same deploy. Runs in the background. */
-	private queueShowcaseCapture(url: string): void {
+	/**
+	 * Public stores also get the tall Discover showcase image of the same deploy.
+	 * It always captures the server's own public preview: the thumbnail URL can
+	 * come from an editor's browser. Runs in the background.
+	 */
+	private queueShowcaseCapture(): void {
 		const appId = this.getAgentId();
 		void new AppService(this.env)
 			.getPublishingState(appId)
-			.then((publishing) =>
-				showcaseEligible(publishing)
-					? captureShowcaseScreenshot(createShowcaseCaptureDeps(this.env, this.logger), appId, url)
-					: null,
-			)
+			.then(async (publishing) => {
+				if (!showcaseEligible(publishing)) return null;
+				const previewUrl = await this.getPublicPreviewURL();
+				if (!previewUrl) return null;
+				return captureShowcaseScreenshot(createShowcaseCaptureDeps(this.env, this.logger), appId, previewUrl);
+			})
 			.catch((e: unknown) => this.logger.warn('Showcase screenshot skipped', e));
 	}
 

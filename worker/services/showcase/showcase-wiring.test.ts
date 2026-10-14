@@ -33,10 +33,20 @@ describe('showcase capture triggers', () => {
 	it("refreshes a public store's showcase image right after its thumbnail", () => {
 		const think = source(THINK);
 		const override = between(think, 'override async captureScreenshot(', 'private captureDeployedScreenshot(): void {');
-		expect(override.indexOf('this.queueShowcaseCapture(url);')).toBeGreaterThan(override.indexOf('screenshotCommit: commit'));
-		const queue = between(think, 'private queueShowcaseCapture(url: string): void {', 'private pendingScreenshotCommit(): string | null {');
+		expect(override.indexOf('this.queueShowcaseCapture();')).toBeGreaterThan(override.indexOf('screenshotCommit: commit'));
+		const queue = between(think, 'private queueShowcaseCapture(): void {', 'private pendingScreenshotCommit(): string | null {');
 		expect(queue).toContain('getPublishingState(appId)');
 		expect(queue).toContain('showcaseEligible(publishing)');
-		expect(queue).toContain('captureShowcaseScreenshot(createShowcaseCaptureDeps(this.env, this.logger), appId, url)');
+		expect(queue).toContain('captureShowcaseScreenshot(createShowcaseCaptureDeps(this.env, this.logger), appId, previewUrl)');
+	});
+
+	it('captures the showcase from the public preview, never the URL an editor sent', () => {
+		const think = source(THINK);
+		const override = between(think, 'override async captureScreenshot(', 'private captureDeployedScreenshot(): void {');
+		expect(override).not.toContain('queueShowcaseCapture(url');
+		const queue = between(think, 'private queueShowcaseCapture(): void {', 'private pendingScreenshotCommit(): string | null {');
+		expect(queue).toContain('const previewUrl = await this.getPublicPreviewURL();');
+		expect(queue).toContain('if (!previewUrl) return null;');
+		expect(queue).not.toMatch(/\burl\b/);
 	});
 });
