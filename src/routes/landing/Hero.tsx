@@ -17,7 +17,8 @@ export const HERO_STORE_IMAGE = '/marketing/hero-store.jpg';
 
 export function Hero() {
 	return (
-		<section className="bg-public-charcoal text-white">
+		<section className="overflow-x-clip bg-public-charcoal text-white">
+			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
 			<div className="mx-auto max-w-[1248px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
 				<h1 className={cn(HEADING_HERO, 'mx-auto max-w-5xl text-balance')}>Build online stores with AI. Sell them as templates.</h1>
 				<p className={cn(LEAD, 'mx-auto mt-6 max-w-2xl text-pretty text-white/80')}>

@@ -55,6 +55,7 @@ describe('landing page', () => {
 		expect(hero).toContain('<BorderBeam');
 		expect(hero).toContain('id="build"');
 		expect(hero).toMatch(/id="build"\s+className="app-theme-scope /);
+		expect(hero).toContain('<section className="overflow-x-clip bg-public-charcoal text-white">');
 	});
 
 	it('shows Discover stores as wordmarks and as a showcase, and hides both at two stores or fewer', () => {

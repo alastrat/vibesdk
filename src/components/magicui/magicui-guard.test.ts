@@ -49,8 +49,8 @@ describe('Magic UI components', () => {
 		expect(marquee).toContain('motion-reduce:overflow-x-auto');
 	});
 
-	it('keeps the border beam inside its box, so it never widens the page', () => {
-		expect(component('border-beam')).toMatch(/pointer-events-none absolute inset-0 rounded-\[inherit\] overflow-hidden /);
+	it('leaves the border beam visible in its border strip (no clipping on its wrapper)', () => {
+		expect(component('border-beam')).not.toMatch(/rounded-\[inherit\] overflow-hidden/);
 	});
 
 	it('ignores the app dark mode in the device frames and the ticker', () => {
