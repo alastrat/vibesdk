@@ -107,6 +107,27 @@ describe('landing page', () => {
 		expect(preview).toContain('<Iphone');
 	});
 
+	it('lets keyboard users reach every store in the marquees once, in view and with a visible focus ring', () => {
+		const logos = source('/src/routes/landing/StoreLogos.tsx');
+		const showcase = source('/src/routes/landing/StoreShowcase.tsx');
+		// The edge fades hide while a link inside their wrapper has focus.
+		expect(source('/src/components/public-site/primitives.tsx').match(/transition-opacity group-focus-within\/edges:opacity-0/g)).toHaveLength(2);
+		expect(logos).toContain('<div className="group/edges relative mt-8">');
+		expect(showcase).toContain('<div className="group/edges relative mt-12">');
+		// Room above and below each row for the focus rings.
+		for (const text of [logos, showcase]) {
+			expect(text).not.toMatch(/<Marquee[^>]*className="p-0 /);
+			expect(text).toMatch(/<Marquee[^>]*className="px-0 py-1 /);
+		}
+		// The reverse row repeats the first, so it stays out of the accessibility tree and the tab order.
+		const rowTwo = showcase.slice(showcase.indexOf('<Marquee pauseOnHover reverse'), showcase.indexOf('</Marquee>', showcase.indexOf('<Marquee pauseOnHover reverse')));
+		expect(rowTwo).toMatch(/<Marquee pauseOnHover reverse aria-hidden /);
+		expect(rowTwo).toContain('focusable={false}');
+		expect(showcase).toContain('focusable = true');
+		expect(showcase).toContain('tabIndex={focusable ? undefined : -1}');
+		expect(showcase).not.toContain('inert');
+	});
+
 	it('keeps a card readable when its image fails to load', () => {
 		expect(source('/src/routes/landing/StoreShowcase.tsx')).toContain('onError={() => setImageFailed(true)}');
 	});

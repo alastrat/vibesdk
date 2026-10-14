@@ -1,5 +1,5 @@
 // Adapted from Magic UI (MIT, see ./LICENSE.md), commit 85f97fd.
-import { useRef, type ComponentPropsWithoutRef } from "react"
+import { useRef, type ComponentPropsWithoutRef, type FocusEvent } from "react"
 import { useInView } from "framer-motion"
 
 import { cn } from "@/lib/utils"
@@ -8,7 +8,10 @@ interface MarqueeProps extends ComponentPropsWithoutRef<"div"> {
   className?: string
   /** Scroll the other way. */
   reverse?: boolean
-  /** Pause while hovered; it also pauses while a child has keyboard focus. */
+  /**
+   * Pause while hovered. While a child has keyboard focus it stops instead, back
+   * at the start, and the focused child scrolls fully into view.
+   */
   pauseOnHover?: boolean
   children: React.ReactNode
   vertical?: boolean
@@ -28,18 +31,26 @@ export function Marquee({
   children,
   vertical = false,
   repeat = 4,
+  onFocus,
   ...props
 }: MarqueeProps) {
   const ref = useRef<HTMLDivElement>(null)
   const onScreen = useInView(ref)
 
+  // Chrome's focus scrolling leaves a partly visible child where it is.
+  const revealFocused = (event: FocusEvent<HTMLDivElement>) => {
+    onFocus?.(event)
+    if (pauseOnHover) event.target.scrollIntoView({ block: "nearest", inline: "nearest" })
+  }
+
   return (
     <div
       ref={ref}
       {...props}
+      onFocus={revealFocused}
       data-offscreen={onScreen ? undefined : ""}
       className={cn(
-        "group flex gap-(--gap) overflow-hidden p-2 [--duration:40s] [--gap:1rem] motion-reduce:overflow-x-auto",
+        "group flex scroll-px-1 gap-(--gap) overflow-hidden p-2 [--duration:40s] [--gap:1rem] motion-reduce:overflow-x-auto",
         {
           "flex-row": !vertical,
           "flex-col": vertical,
@@ -57,7 +68,7 @@ export function Marquee({
             {
               "animate-marquee flex-row": !vertical,
               "animate-marquee-vertical flex-col": vertical,
-              "group-hover:[animation-play-state:paused] group-focus-within:[animation-play-state:paused]": pauseOnHover,
+              "group-hover:[animation-play-state:paused] group-focus-within:animate-none": pauseOnHover,
               "[animation-direction:reverse]": reverse,
               "motion-reduce:hidden": i > 0,
             }

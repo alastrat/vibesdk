@@ -40,11 +40,18 @@ describe('Magic UI components', () => {
 		for (const name of ANIMATED) expect(component(name)).toMatch(/useReducedMotion\(\)|motion-reduce:/);
 	});
 
-	it('keeps marquee copies out of the accessibility tree and the tab order, and pauses on focus and off screen', () => {
+	it('keeps marquee copies out of the accessibility tree and the tab order, pauses on hover and off screen, and stops on focus', () => {
 		const marquee = component('marquee');
 		expect(marquee).toContain('aria-hidden={i > 0 || undefined}');
 		expect(marquee).toContain('inert={i > 0 || undefined}');
-		expect(marquee).toContain('group-focus-within:[animation-play-state:paused]');
+		expect(marquee).toContain('group-hover:[animation-play-state:paused]');
+		// Stopped, the first copy returns to x = 0, so the browser can scroll a focused link into view.
+		expect(marquee).toContain('group-focus-within:animate-none');
+		expect(marquee).not.toContain('group-focus-within:[animation-play-state:paused]');
+		// Chrome leaves a partly visible focused link where it is, so the marquee reveals it, clear of the edge for its ring.
+		expect(marquee).toContain('if (pauseOnHover) event.target.scrollIntoView({ block: "nearest", inline: "nearest" })');
+		expect(marquee).toContain('onFocus={revealFocused}');
+		expect(marquee).toContain('scroll-px-1');
 		expect(marquee).toContain('group-data-[offscreen]:[animation-play-state:paused]');
 		expect(marquee).toContain('motion-reduce:overflow-x-auto');
 	});

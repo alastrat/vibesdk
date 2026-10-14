@@ -54,7 +54,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 					</div>
 				)}
 			</div>
-			<div className="relative mt-12">
+			<div className="group/edges relative mt-12">
 				{layout.kind === 'static' ? (
 					<div className="mx-auto flex max-w-[1248px] flex-wrap gap-4 px-4 sm:px-6">
 						{layout.row.map((store) => (
@@ -63,14 +63,15 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 					</div>
 				) : (
 					<div className="grid gap-4">
-						<Marquee pauseOnHover className="p-0 [--duration:70s] [--gap:1rem]">
+						<Marquee pauseOnHover className="px-0 py-1 [--duration:70s] [--gap:1rem]">
 							{layout.rows[0].map((store) => (
 								<ShowcaseCard key={store.id} store={store} />
 							))}
 						</Marquee>
-						<Marquee pauseOnHover reverse className="p-0 [--duration:80s] [--gap:1rem]">
+						{/* The same stores in reverse: one set of tab stops and one reading is enough. */}
+						<Marquee pauseOnHover reverse aria-hidden className="px-0 py-1 [--duration:80s] [--gap:1rem]">
 							{layout.rows[1].map((store) => (
-								<ShowcaseCard key={store.id} store={store} />
+								<ShowcaseCard key={store.id} store={store} focusable={false} />
 							))}
 						</Marquee>
 						<EdgeFades />
@@ -86,11 +87,13 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 	);
 }
 
-function ShowcaseCard({ store }: { store: ShowcaseStore }) {
+/** A store card; `focusable={false}` keeps a repeated card clickable but out of the tab order. */
+function ShowcaseCard({ store, focusable = true }: { store: ShowcaseStore; focusable?: boolean }) {
 	const [imageFailed, setImageFailed] = useState(false);
 	return (
 		<Link
 			to={`/discover/${store.id}`}
+			tabIndex={focusable ? undefined : -1}
 			className="group relative block h-[280px] w-[220px] shrink-0 overflow-hidden rounded-[18px] bg-[#2a2a30] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-[360px] sm:w-[280px]"
 		>
 			{store.imageUrl && !imageFailed && (

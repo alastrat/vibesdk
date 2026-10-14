@@ -61,12 +61,18 @@ export function Eyebrow({ tone = 'light', className, children }: { tone?: 'light
 	);
 }
 
-/** Fades the ends of a full-width marquee into the charcoal background. */
+/** Fades the ends of a full-width marquee into the charcoal background; hidden while a link in its `group/edges` wrapper has focus. */
 export function EdgeFades() {
 	return (
 		<>
-			<span aria-hidden className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-public-charcoal to-transparent sm:w-32" />
-			<span aria-hidden className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-public-charcoal to-transparent sm:w-32" />
+			<span
+				aria-hidden
+				className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-public-charcoal to-transparent transition-opacity group-focus-within/edges:opacity-0 sm:w-32"
+			/>
+			<span
+				aria-hidden
+				className="pointer-events-none absolute inset-y-0 right-0 z-10 w-16 bg-gradient-to-l from-public-charcoal to-transparent transition-opacity group-focus-within/edges:opacity-0 sm:w-32"
+			/>
 		</>
 	);
 }

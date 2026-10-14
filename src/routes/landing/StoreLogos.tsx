@@ -20,8 +20,8 @@ export function StoreLogos({ stores }: { stores: readonly ShowcaseStore[] }) {
 			<h2 id="store-logos-title" className="text-center text-xs uppercase tracking-[0.04em] text-white/60">
 				Stores built on Estori
 			</h2>
-			<div className="relative mt-8">
-				<Marquee pauseOnHover className="p-0 [--duration:60s] [--gap:4rem]">
+			<div className="group/edges relative mt-8">
+				<Marquee pauseOnHover className="px-0 py-1 [--duration:60s] [--gap:4rem]">
 					{stores.map((store, index) => (
 						<Link
 							key={store.id}
