@@ -29,6 +29,8 @@ describe('landing page', () => {
 		expect(root).toContain('isLoading');
 		expect(root).toContain('<LandingPage />');
 		expect(root).toContain('<Home />');
+		expect(root).toContain("view === 'loading'");
+		expect(root).toContain('<Loader />');
 		expect(source('/src/routes.tsx')).toContain('{ index: true, Component: RootIndex }');
 	});
 

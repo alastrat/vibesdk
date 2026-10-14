@@ -9,6 +9,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/components/layout/app-sidebar.tsx',
 		'/src/routes/legal/LegalPage.tsx',
+		'/src/routes/root-index.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -32,6 +33,19 @@ describe('public pages', () => {
 	it('keeps the app sidebar only for app routes', () => {
 		expect(source('/src/App.tsx')).not.toContain('<AppLayout>');
 		expect(source('/src/routes.tsx')).toContain('Component: AppShell');
+	});
+
+	it('serves the builder home and the app routes from one app layout, so the sidebar persists between them', () => {
+		const routes = source('/src/routes.tsx');
+		const appBlock = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
+		expect(appBlock).toContain('{ index: true, Component: RootIndex }');
+		expect(appBlock).toContain("path: 'chat/:chatId'");
+		expect(appBlock).toContain("path: 'apps'");
+		const root = source('/src/routes/root-index.tsx');
+		expect(root.match(/<AppLayout\b/g)).toHaveLength(1);
+		expect(root).not.toContain('<AppLayout>');
+		expect(root).toContain("pathname !== '/'");
+		expect(root).toContain('<PublicLayout />');
 	});
 
 	it('links every legal page from the footer and the sidebar', () => {

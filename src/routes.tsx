@@ -1,7 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router';
 
 import App from './App';
-import RootIndex from './routes/root-index';
+import RootIndex, { AppShell } from './routes/root-index';
 import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
@@ -11,12 +11,10 @@ import DiscoverPage from './routes/discover';
 import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
 import { ProtectedRoute } from './routes/protected-route';
-import { AppLayout } from './components/layout/app-layout';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
 import PricingPage from './routes/pricing';
 
-const AppShell = () => <AppLayout />;
 const PublicShell = () => <PublicLayout />;
 
 const routes = [
@@ -24,10 +22,10 @@ const routes = [
 		path: '/',
 		Component: App,
 		children: [
-			{ index: true, Component: RootIndex },
 			{
 				Component: AppShell,
 				children: [
+					{ index: true, Component: RootIndex },
 					{
 						path: 'chat/:chatId',
 						Component: Chat,
