@@ -384,6 +384,19 @@ export const stars = sqliteTable('stars', {
     appStarredAtIdx: index('stars_app_starred_at_idx').on(table.appId, table.starredAt),
 }));
 
+/**
+ * Early-access requests for upcoming programs, one per user and program.
+ */
+export const earlyAccessRequests = sqliteTable('early_access_requests', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    capability: text('capability').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    userCapabilityIdx: uniqueIndex('early_access_requests_user_capability_idx').on(table.userId, table.capability),
+    capabilityIdx: index('early_access_requests_capability_idx').on(table.capability),
+}));
+
 // ========================================
 // COMMUNITY INTERACTIONS
 // ========================================
@@ -749,6 +762,9 @@ export const systemSettings = sqliteTable('system_settings', {
 
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+
+export type EarlyAccessRequest = typeof earlyAccessRequests.$inferSelect;
+export type NewEarlyAccessRequest = typeof earlyAccessRequests.$inferInsert;
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;

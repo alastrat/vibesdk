@@ -428,4 +428,10 @@ export type {
     SitePageData,
     SitePageOffer,
 } from 'worker/api/controllers/sitePage/types';
+
+export type {
+    EarlyAccessAdminData,
+    EarlyAccessAdminRequest,
+    MyEarlyAccessData,
+} from 'worker/api/controllers/earlyAccess/types';
 export type { PublicPlanLimits } from '../shared/types/plan.js';
