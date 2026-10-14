@@ -13,7 +13,8 @@ import {
     oauthProviderSchema,
     acceptTermsSchema,
     forgotPasswordSchema,
-    resetPasswordSchema
+    resetPasswordSchema,
+    verifyEmailSchema
 } from './authSchemas';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import {
@@ -41,9 +42,9 @@ import { CloudflareProvisioningService } from '../../../services/cloudflare/Clou
 import { isCloudflareGatewayLimitsEnabled } from '../../../services/rate-limit';
 import { RateLimitType } from '../../../services/rate-limit/config';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
-import { createEmailSender } from '../../../services/email/sender';
+import { createEmailSender, isEmailSendingEnabled } from '../../../services/email/sender';
 import { appBaseUrl } from '../../../services/email/links';
-import { FORGOT_PASSWORD_MESSAGE } from '../../../services/auth/one-time-token';
+import { CONFIRM_LINK_INVALID_MESSAGE, FORGOT_PASSWORD_MESSAGE } from '../../../services/auth/one-time-token';
 import { isEmailAuthEnabled } from '../../../utils/envs';
 /**
  * Authentication Controller
@@ -72,7 +73,12 @@ export class AuthController extends BaseController {
             const validatedData = registerSchema.parse(bodyResult.data);
 
             const authService = new AuthService(env);
-            const result = await authService.register(validatedData, request);
+            const result = await authService.register(
+                validatedData,
+                request,
+                createEmailSender(env),
+                appBaseUrl(env, request)
+            );
             
             const response = AuthController.createSuccessResponse(
                 formatAuthResponse(result.user, result.sessionId, result.expiresAt)
@@ -251,6 +257,59 @@ export class AuthController extends BaseController {
             }
 
             return AuthController.handleError(error, 'reset password');
+        }
+    }
+
+    /**
+     * Confirm an email address with the token from an emailed confirmation link.
+     * POST /api/auth/verify-email
+     */
+    static async verifyEmail(request: Request, env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
+        try {
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) {
+                return bodyResult.response!;
+            }
+
+            const parsed = verifyEmailSchema.safeParse(bodyResult.data);
+            if (!parsed.success) {
+                return AuthController.createErrorResponse(CONFIRM_LINK_INVALID_MESSAGE, 400);
+            }
+
+            await new AuthService(env).verifyEmail(parsed.data.token);
+
+            return AuthController.createSuccessResponse({ message: 'Your email is confirmed.' });
+        } catch (error) {
+            if (error instanceof SecurityError) {
+                return AuthController.createErrorResponse(error.message, error.statusCode);
+            }
+
+            return AuthController.handleError(error, 'confirm email');
+        }
+    }
+
+    /**
+     * Email the signed-in user a new confirmation link, unless their address is already confirmed.
+     * POST /api/auth/resend-verification
+     */
+    static async resendVerification(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
+        try {
+            const user = routeContext.user;
+            if (!user) {
+                return AuthController.createErrorResponse('Unauthorized', 401);
+            }
+
+            await RateLimitService.enforceAuthEmailRateLimit(env, routeContext.config.security.rateLimit, request, user);
+
+            await new AuthService(env).resendEmailConfirmation(user.id, createEmailSender(env), appBaseUrl(env, request));
+
+            return AuthController.createSuccessResponse({ message: 'If your email is not confirmed yet, we sent a new link.' });
+        } catch (error) {
+            if (error instanceof RateLimitExceededError) {
+                return AuthController.createErrorResponse(error, 429);
+            }
+
+            return AuthController.handleError(error, 'resend email confirmation');
         }
     }
 
@@ -950,7 +1009,8 @@ export class AuthController extends BaseController {
                 google: !!env.GOOGLE_CLIENT_ID && !!env.GOOGLE_CLIENT_SECRET,
                 github: !!env.GITHUB_CLIENT_ID && !!env.GITHUB_CLIENT_SECRET,
                 cloudflare: CloudflareConnectOAuthProvider.isLoginConfigured(env),
-                email: isEmailAuthEnabled(env)
+                email: isEmailAuthEnabled(env),
+                emailSending: isEmailSendingEnabled(env)
             };
             const hasOAuth = providers.google || providers.github || providers.cloudflare;
             

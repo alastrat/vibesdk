@@ -21,6 +21,7 @@ export function setupAuthRoutes(app: Hono<AppEnv>): void {
     authRouter.post('/login', setAuthLevel(AuthConfig.public), adaptController(AuthController, AuthController.login));
     authRouter.post('/forgot-password', setAuthLevel(AuthConfig.public), adaptController(AuthController, AuthController.forgotPassword));
     authRouter.post('/reset-password', setAuthLevel(AuthConfig.public), adaptController(AuthController, AuthController.resetPassword));
+    authRouter.post('/verify-email', setAuthLevel(AuthConfig.public), adaptController(AuthController, AuthController.verifyEmail));
     authRouter.get('/check', setAuthLevel(AuthConfig.public), adaptController(AuthController, AuthController.checkAuth));
     
     // Protected routes (require authentication) - must come before dynamic OAuth routes
@@ -28,6 +29,7 @@ export function setupAuthRoutes(app: Hono<AppEnv>): void {
     authRouter.put('/profile', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.updateProfile));
     authRouter.post('/logout', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.logout));
     authRouter.post('/accept-terms', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.acceptTerms));
+    authRouter.post('/resend-verification', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.resendVerification));
 
     // Session management routes
     authRouter.get('/sessions', setAuthLevel(AuthConfig.authenticated), adaptController(AuthController, AuthController.getActiveSessions));

@@ -2,33 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { SecurityError } from 'shared/types/errors';
 import { AuthService } from './AuthService';
 import { recordingD1 } from '../test-support/recording-d1';
-import type { EmailSender, OutgoingEmail } from '../../services/email/types';
+import { lastWrite, recordingSender, rejection, rowsByTable, writes, type Row, type Statement } from '../test-support/recorded-statements';
 import { RESET_LINK_INVALID_MESSAGE, RESET_TOKEN_TTL_MS, hashOneTimeToken } from '../../services/auth/one-time-token';
 import { sha256Hash } from '../../utils/cryptoUtils';
 import { PasswordService } from '../../utils/passwordService';
-
-type Row = Record<string, unknown>;
-type Statement = { sql: string; params: unknown[] };
-
-/** The column names drizzle selected, so a fake row can be laid out whatever order the service asks for. */
-function selectedColumns(sql: string): string[] {
-	const list = sql.slice('select '.length, sql.indexOf(' from '));
-	return list.split(', ').map((part) => (part.split('.').pop() ?? '').replace(/"/g, ''));
-}
-
-/** Rows to return for a select, by table name; a table without a row selects nothing. */
-function rowsByTable(tables: Record<string, Row | undefined>): (sql: string) => unknown[][] {
-	return (sql) => {
-		const lower = sql.toLowerCase();
-		if (!lower.startsWith('select ')) return [];
-		for (const [table, row] of Object.entries(tables)) {
-			if (row && lower.includes(`from "${table}"`)) {
-				return [selectedColumns(lower).map((column) => row[column] ?? null)];
-			}
-		}
-		return [];
-	};
-}
 
 const REQUEST = new Request('http://localhost/api/auth/reset-password', { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.9' } });
 const USER = { id: 'user-1', email: 'user@example.test', password_hash: 'stored-hash' };
@@ -40,18 +17,6 @@ function secondsFromNow(ms: number): number {
 
 function validTokenRow(overrides: Row = {}): Row {
 	return { id: 'token-1', user_id: USER.id, used: 0, expires_at: secondsFromNow(10 * 60 * 1000), ...overrides };
-}
-
-function recordingSender(): { sender: EmailSender; sent: OutgoingEmail[] } {
-	const sent: OutgoingEmail[] = [];
-	return {
-		sent,
-		sender: {
-			async send(email) {
-				sent.push(email);
-			},
-		},
-	};
 }
 
 /** `claim: false` makes the atomic token claim (`update ... returning`) match no row, as when another request used the token first. */
@@ -70,26 +35,6 @@ function serviceWith(
 	};
 	const { d1, statements } = recordingD1(rows);
 	return { auth: new AuthService({ DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters' } as unknown as Env), statements };
-}
-
-function writes(statements: Statement[], verb: 'insert' | 'update', table: string): Statement[] {
-	const prefix = verb === 'insert' ? `insert into "${table}"` : `update "${table}"`;
-	return statements.filter((entry) => entry.sql.toLowerCase().startsWith(prefix));
-}
-
-function lastWrite(statements: Statement[], verb: 'insert' | 'update', table: string): Statement {
-	const found = writes(statements, verb, table).at(-1);
-	if (!found) throw new Error(`No ${verb} on ${table}`);
-	return found;
-}
-
-async function rejection(promise: Promise<unknown>): Promise<unknown> {
-	try {
-		await promise;
-	} catch (error) {
-		return error;
-	}
-	throw new Error('Expected the promise to reject');
 }
 
 describe('AuthService.requestPasswordReset', () => {
