@@ -334,7 +334,7 @@ export class AppService extends BaseService {
         return this.updateApp(appId, { showcaseScreenshotUrl });
     }
 
-    /** Deployed public stores still in Discover that have no showcase image yet, most recently deployed first. */
+    /** Deployed public stores still in Discover that have no showcase image yet, in random order so stores that keep failing can't hold every batch. */
     async listAppsMissingShowcase(limit: number): Promise<{ ids: string[]; remaining: number }> {
         const missing = and(
             eq(schema.apps.visibility, 'public'),
@@ -347,7 +347,7 @@ export class AppService extends BaseService {
                 .select({ id: schema.apps.id })
                 .from(schema.apps)
                 .where(missing)
-                .orderBy(desc(schema.apps.lastDeployedAt))
+                .orderBy(sql`random()`)
                 .limit(limit)
                 .all(),
             this.database.select({ count: sql<number>`count(*)` }).from(schema.apps).where(missing).all(),
