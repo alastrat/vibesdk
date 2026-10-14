@@ -32,6 +32,8 @@ import type { ProviderFailure } from '../../think/model-transport';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
 import { BuildProgressTracker } from '../../think/build-progress';
 import { screenshotTarget } from '../../think/screenshot-policy';
+import { createShowcaseCaptureDeps } from '../../../services/showcase/showcase-capture';
+import { captureShowcaseScreenshot, showcaseEligible } from '../../../services/showcase/showcase-screenshot';
 import type { BranchDeploymentBundle } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
@@ -998,6 +1000,7 @@ export class ThinkCodingBehavior
 		try {
 			const screenshotUrl = await super.captureScreenshot(url, viewport);
 			this.setState({ ...this.state, screenshotCommit: commit });
+			this.queueShowcaseCapture(url);
 			return screenshotUrl;
 		} finally {
 			if (this.screenshotInFlightCommit === commit) this.screenshotInFlightCommit = null;
@@ -1014,6 +1017,19 @@ export class ThinkCodingBehavior
 		void this.getBrowserPreviewURL()
 			.then((url) => this.captureScreenshot(url))
 			.catch((e: unknown) => this.logger.warn('Server-side thumbnail capture failed', e));
+	}
+
+	/** Public stores also get the tall Discover showcase image of the same deploy. Runs in the background. */
+	private queueShowcaseCapture(url: string): void {
+		const appId = this.getAgentId();
+		void new AppService(this.env)
+			.getPublishingState(appId)
+			.then((publishing) =>
+				showcaseEligible(publishing)
+					? captureShowcaseScreenshot(createShowcaseCaptureDeps(this.env, this.logger), appId, url)
+					: null,
+			)
+			.catch((e: unknown) => this.logger.warn('Showcase screenshot skipped', e));
 	}
 
 	private pendingScreenshotCommit(): string | null {
