@@ -3,7 +3,7 @@ import { PLATFORM_FEE_LABEL } from '@/api-types';
 import type { FaqItem } from '@/content/positioning';
 import { Eyebrow } from './primitives';
 
-export const LAUNCH_FAQ: readonly FaqItem[] = [
+const LAUNCH_FAQ: readonly FaqItem[] = [
 	{ question: 'Is Estori free?', answer: 'Yes. Building and editing stores is free within daily limits. Paid plans are coming soon.' },
 	{ question: 'What does Coming soon mean?', answer: "A capability or plan we're building. It isn't part of Estori until it launches, and its details may change before then." },
 	{ question: 'Can my store take payments?', answer: 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.' },
