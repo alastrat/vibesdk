@@ -92,3 +92,53 @@ describe('reset email limit per recipient', () => {
 		expect(enforce).not.toHaveBeenCalled();
 	});
 });
+
+describe('confirmation resend limit per user', () => {
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('allows three resends per user per hour by default, in its own bucket', () => {
+		expect(DEFAULT_RATE_LIMIT_SETTINGS[RateLimitType.EMAIL_CONFIRMATION_RESEND]).toEqual({
+			enabled: true,
+			store: RateLimitStore.DURABLE_OBJECT,
+			limit: 3,
+			period: 60 * 60,
+		});
+		expect(RateLimitType.EMAIL_CONFIRMATION_RESEND).toBe('emailConfirmationResend');
+	});
+
+	it('keys on the user id', async () => {
+		const enforce = vi.spyOn(RateLimitService, 'enforce').mockResolvedValue({ success: true });
+		await RateLimitService.enforceEmailConfirmationResendRateLimit({} as Env, DEFAULT_RATE_LIMIT_SETTINGS, 'user-1');
+		await RateLimitService.enforceEmailConfirmationResendRateLimit({} as Env, DEFAULT_RATE_LIMIT_SETTINGS, 'user-2');
+		const [first, second] = enforce.mock.calls.map((call) => call[1]);
+		expect(first).toBe('platform:emailConfirmationResend:user:user-1');
+		expect(second).toBe('platform:emailConfirmationResend:user:user-2');
+		expect(enforce.mock.calls.every((call) => call[3] === RateLimitType.EMAIL_CONFIRMATION_RESEND)).toBe(true);
+	});
+
+	it('throws RateLimitExceededError once the user has had three resends', async () => {
+		vi.spyOn(RateLimitService, 'enforce').mockResolvedValue({ success: false });
+		const error = await RateLimitService.enforceEmailConfirmationResendRateLimit(
+			{} as Env,
+			DEFAULT_RATE_LIMIT_SETTINGS,
+			'user-1',
+		).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(RateLimitExceededError);
+		expect((error as RateLimitExceededError).limitType).toBe(RateLimitType.EMAIL_CONFIRMATION_RESEND);
+		expect((error as RateLimitExceededError).limit).toBe(3);
+	});
+
+	it('does not count anything when the limit is switched off', async () => {
+		const enforce = vi.spyOn(RateLimitService, 'enforce').mockResolvedValue({ success: false });
+		const disabled: RateLimitSettings = {
+			...DEFAULT_RATE_LIMIT_SETTINGS,
+			emailConfirmationResend: { enabled: false, store: RateLimitStore.DURABLE_OBJECT, limit: 3, period: 60 * 60 },
+		};
+		await expect(
+			RateLimitService.enforceEmailConfirmationResendRateLimit({} as Env, disabled, 'user-1'),
+		).resolves.toBeUndefined();
+		expect(enforce).not.toHaveBeenCalled();
+	});
+});

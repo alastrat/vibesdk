@@ -72,6 +72,6 @@ export function verifyEmailEmail(to: string, link: string): OutgoingEmail {
 		body: 'Confirm this address to finish setting up your Estori account.',
 		buttonLabel: 'Confirm email',
 		link,
-		footer: 'This link expires in 24 hours.',
+		footer: "This link expires in 24 hours. If you didn't create an Estori account, ignore this email.",
 	});
 }

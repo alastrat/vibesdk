@@ -48,6 +48,11 @@ describe('verifyEmailEmail', () => {
 		expect(email.text).toContain('This link expires in 24 hours.');
 	});
 
+	it('tells someone who did not sign up to ignore it, since confirming would hand the address to whoever did', () => {
+		expect(email.text).toContain("If you didn't create an Estori account, ignore this email.");
+		expect(email.html).toContain('If you didn&#39;t create an Estori account, ignore this email.');
+	});
+
 	it('has no images', () => {
 		expect(email.html).not.toContain('<img');
 	});

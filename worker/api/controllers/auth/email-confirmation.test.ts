@@ -73,16 +73,19 @@ async function message(response: Response): Promise<string | undefined> {
 }
 
 let enforceClient: MockInstance<typeof RateLimitService.enforceAuthEmailRateLimit>;
+let enforceResend: MockInstance<typeof RateLimitService.enforceEmailConfirmationResendRateLimit>;
 
 beforeEach(() => {
 	mockVerifyEmail.mockReset().mockResolvedValue(undefined);
 	mockResendEmailConfirmation.mockReset().mockResolvedValue(undefined);
 	mockRegister.mockReset();
 	enforceClient = vi.spyOn(RateLimitService, 'enforceAuthEmailRateLimit').mockResolvedValue(undefined);
+	enforceResend = vi.spyOn(RateLimitService, 'enforceEmailConfirmationResendRateLimit').mockResolvedValue(undefined);
 });
 
 afterEach(() => {
 	enforceClient.mockRestore();
+	enforceResend.mockRestore();
 });
 
 describe('AuthController.verifyEmail', () => {
@@ -124,14 +127,17 @@ describe('AuthController.resendVerification', () => {
 		);
 	});
 
-	it('counts the limit against the signed-in user', async () => {
+	it('counts the resend limit against the signed-in user in its own bucket', async () => {
 		await resend();
-		expect(enforceClient).toHaveBeenCalledWith(ENV, DEFAULT_RATE_LIMIT_SETTINGS, expect.any(Request), USER);
+		expect(enforceResend).toHaveBeenCalledWith(ENV, DEFAULT_RATE_LIMIT_SETTINGS, 'user-1');
+		expect(enforceClient).not.toHaveBeenCalled();
 	});
 
 	it('answers 429 without sending when the user has asked too often', async () => {
-		enforceClient.mockRejectedValue(
-			new RateLimitExceededError('Account email limit reached', RateLimitType.AUTH_EMAIL, 5, 3600, ['Please try again in an hour.']),
+		enforceResend.mockRejectedValue(
+			new RateLimitExceededError('Confirmation email limit reached', RateLimitType.EMAIL_CONFIRMATION_RESEND, 3, 3600, [
+				'Please try again in an hour.',
+			]),
 		);
 		const response = await resend();
 		expect(response.status).toBe(429);
@@ -142,7 +148,7 @@ describe('AuthController.resendVerification', () => {
 		const response = await resend(null);
 		expect(response.status).toBe(401);
 		expect(mockResendEmailConfirmation).not.toHaveBeenCalled();
-		expect(enforceClient).not.toHaveBeenCalled();
+		expect(enforceResend).not.toHaveBeenCalled();
 	});
 });
 

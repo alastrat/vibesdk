@@ -441,6 +441,32 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Per-user cap on resent confirmation emails, kept apart from the shared
+	 * account email budget. Throws RateLimitExceededError when the limit is exceeded.
+	 */
+	static async enforceEmailConfirmationResendRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		userId: string,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.EMAIL_CONFIRMATION_RESEND];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const key = this.buildRateLimitKey(RateLimitType.EMAIL_CONFIRMATION_RESEND, `user:${userId}`);
+		const result = await this.enforce(env, key, config, RateLimitType.EMAIL_CONFIRMATION_RESEND);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Confirmation email limit reached. Maximum ${limitConfig.limit} emails per hour`,
+				RateLimitType.EMAIL_CONFIRMATION_RESEND,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
 	 * Get remaining credits for LLM calls without incrementing (for pre-flight checks)
 	 * Works in both dev and prod - uses local DO in dev mode
 	 */

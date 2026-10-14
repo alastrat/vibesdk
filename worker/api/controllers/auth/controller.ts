@@ -299,7 +299,7 @@ export class AuthController extends BaseController {
                 return AuthController.createErrorResponse('Unauthorized', 401);
             }
 
-            await RateLimitService.enforceAuthEmailRateLimit(env, routeContext.config.security.rateLimit, request, user);
+            await RateLimitService.enforceEmailConfirmationResendRateLimit(env, routeContext.config.security.rateLimit, user.id);
 
             await new AuthService(env).resendEmailConfirmation(user.id, createEmailSender(env), appBaseUrl(env, request));
 
