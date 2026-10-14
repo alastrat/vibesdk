@@ -31,6 +31,12 @@ import { validateEmail, validatePassword } from '../../utils/validationUtils';
 import { ADMIN_EMAIL_PROVIDER_MESSAGE, isPlatformAdminEmail, mayClaimEmailByOAuth } from '../../services/auth/admin-access';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
+import {
+    TERMS_VERSION,
+    TERMS_REQUIRED_MESSAGE,
+    TERMS_OUTDATED_MESSAGE,
+    isCurrentTermsVersion,
+} from '../../../shared/types/legal';
 
 const logger = createLogger('AuthService');
 
@@ -49,6 +55,7 @@ export interface RegistrationData {
     email: string;
     password: string;
     name?: string;
+    acceptedTermsVersion?: string;
 }
 
 /**
@@ -67,6 +74,14 @@ export function providerLabel(provider: string | null | undefined): string {
     }
 }
 
+/**
+ * Why a password sign-up can't go ahead with this terms version, or null when it can.
+ * A page loaded before a terms update sends the old version and must reload.
+ */
+export function signUpTermsError(version: unknown): string | null {
+    if (isCurrentTermsVersion(version)) return null;
+    return typeof version === 'string' && version.length > 0 ? TERMS_OUTDATED_MESSAGE : TERMS_REQUIRED_MESSAGE;
+}
 
 /**
  * Main Authentication Service
@@ -101,6 +116,11 @@ export class AuthService extends BaseService {
                     emailValidation.error || 'Invalid email format',
                     400
                 );
+            }
+
+            const termsError = signUpTermsError(data.acceptedTermsVersion);
+            if (termsError) {
+                throw new SecurityError(SecurityErrorType.INVALID_INPUT, termsError, 400);
             }
             
             // Password sign-up marks the email verified unchecked, so an admin
@@ -167,6 +187,8 @@ export class AuthService extends BaseService {
                 emailVerified: true, // Set as verified immediately
                 provider: 'email',
                 providerId: userId,
+                termsAcceptedAt: now,
+                termsVersion: TERMS_VERSION,
                 createdAt: now,
                 updatedAt: now
             });
@@ -216,6 +238,24 @@ export class AuthService extends BaseService {
                 500
             );
         }
+    }
+
+    /**
+     * Record that a signed-in user agreed to the current terms version.
+     */
+    async acceptTerms(userId: string, version: unknown): Promise<AuthUser> {
+        if (!isCurrentTermsVersion(version)) {
+            throw new SecurityError(SecurityErrorType.INVALID_INPUT, TERMS_OUTDATED_MESSAGE, 400);
+        }
+        const now = new Date();
+        await this.database
+            .update(schema.users)
+            .set({ termsAcceptedAt: now, termsVersion: TERMS_VERSION, updatedAt: now })
+            .where(eq(schema.users.id, userId))
+            .run();
+        const user = await this.database.select().from(schema.users).where(eq(schema.users.id, userId)).get();
+        if (!user) throw new SecurityError(SecurityErrorType.UNAUTHORIZED, 'User not found', 404);
+        return mapUserResponse(user);
     }
     
     /**
@@ -945,6 +985,7 @@ export class AuthService extends BaseService {
                     provider: schema.users.provider,
                     emailVerified: schema.users.emailVerified,
                     createdAt: schema.users.createdAt,
+                    termsVersion: schema.users.termsVersion,
                 })
                 .from(schema.users)
                 .where(

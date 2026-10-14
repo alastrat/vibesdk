@@ -22,10 +22,16 @@ export type LoginRequest = z.infer<typeof loginSchema>;
 export const registerSchema = z.object({
   email: commonSchemas.email,
   password: commonSchemas.password,
-  name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional()
+  name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional(),
+  acceptedTermsVersion: z.string().max(32).optional()
 });
 
 export type RegisterRequest = z.infer<typeof registerSchema>;
+
+/**
+ * Terms agreement schema
+ */
+export const acceptTermsSchema = z.object({ version: z.string().min(1).max(32) });
 
 /**
  * OAuth callback schema

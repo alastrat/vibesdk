@@ -16,4 +16,11 @@ export function setupLimitsRoutes(app: Hono<AppEnv>): void {
 		setAuthLevel(AuthConfig.authenticated),
 		adaptController(LimitsController, LimitsController.getUsage),
 	);
+
+	// Public: the free plan's daily limits for the pricing page
+	app.get(
+		'/api/limits/plan',
+		setAuthLevel(AuthConfig.public),
+		adaptController(LimitsController, LimitsController.getPublicPlan),
+	);
 }

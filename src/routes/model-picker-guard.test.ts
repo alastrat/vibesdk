@@ -5,6 +5,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/ThinkModelPicker.tsx',
 		'/src/components/ModelUnavailableNotice.tsx',
 		'/src/components/prompt-box.tsx',
+		'/src/components/build-box.tsx',
 		'/src/routes/home.tsx',
 		'/src/routes/chat/chat.tsx',
 		'/src/routes/chat/components/chat-input.tsx',
@@ -32,11 +33,12 @@ describe('model picker: component', () => {
 
 describe('model picker: home prompt', () => {
 	it('renders the picker on the home prompt', () => {
-		expect(source('/src/routes/home.tsx')).toMatch(/<ThinkModelPicker\b/);
+		expect(source('/src/routes/home.tsx')).toMatch(/<BuildBox\b/);
+		expect(source('/src/components/build-box.tsx')).toMatch(/<ThinkModelPicker\b/);
 	});
 
 	it('sends the chosen model only when one is set', () => {
-		expect(source('/src/routes/home.tsx')).toContain(
+		expect(source('/src/components/build-box.tsx')).toContain(
 			"const modelParam = mode === 'app' && modelId ? `&model=${encodeURIComponent(modelId)}` : '';",
 		);
 	});

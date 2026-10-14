@@ -30,6 +30,11 @@ export const queryKeys = {
 		sitePage: (appId: string, userId?: string | null) =>
 			[...queryKeys.apps.sitePageAll(), appId, userId ?? 'anonymous'] as const,
 	},
+	/** Public platform facts that don't depend on the viewer. */
+	platform: {
+		all: ['platform'] as const,
+		plan: () => [...queryKeys.platform.all, 'plan'] as const,
+	},
 	account: {
 		all: ['account'] as const,
 		user: {

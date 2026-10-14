@@ -1,122 +1,16 @@
-import { useCallback, useRef, useState, useEffect, useMemo } from 'react';
-import { ArrowUpRight, Loader2 } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router';
-import { useAuth } from '@/contexts/auth-context';
-import {
-	ProjectModeSelector,
-	type ProjectModeOption,
-} from '../components/project-mode-selector';
-import {
-	MAX_AGENT_QUERY_LENGTH,
-	SUPPORTED_IMAGE_MIME_TYPES,
-	type ProjectType,
-	type BehaviorType,
-} from '@/api-types';
-import { useFeature } from '@/features';
-import { useAuthGuard } from '../hooks/useAuthGuard';
+import { useRef, useState, useEffect, useMemo } from 'react';
+import { ArrowUpRight } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { AppCard } from '@/components/shared/AppCard';
 import { LinkButton, cn } from '@cloudflare/kumo';
-import { useImageUpload } from '@/hooks/use-image-upload';
-import { useDragDrop } from '@/hooks/use-drag-drop';
-import { toast } from 'sonner';
-import { useLimitsContext } from '@/contexts/limits-context';
-import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
-import { PromptBox } from '@/components/prompt-box';
-import { ThinkModelPicker } from '@/components/ThinkModelPicker';
+import { BuildBox } from '@/components/build-box';
 import { DiscoverStrip } from '@/components/publishing/DiscoverStrip';
-import { InfoIcon, PaperPlaneTiltIcon } from '@phosphor-icons/react';
-import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { pageTitle } from '@/brand';
 
 export default function Home() {
 	const navigate = useNavigate();
-	const { requireAuth } = useAuthGuard();
-	const [projectMode, setProjectMode] = useState<ProjectType>('app');
-	const behaviorMode: Extract<BehaviorType, 'think' | 'phasic'> = 'think';
-	const [query, setQuery] = useState('');
-	const [modelId, setModelId] = useState('');
-	const { user } = useAuth();
-	const { isLoadingCapabilities, capabilities, getEnabledFeatures } =
-		useFeature();
-
-	useEffect(() => {
-		if (!modelId && capabilities?.defaultThinkModel) {
-			setModelId(capabilities.defaultThinkModel);
-		}
-	}, [capabilities, modelId]);
-	const { data: limitsData, loading: usageLimitsLoading } =
-		useLimitsContext();
-	const [showLimitDialog, setShowLimitDialog] =
-		useState<React.ReactElement | null>(null);
-
-	const handleConnectCloudflare = useCallback(() => {
-		void startCloudflareConnect(window.location.href);
-	}, []);
-
-	// Surface auth failures redirected here from the OAuth callback (e.g. an email
-	// that already belongs to an account created via a different method).
-	const [searchParams, setSearchParams] = useSearchParams();
-	useEffect(() => {
-		const authError = searchParams.get('error');
-		if (!authError) return;
-		const messages: Record<string, string> = {
-			email_exists:
-				'An account with this email already exists. Sign in with your existing method, then link the provider from Settings.',
-			oauth_failed:
-				'The sign-in provider reported an error. Please try again.',
-			auth_failed: 'Sign-in failed. Please try again.',
-		};
-		toast.error(messages[authError] ?? messages.auth_failed);
-		searchParams.delete('error');
-		setSearchParams(searchParams, { replace: true });
-	}, [searchParams, setSearchParams]);
-
-	const modeOptions = useMemo<ProjectModeOption[]>(() => {
-		if (isLoadingCapabilities || !capabilities) return [];
-		return getEnabledFeatures().map((def) => ({
-			id: def.id,
-			label:
-				def.id === 'presentation'
-					? 'Slides'
-					: def.id === 'general'
-						? 'General'
-						: 'App',
-			description: def.description,
-		}));
-	}, [capabilities, getEnabledFeatures, isLoadingCapabilities]);
-
-	const showModeSelector = modeOptions.length > 1;
-
-	useEffect(() => {
-		if (isLoadingCapabilities) return;
-		if (modeOptions.length === 0) {
-			if (projectMode !== 'app') setProjectMode('app');
-			return;
-		}
-		if (!modeOptions.some((m) => m.id === projectMode)) {
-			setProjectMode(modeOptions[0].id);
-		}
-	}, [isLoadingCapabilities, modeOptions, projectMode]);
-
-	const { images, addImages, removeImage, clearImages, isProcessing } =
-		useImageUpload({
-			onError: (error) => {
-				console.error('Image upload error:', error);
-				toast.error(error);
-			},
-		});
-
-	const { isDragging, dragHandlers } = useDragDrop({
-		onFilesDropped: addImages,
-		accept: [...SUPPORTED_IMAGE_MIME_TYPES],
-	});
-
-	const placeholderPhrases = useMemo(
-		() => ['todo list app', 'F1 fantasy game', 'personal finance tracker'],
-		[],
-	);
 
 	const { apps, loading } = usePaginatedApps({
 		type: 'public',
@@ -131,66 +25,6 @@ export default function Home() {
 		[loading, apps],
 	);
 	const discoverApps = useMemo(() => (apps ?? []).slice(0, 9), [apps]);
-
-	const handleCreateApp = (query: string, mode: ProjectType) => {
-		if (query.length > MAX_AGENT_QUERY_LENGTH) {
-			toast.error(
-				`Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`,
-			);
-			return;
-		}
-
-		if (user && usageLimitsLoading) {
-			return;
-		}
-
-		const encodedQuery = encodeURIComponent(query);
-		const encodedMode = encodeURIComponent(mode);
-		const behaviorParam =
-			mode === 'app'
-				? `&behaviorType=${encodeURIComponent(behaviorMode)}`
-				: '';
-
-		// Encode images as JSON if present
-		const imageParam =
-			images.length > 0
-				? `&images=${encodeURIComponent(JSON.stringify(images))}`
-				: '';
-		const modelParam = mode === 'app' && modelId ? `&model=${encodeURIComponent(modelId)}` : '';
-		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${behaviorParam}${modelParam}${imageParam}`;
-
-		if (
-			!requireAuth({
-				requireFullAuth: true,
-				actionContext: 'to create applications',
-				intendedUrl: intendedUrl,
-			})
-		) {
-			return;
-		}
-
-		// Check usage limits before proceeding
-		const limitCheck = checkCanSendPrompt(
-			limitsData,
-			usageLimitsLoading,
-			() => {
-				void startCloudflareConnect(window.location.href);
-			},
-			() => setShowLimitDialog(null),
-		);
-
-		if (!limitCheck.canProceed) {
-			setShowLimitDialog(limitCheck.dialogComponent || null);
-			return;
-		}
-
-		// User is already authenticated, navigate immediately. Mark the
-		// navigation as in-app so the chat session can auto-start without the
-		// external-link confirmation gate.
-		navigate(intendedUrl, { state: { fromPrompt: true } });
-		// Clear images after navigation
-		clearImages();
-	};
 
 	const discoverLinkRef = useRef<HTMLDivElement>(null);
 
@@ -221,81 +55,10 @@ export default function Home() {
 								today?
 							</h1>
 						</div>
-						<PromptBox
-							value={query}
-							onChange={setQuery}
-							onSubmit={() => handleCreateApp(query, projectMode)}
-							placeholder="Create a "
-							animatedPlaceholder
-							placeholderPhrases={placeholderPhrases}
-							images={images}
-							onAddImages={addImages}
-							onRemoveImage={removeImage}
-							isProcessing={
-								isProcessing ||
-								(user ? usageLimitsLoading : false)
-							}
-							isDragging={isDragging}
-							dragHandlers={dragHandlers}
-							submitDisabled={user ? usageLimitsLoading : false}
-							limitsData={user ? limitsData : undefined}
-							onConnectCloudflare={handleConnectCloudflare}
-							variant="expanded"
-							submitIcon={
-								user && usageLimitsLoading ? (
-									<Loader2 className="animate-spin" />
-								) : (
-									<PaperPlaneTiltIcon weight="duotone" />
-								)
-							}
-							leftActions={
-								<div className="flex items-center gap-2">
-									{showModeSelector && (
-										<ProjectModeSelector
-											value={projectMode}
-											onChange={setProjectMode}
-											modes={modeOptions}
-										/>
-									)}
-									<ThinkModelPicker
-										options={capabilities?.thinkModels ?? []}
-										value={modelId}
-										onChange={setModelId}
-									/>
-								</div>
-							}
-						/>
+						<BuildBox />
 					</motion.div>
 					<DiscoverStrip />
 				</div>
-
-				<AnimatePresence mode="popLayout">
-					{images.length > 0 && (
-						<motion.div
-							initial={{ opacity: 0, y: -10 }}
-							animate={{ opacity: 1, y: 0 }}
-							exit={{ opacity: 0, y: -10 }}
-							className="w-full max-w-2xl px-5 sm:px-6 mt-4"
-						>
-							<div
-								className="flex items-start gap-2 px-4 py-3 rounded-xl bg-bg-4/50 dark:bg-bg-2/50 shadow-sm border-brand/20"
-							>
-								<InfoIcon
-									className="size-4 flex-shrink-0 mt-0.5 text-brand"
-								/>
-								<p className="text-xs text-kumo-subtle leading-relaxed">
-									<span className="font-medium text-text-secondary">
-										Images Beta:
-									</span>{' '}
-									Images guide app layout and design but may
-									not be replicated exactly. The coding agent
-									cannot access images directly for app
-									assets.
-								</p>
-							</div>
-						</motion.div>
-					)}
-				</AnimatePresence>
 
 				<AnimatePresence>
 					{discoverReady && (
@@ -309,12 +72,7 @@ export default function Home() {
 								duration: 0.5,
 								ease: [0.22, 1, 0.36, 1],
 							}}
-							className={cn(
-								'w-full max-w-5xl mx-auto px-5 sm:px-6 z-10',
-								images.length > 0
-									? 'mt-10'
-									: 'mt-16 sm:mt-20 mb-12',
-							)}
+							className="w-full max-w-5xl mx-auto px-5 sm:px-6 z-10 mt-16 sm:mt-20 mb-12"
 						>
 							<div className="flex flex-col gap-6">
 								<div className="flex items-end justify-between gap-4">
@@ -359,9 +117,6 @@ export default function Home() {
 					)}
 				</AnimatePresence>
 			</LayoutGroup>
-
-			{/* Usage limit dialogs */}
-			{showLimitDialog}
 		</div>
 	);
 }

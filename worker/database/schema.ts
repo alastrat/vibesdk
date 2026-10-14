@@ -60,6 +60,10 @@ export const users = sqliteTable('users', {
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     lastActiveAt: integer('last_active_at', { mode: 'timestamp' }),
+
+    // Terms of Service agreement: when and which version; null until the user agrees.
+    termsAcceptedAt: integer('terms_accepted_at', { mode: 'timestamp' }),
+    termsVersion: text('terms_version'),
     
     // Soft delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),

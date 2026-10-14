@@ -10,7 +10,8 @@ import { generateApiKey, sha256Hash } from '../../../utils/cryptoUtils';
 import { 
     loginSchema, 
     registerSchema, 
-    oauthProviderSchema
+    oauthProviderSchema,
+    acceptTermsSchema
 } from './authSchemas';
 import { SecurityError } from 'shared/types/errors';
 import {
@@ -87,6 +88,24 @@ export class AuthController extends BaseController {
             }
             
             return AuthController.handleError(error, 'register user');
+        }
+    }
+
+    /**
+     * Record the signed-in user's agreement to the current Terms of Service and Privacy Policy.
+     * POST /api/auth/accept-terms
+     */
+    static async acceptTerms(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
+        try {
+            const bodyResult = await AuthController.parseJsonBody(request);
+            if (!bodyResult.success) return bodyResult.response!;
+            const parsed = acceptTermsSchema.safeParse(bodyResult.data);
+            if (!parsed.success) return AuthController.createErrorResponse('A terms version is required', 400);
+            const user = await new AuthService(env).acceptTerms(routeContext.user!.id, parsed.data.version);
+            return AuthController.createSuccessResponse({ user });
+        } catch (error) {
+            if (error instanceof SecurityError) return AuthController.createErrorResponse(error.message, error.statusCode);
+            return AuthController.handleError(error, 'record terms agreement');
         }
     }
 

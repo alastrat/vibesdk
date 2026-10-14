@@ -13,6 +13,9 @@ import {
 	InputGroup,
 } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
+import { Checkbox } from '@/components/ui/checkbox';
+import { TermsAgreementLabel } from './TermsAgreementLabel';
+import { TERMS_REQUIRED_MESSAGE, TERMS_VERSION } from '@/api-types';
 import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import {
 	EyeIcon,
@@ -42,6 +45,7 @@ interface LoginModalProps {
 		email: string;
 		password: string;
 		name?: string;
+		acceptedTermsVersion: string;
 	}) => Promise<void>;
 	error?: string | null;
 	onClearError?: () => void;
@@ -75,6 +79,7 @@ export function LoginModal({
 	const [password, setPassword] = useState('');
 	const [name, setName] = useState('');
 	const [confirmPassword, setConfirmPassword] = useState('');
+	const [agreeToTerms, setAgreeToTerms] = useState(false);
 
 	// Validation errors
 	const [validationErrors, setValidationErrors] = useState<
@@ -96,6 +101,7 @@ export function LoginModal({
 		setPassword('');
 		setName('');
 		setConfirmPassword('');
+		setAgreeToTerms(false);
 		setValidationErrors({});
 		setShowPassword(false);
 		if (onClearError) onClearError();
@@ -157,6 +163,10 @@ export function LoginModal({
 			if (password !== confirmPassword) {
 				errors.confirmPassword = 'Passwords do not match';
 			}
+
+			if (!agreeToTerms) {
+				errors.terms = TERMS_REQUIRED_MESSAGE;
+			}
 		}
 
 		setValidationErrors(errors);
@@ -173,7 +183,7 @@ export function LoginModal({
 			if (mode === 'login' && onEmailLogin) {
 				await onEmailLogin({ email, password });
 			} else if (mode === 'register' && onRegister) {
-				await onRegister({ email, password, name: name.trim() });
+				await onRegister({ email, password, name: name.trim(), acceptedTermsVersion: TERMS_VERSION });
 			}
 			// Don't auto-close here - let the parent handle success/error
 		} catch (err) {
@@ -464,6 +474,21 @@ export function LoginModal({
 								</div>
 							)}
 
+							{mode === 'register' && (
+								<div className="grid gap-1">
+									<label className="flex items-start gap-2 text-sm text-kumo-default">
+										<Checkbox
+											checked={agreeToTerms}
+											onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+											disabled={isLoading}
+											className="mt-0.5"
+										/>
+										<TermsAgreementLabel />
+									</label>
+									{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
+								</div>
+							)}
+
 							<OrangeButton
 								type="submit"
 								disabled={isLoading}
@@ -501,27 +526,6 @@ export function LoginModal({
 							</button>
 						</div>
 					)}
-
-					<p className="text-center text-xs text-kumo-subtle">
-						By continuing, you agree to our{' '}
-						<a
-							href="https://www.cloudflare.com/website-terms/"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="underline hover:text-kumo-default"
-						>
-							Terms of Service
-						</a>{' '}
-						and{' '}
-						<a
-							href="https://www.cloudflare.com/privacypolicy/"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="underline hover:text-kumo-default"
-						>
-							Privacy Policy
-						</a>
-					</p>
 				</div>
 			</Dialog>
 		</Dialog.Root>
