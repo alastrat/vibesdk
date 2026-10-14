@@ -28,6 +28,7 @@ export const SITE_NOT_REUSABLE_MESSAGE = "This site can't be reused right now";
 export const REUSE_CONSENT_REQUIRED_MESSAGE = 'Confirm that others may copy and adapt this site';
 export const NOT_THINK_REASON = 'Only apps built with the current builder can be published';
 export const NOT_DEPLOYED_REASON = 'Deploy your app before publishing it';
+export const PAID_COPY_REASON = "This site started from a paid site, so it can't be made public";
 export const PUBLISHING_CHECK_FAILED_MESSAGE = "Couldn't check this app right now; try again";
 
 export type PublishRequest =
@@ -126,9 +127,20 @@ export function parsePublishRequest(body: unknown): Validation<PublishRequest> {
 }
 
 /** Why an app cannot be published, or null when it can. */
-export function publishEligibilityReason(behaviorType: string, hasDeployedCommit: boolean): string | null {
+export function publishEligibilityReason(behaviorType: string, hasDeployedCommit: boolean, paidCopy: boolean): string | null {
+	if (paidCopy) return PAID_COPY_REASON;
 	if (behaviorType !== 'think') return NOT_THINK_REASON;
 	return hasDeployedCommit ? null : NOT_DEPLOYED_REASON;
+}
+
+/** The paid listing an app was copied from: its creator, or null once the listing is deleted. */
+export interface PaidCopyOrigin {
+	creatorUserId: string | null;
+}
+
+/** Whether an app is a copy of someone else's paid site, which stays private so the purchase isn't given away. */
+export function isPaidCopy(origin: PaidCopyOrigin | null, ownerUserId: string): boolean {
+	return origin !== null && origin.creatorUserId !== ownerUserId;
 }
 
 /**

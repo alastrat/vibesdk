@@ -36,6 +36,7 @@ There is one gallery, Discover. Publishing an app is what makes it reusable:
   - On a public app, the owner's "Public" control opens the same dialog to change the category or price, or to make the app private.
   - Switching a free public app to a price pauses reuse until an admin approves the price.
   - Making the app private removes it from Discover and stops new reuse. Apps already made from it keep working.
+  - A copy of someone else's paid site stays private, so a purchase can't be given away. Its dialog shows "This site started from a paid site, so it can't be made public" instead of the form. The creator's own copies of their paid site can still be published. Added on 2026-10-13.
   - The profile's "Paid listings" section shows each paid site's review status, versions and buyer count.
 - **Everyone, in Discover.**
   - The current grid, search and sorts (popular, trending, recent, starred), plus a category filter and an All / Free / Paid filter.
@@ -157,6 +158,7 @@ The tool-ordering fix (`serializeTools`, commit 6eddebf) stays.
 |---|---|
 | Publish without the consent checkbox | 400: `Confirm that others may copy and adapt this site` |
 | Publish a non-Think or never-deployed app | 400 with the reason; the app stays private |
+| Publish a copy of someone else's paid site | 403: `This site started from a paid site, so it can't be made public`; nothing changes |
 | A file looks like a secret at publish | 400: `{path} looks like it contains a secret key; remove it and redeploy` |
 | Too many files or too large at publish | 400: `Sites can have at most 500 files and 10 MB to be published` |
 | Paid publish fails (snapshot, R2 or capture) | The app stays private; no version row; the error is returned |

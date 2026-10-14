@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import { Badge, Button, Loader } from '@cloudflare/kumo';
 import { useStripeConnectStatus, useStripeDashboardLink, useStripeOnboardingRedirect } from '@/hooks/use-payments';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE } from '@/lib/paid-listing-display';
-import { PLATFORM_FEE_PERCENT } from '@/api-types';
+import { PLATFORM_FEE_LABEL } from '@/api-types';
 
 /** "Get paid with Stripe": connect or finish Stripe onboarding, then open the Stripe dashboard. */
 export function PayoutsCard() {
@@ -38,7 +38,7 @@ export function PayoutsCard() {
 			<div className="grid gap-0.5">
 				<span className="text-sm font-medium text-kumo-default">Get paid with Stripe</span>
 				<span className="text-sm text-kumo-subtle">
-					Buyers pay through Stripe. You receive the price minus Estori's {PLATFORM_FEE_PERCENT}% fee.
+					Buyers pay through Stripe. You receive the price minus Estori's {PLATFORM_FEE_LABEL} fee.
 				</span>
 				{verifying && <span className="text-sm text-kumo-subtle">Stripe is verifying your details.</span>}
 			</div>

@@ -7,12 +7,12 @@ It builds on `2026-10-12-unified-discover-design.md`:
 - paid sites reviewed by an admin;
 - purchases recorded in test mode with no charge.
 
-This spec replaces the test-mode purchase with real Stripe payments: buyers pay by card, sellers get paid through Stripe Connect, and Estori keeps 5% of every sale.
+This spec replaces the test-mode purchase with real Stripe payments: buyers pay by card, sellers get paid through Stripe Connect, and Estori keeps 7% + $0.60 of every sale.
 
 ## What the owner asked for
 
 - Buyers pay for paid sites, and creators get paid when their sites sell, through Stripe Connect.
-- Estori charges a 5% fee on each sale.
+- Estori charges a fee on each sale: 7% of the price plus $0.60. It was 5% until 2026-10-13, which didn't cover Stripe's card fee on small sales.
 - It must work end to end by the morning, with real Stripe test-mode transactions between separate test users, paid with Stripe test cards.
 - Admin access for alastrat@pluriza.com must be guaranteed.
 
@@ -21,8 +21,8 @@ This spec replaces the test-mode purchase with real Stripe payments: buyers pay 
 | Question | Decision | Cost if wrong |
 |---|---|---|
 | Seller account type | Stripe Connect Express accounts. Stripe hosts onboarding and the seller dashboard, and Estori never handles bank or identity details. | Moving to Standard or Custom accounts later means re-onboarding sellers. |
-| Charge type | Destination charges through Stripe Checkout. Estori is the merchant of record, the buyer's card statement shows Estori, and the seller's share is transferred automatically. | Stripe's processing fee comes out of Estori's 5%. On a $9 sale, Estori keeps about $0.12 after Stripe's fee. Direct charges would make the seller pay that fee instead. |
-| Fee | 5% of the price, rounded to the nearest cent and sent as Stripe's `application_fee_amount`. | A one-line constant. |
+| Charge type | Destination charges through Stripe Checkout. Estori is the merchant of record, the buyer's card statement shows Estori, and the seller's share is transferred automatically. | Stripe's processing fee comes out of Estori's fee. At Stripe's standard US card rate (2.9% + $0.30), Estori keeps about $0.67 of a $9 sale and $1.49 of a $29 sale. Direct charges would make the seller pay that fee instead. |
+| Fee | 7% of the price, rounded to the nearest cent, plus $0.60, sent as Stripe's `application_fee_amount`. A free site has none. | Two constants in `shared/types/templates.ts`. |
 | Selling requirement | A creator can set a price only after their Stripe account can receive transfers. | A creator who skips onboarding cannot set a price, which is intended. |
 | Fulfillment | The Stripe webhook (`checkout.session.completed`) records the purchase. On return from Checkout, the app also confirms the session itself, so a missed or slow webhook never leaves a paid buyer without access. Both paths are idempotent on the Checkout session id. | None; the same session id is never recorded twice. |
 | Stripe library | No SDK dependency. A small fetch-based client calls Stripe's REST API, and webhook signatures are checked with WebCrypto. | More code to own than the SDK. In return there is no lockfile change; `bun.lock` and the local `bun.lockb` disagree in this repo, so a dependency would break CI. |
@@ -38,7 +38,7 @@ This spec replaces the test-mode purchase with real Stripe payments: buyers pay 
     - A "Get paid with Stripe" card: "Connect Stripe" starts Stripe's hosted onboarding, and returning from Stripe shows the account status.
     - Once transfers are active, it reads "Payouts active" and links to "Open Stripe dashboard".
   - Publish dialog: choosing a price before payouts are active shows "Connect Stripe to sell this site" with a button that starts onboarding. Publishing a paid site is refused until payouts are active.
-  - Paid listings: each paid site shows buyers, gross sales, Estori's 5% fee and the creator's earnings.
+  - Paid listings: each paid site shows buyers, gross sales, Estori's fee and the creator's earnings.
 - **Buyer.**
   - "Buy for $29" on the app page opens Stripe Checkout.
   - After paying, the buyer returns to the app page, which confirms the payment and shows "Use this site".
@@ -71,7 +71,7 @@ This spec replaces the test-mode purchase with real Stripe payments: buyers pay 
   - Checkout sessions: create, retrieve;
   - application fees: list, for verification.
 - **`webhook.ts`:** verifies `Stripe-Signature` (`t=` and `v1=`, HMAC-SHA256 over `{t}.{body}`, constant-time compare, 5-minute tolerance), then parses the event.
-- **`fees.ts`:** `platformFeeCents(priceCents) = Math.round(priceCents * 500 / 10000)`.
+- **Fee:** `platformFeeCents(priceCents)` in `shared/types/templates.ts` returns `Math.round(priceCents * 7 / 100) + 60`, and 0 for a free site.
 - **`config`:** `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` worker secrets. Payments are enabled when the secret key is set.
 
 ### Seller onboarding
@@ -142,7 +142,7 @@ This spec replaces the test-mode purchase with real Stripe payments: buyers pay 
   4. The buyer pays with test card 4242 4242 4242 4242 in Stripe Checkout.
   5. Confirm in the database and in Stripe:
      - the purchase row;
-     - the application fee of 5%;
+     - the application fee of 7% + $0.60;
      - the transfer to the seller;
      - the webhook delivery.
   6. A second buyer pays with a different test card; a declined card (4000 0000 0000 0002) records nothing.

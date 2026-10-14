@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { platformFeeCents } from '../../../shared/types/templates';
+import { PLATFORM_FEE_LABEL, platformFeeCents } from '../../../shared/types/templates';
 import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, type StripeAccount } from './stripe-client';
 
 describe('platformFeeCents', () => {
-	it('keeps 5% of every price option', () => {
-		expect([900, 1900, 2900, 4900].map(platformFeeCents)).toEqual([45, 95, 145, 245]);
+	it('keeps 7% plus 60 cents of every price option, and nothing of a free site', () => {
+		expect([900, 1900, 2900, 4900].map(platformFeeCents)).toEqual([123, 193, 263, 403]);
 		expect(platformFeeCents(0)).toBe(0);
+	});
+
+	it('names the fee the way sellers see it', () => {
+		expect(PLATFORM_FEE_LABEL).toBe('7% + $0.60');
 	});
 });
 
@@ -73,7 +77,7 @@ describe('createStripeClient', () => {
 		const session = await client.createCheckoutSession({
 			productName: 'Lumen Yoga',
 			priceCents: 2900,
-			feeCents: 145,
+			feeCents: 263,
 			destinationAccountId: 'acct_1',
 			buyerUserId: 'u1',
 			buyerEmail: 'buyer@example.test',
@@ -89,7 +93,7 @@ describe('createStripeClient', () => {
 		expect(headers.get('Authorization')).toBe('Bearer sk_test_fake');
 		expect(headers.get('Content-Type')).toBe('application/x-www-form-urlencoded');
 		const body = decodeURIComponent(String(calls[0].init.body));
-		expect(body).toContain('payment_intent_data[application_fee_amount]=145');
+		expect(body).toContain('payment_intent_data[application_fee_amount]=263');
 		expect(body).toContain('payment_intent_data[transfer_data][destination]=acct_1');
 		expect(body).toContain('line_items[0][price_data][unit_amount]=2900');
 		expect(body).toContain('client_reference_id=u1');
@@ -139,7 +143,7 @@ describe('createStripeClient', () => {
 		const input = {
 			productName: 'Lumen Yoga',
 			priceCents: 2900,
-			feeCents: 145,
+			feeCents: 263,
 			destinationAccountId: 'acct_1',
 			buyerUserId: 'u1',
 			successUrl: 'http://localhost/app/a1?purchase=success&session_id={CHECKOUT_SESSION_ID}',

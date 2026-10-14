@@ -72,9 +72,23 @@ describe('publish messages', () => {
 });
 
 describe('publishing settings', () => {
+	const controller = source('/worker/api/controllers/publishing/controller.ts');
+	const between = (from: string, to: string): string => controller.slice(controller.indexOf(from), controller.indexOf(to));
+
 	it('report whether the owner recorded consent to reuse', () => {
-		const controller = source('/worker/api/controllers/publishing/controller.ts');
 		expect(controller).toContain('hasReuseConsent: state.reuseConsentAt !== null');
+	});
+
+	it("explain that a copy of someone else's paid site stays private", () => {
+		const settings = between('static async getPublishing(', 'static async submitPaidUpdate(');
+		expect(settings).toContain('listings.getPaidCopyOrigin(appId)');
+		expect(settings).toContain('const paidCopy = isPaidCopy(paidOrigin, context.user!.id);');
+		expect(settings).toContain('publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null, paidCopy)');
+	});
+
+	it("refuse to publish a copy of someone else's paid site", () => {
+		const deps = between('private static publishDeps(', 'private static async submitVersion(');
+		expect(deps).toContain('isPaidCopy: async () => isPaidCopy(await listings.getPaidCopyOrigin(appId), userId),');
 	});
 });
 
