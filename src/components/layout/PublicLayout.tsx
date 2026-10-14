@@ -11,12 +11,14 @@ export const PUBLIC_FONT_URL = '/fonts/dm-sans/dm-sans-latin-opsz-normal.woff2';
 export function PublicLayout({ children }: { children?: ReactNode }) {
 	preload(PUBLIC_FONT_URL, { as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' });
 	const scrollRef = useRef<HTMLDivElement>(null);
-	const { pathname } = useLocation();
+	const { pathname, hash } = useLocation();
 
-	// This container stays mounted across public routes, so each page starts at the top.
+	// This container stays mounted across public routes: go to the anchor a link names, else to the top.
 	useEffect(() => {
-		scrollRef.current?.scrollTo({ top: 0 });
-	}, [pathname]);
+		const target = hash ? document.getElementById(hash.slice(1)) : null;
+		if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+		else scrollRef.current?.scrollTo({ top: 0 });
+	}, [pathname, hash]);
 
 	return (
 		<div ref={scrollRef} className="public-site h-svh overflow-y-auto">
