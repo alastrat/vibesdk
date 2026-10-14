@@ -1,6 +1,5 @@
-import { LEGAL_CONTACT, LEGAL_ENTITY, legalAddressLine } from '../../../shared/types/legal';
-import { PLATFORM_FEE_LABEL } from '../../../shared/types/templates';
-import { parseLegalDocument, type LegalDocument } from '../../lib/legal-document';
+import { LEGAL_CONTACT, LEGAL_ENTITY, PLATFORM_FEE_LABEL, legalAddressLine } from '@/api-types';
+import { parseLegalDocument, type LegalDocument } from '@/lib/legal-document';
 import terms from './terms.md?raw';
 import privacy from './privacy.md?raw';
 import refunds from './refunds.md?raw';
