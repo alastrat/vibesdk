@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { COMPETITORS } from './copy-rules';
 
 const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src/components/public-site/*.tsx'], {
 	query: '?raw',
@@ -16,7 +17,6 @@ function source(path: string): string {
 	return text;
 }
 
-const COMPETITORS = ['lovable', 'base44', 'amboras', 'shopify', 'wix', 'squarespace', 'webflow', 'framer', 'bolt.new', 'replit', 'v0.dev', 'durable.co'];
 
 describe('landing page', () => {
 	const landing = Object.values(pageSources).join('\n');
@@ -167,13 +167,15 @@ describe('landing page', () => {
 		expect(summary).toContain('[&::-webkit-details-marker]:hidden');
 	});
 
-	it('answers the six launch questions', () => {
+	it('answers the launch questions', () => {
 		for (const question of [
 			'Is Estori free?',
+			'What does Coming soon mean?',
 			'Can my store take payments?',
+			'Does Estori take a cut of my store sales?',
 			'Who owns the store I build?',
+			'What does Estori charge for template sales?',
 			'Can I resell a store I bought?',
-			'What does Estori charge sellers?',
 			"What if a store I bought doesn't work?",
 		]) {
 			expect(landing).toContain(question);

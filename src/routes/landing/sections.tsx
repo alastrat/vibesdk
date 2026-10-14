@@ -1,7 +1,7 @@
 import { PLATFORM_FEE_LABEL } from '@/api-types';
 import { PlanLimits } from '@/components/marketing/PlanLimits';
 import { BlurFade } from '@/components/magicui/blur-fade';
-import { Eyebrow, HEADING_SECTION, LEAD, PillLink, TextLink, pillClass } from '@/components/public-site/primitives';
+import { Eyebrow, HEADING_SECTION, LEAD, PillLink, TextLink } from '@/components/public-site/primitives';
 import { cn } from '@/lib/utils';
 
 export function PricingSummary() {
@@ -39,9 +39,9 @@ export function ClosingPanel() {
 				<h2 className={cn(HEADING_SECTION, 'mx-auto max-w-3xl text-balance')}>Your next store starts with a sentence.</h2>
 				<p className={cn(LEAD, 'mx-auto mt-5 max-w-xl text-white/80')}>Describe it, watch it build, and publish it when it's ready.</p>
 				<div className="mt-10 flex flex-wrap justify-center gap-3">
-					<a href="#build" className={pillClass('white')}>
+					<PillLink to="/#build" variant="white">
 						Start building
-					</a>
+					</PillLink>
 					<PillLink to="/pricing" variant="outline-on-dark">
 						View pricing
 					</PillLink>
