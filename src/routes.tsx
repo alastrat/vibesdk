@@ -15,6 +15,10 @@ import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
 import PricingPage from './routes/pricing';
+import BrandsPage from './routes/solutions/brands';
+import ResellersPage from './routes/solutions/resellers';
+import DigitalPage from './routes/solutions/digital';
+import AgenticCommercePage from './routes/agentic-commerce';
 import ResetPasswordPage from './routes/auth/ResetPasswordPage';
 import VerifyEmailPage from './routes/auth/VerifyEmailPage';
 
@@ -105,6 +109,22 @@ const routes = [
 					{
 						path: 'pricing',
 						Component: PricingPage,
+					},
+					{
+						path: 'solutions/brands',
+						Component: BrandsPage,
+					},
+					{
+						path: 'solutions/resellers',
+						Component: ResellersPage,
+					},
+					{
+						path: 'solutions/digital',
+						Component: DigitalPage,
+					},
+					{
+						path: 'agentic-commerce',
+						Component: AgenticCommercePage,
 					},
 					{
 						path: 'terms',

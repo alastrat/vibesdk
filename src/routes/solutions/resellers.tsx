@@ -1,0 +1,31 @@
+import { PublicFaq } from '@/components/public-site/PublicFaq';
+import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
+import { CATALOG_CARDS, RESELLER_FAQ, RESELLER_STEPS, TODAY_CARDS } from '@/content/positioning';
+import { ClosingPanel } from '@/routes/landing/sections';
+
+export default function ResellersPage() {
+	return (
+		<div>
+			<PageMeta
+				title="For dropshippers and resellers"
+				description="A curated catalog of vetted suppliers is coming soon to Estori. Build the store for it today."
+			/>
+			<SolutionHero
+				eyebrow="For dropshippers and resellers"
+				title="Find products. Add them in a few clicks. Let suppliers ship."
+				lead="Estori is building a curated catalog of vetted suppliers. Apply, choose products and they appear in your store, ready to sell."
+				tag="product-catalog"
+			/>
+			<CardSection id="catalog" eyebrow="Product catalog" tag="product-catalog" title="A curated product catalog" cards={CATALOG_CARDS} />
+			<HowItWorks steps={RESELLER_STEPS} />
+			<CardSection
+				eyebrow="Available today"
+				title="Build the store first"
+				lead="While the catalog is on its way, build the store itself with Estori, ready for the products you'll add."
+				cards={TODAY_CARDS}
+			/>
+			<PublicFaq items={RESELLER_FAQ} />
+			<ClosingPanel />
+		</div>
+	);
+}

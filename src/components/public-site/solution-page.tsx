@@ -80,14 +80,16 @@ export function CardSection({
 				)}
 				<h2 className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance text-public-ink')}>{title}</h2>
 				{lead && <p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty text-public-muted')}>{lead}</p>}
-				<div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-					{cards.map((card) => (
-						<article key={card.title} className="rounded-[24px] p-7 ring ring-public-line">
-							<h3 className={cn(HEADING_CARD, 'text-public-ink')}>{card.title}</h3>
-							<p className="mt-3 text-[15px] leading-relaxed font-light text-public-muted">{card.body}</p>
-						</article>
-					))}
-				</div>
+				{cards.length > 0 && (
+					<div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+						{cards.map((card) => (
+							<article key={card.title} className="rounded-[24px] p-7 ring ring-public-line">
+								<h3 className={cn(HEADING_CARD, 'text-public-ink')}>{card.title}</h3>
+								<p className="mt-3 text-[15px] leading-relaxed font-light text-public-muted">{card.body}</p>
+							</article>
+						))}
+					</div>
+				)}
 				{children && <div className="mt-10 flex flex-wrap items-center gap-4">{children}</div>}
 			</BlurFade>
 		</section>
