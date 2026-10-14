@@ -7,7 +7,7 @@ import * as schema from '../schema';
 import { eq, and, sql, or, lt, gt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
-import { SessionService } from './SessionService';
+import { SessionService, revokeAllUserSessionsQuery } from './SessionService';
 import { ApiKeyService } from './ApiKeyService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
@@ -28,7 +28,12 @@ import {
 import { mapUserResponse, validateRedirectUrl, enforceAllowedEmail } from '../../utils/authUtils';
 import { createLogger } from '../../logger';
 import { validateEmail, validatePassword } from '../../utils/validationUtils';
-import { ADMIN_EMAIL_PROVIDER_MESSAGE, isPlatformAdminEmail, mayClaimEmailByOAuth } from '../../services/auth/admin-access';
+import {
+    ADMIN_EMAIL_PROVIDER_MESSAGE,
+    EMAIL_VERIFYING_PROVIDERS,
+    isPlatformAdminEmail,
+    mayClaimEmailByOAuth,
+} from '../../services/auth/admin-access';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
 import {
@@ -93,6 +98,27 @@ export function providerLabel(provider: string | null | undefined): string {
 export function signUpTermsError(version: unknown): string | null {
     if (isCurrentTermsVersion(version)) return null;
     return typeof version === 'string' && version.length > 0 ? TERMS_OUTDATED_MESSAGE : TERMS_REQUIRED_MESSAGE;
+}
+
+/**
+ * A new identity row for a provider account whose email the provider has verified.
+ */
+function verifiedIdentityRow(
+    userId: string,
+    provider: OAuthProvider,
+    oauthUserInfo: OAuthUserInfo,
+    now: Date
+): schema.NewUserOauthIdentity {
+    return {
+        id: generateId(),
+        userId,
+        provider,
+        providerId: oauthUserInfo.id,
+        email: oauthUserInfo.email.toLowerCase(),
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+    };
 }
 
 /**
@@ -386,7 +412,8 @@ export class AuthService extends BaseService {
     /**
      * Start a password reset: store the hash of a single-use token and email its link.
      * Resolves the same way for every address, so a caller can't tell whether an account
-     * exists. A provider-only account has no password to reset and gets nothing.
+     * exists. A confirmed account without a password can use the link to set one; an
+     * unconfirmed account without a password gets nothing.
      */
     async requestPasswordReset(email: string, sender: EmailSender | null, baseUrl: string): Promise<void> {
         const user = await this.database
@@ -394,12 +421,13 @@ export class AuthService extends BaseService {
                 id: schema.users.id,
                 email: schema.users.email,
                 passwordHash: schema.users.passwordHash,
+                emailVerified: schema.users.emailVerified,
             })
             .from(schema.users)
             .where(and(eq(schema.users.email, email.toLowerCase()), isNull(schema.users.deletedAt)))
             .get();
 
-        if (!user || !user.passwordHash || !sender) {
+        if (!user || !sender || (!user.passwordHash && user.emailVerified !== true)) {
             return;
         }
 
@@ -888,9 +916,9 @@ export class AuthService extends BaseService {
      *
      * Lookup is by the (provider, providerId) identity first. Without one, a
      * provider-verified email attaches the identity to the account with that
-     * email. If that account's email was never confirmed, the provider sign-in
-     * proves ownership, so the account's password is removed and its sessions
-     * are revoked before the caller creates the new session.
+     * email when the account's email is confirmed. An unconfirmed account is
+     * claimed only through Google or GitHub (see claimUnconfirmedAccount);
+     * other providers are refused.
      */
     private async findOrCreateOAuthUser(
         provider: OAuthProvider,
@@ -975,9 +1003,8 @@ export class AuthService extends BaseService {
             .get();
 
         if (emailRow) {
-            await this.linkOAuthIdentity(emailRow.id, provider, oauthUserInfo);
-
             if (emailRow.emailVerified === true) {
+                await this.linkOAuthIdentity(emailRow.id, provider, oauthUserInfo);
                 logger.info('Auto-linked OAuth provider to existing account', {
                     userId: emailRow.id,
                     provider
@@ -985,24 +1012,66 @@ export class AuthService extends BaseService {
                 return emailRow;
             }
 
-            // Nobody proved this address before, so whoever set the password may not own it.
-            // The provider just proved ownership: remove that password and sign the account out
-            // everywhere. The caller creates this sign-in's session after this returns.
-            const now = new Date();
-            await this.database
-                .update(schema.users)
-                .set({ emailVerified: true, passwordHash: null, updatedAt: now })
-                .where(eq(schema.users.id, emailRow.id));
-            await this.sessionService.revokeAllUserSessions(emailRow.id);
-            logger.info('Claimed unconfirmed account through a verified provider', {
-                userId: emailRow.id,
-                provider
-            });
-            return { ...emailRow, emailVerified: true, passwordHash: null, updatedAt: now };
+            // Only a provider that verifies email itself proves who owns an unconfirmed address.
+            if (!EMAIL_VERIFYING_PROVIDERS.includes(provider)) {
+                throw new SecurityError(
+                    SecurityErrorType.CONFLICT,
+                    `Sign in with your password, Google or GitHub, then connect ${providerLabel(provider)} from Settings.`,
+                    409
+                );
+            }
+
+            return this.claimUnconfirmedAccount(emailRow, provider, oauthUserInfo);
         }
 
         // 3. Brand-new identity: create the user and its first identity row.
         return this.createOAuthUser(provider, oauthUserInfo);
+    }
+
+    /**
+     * Give an unconfirmed account to the owner a verifying provider just proved. Whoever set
+     * its password may not own the address, so everything they could have attached is removed
+     * in one batch, which D1 runs as a transaction: other identities, the password, sessions,
+     * API keys and the payout account. The caller creates this sign-in's session afterwards.
+     */
+    private async claimUnconfirmedAccount(
+        account: schema.User,
+        provider: OAuthProvider,
+        oauthUserInfo: OAuthUserInfo
+    ): Promise<schema.User> {
+        const now = new Date();
+        const claimed = {
+            emailVerified: true,
+            passwordHash: null,
+            provider,
+            providerId: oauthUserInfo.id,
+            updatedAt: now,
+        };
+
+        await this.database.batch([
+            this.database
+                .delete(schema.userOauthIdentities)
+                .where(eq(schema.userOauthIdentities.userId, account.id)),
+            this.database
+                .insert(schema.userOauthIdentities)
+                .values(verifiedIdentityRow(account.id, provider, oauthUserInfo, now)),
+            this.database.update(schema.users).set(claimed).where(eq(schema.users.id, account.id)),
+            revokeAllUserSessionsQuery(this.database, account.id),
+            this.database
+                .update(schema.apiKeys)
+                .set({ isActive: false, updatedAt: now })
+                .where(eq(schema.apiKeys.userId, account.id)),
+            // Past purchases keep the seller's Stripe account id, so sales history survives.
+            this.database
+                .delete(schema.stripeConnectAccounts)
+                .where(eq(schema.stripeConnectAccounts.userId, account.id)),
+        ]);
+
+        logger.info('Claimed unconfirmed account through a verified provider', {
+            userId: account.id,
+            provider
+        });
+        return { ...account, ...claimed };
     }
 
     /**
@@ -1029,16 +1098,9 @@ export class AuthService extends BaseService {
             updatedAt: now
         });
 
-        await this.database.insert(schema.userOauthIdentities).values({
-            id: generateId(),
-            userId,
-            provider,
-            providerId: oauthUserInfo.id,
-            email,
-            emailVerified: true,
-            createdAt: now,
-            updatedAt: now
-        });
+        await this.database
+            .insert(schema.userOauthIdentities)
+            .values(verifiedIdentityRow(userId, provider, oauthUserInfo, now));
 
         const user = await this.database
             .select()
@@ -1142,16 +1204,9 @@ export class AuthService extends BaseService {
             return;
         }
 
-        await this.database.insert(schema.userOauthIdentities).values({
-            id: generateId(),
-            userId,
-            provider,
-            providerId: oauthUserInfo.id,
-            email,
-            emailVerified: true,
-            createdAt: now,
-            updatedAt: now
-        });
+        await this.database
+            .insert(schema.userOauthIdentities)
+            .values(verifiedIdentityRow(userId, provider, oauthUserInfo, now));
 
         logger.info('OAuth identity linked', { userId, provider });
     }

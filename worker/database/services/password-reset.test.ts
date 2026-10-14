@@ -47,12 +47,30 @@ describe('AuthService.requestPasswordReset', () => {
 		expect(writes(statements, 'update', 'password_reset_tokens')).toEqual([]);
 	});
 
-	it('sends nothing for an account that signs in only through a provider', async () => {
-		const { auth, statements } = serviceWith({ users: { ...USER, password_hash: null } });
+	it('sends nothing for an unconfirmed account without a password', async () => {
+		const { auth, statements } = serviceWith({ users: { ...USER, password_hash: null, email_verified: 0 } });
 		const { sender, sent } = recordingSender();
 		await auth.requestPasswordReset(USER.email, sender, 'https://estori.app');
 		expect(sent).toEqual([]);
 		expect(writes(statements, 'insert', 'password_reset_tokens')).toEqual([]);
+	});
+
+	it('emails a confirmed account without a password a link to set one', async () => {
+		const { auth, statements } = serviceWith({ users: { ...USER, password_hash: null, email_verified: 1 } });
+		const { sender, sent } = recordingSender();
+		await auth.requestPasswordReset(USER.email, sender, 'https://estori.app');
+		expect(sent).toHaveLength(1);
+		expect(sent[0].to).toBe(USER.email);
+		expect(sent[0].subject).toBe('Reset your Estori password');
+		expect(writes(statements, 'insert', 'password_reset_tokens')).toHaveLength(1);
+	});
+
+	it('still emails an unconfirmed account that has a password', async () => {
+		const { auth, statements } = serviceWith({ users: { ...USER, email_verified: 0 } });
+		const { sender, sent } = recordingSender();
+		await auth.requestPasswordReset(USER.email, sender, 'https://estori.app');
+		expect(sent).toHaveLength(1);
+		expect(writes(statements, 'insert', 'password_reset_tokens')).toHaveLength(1);
 	});
 
 	it('stores nothing when email sending is unavailable', async () => {

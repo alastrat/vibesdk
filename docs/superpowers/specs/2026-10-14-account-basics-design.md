@@ -81,8 +81,8 @@ The chat debug panel's "email this dump" goes to support@estori.app instead of t
 - `POST /api/auth/forgot-password` with `{ email }`:
   - public, and rate limited per client;
   - answers 200 with the same message for every input;
-  - sends an email only to an existing account that has a password;
-  - an account that signs in only through a provider gets nothing.
+  - sends an email only to an existing account that has a password or a confirmed email;
+  - an unconfirmed account with no password gets nothing; a confirmed account without a password can use the link to set one.
 - `POST /api/auth/reset-password` with `{ token, newPassword, confirmPassword }` (the existing schema):
   - public, and rate limited per client;
   - 400 "This reset link is invalid or has expired." for a bad, used or expired token;

@@ -23,12 +23,16 @@ export function rowsByTable(tables: Record<string, Row | undefined>): (sql: stri
 	};
 }
 
-export function writes(statements: Statement[], verb: 'insert' | 'update', table: string): Statement[] {
-	const prefix = verb === 'insert' ? `insert into "${table}"` : `update "${table}"`;
+type WriteVerb = 'insert' | 'update' | 'delete';
+
+const WRITE_PREFIX: Record<WriteVerb, string> = { insert: 'insert into', update: 'update', delete: 'delete from' };
+
+export function writes(statements: Statement[], verb: WriteVerb, table: string): Statement[] {
+	const prefix = `${WRITE_PREFIX[verb]} "${table}"`;
 	return statements.filter((entry) => entry.sql.toLowerCase().startsWith(prefix));
 }
 
-export function lastWrite(statements: Statement[], verb: 'insert' | 'update', table: string): Statement {
+export function lastWrite(statements: Statement[], verb: WriteVerb, table: string): Statement {
 	const found = writes(statements, verb, table).at(-1);
 	if (!found) throw new Error(`No ${verb} on ${table}`);
 	return found;
