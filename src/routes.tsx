@@ -11,6 +11,12 @@ import DiscoverPage from './routes/discover';
 import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
 import { ProtectedRoute } from './routes/protected-route';
+import { AppLayout } from './components/layout/app-layout';
+import { PublicLayout } from './components/layout/PublicLayout';
+import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
+
+const AppShell = () => <AppLayout />;
+const PublicShell = () => <PublicLayout />;
 
 const routes = [
 	{
@@ -19,67 +25,97 @@ const routes = [
 		children: [
 			{
 				index: true,
-				Component: Home,
-			},
-			{
-				path: 'chat/:chatId',
-				Component: Chat,
-			},
-			{
-				path: 'profile',
 				element: (
-					<ProtectedRoute>
-						<Profile />
-					</ProtectedRoute>
+					<AppLayout>
+						<Home />
+					</AppLayout>
 				),
 			},
 			{
-				path: 'settings',
-				element: (
-					<ProtectedRoute>
-						<Settings />
-					</ProtectedRoute>
-				),
+				Component: AppShell,
+				children: [
+					{
+						path: 'chat/:chatId',
+						Component: Chat,
+					},
+					{
+						path: 'profile',
+						element: (
+							<ProtectedRoute>
+								<Profile />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'settings',
+						element: (
+							<ProtectedRoute>
+								<Settings />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'apps',
+						element: (
+							<ProtectedRoute>
+								<AppsPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'app/:id',
+						Component: AppView,
+					},
+					{
+						path: 'discover',
+						Component: DiscoverPage,
+					},
+					{
+						path: 'discover/:appId',
+						Component: SitePage,
+					},
+					{
+						path: 'templates',
+						element: <Navigate to="/discover" replace />,
+					},
+					{
+						path: 'templates/:slug',
+						element: <Navigate to="/discover" replace />,
+					},
+					{
+						path: 'admin/templates',
+						element: <Navigate to="/admin/reviews" replace />,
+					},
+					{
+						path: 'admin/reviews',
+						element: (
+							<ProtectedRoute>
+								<AdminReviewsPage />
+							</ProtectedRoute>
+						),
+					},
+				],
 			},
 			{
-				path: 'apps',
-				element: (
-					<ProtectedRoute>
-						<AppsPage />
-					</ProtectedRoute>
-				),
-			},
-			{
-				path: 'app/:id',
-				Component: AppView,
-			},
-			{
-				path: 'discover',
-				Component: DiscoverPage,
-			},
-			{
-				path: 'discover/:appId',
-				Component: SitePage,
-			},
-			{
-				path: 'templates',
-				element: <Navigate to="/discover" replace />,
-			},
-			{
-				path: 'templates/:slug',
-				element: <Navigate to="/discover" replace />,
-			},
-			{
-				path: 'admin/templates',
-				element: <Navigate to="/admin/reviews" replace />,
-			},
-			{
-				path: 'admin/reviews',
-				element: (
-					<ProtectedRoute>
-						<AdminReviewsPage />
-					</ProtectedRoute>
-				),
+				Component: PublicShell,
+				children: [
+					{
+						path: 'terms',
+						Component: TermsPage,
+					},
+					{
+						path: 'privacy',
+						Component: PrivacyPage,
+					},
+					{
+						path: 'refunds',
+						Component: RefundsPage,
+					},
+					{
+						path: 'copyright',
+						Component: CopyrightPage,
+					},
+				],
 			},
 		],
 	},

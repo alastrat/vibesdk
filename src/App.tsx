@@ -7,7 +7,6 @@ import { TermsGate } from './components/auth/TermsGate';
 import { ThemeProvider } from './contexts/theme-context';
 import { LimitsProvider } from './contexts/limits-context';
 import { Toaster } from './components/ui/sonner';
-import { AppLayout } from './components/layout/app-layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { FeatureProvider } from './features';
 import { Toasty } from '@cloudflare/kumo';
@@ -35,13 +34,11 @@ export default function App() {
 							<AppsQuerySync />
 							<LimitsProvider>
 								<AuthModalProvider>
-									<AppLayout>
-										<Toasty>
-											<AppLinkProvider>
-												<Outlet />
-											</AppLinkProvider>
-										</Toasty>
-									</AppLayout>
+									<Toasty>
+										<AppLinkProvider>
+											<Outlet />
+										</AppLinkProvider>
+									</Toasty>
 									<Toaster
 										richColors
 										position="top-right"

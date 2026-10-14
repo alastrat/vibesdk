@@ -10,7 +10,7 @@ import {
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { isValid } from 'date-fns';
-import { useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import {
 	Button,
 	CloudflareLogo,
@@ -26,6 +26,7 @@ import { OrangeButton } from '@/components/shared/OrangeButton';
 import { useUsageLimitsBadgeState } from '@/components/usage-limits-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
+import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 
 interface App {
 	id: string;
@@ -584,6 +585,16 @@ export function AppSidebar() {
 								</span>
 							) : null}
 						</OrangeButton>
+					)}
+					{!isCollapsed && (
+						<nav className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-xs text-kumo-subtle">
+							<Link to={'/pricing'} className="hover:text-kumo-default">Pricing</Link>
+							{LEGAL_LINKS.map((link) => (
+								<Link key={link.slug} to={link.path} className="hover:text-kumo-default">
+									{link.label}
+								</Link>
+							))}
+						</nav>
 					)}
 					<div
 						className={cn(
