@@ -383,6 +383,35 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Per-client (or per-user, when signed in) cap on account emails: reset
+	 * links and confirmation emails. Throws RateLimitExceededError when the
+	 * limit is exceeded.
+	 */
+	static async enforceAuthEmailRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		request: Request,
+		user: AuthUser | null,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.AUTH_EMAIL];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const identifier = await this.getUniversalIdentifier(user, request);
+		const key = this.buildRateLimitKey(RateLimitType.AUTH_EMAIL, identifier);
+		const result = await this.enforce(env, key, config, RateLimitType.AUTH_EMAIL);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Account email limit reached. Maximum ${limitConfig.limit} emails per hour`,
+				RateLimitType.AUTH_EMAIL,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
 	 * Get remaining credits for LLM calls without incrementing (for pre-flight checks)
 	 * Works in both dev and prod - uses local DO in dev mode
 	 */
