@@ -41,6 +41,13 @@ describe('landing page', () => {
 		expect(box).toContain('<ThinkModelPicker');
 	});
 
+	it('keeps the images note on an opaque surface, readable on the dark hero', () => {
+		const box = source('/src/components/build-box.tsx');
+		const note = box.slice(box.lastIndexOf('<div', box.indexOf('Images Beta:')), box.indexOf('Images Beta:'));
+		expect(note).toContain('bg-kumo-elevated');
+		expect(note).not.toMatch(/\bbg-[\w-]+\/\d+/);
+	});
+
 	it('hides the featured stores section when Discover has none', () => {
 		expect(landing).toContain('useDiscoverStripSites()');
 		expect(landing).toContain('if (!sites.data?.length) return null;');

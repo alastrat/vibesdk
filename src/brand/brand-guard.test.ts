@@ -210,7 +210,10 @@ describe('brand guard: brand color and deploy copy', () => {
 	it('has no hardcoded brand orange in the home screen', () => {
 		expect(
 			findMatches(
-				{ home: source(frontendSources, '/src/routes/home.tsx') },
+				{
+					home: source(frontendSources, '/src/routes/home.tsx'),
+					buildBox: source(frontendSources, '/src/components/build-box.tsx'),
+				},
 				/#ff3d00|#f6821f|rgba\(255,\s*61,\s*0|rgba\(246,\s*130,\s*31/i,
 			),
 		).toEqual([]);

@@ -221,7 +221,7 @@ export function BuildBox({
 						className="w-full mt-4"
 					>
 						<div
-							className="flex items-start gap-2 px-4 py-3 rounded-xl bg-bg-4/50 dark:bg-bg-2/50 shadow-sm border-brand/20"
+							className="flex items-start gap-2 px-4 py-3 rounded-xl bg-kumo-elevated shadow-sm ring ring-kumo-hairline"
 						>
 							<InfoIcon
 								className="size-4 flex-shrink-0 mt-0.5 text-brand"
