@@ -11,11 +11,13 @@ interface DailyCountable {
 	calendarDaily?: boolean;
 }
 
+/** The most a user can use in a day; the store enforces both the main window and dailyLimit. */
 function perDay(config: DailyCountable): number | null {
 	if (!config.enabled) return null;
-	if (typeof config.dailyLimit === 'number') return config.dailyLimit;
-	if (typeof config.limit !== 'number') return null;
-	return config.calendarDaily || config.period === DAY_SECONDS ? config.limit : null;
+	const mainPerDay =
+		typeof config.limit === 'number' && (config.calendarDaily || config.period === DAY_SECONDS) ? config.limit : null;
+	if (typeof config.dailyLimit !== 'number') return mainPerDay;
+	return mainPerDay === null ? config.dailyLimit : Math.min(mainPerDay, config.dailyLimit);
 }
 
 /** The limits shown on the pricing page, read from the configuration in force. */

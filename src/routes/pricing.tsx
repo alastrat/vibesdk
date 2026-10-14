@@ -4,6 +4,7 @@ import { CheckIcon } from '@phosphor-icons/react';
 import { pageTitle } from '@/brand';
 import { PLATFORM_FEE_LABEL, formatTemplatePrice } from '@/api-types';
 import { PlanLimits } from '@/components/marketing/PlanLimits';
+import { usePublicPlan } from '@/hooks/use-public-plan';
 import { ComingSoon } from '@/components/marketing/ComingSoon';
 import { formatCents, sellerKeepsTable } from '@/lib/pricing';
 
@@ -14,6 +15,13 @@ function Feature({ children }: { children: ReactNode }) {
 			<span>{children}</span>
 		</li>
 	);
+}
+
+/** Shown only with the credits number it explains. */
+function CreditRateNote() {
+	const plan = usePublicPlan();
+	if (plan.data?.aiCreditsPerDay == null) return null;
+	return <p className="mt-2 text-sm text-kumo-subtle">Each model uses credits at its own rate, so lighter models go further.</p>;
 }
 
 export default function PricingPage() {
@@ -35,6 +43,7 @@ export default function PricingPage() {
 					<h2 className="text-sm font-medium uppercase tracking-[0.14em] text-kumo-subtle">Build</h2>
 					<p className="mt-4 text-5xl font-light tracking-tight text-kumo-strong">Free</p>
 					<PlanLimits className="mt-3 text-sm text-kumo-subtle" />
+					<CreditRateNote />
 					<ul className="mt-8 grid gap-3">
 						<Feature>Change your store by chatting with the AI</Feature>
 						<Feature>Live preview on desktop and phone</Feature>

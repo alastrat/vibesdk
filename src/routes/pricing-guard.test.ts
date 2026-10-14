@@ -22,6 +22,12 @@ describe('pricing page', () => {
 		expect(page).not.toMatch(/7% \+ \$0\.60/);
 	});
 
+	it('explains that models use credits at different rates', () => {
+		expect(page).toContain('Each model uses credits at its own rate, so lighter models go further.');
+		expect(page).toContain('usePublicPlan()');
+		expect(page).toContain('aiCreditsPerDay == null');
+	});
+
 	it("doesn't promise store payments yet", () => {
 		expect(page).toContain('<ComingSoon');
 		expect(page).toContain('Accept payments in your store');

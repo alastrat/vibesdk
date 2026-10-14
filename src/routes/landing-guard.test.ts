@@ -64,6 +64,12 @@ describe('landing page', () => {
 		for (const name of COMPETITORS) expect(copy).not.toContain(name);
 	});
 
+	it("hides Safari's default disclosure marker on the FAQ questions", () => {
+		const summary = landing.slice(landing.indexOf('<summary'), landing.indexOf('>', landing.indexOf('<summary')));
+		expect(summary).toContain('list-none');
+		expect(summary).toContain('[&::-webkit-details-marker]:hidden');
+	});
+
 	it('answers the six launch questions', () => {
 		for (const question of [
 			'Is Estori free?',

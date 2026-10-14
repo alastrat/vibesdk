@@ -199,7 +199,7 @@ export function LandingFaq() {
 				<div className="divide-y divide-kumo-line">
 					{FAQ.map((item) => (
 						<details key={item.question} className="group py-5">
-							<summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-normal text-kumo-strong">
+							<summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-normal text-kumo-strong [&::-webkit-details-marker]:hidden">
 								{item.question}
 								<span className="text-kumo-subtle transition-transform group-open:rotate-45" aria-hidden>+</span>
 							</summary>

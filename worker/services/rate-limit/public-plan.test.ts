@@ -21,6 +21,24 @@ describe('publicPlanFromSettings', () => {
 		expect(plan).toEqual({ newSitesPerDay: 5, aiCreditsPerDay: 500 });
 	});
 
+	it('reports the tighter of two daily limits', () => {
+		const plan = publicPlanFromSettings(
+			settings({
+				llmCalls: { ...DEFAULT_RATE_LIMIT_SETTINGS.llmCalls, limit: 200, calendarDaily: true, dailyLimit: 500 },
+			}),
+		);
+		expect(plan.aiCreditsPerDay).toBe(200);
+	});
+
+	it('reports the daily limit when the main window is shorter than a day', () => {
+		const plan = publicPlanFromSettings(
+			settings({
+				llmCalls: { ...DEFAULT_RATE_LIMIT_SETTINGS.llmCalls, limit: 20, period: 3600, calendarDaily: false, dailyLimit: 150 },
+			}),
+		);
+		expect(plan.aiCreditsPerDay).toBe(150);
+	});
+
 	it('reports no number for a limit that is turned off or not counted per day', () => {
 		const plan = publicPlanFromSettings(
 			settings({
