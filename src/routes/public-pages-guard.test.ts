@@ -4,6 +4,7 @@ const sources = import.meta.glob<string>(
 	[
 		'/src/routes.tsx',
 		'/src/App.tsx',
+		'/src/components/layout/PublicLayout.tsx',
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/components/layout/app-sidebar.tsx',
@@ -38,6 +39,12 @@ describe('public pages', () => {
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
 		expect(sidebar).toContain('LEGAL_LINKS');
 		expect(sidebar).toContain("'/pricing'");
+	});
+
+	it('starts each public page at the top of its own scroll container', () => {
+		const layout = source('/src/components/layout/PublicLayout.tsx');
+		expect(layout).toContain('useLocation');
+		expect(layout).toContain('scrollTo(');
 	});
 
 	it('keeps the top bar usable on phones and legal text readable in dark mode', () => {
