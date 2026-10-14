@@ -59,4 +59,10 @@ describe('public site styles', () => {
 		expect(badge).not.toContain('kumo-');
 		expect(badge).toContain('Coming soon');
 	});
+
+	it('lets app components embedded in a public page keep the app theme', () => {
+		expect(publicCss).toContain(":root[data-mode='dark'] .public-site .app-theme-scope {");
+		const start = publicCss.indexOf(":root[data-mode='dark'] .public-site .app-theme-scope {");
+		expect(publicCss.slice(start, publicCss.indexOf('}', start))).toContain('color-scheme: dark');
+	});
 });

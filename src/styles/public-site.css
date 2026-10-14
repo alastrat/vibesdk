@@ -31,3 +31,8 @@
 	color: var(--color-public-ink);
 	-webkit-font-smoothing: antialiased;
 }
+
+/* App components embedded in a public page, such as the landing build box, keep the app's theme. */
+:root[data-mode='dark'] .public-site .app-theme-scope {
+	color-scheme: dark;
+}
