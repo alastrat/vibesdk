@@ -189,6 +189,20 @@ describe('AuthController.resetPassword', () => {
 		expect(mockResetPassword).not.toHaveBeenCalled();
 	});
 
+	it('answers 400 with the invalid-link message for an oversized token, without calling the service', async () => {
+		const response = await reset({ ...body, token: 'x'.repeat(201) });
+		expect(response.status).toBe(400);
+		const json = (await response.json()) as { error: { message: string } };
+		expect(json.error.message).toBe(RESET_LINK_INVALID_MESSAGE);
+		expect(mockResetPassword).not.toHaveBeenCalled();
+	});
+
+	it('accepts a token at the 200-character limit', async () => {
+		const response = await reset({ ...body, token: 'x'.repeat(200) });
+		expect(response.status).toBe(200);
+		expect(mockResetPassword).toHaveBeenCalledWith('x'.repeat(200), STRONG_PASSWORD, expect.any(Request));
+	});
+
 	it('answers 429 without touching the password when the client has tried too often', async () => {
 		enforceClient.mockRejectedValue(limitError(RateLimitType.AUTH_EMAIL));
 		const response = await reset(body);
