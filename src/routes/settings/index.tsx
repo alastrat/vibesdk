@@ -17,7 +17,7 @@ import {
 	EyeOff,
 	Mail,
 } from 'lucide-react';
-import type { ActiveSessionsData, ApiKeysData } from '@/api-types';
+import { LEGAL_CONTACT, type ActiveSessionsData, type ApiKeysData } from '@/api-types';
 import {
 	Button,
 	DeleteResource,
@@ -29,6 +29,7 @@ import {
 	DialogTrigger,
 	LayerCard,
 	Input,
+	LinkButton,
 	Table,
 } from '@cloudflare/kumo';
 import { Separator } from '@/components/ui/separator';
@@ -45,6 +46,8 @@ import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
 
 const SUCCESS_BADGE_CLASS = 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
 const WARNING_BADGE_CLASS = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200';
+
+const DELETION_REQUEST_HREF = `mailto:${LEGAL_CONTACT.privacy}?subject=${encodeURIComponent('Delete my Estori account')}`;
 
 type CreatedApiKey = {
 	key: string;
@@ -168,10 +171,6 @@ export default function SettingsPage() {
 			);
 		},
 	});
-
-	const handleDeleteAccount = async () => {
-		toast.error('Account deletion is not yet implemented');
-	};
 
 	const revokeSessionMutation = useMutation({
 		mutationFn: async (sessionId: string) => {
@@ -573,7 +572,7 @@ export default function SettingsPage() {
 													No API keys yet
 												</p>
 												<p className="text-sm text-kumo-subtle">
-													Create an API key to use the
+													Create an API key to use the{' '}
 													{BRAND.name} SDK from your own
 													apps.
 												</p>
@@ -784,8 +783,7 @@ export default function SettingsPage() {
 										Delete account
 									</p>
 									<p className="text-sm text-kumo-subtle">
-										Permanently delete your account and all
-										data
+										Ask us to erase your account and all your data
 									</p>
 								</div>
 
@@ -808,13 +806,10 @@ export default function SettingsPage() {
 									<Dialog className="p-8">
 										<div className="mb-4 grid gap-1.5">
 											<DialogTitle className="text-xl font-semibold">
-												Delete account?
+												Delete your account
 											</DialogTitle>
 											<DialogDescription className="text-kumo-subtle">
-												This action cannot be undone.
-												This will permanently delete
-												your account and remove all your
-												data from our servers.
+												To delete your account and all your data, email {LEGAL_CONTACT.privacy} from {user?.email}. We complete erasure within 45 days.
 											</DialogDescription>
 										</div>
 										<div className="mt-8 flex justify-end gap-2">
@@ -828,20 +823,12 @@ export default function SettingsPage() {
 													</Button>
 												)}
 											/>
-											<DialogClose
-												render={(props) => (
-													<Button
-														variant="destructive"
-														{...props}
-														onClick={(e) => {
-															props.onClick?.(e);
-															void handleDeleteAccount();
-														}}
-													>
-														Delete account
-													</Button>
-												)}
-											/>
+											<LinkButton
+												variant="primary"
+												href={DELETION_REQUEST_HREF}
+											>
+												Email us
+											</LinkButton>
 										</div>
 									</Dialog>
 								</DialogRoot>
