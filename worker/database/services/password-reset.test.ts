@@ -2,13 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { SecurityError } from 'shared/types/errors';
 import { AuthService } from './AuthService';
 import { recordingD1 } from '../test-support/recording-d1';
-import { lastWrite, recordingSender, rejection, rowsByTable, writes, type Row, type Statement } from '../test-support/recorded-statements';
+import { assignedValues, lastWrite, recordingSender, rejection, rowsByTable, writes, type Row, type Statement } from '../test-support/recorded-statements';
+import { expectNoTakeoverCleanup, expectTakeoverCleanupIn, sessionRevokes } from '../test-support/takeover-cleanup';
 import { RESET_LINK_INVALID_MESSAGE, RESET_TOKEN_TTL_MS, hashOneTimeToken } from '../../services/auth/one-time-token';
 import { sha256Hash } from '../../utils/cryptoUtils';
 import { PasswordService } from '../../utils/passwordService';
 
 const REQUEST = new Request('http://localhost/api/auth/reset-password', { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.9' } });
-const USER = { id: 'user-1', email: 'user@example.test', password_hash: 'stored-hash' };
+const USER = { id: 'user-1', email: 'user@example.test', password_hash: 'stored-hash', email_verified: 1 };
 const STRONG_PASSWORD = 'A-new-Passw0rd-for-Estori';
 
 function secondsFromNow(ms: number): number {
@@ -23,7 +24,7 @@ function validTokenRow(overrides: Row = {}): Row {
 function serviceWith(
 	tables: Record<string, Row | undefined>,
 	options: { claim?: boolean } = {},
-): { auth: AuthService; statements: Statement[] } {
+): { auth: AuthService; statements: Statement[]; batches: Statement[][] } {
 	const { claim = true } = options;
 	const selects = rowsByTable(tables);
 	const rows = (sql: string): unknown[][] => {
@@ -33,8 +34,12 @@ function serviceWith(
 		}
 		return selects(sql);
 	};
-	const { d1, statements } = recordingD1(rows);
-	return { auth: new AuthService({ DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters' } as unknown as Env), statements };
+	const { d1, statements, batches } = recordingD1(rows);
+	return {
+		auth: new AuthService({ DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters' } as unknown as Env),
+		statements,
+		batches,
+	};
 }
 
 describe('AuthService.requestPasswordReset', () => {
@@ -229,6 +234,50 @@ describe('AuthService.resetPassword', () => {
 		expect(writes(statements, 'update', 'users')).toEqual([]);
 		expect(writes(statements, 'update', 'sessions')).toEqual([]);
 		expect(writes(statements, 'insert', 'auth_attempts')).toEqual([]);
+	});
+
+	it('leaves a confirmed account its linked sign-in methods, API keys, payouts and model routing', async () => {
+		const { auth, statements, batches } = serviceWith({ password_reset_tokens: validTokenRow(), users: USER });
+		await auth.resetPassword('some-token', STRONG_PASSWORD, REQUEST);
+
+		expect(batches).toEqual([]);
+		expectNoTakeoverCleanup(statements);
+		const changes = assignedValues(lastWrite(statements, 'update', 'users'));
+		expect(changes).not.toHaveProperty('email_verified');
+		expect(changes).not.toHaveProperty('ai_gateway_enabled');
+		expect(sessionRevokes(statements)).toHaveLength(1);
+	});
+
+	it.each([
+		['unconfirmed', 0],
+		['never marked either way', null],
+	])('confirms an %s account and strips what someone else could have attached, in one batch with the new password', async (_label, emailVerified) => {
+		const { auth, statements, batches } = serviceWith({
+			password_reset_tokens: validTokenRow(),
+			users: { ...USER, email_verified: emailVerified },
+		});
+		await auth.resetPassword('some-token', STRONG_PASSWORD, REQUEST);
+
+		expect(batches).toHaveLength(1);
+		const account = lastWrite(statements, 'update', 'users');
+		expect(batches[0]).toContain(account);
+		const changes = assignedValues(account);
+		expect(await new PasswordService().verify(STRONG_PASSWORD, changes.password_hash as string)).toBe(true);
+		expect(typeof changes.password_changed_at).toBe('number');
+		expect(changes.failed_login_attempts).toBe(0);
+		expect(changes.locked_until).toBeNull();
+		expect(changes.email_verified).toBe(1);
+		expect(changes.ai_gateway_enabled).toBeNull();
+		expect(account.params.at(-1)).toBe(USER.id);
+
+		expectTakeoverCleanupIn(batches[0], statements, USER.id);
+
+		const claimIndex = statements.findIndex(
+			(entry) => entry.sql.toLowerCase().startsWith('update "password_reset_tokens"') && entry.sql.toLowerCase().includes(' returning '),
+		);
+		expect(claimIndex).toBeGreaterThan(-1);
+		expect(batches[0]).not.toContain(statements[claimIndex]);
+		expect(claimIndex).toBeLessThan(statements.indexOf(account));
 	});
 
 	it('records the reset as an auth attempt from the requesting address', async () => {

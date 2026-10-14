@@ -22,6 +22,7 @@ Before strangers can use Estori:
   - "New password" and "Confirm password" fields, with the same strength rules and hints as sign-up;
   - **Update password**.
   - **On success:** "Your password is updated. Sign in with your new password." with a **Sign in** button that opens the auth window. Every session of that user is signed out.
+  - **On an unconfirmed account:** following the link proves the inbox, so the reset also confirms the email and runs the same cleanup as a Google or GitHub claim (below), in the same step as the password change. The new password stays.
   - **On a bad or expired link:** "This reset link is invalid or has expired." with a **Request a new link** button that opens the forgot-password view.
 
 ### Confirm your email
@@ -32,11 +33,20 @@ Before strangers can use Estori:
 - **Existing accounts** keep their current flag.
 
 ### Signing in with Google or GitHub when an account with that email exists
-- **Confirmed email:** the provider is attached to the existing account, as today.
-- **Unconfirmed email:**
-  - The provider sign-in proves who owns the address, so the provider is attached and the email is marked confirmed.
-  - The account's password is removed, and all its other sessions are signed out. Anyone who signed up with someone else's address loses access.
+- **Confirmed email:** the provider is attached to the existing account, as today. This holds for every provider, Cloudflare included.
+- **Unconfirmed email, with Google or GitHub:**
+  - The provider sign-in proves who owns the address. The provider is attached, becomes the account's main sign-in method, and the email is marked confirmed.
+  - Everything whoever set the password could have attached is removed, in one step that happens completely or not at all:
+    - the password;
+    - every session, signed out;
+    - other linked sign-in methods;
+    - API keys, turned off;
+    - the Stripe payout account, disconnected (past sales keep their records);
+    - the connected Cloudflare account, its AI gateways and the AI gateway preference;
+    - custom model providers and model settings.
+  - Anyone who signed up with someone else's address loses access.
   - The real owner can set a password later through Forgot password.
+- **Unconfirmed email, with Cloudflare:** Cloudflare's sign-in doesn't verify the email itself, so it can't claim the account. It's refused with "Sign in with your password, Google or GitHub, then connect Cloudflare from Settings."
 
 ### Deleting an account
 - **The Settings "Delete account" dialog** becomes honest: "To delete your account and all your data, email privacy@estori.app from {your account's email}. We complete erasure within 45 days." It has an **Email us** button, a `mailto:` with the subject "Delete my Estori account", and **Cancel**. This matches the privacy policy.
@@ -92,7 +102,8 @@ The chat debug panel's "email this dump" goes to support@estori.app instead of t
     - sets `passwordChangedAt`;
     - clears failed attempts and the lock;
     - marks the token used;
-    - signs out every session.
+    - signs out every session;
+    - on an unconfirmed account, also confirms the email and runs the same cleanup as a provider claim, in one batch with the password change.
 - `POST /api/auth/verify-email` with `{ token }`:
   - public;
   - marks the user confirmed when the token is valid and its email matches the user's current email;
@@ -146,7 +157,7 @@ The version stays `2026-10-13`, because it hasn't been published.
 
 1. **Email provider:** Cloudflare Email Service, not a third-party service like Resend. It's in the same account and the domain is on Cloudflare DNS. The cost is that it's in beta; switching providers means changing one module.
 2. **Confirmation doesn't lock any feature during the beta.** Its main job is to stop account pre-hijacking. The cost is that unconfirmed accounts can still publish and sell.
-3. **An unconfirmed account loses its password** when the address's owner signs in with Google or GitHub. This is the standard defense against pre-hijacking. The cost is that a real owner who used both methods must reset their password once.
+3. **An unconfirmed account is cleaned out** when the address's owner proves it, by signing in with Google or GitHub or by resetting the password. The account loses its password (on a provider claim), its sessions, its other linked sign-in methods, its API keys, its Stripe payout account, its Cloudflare connection and AI gateways, and its custom model settings. This is the standard defense against pre-hijacking. The cost is that a real owner who never confirmed their email must set these up again once.
 4. **Self-service account erasure is deferred.** Deletion goes through privacy@ by email, as the privacy policy now says. The cost is manual work per request.
 5. **The `send_email` binding isn't added to `wrangler.estori.jsonc` in this branch.** Production keeps working with email off until the domain is onboarded. The cost is one config line at launch.
 6. **The reset link lasts 30 minutes and the confirmation link 24 hours,** which are common defaults.

@@ -4,6 +4,7 @@ import { AuthService } from './AuthService';
 import { SessionService } from './SessionService';
 import { recordingD1 } from '../test-support/recording-d1';
 import { assignedValues, lastWrite, rejection, rowsByTable, writes, type Row, type Statement } from '../test-support/recorded-statements';
+import { expectTakeoverCleanupIn, sessionRevokes, takeoverCleanupWrites } from '../test-support/takeover-cleanup';
 import type { BaseOAuthProvider } from '../../services/oauth/base';
 import type { AuthUser, OAuthProvider, OAuthUserInfo } from '../../types/auth-types';
 
@@ -78,19 +79,12 @@ function signIn(provider: OAuthProvider, account: Row): SignIn {
 	return { statements, batches, batch, run };
 }
 
-function sessionRevokes(statements: Statement[]): Statement[] {
-	return writes(statements, 'update', 'sessions').filter((entry) => entry.params.includes('user_force_logout'));
-}
-
 /** Every write that takes an account away from whoever set its password. */
 function claimWrites(statements: Statement[]): Statement[] {
 	return [
-		...writes(statements, 'delete', 'user_oauth_identities'),
+		...takeoverCleanupWrites(statements),
 		...writes(statements, 'insert', 'user_oauth_identities'),
 		...writes(statements, 'update', 'users'),
-		...sessionRevokes(statements),
-		...writes(statements, 'update', 'api_keys'),
-		...writes(statements, 'delete', 'stripe_connect_accounts'),
 	];
 }
 
@@ -106,7 +100,7 @@ afterEach(() => {
 
 describe('provider sign-in to an existing account with a confirmed email', () => {
 	it.each<OAuthProvider>(['google', 'github', 'cloudflare'])(
-		'links %s and leaves the password, sessions, other identities, API keys and payouts alone',
+		'links %s and leaves the password, sessions, other identities, API keys, payouts and model routing alone',
 		async (provider) => {
 			const { statements, batches, run } = signIn(provider, existingAccount(1));
 			const user = await run;
@@ -118,10 +112,7 @@ describe('provider sign-in to an existing account with a confirmed email', () =>
 
 			expect(batches).toEqual([]);
 			expect(writes(statements, 'update', 'users')).toEqual([]);
-			expect(writes(statements, 'delete', 'user_oauth_identities')).toEqual([]);
-			expect(sessionRevokes(statements)).toEqual([]);
-			expect(writes(statements, 'update', 'api_keys')).toEqual([]);
-			expect(writes(statements, 'delete', 'stripe_connect_accounts')).toEqual([]);
+			expect(takeoverCleanupWrites(statements)).toEqual([]);
 			expect(user.id).toBe('user-1');
 			expect(createSession).toHaveBeenCalledOnce();
 		},
@@ -152,23 +143,16 @@ describe('provider sign-in to an existing account with an unconfirmed email', ()
 		expect(changes.email_verified).toBe(1);
 		expect(changes.provider).toBe(provider);
 		expect(changes.provider_id).toBe(`${provider}-123`);
+		expect(changes.ai_gateway_enabled).toBeNull();
 		expect(typeof changes.updated_at).toBe('number');
 		expect(account.params.at(-1)).toBe('user-1');
 
-		const [revoke] = sessionRevokes(statements);
-		expect(assignedValues(revoke).is_revoked).toBe(1);
-		expect(revoke.params.at(-1)).toBe('user-1');
-
-		const keys = lastWrite(statements, 'update', 'api_keys');
-		expect(assignedValues(keys).is_active).toBe(0);
-		expect(keys.params.at(-1)).toBe('user-1');
-
-		expect(lastWrite(statements, 'delete', 'stripe_connect_accounts').params).toEqual(['user-1']);
+		expect(batches).toHaveLength(1);
+		expectTakeoverCleanupIn(batches[0], statements, 'user-1');
 
 		expect(user.id).toBe('user-1');
 		expect(user.emailVerified).toBe(true);
 		expect(user.provider).toBe(provider);
-		expect(batches).toHaveLength(1);
 	});
 
 	it('issues every write of the claim in one batch, so a failure leaves nothing half done', async () => {
@@ -176,9 +160,9 @@ describe('provider sign-in to an existing account with an unconfirmed email', ()
 		await run;
 
 		const claim = claimWrites(statements);
-		expect(claim).toHaveLength(6);
+		expect(claim).toHaveLength(10);
 		expect(batches).toHaveLength(1);
-		expect(batches[0]).toHaveLength(6);
+		expect(batches[0]).toHaveLength(10);
 		for (const write of claim) {
 			expect(batches[0]).toContain(write);
 		}

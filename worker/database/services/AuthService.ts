@@ -101,6 +101,12 @@ export function signUpTermsError(version: unknown): string | null {
 }
 
 /**
+ * User fields set when an unconfirmed account passes to the proven owner of its address:
+ * the email is confirmed, and an AI gateway preference someone else may have set is dropped.
+ */
+const PROVEN_OWNER_FIELDS = { emailVerified: true, aiGatewayEnabled: null } as const;
+
+/**
  * A new identity row for a provider account whose email the provider has verified.
  */
 function verifiedIdentityRow(
@@ -478,7 +484,11 @@ export class AuthService extends BaseService {
         const user =
             row && isTokenUsable(row, now)
                 ? await this.database
-                      .select({ id: schema.users.id, email: schema.users.email })
+                      .select({
+                          id: schema.users.id,
+                          email: schema.users.email,
+                          emailVerified: schema.users.emailVerified,
+                      })
                       .from(schema.users)
                       .where(and(eq(schema.users.id, row.userId), isNull(schema.users.deletedAt)))
                       .get()
@@ -515,20 +525,29 @@ export class AuthService extends BaseService {
             throw new SecurityError(SecurityErrorType.INVALID_TOKEN, RESET_LINK_INVALID_MESSAGE, 400);
         }
 
-        await this.database
-            .update(schema.users)
-            .set({
-                passwordHash,
-                passwordChangedAt: claimedAt,
-                failedLoginAttempts: 0,
-                lockedUntil: null,
-                updatedAt: claimedAt,
-            })
-            .where(eq(schema.users.id, user.id));
-        await this.sessionService.revokeAllUserSessions(user.id);
+        const passwordChange = {
+            passwordHash,
+            passwordChangedAt: claimedAt,
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+            updatedAt: claimedAt,
+        };
+        if (user.emailVerified === true) {
+            await this.database.update(schema.users).set(passwordChange).where(eq(schema.users.id, user.id));
+            await this.sessionService.revokeAllUserSessions(user.id);
+        } else {
+            // The reset proves inbox control, so it settles an unconfirmed account the way a provider claim does.
+            await this.database.batch([
+                this.database
+                    .update(schema.users)
+                    .set({ ...passwordChange, ...PROVEN_OWNER_FIELDS })
+                    .where(eq(schema.users.id, user.id)),
+                ...this.takeoverCleanup(user.id),
+            ]);
+        }
 
         await this.logAuthAttempt(user.email, 'reset_password', true, request);
-        logger.info('Password reset', { userId: user.id });
+        logger.info('Password reset', { userId: user.id, confirmedEmail: user.emailVerified !== true });
     }
 
     /**
@@ -1030,9 +1049,9 @@ export class AuthService extends BaseService {
 
     /**
      * Give an unconfirmed account to the owner a verifying provider just proved. Whoever set
-     * its password may not own the address, so everything they could have attached is removed
-     * in one batch, which D1 runs as a transaction: other identities, the password, sessions,
-     * API keys and the payout account. The caller creates this sign-in's session afterwards.
+     * its password may not own the address, so the password goes and the takeover cleanup runs,
+     * all in one batch, which D1 runs as a transaction. The cleanup deletes every linked identity,
+     * so the claiming one is inserted after it. The caller creates this sign-in's session afterwards.
      */
     private async claimUnconfirmedAccount(
         account: schema.User,
@@ -1041,7 +1060,7 @@ export class AuthService extends BaseService {
     ): Promise<schema.User> {
         const now = new Date();
         const claimed = {
-            emailVerified: true,
+            ...PROVEN_OWNER_FIELDS,
             passwordHash: null,
             provider,
             providerId: oauthUserInfo.id,
@@ -1049,22 +1068,11 @@ export class AuthService extends BaseService {
         };
 
         await this.database.batch([
-            this.database
-                .delete(schema.userOauthIdentities)
-                .where(eq(schema.userOauthIdentities.userId, account.id)),
+            ...this.takeoverCleanup(account.id),
             this.database
                 .insert(schema.userOauthIdentities)
                 .values(verifiedIdentityRow(account.id, provider, oauthUserInfo, now)),
             this.database.update(schema.users).set(claimed).where(eq(schema.users.id, account.id)),
-            revokeAllUserSessionsQuery(this.database, account.id),
-            this.database
-                .update(schema.apiKeys)
-                .set({ isActive: false, updatedAt: now })
-                .where(eq(schema.apiKeys.userId, account.id)),
-            // Past purchases keep the seller's Stripe account id, so sales history survives.
-            this.database
-                .delete(schema.stripeConnectAccounts)
-                .where(eq(schema.stripeConnectAccounts.userId, account.id)),
         ]);
 
         logger.info('Claimed unconfirmed account through a verified provider', {
@@ -1072,6 +1080,40 @@ export class AuthService extends BaseService {
             provider
         });
         return { ...account, ...claimed };
+    }
+
+    /**
+     * Statements that strip an account of everything someone other than its address's owner
+     * could have attached: linked sign-in methods, API keys, the payout account, custom model
+     * routing, the connected Cloudflare account and its AI gateways, and every session. Callers
+     * run them in one batch with their own users update (see PROVEN_OWNER_FIELDS).
+     */
+    private takeoverCleanup(userId: string) {
+        return [
+            this.database
+                .delete(schema.userOauthIdentities)
+                .where(eq(schema.userOauthIdentities.userId, userId)),
+            this.database
+                .update(schema.apiKeys)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(eq(schema.apiKeys.userId, userId)),
+            // Past purchases keep the seller's Stripe account id, so sales history survives.
+            this.database
+                .delete(schema.stripeConnectAccounts)
+                .where(eq(schema.stripeConnectAccounts.userId, userId)),
+            this.database
+                .delete(schema.userModelProviders)
+                .where(eq(schema.userModelProviders.userId, userId)),
+            this.database
+                .delete(schema.userModelConfigs)
+                .where(eq(schema.userModelConfigs.userId, userId)),
+            // Gateways reference the Cloudflare account, so they go first.
+            this.database.delete(schema.aiGateways).where(eq(schema.aiGateways.userId, userId)),
+            this.database
+                .delete(schema.cloudflareAccounts)
+                .where(eq(schema.cloudflareAccounts.userId, userId)),
+            revokeAllUserSessionsQuery(this.database, userId),
+        ] as const;
     }
 
     /**
