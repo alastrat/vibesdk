@@ -2,6 +2,7 @@ import { RateLimitType, RateLimitStore, RateLimitSettings, DORateLimitConfig, KV
 import { createObjectLogger } from '../../logger';
 import { AuthUser } from '../../types/auth-types';
 import { extractRequestMetadata } from '../../utils/authUtils';
+import { sha256Hash } from '../../utils/cryptoUtils';
 import { captureSecurityEvent } from '../../observability/sentry';
 import { KVRateLimitStore } from './KVRateLimitStore';
 import { RateLimitResult } from './DORateLimitStore';
@@ -404,6 +405,34 @@ export class RateLimitService {
 			throw new RateLimitExceededError(
 				`Account email limit reached. Maximum ${limitConfig.limit} emails per hour`,
 				RateLimitType.AUTH_EMAIL,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
+	 * Per-address cap on reset emails, so one inbox can't be flooded from many
+	 * clients. Keyed by a hash of the address, so the address itself is never
+	 * stored. Throws RateLimitExceededError when the limit is exceeded.
+	 */
+	static async enforceAuthEmailRecipientRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		email: string,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.AUTH_EMAIL_RECIPIENT];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const identifier = `email:${await sha256Hash(email.trim().toLowerCase())}`;
+		const key = this.buildRateLimitKey(RateLimitType.AUTH_EMAIL_RECIPIENT, identifier);
+		const result = await this.enforce(env, key, config, RateLimitType.AUTH_EMAIL_RECIPIENT);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Account email limit reached for this address. Maximum ${limitConfig.limit} emails per hour`,
+				RateLimitType.AUTH_EMAIL_RECIPIENT,
 				limitConfig.limit,
 				limitConfig.period,
 				['Please try again in an hour.'],

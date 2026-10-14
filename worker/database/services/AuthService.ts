@@ -32,6 +32,16 @@ import { ADMIN_EMAIL_PROVIDER_MESSAGE, isPlatformAdminEmail, mayClaimEmailByOAut
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
 import {
+    RESET_LINK_INVALID_MESSAGE,
+    RESET_TOKEN_TTL_MS,
+    createOneTimeToken,
+    hashOneTimeToken,
+    isTokenUsable,
+} from '../../services/auth/one-time-token';
+import { resetPasswordLink } from '../../services/email/links';
+import { passwordResetEmail } from '../../services/email/templates';
+import type { EmailSender } from '../../services/email/types';
+import {
     TERMS_VERSION,
     TERMS_REQUIRED_MESSAGE,
     TERMS_OUTDATED_MESSAGE,
@@ -360,6 +370,114 @@ export class AuthService extends BaseService {
                 500
             );
         }
+    }
+
+    /**
+     * Start a password reset: store the hash of a single-use token and email its link.
+     * Resolves the same way for every address, so a caller can't tell whether an account
+     * exists. A provider-only account has no password to reset and gets nothing.
+     */
+    async requestPasswordReset(email: string, sender: EmailSender | null, baseUrl: string): Promise<void> {
+        const user = await this.database
+            .select({
+                id: schema.users.id,
+                email: schema.users.email,
+                passwordHash: schema.users.passwordHash,
+            })
+            .from(schema.users)
+            .where(and(eq(schema.users.email, email.toLowerCase()), isNull(schema.users.deletedAt)))
+            .get();
+
+        if (!user || !user.passwordHash || !sender) {
+            return;
+        }
+
+        const token = createOneTimeToken();
+        const tokenHash = await hashOneTimeToken(token);
+        await this.database.batch([
+            this.database
+                .update(schema.passwordResetTokens)
+                .set({ used: true })
+                .where(
+                    and(
+                        eq(schema.passwordResetTokens.userId, user.id),
+                        or(eq(schema.passwordResetTokens.used, false), isNull(schema.passwordResetTokens.used))
+                    )
+                ),
+            this.database.insert(schema.passwordResetTokens).values({
+                id: generateId(),
+                userId: user.id,
+                tokenHash,
+                expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+            }),
+        ]);
+
+        try {
+            await sender.send(passwordResetEmail(user.email, resetPasswordLink(baseUrl, token)));
+        } catch (error) {
+            logger.error('Failed to send password reset email', { userId: user.id, error });
+        }
+    }
+
+    /**
+     * Set a new password with the token from a reset link. The token works once; on
+     * success every session of the account is signed out.
+     */
+    async resetPassword(token: string, newPassword: string, request: Request): Promise<void> {
+        const now = new Date();
+        const row = await this.database
+            .select({
+                id: schema.passwordResetTokens.id,
+                userId: schema.passwordResetTokens.userId,
+                used: schema.passwordResetTokens.used,
+                expiresAt: schema.passwordResetTokens.expiresAt,
+            })
+            .from(schema.passwordResetTokens)
+            .where(eq(schema.passwordResetTokens.tokenHash, await hashOneTimeToken(token)))
+            .get();
+
+        const user =
+            row && isTokenUsable(row, now)
+                ? await this.database
+                      .select({ id: schema.users.id, email: schema.users.email })
+                      .from(schema.users)
+                      .where(and(eq(schema.users.id, row.userId), isNull(schema.users.deletedAt)))
+                      .get()
+                : undefined;
+        if (!row || !user) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, RESET_LINK_INVALID_MESSAGE, 400);
+        }
+
+        const passwordValidation = validatePassword(newPassword, undefined, { email: user.email });
+        if (!passwordValidation.valid) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                (passwordValidation.errors ?? []).join(', '),
+                400
+            );
+        }
+
+        const passwordHash = await this.passwordService.hash(newPassword);
+        await this.database.batch([
+            this.database
+                .update(schema.users)
+                .set({
+                    passwordHash,
+                    passwordChangedAt: now,
+                    failedLoginAttempts: 0,
+                    lockedUntil: null,
+                    updatedAt: now,
+                })
+                .where(eq(schema.users.id, user.id)),
+            this.database
+                .update(schema.passwordResetTokens)
+                .set({ used: true })
+                .where(eq(schema.passwordResetTokens.id, row.id)),
+        ]);
+        await this.sessionService.revokeAllUserSessions(user.id);
+
+        await this.logAuthAttempt(user.email, 'reset_password', true, request);
+        logger.info('Password reset', { userId: user.id });
     }
 
     async getOauthProvider(provider: OAuthProvider, request: Request): Promise<BaseOAuthProvider> {

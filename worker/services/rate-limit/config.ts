@@ -58,6 +58,7 @@ export enum RateLimitType {
 	TEMPLATE_SUBMISSION = 'templateSubmission',
 	PAGE_COPY_DRAFT = 'pageCopyDraft',
 	AUTH_EMAIL = 'authEmail',
+	AUTH_EMAIL_RECIPIENT = 'authEmailRecipient',
 }
 
 export interface RateLimitSettings {
@@ -70,6 +71,7 @@ export interface RateLimitSettings {
 	[RateLimitType.TEMPLATE_SUBMISSION]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.PAGE_COPY_DRAFT]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.AUTH_EMAIL]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.AUTH_EMAIL_RECIPIENT]: DORateLimitConfig | KVRateLimitConfig;
 }
 
 export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
@@ -142,6 +144,13 @@ export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
 		enabled: true,
 		store: RateLimitStore.DURABLE_OBJECT,
 		limit: 5,
+		period: 60 * 60,
+	},
+	// Per-address cap on reset emails, so one inbox can't be flooded from many clients.
+	authEmailRecipient: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 3,
 		period: 60 * 60,
 	},
 };
