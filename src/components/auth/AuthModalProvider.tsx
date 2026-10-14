@@ -33,16 +33,31 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
   const [modalContext, setModalContext] = useState<string | undefined>();
   const [pendingAction, setPendingAction] = useState<(() => void) | undefined>();
   const [intendedUrl, setIntendedUrlState] = useState<string | undefined>();
-  const { login, loginWithEmail, register, error, clearError, isAuthenticated } = useAuth();
+  const {
+    login,
+    loginWithEmail,
+    register,
+    error,
+    clearError,
+    isAuthenticated,
+    setIntendedUrl,
+    clearIntendedUrl,
+  } = useAuth();
 
   const showAuthModal = useCallback((context?: string, onSuccess?: () => void, intendedUrl?: string) => {
     setModalContext(context);
     setPendingAction(onSuccess ? () => onSuccess : undefined);
     setIntendedUrlState(intendedUrl);
+    // Email sign-in and sign-up navigate to the stored URL once the session is set.
+    if (intendedUrl) {
+      setIntendedUrl(intendedUrl);
+    } else {
+      clearIntendedUrl();
+    }
     setIsAuthModalOpen(true);
-  }, []);
+  }, [setIntendedUrl, clearIntendedUrl]);
 
-  const hideAuthModal = useCallback(() => {
+  const closeAuthModal = useCallback(() => {
     setIsAuthModalOpen(false);
     setModalContext(undefined);
     setPendingAction(undefined);
@@ -50,10 +65,16 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
     clearError();
   }, [clearError]);
 
+  // Dismissed without signing in, so the visitor isn't sent there on a later sign-in.
+  const hideAuthModal = useCallback(() => {
+    closeAuthModal();
+    clearIntendedUrl();
+  }, [closeAuthModal, clearIntendedUrl]);
+
   // Close modal and execute pending action when user becomes authenticated
   useEffect(() => {
     if (isAuthenticated && isAuthModalOpen) {
-      hideAuthModal();
+      closeAuthModal();
       // Execute the pending action after a brief delay to ensure modal is closed
       if (pendingAction) {
         setTimeout(() => {
@@ -61,7 +82,7 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
         }, 100);
       }
     }
-  }, [isAuthenticated, pendingAction, isAuthModalOpen, hideAuthModal]);
+  }, [isAuthenticated, pendingAction, isAuthModalOpen, closeAuthModal]);
 
   const handleLogin = useCallback((provider: 'google' | 'github' | 'cloudflare', redirectUrl?: string) => {
     // Use the intended URL if available, otherwise use the provided redirect URL

@@ -279,7 +279,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const navigateAfterAuth = useCallback(() => {
 		const intendedUrl = getIntendedUrl();
 		clearIntendedUrl();
-		navigate(intendedUrl || '/');
+		// Commit the destination before the new session re-renders the page being
+		// left, so the landing page doesn't flash the builder home on the way out.
+		navigate(intendedUrl || '/', { flushSync: true });
 	}, [clearIntendedUrl, getIntendedUrl, navigate]);
 
 	// OAuth login method with redirect support
