@@ -501,27 +501,6 @@ export function LoginModal({
 							</button>
 						</div>
 					)}
-
-					<p className="text-center text-xs text-kumo-subtle">
-						By continuing, you agree to our{' '}
-						<a
-							href="https://www.cloudflare.com/website-terms/"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="underline hover:text-kumo-default"
-						>
-							Terms of Service
-						</a>{' '}
-						and{' '}
-						<a
-							href="https://www.cloudflare.com/privacypolicy/"
-							target="_blank"
-							rel="noopener noreferrer"
-							className="underline hover:text-kumo-default"
-						>
-							Privacy Policy
-						</a>
-					</p>
 				</div>
 			</Dialog>
 		</Dialog.Root>
