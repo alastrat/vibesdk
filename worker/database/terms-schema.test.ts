@@ -28,4 +28,10 @@ describe('terms agreement on users', () => {
 		expect(mapUserResponse({ ...base, termsVersion: null }).termsAccepted).toBe(false);
 		expect('termsAccepted' in mapUserResponse(base)).toBe(false);
 	});
+
+	it('keeps termsAccepted when an already-mapped session user is mapped again for the profile', () => {
+		const sessionUser = { id: 'u1', email: 'a@example.test' };
+		expect(mapUserResponse({ ...sessionUser, termsAccepted: false }).termsAccepted).toBe(false);
+		expect(mapUserResponse({ ...sessionUser, termsAccepted: true }).termsAccepted).toBe(true);
+	});
 });

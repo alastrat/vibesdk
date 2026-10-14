@@ -288,7 +288,11 @@ export function mapUserResponse(
 		provider: user.provider || undefined,
 		emailVerified: user.emailVerified || undefined,
 		createdAt: user.createdAt || undefined,
-		...('termsVersion' in user ? { termsAccepted: user.termsVersion === TERMS_VERSION } : {}),
+		...('termsVersion' in user
+			? { termsAccepted: user.termsVersion === TERMS_VERSION }
+			: 'termsAccepted' in user && typeof user.termsAccepted === 'boolean'
+				? { termsAccepted: user.termsAccepted }
+				: {}),
 	};
 }
 
