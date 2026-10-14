@@ -5,14 +5,47 @@
  */
 
 import type { StructuredLogger } from '../../logger';
-import { detectBlankScreenshot } from '../../utils/images';
+import { base64ToUint8Array } from '../../utils/encoding';
 
 export const SHOWCASE_SCREENSHOT_FILENAME = 'showcase.jpg';
 /** Stores per admin refresh, and captures running at once, so a batch fits in one request. */
 export const SHOWCASE_REFRESH_BATCH = 10;
 export const SHOWCASE_REFRESH_CONCURRENCY = 3;
-/** A real 1280x1650 page compresses to far more than this; a blank one doesn't. */
+/** A 1280x1650 JPEG under this size is a blank page: Chrome encodes a uniform one in about 13 KB, real stores take 60 KB and up. */
 const SHOWCASE_MIN_BYTES = 15_000;
+/** Bits per byte of a JPEG's compressed scan: blank and flat pages measure 0 to 0.7, a bare error page 3.4, real stores 7.5 to 7.9. */
+const SHOWCASE_MIN_SCAN_ENTROPY = 5;
+
+/** Bits per byte of a JPEG's entropy-coded scan (after the start-of-scan header); the whole input when there is no scan marker. */
+export function jpegScanEntropy(bytes: Uint8Array): number {
+	let scan = bytes;
+	for (let i = 0; i + 3 < bytes.length; i += 1) {
+		if (bytes[i] === 0xff && bytes[i + 1] === 0xda) {
+			const headerLength = (bytes[i + 2] << 8) | bytes[i + 3];
+			scan = bytes.subarray(i + 2 + headerLength, Math.max(i + 2 + headerLength, bytes.length - 2));
+			break;
+		}
+	}
+	if (scan.length === 0) return 0;
+	const counts = new Array<number>(256).fill(0);
+	for (const byte of scan) counts[byte] += 1;
+	let entropy = 0;
+	for (const count of counts) {
+		if (count === 0) continue;
+		const p = count / scan.length;
+		entropy -= p * Math.log2(p);
+	}
+	return entropy;
+}
+
+/** A capture too small or too uniform to be a real page. */
+export function looksBlank(base64Jpeg: string, minBytes = SHOWCASE_MIN_BYTES): { isBlank: boolean; reason: string } {
+	const bytes = base64ToUint8Array(base64Jpeg);
+	if (bytes.length < minBytes) return { isBlank: true, reason: `only ${bytes.length} bytes` };
+	const entropy = jpegScanEntropy(bytes);
+	if (entropy < SHOWCASE_MIN_SCAN_ENTROPY) return { isBlank: true, reason: `scan entropy ${entropy.toFixed(2)}` };
+	return { isBlank: false, reason: '' };
+}
 
 export type ShowcaseCaptureResult = 'stored' | 'blank' | 'failed';
 
@@ -34,7 +67,7 @@ export async function captureShowcaseScreenshot(
 ): Promise<ShowcaseCaptureResult> {
 	try {
 		const base64 = await deps.capture(previewUrl);
-		const blank = detectBlankScreenshot(base64, SHOWCASE_MIN_BYTES);
+		const blank = looksBlank(base64);
 		if (blank.isBlank) {
 			deps.logger.warn('Showcase screenshot looked blank; keeping the previous one', { appId, reason: blank.reason });
 			return 'blank';

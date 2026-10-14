@@ -1,17 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
+import { base64ToUint8Array } from '../../utils/encoding';
 import { SHOWCASE_VIEWPORT } from '../browser-capture/capture-core';
 import {
 	captureShowcaseScreenshot,
+	jpegScanEntropy,
+	looksBlank,
 	runShowcaseRefresh,
 	showcaseEligible,
 	type ShowcaseCaptureDeps,
 	type ShowcaseCaptureResult,
 } from './showcase-screenshot';
+import { BLANK_PAGE_JPEG, REAL_PAGE_JPEG } from './test-fixtures';
 
-/** Base64 of random bytes: as large and varied as a real page capture. */
+/**
+ * Base64 of random bytes: as large and varied as a real page capture. 0xFF is
+ * remapped so no JPEG marker can appear in the input; a marker would make the
+ * scan measurement read a random header and fail at random.
+ */
 function pageLikeCapture(bytes: number): string {
 	let binary = '';
-	for (const byte of crypto.getRandomValues(new Uint8Array(bytes))) binary += String.fromCharCode(byte);
+	for (const byte of crypto.getRandomValues(new Uint8Array(bytes))) binary += String.fromCharCode(byte === 0xff ? 0xfe : byte);
 	return btoa(binary);
 }
 
@@ -26,6 +34,20 @@ function fakeDeps(capture: () => Promise<string>, saveResult = true) {
 describe('showcase screenshots', () => {
 	it('captures a tall 1280x1650 page', () => {
 		expect(SHOWCASE_VIEWPORT).toEqual({ width: 1280, height: 1650 });
+	});
+
+	it('measures a blank Chrome capture as flat and a real page as busy', () => {
+		expect(jpegScanEntropy(base64ToUint8Array(BLANK_PAGE_JPEG))).toBeLessThan(1);
+		expect(jpegScanEntropy(base64ToUint8Array(REAL_PAGE_JPEG))).toBeGreaterThan(7);
+	});
+
+	it('treats a flat capture as blank and a real page as a page, whatever their size', () => {
+		expect(looksBlank(BLANK_PAGE_JPEG, 0).isBlank).toBe(true);
+		expect(looksBlank(REAL_PAGE_JPEG, 0).isBlank).toBe(false);
+	});
+
+	it('treats a capture under the size floor as blank', () => {
+		expect(looksBlank(REAL_PAGE_JPEG)).toMatchObject({ isBlank: true });
 	});
 
 	it('stores and records a real capture', async () => {
