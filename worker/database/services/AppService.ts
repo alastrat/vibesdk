@@ -329,6 +329,11 @@ export class AppService extends BaseService {
         });
     }
 
+    /** Records the tall Discover showcase image of a store. */
+    async updateAppShowcaseScreenshot(appId: string, showcaseScreenshotUrl: string): Promise<boolean> {
+        return this.updateApp(appId, { showcaseScreenshotUrl });
+    }
+
     /**
      * Get user apps with favorite status
      * Optimized to fetch favorites separately to avoid subquery memory issues

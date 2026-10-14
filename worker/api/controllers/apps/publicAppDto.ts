@@ -42,6 +42,7 @@ function toPublicAppBase(app: EnhancedAppData): PublicAppBaseData {
         status: app.status,
         isFeatured: app.isFeatured,
         screenshotUrl: app.screenshotUrl,
+        showcaseScreenshotUrl: app.showcaseScreenshotUrl,
         createdAt: app.createdAt,
         updatedAt: app.updatedAt,
         lastDeployedAt: app.lastDeployedAt,

@@ -59,6 +59,7 @@ export type PublicAppListData = Pick<
     | 'status'
     | 'isFeatured'
     | 'screenshotUrl'
+    | 'showcaseScreenshotUrl'
     | 'createdAt'
     | 'updatedAt'
     | 'lastDeployedAt'

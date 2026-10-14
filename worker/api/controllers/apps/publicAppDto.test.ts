@@ -55,6 +55,7 @@ function makeApp(overrides: Partial<EnhancedAppData> = {}): EnhancedAppData {
         parentAppId: 'parent-app-9',
         screenshotUrl: 'https://cdn/shot.png',
         screenshotCapturedAt: new Date('2024-01-01'),
+        showcaseScreenshotUrl: null,
         createdAt: new Date('2024-01-01'),
         updatedAt: new Date('2024-02-01'),
         lastDeployedAt: new Date('2024-02-02'),
@@ -164,5 +165,12 @@ describe('toPublicAppDetail (owner)', () => {
         const json = JSON.stringify(toPublicAppDetail(makeApp(), true));
         expect(json).not.toContain('anon-session-token-abc');
         expect(json).not.toContain('refined secret prompt');
+    });
+});
+
+describe('showcase screenshot in listings', () => {
+    it('lists the tall showcase screenshot next to the desktop one', () => {
+        const item = toPublicAppListItem(makeApp({ showcaseScreenshotUrl: '/api/screenshots/app-1/showcase.jpg' }));
+        expect(item.showcaseScreenshotUrl).toBe('/api/screenshots/app-1/showcase.jpg');
     });
 });

@@ -1,0 +1,1 @@
+ALTER TABLE `apps` ADD `showcase_screenshot_url` text;

@@ -31,6 +31,7 @@ function app(overrides: Partial<EnhancedAppData> = {}): EnhancedAppData {
 		previewVersion: 0,
 		screenshotUrl: null,
 		screenshotCapturedAt: null,
+		showcaseScreenshotUrl: null,
 		createdAt: new Date(0),
 		updatedAt: new Date(0),
 		lastDeployedAt: new Date(0),

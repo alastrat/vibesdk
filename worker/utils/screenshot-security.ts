@@ -28,11 +28,15 @@ export class ScreenshotSecurity {
         return isAbsolute ? parsed.toString() : parsed.pathname + parsed.search;
     }
 
-    async enrichUrls<T extends { id: string; screenshotUrl?: string | null }>(apps: T[]): Promise<T[]> {
+    /** Signs each app's desktop and showcase screenshot URLs. */
+    async enrichUrls<T extends { id: string; screenshotUrl?: string | null; showcaseScreenshotUrl?: string | null }>(apps: T[]): Promise<T[]> {
         return Promise.all(apps.map(async (app) => {
-            if (!app.screenshotUrl) return app;
-            const signed = await this.signUrl(app.screenshotUrl, app.id);
-            return signed === app.screenshotUrl ? app : { ...app, screenshotUrl: signed };
+            const screenshotUrl = app.screenshotUrl ? await this.signUrl(app.screenshotUrl, app.id) : app.screenshotUrl;
+            const showcaseScreenshotUrl = app.showcaseScreenshotUrl
+                ? await this.signUrl(app.showcaseScreenshotUrl, app.id)
+                : app.showcaseScreenshotUrl;
+            if (screenshotUrl === app.screenshotUrl && showcaseScreenshotUrl === app.showcaseScreenshotUrl) return app;
+            return { ...app, screenshotUrl, showcaseScreenshotUrl };
         }));
     }
 
