@@ -533,8 +533,11 @@ export class AuthService extends BaseService {
             updatedAt: claimedAt,
         };
         if (user.emailVerified === true) {
-            await this.database.update(schema.users).set(passwordChange).where(eq(schema.users.id, user.id));
-            await this.sessionService.revokeAllUserSessions(user.id);
+            // One batch, so the new password never lands without every session signed out.
+            await this.database.batch([
+                this.database.update(schema.users).set(passwordChange).where(eq(schema.users.id, user.id)),
+                revokeAllUserSessionsQuery(this.database, user.id),
+            ]);
         } else {
             // The reset proves inbox control, so it settles an unconfirmed account the way a provider claim does.
             await this.database.batch([

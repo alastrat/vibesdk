@@ -237,15 +237,26 @@ describe('AuthService.resetPassword', () => {
 	});
 
 	it('leaves a confirmed account its linked sign-in methods, API keys, payouts and model routing', async () => {
-		const { auth, statements, batches } = serviceWith({ password_reset_tokens: validTokenRow(), users: USER });
+		const { auth, statements } = serviceWith({ password_reset_tokens: validTokenRow(), users: USER });
 		await auth.resetPassword('some-token', STRONG_PASSWORD, REQUEST);
 
-		expect(batches).toEqual([]);
 		expectNoTakeoverCleanup(statements);
 		const changes = assignedValues(lastWrite(statements, 'update', 'users'));
 		expect(changes).not.toHaveProperty('email_verified');
 		expect(changes).not.toHaveProperty('ai_gateway_enabled');
 		expect(sessionRevokes(statements)).toHaveLength(1);
+	});
+
+	it('changes a confirmed account password and signs its sessions out in one batch', async () => {
+		const { auth, statements, batches } = serviceWith({ password_reset_tokens: validTokenRow(), users: USER });
+		await auth.resetPassword('some-token', STRONG_PASSWORD, REQUEST);
+
+		expect(batches).toHaveLength(1);
+		const account = lastWrite(statements, 'update', 'users');
+		const [revoke] = sessionRevokes(statements);
+		expect(batches[0]).toEqual([account, revoke]);
+		expect(account.params.at(-1)).toBe(USER.id);
+		expect(revoke.params.at(-1)).toBe(USER.id);
 	});
 
 	it.each([
