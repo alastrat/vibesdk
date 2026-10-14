@@ -4,7 +4,7 @@
  */
 
 import * as schema from '../schema';
-import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
+import { eq, and, sql, or, lt, gt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
 import { SessionService } from './SessionService';
@@ -458,22 +458,34 @@ export class AuthService extends BaseService {
         }
 
         const passwordHash = await this.passwordService.hash(newPassword);
-        await this.database.batch([
-            this.database
-                .update(schema.users)
-                .set({
-                    passwordHash,
-                    passwordChangedAt: now,
-                    failedLoginAttempts: 0,
-                    lockedUntil: null,
-                    updatedAt: now,
-                })
-                .where(eq(schema.users.id, user.id)),
-            this.database
-                .update(schema.passwordResetTokens)
-                .set({ used: true })
-                .where(eq(schema.passwordResetTokens.id, row.id)),
-        ]);
+
+        // The claim is one conditional statement, so concurrent requests with the same token can't both win.
+        const claimedAt = new Date();
+        const claimed = await this.database
+            .update(schema.passwordResetTokens)
+            .set({ used: true })
+            .where(
+                and(
+                    eq(schema.passwordResetTokens.id, row.id),
+                    or(eq(schema.passwordResetTokens.used, false), isNull(schema.passwordResetTokens.used)),
+                    gt(schema.passwordResetTokens.expiresAt, claimedAt)
+                )
+            )
+            .returning({ id: schema.passwordResetTokens.id });
+        if (claimed.length === 0) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, RESET_LINK_INVALID_MESSAGE, 400);
+        }
+
+        await this.database
+            .update(schema.users)
+            .set({
+                passwordHash,
+                passwordChangedAt: claimedAt,
+                failedLoginAttempts: 0,
+                lockedUntil: null,
+                updatedAt: claimedAt,
+            })
+            .where(eq(schema.users.id, user.id));
         await this.sessionService.revokeAllUserSessions(user.id);
 
         await this.logAuthAttempt(user.email, 'reset_password', true, request);

@@ -54,8 +54,21 @@ function recordingSender(): { sender: EmailSender; sent: OutgoingEmail[] } {
 	};
 }
 
-function serviceWith(tables: Record<string, Row | undefined>): { auth: AuthService; statements: Statement[] } {
-	const { d1, statements } = recordingD1(rowsByTable(tables));
+/** `claim: false` makes the atomic token claim (`update ... returning`) match no row, as when another request used the token first. */
+function serviceWith(
+	tables: Record<string, Row | undefined>,
+	options: { claim?: boolean } = {},
+): { auth: AuthService; statements: Statement[] } {
+	const { claim = true } = options;
+	const selects = rowsByTable(tables);
+	const rows = (sql: string): unknown[][] => {
+		const lower = sql.toLowerCase();
+		if (lower.startsWith('update "password_reset_tokens"') && lower.includes(' returning ')) {
+			return claim ? [['token-1']] : [];
+		}
+		return selects(sql);
+	};
+	const { d1, statements } = recordingD1(rows);
 	return { auth: new AuthService({ DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters' } as unknown as Env), statements };
 }
 
@@ -218,6 +231,41 @@ describe('AuthService.resetPassword', () => {
 		const sessionUpdate = lastWrite(statements, 'update', 'sessions');
 		expect(sessionUpdate.params).toContain(USER.id);
 		expect(sessionUpdate.params).toContain('user_force_logout');
+	});
+
+	it('claims the token in one statement that requires it unused and unexpired, before changing the password', async () => {
+		const { auth, statements } = serviceWith({ password_reset_tokens: validTokenRow(), users: USER });
+		const before = Math.floor(Date.now() / 1000);
+		await auth.resetPassword('some-token', STRONG_PASSWORD, REQUEST);
+
+		const claimIndex = statements.findIndex(
+			(entry) => entry.sql.toLowerCase().startsWith('update "password_reset_tokens"') && entry.sql.toLowerCase().includes(' returning '),
+		);
+		expect(claimIndex).toBeGreaterThan(-1);
+		const claim = statements[claimIndex];
+		const condition = claim.sql.toLowerCase().slice(claim.sql.toLowerCase().indexOf(' where '));
+		expect(condition).toContain('"id" = ?');
+		expect(condition).toContain('"used" = ?');
+		expect(condition).toContain('"used" is null');
+		expect(condition).toContain('"expires_at" > ?');
+		expect(claim.params).toContain('token-1');
+		const expiryBound = claim.params.find((param): param is number => typeof param === 'number' && param > 1_000_000_000);
+		expect(expiryBound).toBeGreaterThanOrEqual(before);
+
+		const userUpdateIndex = statements.findIndex((entry) => entry.sql.toLowerCase().startsWith('update "users"'));
+		expect(userUpdateIndex).toBeGreaterThan(claimIndex);
+		expect(writes(statements, 'update', 'password_reset_tokens')).toHaveLength(1);
+	});
+
+	it('changes nothing when another request claimed the token first', async () => {
+		const { auth, statements } = serviceWith({ password_reset_tokens: validTokenRow(), users: USER }, { claim: false });
+		const error = await rejection(auth.resetPassword('some-token', STRONG_PASSWORD, REQUEST));
+		expect(error).toBeInstanceOf(SecurityError);
+		expect((error as SecurityError).message).toBe(RESET_LINK_INVALID_MESSAGE);
+		expect((error as SecurityError).statusCode).toBe(400);
+		expect(writes(statements, 'update', 'users')).toEqual([]);
+		expect(writes(statements, 'update', 'sessions')).toEqual([]);
+		expect(writes(statements, 'insert', 'auth_attempts')).toEqual([]);
 	});
 
 	it('records the reset as an auth attempt from the requesting address', async () => {
