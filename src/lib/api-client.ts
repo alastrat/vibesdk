@@ -79,6 +79,7 @@ import type{
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
 	SiteCheckoutData,
+	PublicPlanLimits,
 	SitePageData,
 	SitePublishingData,
 	StripeConnectStatusData,
@@ -579,6 +580,11 @@ class ApiClient {
 	/** Publishing settings for one of the owner's apps; quiet because non-owners get 403. */
 	async getSitePublishing(appId: string): Promise<ApiResponse<SitePublishingData>> {
 		return this.request<SitePublishingData>(`/api/apps/${appId}/publishing`, {}, true);
+	}
+
+	/** The free plan's daily limits; quiet because pricing hides the line on failure. */
+	async getPublicPlan(): Promise<ApiResponse<PublicPlanLimits>> {
+		return this.request<PublicPlanLimits>('/api/limits/plan', {}, true);
 	}
 
 	/** A Discover site's product page; quiet because the page shows its own unavailable state. */

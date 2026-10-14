@@ -416,3 +416,4 @@ export type {
     SitePageData,
     SitePageOffer,
 } from 'worker/api/controllers/sitePage/types';
+export type { PublicPlanLimits } from '../shared/types/plan.js';

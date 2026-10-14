@@ -9,9 +9,26 @@ import { checkUsageAndBalance, isCloudflareGatewayLimitsEnabled } from '../../..
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { UserService } from '../../../database/services/UserService';
 import { createLogger } from '../../../logger';
+import { RateLimitService } from '../../../services/rate-limit/rateLimits';
+import { publicPlanFromSettings } from '../../../services/rate-limit/public-plan';
+import { RateLimitExceededError } from 'shared/types/errors';
 
 export class LimitsController extends BaseController {
 	static logger = createLogger('LimitsController');
+
+	/**
+	 * GET /api/limits/plan
+	 * The free plan's daily limits for the public pricing page.
+	 */
+	static async getPublicPlan(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<Response> {
+		try {
+			await RateLimitService.enforcePublicAppsRateLimit(env, context.config.security.rateLimit, null, request);
+		} catch (error) {
+			if (error instanceof RateLimitExceededError) return LimitsController.createErrorResponse('Too many requests', 429);
+			throw error;
+		}
+		return LimitsController.createSuccessResponse(publicPlanFromSettings(context.config.security.rateLimit));
+	}
 
 	/**
 	 * GET /api/limits/usage
