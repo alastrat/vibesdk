@@ -1,9 +1,13 @@
 import { pageTitle } from '@/brand';
+import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
+import { CreatorsPanel } from './CreatorsPanel';
+import { Features } from './Features';
 import { Hero } from './Hero';
+import { LivePreview } from './LivePreview';
 import { StoreLogos } from './StoreLogos';
 import { StoreShowcase } from './StoreShowcase';
-import { ClosingCta, ForCreators, ForStoreOwners, LandingFaq, PricingSummary } from './sections';
+import { ClosingPanel, PricingSummary } from './sections';
 
 export function LandingPage() {
 	const stores = useShowcaseStores().data ?? [];
@@ -14,11 +18,12 @@ export function LandingPage() {
 			<Hero />
 			<StoreLogos stores={stores} />
 			<StoreShowcase stores={stores} />
-			<ForCreators />
-			<ForStoreOwners />
+			<Features />
+			<CreatorsPanel />
+			<LivePreview />
 			<PricingSummary />
-			<LandingFaq />
-			<ClosingCta />
+			<PublicFaq />
+			<ClosingPanel />
 		</>
 	);
 }

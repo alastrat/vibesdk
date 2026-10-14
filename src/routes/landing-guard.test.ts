@@ -72,6 +72,37 @@ describe('landing page', () => {
 		expect(showcase).toContain('id="discover"');
 	});
 
+	it('lays the page out in the approved order', () => {
+		const page = source('/src/routes/landing/LandingPage.tsx');
+		const order = ['<Hero />', '<StoreLogos', '<StoreShowcase', '<Features />', '<CreatorsPanel />', '<LivePreview />', '<PricingSummary />', '<PublicFaq />', '<ClosingPanel />'];
+		const positions = order.map((tag) => page.indexOf(tag));
+		expect(positions.every((position) => position > -1)).toBe(true);
+		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+	});
+
+	it('states what a seller keeps from the fee code, with the creators anchor the top bar links to', () => {
+		const creators = source('/src/routes/landing/CreatorsPanel.tsx');
+		expect(creators).toContain('sellerKeepsCents(EXAMPLE_SALE_CENTS)');
+		expect(creators).toContain('<AnimatedBeam');
+		expect(creators).toContain('id="creators"');
+		expect(creators).not.toContain('26.37');
+	});
+
+	it('uses the 1Password layout: charcoal features, a blue creators panel and a charcoal closing panel', () => {
+		expect(source('/src/routes/landing/Features.tsx')).toContain('bg-public-charcoal');
+		expect(source('/src/routes/landing/CreatorsPanel.tsx')).toContain('bg-public-blue');
+		const sections = source('/src/routes/landing/sections.tsx');
+		expect(sections.slice(sections.indexOf('export function ClosingPanel'))).toContain('bg-public-charcoal');
+	});
+
+	it('shows the live preview on bundled desktop and phone images', () => {
+		const preview = source('/src/routes/landing/LivePreview.tsx');
+		expect(preview).toContain("'/marketing/preview-desktop.jpg'");
+		expect(preview).toContain("'/marketing/preview-phone.jpg'");
+		expect(preview).toContain('<Safari');
+		expect(preview).toContain('<Iphone');
+	});
+
 	it('keeps a card readable when its image fails to load', () => {
 		expect(source('/src/routes/landing/StoreShowcase.tsx')).toContain('onError={() => setImageFailed(true)}');
 	});
