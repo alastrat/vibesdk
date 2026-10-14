@@ -60,6 +60,9 @@
 	"browser": {
 		"binding": "BROWSER"
 	},
+	"send_email": [
+		{ "name": "EMAIL", "remote": true }
+	],
 	"artifacts": [
 		{
 			"binding": "ARTIFACTS",

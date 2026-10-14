@@ -12,6 +12,7 @@ interface WranglerConfig {
 	kv_namespaces?: Binding[];
 	r2_buckets?: Binding[];
 	artifacts?: Binding[];
+	send_email?: Binding[];
 	containers?: unknown[];
 	dispatch_namespaces?: unknown[];
 	durable_objects?: { bindings: Binding[] };
@@ -43,6 +44,10 @@ describe('wrangler.estori.jsonc', () => {
 		expect(estori.r2_buckets).toEqual([{ binding: 'TEMPLATES_BUCKET', bucket_name: 'estori-assets' }]);
 		expect(estori.artifacts).toEqual([{ binding: 'ARTIFACTS', namespace: 'estori-production' }]);
 		expect(estoriRaw).not.toContain('__ESTORI_');
+	});
+
+	it('binds the Cloudflare Email Service sender the account emails use', () => {
+		expect(estori.send_email).toEqual([{ name: 'EMAIL', remote: true }]);
 	});
 
 	it('routes the app host and the preview host', () => {
