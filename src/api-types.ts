@@ -267,6 +267,15 @@ export {
 	formatTemplatePrice,
 	platformFeeCents,
 } from '../shared/types/templates.js';
+export {
+	LEGAL_CONTACT,
+	LEGAL_ENTITY,
+	TERMS_OUTDATED_MESSAGE,
+	TERMS_REQUIRED_MESSAGE,
+	TERMS_VERSION,
+	isCurrentTermsVersion,
+	legalAddressLine,
+} from '../shared/types/legal.js';
 export type {
 	PageCopyValidation,
 	SitePageCopy,
