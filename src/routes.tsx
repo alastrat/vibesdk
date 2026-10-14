@@ -14,6 +14,7 @@ import { ProtectedRoute } from './routes/protected-route';
 import { AppLayout } from './components/layout/app-layout';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
+import PricingPage from './routes/pricing';
 
 const AppShell = () => <AppLayout />;
 const PublicShell = () => <PublicLayout />;
@@ -99,6 +100,10 @@ const routes = [
 			{
 				Component: PublicShell,
 				children: [
+					{
+						path: 'pricing',
+						Component: PricingPage,
+					},
 					{
 						path: 'terms',
 						Component: TermsPage,
