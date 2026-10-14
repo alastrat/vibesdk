@@ -5,6 +5,7 @@
 
 import { z } from 'zod';
 import { commonSchemas } from '../../../utils/inputValidator';
+import { RESET_LINK_INVALID_MESSAGE } from '../../../services/auth/one-time-token';
 
 /**
  * Login request schema
@@ -72,7 +73,7 @@ export type ForgotPasswordRequest = z.infer<typeof forgotPasswordSchema>;
  * Reset password schema
  */
 export const resetPasswordSchema = z.object({
-  token: z.string().min(1, 'Reset token is required'),
+  token: z.string().min(1, 'Reset token is required').max(200, RESET_LINK_INVALID_MESSAGE),
   newPassword: commonSchemas.password,
   confirmPassword: z.string()
 }).refine(data => data.newPassword === data.confirmPassword, {
@@ -81,6 +82,13 @@ export const resetPasswordSchema = z.object({
 });
 
 export type ResetPasswordRequest = z.infer<typeof resetPasswordSchema>;
+
+/**
+ * Email confirmation schema
+ */
+export const verifyEmailSchema = z.object({ token: z.string().min(1).max(200) });
+
+export type VerifyEmailRequest = z.infer<typeof verifyEmailSchema>;
 
 /**
  * OAuth provider schema

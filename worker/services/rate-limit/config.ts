@@ -57,6 +57,9 @@ export enum RateLimitType {
 	SPACE_PREVIEW = 'spacePreview',
 	TEMPLATE_SUBMISSION = 'templateSubmission',
 	PAGE_COPY_DRAFT = 'pageCopyDraft',
+	AUTH_EMAIL = 'authEmail',
+	AUTH_EMAIL_RECIPIENT = 'authEmailRecipient',
+	EMAIL_CONFIRMATION_RESEND = 'emailConfirmationResend',
 }
 
 export interface RateLimitSettings {
@@ -68,6 +71,9 @@ export interface RateLimitSettings {
 	[RateLimitType.SPACE_PREVIEW]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.TEMPLATE_SUBMISSION]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.PAGE_COPY_DRAFT]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.AUTH_EMAIL]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.AUTH_EMAIL_RECIPIENT]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.EMAIL_CONFIRMATION_RESEND]: DORateLimitConfig | KVRateLimitConfig;
 }
 
 export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
@@ -132,6 +138,28 @@ export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
 		enabled: true,
 		store: RateLimitStore.DURABLE_OBJECT,
 		limit: 10,
+		period: 60 * 60,
+	},
+	// Per-client (or per-user) cap on account emails: reset links and
+	// confirmation emails. Each one reaches a third party's inbox.
+	authEmail: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 5,
+		period: 60 * 60,
+	},
+	// Per-address cap on reset emails, so one inbox can't be flooded from many clients.
+	authEmailRecipient: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 3,
+		period: 60 * 60,
+	},
+	// Per-user cap on confirmation emails a signed-in user asks to have resent.
+	emailConfirmationResend: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 3,
 		period: 60 * 60,
 	},
 };

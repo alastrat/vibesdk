@@ -12,8 +12,24 @@ import { generateId } from '../../utils/idGenerator';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
+import type { DrizzleD1Database } from 'drizzle-orm/d1';
 
 const logger = createLogger('SessionService');
+
+/**
+ * The statement that signs a user out of every session. A builder, so another service
+ * can run it inside its own batch on its own connection.
+ */
+export function revokeAllUserSessionsQuery(db: DrizzleD1Database<typeof schema>, userId: string) {
+    return db
+        .update(schema.sessions)
+        .set({
+            isRevoked: true,
+            revokedAt: new Date(),
+            revokedReason: 'user_force_logout'
+        })
+        .where(eq(schema.sessions.userId, userId));
+}
 
 /**
  * Session configuration
@@ -191,14 +207,7 @@ export class SessionService extends BaseService {
      */
     async revokeAllUserSessions(userId: string): Promise<void> {
         try {
-            await this.db.db
-                .update(schema.sessions)
-                .set({
-                    isRevoked: true,
-                    revokedAt: new Date(),
-                    revokedReason: 'user_force_logout'
-                })
-                .where(eq(schema.sessions.userId, userId));
+            await revokeAllUserSessionsQuery(this.db.db, userId);
             
             logger.info('All user sessions revoked', { userId });
         } catch (error) {

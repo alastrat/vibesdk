@@ -2,6 +2,7 @@ import { RateLimitType, RateLimitStore, RateLimitSettings, DORateLimitConfig, KV
 import { createObjectLogger } from '../../logger';
 import { AuthUser } from '../../types/auth-types';
 import { extractRequestMetadata } from '../../utils/authUtils';
+import { sha256Hash } from '../../utils/cryptoUtils';
 import { captureSecurityEvent } from '../../observability/sentry';
 import { KVRateLimitStore } from './KVRateLimitStore';
 import { RateLimitResult } from './DORateLimitStore';
@@ -375,6 +376,89 @@ export class RateLimitService {
 			throw new RateLimitExceededError(
 				`Page drafting limit reached. Maximum ${limitConfig.limit} drafts per hour`,
 				RateLimitType.PAGE_COPY_DRAFT,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
+	 * Per-client (or per-user, when signed in) cap on account emails: reset
+	 * links and confirmation emails. Throws RateLimitExceededError when the
+	 * limit is exceeded.
+	 */
+	static async enforceAuthEmailRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		request: Request,
+		user: AuthUser | null,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.AUTH_EMAIL];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const identifier = await this.getUniversalIdentifier(user, request);
+		const key = this.buildRateLimitKey(RateLimitType.AUTH_EMAIL, identifier);
+		const result = await this.enforce(env, key, config, RateLimitType.AUTH_EMAIL);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Account email limit reached. Maximum ${limitConfig.limit} emails per hour`,
+				RateLimitType.AUTH_EMAIL,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
+	 * Per-address cap on reset emails, so one inbox can't be flooded from many
+	 * clients. Keyed by a hash of the address, so the address itself is never
+	 * stored. Throws RateLimitExceededError when the limit is exceeded.
+	 */
+	static async enforceAuthEmailRecipientRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		email: string,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.AUTH_EMAIL_RECIPIENT];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const identifier = `email:${await sha256Hash(email.trim().toLowerCase())}`;
+		const key = this.buildRateLimitKey(RateLimitType.AUTH_EMAIL_RECIPIENT, identifier);
+		const result = await this.enforce(env, key, config, RateLimitType.AUTH_EMAIL_RECIPIENT);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Account email limit reached for this address. Maximum ${limitConfig.limit} emails per hour`,
+				RateLimitType.AUTH_EMAIL_RECIPIENT,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
+	 * Per-user cap on resent confirmation emails, kept apart from the shared
+	 * account email budget. Throws RateLimitExceededError when the limit is exceeded.
+	 */
+	static async enforceEmailConfirmationResendRateLimit(
+		env: Env,
+		config: RateLimitSettings,
+		userId: string,
+	): Promise<void> {
+		const limitConfig = config[RateLimitType.EMAIL_CONFIRMATION_RESEND];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const key = this.buildRateLimitKey(RateLimitType.EMAIL_CONFIRMATION_RESEND, `user:${userId}`);
+		const result = await this.enforce(env, key, config, RateLimitType.EMAIL_CONFIRMATION_RESEND);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Confirmation email limit reached. Maximum ${limitConfig.limit} emails per hour`,
+				RateLimitType.EMAIL_CONFIRMATION_RESEND,
 				limitConfig.limit,
 				limitConfig.period,
 				['Please try again in an hour.'],

@@ -39,7 +39,7 @@ We share personal data only as described here.
 
 **Service providers** that process it for us under contract:
 
-- **Cloudflare**: hosting, databases, file storage, AI request routing, browser rendering for site screenshots and for pages you ask the AI to look at, and operational logs.
+- **Cloudflare**: hosting, databases, file storage, AI request routing, browser rendering for site screenshots and for pages you ask the AI to look at, sending account emails such as password resets and email confirmations, and operational logs.
 - **AI model providers** (currently Anthropic and Google): your prompts, messages, images and site files are sent to the model you choose, or to a fallback model when the chosen one is unavailable, to generate and edit your site.
 - **Stripe**: payments, seller onboarding and payouts. Stripe receives buyers' and sellers' email addresses and the payment and payout details they give Stripe directly.
 - **GitHub**: only if you choose to export a site to GitHub.

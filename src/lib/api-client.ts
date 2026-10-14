@@ -1372,6 +1372,48 @@ class ApiClient {
 		});
 	}
 
+	// The account email calls show their errors in place, so they skip the error toast.
+
+	/** Email a password reset link. The answer is the same whether or not the account exists. */
+	async forgotPassword(email: string): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>(
+			'/api/auth/forgot-password',
+			{ method: 'POST', body: { email } },
+			true,
+		);
+	}
+
+	/** Set a new password with the token from a reset link. */
+	async resetPassword(
+		token: string,
+		newPassword: string,
+		confirmPassword: string,
+	): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>(
+			'/api/auth/reset-password',
+			{ method: 'POST', body: { token, newPassword, confirmPassword } },
+			true,
+		);
+	}
+
+	/** Confirm an email address with the token from a confirmation link. */
+	async verifyEmail(token: string): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>(
+			'/api/auth/verify-email',
+			{ method: 'POST', body: { token } },
+			true,
+		);
+	}
+
+	/** Email the signed-in user a new confirmation link. */
+	async resendVerification(): Promise<ApiResponse<{ message: string }>> {
+		return this.request<{ message: string }>(
+			'/api/auth/resend-verification',
+			{ method: 'POST' },
+			true,
+		);
+	}
+
 	/**
 	 * Get CSRF token
 	 */

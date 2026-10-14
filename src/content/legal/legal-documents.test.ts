@@ -28,6 +28,12 @@ describe('legal documents', () => {
 		expect(LEGAL_DOCUMENTS.copyright.body).toContain(LEGAL_CONTACT.copyright);
 	});
 
+	it('lists account emails among what Cloudflare sends for us', () => {
+		expect(LEGAL_DOCUMENTS.privacy.body).toContain(
+			'sending account emails such as password resets and email confirmations',
+		);
+	});
+
 	it('names Texas law and Harris County courts, and the Stripe agreement for sellers', () => {
 		expect(LEGAL_DOCUMENTS.terms.body).toContain('laws of the State of Texas');
 		expect(LEGAL_DOCUMENTS.terms.body).toContain('Harris County, Texas');

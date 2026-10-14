@@ -15,8 +15,9 @@ import {
 	Check,
 	Eye,
 	EyeOff,
+	Mail,
 } from 'lucide-react';
-import type { ActiveSessionsData, ApiKeysData } from '@/api-types';
+import { LEGAL_CONTACT, type ActiveSessionsData, type ApiKeysData } from '@/api-types';
 import {
 	Button,
 	DeleteResource,
@@ -28,6 +29,7 @@ import {
 	DialogTrigger,
 	LayerCard,
 	Input,
+	LinkButton,
 	Table,
 } from '@cloudflare/kumo';
 import { Separator } from '@/components/ui/separator';
@@ -41,6 +43,11 @@ import { CloudflareAccountSelector } from '@/components/cloudflare-account-selec
 import { ConnectedAccounts } from '@/components/connected-accounts';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
+
+const SUCCESS_BADGE_CLASS = 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
+const WARNING_BADGE_CLASS = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200';
+
+const DELETION_REQUEST_HREF = `mailto:${LEGAL_CONTACT.privacy}?subject=${encodeURIComponent('Delete my Estori account')}`;
 
 type CreatedApiKey = {
 	key: string;
@@ -85,7 +92,7 @@ async function fetchApiKeys(): Promise<ApiKeysData> {
 }
 
 export default function SettingsPage() {
-	const { user } = useAuth();
+	const { user, authProviders } = useAuth();
 	const queryClient = useQueryClient();
 	const [searchParams, setSearchParams] = useSearchParams();
 
@@ -139,9 +146,33 @@ export default function SettingsPage() {
 	const activeSessions = activeSessionsQuery.data?.sessions ?? [];
 	const apiKeys = apiKeysQuery.data?.keys ?? [];
 
-	const handleDeleteAccount = async () => {
-		toast.error('Account deletion is not yet implemented');
-	};
+	// Without email sending, an unconfirmed address can't be confirmed, so its status stays hidden.
+	const emailSending = !!authProviders?.emailSending;
+	const emailConfirmed = !!user?.emailVerified;
+	const canResendConfirmation =
+		emailSending && !emailConfirmed && user?.provider === 'email';
+
+	const resendConfirmationMutation = useMutation({
+		mutationFn: async () => {
+			const response = await apiClient.resendVerification();
+			if (!response.success || !response.data) {
+				throw new Error(
+					response.error?.message || "Couldn't send the confirmation email",
+				);
+			}
+			return response.data.message;
+		},
+		onSuccess: (message) => {
+			toast.success(message);
+		},
+		onError: (error) => {
+			toast.error(
+				error instanceof Error && error.message
+					? error.message
+					: "Couldn't send the confirmation email",
+			);
+		},
+	});
 
 	const revokeSessionMutation = useMutation({
 		mutationFn: async (sessionId: string) => {
@@ -262,6 +293,58 @@ export default function SettingsPage() {
 							Manage your account settings and preferences
 						</p>
 					</div>
+
+					<LayerCard id="account">
+						<LayerCard.Secondary className="font-funky-mono tracking-tighter">
+							<div className="flex items-center gap-2">
+								<span className="flex items-center">
+									<Mail className="size-4" />
+								</span>
+								<span>Account</span>
+							</div>
+						</LayerCard.Secondary>
+						<LayerCard.Primary>
+							<div className="flex flex-wrap items-center justify-between gap-4">
+								<div className="grid min-w-0 gap-1.5">
+									<h4 className="text-sm font-medium text-kumo-default">
+										Email
+									</h4>
+									<div className="flex flex-wrap items-center gap-2">
+										<p className="truncate text-sm text-kumo-subtle">
+											{user?.email}
+										</p>
+										{emailSending && (
+											emailConfirmed ? (
+												<Badge
+													variant="secondary"
+													className={SUCCESS_BADGE_CLASS}
+												>
+													Email confirmed
+												</Badge>
+											) : (
+												<Badge
+													variant="secondary"
+													className={WARNING_BADGE_CLASS}
+												>
+													Email not confirmed
+												</Badge>
+											)
+										)}
+									</div>
+								</div>
+								{canResendConfirmation && (
+									<Button
+										variant="secondary"
+										size="sm"
+										loading={resendConfirmationMutation.isPending}
+										onClick={() => resendConfirmationMutation.mutate()}
+									>
+										Resend confirmation email
+									</Button>
+								)}
+							</div>
+						</LayerCard.Primary>
+					</LayerCard>
 
 					{/* Cloudflare Account & Gateway Selection */}
 					<CloudflareAccountSelector />
@@ -493,7 +576,7 @@ export default function SettingsPage() {
 													No API keys yet
 												</p>
 												<p className="text-sm text-kumo-subtle">
-													Create an API key to use the
+													Create an API key to use the{' '}
 													{BRAND.name} SDK from your own
 													apps.
 												</p>
@@ -546,7 +629,7 @@ export default function SettingsPage() {
 																{k.isActive ? (
 																	<Badge
 																		variant="secondary"
-																		className="bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200"
+																		className={SUCCESS_BADGE_CLASS}
 																	>
 																		Active
 																	</Badge>
@@ -704,8 +787,7 @@ export default function SettingsPage() {
 										Delete account
 									</p>
 									<p className="text-sm text-kumo-subtle">
-										Permanently delete your account and all
-										data
+										Ask us to erase your account and all your data
 									</p>
 								</div>
 
@@ -728,13 +810,10 @@ export default function SettingsPage() {
 									<Dialog className="p-8">
 										<div className="mb-4 grid gap-1.5">
 											<DialogTitle className="text-xl font-semibold">
-												Delete account?
+												Delete your account
 											</DialogTitle>
 											<DialogDescription className="text-kumo-subtle">
-												This action cannot be undone.
-												This will permanently delete
-												your account and remove all your
-												data from our servers.
+												To delete your account and all your data, email {LEGAL_CONTACT.privacy} from {user?.email}. We complete erasure within 45 days.
 											</DialogDescription>
 										</div>
 										<div className="mt-8 flex justify-end gap-2">
@@ -748,20 +827,12 @@ export default function SettingsPage() {
 													</Button>
 												)}
 											/>
-											<DialogClose
-												render={(props) => (
-													<Button
-														variant="destructive"
-														{...props}
-														onClick={(e) => {
-															props.onClick?.(e);
-															void handleDeleteAccount();
-														}}
-													>
-														Delete account
-													</Button>
-												)}
-											/>
+											<LinkButton
+												variant="primary"
+												href={DELETION_REQUEST_HREF}
+											>
+												Email us
+											</LinkButton>
 										</div>
 									</Dialog>
 								</DialogRoot>

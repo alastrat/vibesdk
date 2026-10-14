@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useCallback, Component } from 'react';
 import { Bug, X, Download, Mail, Maximize2, Minimize2, Clock, BookmarkPlus, Bookmark, Activity, BarChart3 } from 'lucide-react';
 import { Button } from '../../../components/primitives/button';
+import { LEGAL_CONTACT } from '@/api-types';
 import { captureDebugScreenshot } from '../../../utils/screenshot';
 
 // Custom Error Boundary to prevent debug panel crashes from affecting main site
@@ -505,7 +506,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
       const body = `Debug dump generated at ${new Date().toISOString()}\n\nDump data attached as JSON.`;
 
       // Create mailto link with dump as attachment workaround
-      const mailtoLink = `mailto:ashishsingh@cloudflare.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n' + JSON.stringify(dump, null, 2))}`;
+      const mailtoLink = `mailto:${LEGAL_CONTACT.support}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n' + JSON.stringify(dump, null, 2))}`;
       window.open(mailtoLink);
     } finally {
       setIsGeneratingDump(false);

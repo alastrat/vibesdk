@@ -4,12 +4,17 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { LoginModal } from './login-modal';
+import { LoginModal, type AuthMode } from './login-modal';
 import { useAuth } from '../../contexts/auth-context';
 import { setGlobalAuthModalTrigger } from '../../lib/api-client';
 
+export interface ShowAuthModalOptions {
+  /** The view to open in; sign-in when absent. */
+  initialMode?: AuthMode;
+}
+
 interface AuthModalContextType {
-  showAuthModal: (context?: string, onSuccess?: () => void, intendedUrl?: string) => void;
+  showAuthModal: (context?: string, onSuccess?: () => void, intendedUrl?: string, options?: ShowAuthModalOptions) => void;
   hideAuthModal: () => void;
   isAuthModalOpen: boolean;
 }
@@ -33,6 +38,9 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
   const [modalContext, setModalContext] = useState<string | undefined>();
   const [pendingAction, setPendingAction] = useState<(() => void) | undefined>();
   const [intendedUrl, setIntendedUrlState] = useState<string | undefined>();
+  const [initialMode, setInitialMode] = useState<AuthMode>('login');
+  // The session the window was opened from, when it should stay open for a signed-in visitor.
+  const [heldSessionId, setHeldSessionId] = useState<string | null>(null);
   const {
     login,
     loginWithEmail,
@@ -40,14 +48,19 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
     error,
     clearError,
     isAuthenticated,
+    session,
     setIntendedUrl,
     clearIntendedUrl,
   } = useAuth();
+  const sessionId = session?.sessionId ?? null;
 
-  const showAuthModal = useCallback((context?: string, onSuccess?: () => void, intendedUrl?: string) => {
+  const showAuthModal = useCallback((context?: string, onSuccess?: () => void, intendedUrl?: string, options?: ShowAuthModalOptions) => {
     setModalContext(context);
     setPendingAction(onSuccess ? () => onSuccess : undefined);
     setIntendedUrlState(intendedUrl);
+    setInitialMode(options?.initialMode ?? 'login');
+    // A signed-in visitor may still request a reset link; any other view closes once a session exists.
+    setHeldSessionId(options?.initialMode === 'forgot' ? sessionId : null);
     // Email sign-in and sign-up navigate to the stored URL once the session is set.
     if (intendedUrl) {
       setIntendedUrl(intendedUrl);
@@ -55,13 +68,14 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
       clearIntendedUrl();
     }
     setIsAuthModalOpen(true);
-  }, [setIntendedUrl, clearIntendedUrl]);
+  }, [setIntendedUrl, clearIntendedUrl, sessionId]);
 
   const closeAuthModal = useCallback(() => {
     setIsAuthModalOpen(false);
     setModalContext(undefined);
     setPendingAction(undefined);
     setIntendedUrlState(undefined);
+    setHeldSessionId(null);
     clearError();
   }, [clearError]);
 
@@ -73,7 +87,7 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
 
   // Close modal and execute pending action when user becomes authenticated
   useEffect(() => {
-    if (isAuthenticated && isAuthModalOpen) {
+    if (isAuthenticated && isAuthModalOpen && sessionId !== heldSessionId) {
       closeAuthModal();
       // Execute the pending action after a brief delay to ensure modal is closed
       if (pendingAction) {
@@ -82,7 +96,7 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
         }, 100);
       }
     }
-  }, [isAuthenticated, pendingAction, isAuthModalOpen, closeAuthModal]);
+  }, [isAuthenticated, pendingAction, isAuthModalOpen, closeAuthModal, sessionId, heldSessionId]);
 
   const handleLogin = useCallback((provider: 'google' | 'github' | 'cloudflare', redirectUrl?: string) => {
     // Use the intended URL if available, otherwise use the provided redirect URL
@@ -114,6 +128,7 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
         error={error}
         onClearError={clearError}
         actionContext={modalContext}
+        initialMode={initialMode}
       />
     </AuthModalContext.Provider>
   );

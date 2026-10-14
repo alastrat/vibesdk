@@ -14,6 +14,8 @@ import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
 import PricingPage from './routes/pricing';
+import ResetPasswordPage from './routes/auth/ResetPasswordPage';
+import VerifyEmailPage from './routes/auth/VerifyEmailPage';
 
 const PublicShell = () => <PublicLayout />;
 
@@ -110,6 +112,14 @@ const routes = [
 					{
 						path: 'copyright',
 						Component: CopyrightPage,
+					},
+					{
+						path: 'reset-password',
+						Component: ResetPasswordPage,
+					},
+					{
+						path: 'verify-email',
+						Component: VerifyEmailPage,
 					},
 				],
 			},

@@ -4,10 +4,10 @@
  */
 
 import * as schema from '../schema';
-import { eq, and, sql, or, lt, isNull } from 'drizzle-orm';
+import { eq, and, sql, or, lt, gt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
-import { SessionService } from './SessionService';
+import { SessionService, revokeAllUserSessionsQuery } from './SessionService';
 import { ApiKeyService } from './ApiKeyService';
 import { PasswordService } from '../../utils/passwordService';
 import { GoogleOAuthProvider } from '../../services/oauth/google';
@@ -28,9 +28,26 @@ import {
 import { mapUserResponse, validateRedirectUrl, enforceAllowedEmail } from '../../utils/authUtils';
 import { createLogger } from '../../logger';
 import { validateEmail, validatePassword } from '../../utils/validationUtils';
-import { ADMIN_EMAIL_PROVIDER_MESSAGE, isPlatformAdminEmail, mayClaimEmailByOAuth } from '../../services/auth/admin-access';
+import {
+    ADMIN_EMAIL_PROVIDER_MESSAGE,
+    EMAIL_VERIFYING_PROVIDERS,
+    isPlatformAdminEmail,
+    mayClaimEmailByOAuth,
+} from '../../services/auth/admin-access';
 import { extractRequestMetadata } from '../../utils/authUtils';
 import { BaseService } from './BaseService';
+import {
+    CONFIRM_LINK_INVALID_MESSAGE,
+    RESET_LINK_INVALID_MESSAGE,
+    RESET_TOKEN_TTL_MS,
+    VERIFY_TOKEN_TTL_MS,
+    createOneTimeToken,
+    hashOneTimeToken,
+    isTokenUsable,
+} from '../../services/auth/one-time-token';
+import { resetPasswordLink, verifyEmailLink } from '../../services/email/links';
+import { passwordResetEmail, verifyEmailEmail } from '../../services/email/templates';
+import type { EmailSender } from '../../services/email/types';
 import {
     TERMS_VERSION,
     TERMS_REQUIRED_MESSAGE,
@@ -84,6 +101,33 @@ export function signUpTermsError(version: unknown): string | null {
 }
 
 /**
+ * User fields set when an unconfirmed account passes to the proven owner of its address:
+ * the email is confirmed, and an AI gateway preference someone else may have set is dropped.
+ */
+const PROVEN_OWNER_FIELDS = { emailVerified: true, aiGatewayEnabled: null } as const;
+
+/**
+ * A new identity row for a provider account whose email the provider has verified.
+ */
+function verifiedIdentityRow(
+    userId: string,
+    provider: OAuthProvider,
+    oauthUserInfo: OAuthUserInfo,
+    now: Date
+): schema.NewUserOauthIdentity {
+    return {
+        id: generateId(),
+        userId,
+        provider,
+        providerId: oauthUserInfo.id,
+        email: oauthUserInfo.email.toLowerCase(),
+        emailVerified: true,
+        createdAt: now,
+        updatedAt: now,
+    };
+}
+
+/**
  * Main Authentication Service
  */
 export class AuthService extends BaseService {
@@ -101,9 +145,15 @@ export class AuthService extends BaseService {
     }
     
     /**
-     * Register a new user
+     * Register a new user. The address starts unconfirmed; a confirmation link is emailed
+     * when a sender is available, and a failure to send never fails the sign-up.
      */
-    async register(data: RegistrationData, request: Request): Promise<AuthResult> {
+    async register(
+        data: RegistrationData,
+        request: Request,
+        sender: EmailSender | null,
+        baseUrl: string
+    ): Promise<AuthResult> {
         try {
             // Deployment-level admission gate (ALLOWED_EMAIL)
             enforceAllowedEmail(this.env, data.email, 'register');
@@ -123,8 +173,8 @@ export class AuthService extends BaseService {
                 throw new SecurityError(SecurityErrorType.INVALID_INPUT, termsError, 400);
             }
             
-            // Password sign-up marks the email verified unchecked, so an admin
-            // email must be claimed through a provider that verifies it.
+            // Password sign-up doesn't prove the address, so an admin email
+            // must be claimed through a provider that verifies it.
             if (isPlatformAdminEmail(data.email)) {
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
@@ -178,13 +228,14 @@ export class AuthService extends BaseService {
             const userId = generateId();
             const now = new Date();
             
-            // Store user as verified immediately (no OTP verification required)
+            // Unconfirmed until the emailed link is followed, so a provider sign-in
+            // for this address can take the account back from whoever set the password.
             await this.database.insert(schema.users).values({
                 id: userId,
                 email: data.email.toLowerCase(),
                 passwordHash,
                 displayName: data.name || data.email.split('@')[0],
-                emailVerified: true, // Set as verified immediately
+                emailVerified: false,
                 provider: 'email',
                 providerId: userId,
                 termsAcceptedAt: now,
@@ -217,7 +268,9 @@ export class AuthService extends BaseService {
                 userId,
                 request
             );
-            
+
+            await this.sendEmailConfirmation(newUser, sender, baseUrl);
+
             return {
                 user: mapUserResponse(newUser),
                 sessionId: session.sessionId,
@@ -360,6 +413,259 @@ export class AuthService extends BaseService {
                 500
             );
         }
+    }
+
+    /**
+     * Start a password reset: store the hash of a single-use token and email its link.
+     * Resolves the same way for every address, so a caller can't tell whether an account
+     * exists. A confirmed account without a password can use the link to set one; an
+     * unconfirmed account without a password gets nothing.
+     */
+    async requestPasswordReset(email: string, sender: EmailSender | null, baseUrl: string): Promise<void> {
+        const user = await this.database
+            .select({
+                id: schema.users.id,
+                email: schema.users.email,
+                passwordHash: schema.users.passwordHash,
+                emailVerified: schema.users.emailVerified,
+            })
+            .from(schema.users)
+            .where(and(eq(schema.users.email, email.toLowerCase()), isNull(schema.users.deletedAt)))
+            .get();
+
+        if (!user || !sender || (!user.passwordHash && user.emailVerified !== true)) {
+            return;
+        }
+
+        const token = createOneTimeToken();
+        const tokenHash = await hashOneTimeToken(token);
+        await this.database.batch([
+            this.database
+                .update(schema.passwordResetTokens)
+                .set({ used: true })
+                .where(
+                    and(
+                        eq(schema.passwordResetTokens.userId, user.id),
+                        or(eq(schema.passwordResetTokens.used, false), isNull(schema.passwordResetTokens.used))
+                    )
+                ),
+            this.database.insert(schema.passwordResetTokens).values({
+                id: generateId(),
+                userId: user.id,
+                tokenHash,
+                expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+            }),
+        ]);
+
+        try {
+            await sender.send(passwordResetEmail(user.email, resetPasswordLink(baseUrl, token)));
+        } catch (error) {
+            logger.error('Failed to send password reset email', { userId: user.id, error });
+        }
+    }
+
+    /**
+     * Set a new password with the token from a reset link. The token works once; on
+     * success every session of the account is signed out.
+     */
+    async resetPassword(token: string, newPassword: string, request: Request): Promise<void> {
+        const now = new Date();
+        const row = await this.database
+            .select({
+                id: schema.passwordResetTokens.id,
+                userId: schema.passwordResetTokens.userId,
+                used: schema.passwordResetTokens.used,
+                expiresAt: schema.passwordResetTokens.expiresAt,
+            })
+            .from(schema.passwordResetTokens)
+            .where(eq(schema.passwordResetTokens.tokenHash, await hashOneTimeToken(token)))
+            .get();
+
+        const user =
+            row && isTokenUsable(row, now)
+                ? await this.database
+                      .select({
+                          id: schema.users.id,
+                          email: schema.users.email,
+                          emailVerified: schema.users.emailVerified,
+                      })
+                      .from(schema.users)
+                      .where(and(eq(schema.users.id, row.userId), isNull(schema.users.deletedAt)))
+                      .get()
+                : undefined;
+        if (!row || !user) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, RESET_LINK_INVALID_MESSAGE, 400);
+        }
+
+        const passwordValidation = validatePassword(newPassword, undefined, { email: user.email });
+        if (!passwordValidation.valid) {
+            throw new SecurityError(
+                SecurityErrorType.INVALID_INPUT,
+                (passwordValidation.errors ?? []).join(', '),
+                400
+            );
+        }
+
+        const passwordHash = await this.passwordService.hash(newPassword);
+
+        // The claim is one conditional statement, so concurrent requests with the same token can't both win.
+        const claimedAt = new Date();
+        const claimed = await this.database
+            .update(schema.passwordResetTokens)
+            .set({ used: true })
+            .where(
+                and(
+                    eq(schema.passwordResetTokens.id, row.id),
+                    or(eq(schema.passwordResetTokens.used, false), isNull(schema.passwordResetTokens.used)),
+                    gt(schema.passwordResetTokens.expiresAt, claimedAt)
+                )
+            )
+            .returning({ id: schema.passwordResetTokens.id });
+        if (claimed.length === 0) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, RESET_LINK_INVALID_MESSAGE, 400);
+        }
+
+        const passwordChange = {
+            passwordHash,
+            passwordChangedAt: claimedAt,
+            failedLoginAttempts: 0,
+            lockedUntil: null,
+            updatedAt: claimedAt,
+        };
+        if (user.emailVerified === true) {
+            // One batch, so the new password never lands without every session signed out.
+            await this.database.batch([
+                this.database.update(schema.users).set(passwordChange).where(eq(schema.users.id, user.id)),
+                revokeAllUserSessionsQuery(this.database, user.id),
+            ]);
+        } else {
+            // The reset proves inbox control, so it settles an unconfirmed account the way a provider claim does.
+            await this.database.batch([
+                this.database
+                    .update(schema.users)
+                    .set({ ...passwordChange, ...PROVEN_OWNER_FIELDS })
+                    .where(eq(schema.users.id, user.id)),
+                ...this.takeoverCleanup(user.id),
+            ]);
+        }
+
+        await this.logAuthAttempt(user.email, 'reset_password', true, request);
+        logger.info('Password reset', { userId: user.id, confirmedEmail: user.emailVerified !== true });
+    }
+
+    /**
+     * Email a link that confirms the user's current address; a new link retires the earlier
+     * unused ones. Best effort: a failure is logged, never thrown, so it can't fail sign-up.
+     */
+    async sendEmailConfirmation(user: { id: string; email: string }, sender: EmailSender | null, baseUrl: string): Promise<void> {
+        if (!sender) {
+            return;
+        }
+
+        try {
+            const token = createOneTimeToken();
+            const tokenHash = await hashOneTimeToken(token);
+            await this.database.batch([
+                this.database
+                    .update(schema.emailVerificationTokens)
+                    .set({ used: true })
+                    .where(
+                        and(
+                            eq(schema.emailVerificationTokens.userId, user.id),
+                            or(eq(schema.emailVerificationTokens.used, false), isNull(schema.emailVerificationTokens.used))
+                        )
+                    ),
+                this.database.insert(schema.emailVerificationTokens).values({
+                    id: generateId(),
+                    userId: user.id,
+                    tokenHash,
+                    email: user.email,
+                    expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
+                }),
+            ]);
+            await sender.send(verifyEmailEmail(user.email, verifyEmailLink(baseUrl, token)));
+        } catch (error) {
+            logger.error('Failed to send email confirmation', { userId: user.id, error });
+        }
+    }
+
+    /**
+     * Confirm the address a confirmation link was sent to. The link works once, and only
+     * while that address is still the account's email.
+     */
+    async verifyEmail(token: string): Promise<void> {
+        const now = new Date();
+        const row = await this.database
+            .select({
+                id: schema.emailVerificationTokens.id,
+                userId: schema.emailVerificationTokens.userId,
+                email: schema.emailVerificationTokens.email,
+                used: schema.emailVerificationTokens.used,
+                expiresAt: schema.emailVerificationTokens.expiresAt,
+            })
+            .from(schema.emailVerificationTokens)
+            .where(eq(schema.emailVerificationTokens.tokenHash, await hashOneTimeToken(token)))
+            .get();
+
+        const user =
+            row && isTokenUsable(row, now)
+                ? await this.database
+                      .select({ id: schema.users.id, email: schema.users.email })
+                      .from(schema.users)
+                      .where(and(eq(schema.users.id, row.userId), isNull(schema.users.deletedAt)))
+                      .get()
+                : undefined;
+        if (!row || !user || user.email !== row.email) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, CONFIRM_LINK_INVALID_MESSAGE, 400);
+        }
+
+        // The claim is one conditional statement, so concurrent requests with the same token can't both win.
+        const claimedAt = new Date();
+        const claimed = await this.database
+            .update(schema.emailVerificationTokens)
+            .set({ used: true })
+            .where(
+                and(
+                    eq(schema.emailVerificationTokens.id, row.id),
+                    or(eq(schema.emailVerificationTokens.used, false), isNull(schema.emailVerificationTokens.used)),
+                    gt(schema.emailVerificationTokens.expiresAt, claimedAt)
+                )
+            )
+            .returning({ id: schema.emailVerificationTokens.id });
+        if (claimed.length === 0) {
+            throw new SecurityError(SecurityErrorType.INVALID_TOKEN, CONFIRM_LINK_INVALID_MESSAGE, 400);
+        }
+
+        // Matching the email again keeps an address changed since the check from being confirmed.
+        await this.database
+            .update(schema.users)
+            .set({ emailVerified: true, updatedAt: claimedAt })
+            .where(and(eq(schema.users.id, user.id), eq(schema.users.email, row.email)));
+
+        logger.info('Email confirmed', { userId: user.id });
+    }
+
+    /**
+     * Email a new confirmation link to a password account whose address isn't confirmed yet.
+     * A confirmed account, or one that signs in only through a provider, gets nothing.
+     */
+    async resendEmailConfirmation(userId: string, sender: EmailSender | null, baseUrl: string): Promise<void> {
+        const user = await this.database
+            .select({
+                id: schema.users.id,
+                email: schema.users.email,
+                emailVerified: schema.users.emailVerified,
+                passwordHash: schema.users.passwordHash,
+            })
+            .from(schema.users)
+            .where(and(eq(schema.users.id, userId), isNull(schema.users.deletedAt)))
+            .get();
+
+        if (!user || user.emailVerified || !user.passwordHash) {
+            return;
+        }
+
+        await this.sendEmailConfirmation(user, sender, baseUrl);
     }
 
     async getOauthProvider(provider: OAuthProvider, request: Request): Promise<BaseOAuthProvider> {
@@ -630,12 +936,11 @@ export class AuthService extends BaseService {
     /**
      * Resolve the user for an OAuth login.
      *
-     * An OAuth login is a request to authenticate as a (provider, providerId)
-     * identity, NOT as an email address. Lookup therefore happens against the
-     * user_oauth_identities table. Binding an OAuth identity to an existing
-     * account only happens through the authenticated link flow (linkOAuthIdentity),
-     * never implicitly by email match — that implicit bind was the account-takeover
-     * vector this method previously had.
+     * Lookup is by the (provider, providerId) identity first. Without one, a
+     * provider-verified email attaches the identity to the account with that
+     * email when the account's email is confirmed. An unconfirmed account is
+     * claimed only through Google or GitHub (see claimUnconfirmedAccount);
+     * other providers are refused.
      */
     private async findOrCreateOAuthUser(
         provider: OAuthProvider,
@@ -720,16 +1025,98 @@ export class AuthService extends BaseService {
             .get();
 
         if (emailRow) {
-            await this.linkOAuthIdentity(emailRow.id, provider, oauthUserInfo);
-            logger.info('Auto-linked OAuth provider to existing account', {
-                userId: emailRow.id,
-                provider
-            });
-            return emailRow;
+            if (emailRow.emailVerified === true) {
+                await this.linkOAuthIdentity(emailRow.id, provider, oauthUserInfo);
+                logger.info('Auto-linked OAuth provider to existing account', {
+                    userId: emailRow.id,
+                    provider
+                });
+                return emailRow;
+            }
+
+            // Only a provider that verifies email itself proves who owns an unconfirmed address.
+            if (!EMAIL_VERIFYING_PROVIDERS.includes(provider)) {
+                throw new SecurityError(
+                    SecurityErrorType.CONFLICT,
+                    `Sign in with your password, Google or GitHub, then connect ${providerLabel(provider)} from Settings.`,
+                    409
+                );
+            }
+
+            return this.claimUnconfirmedAccount(emailRow, provider, oauthUserInfo);
         }
 
         // 3. Brand-new identity: create the user and its first identity row.
         return this.createOAuthUser(provider, oauthUserInfo);
+    }
+
+    /**
+     * Give an unconfirmed account to the owner a verifying provider just proved. Whoever set
+     * its password may not own the address, so the password goes and the takeover cleanup runs,
+     * all in one batch, which D1 runs as a transaction. The cleanup deletes every linked identity,
+     * so the claiming one is inserted after it. The caller creates this sign-in's session afterwards.
+     */
+    private async claimUnconfirmedAccount(
+        account: schema.User,
+        provider: OAuthProvider,
+        oauthUserInfo: OAuthUserInfo
+    ): Promise<schema.User> {
+        const now = new Date();
+        const claimed = {
+            ...PROVEN_OWNER_FIELDS,
+            passwordHash: null,
+            provider,
+            providerId: oauthUserInfo.id,
+            updatedAt: now,
+        };
+
+        await this.database.batch([
+            ...this.takeoverCleanup(account.id),
+            this.database
+                .insert(schema.userOauthIdentities)
+                .values(verifiedIdentityRow(account.id, provider, oauthUserInfo, now)),
+            this.database.update(schema.users).set(claimed).where(eq(schema.users.id, account.id)),
+        ]);
+
+        logger.info('Claimed unconfirmed account through a verified provider', {
+            userId: account.id,
+            provider
+        });
+        return { ...account, ...claimed };
+    }
+
+    /**
+     * Statements that strip an account of everything someone other than its address's owner
+     * could have attached: linked sign-in methods, API keys, the payout account, custom model
+     * routing, the connected Cloudflare account and its AI gateways, and every session. Callers
+     * run them in one batch with their own users update (see PROVEN_OWNER_FIELDS).
+     */
+    private takeoverCleanup(userId: string) {
+        return [
+            this.database
+                .delete(schema.userOauthIdentities)
+                .where(eq(schema.userOauthIdentities.userId, userId)),
+            this.database
+                .update(schema.apiKeys)
+                .set({ isActive: false, updatedAt: new Date() })
+                .where(eq(schema.apiKeys.userId, userId)),
+            // Past purchases keep the seller's Stripe account id, so sales history survives.
+            this.database
+                .delete(schema.stripeConnectAccounts)
+                .where(eq(schema.stripeConnectAccounts.userId, userId)),
+            this.database
+                .delete(schema.userModelProviders)
+                .where(eq(schema.userModelProviders.userId, userId)),
+            this.database
+                .delete(schema.userModelConfigs)
+                .where(eq(schema.userModelConfigs.userId, userId)),
+            // Gateways reference the Cloudflare account, so they go first.
+            this.database.delete(schema.aiGateways).where(eq(schema.aiGateways.userId, userId)),
+            this.database
+                .delete(schema.cloudflareAccounts)
+                .where(eq(schema.cloudflareAccounts.userId, userId)),
+            revokeAllUserSessionsQuery(this.database, userId),
+        ] as const;
     }
 
     /**
@@ -756,16 +1143,9 @@ export class AuthService extends BaseService {
             updatedAt: now
         });
 
-        await this.database.insert(schema.userOauthIdentities).values({
-            id: generateId(),
-            userId,
-            provider,
-            providerId: oauthUserInfo.id,
-            email,
-            emailVerified: true,
-            createdAt: now,
-            updatedAt: now
-        });
+        await this.database
+            .insert(schema.userOauthIdentities)
+            .values(verifiedIdentityRow(userId, provider, oauthUserInfo, now));
 
         const user = await this.database
             .select()
@@ -869,16 +1249,9 @@ export class AuthService extends BaseService {
             return;
         }
 
-        await this.database.insert(schema.userOauthIdentities).values({
-            id: generateId(),
-            userId,
-            provider,
-            providerId: oauthUserInfo.id,
-            email,
-            emailVerified: true,
-            createdAt: now,
-            updatedAt: now
-        });
+        await this.database
+            .insert(schema.userOauthIdentities)
+            .values(verifiedIdentityRow(userId, provider, oauthUserInfo, now));
 
         logger.info('OAuth identity linked', { userId, provider });
     }

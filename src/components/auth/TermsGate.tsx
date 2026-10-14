@@ -5,18 +5,23 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/auth-context';
 import { apiClient } from '@/lib/api-client';
-import { TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '@/api-types';
+import { RESET_PASSWORD_PATH, TERMS_OUTDATED_MESSAGE, TERMS_VERSION, VERIFY_EMAIL_PATH } from '@/api-types';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
+
+/** Where the window must not appear: the documents it asks the user to read, and the pages opened from account emails. */
+const GATE_FREE_PATHS: ReadonlySet<string> = new Set([
+	...LEGAL_LINKS.map((link) => link.path),
+	RESET_PASSWORD_PATH,
+	VERIFY_EMAIL_PATH,
+]);
 
 /** One-time agreement for signed-in users who haven't agreed to the current terms version. */
 export function TermsGate() {
 	const { user } = useAuth();
 	const { pathname } = useLocation();
 
-	// The window must not cover the documents it asks the user to read.
-	const onLegalPage = LEGAL_LINKS.some((link) => link.path === pathname);
-	const open = !!user && !user.isAnonymous && user.termsAccepted === false && !onLegalPage;
+	const open = !!user && !user.isAnonymous && user.termsAccepted === false && !GATE_FREE_PATHS.has(pathname);
 	if (!open) return null;
 
 	return <TermsDialog key={user.id} />;
