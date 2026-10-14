@@ -90,21 +90,8 @@ describe('landing page', () => {
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 	});
 
-	it('states what a seller keeps from the fee code, with the creators anchor the top bar links to', () => {
-		const creators = source('/src/routes/landing/CreatorsPanel.tsx');
-		expect(creators).toContain('sellerKeepsCents(EXAMPLE_SALE_CENTS)');
-		expect(creators).toContain('<AnimatedBeam');
-		expect(creators).toContain('id="creators"');
-		expect(creators).not.toContain('26.37');
-		// AA contrast on the blue panel: no translucent white text, and a darker node fill.
-		expect(creators).not.toMatch(/text-white\/\d+/);
-		expect(creators).toContain('bg-black/15');
-		expect(creators).not.toContain('bg-white/12');
-	});
-
-	it('uses the 1Password layout: charcoal features, a blue creators panel and a charcoal closing panel', () => {
+	it('uses the 1Password layout: charcoal features and a charcoal closing panel', () => {
 		expect(source('/src/routes/landing/Features.tsx')).toContain('bg-public-charcoal');
-		expect(source('/src/routes/landing/CreatorsPanel.tsx')).toContain('bg-public-blue');
 		const sections = source('/src/routes/landing/sections.tsx');
 		expect(sections.slice(sections.indexOf('export function ClosingPanel'))).toContain('bg-public-charcoal');
 	});

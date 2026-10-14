@@ -19,6 +19,8 @@ import BrandsPage from './routes/solutions/brands';
 import ResellersPage from './routes/solutions/resellers';
 import DigitalPage from './routes/solutions/digital';
 import AgenticCommercePage from './routes/agentic-commerce';
+import DevelopersPage from './routes/creators/developers';
+import ContentCreatorsPage from './routes/creators/content';
 import ResetPasswordPage from './routes/auth/ResetPasswordPage';
 import VerifyEmailPage from './routes/auth/VerifyEmailPage';
 
@@ -125,6 +127,14 @@ const routes = [
 					{
 						path: 'agentic-commerce',
 						Component: AgenticCommercePage,
+					},
+					{
+						path: 'creators/developers',
+						Component: DevelopersPage,
+					},
+					{
+						path: 'creators/content',
+						Component: ContentCreatorsPage,
 					},
 					{
 						path: 'terms',

@@ -48,3 +48,30 @@ describe('solution pages', () => {
 		expect(digital).toContain('useEarlyAccessFromUrl();');
 	});
 });
+
+describe('creator pages', () => {
+	it('are public pages', () => {
+		const routes = source('/src/routes.tsx');
+		const publicBlock = routes.slice(routes.indexOf('Component: PublicShell'));
+		expect(publicBlock).toContain("path: 'creators/developers'");
+		expect(publicBlock).toContain("path: 'creators/content'");
+	});
+
+	it('shows developers what they keep from the fee code, on the blue panel with AA contrast', () => {
+		const earnings = source('/src/routes/creators/TemplateEarnings.tsx');
+		expect(earnings).toContain('sellerKeepsCents(EXAMPLE_SALE_CENTS)');
+		expect(earnings).toContain('<AnimatedBeam');
+		expect(earnings).toContain('bg-public-blue');
+		expect(earnings).not.toMatch(/text-white\/\d+/);
+		expect(earnings).toContain('bg-black/15');
+		expect(earnings).not.toContain('id="creators"');
+		expect(source('/src/routes/creators/developers.tsx')).toContain('<TemplateEarnings />');
+	});
+
+	it('takes early-access requests for the content creator program, including after a sign-in that reloads the page', () => {
+		const content = source('/src/routes/creators/content.tsx');
+		expect(content).toContain('<EarlyAccessButton capability="content-creators"');
+		expect(content).toContain('useEarlyAccessFromUrl();');
+		expect(content).not.toContain('<ComingSoon');
+	});
+});

@@ -1,7 +1,6 @@
 import { pageTitle } from '@/brand';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
-import { CreatorsPanel } from './CreatorsPanel';
 import { Features } from './Features';
 import { Hero } from './Hero';
 import { LivePreview } from './LivePreview';
@@ -19,7 +18,6 @@ export function LandingPage() {
 			<StoreLogos stores={stores} />
 			<StoreShowcase stores={stores} />
 			<Features />
-			<CreatorsPanel />
 			<LivePreview />
 			<PricingSummary />
 			<PublicFaq />
