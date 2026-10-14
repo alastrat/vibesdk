@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/worker/api/controllers/publishing/controller.ts', '/worker/agents/core/behaviors/think.ts'],
+	['/worker/api/controllers/publishing/controller.ts', '/worker/agents/core/behaviors/think.ts', '/worker/services/showcase/showcase-refresh.ts'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
 const CONTROLLER = '/worker/api/controllers/publishing/controller.ts';
 const THINK = '/worker/agents/core/behaviors/think.ts';
+const REFRESH = '/worker/services/showcase/showcase-refresh.ts';
 
 function source(path: string): string {
 	const text = sources[path];
@@ -38,6 +39,10 @@ describe('showcase capture triggers', () => {
 		expect(queue).toContain('getPublishingState(appId)');
 		expect(queue).toContain('showcaseEligible(publishing)');
 		expect(queue).toContain('captureShowcaseScreenshot(createShowcaseCaptureDeps(this.env, this.logger), appId, previewUrl)');
+	});
+
+	it('logs a store with no deployed public preview before reporting it failed', () => {
+		expect(source(REFRESH)).toMatch(/if \(!previewUrl\) \{\s*logger\.warn\('Showcase screenshot skipped: the store has no deployed public preview', \{ appId \}\);\s*return 'failed';/);
 	});
 
 	it('captures the showcase from the public preview, never the URL an editor sent', () => {

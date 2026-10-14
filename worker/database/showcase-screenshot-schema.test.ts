@@ -25,4 +25,10 @@ describe('showcase screenshot column', () => {
 			showcase_screenshot_url: '/api/screenshots/app1/showcase.jpg',
 		});
 	});
+
+	it("leaves the app's updated time alone, so a capture never reorders Discover or a creator's apps", async () => {
+		const { d1, statements } = recordingD1();
+		await new AppService({ DB: d1 } as unknown as Env).updateAppShowcaseScreenshot('app1', '/api/screenshots/app1/showcase.jpg');
+		expect(assignedValues(lastWrite(statements, 'update', 'apps'))).not.toHaveProperty('updated_at');
+	});
 });

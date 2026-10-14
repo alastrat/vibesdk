@@ -60,6 +60,16 @@ describe('Magic UI components', () => {
 		expect(component('border-beam')).not.toMatch(/rounded-\[inherit\] overflow-hidden/);
 	});
 
+	it('stops the animated beams while their container is off screen', () => {
+		const beam = component('animated-beam');
+		expect(beam).toContain('const onScreen = useInView(containerRef)');
+		expect(beam).toContain('{!reduceMotion && onScreen && (');
+	});
+
+	it('never adds an "undefined" class to the phone frame', () => {
+		expect(component('iphone')).toContain('${className ?? ""}');
+	});
+
 	it('ignores the app dark mode in the device frames and the ticker', () => {
 		for (const name of ['safari', 'iphone', 'number-ticker']) expect(component(name)).not.toContain('dark:');
 	});

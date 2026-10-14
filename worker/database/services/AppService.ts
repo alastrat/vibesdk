@@ -330,8 +330,18 @@ export class AppService extends BaseService {
     }
 
     /** Records the tall Discover showcase image of a store. */
+    /** Writes only the image: a capture is not an edit, so `updatedAt` (Discover's "recent" sort) stays as it was. */
     async updateAppShowcaseScreenshot(appId: string, showcaseScreenshotUrl: string): Promise<boolean> {
-        return this.updateApp(appId, { showcaseScreenshotUrl });
+        try {
+            await this.database
+                .update(schema.apps)
+                .set({ showcaseScreenshotUrl })
+                .where(eq(schema.apps.id, appId));
+            return true;
+        } catch (error) {
+            this.logger.error('[AppService] Failed to store showcase screenshot', { appId, error });
+            return false;
+        }
     }
 
     /** Deployed public stores still in Discover that have no showcase image yet, in random order so stores that keep failing can't hold every batch. */

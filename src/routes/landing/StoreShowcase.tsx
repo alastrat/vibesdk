@@ -89,19 +89,20 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 
 /** A store card; `focusable={false}` keeps a repeated card clickable but out of the tab order. */
 function ShowcaseCard({ store, focusable = true }: { store: ShowcaseStore; focusable?: boolean }) {
-	const [imageFailed, setImageFailed] = useState(false);
+	// Remembers which URL failed, so a re-signed URL from a later fetch gets a fresh try.
+	const [failedImage, setFailedImage] = useState<string | null>(null);
 	return (
 		<Link
 			to={`/discover/${store.id}`}
 			tabIndex={focusable ? undefined : -1}
 			className="group relative block h-[280px] w-[220px] shrink-0 overflow-hidden rounded-[18px] bg-[#2a2a30] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white sm:h-[360px] sm:w-[280px]"
 		>
-			{store.imageUrl && !imageFailed && (
+			{store.imageUrl && failedImage !== store.imageUrl && (
 				<img
 					src={store.imageUrl}
 					alt=""
 					loading="lazy"
-					onError={() => setImageFailed(true)}
+					onError={() => setFailedImage(store.imageUrl)}
 					className={cn(
 						'absolute inset-0 size-full object-cover transition-transform duration-500 group-hover:scale-105 motion-reduce:transition-none',
 						store.tallImage ? 'object-top' : 'object-left-top',

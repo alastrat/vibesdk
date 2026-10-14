@@ -58,6 +58,16 @@ describe('landing page', () => {
 		expect(hero).toContain('<section className="overflow-x-clip bg-public-charcoal text-white">');
 	});
 
+	it('always underlines the Discover link under the build box', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*Browse stores in Discover/);
+		expect(hero).not.toMatch(/hover:underline">\s*Browse stores in Discover/);
+	});
+
+	it('reserves the finished step list so the demo never grows while steps arrive', () => {
+		expect(source('/src/routes/landing/Hero.tsx')).toMatch(/<AnimatedList [^>]*className="[^"]*min-h-28/);
+	});
+
 	it('shows Discover stores as wordmarks and as a showcase, and hides both at two stores or fewer', () => {
 		expect(source('/src/routes/landing/LandingPage.tsx')).toContain('useShowcaseStores()');
 		const logos = source('/src/routes/landing/StoreLogos.tsx');
@@ -129,7 +139,9 @@ describe('landing page', () => {
 	});
 
 	it('keeps a card readable when its image fails to load', () => {
-		expect(source('/src/routes/landing/StoreShowcase.tsx')).toContain('onError={() => setImageFailed(true)}');
+		const showcase = source('/src/routes/landing/StoreShowcase.tsx');
+		expect(showcase).toContain('onError={() => setFailedImage(store.imageUrl)}');
+		expect(showcase).toContain('failedImage !== store.imageUrl');
 	});
 
 	it('shows no third-party company logos or testimonials', () => {

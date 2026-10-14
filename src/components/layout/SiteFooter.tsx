@@ -43,7 +43,7 @@ export function SiteFooter() {
 					<FooterColumn title="Contact">
 						{Object.values(LEGAL_CONTACT).map((address) => (
 							<li key={address}>
-								<a href={`mailto:${address}`} className="hover:text-white">{address}</a>
+								<a href={`mailto:${address}`} className="[overflow-wrap:anywhere] hover:text-white">{address}</a>
 							</li>
 						))}
 					</FooterColumn>

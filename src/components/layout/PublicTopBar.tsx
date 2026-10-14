@@ -43,7 +43,7 @@ export function PublicTopBar() {
 						<Link to="/" aria-label={`${BRAND.name} home`} className="flex items-center text-public-brand">
 							<EstoriLogo className="h-7 w-auto" />
 						</Link>
-						<nav aria-label="Main" className="hidden sm:flex items-center gap-6 text-[15px] text-public-charcoal">
+						<nav aria-label="Main" className="hidden md:flex items-center gap-6 whitespace-nowrap text-[15px] text-public-charcoal">
 							{NAV_LINKS.map((link) => (
 								<Link key={link.to} to={link.to} className="underline-offset-4 hover:underline">
 									{link.label}
@@ -51,7 +51,7 @@ export function PublicTopBar() {
 							))}
 						</nav>
 					</div>
-					<div className="flex items-center gap-4">
+					<div className="flex items-center gap-4 whitespace-nowrap">
 						{isAuthenticated ? (
 							<Link to="/" className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
 								Open app
@@ -66,7 +66,7 @@ export function PublicTopBar() {
 						</button>
 						<button
 							type="button"
-							className="rounded-full p-2 text-public-charcoal sm:hidden"
+							className="rounded-full p-2 text-public-charcoal md:hidden"
 							aria-expanded={menuOpen}
 							aria-controls="public-menu"
 							aria-label={menuOpen ? 'Close menu' : 'Open menu'}
@@ -77,13 +77,13 @@ export function PublicTopBar() {
 					</div>
 				</div>
 				{menuOpen && (
-					<nav id="public-menu" aria-label="Main" className="grid gap-1 border-t border-public-line px-4 py-4 sm:hidden">
+					<nav id="public-menu" aria-label="Main" className="grid gap-1 border-t border-public-line px-4 py-4 sm:px-6 md:hidden">
 						{NAV_LINKS.map((link) => (
 							<Link key={link.to} to={link.to} className="py-2 text-lg text-public-charcoal">
 								{link.label}
 							</Link>
 						))}
-						<button type="button" onClick={startBuilding} className={pillClass('blue', 'mt-3 w-full')}>
+						<button type="button" onClick={startBuilding} className={pillClass('blue', 'mt-3 w-full sm:hidden')}>
 							Start building free
 						</button>
 					</nav>

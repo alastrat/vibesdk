@@ -35,7 +35,7 @@ export function Hero() {
 				</div>
 				<div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/75">
 					<span>Free to build. No credit card.</span>
-					<Link to="/discover" className="inline-flex items-center gap-1 text-white underline-offset-4 hover:underline">
+					<Link to="/discover" className="inline-flex items-center gap-1 text-white underline underline-offset-[5px]">
 						Browse stores in Discover <ArrowRightIcon className="size-4" aria-hidden />
 					</Link>
 				</div>
@@ -57,7 +57,8 @@ function BuilderDemo() {
 				<div className="mx-auto grid max-w-[1152px] overflow-hidden rounded-t-[14px] bg-white text-left text-[#1e2a3b] shadow-[0_-10px_40px_rgba(0,0,0,0.25)] md:grid-cols-[280px_1fr]">
 					<div className="grid content-start gap-3 border-b border-public-line p-5 text-sm md:border-r md:border-b-0">
 						<p className="rounded-xl bg-[#eef4ff] px-3 py-2.5">{DEMO_PROMPT}</p>
-						<AnimatedList delay={900} newestFirst={false} className="items-stretch gap-2">
+						{/* Reserves the finished list's height so the demo doesn't grow on phones while steps arrive. */}
+						<AnimatedList delay={900} newestFirst={false} className="min-h-28 items-stretch gap-2">
 							{BUILD_STEPS.map((step) => (
 								<p key={step} className="flex items-center gap-2">
 									<CheckCircleIcon weight="fill" className="size-4 shrink-0 text-[#16a34a]" aria-hidden />

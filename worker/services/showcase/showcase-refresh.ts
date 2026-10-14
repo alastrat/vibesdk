@@ -8,7 +8,10 @@ import { captureShowcaseScreenshot, type ShowcaseCaptureResult } from './showcas
 export async function refreshShowcaseScreenshot(env: Env, logger: StructuredLogger, appId: string): Promise<ShowcaseCaptureResult> {
 	try {
 		const previewUrl = await (await getAgentStub(env, appId)).getPublicPreviewURL();
-		if (!previewUrl) return 'failed';
+		if (!previewUrl) {
+			logger.warn('Showcase screenshot skipped: the store has no deployed public preview', { appId });
+			return 'failed';
+		}
 		return await captureShowcaseScreenshot(createShowcaseCaptureDeps(env, logger), appId, previewUrl);
 	} catch (error) {
 		logger.warn('Showcase screenshot refresh failed', {

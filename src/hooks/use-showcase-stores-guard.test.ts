@@ -10,4 +10,8 @@ describe('useShowcaseStores', () => {
 		expect(hook).toContain('queryKeys.apps.showcase()');
 		expect(hook).toContain('.map(toShowcaseStore)');
 	});
+
+	it('keeps the stores for 30 minutes, well inside the 6-hour image signatures, so images are not downloaded again on every visit', () => {
+		expect(sources['/src/hooks/use-showcase-stores.ts']).toContain('staleTime: 30 * 60_000');
+	});
 });

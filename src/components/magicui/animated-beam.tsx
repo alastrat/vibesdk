@@ -1,7 +1,7 @@
 // Adapted from Magic UI (MIT, see ./LICENSE.md), commit 85f97fd.
 
 import { useEffect, useId, useState, type RefObject } from "react"
-import { motion, useReducedMotion } from "framer-motion"
+import { motion, useInView, useReducedMotion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
 
@@ -50,6 +50,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
 }) => {
   const id = useId()
   const reduceMotion = useReducedMotion()
+  const onScreen = useInView(containerRef)
   const [pathD, setPathD] = useState("")
   const [svgDimensions, setSvgDimensions] = useState({ width: 0, height: 0 })
 
@@ -143,7 +144,7 @@ export const AnimatedBeam: React.FC<AnimatedBeamProps> = ({
         strokeOpacity={pathOpacity}
         strokeLinecap="round"
       />
-      {!reduceMotion && (
+      {!reduceMotion && onScreen && (
         <>
       <path
         d={pathD}

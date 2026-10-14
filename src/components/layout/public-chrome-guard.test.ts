@@ -39,13 +39,26 @@ describe('public chrome', () => {
 	it('shows the announcement above a white top bar with the blue build action and a phone menu', () => {
 		const top = source(TOP);
 		expect(top).toContain('<AnnouncementBar />');
-		expect(top).toContain('hidden sm:flex');
+		expect(top).toContain('hidden md:flex');
 		expect(top).toContain('Start building free');
 		expect(top).toContain("pillClass('blue'");
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
 		expect(top).toContain("to: '/#creators'");
 		expect(top).toContain('}, [pathname, hash, key]);');
+	});
+
+	it('keeps the bar on one line: links move to the menu below md, and nothing in the bar wraps', () => {
+		const top = source(TOP);
+		expect(top).toMatch(/<nav aria-label="Main" className="hidden md:flex [^"]*whitespace-nowrap/);
+		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
+		expect(top).toContain('rounded-full p-2 text-public-charcoal md:hidden');
+		expect(top).toMatch(/id="public-menu"[^>]*md:hidden/);
+		expect(top).toContain("pillClass('blue', 'mt-3 w-full sm:hidden')");
+	});
+
+	it('wraps long contact emails instead of scrolling a narrow phone sideways', () => {
+		expect(source(FOOTER)).toMatch(/href=\{`mailto:\$\{address\}`\} className="[^"]*\[overflow-wrap:anywhere\]/);
 	});
 
 	it('ends every public page with the dark footer: link columns, contacts, wordmark and legal line', () => {

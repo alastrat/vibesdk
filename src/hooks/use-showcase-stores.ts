@@ -12,6 +12,7 @@ export function useShowcaseStores() {
 			(
 				await unwrap(apiClient.getPublicApps({ sort: 'popular', limit: 24, reusableOnly: true }), "Couldn't load Discover stores")
 			).apps.map(toShowcaseStore),
-		staleTime: 60_000,
+		// Each fetch re-signs every image URL, so a short cache would download every tall image again.
+		staleTime: 30 * 60_000,
 	});
 }
