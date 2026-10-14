@@ -140,28 +140,53 @@ describe('account email pages', () => {
 		}
 	});
 
-	it('confirms the email once on arrival and shows both outcomes', () => {
+	it('confirms the email only when the visitor clicks, once, and shows both outcomes', () => {
 		const page = source('/src/routes/auth/VerifyEmailPage.tsx');
+		// Link scanners open pages without clicking, so nothing may post the token on load.
+		expect(page).not.toContain('useEffect');
+		expect(page).toContain('Confirm my email');
+		expect(page).toContain('Only confirm if you created an Estori account with this address.');
 		expect(occurrences(page, 'apiClient.verifyEmail(')).toBe(1);
+
+		const handlerStart = page.indexOf('const confirm = useCallback(');
+		expect(handlerStart).toBeGreaterThan(-1);
+		const handler = page.slice(handlerStart, page.indexOf('\n\n', handlerStart));
+		expect(handler).toContain('apiClient.verifyEmail(token)');
+		expect(handler).toMatch(/if \(!token \|\| pending\.current\) return;\s*pending\.current = true;/);
 		expect(page).toContain('useRef');
-		expect(page).toMatch(/if \(!token \|\| requested\.current\) return;\s*requested\.current = true;/);
-		expect(page).toContain('Confirming your email…');
+
+		const button = page.slice(page.lastIndexOf('<OrangeButton', page.indexOf('Confirm my email')), page.indexOf('Confirm my email'));
+		expect(button).toContain('onClick={() => void confirm()}');
+		expect(button).toContain("disabled={state.status === 'confirming'}");
+
 		expect(page).toContain('Your email is confirmed.');
 		expect(page).toContain('CONFIRM_LINK_INVALID_MESSAGE');
 		expect(page).toContain('Resend it from Settings');
 		expect(page).toContain('to="/settings"');
+		expect(page).toContain('Try again');
 		expect(page).toContain('refreshUser()');
 		expect(page).toContain("pageTitle('Confirm email')");
 	});
 
 	it('shows the confirmation status in Settings and resends the email for unconfirmed email accounts', () => {
 		const settings = source('/src/routes/settings/index.tsx');
-		expect(settings).toContain('Email confirmed');
-		expect(settings).toContain('Email not confirmed');
 		expect(settings).toContain('Resend confirmation email');
 		expect(settings).toContain('apiClient.resendVerification()');
 		expect(settings).toContain("user?.provider === 'email'");
-		expect(settings).toContain('authProviders?.emailSending');
+		expect(settings).toContain('const emailSending = !!authProviders?.emailSending;');
+	});
+
+	it('shows the confirmation status and the resend button only when the server can send email', () => {
+		const settings = source('/src/routes/settings/index.tsx');
+		// Without email sending, "not confirmed" can't be fixed, so the status stays hidden.
+		const gate = settings.indexOf('{emailSending && (');
+		expect(gate).toBeGreaterThan(-1);
+		expect(occurrences(settings, 'Email confirmed')).toBe(1);
+		expect(occurrences(settings, 'Email not confirmed')).toBe(1);
+		expect(settings.indexOf('Email confirmed')).toBeGreaterThan(gate);
+		expect(settings.indexOf('Email not confirmed')).toBeGreaterThan(gate);
+		expect(settings).toMatch(/const canResendConfirmation =\s*emailSending &&/);
+		expect(settings.indexOf('{canResendConfirmation && (')).toBeLessThan(settings.indexOf('Resend confirmation email'));
 	});
 
 	it('keeps the terms window off the pages opened from account emails', () => {

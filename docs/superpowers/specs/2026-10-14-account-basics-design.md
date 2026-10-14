@@ -27,8 +27,8 @@ Before strangers can use Estori:
 
 ### Confirm your email
 - **Sign-up:** new email accounts start unconfirmed. When email sending is available, sign-up sends "Confirm your email for Estori", with a link to `/verify-email?token=…` that is valid for 24 hours.
-- **`/verify-email`** is a public page. It confirms the address and shows either "Your email is confirmed." with a link to the app, or "This confirmation link is invalid or has expired." with a hint to resend from Settings.
-- **Settings** shows "Email: confirmed" or "Email: not confirmed". An unconfirmed email account gets a **Resend confirmation email** button, shown when email sending is available.
+- **`/verify-email`** is a public page. It explains the link, says "Only confirm if you created an Estori account with this address." and posts the token once when the visitor clicks **Confirm my email**, never on load, so a link scanner that opens the page can't confirm the address. It then shows either "Your email is confirmed." with a link to the app, or "This confirmation link is invalid or has expired." with a hint to resend from Settings.
+- **Settings** shows "Email: confirmed" or "Email: not confirmed" when email sending is available; without it the status is hidden, since an unconfirmed address couldn't be confirmed. An unconfirmed email account then gets a **Resend confirmation email** button.
 - **No feature is locked behind confirmation yet.** During the beta, confirmation only proves ownership. That ownership protects the account when the same address later signs in with Google or GitHub (below).
 - **Existing accounts** keep their current flag.
 

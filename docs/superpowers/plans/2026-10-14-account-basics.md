@@ -319,11 +319,11 @@ Use `vi.spyOn` on `SessionService.prototype.revokeAllUserSessions`, or a recordi
   - **Success:** `Your password is updated. Sign in with your new password.` with a `Sign in` button calling `showAuthModal()`.
   - **Invalid-link error:** `This reset link is invalid or has expired.` with a `Request a new link` button that opens the auth window in forgot mode. Add a way to open the modal directly in forgot mode, for example an optional `initialMode` passed through `showAuthModal`'s options. Keep the existing call signature working.
 - **`VerifyEmailPage`:**
-  - On mount, it posts the token once (guard against React StrictMode double effects with a ref).
-  - It shows "Confirming your email…", then either `Your email is confirmed.` with a link to `/`, or `This confirmation link is invalid or has expired.` with "Resend it from Settings" linking to `/settings` (if signed out, `/settings` asks them to sign in).
+  - It shows a short explanation, the line `Only confirm if you created an Estori account with this address.` and a primary **Confirm my email** button. It posts the token once when the visitor clicks Confirm my email, never on load, because link scanners open pages without clicking (a ref guards against double posts and the button is disabled while pending).
+  - It then shows either `Your email is confirmed.` with a link to `/`, or `This confirmation link is invalid or has expired.` with "Resend it from Settings" linking to `/settings` (if signed out, `/settings` asks them to sign in).
   - It refreshes the user (`refreshUser`) after success when signed in.
 - **Settings,** account section, near the email:
-  - `Email confirmed`, or `Email not confirmed`;
+  - with `emailSending` on, `Email confirmed` or `Email not confirmed` (hidden when email sending is off, since the address couldn't be confirmed);
   - for unconfirmed email accounts (`user.provider === 'email'`) with `emailSending` on, a `Resend confirmation email` button that shows the server message as a toast.
 - **Pages** set `<title>{pageTitle('Reset password')}</title>` and `<title>{pageTitle('Confirm email')}</title>`.
 
@@ -332,7 +332,7 @@ Use `vi.spyOn` on `SessionService.prototype.revokeAllUserSessions`, or a recordi
   - the modal contains `Forgot password?` and the condition `authProviders?.emailSending`;
   - the modal's forgot mode calls `apiClient.forgotPassword`;
   - `ResetPasswordPage` calls `apiClient.resetPassword` and contains both result strings;
-  - `VerifyEmailPage` calls `apiClient.verifyEmail` once (a ref guard is present);
+  - `VerifyEmailPage` calls `apiClient.verifyEmail` once, from the Confirm my email click handler and not a mount effect (a ref guard is present);
   - Settings contains `Resend confirmation email` and `apiClient.resendVerification`;
   - TermsGate skips both new paths.
 

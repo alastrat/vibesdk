@@ -146,9 +146,11 @@ export default function SettingsPage() {
 	const activeSessions = activeSessionsQuery.data?.sessions ?? [];
 	const apiKeys = apiKeysQuery.data?.keys ?? [];
 
+	// Without email sending, an unconfirmed address can't be confirmed, so its status stays hidden.
+	const emailSending = !!authProviders?.emailSending;
 	const emailConfirmed = !!user?.emailVerified;
 	const canResendConfirmation =
-		!emailConfirmed && user?.provider === 'email' && !!authProviders?.emailSending;
+		emailSending && !emailConfirmed && user?.provider === 'email';
 
 	const resendConfirmationMutation = useMutation({
 		mutationFn: async () => {
@@ -311,20 +313,22 @@ export default function SettingsPage() {
 										<p className="truncate text-sm text-kumo-subtle">
 											{user?.email}
 										</p>
-										{emailConfirmed ? (
-											<Badge
-												variant="secondary"
-												className={SUCCESS_BADGE_CLASS}
-											>
-												Email confirmed
-											</Badge>
-										) : (
-											<Badge
-												variant="secondary"
-												className={WARNING_BADGE_CLASS}
-											>
-												Email not confirmed
-											</Badge>
+										{emailSending && (
+											emailConfirmed ? (
+												<Badge
+													variant="secondary"
+													className={SUCCESS_BADGE_CLASS}
+												>
+													Email confirmed
+												</Badge>
+											) : (
+												<Badge
+													variant="secondary"
+													className={WARNING_BADGE_CLASS}
+												>
+													Email not confirmed
+												</Badge>
+											)
 										)}
 									</div>
 								</div>
