@@ -67,6 +67,22 @@ describe('public chrome', () => {
 		expect(layout).toContain('scrollTo({ top: 0 })');
 	});
 
+	it('keeps an anchor in place while late content and the web font change the height above it', () => {
+		const layout = source(LAYOUT);
+		expect(layout).toContain('<main ref={mainRef}>');
+		expect(layout).toContain('new ResizeObserver(');
+		expect(layout).toMatch(/observer\.observe\(main\)/);
+		// Re-anchoring jumps; only the first scroll animates.
+		expect(layout).toContain("target.scrollIntoView({ block: 'start' })");
+		expect(layout).toContain('ANCHOR_HOLD_MS = 2000');
+		// The visitor scrolling takes over at once.
+		for (const event of ["'wheel'", "'touchstart'", "'keydown'"]) expect(layout).toContain(event);
+		expect(layout).toContain('container.addEventListener(event, release');
+		expect(layout).toContain('container.removeEventListener(event, release');
+		expect(layout).toContain('observer.disconnect()');
+		expect(layout).toContain('clearTimeout(');
+	});
+
 	it('sets the 1Password type scale and pill buttons in one place', () => {
 		const primitives = source(PRIMITIVES);
 		expect(primitives).toContain("export const HEADING_HERO = 'text-[44px] leading-[1.1] font-light tracking-[-0.02em] sm:text-[88px]';");

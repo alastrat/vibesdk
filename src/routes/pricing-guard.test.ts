@@ -48,4 +48,10 @@ describe('pricing page', () => {
 		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
 		expect(page.match(/scope="col"/g)).toHaveLength(3);
 	});
+
+	it('positions the Sell card, so the absolute sr-only caption cannot add a second page scroll', () => {
+		const sell = page.slice(page.lastIndexOf('<article', page.indexOf('>Sell</h2>')), page.indexOf('>Sell</h2>'));
+		expect(sell).toMatch(/<article className=\{cn\(CARD, '[^']*\brelative\b/);
+		expect(sell.length).toBeLessThan(200);
+	});
 });

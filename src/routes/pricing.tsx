@@ -60,7 +60,8 @@ export default function PricingPage() {
 							</Feature>
 						</ul>
 					</article>
-					<article className={cn(CARD, 'bg-public-charcoal text-white')}>
+					{/* Positioned, so the table's absolute sr-only caption stays inside the page's own scroll. */}
+					<article className={cn(CARD, 'relative bg-public-charcoal text-white')}>
 						<h2 className={cn(CARD_LABEL, 'text-white/80')}>Sell</h2>
 						<p className="mt-4 text-5xl font-light tracking-[-0.02em]">{PLATFORM_FEE_LABEL}</p>
 						<p className="mt-3 text-sm text-white/70">per sale</p>
