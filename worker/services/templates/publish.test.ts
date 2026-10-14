@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TemplateSource } from '../../agents/core/types';
-import { NOT_DEPLOYED_REASON, NOT_THINK_REASON, type ListingState, type PublishRequest } from './reuse';
+import { NOT_DEPLOYED_REASON, NOT_THINK_REASON, PAID_COPY_REASON, type ListingState, type PublishRequest } from './reuse';
 import { VERSION_IN_REVIEW_ERROR } from './catalog';
 import type { SitePageCopy } from '../../../shared/types/site-page';
 import { publishSite, type PublishDeps } from './publish';
@@ -21,6 +21,7 @@ interface Setup {
 	files?: TreeFile[];
 	submitError?: Error;
 	sellerPayouts?: 'ready' | 'not-configured' | 'not-onboarded';
+	paidCopy?: boolean;
 }
 
 function harness(setup: Setup = {}) {
@@ -54,6 +55,7 @@ function harness(setup: Setup = {}) {
 			calls.push(`applyVisibility:${request.visibility}`);
 		},
 		sellerPayouts: async () => setup.sellerPayouts ?? 'ready',
+		isPaidCopy: async () => setup.paidCopy ?? false,
 	};
 	return { deps, calls, saved, versionCopies };
 }
@@ -76,6 +78,20 @@ describe('publishSite', () => {
 		const undeployed = harness({ source: null });
 		expect(await publishSite(undeployed.deps, FREE)).toEqual({ ok: false, status: 400, error: NOT_DEPLOYED_REASON });
 		expect([...legacy.calls, ...undeployed.calls]).toEqual([]);
+	});
+
+	it('keeps a copy of a paid site private, free or paid, and changes nothing', async () => {
+		const { deps, calls, saved } = harness({ paidCopy: true });
+		expect(await publishSite(deps, FREE)).toEqual({ ok: false, status: 403, error: PAID_COPY_REASON });
+		expect(await publishSite(deps, PAID)).toEqual({ ok: false, status: 403, error: PAID_COPY_REASON });
+		expect(calls).toEqual([]);
+		expect(saved).toEqual([]);
+	});
+
+	it('still lets the owner of a paid copy make it private', async () => {
+		const { deps, calls } = harness({ paidCopy: true });
+		expect(await publishSite(deps, { visibility: 'private' })).toEqual({ ok: true, inReview: false, approvedLive: false });
+		expect(calls).toEqual(['applyVisibility:private']);
 	});
 
 	it('publishes a free site after checking its files', async () => {

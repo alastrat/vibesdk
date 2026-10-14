@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
 	NOT_DEPLOYED_REASON,
 	NOT_THINK_REASON,
+	PAID_COPY_REASON,
 	REUSE_CONSENT_REQUIRED_MESSAGE,
 	SITE_NOT_REUSABLE_MESSAGE,
 	SITE_NOT_YET_AVAILABLE_MESSAGE,
 	SITE_PURCHASE_REQUIRED_MESSAGE,
 	SITE_UNAVAILABLE_MESSAGE,
 	canReadSource,
+	isPaidCopy,
 	parseDiscoverFilters,
 	parseDiscoverRemoval,
 	parsePublishRequest,
@@ -67,9 +69,32 @@ describe('parsePublishRequest', () => {
 
 describe('publishEligibilityReason', () => {
 	it('allows deployed Think apps only', () => {
-		expect(publishEligibilityReason('think', true)).toBeNull();
-		expect(publishEligibilityReason('think', false)).toBe(NOT_DEPLOYED_REASON);
-		expect(publishEligibilityReason('phasic', true)).toBe(NOT_THINK_REASON);
+		expect(publishEligibilityReason('think', true, false)).toBeNull();
+		expect(publishEligibilityReason('think', false, false)).toBe(NOT_DEPLOYED_REASON);
+		expect(publishEligibilityReason('phasic', true, false)).toBe(NOT_THINK_REASON);
+	});
+
+	it('keeps a copy of a paid site private even before it is deployed', () => {
+		expect(publishEligibilityReason('think', true, true)).toBe(PAID_COPY_REASON);
+		expect(publishEligibilityReason('think', false, true)).toBe(PAID_COPY_REASON);
+	});
+});
+
+describe('isPaidCopy', () => {
+	it('is false for an app not copied from a paid version', () => {
+		expect(isPaidCopy(null, 'buyer')).toBe(false);
+	});
+
+	it("is true for a copy of another creator's paid site", () => {
+		expect(isPaidCopy({ creatorUserId: 'seller' }, 'buyer')).toBe(true);
+	});
+
+	it('is false for a creator copying their own paid site', () => {
+		expect(isPaidCopy({ creatorUserId: 'seller' }, 'seller')).toBe(false);
+	});
+
+	it('stays true after the paid listing is deleted', () => {
+		expect(isPaidCopy({ creatorUserId: null }, 'buyer')).toBe(true);
 	});
 });
 

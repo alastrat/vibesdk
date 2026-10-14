@@ -66,6 +66,22 @@ export class TemplateService extends BaseService {
         return row ?? null;
     }
 
+    /**
+     * The creator of the paid listing an app was copied from, null when the app wasn't copied from a paid
+     * version. The creator is null once that listing is deleted.
+     */
+    async getPaidCopyOrigin(appId: string): Promise<{ creatorUserId: string | null } | null> {
+        const row = await this.database
+            .select({ versionId: schema.apps.fromTemplateVersionId, creatorUserId: schema.templates.creatorUserId })
+            .from(schema.apps)
+            .leftJoin(schema.templateVersions, eq(schema.templateVersions.id, schema.apps.fromTemplateVersionId))
+            .leftJoin(schema.templates, eq(schema.templates.id, schema.templateVersions.templateId))
+            .where(eq(schema.apps.id, appId))
+            .get();
+        if (!row?.versionId) return null;
+        return { creatorUserId: row.creatorUserId ?? null };
+    }
+
     async getListingByApp(appId: string): Promise<schema.Template | null> {
         const row = await this.database.select().from(schema.templates).where(eq(schema.templates.sourceAppId, appId)).get();
         return row ?? null;

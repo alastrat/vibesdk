@@ -24,6 +24,7 @@ import {
 import {
     NOT_DEPLOYED_REASON,
     PUBLISHING_CHECK_FAILED_MESSAGE,
+    isPaidCopy,
     parsePublishRequest,
     publishEligibilityReason,
 } from '../../../services/templates/reuse';
@@ -103,15 +104,17 @@ export class PublishingController extends BaseController {
         try {
             const appId = context.pathParams.id;
             const listings = new TemplateService(env);
-            const [state, listing, facts, savedCopy] = await Promise.all([
+            const [state, listing, facts, savedCopy, paidOrigin] = await Promise.all([
                 new AppService(env).getPublishingState(appId),
                 listings.getListingByApp(appId),
                 PublishingController.loadFacts(env, appId),
                 new SitePageService(env).getCopy(appId),
+                listings.getPaidCopyOrigin(appId),
             ]);
             if (!state) {
                 return PublishingController.createErrorResponse<SitePublishingData>('App not found', 404);
             }
+            const paidCopy = isPaidCopy(paidOrigin, context.user!.id);
             const [versions, buyerCount] = listing
                 ? await Promise.all([listings.listVersions(listing.id), listings.countBuyers(listing.id)])
                 : [[], 0];
@@ -121,7 +124,7 @@ export class PublishingController extends BaseController {
                 hasReuseConsent: state.reuseConsentAt !== null,
                 ineligibleReason: facts.unavailable
                     ? PUBLISHING_CHECK_FAILED_MESSAGE
-                    : publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null),
+                    : publishEligibilityReason(facts.behaviorType, facts.deployedCommit !== null, paidCopy),
                 listing: listing ? toOwnerPaidListing(listing, versions, buyerCount) : null,
                 removedFromDiscover: state.removedFromDiscoverAt ? { reason: state.removedFromDiscoverReason } : null,
                 pageCopy: savedCopy,
@@ -437,6 +440,7 @@ export class PublishingController extends BaseController {
                 if (!stripeFromEnv(env)) return 'not-configured';
                 return (await PublishingController.readySellerAccount(env, userId, 'when-inactive')) ? 'ready' : 'not-onboarded';
             },
+            isPaidCopy: async () => isPaidCopy(await listings.getPaidCopyOrigin(appId), userId),
         };
     }
 

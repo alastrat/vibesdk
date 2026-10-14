@@ -30,12 +30,14 @@ export interface PublishDeps {
 	applyVisibility(request: PublishRequest): Promise<void>;
 	/** Whether the owner can be paid: Stripe configured and their account able to receive transfers. */
 	sellerPayouts(): Promise<'ready' | 'not-configured' | 'not-onboarded'>;
+	/** Whether the app is a copy of someone else's paid site. */
+	isPaidCopy(): Promise<boolean>;
 }
 
 /** `approvedLive`: the listing already had an approved version when the publish started. */
 export type PublishOutcome =
 	| { ok: true; inReview: boolean; approvedLive: boolean }
-	| { ok: false; status: 400 | 409 | 500; error: string };
+	| { ok: false; status: 400 | 403 | 409 | 500; error: string };
 
 export async function publishSite(deps: PublishDeps, request: PublishRequest): Promise<PublishOutcome> {
 	if (request.visibility === 'private') {
@@ -43,9 +45,11 @@ export async function publishSite(deps: PublishDeps, request: PublishRequest): P
 		return { ok: true, inReview: false, approvedLive: false };
 	}
 
-	const { behaviorType, source } = await deps.loadSource();
-	const ineligible = publishEligibilityReason(behaviorType, source !== null);
-	if (ineligible || !source) return { ok: false, status: 400, error: ineligible ?? NOT_DEPLOYED_REASON };
+	const [{ behaviorType, source }, paidCopy] = await Promise.all([deps.loadSource(), deps.isPaidCopy()]);
+	const ineligible = publishEligibilityReason(behaviorType, source !== null, paidCopy);
+	if (ineligible || !source) {
+		return { ok: false, status: paidCopy ? 403 : 400, error: ineligible ?? NOT_DEPLOYED_REASON };
+	}
 
 	const listing = await deps.loadListing();
 	const approvedLive = (listing?.state.currentVersionId ?? null) !== null;
