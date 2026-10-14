@@ -30,7 +30,7 @@ You're responsible for your sites and how you use them, including the products y
 
 "Your content" means the prompts, messages, images and files you give the Service, and the sites built for you.
 
-You own your content, to the extent the law allows ownership of it. You give us a worldwide, non-exclusive, royalty-free license to host, store, run, copy, modify (for example, to build and repair your site), back up, display and transmit your content, only as needed to provide, secure and improve the Service. For public sites this includes showing the site, its screenshots, its title and your display name in Discover and on its product page. The license ends when you delete the content, except for copies kept in backups for a limited time, copies another user already made under section 5 or 6, and content we must keep by law.
+You own your content, to the extent the law allows ownership of it. You give us a worldwide, non-exclusive, royalty-free license to host, store, run, copy, modify (for example, to build and repair your site), back up, display and transmit your content, only as needed to provide, secure and improve the Service. For public sites this includes showing the site, its screenshots, its title and your display name in Discover and on its product page. The license ends when you delete the content, except for stored copies we keep until erasure is complete, copies in backups for a limited time, copies another user already made under section 5 or 6, and content we must keep by law.
 
 You confirm that you have all the rights needed to give us your content and that it doesn't break these Terms or anyone's rights.
 

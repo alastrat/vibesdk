@@ -33,4 +33,10 @@ describe('legal documents', () => {
 		expect(LEGAL_DOCUMENTS.terms.body).toContain('Harris County, Texas');
 		expect(LEGAL_DOCUMENTS.terms.body).toContain('Stripe Connected Account Agreement');
 	});
+
+	it('promises erasure on request, not automatic deletion when a site is deleted', () => {
+		expect(LEGAL_DOCUMENTS.privacy.body).toContain('We complete erasure within 45 days');
+		expect(LEGAL_DOCUMENTS.privacy.body).not.toContain('we delete the related personal data within 45 days');
+		expect(LEGAL_DOCUMENTS.terms.body).toContain('except for stored copies we keep until erasure is complete');
+	});
 });

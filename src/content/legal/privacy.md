@@ -63,7 +63,7 @@ Your browser also saves a few preferences (theme, sidebar state and sort order) 
 
 ## 5. How long we keep it
 
-We keep account information and your content while your account exists. When you delete a site or your account, we delete the related personal data within 45 days, except where we must keep it longer, for example purchase records for tax and accounting, or information needed to resolve disputes and prevent abuse. Copies in backups are deleted on their normal cycle. Security records are kept only as long as needed to protect accounts and the Service.
+We keep account information and your content while your account exists. When you delete a site, it's removed from your account and from Discover right away, but its stored files, conversations and screenshots may remain in our systems until they're erased. To have your account and all personal data about you erased, email {{contact.privacy}}. We complete erasure within 45 days, except where we must keep information longer, for example purchase records for tax and accounting, or information needed to resolve disputes and prevent abuse. Copies in backups are deleted on their normal cycle. We keep security records, such as sign-in history, to protect accounts and the Service, and delete them when we erase your account.
 
 ## 6. Your rights and choices
 
