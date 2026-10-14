@@ -108,6 +108,11 @@
 		height: 100%;
 	}
 
+	/* Keeps page content's own z-index below dialogs and popovers portaled to the body. */
+	#root {
+		isolation: isolate;
+	}
+
 	body {
 		@apply bg-kumo-base text-kumo-default;
 	}
