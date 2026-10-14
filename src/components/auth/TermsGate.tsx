@@ -1,20 +1,33 @@
 import { useState } from 'react';
+import { useLocation } from 'react-router';
 import { Button } from '@cloudflare/kumo';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/auth-context';
 import { apiClient } from '@/lib/api-client';
 import { TERMS_VERSION } from '@/api-types';
+import { LEGAL_LINKS } from '@/content/legal/legal-documents';
+import { TermsAgreementLabel } from './TermsAgreementLabel';
 
 /** One-time agreement for signed-in users who haven't agreed to the current terms version. */
 export function TermsGate() {
-	const { user, refreshUser, logout } = useAuth();
+	const { user } = useAuth();
+	const { pathname } = useLocation();
+
+	// The window must not cover the documents it asks the user to read.
+	const onLegalPage = LEGAL_LINKS.some((link) => link.path === pathname);
+	const open = !!user && !user.isAnonymous && user.termsAccepted === false && !onLegalPage;
+	if (!open) return null;
+
+	return <TermsDialog key={user.id} />;
+}
+
+/** Owns the agreement state, so it starts unticked for each person. */
+function TermsDialog() {
+	const { refreshUser, logout } = useAuth();
 	const [agreed, setAgreed] = useState(false);
 	const [pending, setPending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-
-	const open = !!user && !user.isAnonymous && user.termsAccepted === false;
-	if (!open) return null;
 
 	const accept = async () => {
 		setPending(true);
@@ -41,11 +54,7 @@ export function TermsGate() {
 				</DialogHeader>
 				<label className="flex items-start gap-2 text-sm text-kumo-default">
 					<Checkbox checked={agreed} onCheckedChange={(checked) => setAgreed(checked === true)} className="mt-0.5" />
-					<span>
-						I'm 18 or older and agree to the{' '}
-						<a href="/terms" target="_blank" rel="noopener noreferrer" className="underline">Terms of Service</a> and{' '}
-						<a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline">Privacy Policy</a>
-					</span>
+					<TermsAgreementLabel />
 				</label>
 				{error && <p className="text-sm text-kumo-danger">{error}</p>}
 				<div className="flex justify-end gap-2">

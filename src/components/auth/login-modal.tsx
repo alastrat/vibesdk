@@ -14,6 +14,7 @@ import {
 } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { Checkbox } from '@/components/ui/checkbox';
+import { TermsAgreementLabel } from './TermsAgreementLabel';
 import { TERMS_VERSION } from '@/api-types';
 import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import {
@@ -482,16 +483,7 @@ export function LoginModal({
 											disabled={isLoading}
 											className="mt-0.5"
 										/>
-										<span>
-											I'm 18 or older and agree to the{' '}
-											<a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-kumo-strong">
-												Terms of Service
-											</a>{' '}
-											and{' '}
-											<a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-kumo-strong">
-												Privacy Policy
-											</a>
-										</span>
+										<TermsAgreementLabel />
 									</label>
 									{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
 								</div>
