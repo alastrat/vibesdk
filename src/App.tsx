@@ -3,6 +3,7 @@ import { Outlet } from 'react-router';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { AuthProvider } from './contexts/auth-context';
 import { AuthModalProvider } from './components/auth/AuthModalProvider';
+import { TermsGate } from './components/auth/TermsGate';
 import { ThemeProvider } from './contexts/theme-context';
 import { LimitsProvider } from './contexts/limits-context';
 import { Toaster } from './components/ui/sonner';
@@ -45,6 +46,7 @@ export default function App() {
 										richColors
 										position="top-right"
 									/>
+									<TermsGate />
 								</AuthModalProvider>
 							</LimitsProvider>
 						</AuthProvider>

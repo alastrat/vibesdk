@@ -13,6 +13,8 @@ import {
 	InputGroup,
 } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
+import { Checkbox } from '@/components/ui/checkbox';
+import { TERMS_VERSION } from '@/api-types';
 import CloudflareLogo from '@/assets/provider-logos/cloudflare.svg?react';
 import {
 	EyeIcon,
@@ -42,6 +44,7 @@ interface LoginModalProps {
 		email: string;
 		password: string;
 		name?: string;
+		acceptedTermsVersion: string;
 	}) => Promise<void>;
 	error?: string | null;
 	onClearError?: () => void;
@@ -75,6 +78,7 @@ export function LoginModal({
 	const [password, setPassword] = useState('');
 	const [name, setName] = useState('');
 	const [confirmPassword, setConfirmPassword] = useState('');
+	const [agreeToTerms, setAgreeToTerms] = useState(false);
 
 	// Validation errors
 	const [validationErrors, setValidationErrors] = useState<
@@ -96,6 +100,7 @@ export function LoginModal({
 		setPassword('');
 		setName('');
 		setConfirmPassword('');
+		setAgreeToTerms(false);
 		setValidationErrors({});
 		setShowPassword(false);
 		if (onClearError) onClearError();
@@ -157,6 +162,10 @@ export function LoginModal({
 			if (password !== confirmPassword) {
 				errors.confirmPassword = 'Passwords do not match';
 			}
+
+			if (!agreeToTerms) {
+				errors.terms = 'Agree to the Terms of Service and Privacy Policy to create an account';
+			}
 		}
 
 		setValidationErrors(errors);
@@ -173,7 +182,7 @@ export function LoginModal({
 			if (mode === 'login' && onEmailLogin) {
 				await onEmailLogin({ email, password });
 			} else if (mode === 'register' && onRegister) {
-				await onRegister({ email, password, name: name.trim() });
+				await onRegister({ email, password, name: name.trim(), acceptedTermsVersion: TERMS_VERSION });
 			}
 			// Don't auto-close here - let the parent handle success/error
 		} catch (err) {
@@ -461,6 +470,30 @@ export function LoginModal({
 										autoComplete="new-password"
 										className="w-full"
 									/>
+								</div>
+							)}
+
+							{mode === 'register' && (
+								<div className="grid gap-1">
+									<label className="flex items-start gap-2 text-sm text-kumo-default">
+										<Checkbox
+											checked={agreeToTerms}
+											onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+											disabled={isLoading}
+											className="mt-0.5"
+										/>
+										<span>
+											I'm 18 or older and agree to the{' '}
+											<a href="/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-kumo-strong">
+												Terms of Service
+											</a>{' '}
+											and{' '}
+											<a href="/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-kumo-strong">
+												Privacy Policy
+											</a>
+										</span>
+									</label>
+									{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
 								</div>
 							)}
 

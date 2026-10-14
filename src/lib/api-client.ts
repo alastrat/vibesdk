@@ -84,6 +84,7 @@ import type{
 	StripeConnectStatusData,
 	StripeLinkData,
 	TemplateCategory,
+	AuthUser,
 } from '@/api-types';
 import {
 	RateLimitExceededError,
@@ -1349,10 +1350,19 @@ class ApiClient {
 		email: string;
 		password: string;
 		name?: string;
+		acceptedTermsVersion: string;
 	}): Promise<ApiResponse<RegisterResponseData>> {
 		return this.request<RegisterResponseData>('/api/auth/register', {
 			method: 'POST',
 			body: data,
+		});
+	}
+
+	/** Record the signed-in user's agreement to the current terms version. */
+	async acceptTerms(version: string): Promise<ApiResponse<{ user: AuthUser }>> {
+		return this.request<{ user: AuthUser }>('/api/auth/accept-terms', {
+			method: 'POST',
+			body: { version },
 		});
 	}
 

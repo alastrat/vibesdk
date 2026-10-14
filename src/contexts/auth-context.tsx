@@ -75,6 +75,7 @@ interface AuthContextType {
 		email: string;
 		password: string;
 		name?: string;
+		acceptedTermsVersion: string;
 	}) => Promise<void>;
 
 	logout: () => Promise<void>;
@@ -333,6 +334,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			email: string;
 			password: string;
 			name?: string;
+			acceptedTermsVersion: string;
 		}) => {
 			const response = await apiClient.register(data);
 			if (!response.success || !response.data) {
@@ -389,6 +391,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			email: string;
 			password: string;
 			name?: string;
+			acceptedTermsVersion: string;
 		}) => {
 			await registerMutateAsync(data);
 		},
