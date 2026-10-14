@@ -115,7 +115,7 @@ export function Features() {
 		<section className="bg-public-charcoal px-4 pt-20 pb-24 text-white sm:px-6 sm:pt-28">
 			<div className="mx-auto max-w-[1248px]">
 				<Eyebrow tone="dark">Estori store builder</Eyebrow>
-				<h2 className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance')}>Everything your store needs, from one description</h2>
+				<h2 className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance')}>What Estori builds today</h2>
 				<p className={cn(LEAD, 'mt-5 max-w-2xl text-white/80')}>Start from scratch or from a store in Discover, then change anything by chatting.</p>
 				<TextLink to="/#build" tone="dark" className="mt-6">
 					Start building

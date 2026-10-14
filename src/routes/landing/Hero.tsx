@@ -4,7 +4,7 @@ import { BuildBox } from '@/components/build-box';
 import { AnimatedList } from '@/components/magicui/animated-list';
 import { BorderBeam } from '@/components/magicui/border-beam';
 import { Safari } from '@/components/magicui/safari';
-import { HEADING_HERO, LEAD } from '@/components/public-site/primitives';
+import { Eyebrow, HEADING_HERO, LEAD } from '@/components/public-site/primitives';
 import { cn } from '@/lib/utils';
 
 const STORE_PHRASES = ['a specialty coffee store', 'a handmade ceramics shop', 'a streetwear store', 'a plant shop with local delivery', 'a vintage camera store'];
@@ -20,10 +20,11 @@ export function Hero() {
 		<section className="overflow-x-clip bg-public-charcoal text-white">
 			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
 			<div className="mx-auto max-w-[1248px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
-				<h1 className={cn(HEADING_HERO, 'mx-auto max-w-5xl text-balance')}>Build online stores with AI. Sell them as templates.</h1>
+				<Eyebrow tone="dark">The agentic commerce platform</Eyebrow>
+				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>Build your store with AI. Sell wherever shoppers ask AI.</h1>
 				<p className={cn(LEAD, 'mx-auto mt-6 max-w-2xl text-pretty text-white/80')}>
-					Describe a store and Estori builds and deploys it: catalog, cart, checkout flow and order records. Publish it to Discover and earn when
-					others start from it.
+					Describe your brand and Estori builds and deploys a complete store: catalog, cart, checkout flow and order records. Agentic commerce,
+					operations agents and personalized shopping are coming soon to every store.
 				</p>
 				{/* The frame resets the band's white text so the box's own controls stay readable. */}
 				<div

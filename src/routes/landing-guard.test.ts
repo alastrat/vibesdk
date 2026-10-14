@@ -58,6 +58,17 @@ describe('landing page', () => {
 		expect(hero).toContain('<section className="overflow-x-clip bg-public-charcoal text-white">');
 	});
 
+	it('speaks to brands first and marks what is coming soon', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toContain('The agentic commerce platform');
+		expect(hero).toContain('Build your store with AI. Sell wherever shoppers ask AI.');
+		expect(hero).toContain('are coming soon to every store');
+		expect(source('/src/routes/landing/Features.tsx')).toContain('What Estori builds today');
+		const band = source('/src/routes/landing/SellersBand.tsx');
+		expect(band).toContain('CREATOR_ITEMS.map');
+		expect(band).toContain('<LinkCard');
+	});
+
 	it('always underlines the Discover link under the build box', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
 		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*Browse stores in Discover/);
@@ -84,7 +95,20 @@ describe('landing page', () => {
 
 	it('lays the page out in the approved order', () => {
 		const page = source('/src/routes/landing/LandingPage.tsx');
-		const order = ['<Hero />', '<StoreLogos', '<StoreShowcase', '<Features />', '<CreatorsPanel />', '<LivePreview />', '<PricingSummary />', '<PublicFaq />', '<ClosingPanel />'];
+		const order = [
+			'<Hero />',
+			'<StoreLogos',
+			'<AgenticCommerceSection />',
+			'<OperationsSection />',
+			'<PersonalizationSection />',
+			'<Features />',
+			'<SellersBand />',
+			'<StoreShowcase',
+			'<LivePreview />',
+			'<PricingSummary />',
+			'<PublicFaq />',
+			'<ClosingPanel />',
+		];
 		const positions = order.map((tag) => page.indexOf(tag));
 		expect(positions.every((position) => position > -1)).toBe(true);
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
