@@ -690,6 +690,22 @@ export class AppService extends BaseService {
         return changed.length > 0;
     }
 
+    /**
+     * Shows a store on the landing page, or takes it off. Only a public store still in Discover can be shown.
+     * Writes the flag alone, so `updatedAt` and Discover's "recent" order stay as they were. False when nothing matched.
+     */
+    async setShowcased(appId: string, showcased: boolean): Promise<boolean> {
+        const target = showcased
+            ? and(eq(schema.apps.id, appId), eq(schema.apps.visibility, 'public'), isNull(schema.apps.removedFromDiscoverAt))
+            : eq(schema.apps.id, appId);
+        const changed = await this.database
+            .update(schema.apps)
+            .set({ isFeatured: showcased })
+            .where(target)
+            .returning({ id: schema.apps.id });
+        return changed.length > 0;
+    }
+
     /** The app another app was started from, for its "Started from" line. */
     async getStartedFrom(appId: string): Promise<{
         id: string;

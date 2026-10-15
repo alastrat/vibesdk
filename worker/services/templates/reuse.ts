@@ -85,6 +85,8 @@ export interface DiscoverFilters {
 	category: TemplateCategory | null;
 	pricing: DiscoverPricing;
 	reusableOnly: boolean;
+	/** Only stores an admin chose for the landing page. */
+	showcasedOnly: boolean;
 }
 
 function field(body: unknown, key: string): unknown {
@@ -207,12 +209,20 @@ export function parseDiscoverFilters(params: URLSearchParams): Validation<Discov
 	const pricing = DISCOVER_PRICING_FILTERS.find((value) => value === (params.get('pricing') ?? 'all'));
 	if (!pricing) return { ok: false, error: 'pricing must be all, free or paid' };
 	const reusable = params.get('reusableOnly');
+	const showcased = params.get('showcasedOnly');
 	return {
 		ok: true,
 		value: {
 			category: isTemplateCategory(category) ? category : null,
 			pricing,
 			reusableOnly: reusable === 'true' || reusable === '1',
+			showcasedOnly: showcased === 'true' || showcased === '1',
 		},
 	};
+}
+
+/** An admin showing a store on the landing page, or taking it off. */
+export function parseShowcaseChange(body: unknown): Validation<{ showcased: boolean }> {
+	const showcased = field(body, 'showcased');
+	return typeof showcased === 'boolean' ? { ok: true, value: { showcased } } : { ok: false, error: 'showcased must be true or false' };
 }

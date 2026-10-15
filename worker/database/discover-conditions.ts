@@ -26,6 +26,7 @@ export function discoverConditions(filters: DiscoverFilters | undefined): SQL[] 
 	if (filters.pricing === 'paid') {
 		conditions.push(sql`exists (${listedListing} and listing.current_version_id is not null)`);
 	}
+	if (filters.showcasedOnly) conditions.push(eq(schema.apps.isFeatured, true));
 	if (filters.reusableOnly) {
 		conditions.push(sql`${schema.apps.lastDeployedAt} is not null`);
 		conditions.push(sql`not exists (${listedListing} and listing.current_version_id is null)`);

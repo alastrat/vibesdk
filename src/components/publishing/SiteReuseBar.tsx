@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Badge, Button, InputArea } from '@cloudflare/kumo';
 import {
 	useSetDiscoverRemoval,
+	useSetShowcased,
 	useSitePublishing,
 	useSubmitPaidUpdate,
 	useWithdrawPaidVersion,
@@ -12,7 +13,7 @@ import type { AppDetailsData } from '@/api-types';
 import { StartedFromLine } from './StartedFromLine';
 
 interface SiteReuseBarProps {
-	app: Pick<AppDetailsData, 'id' | 'visibility' | 'startedFrom' | 'canModerate' | 'removedFromDiscover'>;
+	app: Pick<AppDetailsData, 'id' | 'visibility' | 'startedFrom' | 'canModerate' | 'removedFromDiscover' | 'isFeatured'>;
 	isOwner: boolean;
 }
 
@@ -34,6 +35,9 @@ export function SiteReuseBar({ app, isOwner }: SiteReuseBarProps) {
 					</span>
 				)}
 				{showOwner && <OwnerPaidListing appId={app.id} />}
+				{showModeration && app.visibility === 'public' && !app.removedFromDiscover && (
+					<ShowcaseSwitch appId={app.id} showcased={app.isFeatured === true} />
+				)}
 				{showModeration && <DiscoverModeration appId={app.id} removed={app.removedFromDiscover !== null} />}
 			</div>
 		</div>
@@ -86,6 +90,29 @@ function OwnerPaidListing({ appId }: { appId: string }) {
 				</Button>
 			)}
 		</>
+	);
+}
+
+/** Admins only: put a public Discover store in the landing page's showcase, or take it out. */
+function ShowcaseSwitch({ appId, showcased }: { appId: string; showcased: boolean }) {
+	const change = useSetShowcased();
+	return (
+		<Button
+			size="sm"
+			variant="secondary"
+			loading={change.isPending}
+			onClick={() =>
+				change.mutate(
+					{ appId, showcased: !showcased },
+					{
+						onSuccess: () => toast.success(showcased ? 'Removed from the landing page' : 'Shown on the landing page'),
+						onError: (error) => toast.error(error.message),
+					},
+				)
+			}
+		>
+			{showcased ? 'Remove from the landing page' : 'Show on the landing page'}
+		</Button>
 	);
 }
 

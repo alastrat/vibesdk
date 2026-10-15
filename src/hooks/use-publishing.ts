@@ -104,6 +104,13 @@ export function useSetDiscoverRemoval() {
 	);
 }
 
+/** Admins only: show a public Discover store on the landing page, or take it off. */
+export function useSetShowcased() {
+	return usePublishingMutation((input: { appId: string; showcased: boolean }) =>
+		unwrap(apiClient.setShowcased(input.appId, { showcased: input.showcased }), "Couldn't change the landing page showcase"),
+	);
+}
+
 /** Admins only: capture the showcase images Discover stores are still missing, one batch per call. */
 export function useRefreshShowcaseScreenshots() {
 	return usePublishingMutation((_input: void) =>

@@ -27,5 +27,6 @@ export function setupPublishingRoutes(app: Hono<AppEnv>): void {
     app.post('/api/admin/template-versions/:id/approve', setAuthLevel(AuthConfig.admin), adaptController(ReviewAdminController, ReviewAdminController.approveVersion));
     app.post('/api/admin/template-versions/:id/reject', setAuthLevel(AuthConfig.admin), adaptController(ReviewAdminController, ReviewAdminController.rejectVersion));
     app.put('/api/admin/apps/:id/discover', setAuthLevel(AuthConfig.admin), adaptController(ReviewAdminController, ReviewAdminController.setDiscoverRemoval));
+    app.put('/api/admin/apps/:id/showcase', setAuthLevel(AuthConfig.admin), adaptController(ReviewAdminController, ReviewAdminController.setShowcased));
     app.post('/api/admin/showcase-screenshots/refresh', setAuthLevel(AuthConfig.admin), adaptController(ReviewAdminController, ReviewAdminController.refreshShowcaseScreenshots));
 }

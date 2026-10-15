@@ -22,7 +22,8 @@ describe('publishing routes', () => {
 
 	it('puts every admin route behind the admin auth level', () => {
 		const adminLines = lines.filter((line) => line.includes("'/api/admin/"));
-		expect(adminLines).toHaveLength(9);
+		expect(adminLines).toHaveLength(10);
+		expect(routes).toContain("app.put('/api/admin/apps/:id/showcase', setAuthLevel(AuthConfig.admin), adaptController(ReviewAdminController, ReviewAdminController.setShowcased));");
 		for (const line of adminLines) expect(line).toContain('setAuthLevel(AuthConfig.admin)');
 	});
 

@@ -15,7 +15,7 @@ import {
     parseRejectionReason,
     supersededVersionId,
 } from '../../../services/templates/catalog';
-import { parseDiscoverRemoval } from '../../../services/templates/reuse';
+import { parseDiscoverRemoval, parseShowcaseChange } from '../../../services/templates/reuse';
 import { SHOWCASE_REFRESH_BATCH, runShowcaseRefresh } from '../../../services/showcase/showcase-screenshot';
 import { refreshShowcaseScreenshot } from '../../../services/showcase/showcase-refresh';
 import { decodeText, type TreeFile } from '../../../services/templates/snapshot';
@@ -28,6 +28,8 @@ import type {
     PaidVersionActionData,
     PendingReviewsData,
     RejectVersionRequest,
+    ShowcaseChangeData,
+    ShowcaseChangeRequest,
     ReviewVersionFileData,
     ReviewVersionFilesData,
     ShowcaseRefreshData,
@@ -257,6 +259,36 @@ export class ReviewAdminController extends BaseController {
         } catch (error) {
             this.logger.error('Error changing Discover removal', error);
             return ReviewAdminController.createErrorResponse<DiscoverRemovalData>('Failed to change the removal', 500);
+        }
+    }
+
+    /** Show a public Discover store on the landing page, or take it off. */
+    static async setShowcased(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<ShowcaseChangeData>>> {
+        try {
+            const appId = context.pathParams.id;
+            const bodyResult = await ReviewAdminController.parseJsonBody<ShowcaseChangeRequest>(request);
+            if (!bodyResult.success) {
+                return bodyResult.response! as ControllerResponse<ApiResponse<ShowcaseChangeData>>;
+            }
+            const change = parseShowcaseChange(bodyResult.data);
+            if (!change.ok) {
+                return ReviewAdminController.createErrorResponse<ShowcaseChangeData>(change.error, 400);
+            }
+            const changed = await new AppService(env).setShowcased(appId, change.value.showcased);
+            if (!changed) {
+                return change.value.showcased
+                    ? ReviewAdminController.createErrorResponse<ShowcaseChangeData>('Only public stores in Discover can be shown on the landing page', 409)
+                    : ReviewAdminController.createErrorResponse<ShowcaseChangeData>('App not found', 404);
+            }
+            return ReviewAdminController.createSuccessResponse<ShowcaseChangeData>({ appId, showcased: change.value.showcased });
+        } catch (error) {
+            this.logger.error('Error changing the landing page showcase', error);
+            return ReviewAdminController.createErrorResponse<ShowcaseChangeData>('Failed to change the showcase', 500);
         }
     }
 

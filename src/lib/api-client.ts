@@ -81,6 +81,8 @@ import type{
 	RejectVersionRequest,
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
+	ShowcaseChangeData,
+	ShowcaseChangeRequest,
 	ShowcaseRefreshData,
 	SiteCheckoutData,
 	PublicPlanLimits,
@@ -174,6 +176,8 @@ interface PublicAppsParams extends PaginationParams {
 	category?: TemplateCategory;
 	pricing?: DiscoverPricing;
 	reusableOnly?: boolean;
+	/** Only stores an admin showcased on the landing page. */
+	showcasedOnly?: boolean;
 }
 
 /**
@@ -522,6 +526,7 @@ class ApiClient {
 		if (params?.category) queryParams.set('category', params.category);
 		if (params?.pricing && params.pricing !== 'all') queryParams.set('pricing', params.pricing);
 		if (params?.reusableOnly) queryParams.set('reusableOnly', 'true');
+		if (params?.showcasedOnly) queryParams.set('showcasedOnly', 'true');
 		if (params?.boardId) queryParams.set('boardId', params.boardId);
 
 		const endpoint = `/api/apps/public${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
@@ -673,6 +678,11 @@ class ApiClient {
 	/** Admins only: hide a public site from Discover and block its reuse, or restore it. */
 	async setDiscoverRemoval(appId: string, body: DiscoverRemovalRequest): Promise<ApiResponse<DiscoverRemovalData>> {
 		return this.request<DiscoverRemovalData>(`/api/admin/apps/${appId}/discover`, { method: 'PUT', body });
+	}
+
+	/** Admins only: show a public Discover store on the landing page, or take it off. */
+	async setShowcased(appId: string, body: ShowcaseChangeRequest): Promise<ApiResponse<ShowcaseChangeData>> {
+		return this.request<ShowcaseChangeData>(`/api/admin/apps/${appId}/showcase`, { method: 'PUT', body });
 	}
 
 	/** Admins only: capture the showcase images Discover stores are still missing, one batch per call. */

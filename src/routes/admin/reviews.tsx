@@ -14,6 +14,8 @@ import {
 import { useAdminSales } from '@/hooks/use-payments';
 import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
 import { showcaseRefreshMessage } from '@/lib/showcase-refresh-message';
+import { SHOWCASE_MOVING_MIN } from '@/lib/showcase';
+import { useShowcaseStores } from '@/hooks/use-showcase-stores';
 import { formatTemplatePrice, type PendingReview } from '@/api-types';
 import { isForbiddenError } from '@/lib/security-error';
 
@@ -70,12 +72,29 @@ export default function AdminReviewsPage() {
 }
 
 /** Captures the tall Discover showcase images that stores are still missing, a batch per click. */
+/** How many stores are showcased, and what the landing page shows for that many. */
+function ShowcasedCount() {
+	const showcased = useShowcaseStores();
+	if (!showcased.data) return null;
+	const count = showcased.data.length;
+	return (
+		<p className="text-sm text-kumo-default">
+			{count === 1 ? '1 store is' : `${count} stores are`} showcased on the landing page.{' '}
+			{count < SHOWCASE_MOVING_MIN
+				? `It shows them as one still row until ${SHOWCASE_MOVING_MIN} are showcased, then as two moving rows.`
+				: 'It shows them as two moving rows.'}{' '}
+			To add or remove a store, open it and use Show on the landing page.
+		</p>
+	);
+}
+
 function ShowcaseImagesSection() {
 	const refresh = useRefreshShowcaseScreenshots();
 	return (
 		<section className="grid gap-3 pt-4">
 			<div className="grid gap-1">
-				<h2 className="text-xl font-semibold text-kumo-strong">Showcase images</h2>
+				<h2 className="text-xl font-semibold text-kumo-strong">Landing page showcase</h2>
+				<ShowcasedCount />
 				<p className="text-sm text-kumo-subtle">
 					The landing page shows a tall image of each Discover store. Stores get one when they're published or redeployed;
 					this captures the ones still missing.

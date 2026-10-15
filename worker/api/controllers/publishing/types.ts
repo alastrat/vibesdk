@@ -154,6 +154,15 @@ export interface DiscoverRemovalData {
     removed: boolean;
 }
 
+export interface ShowcaseChangeRequest {
+    showcased: boolean;
+}
+
+export interface ShowcaseChangeData {
+    appId: string;
+    showcased: boolean;
+}
+
 /** One admin batch of showcase captures; `remaining` counts stores still without an image, failures included. */
 export interface ShowcaseRefreshData {
     attempted: number;

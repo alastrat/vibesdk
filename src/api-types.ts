@@ -235,6 +235,8 @@ export type {
 	ConfirmPurchaseRequest,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
+	ShowcaseChangeData,
+	ShowcaseChangeRequest,
 	MyPaidListing,
 	MyPaidListingsData,
 	OwnerPaidListing,

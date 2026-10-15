@@ -5,7 +5,7 @@ import { discoverConditions } from './discover-conditions';
 import type { DiscoverFilters } from '../services/templates/reuse';
 
 const dialect = new SQLiteSyncDialect();
-const ALL: DiscoverFilters = { category: null, pricing: 'all', reusableOnly: false };
+const ALL: DiscoverFilters = { category: null, pricing: 'all', reusableOnly: false, showcasedOnly: false };
 
 function render(filters: DiscoverFilters | undefined) {
 	const where = and(...discoverConditions(filters));
@@ -17,6 +17,13 @@ describe('discoverConditions', () => {
 	it('always hides sites an admin removed', () => {
 		expect(render(undefined).sql).toContain('removed_from_discover_at" is null');
 		expect(render(ALL).sql).toContain('removed_from_discover_at" is null');
+	});
+
+	it('limits the landing page to stores an admin showcased', () => {
+		const query = render({ ...ALL, showcasedOnly: true });
+		expect(query.sql).toContain('"is_featured" = ?');
+		expect(query.params).toContain(1);
+		expect(render(ALL).sql).not.toContain('is_featured');
 	});
 
 	it('filters by category', () => {
