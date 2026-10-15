@@ -14,6 +14,12 @@ export const PLANS: readonly Plan[] = [
 	{ id: 'enterprise', name: 'Enterprise', tagline: 'Custom credits, terms and support for larger teams.' },
 ];
 
+export function planById(id: PlanId): Plan {
+	const plan = PLANS.find((entry) => entry.id === id);
+	if (!plan) throw new Error(`Unknown plan: ${id}`);
+	return plan;
+}
+
 /** A Premium credit pool and its monthly price. */
 export interface PremiumTier {
 	credits: number;

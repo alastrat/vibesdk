@@ -1,8 +1,11 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
-/** A number with minus and plus buttons, kept between `min` and `max`; `noun` names what is counted for the buttons. */
+/**
+ * A number with minus and plus buttons, kept between `min` and `max`; `noun` names what is counted for the buttons.
+ * While someone types, the field shows exactly what they typed (even nothing), and settles to the kept value on blur.
+ */
 export function Stepper({
 	label,
 	noun,
@@ -23,6 +26,7 @@ export function Stepper({
 	className?: string;
 }) {
 	const id = useId();
+	const [draft, setDraft] = useState<string | null>(null);
 	const set = (next: number) => onChange(Math.min(max, Math.max(min, Number.isFinite(next) ? Math.round(next) : min)));
 	const button = 'grid size-9 place-items-center text-public-ink transition-colors hover:bg-[#eef0f3] disabled:cursor-not-allowed disabled:opacity-40';
 	return (
@@ -41,8 +45,13 @@ export function Stepper({
 					min={min}
 					max={max}
 					step={step}
-					value={value}
-					onChange={(event) => set(Number(event.target.value))}
+					value={draft ?? value}
+					onChange={(event) => {
+						const typed = event.target.value;
+						setDraft(typed);
+						if (typed.trim() !== '' && Number.isFinite(Number(typed))) set(Number(typed));
+					}}
+					onBlur={() => setDraft(null)}
 					className="h-9 w-20 border-x border-public-line text-center text-[15px] tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 				/>
 				<button type="button" aria-label={`More ${noun}`} disabled={value >= max} onClick={() => set(value + step)} className={button}>

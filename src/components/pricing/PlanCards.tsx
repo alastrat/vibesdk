@@ -5,14 +5,8 @@ import { PlanLimits } from '@/components/marketing/PlanLimits';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { PillLink } from '@/components/public-site/primitives';
 import type { CapabilityId } from '@/lib/capabilities';
-import { PLANS, PREMIUM_TIERS, formatCredits, formatUsd, type PlanId } from '@/lib/plans';
+import { PREMIUM_TIERS, formatCredits, formatUsd, planById, type PlanId } from '@/lib/plans';
 import { contactPath } from '@/lib/contact';
-
-function planInfo(id: PlanId) {
-	const plan = PLANS.find((entry) => entry.id === id);
-	if (!plan) throw new Error(`Unknown plan: ${id}`);
-	return plan;
-}
 
 function Feature({ children, capability }: { children: ReactNode; capability?: CapabilityId }) {
 	return (
@@ -27,7 +21,7 @@ function Feature({ children, capability }: { children: ReactNode; capability?: C
 }
 
 function PlanHeading({ id, icon: Glyph, children }: { id: PlanId; icon: Icon; children?: ReactNode }) {
-	const plan = planInfo(id);
+	const plan = planById(id);
 	return (
 		<>
 			<div className="flex flex-wrap items-center gap-3">
@@ -140,7 +134,7 @@ export function PlanCards() {
 }
 
 function EnterpriseBand() {
-	const plan = planInfo('enterprise');
+	const plan = planById('enterprise');
 	return (
 		<article className="mx-auto mt-6 flex max-w-[1248px] flex-col gap-6 rounded-[25px] bg-public-charcoal p-8 text-white sm:flex-row sm:items-center sm:justify-between sm:p-10">
 			<div>

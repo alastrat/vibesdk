@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from './capabilities';
-import { CREDIT_ACTIONS, DAYS_PER_MONTH, actionCredits, actionCreditsRange, creditsFor, monthlyCredits, recommendPlan, typicalUsage, type Usage } from './credits';
+import {
+	CREDIT_ACTIONS,
+	DAYS_PER_MONTH,
+	actionById,
+	actionCredits,
+	actionCreditsRange,
+	creditsFor,
+	monthlyCredits,
+	recommendPlan,
+	typicalUsage,
+	type Usage,
+} from './credits';
 import { PREMIUM_TIERS } from './plans';
 
 /** Claude Sonnet 5.5's rate, the builder's default today. */
@@ -73,6 +84,15 @@ describe('credits', () => {
 		expect(recommendPlan(free + 1, free)).toEqual({ plan: 'premium', tier: PREMIUM_TIERS[0] });
 		expect(recommendPlan(PREMIUM_TIERS[1].credits, free)).toEqual({ plan: 'premium', tier: PREMIUM_TIERS[1] });
 		expect(recommendPlan(PREMIUM_TIERS[PREMIUM_TIERS.length - 1].credits + 1, free)).toEqual({ plan: 'enterprise' });
+	});
+
+	it('recommends Basic when nothing needs credits, even before the free allowance is known', () => {
+		expect(recommendPlan(0, null)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(0, 200 * DAYS_PER_MONTH)).toEqual({ plan: 'basic' });
+	});
+
+	it('looks an action up by its category', () => {
+		expect(actionById('change')).toBe(CREDIT_ACTIONS.find((action) => action.id === 'change'));
 	});
 
 	it("doesn't recommend Basic when the free allowance isn't known", () => {

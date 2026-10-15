@@ -103,9 +103,9 @@ export function ComparePlans() {
 				<h2 id="compare-title" className={cn(HEADING_SECTION, 'text-balance text-public-ink')}>
 					Compare plans
 				</h2>
-				{/* Only tablets scroll sideways: a scrolling box would stop the headers from pinning to the page. */}
-				<div className="relative mt-10 md:max-lg:overflow-x-auto">
-					<table className="w-full table-fixed border-separate border-spacing-0 text-[15px] md:min-w-[760px]">
+				{/* No scrolling box around the table: it would stop the headers from pinning to the page. */}
+				<div className="relative mt-10">
+					<table className="w-full table-fixed border-separate border-spacing-0 text-[15px]">
 						<caption className="sr-only">What each plan includes</caption>
 						<thead>
 							<tr>
@@ -137,7 +137,7 @@ export function ComparePlans() {
 										<th
 											key={entry.id}
 											scope="col"
-											className="sticky top-[var(--public-header-h)] z-10 border-b border-l border-public-line bg-white px-3 pt-3 pb-5 text-left align-top font-normal md:px-5"
+											className="sticky top-[var(--public-header-h)] z-10 border-b border-l border-public-line bg-white px-3 pt-3 pb-5 text-left align-top font-normal lg:px-5"
 										>
 											<span className="block text-lg text-public-ink">{entry.name}</span>
 											<span className="mt-2 block text-3xl font-light tracking-[-0.02em] text-public-ink">{header.price}</span>

@@ -57,6 +57,22 @@ describe('credits calculator', () => {
 		expect(calculator).toMatch(/<aside ref=\{recommendationRef\}/);
 	});
 
+	it('waits for the model rates and the free allowance before recommending anything', () => {
+		const calculator = source(CALCULATOR);
+		expect(calculator).toContain('const ready = models.length > 0 && !plan.isPending;');
+		expect(calculator).toContain('Working out your plan');
+		// One source for plan names and actions.
+		expect(calculator).not.toContain('RECOMMENDED_NAMES');
+		expect(calculator).not.toContain('CREDIT_ACTIONS.find');
+	});
+
+	it('lets a number be cleared and retyped, and settles it when the field is left', () => {
+		const stepper = source('/src/components/pricing/Stepper.tsx');
+		expect(stepper).toContain('const [draft, setDraft] = useState<string | null>(null);');
+		expect(stepper).toContain('value={draft ?? value}');
+		expect(stepper).toContain('onBlur={');
+	});
+
 	it('uses labelled steppers that keep values in range', () => {
 		const stepper = source('/src/components/pricing/Stepper.tsx');
 		expect(stepper).toContain('aria-label={`Fewer ${noun}`}');

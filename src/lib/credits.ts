@@ -69,7 +69,7 @@ export interface Usage {
 	visitsPerStore: number;
 }
 
-function actionById(category: UsageCategory): CreditAction {
+export function actionById(category: UsageCategory): CreditAction {
 	const action = CREDIT_ACTIONS.find((entry) => entry.id === category);
 	if (!action) throw new Error(`No credit action for ${category}`);
 	return action;
@@ -111,9 +111,12 @@ export function typicalUsage(stores: number, creditsPerStep: number): Usage {
 
 export type Recommendation = { plan: 'basic' } | { plan: 'premium'; tier: PremiumTier } | { plan: 'enterprise' };
 
-/** Basic while its free allowance covers the month, else the smallest Premium pool, else Enterprise. */
+/**
+ * Basic while its free allowance covers the month, else the smallest Premium pool, else Enterprise. With the allowance
+ * unknown (null), only a month that needs no credits is Basic.
+ */
 export function recommendPlan(credits: number, freeMonthlyCredits: number | null): Recommendation {
-	if (freeMonthlyCredits !== null && credits <= freeMonthlyCredits) return { plan: 'basic' };
+	if (credits <= 0 || (freeMonthlyCredits !== null && credits <= freeMonthlyCredits)) return { plan: 'basic' };
 	const tier = premiumTierFor(credits);
 	return tier ? { plan: 'premium', tier } : { plan: 'enterprise' };
 }

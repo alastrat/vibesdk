@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from './capabilities';
-import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, formatCredits, formatUsd, premiumTierFor } from './plans';
+import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, formatCredits, formatUsd, planById, premiumTierFor } from './plans';
 
 describe('plans', () => {
+	it('looks a plan up by id', () => {
+		expect(planById('premium')).toBe(PLANS[1]);
+		expect(planById('enterprise').name).toBe('Enterprise');
+	});
+
 	it('offers Basic, Premium and Enterprise, in that order', () => {
 		expect(PLANS.map((plan) => plan.id)).toEqual(['basic', 'premium', 'enterprise']);
 	});

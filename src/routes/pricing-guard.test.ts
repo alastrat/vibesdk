@@ -74,7 +74,6 @@ describe('pricing page', () => {
 		expect(compare).toContain('const isPhone = useIsMobile();');
 		expect(compare).toContain('const shown = isPhone ? PLANS.filter((entry) => entry.id === phonePlan) : PLANS;');
 		expect(compare).toContain('colSpan={shown.length + 1}');
-		expect(compare).toContain('md:min-w-[760px]');
 		expect(compare).toMatch(/<select[^>]*aria-label="Plan to compare"/);
 	});
 
@@ -82,9 +81,9 @@ describe('pricing page', () => {
 		const compare = source(COMPARE);
 		expect(compare).toContain('PLAN_COMPARISON.map');
 		expect(compare).toContain('sticky top-[var(--public-header-h)] z-10');
-		// Only tablets scroll the table sideways; a scrolling box anywhere else would stop the headers from pinning.
-		expect(compare).toContain('md:max-lg:overflow-x-auto');
-		expect(compare).not.toMatch(/[^:]overflow-x-auto/);
+		// No scrolling box around the table at any width: it would stop the headers from pinning to the page.
+		expect(compare).not.toContain('overflow-x-auto');
+		expect(compare).not.toContain('min-w-[');
 		expect(compare).toContain('aria-expanded={!isFolded}');
 		expect(compare).toContain('<CapabilityTag id={section.capability} />');
 		expect(compare).toContain('<caption className="sr-only">What each plan includes</caption>');
