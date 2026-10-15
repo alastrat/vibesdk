@@ -13,6 +13,7 @@ const LINK_COLUMNS = [
 			{ to: '/solutions/digital', label: 'Digital businesses' },
 			{ to: '/agentic-commerce', label: 'AI recommendations' },
 			{ to: '/pricing', label: 'Pricing' },
+			{ to: '/contact', label: 'Contact sales' },
 		],
 	},
 	{

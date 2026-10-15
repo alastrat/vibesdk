@@ -11,11 +11,13 @@ import DiscoverPage from './routes/discover';
 import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
 import AdminEarlyAccessPage from './routes/admin/early-access';
+import AdminContactRequestsPage from './routes/admin/contact-requests';
 import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
 import PricingPage from './routes/pricing';
 import PricingCalculatorPage from './routes/pricing-calculator';
+import ContactPage from './routes/contact';
 import BrandsPage from './routes/solutions/brands';
 import ResellersPage from './routes/solutions/resellers';
 import DigitalPage from './routes/solutions/digital';
@@ -104,6 +106,14 @@ const routes = [
 							</ProtectedRoute>
 						),
 					},
+					{
+						path: 'admin/contact-requests',
+						element: (
+							<ProtectedRoute>
+								<AdminContactRequestsPage />
+							</ProtectedRoute>
+						),
+					},
 				],
 			},
 			{
@@ -116,6 +126,10 @@ const routes = [
 					{
 						path: 'pricing/calculator',
 						Component: PricingCalculatorPage,
+					},
+					{
+						path: 'contact',
+						Component: ContactPage,
 					},
 					{
 						path: 'solutions/brands',

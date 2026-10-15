@@ -32,9 +32,14 @@ export default function AdminReviewsPage() {
 						Approve prices for paid sites. A rejection needs a reason the creator will see. To take a site out of
 						Discover, open it and use Remove from Discover.
 					</p>
-					<Link to="/admin/early-access" className="w-fit text-sm text-kumo-default underline underline-offset-2">
-						Early access requests
-					</Link>
+					<div className="flex flex-wrap gap-x-5 gap-y-1">
+						<Link to="/admin/early-access" className="w-fit text-sm text-kumo-default underline underline-offset-2">
+							Early access requests
+						</Link>
+						<Link to="/admin/contact-requests" className="w-fit text-sm text-kumo-default underline underline-offset-2">
+							Contact requests
+						</Link>
+					</div>
 				</div>
 				{pending.data ? (
 					<>
