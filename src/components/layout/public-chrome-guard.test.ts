@@ -36,7 +36,23 @@ describe('public chrome', () => {
 		// Learn more takes the right-hand spot; signing in lives in the top bar.
 		expect(bar).not.toContain('Sign in');
 		expect(bar).toContain('to={blogPostPath(ANNOUNCEMENT_POST)}');
-		expect(bar).toMatch(/className=\{cn\('shrink-0', UNDERLINE_FILL\)\}/);
+		expect(bar).toMatch(/className=\{cn\('shrink-0 justify-self-end', UNDERLINE_FILL\)\}/);
+		// Centred on wide screens, with an empty column balancing Learn more; left-aligned where it truncates.
+		expect(bar).toContain('lg:grid-cols-[1fr_minmax(0,auto)_1fr]');
+		expect(bar).toContain('lg:justify-center');
+	});
+
+	it('animates the phone menu: the burger turns into a cross, the sheet fades in and out, and its rows arrive in turn', () => {
+		const top = source(TOP);
+		expect(top).toContain("menuOpen && 'top-[7px] rotate-45'");
+		expect(top).toContain("menuOpen && 'top-[7px] -rotate-45'");
+		// Opening and closing both animate, in CSS, from the dialog's open state.
+		expect(top).toContain('transition-discrete');
+		expect(top).toContain('starting:open:opacity-0');
+		expect(top).toContain('motion-safe:animate-public-menu-item');
+		expect(top).toContain('const ROW_STAGGER_MS = 40;');
+		expect(top).toContain('animationDelay: `${index * ROW_STAGGER_MS}ms`');
+		expect(publicCss).toMatch(/@keyframes public-menu-item \{\s*from \{\s*opacity: 0;/);
 	});
 
 	it('draws link underlines that fill from left to right on hover, and stay still for reduced motion', () => {

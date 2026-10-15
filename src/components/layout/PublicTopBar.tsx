@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, ListIcon, XIcon } from '@phosphor-icons/react';
+import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, XIcon } from '@phosphor-icons/react';
 import { EstoriLogo, BRAND } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
@@ -27,6 +27,10 @@ const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;
 const NAV_ITEM = 'border-b-2 border-transparent py-1.5 transition-colors hover:border-public-ink';
 const SHEET_BUTTON = 'grid size-10 place-items-center rounded-full text-public-charcoal hover:bg-[#f4f4f5] focus-visible:outline-2 focus-visible:outline-public-blue';
 const SHEET_ROW = 'flex w-full items-center justify-between py-3.5 text-left text-[22px] text-public-charcoal';
+/** One line of the menu button; the three fold into a cross while the menu is open. */
+const BURGER_LINE = 'absolute left-0 h-0.5 w-6 rounded-full bg-current transition-[top,rotate,opacity] duration-200 ease-out motion-reduce:transition-none';
+/** Each row of the phone menu arrives a moment after the one above it. */
+const ROW_STAGGER_MS = 40;
 
 /** Top of every public page: the gold announcement, then a white bar with the brand, the menus, sign-in and the build action. */
 export function PublicTopBar() {
@@ -151,7 +155,11 @@ export function PublicTopBar() {
 							aria-label="Open menu"
 							onClick={() => setMenuOpen(true)}
 						>
-							<ListIcon className="size-6" aria-hidden />
+							<span aria-hidden className="relative block h-4 w-6">
+								<span className={cn(BURGER_LINE, 'top-0', menuOpen && 'top-[7px] rotate-45')} />
+								<span className={cn(BURGER_LINE, 'top-[7px]', menuOpen && 'opacity-0')} />
+								<span className={cn(BURGER_LINE, 'top-[14px]', menuOpen && 'top-[7px] -rotate-45')} />
+							</span>
 						</button>
 					</div>
 				</div>
@@ -164,7 +172,8 @@ export function PublicTopBar() {
 						setMenuOpen(false);
 						setMobileSection(null);
 					}}
-					className="m-0 h-full max-h-none w-full max-w-none border-0 bg-white p-0 text-public-charcoal backdrop:bg-transparent lg:hidden"
+					// Fades and slides in when it opens and back out when it closes, from the dialog's own open state.
+					className="m-0 h-full max-h-none w-full max-w-none -translate-y-2 border-0 bg-white p-0 text-public-charcoal opacity-0 transition-[opacity,translate,display,overlay] duration-200 ease-out transition-discrete backdrop:bg-transparent open:translate-y-0 open:opacity-100 starting:open:-translate-y-2 starting:open:opacity-0 motion-reduce:transition-none lg:hidden"
 				>
 					<div className="flex h-full flex-col">
 						<div className="grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-public-line px-4 sm:h-[72px] sm:px-6">
@@ -192,19 +201,25 @@ export function PublicTopBar() {
 
 						<div className="flex-1 overflow-y-auto overscroll-contain px-4 py-6 sm:px-6">
 							{mobileSection ? (
-								<MobileMenuSection id={mobileSection} />
+								<div key={mobileSection} className="motion-safe:animate-public-menu-item">
+									<MobileMenuSection id={mobileSection} />
+								</div>
 							) : (
 								<ul>
-									{MENUS.map((menu) => (
-										<li key={menu.id}>
+									{MENUS.map((menu, index) => (
+										<li key={menu.id} className="motion-safe:animate-public-menu-item" style={{ animationDelay: `${index * ROW_STAGGER_MS}ms` }}>
 											<button type="button" onClick={() => setMobileSection(menu.id)} className={SHEET_ROW}>
 												{menu.label}
 												<CaretRightIcon className="size-6" aria-hidden />
 											</button>
 										</li>
 									))}
-									{PAGE_LINKS.map((link) => (
-										<li key={link.to}>
+									{PAGE_LINKS.map((link, index) => (
+										<li
+											key={link.to}
+											className="motion-safe:animate-public-menu-item"
+											style={{ animationDelay: `${(MENUS.length + index) * ROW_STAGGER_MS}ms` }}
+										>
 											<Link to={link.to} className={SHEET_ROW}>
 												{link.label}
 											</Link>

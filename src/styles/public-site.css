@@ -32,6 +32,7 @@
 	--animate-public-float: public-float 5s ease-in-out infinite alternate;
 	--animate-public-menu-in: public-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 	--animate-public-underline: public-underline-fill 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-public-menu-item: public-menu-item 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
 
 	@keyframes public-rise {
 		from {
@@ -102,6 +103,12 @@
 		}
 		to {
 			background-size: 100% 1px;
+		}
+	}
+	@keyframes public-menu-item {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
 		}
 	}
 	@keyframes public-float {
