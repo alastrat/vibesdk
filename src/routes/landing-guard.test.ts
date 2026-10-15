@@ -133,10 +133,6 @@ describe('landing page', () => {
 		expect(page).toMatch(/<div className="bg-public-charcoal">\s*<Hero stores=\{stores\} \/>\s*<StoreShowcase stores=\{stores\} \/>\s*<\/div>/);
 	});
 
-	it('separates the white sections that now meet after the showcase moved up', () => {
-		expect(source('/src/routes/landing/LivePreview.tsx')).toContain('<section className="border-t border-public-line bg-white');
-	});
-
 	it('shows the store names right under the build box, above the builder demo, inside the hero', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
 		const build = hero.indexOf('id="build"');
@@ -160,7 +156,6 @@ describe('landing page', () => {
 			'<PersonalizationSection />',
 			'<Features />',
 			'<SellersBand />',
-			'<LivePreview />',
 			'<ClosingPanel />',
 		];
 		const positions = order.map((tag) => page.indexOf(tag));
@@ -192,12 +187,9 @@ describe('landing page', () => {
 		expect(closing).not.toMatch(/[\u201c\u201d]|review|<blockquote/i);
 	});
 
-	it('shows the live preview on bundled desktop and phone images', () => {
-		const preview = source('/src/routes/landing/LivePreview.tsx');
-		expect(preview).toContain("'/marketing/preview-desktop.jpg'");
-		expect(preview).toContain("'/marketing/preview-phone.jpg'");
-		expect(preview).toContain('<Safari');
-		expect(preview).toContain('<Iphone');
+	it('has no live preview section', () => {
+		expect(source('/src/routes/landing/LandingPage.tsx')).not.toContain('LivePreview');
+		expect(Object.keys(pageSources)).not.toContain('/src/routes/landing/LivePreview.tsx');
 	});
 
 	it('lets keyboard users reach every store in the marquees once, in view and with a visible focus ring', () => {

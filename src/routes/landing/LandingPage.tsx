@@ -4,7 +4,6 @@ import { AgenticCommerceSection, PersonalizationSection } from '@/components/pub
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
 import { Features } from './Features';
 import { Hero } from './Hero';
-import { LivePreview } from './LivePreview';
 import { SellersBand } from './SellersBand';
 import { StoreShowcase } from './StoreShowcase';
 import { ClosingPanel } from './sections';
@@ -28,7 +27,6 @@ export function LandingPage() {
 			<PersonalizationSection />
 			<Features />
 			<SellersBand />
-			<LivePreview />
 			<ClosingPanel />
 		</>
 	);
