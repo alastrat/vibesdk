@@ -91,6 +91,15 @@ describe('pricing page', () => {
 		expect(compare).toMatch(/<select[^>]*aria-label="Plan to compare"/);
 	});
 
+	it('puts the Compare plans heading in the corner of the pinned header, beside the plans, on every screen', () => {
+		const compare = source(COMPARE);
+		const corner = compare.slice(compare.indexOf('<thead>'), compare.indexOf('{shown.map'));
+		expect(corner).toContain('<h2 id="compare-title"');
+		expect(compare.match(/<h2/g)).toHaveLength(1);
+		// The phone plan picker sits under it, in the same cell.
+		expect(corner.indexOf('<h2')).toBeLessThan(corner.indexOf('aria-label="Plan to compare"'));
+	});
+
 	it('compares plans with pinned headers, and groups that fold', () => {
 		const compare = source(COMPARE);
 		expect(compare).toContain('PLAN_COMPARISON.map');

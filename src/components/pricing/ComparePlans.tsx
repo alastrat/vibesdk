@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { CaretDownIcon, CheckIcon, MinusIcon } from '@phosphor-icons/react';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
-import { HEADING_SECTION, PillLink } from '@/components/public-site/primitives';
+import { PillLink } from '@/components/public-site/primitives';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePublicPlan } from '@/hooks/use-public-plan';
@@ -123,18 +123,19 @@ export function ComparePlans() {
 	return (
 		<section id="compare" aria-labelledby="compare-title" className="scroll-mt-36 bg-white px-4 py-16 sm:px-6 sm:py-20">
 			<div className="mx-auto max-w-[1248px]">
-				<h2 id="compare-title" className={cn(HEADING_SECTION, 'text-balance text-public-ink')}>
-					Compare plans
-				</h2>
 				{/* No scrolling box around the table: it would stop the headers from pinning to the page. */}
-				<div className="relative mt-10">
+				<div className="relative">
 					<table className="w-full table-fixed border-separate border-spacing-0 text-[15px]">
 						<caption className="sr-only">What each plan includes</caption>
 						<thead>
 							<tr>
-								<td className="sticky top-[var(--public-header-h)] z-10 w-1/2 bg-white pr-3 pb-5 align-bottom md:w-[34%]">
+								{/* The heading sits in the header's corner, beside the plans, and stays pinned with them. */}
+								<td className="sticky top-[var(--public-header-h)] z-10 w-1/2 bg-white pt-3 pr-3 pb-5 align-top md:w-[34%]">
+									<h2 id="compare-title" className="text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance text-public-ink lg:text-[48px]">
+										Compare plans
+									</h2>
 									{isPhone && (
-										<div className="relative">
+										<div className="relative mt-4">
 											<select
 												aria-label="Plan to compare"
 												value={phonePlan}
