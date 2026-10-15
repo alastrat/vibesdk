@@ -9,6 +9,7 @@ import { Eyebrow, HEADING_SECTION, LEAD } from '@/components/public-site/primiti
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { PageMeta } from '@/components/public-site/solution-page';
 import { PRICING_FAQ } from '@/content/positioning';
+import { PRICING_PAGE } from '@/content/public-pages';
 import { formatCents, sellerKeepsTable } from '@/lib/pricing';
 import { cn } from '@/lib/utils';
 
@@ -28,10 +29,7 @@ const CARD_LABEL = 'text-xs uppercase tracking-[0.02em]';
 export default function PricingPage() {
 	return (
 		<div>
-			<PageMeta
-				title="Pricing"
-				description={`Build with Estori for free on Basic. Premium, with a monthly pool of AI credits, is coming soon, and Enterprise is tailored with our team. Template sellers pay ${PLATFORM_FEE_LABEL} per sale.`}
-			/>
+			<PageMeta {...PRICING_PAGE} />
 			<section className="bg-public-charcoal px-4 pt-20 pb-24 text-center text-white sm:px-6 sm:pt-28 sm:pb-28">
 				<Eyebrow tone="dark">Pricing</Eyebrow>
 				<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-3xl text-balance')}>Pricing that grows with your stores</h1>

@@ -1,15 +1,13 @@
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { CATALOG_CARDS, RESELLER_FAQ, RESELLER_STEPS, TODAY_CARDS } from '@/content/positioning';
+import { RESELLERS_PAGE } from '@/content/public-pages';
 import { ClosingPanel } from '@/routes/landing/sections';
 
 export default function ResellersPage() {
 	return (
 		<div>
-			<PageMeta
-				title="For dropshippers and resellers"
-				description="A curated catalog of vetted suppliers is coming soon to Estori. Build the store for it today."
-			/>
+			<PageMeta {...RESELLERS_PAGE} />
 			<SolutionHero
 				eyebrow="For dropshippers and resellers"
 				title="Find products. Add them in a few clicks. Let suppliers ship."

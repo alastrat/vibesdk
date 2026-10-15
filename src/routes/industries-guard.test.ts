@@ -63,9 +63,8 @@ describe('industry pages', () => {
 		expect(page).toMatch(/<PageMeta\s+title=\{industry\.metaTitle\}\s+description=\{industry\.metaDescription\}\s+path=\{industryPath\(industry\.slug\)\}\s+image=\{industry\.photo\}/);
 		expect(page).toContain('crumbs={industryCrumbs(industry)}');
 		const meta = source('/src/components/public-site/solution-page.tsx');
-		for (const tag of ['<link rel="canonical"', 'property="og:title"', 'property="og:description"', 'property="og:url"', 'property="og:image"', 'name="twitter:card"']) {
-			expect(meta, tag).toContain(tag);
-		}
+		// The worker writes the same tags into the HTML; page-head.test.ts covers which tags they are.
+		expect(meta).toContain('pageHeadTags(head, window.location.origin)');
 		expect(meta).toContain('<nav aria-label="Breadcrumb"');
 		expect(meta).toContain('aria-current="page"');
 	});

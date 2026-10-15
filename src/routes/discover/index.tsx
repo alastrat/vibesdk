@@ -21,7 +21,8 @@ import {
 } from '@/components/ui/select';
 import { GlobeIcon } from '@phosphor-icons/react';
 import { BrandEmphasisIcon } from '@/components/shared/BrandEmphasisIcon';
-import { pageTitle } from '@/brand';
+import { PageMeta } from '@/components/public-site/solution-page';
+import { DISCOVER_PAGE } from '@/content/public-pages';
 
 export default function DiscoverPage() {
 	const navigate = useNavigate();
@@ -96,7 +97,7 @@ export default function DiscoverPage() {
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('Discover')}</title>
+			<PageMeta {...DISCOVER_PAGE} />
 			<div className="container max-w-6xl mx-auto px-4 py-8">
 				<motion.div
 					initial={{ opacity: 0, y: -20 }}
@@ -114,7 +115,7 @@ export default function DiscoverPage() {
 							Discover
 						</h1>
 						<p className="text-kumo-subtle text-lg font-funky-mono tracking-tight">
-							Explore sites built by the community, and start your own from any of them
+							{DISCOVER_PAGE.description}
 						</p>
 					</div>
 

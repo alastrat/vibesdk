@@ -66,7 +66,7 @@ describe('public pages', () => {
 		const legal = source('/src/routes/legal/LegalPage.tsx');
 		expect(legal).not.toContain('dark:');
 		expect(legal).not.toContain('kumo-');
-		expect(legal).toContain('pageTitle(document.title)');
+		expect(legal).toContain('<PageMeta {...legalPage(slug)} />');
 		expect(legal).toContain('document.version');
 		expect(legal).toContain('max-w-[720px]');
 	});

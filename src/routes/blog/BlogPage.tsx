@@ -3,6 +3,7 @@ import { FeaturedPost, PostCard, PostListItem } from '@/components/blog/BlogCard
 import { UNDERLINE_FILL } from '@/components/public-site/primitives';
 import { PageMeta } from '@/components/public-site/solution-page';
 import { BLOG_CATEGORIES, postsInCategory } from '@/content/blog';
+import { BLOG_PAGE } from '@/content/public-pages';
 import { cn } from '@/lib/utils';
 
 /** How many posts sit beside the featured one before the grid starts. */
@@ -19,7 +20,7 @@ export default function BlogPage() {
 
 	return (
 		<div className="bg-white px-4 pt-16 pb-24 sm:px-6 sm:pt-24">
-			<PageMeta title="Blog" description="News from Estori: launches, guides for store owners and stories from creators." />
+			<PageMeta {...BLOG_PAGE} />
 			<div className="mx-auto max-w-[1248px]">
 				<h1 className="text-center text-5xl leading-[1.05] font-normal tracking-[-0.02em] text-public-ink sm:text-[72px]">Estori Blog</h1>
 				<nav aria-label="Blog categories" className="mt-8">

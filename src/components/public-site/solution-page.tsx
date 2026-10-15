@@ -4,7 +4,8 @@ import { pageTitle } from '@/brand';
 import { BlurFade } from '@/components/magicui/blur-fade';
 import type { CardCopy } from '@/content/positioning';
 import type { CapabilityId } from '@/lib/capabilities';
-import { absoluteUrl, type Crumb } from '@/lib/seo';
+import { pageHeadTags, type PageHead } from '@/lib/page-head';
+import type { Crumb } from '@/lib/seo';
 import { cn } from '@/lib/utils';
 import { CapabilityTag } from './CapabilityTag';
 import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, UNDERLINE_GROW } from './primitives';
@@ -24,23 +25,15 @@ function useReplaceDefaultHead() {
  * The page's title and description for search results and shared links. With its path, the page also names its
  * canonical address; with an image, shared links show it large.
  */
-export function PageMeta({ title, description, path, image }: { title: string; description: string; path?: string; image?: { src: string; alt: string } }) {
+export function PageMeta(head: PageHead) {
 	useReplaceDefaultHead();
-	const fullTitle = pageTitle(title);
-	const origin = window.location.origin;
-	const url = path === undefined ? undefined : absoluteUrl(path, origin);
 	return (
 		<>
-			<title>{fullTitle}</title>
-			<meta name="description" content={description} />
-			<meta property="og:type" content="website" />
-			<meta property="og:title" content={fullTitle} />
-			<meta property="og:description" content={description} />
-			<meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
-			{url && <link rel="canonical" href={url} />}
-			{url && <meta property="og:url" content={url} />}
-			{image && <meta property="og:image" content={absoluteUrl(image.src, origin)} />}
-			{image && <meta property="og:image:alt" content={image.alt} />}
+			<title>{pageTitle(head.title)}</title>
+			<meta name="description" content={head.description} />
+			{pageHeadTags(head, window.location.origin).map(({ name: Tag, attributes }) => (
+				<Tag key={attributes.rel ?? attributes.property ?? attributes.name} {...attributes} />
+			))}
 		</>
 	);
 }

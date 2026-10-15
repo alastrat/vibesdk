@@ -3,16 +3,14 @@ import { AgenticCommerceSection, PersonalizationSection } from '@/components/pub
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { BRAND_FAQ, BRAND_STEPS, TODAY_CARDS } from '@/content/positioning';
+import { BRANDS_PAGE } from '@/content/public-pages';
 import { ClosingPanel } from '@/routes/landing/sections';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 export default function BrandsPage() {
 	return (
 		<div>
-			<PageMeta
-				title="For brands"
-				description="Build your brand's online store in minutes. Getting recommended by AI assistants, store assistants and personalized shopping are coming soon."
-			/>
+			<PageMeta {...BRANDS_PAGE} />
 			<SolutionHero
 				eyebrow="For brands and store owners"
 				title="An online store for your brand, built in minutes"

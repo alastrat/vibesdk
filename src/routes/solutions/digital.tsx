@@ -2,6 +2,7 @@ import { EarlyAccessButton } from '@/components/public-site/EarlyAccessButton';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { COMMUNITY_CARDS, DIGITAL_FAQ, DIGITAL_PRODUCT_CARDS, DIGITAL_STEPS } from '@/content/positioning';
+import { DIGITAL_PAGE } from '@/content/public-pages';
 import { useEarlyAccessFromUrl } from '@/hooks/use-early-access';
 import { ClosingPanel } from '@/routes/landing/sections';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
@@ -10,10 +11,7 @@ export default function DigitalPage() {
 	useEarlyAccessFromUrl();
 	return (
 		<div>
-			<PageMeta
-				title="For digital businesses"
-				description="Sell e-books, images and videos and run a community from your Estori store. In early access."
-			/>
+			<PageMeta {...DIGITAL_PAGE} />
 			<SolutionHero
 				eyebrow="For digital businesses"
 				title="Sell digital products and build a community around them"

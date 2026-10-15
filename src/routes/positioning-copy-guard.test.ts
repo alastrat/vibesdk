@@ -14,6 +14,7 @@ const pages = import.meta.glob<string>(
 		'/src/components/layout/NavMenu.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/content/positioning.ts',
+		'/src/content/public-pages.ts',
 		'/src/lib/site-nav.ts',
 		'/src/lib/capabilities.ts',
 		'/src/lib/plans.ts',

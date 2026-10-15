@@ -6,6 +6,7 @@ import { PillLink, UNDERLINE_FILL } from '@/components/public-site/primitives';
 import { PageMeta } from '@/components/public-site/solution-page';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import { findBlogPost, formatBlogDate, type BlogBlock } from '@/content/blog';
+import { blogPostPage } from '@/content/public-pages';
 import { cn } from '@/lib/utils';
 
 function BackToBlog() {
@@ -52,7 +53,7 @@ export default function BlogPostPage() {
 
 	return (
 		<article className="bg-white px-4 pt-14 pb-24 sm:px-6 sm:pt-20">
-			<PageMeta title={post.title} description={post.summary} />
+			<PageMeta {...blogPostPage(post)} />
 			<div className="mx-auto max-w-[1248px]">
 				<BackToBlog />
 				<h1 className="mt-8 max-w-4xl text-[40px] leading-[1.08] font-normal tracking-[-0.02em] text-balance text-public-ink sm:text-[64px]">{post.title}</h1>

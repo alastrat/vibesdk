@@ -2,6 +2,7 @@ import { EarlyAccessButton } from '@/components/public-site/EarlyAccessButton';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { CONTENT_CREATOR_CARDS, CONTENT_FAQ, CONTENT_STEPS } from '@/content/positioning';
+import { CONTENT_CREATORS_PAGE } from '@/content/public-pages';
 import { useEarlyAccessFromUrl } from '@/hooks/use-early-access';
 import { ClosingPanel } from '@/routes/landing/sections';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
@@ -10,10 +11,7 @@ export default function ContentCreatorsPage() {
 	useEarlyAccessFromUrl();
 	return (
 		<div>
-			<PageMeta
-				title="For content creators"
-				description="Get paid for the products you recommend, with your own link or your own Estori store. In early access."
-			/>
+			<PageMeta {...CONTENT_CREATORS_PAGE} />
 			<SolutionHero
 				eyebrow="For content creators"
 				tag="content-creators"

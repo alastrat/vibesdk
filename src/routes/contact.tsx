@@ -5,6 +5,7 @@ import { ContactForm } from '@/components/contact/ContactForm';
 import { GlobeWalk } from '@/components/contact/GlobeWalk';
 import { Eyebrow, HEADING_HERO, LEAD } from '@/components/public-site/primitives';
 import { PageMeta } from '@/components/public-site/solution-page';
+import { CONTACT_PAGE } from '@/content/public-pages';
 import { cn } from '@/lib/utils';
 
 function NextStep({ icon: Glyph, title, children }: { icon: Icon; title: string; children: ReactNode }) {
@@ -25,7 +26,7 @@ function NextStep({ icon: Glyph, title, children }: { icon: Icon; title: string;
 export default function ContactPage() {
 	return (
 		<div>
-			<PageMeta title="Contact sales" description="Tell the Estori team about your stores. We'll reply by email and help you pick the right plan." />
+			<PageMeta {...CONTACT_PAGE} />
 			<section className="bg-white px-4 pt-16 pb-16 sm:px-6 sm:pt-24 sm:pb-20">
 				<div className="mx-auto grid max-w-[1248px] grid-cols-1 items-start gap-12 lg:grid-cols-2 lg:gap-16">
 					<div>

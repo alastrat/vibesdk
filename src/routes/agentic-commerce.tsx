@@ -1,15 +1,13 @@
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { AGENT_READY_CARDS, AGENTIC_BASICS_CARDS, AGENTIC_FAQ } from '@/content/positioning';
+import { AGENTIC_COMMERCE_PAGE } from '@/content/public-pages';
 import { ClosingPanel } from '@/routes/landing/sections';
 
 export default function AgenticCommercePage() {
 	return (
 		<div>
-			<PageMeta
-				title="Get found by AI assistants"
-				description="How shoppers find products by asking AI assistants, and how every Estori store will be ready to be recommended."
-			/>
+			<PageMeta {...AGENTIC_COMMERCE_PAGE} />
 			<SolutionHero
 				eyebrow="Get found by AI assistants"
 				tag="agentic-commerce"
