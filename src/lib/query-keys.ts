@@ -125,6 +125,9 @@ export const queryKeys = {
 			mine: (userId?: string | null) => [...queryKeys.account.earlyAccess.all(), 'mine', userId ?? 'anonymous'] as const,
 			admin: () => [...queryKeys.account.earlyAccess.all(), 'admin'] as const,
 		},
+		contactRequests: {
+			admin: () => [...queryKeys.account.all, 'contact-requests', 'admin'] as const,
+		},
 		limits: {
 			all: () => [...queryKeys.account.all, 'limits'] as const,
 			usageAll: () =>

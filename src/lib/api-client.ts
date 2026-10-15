@@ -69,6 +69,9 @@ import type{
 	DiscoverPricing,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
+	ContactAdminData,
+	ContactReceivedData,
+	ContactRequestBody,
 	EarlyAccessAdminData,
 	EarlyAccessCapability,
 	MyEarlyAccessData,
@@ -701,6 +704,16 @@ class ApiClient {
 	/** Every early-access request; quiet because non-admins get 403. */
 	async getAdminEarlyAccess(): Promise<ApiResponse<EarlyAccessAdminData>> {
 		return this.request<EarlyAccessAdminData>('/api/admin/early-access', {}, true);
+	}
+
+	/** Sends the contact-sales form; anyone can, signed in or not. Quiet: the form shows its own errors. */
+	async submitContact(body: ContactRequestBody): Promise<ApiResponse<ContactReceivedData>> {
+		return this.request<ContactReceivedData>('/api/contact', { method: 'POST', body }, true);
+	}
+
+	/** The latest contact-sales requests; quiet because non-admins get 403. */
+	async getAdminContactRequests(): Promise<ApiResponse<ContactAdminData>> {
+		return this.request<ContactAdminData>('/api/admin/contact-requests', {}, true);
 	}
 
 	/**

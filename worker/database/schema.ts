@@ -397,6 +397,24 @@ export const earlyAccessRequests = sqliteTable('early_access_requests', {
     capabilityIdx: index('early_access_requests_capability_idx').on(table.capability),
 }));
 
+/**
+ * Contact-sales requests from the public contact page. Anyone can send one, so they aren't tied to an account.
+ */
+export const contactRequests = sqliteTable('contact_requests', {
+    id: text('id').primaryKey(),
+    firstName: text('first_name').notNull(),
+    lastName: text('last_name').notNull(),
+    email: text('email').notNull(),
+    company: text('company').notNull(),
+    companySize: text('company_size').notNull(),
+    topic: text('topic').notNull(),
+    message: text('message'),
+    premiumCredits: integer('premium_credits'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    createdAtIdx: index('contact_requests_created_at_idx').on(table.createdAt),
+}));
+
 // ========================================
 // COMMUNITY INTERACTIONS
 // ========================================
@@ -765,6 +783,8 @@ export type NewUser = typeof users.$inferInsert;
 
 export type EarlyAccessRequest = typeof earlyAccessRequests.$inferSelect;
 export type NewEarlyAccessRequest = typeof earlyAccessRequests.$inferInsert;
+export type ContactRequest = typeof contactRequests.$inferSelect;
+export type NewContactRequest = typeof contactRequests.$inferInsert;
 
 export type Session = typeof sessions.$inferSelect;
 export type NewSession = typeof sessions.$inferInsert;

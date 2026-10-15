@@ -384,6 +384,28 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Per-client cap on contact-sales requests from the public contact page. Throws RateLimitExceededError when
+	 * the limit is exceeded.
+	 */
+	static async enforceContactSalesRateLimit(env: Env, config: RateLimitSettings, request: Request): Promise<void> {
+		const limitConfig = config[RateLimitType.CONTACT_SALES];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const key = this.buildRateLimitKey(RateLimitType.CONTACT_SALES, await this.getRequestIdentifier(request));
+		const result = await this.enforce(env, key, config, RateLimitType.CONTACT_SALES);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Contact limit reached. Maximum ${limitConfig.limit} requests per hour`,
+				RateLimitType.CONTACT_SALES,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
 	 * Per-client (or per-user, when signed in) cap on account emails: reset
 	 * links and confirmation emails. Throws RateLimitExceededError when the
 	 * limit is exceeded.
