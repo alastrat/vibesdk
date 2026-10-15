@@ -86,7 +86,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your beauty or skincare brand with AI. Describe your products, shades and routines, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for beauty and personal care brands. Describe your products, shades and routines in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then add swatches, routine builders or ingredient lists just by asking, without writing code.',
+			'Got a beauty or personal care brand? Tell Estori about your products, shades and routines, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want swatches, a routine builder or ingredient lists? Just ask, no code needed.',
 		photo: {
 			src: '/marketing/industries/beauty-personal-care.webp',
 			alt: "Skincare bottles and a jar of cream on a wooden block, against a peach wall with baby's breath",
@@ -161,7 +161,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your fashion or clothing brand with AI. Describe your collections, sizes and drops, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for fashion and clothing brands. Describe your collections, sizes and style in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then add size guides, lookbooks or limited drops just by asking, without writing code.',
+			'Running a clothing brand? Tell Estori about your collections, sizes and style, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want size guides, lookbooks or limited drops? Just ask, no code needed.',
 		photo: {
 			src: '/marketing/industries/fashion-apparel.webp',
 			alt: 'Inside a clothing boutique, with shirts and jackets on hanging rails under pendant lamps',
@@ -236,7 +236,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your wellness brand with AI. Describe your supplements, teas or yoga gear, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for health and wellness brands. Describe your supplements, teas, yoga gear or self-care products in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then add ingredient pages, starter sets or guides just by asking, without writing code.',
+			'Selling supplements, teas, yoga gear or self-care products? Tell Estori what you make, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want ingredient pages, starter sets or guides? Just ask, no code needed.',
 		photo: {
 			src: '/marketing/industries/health-wellness.webp',
 			alt: 'Scented candles, lotions and reed diffusers lined up on a white shelf',
@@ -311,7 +311,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your food or drink brand with AI. Describe your coffee, baked goods or sauces, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for food and drink brands. Describe what you make and where it comes from in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then add tasting notes, gift boxes or recipes just by asking, without writing code.',
+			'Making food or drinks people love? Tell Estori what you make and where it comes from, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want tasting notes, gift boxes or recipes? Just ask, no code needed.',
 		photo: {
 			src: '/marketing/industries/food-beverage.webp',
 			alt: 'A coffee roaster pouring freshly roasted beans into the cooling tray of a roasting machine',
@@ -386,7 +386,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your home goods or decor brand with AI. Describe your furniture, ceramics or candles, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for home goods and decor brands. Describe your furniture, ceramics, candles or textiles in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then organize it by room, add dimensions and care notes, or curate gift guides just by asking, without writing code.',
+			'Selling furniture, ceramics, candles or textiles? Tell Estori about your pieces, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want shop-by-room pages, dimensions and care notes, or gift guides? Just ask, no code needed.',
 		photo: {
 			src: '/marketing/industries/home-living.webp',
 			alt: 'A row of handmade ceramic vases in cream, white and brown glazes on a wooden shelf',
@@ -461,7 +461,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your jewelry or accessories brand with AI. Describe your pieces, metals and sizes, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for jewelry and accessories brands. Describe your pieces, metals and the stories behind them in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then add ring size guides, collections or gift sets just by asking, without writing code.',
+			'Making jewelry or accessories? Tell Estori about your pieces, metals and the stories behind them, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want ring size guides, collections or gift sets? Just ask, no code needed.',
 		photo: {
 			src: '/marketing/industries/jewelry-accessories.webp',
 			alt: 'A diamond engagement ring with a rose gold halo resting on a black box',
@@ -536,7 +536,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your sports or outdoor brand with AI. Describe your gear and who it is for, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for sports and outdoor brands. Describe your gear and the people who use it in plain words, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then organize gear by activity, add specs and size guides, or publish packing lists just by asking, without writing code.',
+			"Got gear for runners, riders or hikers? Tell Estori about it and who it's for, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want shop-by-activity pages, specs and size guides, or packing lists? Just ask, no code needed.",
 		photo: {
 			src: '/marketing/industries/sports-outdoors.webp',
 			alt: 'Two hikers with backpacks walking a trail toward snowy mountain peaks',
@@ -611,7 +611,7 @@ export const INDUSTRIES: readonly Industry[] = [
 		metaDescription:
 			'Build an online store for your pet brand with AI. Describe your pet food, toys and accessories, and Estori builds it in minutes. Free to build.',
 		summary:
-			'Estori is an AI store builder for pet brands and pet shops. Describe your food, toys and accessories and the pets they are for, and Estori builds a complete online store with a catalog, product pages, cart and checkout flow. You can then organize products by animal, size and age, or bundle starter kits just by asking, without writing code.',
+			"Selling food, toys or accessories for pets? Tell Estori what you make and which pets it's for, and its AI builds you a complete online store with a catalog, product pages, cart and checkout flow. Want shop-by-pet pages, size guides or starter kits? Just ask, no code needed.",
 		photo: {
 			src: '/marketing/industries/pets.webp',
 			alt: 'A fluffy dog on a teal leash sitting beside its owner against a yellow wall',

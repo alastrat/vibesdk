@@ -137,7 +137,11 @@ describe('industries', () => {
 
 	it('opens every page with a direct answer that search engines and AI assistants can quote', () => {
 		for (const industry of INDUSTRIES) {
-			expect(industry.summary, industry.slug).toMatch(/^Estori is an AI store builder for /);
+			// A casual question to the seller, then a plain answer that still names Estori, its AI and what the store has.
+			expect(industry.summary, industry.slug).toMatch(/^[A-Z][^.?]+\? Tell Estori /);
+			expect(industry.summary, industry.slug).not.toMatch(/^Estori is /);
+			expect(industry.summary, industry.slug).toContain('its AI builds you a complete online store');
+			expect(industry.summary, industry.slug).toMatch(/\? Just ask, no code needed\.$/);
 			expect(industry.summary, industry.slug).toContain('catalog, product pages, cart and checkout flow');
 			expect(words(industry.summary), industry.slug).toBeGreaterThanOrEqual(40);
 			expect(words(industry.summary), industry.slug).toBeLessThanOrEqual(70);
