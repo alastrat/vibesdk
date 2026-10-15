@@ -8,6 +8,7 @@ const sources = import.meta.glob<string>(['/src/routes/landing/Features.tsx', '/
 });
 
 const PREVIEW_FILES = import.meta.glob('/public/marketing/preview-*.webp', { query: '?url', import: 'default', eager: true });
+const DISCOVER_FILES = import.meta.glob('/public/marketing/discover-*.webp', { query: '?url', import: 'default', eager: true });
 const STYLES = import.meta.glob<string>('/src/components/public-site/art-styles.ts', { query: '?raw', import: 'default', eager: true });
 
 function source(path: string): string {
@@ -33,11 +34,12 @@ describe('store builder features', () => {
 		expect(source('/src/components/public-site/art-kit.tsx')).toContain("cn('overflow-hidden [contain:inline-size]', className)");
 	});
 
-	it('uses the Vori layout: a white section, the heading on the left and the action on the right', () => {
+	it('uses the Vori layout: the heading on the left and the action on the right, on white or on charcoal', () => {
 		const section = source(SECTION);
-		expect(section).toContain('<section className="border-t border-public-line bg-white');
-		expect(section).not.toContain('bg-public-charcoal');
-		expect(section).toMatch(/<PillLink to="\/#build" variant="blue">\s*Start building free/);
+		expect(section).toContain("light: { section: 'border-t border-public-line bg-white'");
+		expect(section).toContain("dark: { section: 'bg-public-charcoal'");
+		expect(section).toContain("export function Features({ tone = 'light' }: { tone?: SectionTone })");
+		expect(section).toMatch(/<PillLink to="\/#build" variant=\{colors\.action\}>\s*Start building free/);
 		expect(section).toContain('What your store comes with today');
 	});
 
@@ -67,14 +69,32 @@ describe('store builder features', () => {
 		expect(preview).toContain('src={PREVIEW_SHOTS.phone}');
 	});
 
+	it('puts the device switch on the link row, so the preview pictures sit higher, in step with the switch', () => {
+		const section = source(SECTION);
+		expect(section).toContain('<div className="mt-3 flex w-full items-center justify-between gap-3">');
+		expect(section).toContain('aside={<DeviceSwitch phone={phone} />}');
+		expect(section).toContain('art={<PreviewArt phone={phone} />}');
+		// One story drives both, so they never drift apart.
+		expect(source(ART)).toContain('export function PreviewStory(');
+		expect(source(ART)).toContain('useStory<HTMLElement>(PREVIEW_BEATS)');
+	});
+
+	it('starts from the community garden store in Discover', () => {
+		const art = source(ART);
+		const discover = art.slice(art.indexOf('function DiscoverArt'));
+		expect(discover).toContain('src={DISCOVER_SHOT}');
+		expect(discover).toContain('Seed Sun Sprout');
+		expect(Object.keys(DISCOVER_FILES)).toEqual(['/public/marketing/discover-garden.webp']);
+	});
+
 	it('keeps payments marked as coming soon', () => {
-		expect(source(SECTION)).toMatch(/Accept payments in your store <ComingSoon \/>/);
+		expect(source(SECTION)).toContain('Accept payments in your store <ComingSoon tone={tone} />');
 	});
 
 	it('draws a small moving picture for each feature with the shared art kit', () => {
 		const art = source(ART);
 		expect(art).toContain('export function FeatureArt(');
-		expect(art.match(/useStory<HTMLDivElement>\(/g)).toHaveLength(6);
+		expect(art.match(/useStory<HTML(Div)?Element>\(/g)).toHaveLength(6);
 		expect(art).toContain('<ArtCanvas');
 		expect(art).toContain("from './art-kit'");
 		expect(art).toContain('PHOTOS.');

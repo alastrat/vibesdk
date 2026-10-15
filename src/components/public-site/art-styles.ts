@@ -20,6 +20,9 @@ export const PREVIEW_SHOTS = {
 	phone: '/marketing/preview-phone.webp',
 } as const;
 
+/** A store in Discover, its home page cropped to the top, for the Start from Discover card. */
+export const DISCOVER_SHOT = '/marketing/discover-garden.webp';
+
 /** 1Password's floating panels: white, softly shadowed. */
 export const PANEL = 'rounded-[18px] bg-white shadow-[0_2px_6px_rgba(17,24,39,0.05),0_14px_40px_rgba(17,24,39,0.09)] ring-1 ring-black/[0.04]';
 export const FIELDS = 'divide-y divide-[#e7e8ec] rounded-[14px] ring-1 ring-[#e2e4e9]';

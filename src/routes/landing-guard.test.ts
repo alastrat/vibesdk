@@ -154,7 +154,7 @@ describe('landing page', () => {
 			'<AgenticCommerceSection />',
 			'<AssistantsPanel />',
 			'<PersonalizationSection />',
-			'<Features />',
+			'<Features',
 			'<SellersBand />',
 			'<ClosingPanel />',
 		];

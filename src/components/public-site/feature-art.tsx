@@ -1,13 +1,12 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { CheckIcon, DesktopIcon, DeviceMobileIcon, ShoppingBagIcon, SparkleIcon } from '@phosphor-icons/react';
 import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { StoreFeatureId } from '@/content/positioning';
 import { useStory } from '@/hooks/use-story';
 import { useTypedText } from '@/hooks/use-typed-text';
 import { cn } from '@/lib/utils';
-import { HERO_STORE_IMAGE } from '@/routes/landing/Hero';
 import { ArtCanvas, Photo, StoryFrame } from './art-kit';
-import { MUTED, PHOTOS, PREVIEW_SHOTS } from './art-styles';
+import { DISCOVER_SHOT, MUTED, PHOTOS, PREVIEW_SHOTS } from './art-styles';
 
 /** Each picture is drawn at this size and zoomed to its card's width; the card's bottom edge cuts it off. */
 const ART_WIDTH = 400;
@@ -184,41 +183,57 @@ function ChatArt() {
 /** The preview switches between desktop and phone. */
 const PREVIEW_BEATS = [2600, 2600] as const;
 
-function PreviewArt() {
-	const [ref, beat] = useStory<HTMLDivElement>(PREVIEW_BEATS);
-	const phone = beat === 1;
+/** The preview card's story, shared by its device switch and its picture so the two always change together. */
+export function PreviewStory({ children }: { children: (storyRef: Ref<HTMLElement>, phone: boolean) => ReactNode }) {
+	const [ref, beat] = useStory<HTMLElement>(PREVIEW_BEATS);
+	return children(ref, beat === 1);
+}
+
+/** The device switch on the preview card's link row. Decorative: the card's text says what it shows. */
+export function DeviceSwitch({ phone }: { phone: boolean }) {
 	return (
-		<StoryFrame storyRef={ref} className="relative mx-auto w-[330px]">
-			<div className="mx-auto mb-3 flex w-fit items-center gap-1 rounded-full bg-white p-1 text-[12px] ring-1 ring-[#ececec]">
-				{[
-					{ label: 'Desktop', icon: DesktopIcon, on: !phone },
-					{ label: 'Phone', icon: DeviceMobileIcon, on: phone },
-				].map((option) => (
-					<span
-						key={option.label}
-						className={cn('flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors duration-300', option.on ? 'bg-public-charcoal text-white' : MUTED)}
-					>
-						<option.icon className="size-3.5" />
-						{option.label}
-					</span>
-				))}
-			</div>
-			<div className={cn(MINI, 'overflow-hidden transition-[box-shadow] duration-300', !phone && 'ring-2 ring-public-blue')}>
-				<div className="flex items-center gap-1.5 border-b border-[#f0f0f0] px-3 py-1.5">
-					<span className="size-1.5 rounded-full bg-[#16a34a]" />
-					<span className={cn(MONO, 'text-[11px]')}>Live preview</span>
+		<span aria-hidden className="flex items-center gap-0.5 rounded-full bg-white p-0.5 text-[12px] ring-1 ring-[#ececec]">
+			{[
+				{ label: 'Desktop', icon: DesktopIcon, on: !phone },
+				{ label: 'Phone', icon: DeviceMobileIcon, on: phone },
+			].map((option) => (
+				<span
+					key={option.label}
+					className={cn(
+						'flex items-center gap-1.5 rounded-full px-2.5 py-0.5 transition-colors duration-300 motion-reduce:transition-none',
+						option.on ? 'bg-public-charcoal text-white' : MUTED,
+					)}
+				>
+					<option.icon className="size-3.5" />
+					{option.label}
+				</span>
+			))}
+		</span>
+	);
+}
+
+/** The store on desktop with its phone view beside it; whichever the switch shows is ringed in blue. */
+export function PreviewArt({ phone }: { phone: boolean }) {
+	return (
+		<ArtCanvas width={ART_WIDTH} height={ART_HEIGHT} className="mt-auto px-6 pt-2">
+			<div className="relative mx-auto w-[330px] pt-2">
+				<div className={cn(MINI, 'overflow-hidden transition-[box-shadow] duration-300', !phone && 'ring-2 ring-public-blue')}>
+					<div className="flex items-center gap-1.5 border-b border-[#f0f0f0] px-3 py-1.5">
+						<span className="size-1.5 rounded-full bg-[#16a34a]" />
+						<span className={cn(MONO, 'text-[11px]')}>Live preview</span>
+					</div>
+					<Photo src={PREVIEW_SHOTS.desktop} className="h-[230px] w-full object-top" />
 				</div>
-				<Photo src={PREVIEW_SHOTS.desktop} className="h-[200px] w-full object-top" />
+				<div
+					className={cn(
+						'absolute right-[-18px] bottom-[-40px] h-[200px] w-[92px] overflow-hidden rounded-[18px] border-[4px] border-[#1d2433] bg-white shadow-[0_10px_24px_rgba(17,24,39,0.18)] transition-transform duration-500 motion-reduce:transition-none',
+						phone ? '-translate-y-3 ring-2 ring-public-blue' : '',
+					)}
+				>
+					<Photo src={PREVIEW_SHOTS.phone} className="h-full w-full object-top" />
+				</div>
 			</div>
-			<div
-				className={cn(
-					'absolute right-[-18px] bottom-[-60px] h-[200px] w-[92px] overflow-hidden rounded-[18px] border-[4px] border-[#1d2433] bg-white shadow-[0_10px_24px_rgba(17,24,39,0.18)] transition-transform duration-500',
-					phone ? '-translate-y-3 ring-2 ring-public-blue' : '',
-				)}
-			>
-				<Photo src={PREVIEW_SHOTS.phone} className="h-full w-full object-top" />
-			</div>
-		</StoryFrame>
+		</ArtCanvas>
 	);
 }
 
@@ -231,11 +246,11 @@ function DiscoverArt() {
 	return (
 		<StoryFrame storyRef={ref} className="mx-auto w-[300px]">
 			<div className={cn(MINI, 'overflow-hidden')}>
-				<Photo src={HERO_STORE_IMAGE} className="h-[110px] w-full object-left-top" />
+				<Photo src={DISCOVER_SHOT} className="h-[124px] w-full object-top" />
 				<div className="flex items-center justify-between gap-3 px-4 py-3">
 					<span className="min-w-0">
-						<span className="block truncate text-[14px] font-semibold">North Ridge Coffee</span>
-						<span className={cn(MONO, 'block')}>Free · Coffee store</span>
+						<span className="block truncate text-[14px] font-semibold">Seed Sun Sprout</span>
+						<span className={cn(MONO, 'block')}>Free · Garden</span>
 					</span>
 					<span
 						className={cn(
@@ -259,17 +274,16 @@ function DiscoverArt() {
 	);
 }
 
-const ARTS: Readonly<Record<StoreFeatureId, () => ReactNode>> = {
+const ARTS: Readonly<Record<Exclude<StoreFeatureId, 'preview'>, () => ReactNode>> = {
 	catalog: CatalogArt,
 	checkout: CheckoutArt,
 	orders: OrdersArt,
 	chat: ChatArt,
-	preview: PreviewArt,
 	discover: DiscoverArt,
 };
 
-/** A feature at work, at the bottom of its card. */
-export function FeatureArt({ id }: { id: StoreFeatureId }) {
+/** A feature at work, at the bottom of its card. The preview card draws its own, in step with its switch. */
+export function FeatureArt({ id }: { id: Exclude<StoreFeatureId, 'preview'> }) {
 	const Art = ARTS[id];
 	return (
 		<ArtCanvas width={ART_WIDTH} height={ART_HEIGHT} className="mt-auto px-6 pt-2">
