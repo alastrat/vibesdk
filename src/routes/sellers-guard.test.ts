@@ -5,6 +5,7 @@ import { AUDIENCES, CREATOR_ITEMS } from '@/lib/site-nav';
 const sources = import.meta.glob<string>(
 	[
 		'/src/routes/landing/SellersBand.tsx',
+		'/src/components/public-site/RotatingWord.tsx',
 		'/src/components/public-site/seller-art.tsx',
 		'/src/components/public-site/shopper-mocks.tsx',
 		'/src/components/public-site/art-kit.tsx',
@@ -51,6 +52,25 @@ describe('every kind of seller', () => {
 		const band = source(BAND);
 		expect(band).toContain('mx-auto grid max-w-[1248px] grid-cols-1 ');
 		expect(band).toContain('<div ref={listRef} className="grid grid-cols-1 ');
+	});
+
+	it('leads with the promise, and rotates the kind of seller in the heading', () => {
+		const band = source(BAND);
+		expect(band).toContain('<Eyebrow>Sell more, better, faster.</Eyebrow>');
+		expect(band).not.toContain('<Eyebrow>Solutions</Eyebrow>');
+		expect(band).toContain("const SELLER_WORDS = ['seller', 'entrepreneur', 'merchant', 'developer', 'creator'] as const;");
+		// Screen readers hear the sentence once; the rotating word is visual.
+		expect(band).toMatch(/Estori for every kind of <span className="sr-only">seller<\/span>\s*<RotatingWord words=\{SELLER_WORDS\}/);
+	});
+
+	it('rotates the word in place: the longest word holds the space, and reduced motion keeps the first word', () => {
+		const word = source('/src/components/public-site/RotatingWord.tsx');
+		expect(word).toContain('<span aria-hidden className={cn(\'inline-grid\', className)}>');
+		expect(word).toContain("'col-start-1 row-start-1'");
+		expect(word).toContain("index === shown ? 'animate-public-rise' : 'invisible'");
+		expect(word).toContain('useState(prefersReducedMotion)');
+		expect(word).toContain('if (reduced) return;');
+		expect(word).toContain('return () => clearInterval(timer);');
 	});
 
 	it('pins only the heading and the index on the left; the story shows in each card on phones', () => {

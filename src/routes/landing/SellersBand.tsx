@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, TextLink } from '@/components/public-site/primitives';
+import { RotatingWord } from '@/components/public-site/RotatingWord';
 import { SellerArt } from '@/components/public-site/seller-art';
 import { SELLER_STORIES, type SellerStory } from '@/content/positioning';
 import { AUDIENCES, CREATOR_ITEMS, CREATORS_CAPTION, type NavItem } from '@/lib/site-nav';
@@ -11,6 +12,9 @@ interface Seller extends SellerStory {
 	item: NavItem;
 	forCreators: boolean;
 }
+
+/** The heading's kinds of seller, in turn; the first is the one screen readers hear. */
+const SELLER_WORDS = ['seller', 'entrepreneur', 'merchant', 'developer', 'creator'] as const;
 
 const SELLERS: readonly Seller[] = SELLER_STORIES.flatMap((story) => {
 	const creator = CREATOR_ITEMS.find((item) => item.to === story.to);
@@ -60,8 +64,11 @@ export function SellersBand() {
 		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
 			<div className="mx-auto grid max-w-[1248px] grid-cols-1 gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
 				<div className="lg:sticky lg:top-[calc(var(--public-header-h)+3rem)] lg:self-start">
-					<Eyebrow>Solutions</Eyebrow>
-					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>Estori for every kind of seller</h2>
+					<Eyebrow>Sell more, better, faster.</Eyebrow>
+					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>
+						Estori for every kind of <span className="sr-only">seller</span>
+						<RotatingWord words={SELLER_WORDS} className="grid" />
+					</h2>
 					{/* Marks the card in view; the cards carry the same names, so screen readers skip it. */}
 					<div aria-hidden className="mt-10 hidden lg:block">
 						<ol className="grid border-l border-public-line">
