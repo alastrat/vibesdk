@@ -1,13 +1,13 @@
 import { Link } from 'react-router';
 import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
 import { PLATFORM_FEE_LABEL } from '@/api-types';
-import type { FaqItem } from '@/content/positioning';
+import { FREE_PLAN_ANSWER, PAYMENTS_ANSWER, type FaqItem } from '@/content/positioning';
 import { cn } from '@/lib/utils';
 
 const LAUNCH_FAQ: readonly FaqItem[] = [
-	{ question: 'Is Estori free?', answer: 'Yes. Building and editing stores is free within daily limits. Paid plans are coming soon.' },
+	{ question: 'Is Estori free?', answer: `Yes. ${FREE_PLAN_ANSWER}` },
 	{ question: 'What does Coming soon mean?', answer: "A capability or plan we're building. It isn't part of Estori until it launches, and its details may change before then." },
-	{ question: 'Can my store take payments?', answer: 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.' },
+	{ question: 'Can my store take payments?', answer: PAYMENTS_ANSWER },
 	{ question: 'Does Estori take a cut of my store sales?', answer: 'No. When store payments launch, only Stripe charges for card processing.' },
 	{ question: 'Who owns the store I build?', answer: 'You do. Keep editing it, keep it private, or publish it to Discover.' },
 	{ question: 'What does Estori charge for template sales?', answer: `${PLATFORM_FEE_LABEL} per sale. You receive the rest through Stripe.` },

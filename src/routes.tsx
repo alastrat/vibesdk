@@ -20,6 +20,7 @@ import PricingCalculatorPage from './routes/pricing-calculator';
 import ContactPage from './routes/contact';
 import BlogPage from './routes/blog/BlogPage';
 import BlogPostPage from './routes/blog/BlogPostPage';
+import IndustriesPage from './routes/industries/IndustriesPage';
 import IndustryPage from './routes/industries/IndustryPage';
 import SignupPage from './routes/auth/SignupPage';
 import LoginPage from './routes/auth/LoginPage';
@@ -152,6 +153,10 @@ const routes = [
 					{
 						path: 'blog/:slug',
 						Component: BlogPostPage,
+					},
+					{
+						path: 'industries',
+						Component: IndustriesPage,
 					},
 					{
 						path: 'industries/:slug',

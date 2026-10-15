@@ -1,31 +1,93 @@
-import type { ReactNode } from 'react';
+import { Fragment, useEffect, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { pageTitle } from '@/brand';
 import { BlurFade } from '@/components/magicui/blur-fade';
 import type { CardCopy } from '@/content/positioning';
 import type { CapabilityId } from '@/lib/capabilities';
+import { absoluteUrl, type Crumb } from '@/lib/seo';
 import { cn } from '@/lib/utils';
 import { CapabilityTag } from './CapabilityTag';
-import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD } from './primitives';
+import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, UNDERLINE_GROW } from './primitives';
 import { StartBuildingButton } from './StartBuildingButton';
 
-export function PageMeta({ title, description }: { title: string; description: string }) {
+/** index.html's title and description, there for link previews that never run the app, give way to the page's own. */
+function useReplaceDefaultHead() {
+	useEffect(() => {
+		const defaults = [...document.head.querySelectorAll('[data-default]')];
+		for (const element of defaults) element.remove();
+		// Put back when the page goes, for pages that set no title of their own.
+		return () => document.head.append(...defaults);
+	}, []);
+}
+
+/**
+ * The page's title and description for search results and shared links. With its path, the page also names its
+ * canonical address; with an image, shared links show it large.
+ */
+export function PageMeta({ title, description, path, image }: { title: string; description: string; path?: string; image?: { src: string; alt: string } }) {
+	useReplaceDefaultHead();
+	const fullTitle = pageTitle(title);
+	const origin = window.location.origin;
+	const url = path === undefined ? undefined : absoluteUrl(path, origin);
 	return (
 		<>
-			<title>{pageTitle(title)}</title>
+			<title>{fullTitle}</title>
 			<meta name="description" content={description} />
+			<meta property="og:type" content="website" />
+			<meta property="og:title" content={fullTitle} />
+			<meta property="og:description" content={description} />
+			<meta name="twitter:card" content={image ? 'summary_large_image' : 'summary'} />
+			{url && <link rel="canonical" href={url} />}
+			{url && <meta property="og:url" content={url} />}
+			{image && <meta property="og:image" content={absoluteUrl(image.src, origin)} />}
+			{image && <meta property="og:image:alt" content={image.alt} />}
 		</>
 	);
 }
 
-/** 1Password's solution hero on charcoal: eyebrow and status, headline, lead and actions. */
+/** Where the page sits in the site, in the eyebrow's place: every step a link except the page itself. */
+function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
+	const current = crumbs.length - 1;
+	return (
+		<nav aria-label="Breadcrumb" className="text-xs tracking-[0.02em] uppercase">
+			<ol className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
+				{crumbs.map((crumb, index) => (
+					<Fragment key={crumb.path}>
+						{index > 0 && (
+							<li aria-hidden className="text-white/50">
+								/
+							</li>
+						)}
+						<li>
+							{index === current ? (
+								<span aria-current="page" className="text-white">
+									{crumb.name}
+								</span>
+							) : (
+								<Link to={crumb.path} className={cn('text-white/80 hover:text-white', UNDERLINE_GROW)}>
+									{crumb.name}
+								</Link>
+							)}
+						</li>
+					</Fragment>
+				))}
+			</ol>
+		</nav>
+	);
+}
+
+/** Above the headline: an eyebrow, or the breadcrumb trail on pages that sit under another. */
+type HeroLabel = { eyebrow: string; crumbs?: undefined } | { crumbs: readonly Crumb[]; eyebrow?: undefined };
+
+/** 1Password's solution hero on charcoal: eyebrow or breadcrumbs and status, headline, lead and actions. */
 export function SolutionHero({
 	eyebrow,
+	crumbs,
 	title,
 	lead,
 	tag,
 	actions,
-}: {
-	eyebrow: string;
+}: HeroLabel & {
 	title: string;
 	lead: string;
 	tag?: CapabilityId;
@@ -34,7 +96,7 @@ export function SolutionHero({
 	return (
 		<section className="bg-public-charcoal px-4 pt-20 pb-24 text-center text-white sm:px-6 sm:pt-28 sm:pb-28">
 			<div className="flex flex-wrap items-center justify-center gap-3">
-				<Eyebrow tone="dark">{eyebrow}</Eyebrow>
+				{crumbs ? <Breadcrumbs crumbs={crumbs} /> : <Eyebrow tone="dark">{eyebrow}</Eyebrow>}
 				{tag && <CapabilityTag id={tag} tone="dark" />}
 			</div>
 			<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-4xl text-balance')}>{title}</h1>

@@ -4,7 +4,7 @@ import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, XIcon } from '@phosphor-i
 import { EstoriLogo, BRAND } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
-import { PillLink } from '@/components/public-site/primitives';
+import { PillLink, UNDERLINE_GROW } from '@/components/public-site/primitives';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import { cn } from '@/lib/utils';
 import { AnnouncementBar } from './AnnouncementBar';
@@ -23,8 +23,9 @@ const PAGE_LINKS = [
 /** Beside Pricing on wide screens; a button at the foot of the phone menu, as on 1Password. */
 const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;
 
-/** An underline that marks a hovered link and the open menu's trigger. */
-const NAV_ITEM = 'border-b-2 border-transparent py-1.5 transition-colors hover:border-public-ink';
+/** An underline that draws in from the left under a hovered link, and stays under the open menu's trigger. */
+const NAV_ITEM =
+	'bg-[linear-gradient(currentColor,currentColor)] bg-[length:0%_2px] bg-[position:0_100%] bg-no-repeat pt-1.5 pb-2 transition-[background-size] duration-300 ease-out hover:bg-[length:100%_2px] focus-visible:bg-[length:100%_2px] motion-reduce:transition-none';
 const SHEET_BUTTON = 'grid size-10 place-items-center rounded-full text-public-charcoal hover:bg-[#f4f4f5] focus-visible:outline-2 focus-visible:outline-public-blue';
 const SHEET_ROW = 'flex w-full items-center justify-between py-3.5 text-left text-[22px] text-public-charcoal';
 /** One line of the menu button; the three fold into a cross while the menu is open. */
@@ -118,7 +119,7 @@ export function PublicTopBar() {
 										aria-expanded={openPanel === menu.id}
 										aria-controls={`menu-${menu.id}`}
 										onClick={() => setOpenPanel((open) => (open === menu.id ? null : menu.id))}
-										className={cn('inline-flex items-center gap-1 aria-expanded:border-public-ink', NAV_ITEM)}
+										className={cn('inline-flex items-center gap-1 aria-expanded:bg-[length:100%_2px]', NAV_ITEM)}
 									>
 										{menu.label}
 										<CaretDownIcon
@@ -138,11 +139,11 @@ export function PublicTopBar() {
 					</div>
 					<div className="flex items-center gap-4 whitespace-nowrap">
 						{isAuthenticated ? (
-							<Link to="/" className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
+							<Link to="/" className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>
 								Open app
 							</Link>
 						) : (
-							<button type="button" onClick={() => showAuthModal()} className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
+							<button type="button" onClick={() => showAuthModal()} className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>
 								Sign in
 							</button>
 						)}

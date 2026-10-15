@@ -104,7 +104,7 @@ describe('brand guard: document shell', () => {
 	});
 
 	it('uses the brand title and description', () => {
-		expect(indexHtml).toMatch(new RegExp(`<title>\\s*${escapeRegExp(BRAND.name)}\\s*</title>`));
+		expect(indexHtml).toMatch(new RegExp(`<title\\b[^>]*>\\s*${escapeRegExp(BRAND.name)}\\s*</title>`));
 		expect(indexHtml).toMatch(
 			new RegExp(
 				`<meta\\b(?=[^>]*\\bname="description")(?=[^>]*\\bcontent="${escapeRegExp(BRAND.description)}")`,

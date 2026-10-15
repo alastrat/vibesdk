@@ -126,7 +126,9 @@ export const DEVELOPER_STEPS = [
 
 export const CONTENT_STEPS = ['Request early access.', 'Choose merchants and products to promote.', 'Share your link or store, and earn per sale.'] as const;
 
-const PAYMENTS_ANSWER = 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.';
+export const FREE_PLAN_ANSWER = 'Building and editing stores is free within daily limits. Paid plans are coming soon.';
+
+export const PAYMENTS_ANSWER = 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.';
 
 export const BRAND_FAQ: readonly FaqItem[] = [
 	{ question: 'Do I need to code?', answer: 'No. You describe your store and ask for changes in plain words.' },

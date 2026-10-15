@@ -57,7 +57,7 @@ describe('public chrome', () => {
 
 	it('draws link underlines that fill from left to right on hover, and stay still for reduced motion', () => {
 		expect(source(PRIMITIVES)).toContain('export const UNDERLINE_FILL =');
-		expect(source(PRIMITIVES)).toMatch(/UNDERLINE_FILL =\s*'[^']*hover:animate-public-underline/);
+		expect(source(PRIMITIVES)).toMatch(/UNDERLINE_FILL = `[^`]*hover:animate-public-underline/);
 		expect(publicCss).toMatch(/@keyframes public-underline-fill \{\s*from \{\s*background-size: 0% 1px;/);
 		// The reduced-motion rule turns off every animate-public-* class.
 		expect(publicCss).toContain(".public-site [class*='animate-public-']");
@@ -76,7 +76,7 @@ describe('public chrome', () => {
 
 	it('offers Sign in in the bar on every screen, Talk to sales beside Pricing, and sign-up from Start building free', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className="text-\[15px\] text-public-charcoal underline-offset-4 hover:underline">\s*Sign in/);
+		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className=\{cn\('text-\[15px\] text-public-charcoal', UNDERLINE_GROW\)\}>\s*Sign in/);
 		expect(top).toContain("const PAGE_LINKS = [\n\t{ to: '/discover', label: 'Discover' },\n\t{ to: '/pricing', label: 'Pricing' },\n] as const;");
 		expect(top).toContain("const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;");
 		// Once in the bar, once at the foot of the phone menu, as on 1Password.
@@ -120,8 +120,26 @@ describe('public chrome', () => {
 		expect(nav).toContain("label: 'Compare plans'");
 		expect(nav).toContain('divide-x divide-public-line');
 		expect(nav).toContain('motion-safe:animate-public-menu-in');
+	});
+
+	it('draws menu underlines in from the left, like the announcement link, and keeps the open trigger underlined', () => {
+		const primitives = source(PRIMITIVES);
+		// No line at rest, and no animation for reduced motion; hover draws the full line.
+		expect(primitives).toMatch(/const UNDERLINE_GROW_BASE = `[^`]*bg-\[length:0%_1px\][^`]*motion-reduce:transition-none`;/);
+		expect(primitives).toContain('export const UNDERLINE_GROW = `${UNDERLINE_GROW_BASE} hover:bg-[length:100%_1px]');
+		expect(primitives).toContain('export const GROUP_UNDERLINE_GROW = `${UNDERLINE_GROW_BASE} group-hover:bg-[length:100%_1px]');
+		expect(primitives).toMatch(/export const GROUP_UNDERLINE_FILL = `[^`]*group-hover:animate-public-underline/);
+		const nav = source(NAV);
+		expect(nav).toContain('const HOVER_TEXT = `group-hover:text-public-blue ${GROUP_UNDERLINE_GROW}`;');
+		expect(nav).toMatch(/className=\{cn\('mt-4 inline-block text-\[15px\]', GROUP_UNDERLINE_FILL\)\}>\{feature\.link\.label\}/);
+		expect(nav).not.toContain('group-hover:underline');
+		expect(nav).not.toContain('border-b border-white');
+		const top = source(TOP);
+		expect(top).toMatch(/const NAV_ITEM =\s*'[^']*bg-\[length:0%_2px\][^']*\bhover:bg-\[length:100%_2px\][^']*motion-reduce:transition-none/);
 		// The open menu's trigger is underlined, like a hovered one.
-		expect(source(TOP)).toContain('aria-expanded:border-public-ink');
+		expect(top).toContain('aria-expanded:bg-[length:100%_2px]');
+		expect(top).not.toContain('border-b-2');
+		expect(top).not.toContain('hover:underline');
 	});
 
 	it("turns the phone menu into 1Password's full-screen sheet, with a page per menu and the actions at the foot", () => {
