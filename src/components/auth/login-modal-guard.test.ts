@@ -88,7 +88,8 @@ describe('signing in and up', () => {
 	it('lays the sign-up and sign-in pages out as a full-height photo beside the form, with the logo linking home', () => {
 		const layout = source('/src/components/auth/AuthPageLayout.tsx');
 		expect(layout).toContain('<AuthPhoto view={view}');
-		expect(layout).toContain('<Link to="/" aria-label="Estori home"');
+		// Centred on phones and tablets, on the right once the photo takes the left half.
+		expect(layout).toMatch(/<Link to="\/" aria-label="Estori home" className="[^"]*self-center[^"]*lg:self-end/);
 		expect(layout).toContain('<h1');
 	});
 
