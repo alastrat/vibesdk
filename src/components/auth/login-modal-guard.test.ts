@@ -18,7 +18,11 @@ describe('sign-in window', () => {
 
 	it('shows a photo filling the left column on wider screens, with the form on the right', () => {
 		const modal = sources['/src/components/auth/login-modal.tsx'] ?? '';
-		expect(modal).toContain("const AUTH_PANEL_IMAGE = '/marketing/auth-panel.webp';");
+		expect(modal).toContain("const PANELS: Readonly<Record<PanelId, Panel>> = {");
+		expect(modal).toContain("image: '/marketing/auth-signup.webp'");
+		expect(modal).toContain("image: '/marketing/auth-signin.webp'");
+		// Sign-up shows its own photo; sign-in and password reset share the other.
+		expect(modal).toContain("const panelId: PanelId = mode === 'register' ? 'register' : 'login';");
 		expect(modal).toMatch(/<aside[^>]*className="[^"]*hidden[^"]*md:block/);
 		expect(modal).toContain('absolute inset-0 size-full object-cover');
 		expect(modal).toContain('<EstoriLogo');

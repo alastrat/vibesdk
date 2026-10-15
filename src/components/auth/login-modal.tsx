@@ -12,6 +12,7 @@ import {
 } from '@cloudflare/kumo';
 import { EstoriLogo } from '@/brand';
 import { pillClass } from '@/components/public-site/primitives';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
@@ -26,7 +27,32 @@ import {
 	XIcon,
 } from '@phosphor-icons/react';
 
-const AUTH_PANEL_IMAGE = '/marketing/auth-panel.webp';
+type PanelId = 'register' | 'login';
+
+interface Panel {
+	image: string;
+	/** Keeps the subject in view when the photo is cropped to the column. */
+	position: string;
+	title: string;
+	text: string;
+}
+
+/** The photo and caption beside each view: a team shipping orders for sign-up, someone checking in on the go for sign-in. */
+const PANELS: Readonly<Record<PanelId, Panel>> = {
+	register: {
+		image: '/marketing/auth-signup.webp',
+		position: 'object-center',
+		title: 'From first idea to first order.',
+		text: 'Build your store with AI and launch it in minutes.',
+	},
+	login: {
+		image: '/marketing/auth-signin.webp',
+		position: 'object-[82%_center]',
+		title: 'Your stores, wherever you are.',
+		text: 'Sign in to pick up where you left off.',
+	},
+};
+const PANEL_IDS: readonly PanelId[] = ['register', 'login'];
 
 const GOOGLE_BUTTON = 'flex h-12 w-full items-center justify-center gap-3 rounded-full bg-[#22252f] text-[15px] font-medium text-white transition-colors hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue dark:bg-white dark:text-[#22252f] dark:hover:bg-white/90';
 const PROVIDER_BUTTON = 'flex h-12 w-full items-center justify-center gap-3 rounded-full text-[15px] font-medium text-kumo-default ring-1 ring-inset ring-kumo-line transition-colors hover:bg-kumo-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue';
@@ -280,6 +306,7 @@ export function LoginModal({
 					: 'Sign in to keep building your stores.';
 
 	const bannerError = mode === 'forgot' ? forgotError : error;
+	const panelId: PanelId = mode === 'register' ? 'register' : 'login';
 
 	return (
 		<Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
@@ -287,13 +314,24 @@ export function LoginModal({
 				size="xl"
 				className="top-1/2 flex max-h-[calc(100svh-2rem)] -translate-y-1/2 p-0 font-public sm:top-1/2 sm:w-[28rem] md:w-[56rem]"
 			>
-				{/* A photo filling the left column on wider screens */}
+				{/* A photo filling the left column on wider screens; both load at once and cross-fade when the view changes. */}
 				<aside className="relative hidden w-[44%] shrink-0 overflow-hidden md:block">
-					<img src={AUTH_PANEL_IMAGE} alt="" className="absolute inset-0 size-full object-cover" />
+					{PANEL_IDS.map((id) => (
+						<img
+							key={id}
+							src={PANELS[id].image}
+							alt=""
+							className={cn(
+								'absolute inset-0 size-full object-cover transition-opacity duration-300 motion-reduce:transition-none',
+								PANELS[id].position,
+								id === panelId ? 'opacity-100' : 'opacity-0',
+							)}
+						/>
+					))}
 					<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 					<div className="absolute inset-x-0 bottom-0 p-8 text-white">
-						<p className="text-2xl leading-snug font-normal tracking-[-0.01em] text-balance">From first idea to first order.</p>
-						<p className="mt-2 text-sm text-white/80">Build your store with AI, launch it, and start selling.</p>
+						<p className="text-2xl leading-snug font-normal tracking-[-0.01em] text-balance">{PANELS[panelId].title}</p>
+						<p className="mt-2 text-sm text-white/80">{PANELS[panelId].text}</p>
 					</div>
 				</aside>
 
