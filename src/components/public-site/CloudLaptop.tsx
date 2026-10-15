@@ -44,57 +44,118 @@ export function Cloud({ className }: { className?: string }) {
 	);
 }
 
-/** The laptop's store, block by block: the bar, the headline, the button, the picture, then three products. */
+/** A puff of the big cloud: circles and one rounded base, all sharing one fade so no seams show. */
+interface Puff {
+	cx: number;
+	cy: number;
+	r: number;
+}
+
+/** The cloud's left side, behind the laptop's keyboard. */
+const BACK_PUFFS: readonly Puff[] = [
+	{ cx: 1105, cy: 405, r: 118 },
+	{ cx: 1010, cy: 482, r: 84 },
+	{ cx: 1235, cy: 398, r: 80 },
+];
+
+/** The cloud's right side and base, in front of the laptop: it covers the keyboard's far end and the screen's corner. */
+const FRONT_PUFFS: readonly Puff[] = [
+	{ cx: 1500, cy: 482, r: 96 },
+	{ cx: 1690, cy: 410, r: 112 },
+	{ cx: 1852, cy: 458, r: 98 },
+	{ cx: 1625, cy: 540, r: 110 },
+	{ cx: 1290, cy: 540, r: 100 },
+	{ cx: 1085, cy: 548, r: 95 },
+];
+
+function Puffs({ puffs, fill, base }: { puffs: readonly Puff[]; fill: string; base?: boolean }) {
+	return (
+		<g fill={fill}>
+			{puffs.map((puff) => (
+				<circle key={`${puff.cx}-${puff.cy}`} {...puff} />
+			))}
+			{base && <rect x="935" y="470" width="1015" height="175" rx="86" />}
+		</g>
+	);
+}
+
+/** Polygons with softly rounded corners: the stroke, in the fill's color, rounds each corner. */
+function Rounded({ points, fill, radius, className, delay }: { points: string; fill: string; radius: number; className?: string; delay?: number }) {
+	return (
+		<polygon
+			points={points}
+			fill={fill}
+			stroke={fill}
+			strokeWidth={radius * 2}
+			strokeLinejoin="round"
+			className={className}
+			style={delay === undefined ? undefined : { animationDelay: `${delay}ms` }}
+		/>
+	);
+}
+
+/** The store on the laptop's screen, block by block: the bar, then the two left blocks and the tall one on the right. */
 const STORE_BLOCKS = [
-	{ x: 208, y: 96, width: 194, height: 10, rx: 3, fill: '#e7edf7' },
-	{ x: 208, y: 116, width: 92, height: 9, rx: 3, fill: '#c7d6ee' },
-	{ x: 208, y: 130, width: 70, height: 9, rx: 3, fill: '#c7d6ee' },
-	{ x: 208, y: 146, width: 40, height: 12, rx: 6, fill: '#145fe4' },
-	{ x: 310, y: 116, width: 92, height: 44, rx: 4, fill: '#dbe7fb' },
-	{ x: 208, y: 170, width: 58, height: 34, rx: 4, fill: '#eef3fb' },
-	{ x: 276, y: 170, width: 58, height: 34, rx: 4, fill: '#eef3fb' },
-	{ x: 344, y: 170, width: 58, height: 34, rx: 4, fill: '#eef3fb' },
+	{ points: '1322,209 1563,209 1562,219 1320,219', fill: '#e9eef7' },
+	{ points: '1325,244 1428,244 1425,284 1321,284', fill: '#dde5f2' },
+	{ points: '1320,293 1423,293 1420,333 1316,333', fill: '#dde5f2' },
+	{ points: '1442,244 1550,244 1544,333 1436,333', fill: '#dde5f2' },
 ] as const;
 
-/** A laptop resting on a cloud, its screen building a store over and over. Decorative: the panel's words carry the meaning. */
+/**
+ * A laptop resting in a cloud, turned slightly to the left as on 1Password: the lid's right edge shows its
+ * thickness and the keyboard runs off to the left. Drawn in the reference picture's own coordinates; the laptop
+ * and its cloud float together, and the screen builds a store over and over.
+ */
 export function CloudLaptop() {
 	const ids = useId();
 	const screen = `${ids}-screen`;
 	const deck = `${ids}-deck`;
 	const fade = `${ids}-cloud`;
 	return (
-		<svg aria-hidden viewBox="60 20 520 380" className="relative z-10 mx-auto w-full max-w-[560px]">
+		<svg aria-hidden viewBox="900 110 1080 560" className="relative z-10 mx-auto w-full max-w-[600px]">
 			<defs>
-				<linearGradient id={screen} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" stopColor="#6aa0ff" />
-					<stop offset="1" stopColor="#1f5fe0" />
+				<linearGradient id={screen} x1="0" y1="0" x2="0.35" y2="1">
+					<stop offset="0" stopColor="#62a0f8" />
+					<stop offset="1" stopColor="#1c5bdf" />
 				</linearGradient>
-				<linearGradient id={deck} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0" stopColor="#c3c8d1" />
-					<stop offset="1" stopColor="#7f8794" />
+				<linearGradient id={deck} x1="0" y1="0" x2="1" y2="0">
+					<stop offset="0" stopColor="#9a9fa8" />
+					<stop offset="1" stopColor="#575c65" />
 				</linearGradient>
-				<CloudFade id={fade} edge="#bcd3f6" />
+				<linearGradient id={fade} gradientUnits="userSpaceOnUse" x1="0" y1="285" x2="0" y2="650">
+					<stop offset="0.3" stopColor="#ffffff" />
+					<stop offset="0.68" stopColor="#e2ecfc" />
+					<stop offset="1" stopColor="#a9c6f2" />
+				</linearGradient>
 			</defs>
 			<g className="animate-public-float">
-				{/* Turned slightly, as on 1Password; the deck below follows the screen's bottom edge. */}
-				<g transform="translate(305 150) skewY(-4) translate(-305 -150)">
-					<rect x="170" y="60" width="270" height="180" rx="12" fill="#2d3038" />
-					<rect x="180" y="70" width="250" height="160" rx="4" fill={`url(#${screen})`} />
-					<rect x="198" y="86" width="214" height="128" rx="6" fill="#ffffff" />
-					{STORE_BLOCKS.map((block, index) => (
-						<rect
-							key={`${block.x}-${block.y}`}
-							{...block}
-							className="animate-public-build [transform-box:fill-box] origin-center"
-							style={{ animationDelay: `${index * 180}ms` }}
-						/>
-					))}
+				<Puffs puffs={BACK_PUFFS} fill={`url(#${fade})`} />
+				{/* The lid: its right edge first, then the bezel, the screen and the store window. */}
+				<polygon points="1630,146 1646,155 1627,410 1611,407" fill="#5b6069" />
+				<Rounded points="1275,150 1621,150 1604,401 1243,403" fill="#2b2e35" radius={7} />
+				<Rounded points="1284,160 1614,160 1598,394 1254,396" fill={`url(#${screen})`} radius={2} />
+				<Rounded points="1308,196 1579,196 1566,363 1291,363" fill="#ffffff" radius={4} />
+				{STORE_BLOCKS.map((block, index) => (
+					<Rounded
+						key={block.points}
+						points={block.points}
+						fill={block.fill}
+						radius={3}
+						delay={index * 220}
+						className="animate-public-build [transform-box:fill-box] origin-center"
+					/>
+				))}
+				{/* The keyboard, seen edge on: a light top and a darker front, rounded at its far left. */}
+				<path d="M1126 404 H1612 L1600 412 H1118 Z" fill="#c3c7ce" />
+				<path d="M1124 412 H1600 V438 H1124 A13 13 0 0 1 1124 412 Z" fill={`url(#${deck})`} />
+				<Puffs puffs={FRONT_PUFFS} fill={`url(#${fade})`} base />
+				{/* Faint edges where the puffs overlap, as on 1Password's cloud. */}
+				<g fill="none" stroke="#cfdcf3" strokeWidth="4" strokeLinecap="round">
+					<path d="M1428 478 A92 80 0 0 1 1560 418" />
+					<path d="M1612 372 A105 92 0 0 1 1768 336" />
+					<path d="M960 432 A96 84 0 0 1 1090 380" />
 				</g>
-				<path d="M152 254 L460 232 L482 242 L132 266 Z" fill={`url(#${deck})`} />
-				<path d="M132 266 L482 242 L482 248 L132 272 Z" fill="#6b7280" />
-			</g>
-			<g transform="translate(110 236) scale(1.25)">
-				<CloudShape fill={`url(#${fade})`} />
 			</g>
 		</svg>
 	);
