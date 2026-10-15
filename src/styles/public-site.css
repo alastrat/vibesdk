@@ -30,6 +30,7 @@
 	--animate-public-build: public-build 8s cubic-bezier(0.22, 1, 0.36, 1) infinite both;
 	--animate-public-drift: public-drift 16s ease-in-out infinite alternate;
 	--animate-public-float: public-float 5s ease-in-out infinite alternate;
+	--animate-public-menu-in: public-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 
 	@keyframes public-rise {
 		from {
@@ -86,6 +87,12 @@
 		}
 		to {
 			transform: translateX(14px);
+		}
+	}
+	@keyframes public-menu-in {
+		from {
+			opacity: 0;
+			transform: translateY(-6px);
 		}
 	}
 	@keyframes public-float {

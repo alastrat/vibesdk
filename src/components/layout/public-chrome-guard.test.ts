@@ -45,16 +45,17 @@ describe('public chrome', () => {
 		expect(top).toContain('<StartBuildingButton className="hidden sm:inline-flex" />');
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
-		expect(top).toContain('<MobileMenuGroups />');
+		expect(top).toContain('<MobileMenuSection id={mobileSection} />');
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
 	it('offers Sign in in the bar on every screen, Talk to sales beside Pricing, and sign-up from Start building free', () => {
 		const top = source(TOP);
 		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className="text-\[15px\] text-public-charcoal underline-offset-4 hover:underline">\s*Sign in/);
-		expect(top).toMatch(/\{ to: '\/pricing', label: 'Pricing' \},\s*\{ to: '\/contact', label: 'Talk to sales' \},/);
-		// The bar's Sign in shows on phones too, so the phone menu doesn't repeat it.
-		expect(top.match(/>\s*Sign in\s*</g)).toHaveLength(1);
+		expect(top).toContain("const PAGE_LINKS = [\n\t{ to: '/discover', label: 'Discover' },\n\t{ to: '/pricing', label: 'Pricing' },\n] as const;");
+		expect(top).toContain("const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;");
+		// Once in the bar, once at the foot of the phone menu, as on 1Password.
+		expect(top.match(/>\s*Sign in\s*</g)).toHaveLength(2);
 		expect(top.match(/<StartBuildingButton /g)).toHaveLength(2);
 		expect(top).not.toContain('startBuilding');
 	});
@@ -64,8 +65,8 @@ describe('public chrome', () => {
 		expect(top).toMatch(/<nav aria-label="Main" className="hidden lg:flex [^"]*whitespace-nowrap/);
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
 		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
-		expect(top).toMatch(/id="public-menu"[^>]*lg:hidden/);
-		expect(top).toContain('<StartBuildingButton className="mt-3 w-full sm:hidden" />');
+		expect(top).toMatch(/<dialog[\s\S]*?id="public-menu"[\s\S]*?className="[^"]*lg:hidden[^"]*"/);
+		expect(top).toContain('<StartBuildingButton className="w-full px-3 text-[15px]" />');
 	});
 
 	it('opens one menu panel at a time, closes it on Escape, a click outside or navigation, and returns focus', () => {
@@ -84,6 +85,30 @@ describe('public chrome', () => {
 		expect(top).toContain('event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)');
 		expect(source(NAV)).toContain('export function MenuPanel(');
 		expect(source(NAV)).toMatch(/const PANEL = '[^']*whitespace-normal/);
+	});
+
+	it("opens 1Password's menu panels: icon items that turn blue on hover, a photo card and a link bar", () => {
+		const nav = source(NAV);
+		expect(nav).toContain('const NAV_ICONS: Readonly<Record<NavIcon, Icon>> = {');
+		expect(nav).toContain('group-hover:text-public-blue');
+		expect(nav).toContain('function FeatureCard(');
+		expect(nav).toContain("label: 'Compare plans'");
+		expect(nav).toContain('divide-x divide-public-line');
+		expect(nav).toContain('motion-safe:animate-public-menu-in');
+		// The open menu's trigger is underlined, like a hovered one.
+		expect(source(TOP)).toContain('aria-expanded:border-public-ink');
+	});
+
+	it("turns the phone menu into 1Password's full-screen sheet, with a page per menu and the actions at the foot", () => {
+		const top = source(TOP);
+		expect(top).toContain('<dialog');
+		expect(top).toContain('dialog.showModal()');
+		expect(top).toContain('aria-label="Back to menu"');
+		expect(top).toContain('aria-label="Close menu"');
+		expect(top).toContain('setMobileSection(menu.id)');
+		// A modal sheet left open while the window widens would keep the page inert, so it closes past lg.
+		expect(top).toContain("window.matchMedia('(min-width: 1024px)')");
+		expect(source(NAV)).toContain('export function MobileMenuSection(');
 	});
 
 	it('builds the menus from the registry, so a launch removes its tag everywhere', () => {
