@@ -31,6 +31,7 @@
 	--animate-public-drift: public-drift 16s ease-in-out infinite alternate;
 	--animate-public-float: public-float 5s ease-in-out infinite alternate;
 	--animate-public-menu-in: public-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-public-underline: public-underline-fill 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
 
 	@keyframes public-rise {
 		from {
@@ -93,6 +94,14 @@
 		from {
 			opacity: 0;
 			transform: translateY(-6px);
+		}
+	}
+	@keyframes public-underline-fill {
+		from {
+			background-size: 0% 1px;
+		}
+		to {
+			background-size: 100% 1px;
 		}
 	}
 	@keyframes public-float {

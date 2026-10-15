@@ -18,6 +18,8 @@ import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/leg
 import PricingPage from './routes/pricing';
 import PricingCalculatorPage from './routes/pricing-calculator';
 import ContactPage from './routes/contact';
+import BlogPage from './routes/blog/BlogPage';
+import BlogPostPage from './routes/blog/BlogPostPage';
 import SignupPage from './routes/auth/SignupPage';
 import LoginPage from './routes/auth/LoginPage';
 import BrandsPage from './routes/solutions/brands';
@@ -141,6 +143,14 @@ const routes = [
 					{
 						path: 'contact',
 						Component: ContactPage,
+					},
+					{
+						path: 'blog',
+						Component: BlogPage,
+					},
+					{
+						path: 'blog/:slug',
+						Component: BlogPostPage,
 					},
 					{
 						path: 'solutions/brands',

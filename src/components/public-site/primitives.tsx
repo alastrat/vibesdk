@@ -13,6 +13,10 @@ export function preferredScrollBehavior(): ScrollBehavior {
 	return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
+/** A 1px underline under the text that draws itself from left to right on hover and keyboard focus. */
+export const UNDERLINE_FILL =
+	'bg-[linear-gradient(currentColor,currentColor)] bg-[length:100%_1px] bg-[position:0_100%] bg-no-repeat pb-0.5 hover:animate-public-underline focus-visible:animate-public-underline';
+
 export type PillVariant = 'blue' | 'white' | 'charcoal' | 'outline-on-dark' | 'outline-on-light';
 
 const PILL_BASE =

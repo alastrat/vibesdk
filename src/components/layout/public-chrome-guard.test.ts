@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import publicCss from '../../styles/public-site.css?raw';
 
 const sources = import.meta.glob<string>(
 	[
@@ -26,16 +27,24 @@ function source(path: string): string {
 }
 
 describe('public chrome', () => {
-	it('announces Discover with the fee from the code and links to the developers page', () => {
+	it('announces Discover with the fee from the code, and links to its blog post on the right', () => {
 		const bar = source(ANNOUNCE);
 		expect(bar).toContain('PLATFORM_FEE_LABEL');
 		expect(bar).not.toMatch(/7% \+ \$0\.60/);
-		expect(bar).toContain('to="/creators/developers"');
 		expect(bar).toContain('bg-public-gold');
-		expect(bar).toContain('truncate');
-		expect(bar).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
 		expect(bar).toMatch(/<span className="truncate">Estori Discover is open/);
-		expect(bar).toContain('className="shrink-0 underline');
+		// Learn more takes the right-hand spot; signing in lives in the top bar.
+		expect(bar).not.toContain('Sign in');
+		expect(bar).toContain('to={blogPostPath(ANNOUNCEMENT_POST)}');
+		expect(bar).toMatch(/className=\{cn\('shrink-0', UNDERLINE_FILL\)\}/);
+	});
+
+	it('draws link underlines that fill from left to right on hover, and stay still for reduced motion', () => {
+		expect(source(PRIMITIVES)).toContain('export const UNDERLINE_FILL =');
+		expect(source(PRIMITIVES)).toMatch(/UNDERLINE_FILL =\s*'[^']*hover:animate-public-underline/);
+		expect(publicCss).toMatch(/@keyframes public-underline-fill \{\s*from \{\s*background-size: 0% 1px;/);
+		// The reduced-motion rule turns off every animate-public-* class.
+		expect(publicCss).toContain(".public-site [class*='animate-public-']");
 	});
 
 	it('shows the announcement above a white top bar with the blue build action and a phone menu', () => {

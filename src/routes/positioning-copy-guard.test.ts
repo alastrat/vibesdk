@@ -17,6 +17,9 @@ const pages = import.meta.glob<string>(
 		'/src/lib/site-nav.ts',
 		'/src/lib/capabilities.ts',
 		'/src/lib/plans.ts',
+		'/src/content/blog.ts',
+		'/src/routes/blog/*.tsx',
+		'/src/components/blog/*.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );

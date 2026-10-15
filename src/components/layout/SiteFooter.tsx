@@ -14,6 +14,7 @@ const LINK_COLUMNS = [
 			{ to: '/agentic-commerce', label: 'AI recommendations' },
 			{ to: '/pricing', label: 'Pricing' },
 			{ to: '/contact', label: 'Contact sales' },
+			{ to: '/blog', label: 'Blog' },
 		],
 	},
 	{
