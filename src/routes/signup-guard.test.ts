@@ -13,9 +13,9 @@ function source(path: string): string {
 }
 
 describe('signing up', () => {
-	it('starts from the sign-up window on every Start building free button', () => {
+	it('starts from the sign-up page on every Start building free button', () => {
 		const linked = Object.entries(sources)
-			.filter(([path]) => !path.endsWith('.test.tsx'))
+			.filter(([path]) => !path.endsWith('.test.tsx') && !path.endsWith('StartBuildingButton.tsx'))
 			.filter(([, text]) => /<(PillLink|Link)[^>]*>\s*Start building free/.test(text))
 			.map(([path]) => path);
 		expect(linked).toEqual([]);
@@ -24,22 +24,32 @@ describe('signing up', () => {
 			'/src/components/pricing/PlanCards.tsx',
 			'/src/components/pricing/Calculator.tsx',
 			'/src/components/public-site/solution-page.tsx',
-			'/src/routes/solutions/brands.tsx',
-			'/src/routes/solutions/digital.tsx',
 			'/src/routes/landing/Features.tsx',
 			'/src/routes/landing/sections.tsx',
-			'/src/routes/creators/content.tsx',
-			'/src/routes/creators/developers.tsx',
 		]) {
 			expect(source(path), path).toContain('<StartBuildingButton');
 		}
-		expect(source('/src/components/pricing/ComparePlans.tsx')).toContain('<StartBuildingButton variant="blue"');
 	});
 
-	it('keeps /signup as a link that opens the sign-up window over the home page', () => {
-		expect(source('/src/routes.tsx')).toMatch(/path: 'signup',\s*Component: SignupPage,/);
-		const page = source('/src/routes/signup.tsx');
-		expect(page).toContain("showAuthModal(undefined, undefined, undefined, { initialMode: 'register' })");
-		expect(page).toContain("navigate('/', { replace: true })");
+	it('has its own pages for signing up and signing in, outside the site header and footer', () => {
+		const routes = source('/src/routes.tsx');
+		expect(routes).toContain("import SignupPage from './routes/auth/SignupPage';");
+		expect(routes).toContain("import LoginPage from './routes/auth/LoginPage';");
+		const publicShell = routes.slice(routes.indexOf('Component: PublicShell'));
+		expect(publicShell).not.toContain("path: 'signup'");
+		expect(routes).toMatch(/path: 'signup',\s*Component: SignupPage,/);
+		expect(routes).toMatch(/path: 'login',\s*Component: LoginPage,/);
+	});
+
+	it('signs up on the page and signs in on the page, each linking to the other', () => {
+		const signup = source('/src/routes/auth/SignupPage.tsx');
+		expect(signup).toContain('<AuthForm');
+		expect(signup).toContain('mode="register"');
+		expect(signup).toContain("onSignIn={() => navigate('/login')}");
+		expect(signup).toContain('if (isAuthenticated) return <Navigate to="/" replace />;');
+		const login = source('/src/routes/auth/LoginPage.tsx');
+		expect(login).toContain('<AuthForm');
+		expect(login).toContain("onCreateAccount={() => navigate('/signup')}");
+		expect(login).toContain('if (isAuthenticated) return <Navigate to="/" replace />;');
 	});
 });

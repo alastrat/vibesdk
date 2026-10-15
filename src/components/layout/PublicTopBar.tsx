@@ -142,7 +142,7 @@ export function PublicTopBar() {
 								Sign in
 							</button>
 						)}
-						<StartBuildingButton className="mt-3 w-full sm:hidden" onOpen={() => setMenuOpen(false)} />
+						<StartBuildingButton className="mt-3 w-full sm:hidden" />
 					</nav>
 				)}
 			</div>

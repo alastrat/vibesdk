@@ -18,7 +18,8 @@ import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/leg
 import PricingPage from './routes/pricing';
 import PricingCalculatorPage from './routes/pricing-calculator';
 import ContactPage from './routes/contact';
-import SignupPage from './routes/signup';
+import SignupPage from './routes/auth/SignupPage';
+import LoginPage from './routes/auth/LoginPage';
 import BrandsPage from './routes/solutions/brands';
 import ResellersPage from './routes/solutions/resellers';
 import DigitalPage from './routes/solutions/digital';
@@ -117,6 +118,15 @@ const routes = [
 					},
 				],
 			},
+			// Signing up and in: full pages of their own, outside the site header and footer.
+			{
+				path: 'signup',
+				Component: SignupPage,
+			},
+			{
+				path: 'login',
+				Component: LoginPage,
+			},
 			{
 				Component: PublicShell,
 				children: [
@@ -131,10 +141,6 @@ const routes = [
 					{
 						path: 'contact',
 						Component: ContactPage,
-					},
-					{
-						path: 'signup',
-						Component: SignupPage,
 					},
 					{
 						path: 'solutions/brands',

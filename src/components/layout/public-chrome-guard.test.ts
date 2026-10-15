@@ -65,7 +65,7 @@ describe('public chrome', () => {
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
 		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
 		expect(top).toMatch(/id="public-menu"[^>]*lg:hidden/);
-		expect(top).toContain('<StartBuildingButton className="mt-3 w-full sm:hidden" onOpen={() => setMenuOpen(false)} />');
+		expect(top).toContain('<StartBuildingButton className="mt-3 w-full sm:hidden" />');
 	});
 
 	it('opens one menu panel at a time, closes it on Escape, a click outside or navigation, and returns focus', () => {
