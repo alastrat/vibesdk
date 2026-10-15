@@ -18,6 +18,8 @@ const pages = import.meta.glob<string>(
 		'/src/lib/capabilities.ts',
 		'/src/lib/plans.ts',
 		'/src/content/blog.ts',
+		'/src/content/industries.ts',
+		'/src/routes/industries/*.tsx',
 		'/src/routes/blog/*.tsx',
 		'/src/components/blog/*.tsx',
 	],

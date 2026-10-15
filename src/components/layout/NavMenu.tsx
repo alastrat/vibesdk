@@ -13,6 +13,7 @@ import {
 } from '@phosphor-icons/react';
 import { LEGAL_CONTACT } from '@/api-types';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
+import { INDUSTRIES, industryPath } from '@/content/industries';
 import { CAPABILITIES, PLATFORM_CAPABILITIES } from '@/lib/capabilities';
 import { AUDIENCES, CREATOR_ITEMS, CREATORS_CAPTION, type NavIcon, type NavItem } from '@/lib/site-nav';
 import { cn } from '@/lib/utils';
@@ -47,14 +48,9 @@ interface MenuFeature {
 	link: PlainLink;
 }
 
-/** Each menu's plain-link column and its photo card. */
-const MENU_EXTRAS: Readonly<Record<MenuId, { links: readonly PlainLink[]; feature: MenuFeature }>> = {
+/** Each menu's photo card, and a Get started column where the menu has one. */
+const MENU_EXTRAS: Readonly<Record<MenuId, { links?: readonly PlainLink[]; feature: MenuFeature }>> = {
 	solutions: {
-		links: [
-			{ to: '/pricing', label: 'Pricing' },
-			{ to: '/pricing/calculator', label: 'Credits calculator' },
-			{ to: '/discover', label: 'Templates in Discover' },
-		],
 		feature: {
 			image: '/marketing/auth-signup.webp',
 			position: 'object-center',
@@ -124,11 +120,10 @@ function Column({ title, caption, className, children }: { title: string; captio
 	);
 }
 
-/** A menu's columns, shared by the desktop panel and the phone menu's page for it. */
-function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: string }) {
-	const { links } = MENU_EXTRAS[id];
-	const linksColumn = (
-		<Column title="Get started" className={columnClassName}>
+/** A column of plain links, each turning blue and underlining on hover. */
+function LinksColumn({ title, links, className }: { title: string; links: readonly PlainLink[]; className?: string }) {
+	return (
+		<Column title={title} className={className}>
 			{links.map((link) => (
 				<li key={link.to}>
 					<TextItem to={link.to}>
@@ -138,6 +133,11 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 			))}
 		</Column>
 	);
+}
+
+/** A menu's columns, shared by the desktop panel and the phone menu's page for it. */
+function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: string }) {
+	const { links } = MENU_EXTRAS[id];
 
 	if (id === 'creators') {
 		return (
@@ -149,7 +149,7 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 						</li>
 					))}
 				</Column>
-				{linksColumn}
+				{links && <LinksColumn title="Get started" links={links} className={columnClassName} />}
 			</>
 		);
 	}
@@ -163,6 +163,15 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 					</li>
 				))}
 			</Column>
+			<Column title="Industries" className={columnClassName}>
+				{INDUSTRIES.map((industry) => (
+					<li key={industry.slug}>
+						<TextItem to={industryPath(industry.slug)}>
+							<span className={cn('text-[16px] text-public-ink', HOVER_TEXT)}>{industry.name}</span>
+						</TextItem>
+					</li>
+				))}
+			</Column>
 			<Column title="Platform" className={columnClassName}>
 				{PLATFORM_CAPABILITIES.map((capabilityId) => (
 					<li key={capabilityId}>
@@ -173,7 +182,6 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 					</li>
 				))}
 			</Column>
-			{linksColumn}
 		</>
 	);
 }
