@@ -30,6 +30,14 @@
 	background-color: #ffffff;
 	color: var(--color-public-ink);
 	-webkit-font-smoothing: antialiased;
+	/* The sticky top bar without its phone menu: the announcement (44px), the bar (64px, 72px from sm) and its 1px border. */
+	--public-header-h: 109px;
+}
+
+@media (width >= 40rem) {
+	.public-site {
+		--public-header-h: 117px;
+	}
 }
 
 /* App components embedded in a public page, such as the landing build box, keep the app's theme. */

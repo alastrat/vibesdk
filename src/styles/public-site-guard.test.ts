@@ -4,7 +4,13 @@ import publicCss from './public-site.css?raw';
 import indexCss from '../index.css?raw';
 
 const sources = import.meta.glob<string>(
-	['/src/components/layout/PublicLayout.tsx', '/src/components/layout/app-layout.tsx', '/src/components/marketing/ComingSoon.tsx'],
+	[
+		'/src/components/layout/PublicLayout.tsx',
+		'/src/components/layout/app-layout.tsx',
+		'/src/components/marketing/ComingSoon.tsx',
+		'/src/components/layout/PublicTopBar.tsx',
+		'/src/components/layout/AnnouncementBar.tsx',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -66,5 +72,16 @@ describe('public site styles', () => {
 		expect(publicCss).toContain(":root[data-mode='dark'] .public-site .app-theme-scope {");
 		const start = publicCss.indexOf(":root[data-mode='dark'] .public-site .app-theme-scope {");
 		expect(publicCss.slice(start, publicCss.indexOf('}', start))).toContain('color-scheme: dark');
+	});
+
+	it("publishes the top bar's height, so content can pin right under it", () => {
+		// The announcement (h-11, 44px), the bar (h-16 or sm:h-[72px]) and the bar's 1px bottom border; the phone menu doesn't count.
+		expect(source('/src/components/layout/AnnouncementBar.tsx')).toContain('flex h-11 ');
+		const bar = source('/src/components/layout/PublicTopBar.tsx');
+		expect(bar).toContain('<div className="relative border-b border-public-line bg-white">');
+		expect(bar).toContain('flex h-16 max-w-[1248px] items-center justify-between gap-4 px-4 sm:h-[72px]');
+		const start = publicCss.indexOf('.public-site {');
+		expect(publicCss.slice(start, publicCss.indexOf('}', start))).toContain('--public-header-h: 109px;');
+		expect(publicCss).toMatch(/@media \(width >= 40rem\) \{\s*\.public-site \{\s*--public-header-h: 117px;\s*\}\s*\}/);
 	});
 });

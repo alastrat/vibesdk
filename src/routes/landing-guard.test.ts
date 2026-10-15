@@ -7,7 +7,14 @@ const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src
 	eager: true,
 });
 const otherSources = import.meta.glob<string>(
-	['/src/routes/root-index.tsx', '/src/routes/pricing.tsx', '/src/components/build-box.tsx', '/src/routes/home.tsx', '/src/routes.tsx'],
+	[
+		'/src/routes/root-index.tsx',
+		'/src/routes/pricing.tsx',
+		'/src/components/build-box.tsx',
+		'/src/routes/home.tsx',
+		'/src/routes.tsx',
+		'/src/hooks/use-scroll-grow.ts',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -74,6 +81,31 @@ describe('landing page', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
 		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*Browse stores in Discover/);
 		expect(hero).not.toMatch(/hover:underline">\s*Browse stores in Discover/);
+	});
+
+	it('grows the builder demo to fill the window as the page scrolls', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toContain('const { refs, sizes } = useScrollGrow();');
+		// The stage pins right under the top bar; the track gives it room to stay pinned while it grows.
+		expect(hero).toMatch(/ref=\{refs\.stage\}\s+className="sticky top-\[var\(--public-header-h\)\] /);
+		expect(hero).toContain('style={sizes ? { height: sizes.track } : undefined}');
+		expect(hero).toContain('style={sizes ? { height: sizes.stage } : undefined}');
+		// At rest the card keeps the hero's width; the panel behind it is what reaches the window's edges.
+		expect(hero).toMatch(/ref=\{refs\.card\}\s+className="relative mx-auto max-w-\[1152px\] /);
+		expect(hero).toMatch(/ref=\{refs\.panel\}\s+aria-hidden/);
+		expect(hero).not.toContain('max-w-[1392px]');
+		expect(hero).toMatch(/ref=\{refs\.frame\}\s+role="img"/);
+		expect(hero).toContain('origin-bottom');
+	});
+
+	it('scrolls the demo smoothly, and keeps it still for reduced motion or a window too short to show it', () => {
+		const hook = source('/src/hooks/use-scroll-grow.ts');
+		expect(hook).toContain("'(prefers-reduced-motion: reduce)'");
+		expect(hook).toContain('canGrow(geometry)');
+		expect(hook).toContain('requestAnimationFrame(apply)');
+		expect(hook).toContain("addEventListener('scroll', schedule, { passive: true })");
+		expect(hook).toContain('new ResizeObserver(measure)');
+		expect(hook).not.toMatch(/framer/);
 	});
 
 	it('reserves the finished step list so the demo never grows while steps arrive', () => {
