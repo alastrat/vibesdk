@@ -235,7 +235,8 @@ describe('brand guard: Cloudflare logo usage', () => {
 	const CLOUDFLARE_INTEGRATION_FILES = [
 		'/src/components/icons/logos.tsx',
 		'/src/components/shared/CloudflareLogoThemed.tsx',
-		'/src/components/auth/login-modal.tsx',
+		// Continue with Cloudflare, in the sign-in form the window and the sign-up and sign-in pages share.
+		'/src/components/auth/AuthForm.tsx',
 		'/src/components/byok-api-keys-modal.tsx',
 		'/src/components/cloudflare-account-selector.tsx',
 		'/src/components/connected-accounts.tsx',
