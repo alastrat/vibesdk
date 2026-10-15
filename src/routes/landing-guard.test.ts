@@ -170,8 +170,7 @@ describe('landing page', () => {
 		expect(source('/src/routes/landing/sections.tsx')).not.toContain('export function PricingSummary');
 	});
 
-	it('uses the 1Password layout: charcoal features, and a light blue closing panel with a laptop on a cloud', () => {
-		expect(source('/src/routes/landing/Features.tsx')).toContain('bg-public-charcoal');
+	it('closes on a light blue panel with a laptop on a cloud', () => {
 		const sections = source('/src/routes/landing/sections.tsx');
 		const closing = sections.slice(sections.indexOf('export function ClosingPanel'));
 		expect(closing).toContain('rounded-[25px] bg-[#dce9fc]');

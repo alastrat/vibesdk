@@ -50,7 +50,7 @@ describe('personalized shopping cards', () => {
 		const mocks = source(MOCKS);
 		expect(mocks).toContain('export function ShopperArt(');
 		expect(mocks).toContain('<ArtCanvas width={ART_WIDTH} height={ART_HEIGHT} className="mt-8 bg-[linear-gradient(180deg,#ffffff_0%,#fbf6ec_100%)]');
-		expect(source(KIT)).toContain("<div ref={ref} aria-hidden className={cn('overflow-hidden', className)} style={{ height: height * zoom }}>");
+		expect(source(KIT)).toContain("<div ref={ref} aria-hidden className={cn('overflow-hidden [contain:inline-size]', className)} style={{ height: height * zoom }}>");
 	});
 
 	it('scales each picture like an image, so nothing in it wraps on narrower cards', () => {

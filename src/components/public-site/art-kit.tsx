@@ -9,7 +9,8 @@ import { cn } from '@/lib/utils';
 export function ArtCanvas({ width, height, className, children }: { width: number; height: number; className?: string; children: ReactNode }) {
 	const [ref, zoom] = useFitZoom<HTMLDivElement>(width);
 	return (
-		<div ref={ref} aria-hidden className={cn('overflow-hidden', className)} style={{ height: height * zoom }}>
+		// Inline-size containment keeps the drawing's width out of the container's minimum width, so a grid column can still shrink to a phone.
+		<div ref={ref} aria-hidden className={cn('overflow-hidden [contain:inline-size]', className)} style={{ height: height * zoom }}>
 			<div className="mx-auto" style={{ width, zoom }}>
 				{children}
 			</div>

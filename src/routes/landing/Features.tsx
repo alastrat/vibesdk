@@ -1,141 +1,67 @@
-import type { ReactNode } from 'react';
-import { AnimatedList } from '@/components/magicui/animated-list';
-import { BlurFade } from '@/components/magicui/blur-fade';
-import { NumberTicker } from '@/components/magicui/number-ticker';
-import { TypingAnimation } from '@/components/magicui/typing-animation';
+import { Link } from 'react-router';
+import { ArrowRightIcon } from '@phosphor-icons/react';
 import { ComingSoon } from '@/components/marketing/ComingSoon';
-import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, TextLink } from '@/components/public-site/primitives';
+import { FeatureArt } from '@/components/public-site/feature-art';
+import { Eyebrow, HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
+import { STORE_FEATURES, type StoreFeature } from '@/content/positioning';
 import { cn } from '@/lib/utils';
 
-function MiniCard({ children }: { children: ReactNode }) {
-	return <div className="w-full rounded-xl bg-white p-3 text-left text-[11px] text-[#1e2a3b] shadow-[0_6px_18px_rgba(0,0,0,0.12)]">{children}</div>;
-}
-
-const PRODUCT_SWATCHES = [
-	'from-[#f4e3cf] to-[#d9a77c]',
-	'from-[#dbe6dc] to-[#7f9f86]',
-	'from-[#f4e3cf] to-[#d9a77c]',
-	'from-[#dbe6dc] to-[#7f9f86]',
-	'from-[#e6e1f4] to-[#9a8fc9]',
-	'from-[#f4e3cf] to-[#d9a77c]',
-] as const;
-
-function CatalogIllustration() {
+/** Vori's product card: light gray with a hairline border, a picture at the bottom, and a tab that rises on hover. */
+function FeatureCard({ feature }: { feature: StoreFeature }) {
 	return (
-		<MiniCard>
-			<p className="mb-2">Catalog · 12 products</p>
-			<div className="grid grid-cols-3 gap-1.5">
-				{PRODUCT_SWATCHES.map((swatch, index) => (
-					<span key={index} className={cn('h-10 rounded-md bg-gradient-to-br', swatch)} />
-				))}
-			</div>
-		</MiniCard>
-	);
-}
-
-function CartIllustration() {
-	return (
-		<MiniCard>
-			<p>Your cart · 3 items</p>
-			<p className="mt-1 text-[22px] font-light">
-				$<NumberTicker value={54} decimalPlaces={2} />
-			</p>
-			<span className="mt-2 block rounded-full bg-public-blue py-1.5 text-center text-white">Checkout</span>
-		</MiniCard>
-	);
-}
-
-const ORDERS = [
-	{ id: '#1042', item: 'Ethiopia Guji', total: '$18' },
-	{ id: '#1043', item: 'House blend', total: '$36' },
-	{ id: '#1044', item: 'Subscription', total: '$32' },
-] as const;
-
-function OrdersIllustration() {
-	return (
-		<MiniCard>
-			<p className="mb-1">Orders</p>
-			<AnimatedList delay={1200} className="items-stretch gap-0">
-				{ORDERS.map((order) => (
-					<p key={order.id} className="flex justify-between border-b border-[#f0f0f0] py-1.5">
-						<span>
-							{order.id} · {order.item}
+		<article className="group relative h-full rounded-[16px] transition-shadow duration-300 hover:shadow-[0_4px_12px_2px_rgba(0,0,0,0.08)] motion-reduce:transition-none">
+			{/* Sits behind the card, so only its top peeks out above the card's edge. */}
+			<span
+				aria-hidden
+				className="absolute inset-x-0 top-0 h-24 -translate-y-[40%] rounded-t-[16px] bg-[#dbe8fb] px-7 pt-2 font-mono text-[13px] text-public-blue opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
+			>
+				{feature.tag}
+			</span>
+			<div className="relative flex h-full flex-col overflow-hidden rounded-[16px] border border-public-line bg-[#fafafa]">
+				<div className="flex flex-col items-start gap-3 p-7">
+					<h3 className="text-[19px] leading-snug font-medium text-public-ink">{feature.title}</h3>
+					<p className="text-[15px] leading-relaxed font-light text-public-muted">{feature.body}</p>
+					<Link
+						to={feature.link.to}
+						className="mt-3 inline-flex items-center gap-2 text-[15px] font-medium text-public-ink after:absolute after:inset-0 after:rounded-[16px] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-public-blue"
+					>
+						{feature.link.label}
+						<span className="grid size-6 place-items-center rounded-[5px] transition-colors duration-300 group-hover:bg-public-blue group-hover:text-white motion-reduce:transition-none">
+							<ArrowRightIcon weight="bold" className="size-3.5" />
 						</span>
-						<span>{order.total}</span>
-					</p>
-				))}
-			</AnimatedList>
-		</MiniCard>
+					</Link>
+				</div>
+				<FeatureArt id={feature.id} />
+			</div>
+		</article>
 	);
 }
 
-function ChatIllustration() {
-	return (
-		<MiniCard>
-			<p className="rounded-lg bg-[#eef4ff] px-2.5 py-2">
-				<TypingAnimation className="leading-normal tracking-normal" duration={40}>
-					Make the hero warmer and add a subscription plan
-				</TypingAnimation>
-			</p>
-			<p className="mt-2 text-[#5b6576]">Updating the live store…</p>
-		</MiniCard>
-	);
-}
-
-const FEATURES: ReadonlyArray<{ title: string; text: string; illustration: ReactNode; link: { to: string; label: string } }> = [
-	{
-		title: 'Catalog and product pages',
-		text: 'Products, variants, filters and detailed product pages, generated from your description.',
-		illustration: <CatalogIllustration />,
-		link: { to: '/discover', label: 'See stores in Discover' },
-	},
-	{
-		title: 'Cart and checkout flow',
-		text: 'A cart, a checkout form and order confirmations your customers already know how to use.',
-		illustration: <CartIllustration />,
-		link: { to: '/#build', label: 'Start building' },
-	},
-	{
-		title: 'Order records',
-		text: 'Your store can keep its orders in its own database, ready for you to review.',
-		illustration: <OrdersIllustration />,
-		link: { to: '/#build', label: 'Start building' },
-	},
-	{
-		title: 'Edit by chatting',
-		text: 'Ask for a new section, a different style or more products, and the AI updates the live store.',
-		illustration: <ChatIllustration />,
-		link: { to: '/#build', label: 'Try it' },
-	},
-];
-
-/** What every store gets, on 1Password's white cards with small live illustrations. */
+/** What every store has today, in Vori's layout: the heading on the left, the action on the right, and six cards. */
 export function Features() {
 	return (
-		<section className="bg-public-charcoal px-4 pt-20 pb-24 text-white sm:px-6 sm:pt-28">
+		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
 			<div className="mx-auto max-w-[1248px]">
-				<Eyebrow tone="dark">Estori store builder</Eyebrow>
-				<h2 className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance')}>What your store comes with today</h2>
-				<p className={cn(LEAD, 'mt-5 max-w-2xl text-white/80')}>Start from scratch or from a store in Discover, then change anything by chatting.</p>
-				<TextLink to="/#build" tone="dark" className="mt-6">
-					Start building
-				</TextLink>
-				<BlurFade inView className="mt-14 grid gap-x-4 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-					{FEATURES.map((feature) => (
-						<article key={feature.title}>
-							<div aria-hidden className="flex h-[220px] items-center justify-center rounded-[24px] bg-white p-5">
-								{feature.illustration}
-							</div>
-							<h3 className={cn(HEADING_CARD, 'mt-6')}>{feature.title}</h3>
-							<p className="mt-3 text-base leading-relaxed font-light text-white/80">{feature.text}</p>
-							<TextLink to={feature.link.to} tone="dark" className="mt-4">
-								{feature.link.label}
-							</TextLink>
-						</article>
+				<div className="flex flex-wrap items-end justify-between gap-8">
+					<div className="max-w-3xl">
+						<Eyebrow>Estori store builder</Eyebrow>
+						<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>What your store comes with today</h2>
+						<p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty text-public-muted')}>
+							Start from scratch or from a store in Discover, then change anything by chatting.
+						</p>
+					</div>
+					<PillLink to="/#build" variant="blue">
+						Start building free
+					</PillLink>
+				</div>
+				{/* Row gaps leave room for the tab each card raises on hover. */}
+				<div className="mt-16 grid grid-cols-1 gap-x-5 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
+					{STORE_FEATURES.map((feature) => (
+						<FeatureCard key={feature.id} feature={feature} />
 					))}
-				</BlurFade>
-				<p className="mt-14 flex flex-wrap items-center gap-3 text-sm text-white/75">
-					Accept payments in your store <ComingSoon tone="dark" />
+				</div>
+				<p className="mt-14 flex flex-wrap items-center gap-3 text-sm text-public-muted">
+					Accept payments in your store <ComingSoon />
 				</p>
 			</div>
 		</section>

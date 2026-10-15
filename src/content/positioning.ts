@@ -200,3 +200,57 @@ export const SELLER_STORIES: readonly SellerStory[] = [
 		story: 'Share products you love with your own link or store, and get paid for every sale you bring to a merchant.',
 	},
 ];
+
+export type StoreFeatureId = 'catalog' | 'checkout' | 'orders' | 'chat' | 'preview' | 'discover';
+
+/** What every store has today, on the landing page's cards; `tag` labels the tab a card raises on hover. */
+export interface StoreFeature extends CardCopy {
+	id: StoreFeatureId;
+	tag: string;
+	link: { to: string; label: string };
+}
+
+export const STORE_FEATURES: readonly StoreFeature[] = [
+	{
+		id: 'catalog',
+		tag: 'Catalog',
+		title: 'Catalog and product pages',
+		body: 'Products, variants, filters and detailed product pages, generated from your description.',
+		link: { to: '/discover', label: 'See stores in Discover' },
+	},
+	{
+		id: 'checkout',
+		tag: 'Checkout',
+		title: 'Cart and checkout flow',
+		body: 'A cart, a checkout form and order confirmations your customers already know how to use.',
+		link: { to: '/#build', label: 'Start building' },
+	},
+	{
+		id: 'orders',
+		tag: 'Orders',
+		title: 'Order records',
+		body: 'Your store keeps its orders in its own database, ready for you to review.',
+		link: { to: '/#build', label: 'Start building' },
+	},
+	{
+		id: 'chat',
+		tag: 'AI editing',
+		title: 'Edit by chatting',
+		body: 'Ask for a new section, a different style or more products, and the AI updates the live store.',
+		link: { to: '/#build', label: 'Try it' },
+	},
+	{
+		id: 'preview',
+		tag: 'Live preview',
+		title: 'Desktop and phone preview',
+		body: 'Every store works on both, and you watch every change live on each before you share it.',
+		link: { to: '/#build', label: 'Start building' },
+	},
+	{
+		id: 'discover',
+		tag: 'Discover',
+		title: 'Start from Discover',
+		body: 'Pick a store someone built, get your own copy and make it yours by chatting.',
+		link: { to: '/discover', label: 'Browse Discover' },
+	},
+];

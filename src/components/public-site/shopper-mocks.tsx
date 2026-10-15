@@ -1,8 +1,9 @@
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { ArrowClockwiseIcon, CaretLeftIcon, CaretUpDownIcon, SparkleIcon } from '@phosphor-icons/react';
 import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { ShopperCardId } from '@/content/positioning';
 import { useStory } from '@/hooks/use-story';
+import { useTypedText } from '@/hooks/use-typed-text';
 import { cn } from '@/lib/utils';
 import { ArtCanvas, Field, GreenRing, Photo, StoryFrame } from './art-kit';
 import { FIELDS, MUTED, PANEL, PHOTOS } from './art-styles';
@@ -240,23 +241,9 @@ function SearchRow({ label, children }: { label: string; children: ReactNode }) 
 
 function SearchArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(SEARCH_BEATS);
-	const [typed, setTyped] = useState(0);
-
-	useEffect(() => {
-		if (beat !== 1) return;
-		let count = 0;
-		const timer = setInterval(() => {
-			count = Math.min(QUERY.length, count + 1);
-			setTyped(count);
-		}, TYPE_MS);
-		return () => {
-			clearInterval(timer);
-			setTyped(0);
-		};
-	}, [beat]);
-
+	const typed = useTypedText(QUERY, beat === 1, TYPE_MS);
 	const understood = beat === 2;
-	const query = beat === 0 ? '' : understood ? QUERY : QUERY.slice(0, typed);
+	const query = beat === 0 ? '' : understood ? QUERY : typed;
 	const progress = understood ? 1 : query.length / QUERY.length;
 	return (
 		<StoryFrame storyRef={ref}>
