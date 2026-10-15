@@ -5,12 +5,15 @@ const sources = import.meta.glob<string>(
 		'/src/components/public-site/capability-sections.tsx',
 		'/src/components/public-site/shopper-mocks.tsx',
 		'/src/hooks/use-story.ts',
+		'/src/hooks/use-fit-zoom.ts',
 		'/src/lib/motion.ts',
 		'/src/styles/public-site.css',
 		'/src/content/positioning.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
+
+const PRODUCT_PHOTOS = import.meta.glob('/public/marketing/products/*.webp', { query: '?url', import: 'default', eager: true });
 
 function source(path: string): string {
 	const text = sources[path];
@@ -40,16 +43,33 @@ describe('personalized shopping cards', () => {
 	});
 
 	it('draws each picture in code on a white-to-cream fade, cut off by the card, and hides it from screen readers', () => {
-		const section = personalizationSection();
-		expect(section).toMatch(/aria-hidden\s+className="[^"]*bg-\[linear-gradient\(180deg,#ffffff_0%,#fbf6ec_100%\)\]/);
-		expect(section).toContain('<ShopperMock id={card.id} />');
-		expect(source(MOCKS)).toContain('export function ShopperMock(');
+		expect(personalizationSection()).toContain('<ShopperArt id={card.id} />');
+		const mocks = source(MOCKS);
+		expect(mocks).toContain('export function ShopperArt(');
+		expect(mocks).toMatch(/aria-hidden\s+className="[^"]*bg-\[linear-gradient\(180deg,#ffffff_0%,#fbf6ec_100%\)\]/);
+	});
+
+	it('scales each picture like an image, so nothing in it wraps on narrower cards', () => {
+		const mocks = source(MOCKS);
+		expect(mocks).toContain('useFitZoom<HTMLDivElement>(ART_WIDTH)');
+		expect(mocks).toContain('style={{ height: ART_HEIGHT * zoom }}');
+		expect(mocks).toContain('style={{ width: ART_WIDTH, zoom }}');
+		expect(source('/src/hooks/use-fit-zoom.ts')).toContain('new ResizeObserver(fit)');
+	});
+
+	it('shows real product photos, bundled and decorative', () => {
+		const mocks = source(MOCKS);
+		const paths = [...mocks.matchAll(/'(\/marketing\/products\/[a-z-]+\.webp)'/g)].map((match) => match[1]);
+		expect(paths).toHaveLength(7);
+		for (const path of paths) expect(Object.keys(PRODUCT_PHOTOS), path).toContain(`/public${path}`);
+		expect(mocks).toContain('<img src={src} alt="" loading="lazy"');
+		expect(mocks).toContain('unsplash.com/license');
 	});
 
 	it('has the approved copy, with bundles folded into the cart card', () => {
 		const copy = source('/src/content/positioning.ts');
 		for (const text of [
-			"id: 'picks', title: 'Products picked for each shopper'",
+			"title: 'Products picked for each shopper',\n\t\tbody: 'Machine learning scores every product for every shopper",
 			"id: 'cart', title: 'A cart that suggests what goes with it'",
 			"id: 'offer', title: 'An offer right after checkout'",
 			"id: 'search', title: 'Search that understands shoppers'",
@@ -60,7 +80,19 @@ describe('personalized shopping cards', () => {
 
 	it('tells each card its own story', () => {
 		const mocks = source(MOCKS);
-		for (const text of ['Picked for you', 'Browsing:', 'Goes well with', 'Bundle saves 10%', 'Order confirmed', 'Ethiopia Guji', 'a gift for my dad who loves hiking']) {
+		for (const text of [
+			'Shopper match',
+			'Machine learning scores how well each product fits each shopper.',
+			'value={filled ? 859 : 0}',
+			'Very good',
+			'goes well with',
+			'Save 10% on both',
+			'Thanks for your order, Maya',
+			'This offer is only for this order',
+			'Ethiopia Guji',
+			'Smart search',
+			'a gift for my dad who loves hiking',
+		]) {
 			expect(mocks, text).toContain(text);
 		}
 		expect(mocks.match(/useStory<HTMLDivElement>\(/g)).toHaveLength(4);

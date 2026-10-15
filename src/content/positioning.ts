@@ -52,7 +52,11 @@ export interface ShopperCard extends CardCopy {
 }
 
 export const PERSONALIZATION_CARDS: readonly ShopperCard[] = [
-	{ id: 'picks', title: 'Products picked for each shopper', body: 'Each shopper sees products that fit what they browse and buy.' },
+	{
+		id: 'picks',
+		title: 'Products picked for each shopper',
+		body: 'Machine learning scores every product for every shopper, so each one sees their best matches.',
+	},
 	{ id: 'cart', title: 'A cart that suggests what goes with it', body: "Add-ons and bundles that go with what's already in the cart." },
 	{ id: 'offer', title: 'An offer right after checkout', body: 'A relevant offer right after checkout, while the shopper is still with you.' },
 	{ id: 'search', title: 'Search that understands shoppers', body: 'Shoppers describe what they want and find it, even without the exact words.' },

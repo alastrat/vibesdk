@@ -4,7 +4,7 @@ import { AGENTIC_COMMERCE_SUMMARY, PERSONALIZATION_CARDS } from '@/content/posit
 import { cn } from '@/lib/utils';
 import { CapabilityTag } from './CapabilityTag';
 import { Eyebrow, HEADING_SECTION, LEAD, TextLink } from './primitives';
-import { ShopperMock } from './shopper-mocks';
+import { ShopperArt } from './shopper-mocks';
 
 function DiagramNode({ ref, label }: { ref: Ref<HTMLDivElement>; label: string }) {
 	return (
@@ -71,9 +71,7 @@ export function PersonalizationSection({ id }: { id?: string }) {
 								{card.title}
 							</h3>
 							<p className="px-6 pt-4 text-lg leading-relaxed font-light text-pretty text-public-ink/80 sm:px-12 sm:text-xl">{card.body}</p>
-							<div aria-hidden className="mt-8 h-[280px] bg-[linear-gradient(180deg,#ffffff_0%,#fbf6ec_100%)] px-5 sm:mt-10 sm:h-[320px] sm:px-12">
-								<ShopperMock id={card.id} />
-							</div>
+							<ShopperArt id={card.id} />
 						</article>
 					))}
 				</div>

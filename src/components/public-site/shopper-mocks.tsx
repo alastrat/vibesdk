@@ -1,242 +1,295 @@
-import { useEffect, useState, type ReactNode, type Ref } from 'react';
-import {
-	BackpackIcon,
-	CoffeeBeanIcon,
-	CompassIcon,
-	DropIcon,
-	FlowerLotusIcon,
-	FunnelSimpleIcon,
-	JarIcon,
-	MagnifyingGlassIcon,
-	PersonSimpleTaiChiIcon,
-	ShoppingBagIcon,
-	SneakerIcon,
-	SockIcon,
-	SparkleIcon,
-	TentIcon,
-	WavesIcon,
-	type Icon,
-} from '@phosphor-icons/react';
+import { useEffect, useId, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { ArrowClockwiseIcon, CaretLeftIcon, CaretUpDownIcon, SparkleIcon } from '@phosphor-icons/react';
+import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { ShopperCardId } from '@/content/positioning';
+import { useFitZoom } from '@/hooks/use-fit-zoom';
 import { useStory } from '@/hooks/use-story';
 import { cn } from '@/lib/utils';
 
-/** A white store window rising from the bottom of the card's picture; the card's edge cuts it off, as on 1Password. */
-function ShopWindow({ storyRef, children }: { storyRef: Ref<HTMLDivElement>; children: ReactNode }) {
+/**
+ * Product photos from Unsplash, under its free license (unsplash.com/license), cropped square and
+ * bundled. Unsplash photo ids: wool socks 1615486364462, insulated bottle 1602143407151, trail
+ * daypack 1509762774605, brass compass 1516503424803, house blend 1695245503558, ceramic dripper
+ * 1759259639356, Ethiopia Guji 1712402832925.
+ */
+const PHOTOS = {
+	socks: '/marketing/products/wool-socks.webp',
+	bottle: '/marketing/products/insulated-bottle.webp',
+	daypack: '/marketing/products/trail-daypack.webp',
+	compass: '/marketing/products/brass-compass.webp',
+	houseBlend: '/marketing/products/house-blend.webp',
+	dripper: '/marketing/products/ceramic-dripper.webp',
+	guji: '/marketing/products/ethiopia-guji.webp',
+} as const;
+
+/** Each picture is drawn at this size and zoomed to its card's width, so it scales like an image. */
+const ART_WIDTH = 512;
+const ART_HEIGHT = 432;
+
+/** 1Password's floating panels: white, softly shadowed. */
+const PANEL = 'rounded-[18px] bg-white shadow-[0_2px_6px_rgba(17,24,39,0.05),0_14px_40px_rgba(17,24,39,0.09)] ring-1 ring-black/[0.04]';
+const FIELDS = 'divide-y divide-[#e7e8ec] rounded-[14px] ring-1 ring-[#e2e4e9]';
+const MUTED = 'text-[#6b7280]';
+
+function Photo({ src, className, style }: { src: string; className?: string; style?: CSSProperties }) {
+	return <img src={src} alt="" loading="lazy" decoding="async" className={cn('shrink-0 object-cover', className)} style={style} />;
+}
+
+/** A labeled row in a field group, as in a 1Password item. */
+function Field({ label, children }: { label: string; children: ReactNode }) {
 	return (
-		<div
-			ref={storyRef}
-			className="mx-auto h-full max-w-[440px] overflow-hidden rounded-t-[18px] bg-white px-5 pt-5 text-left text-[#1e2a3b] shadow-[0_12px_48px_rgba(30,34,44,0.12)] ring-1 ring-black/[0.04] sm:px-6 sm:pt-6"
-		>
+		<div className="px-5 py-3">
+			<p className="text-[14px] text-public-blue">{label}</p>
+			<div className="mt-0.5 text-[17px]">{children}</div>
+		</div>
+	);
+}
+
+/** The green ring 1Password draws beside a strong password; drawn in when it appears. */
+function GreenRing() {
+	return (
+		<svg viewBox="0 0 24 24" className="size-6 shrink-0">
+			<circle cx="12" cy="12" r="9" fill="none" stroke="#17a317" strokeWidth="3.5" pathLength={1} strokeDasharray="1" className="animate-public-draw" />
+		</svg>
+	);
+}
+
+function Frame({ storyRef, className, children }: { storyRef: Ref<HTMLDivElement>; className?: string; children: ReactNode }) {
+	return (
+		<div ref={storyRef} className={cn('pt-2 text-left text-[#1d1d21]', className)}>
 			{children}
 		</div>
 	);
 }
 
-function Thumb({ icon: Glyph, tint, size = 'size-11' }: { icon: Icon; tint: string; size?: string }) {
+/** The gauge: a 270 degree arc from bottom left to bottom right, green into blue, with ticks and a marker. */
+const GAUGE_ARC = 'M43.43 160.57 A80 80 0 1 1 156.57 160.57';
+const GAUGE_TICKS = Array.from({ length: 28 }, (_, index) => ((135 + (270 / 27) * index) * Math.PI) / 180);
+
+function Gauge({ filled }: { filled: boolean }) {
+	const fade = useId();
 	return (
-		<span className={cn('grid shrink-0 place-items-center rounded-xl', tint, size)}>
-			<Glyph weight="duotone" className="size-1/2" />
+		<div className="relative size-[196px] shrink-0">
+			<svg viewBox="0 0 200 200" className="size-full">
+				<defs>
+					<linearGradient id={fade} x1="0" y1="0" x2="1" y2="0">
+						<stop offset="0" stopColor="#1caf1b" />
+						<stop offset="0.5" stopColor="#2cbf3c" />
+						<stop offset="0.78" stopColor="#3cc79a" />
+						<stop offset="1" stopColor="#5bb9f6" />
+					</linearGradient>
+				</defs>
+				<path
+					d={GAUGE_ARC}
+					fill="none"
+					stroke={`url(#${fade})`}
+					strokeWidth="22"
+					strokeLinecap="round"
+					pathLength={1}
+					strokeDasharray="1"
+					className={filled ? 'animate-public-draw' : undefined}
+					style={filled ? { animationDuration: '1600ms' } : { strokeDashoffset: 1 }}
+				/>
+				<g stroke="rgba(0,64,16,0.28)" strokeWidth="1.6" strokeLinecap="round" className={cn('transition-opacity duration-700', filled ? 'opacity-100' : 'opacity-0')}>
+					{GAUGE_TICKS.map((angle) => (
+						<line key={angle} x1={100 + 71 * Math.cos(angle)} y1={104 + 71 * Math.sin(angle)} x2={100 + 78 * Math.cos(angle)} y2={104 + 78 * Math.sin(angle)} />
+					))}
+				</g>
+				<path d="M100 44 L91 58 L109 58 Z" fill="#1caf1b" />
+			</svg>
+			<div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
+				<NumberTicker key={filled ? 'scored' : 'waiting'} value={filled ? 859 : 0} className="text-[52px] leading-none font-bold tracking-[-0.03em]" />
+				<span className="mt-1.5 text-[14px] font-semibold tracking-[0.04em] text-[#4b5563] uppercase">Very good</span>
+			</div>
+		</div>
+	);
+}
+
+const PICKS = [
+	{ score: 96, name: 'Wool socks', why: 'Top pick for shoppers who browse hiking gear.', photo: PHOTOS.socks },
+	{ score: 91, name: 'Insulated bottle', why: 'Often bought with the wool socks.', photo: PHOTOS.bottle },
+] as const;
+
+/** The score empties, then machine learning scores the store again: the arc draws in and the numbers count up. */
+const SCORE_BEATS = [900, 6400] as const;
+
+function ScoreArt() {
+	const [ref, beat] = useStory<HTMLDivElement>(SCORE_BEATS);
+	const scored = beat === 1;
+	return (
+		<Frame storyRef={ref}>
+			<div className={cn(PANEL, 'flex items-center justify-between gap-3 py-5 pr-5 pl-7')}>
+				<div className="min-w-0">
+					<p className="flex items-center gap-2.5 text-[26px] leading-none font-bold tracking-[-0.02em]">
+						<span className="grid size-9 place-items-center rounded-[10px] bg-[linear-gradient(135deg,#6aa0ff,#145fe4)] text-white">
+							<SparkleIcon weight="fill" className="size-5" />
+						</span>
+						Shopper match
+					</p>
+					<p className={cn('mt-3.5 text-[13.5px] leading-snug', MUTED)}>Machine learning scores how well each product fits each shopper.</p>
+					<span className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#f6f6f7] px-3 py-1.5 text-[14px] ring-1 ring-black/10">
+						<SparkleIcon className="size-4" />
+						See top picks
+					</span>
+				</div>
+				<Gauge filled={scored} />
+			</div>
+			<div className="mt-4 grid grid-cols-2 gap-4">
+				{PICKS.map((pick) => (
+					<div key={pick.name} className={cn(PANEL, 'p-6')}>
+						<div className="flex items-start justify-between gap-3">
+							<p className="text-[46px] leading-none font-bold tracking-[-0.03em]">
+								<NumberTicker key={scored ? 'scored' : 'waiting'} value={scored ? pick.score : 0} />%
+							</p>
+							<Photo src={pick.photo} className="size-[68px] rounded-[16px]" />
+						</div>
+						<p className="mt-5 text-[17px] font-bold">{pick.name}</p>
+						<p className={cn('mt-1.5 text-[13.5px] leading-snug', MUTED)}>{pick.why}</p>
+					</div>
+				))}
+			</div>
+		</Frame>
+	);
+}
+
+/** The suggestion with its Add button, the tap, then the bundle applied. */
+const CART_BEATS = [1600, 600, 4400] as const;
+
+function CartArt() {
+	const [ref, beat] = useStory<HTMLDivElement>(CART_BEATS);
+	const added = beat === 2;
+	return (
+		<Frame storyRef={ref}>
+			<div className={cn(PANEL, 'mx-auto w-[456px] px-8 pt-8 pb-7')}>
+				<div className="flex items-center gap-5">
+					<Photo src={PHOTOS.houseBlend} className="size-[84px] rounded-[20px]" />
+					<div>
+						<p className="text-[30px] leading-tight font-bold tracking-[-0.02em]">House blend</p>
+						<p className={cn('mt-0.5 text-[15px]', MUTED)}>In your cart · 1 kg · $38</p>
+					</div>
+				</div>
+				<div className={cn(FIELDS, 'mt-7')}>
+					<Field label="goes well with">
+						<div className="flex items-center gap-3">
+							<Photo src={PHOTOS.dripper} className="size-9 rounded-lg" />
+							<span className="min-w-0 flex-1 truncate">Ceramic dripper · $24</span>
+							{added ? (
+								<span className="flex items-center gap-2 text-[16px] text-[#4b5563]">
+									Added
+									<GreenRing />
+								</span>
+							) : (
+								<span
+									className={cn(
+										'rounded-full px-4 py-1 text-[15px] font-medium text-white transition-transform duration-150',
+										beat === 1 ? 'scale-90 bg-public-blue-hover' : 'bg-public-blue',
+									)}
+								>
+									Add
+								</span>
+							)}
+						</div>
+					</Field>
+					<Field label="bundle">
+						<div className="flex items-center justify-between gap-3">
+							<span className={added ? undefined : MUTED}>{added ? 'Save 10% on both' : 'Add the dripper to save 10%'}</span>
+							{added && (
+								<span className="flex items-center gap-2 text-[16px] text-[#4b5563]">
+									Applied
+									<GreenRing />
+								</span>
+							)}
+						</div>
+					</Field>
+					<Field label="subtotal">
+						<span key={added ? 'bundle' : 'single'} className="inline-flex animate-public-rise items-baseline gap-2">
+							{added && <s className="text-[15px] text-[#9aa3b2]">$62.00</s>}
+							<span className="font-semibold">{added ? '$55.80' : '$38.00'}</span>
+						</span>
+					</Field>
+					<Field label="ships">Free, in 2 days</Field>
+				</div>
+			</div>
+		</Frame>
+	);
+}
+
+/** Ten seconds of the offer's countdown, then it starts over. */
+const OFFER_BEATS = Array.from({ length: 10 }, () => 1000);
+
+function OfferArt() {
+	const [ref, beat] = useStory<HTMLDivElement>(OFFER_BEATS);
+	return (
+		<Frame storyRef={ref}>
+			<div className={cn(PANEL, 'mx-auto w-[440px] px-8 pt-9 pb-8')}>
+				<p className="text-center text-[28px] leading-[1.15] font-bold tracking-[-0.02em] text-balance">Thanks for your order, Maya</p>
+				<div className="mt-7 overflow-hidden rounded-[16px] ring-1 ring-[#e2e4e9]">
+					<p className="bg-[#dbe8fb] py-4 text-center text-[17px]">This offer is only for this order</p>
+					<div className="px-6 pt-6 pb-5">
+						<div className="flex items-center gap-5">
+							<Photo src={PHOTOS.guji} className="size-[76px] rounded-[18px]" />
+							<p className="text-[26px] leading-tight font-bold tracking-[-0.02em]">Ethiopia Guji</p>
+						</div>
+						<div className={cn(FIELDS, 'mt-6')}>
+							<Field label="price, 250 g">
+								<span className="font-semibold">$12.00</span> <s className="text-[15px] text-[#9aa3b2]">$16.00</s>
+							</Field>
+							<Field label="offer ends in">
+								<span className="flex items-center gap-2.5">
+									<span className="tabular-nums">4:{59 - beat}</span>
+									<span className="inline-flex items-center rounded-full bg-[#f1f3f6] p-1">
+										<svg viewBox="0 0 20 20" className="size-4 -rotate-90">
+											<circle cx="10" cy="10" r="7" fill="none" stroke="#dfe3e8" strokeWidth="3" />
+											<circle
+												cx="10"
+												cy="10"
+												r="7"
+												fill="none"
+												stroke="#17a317"
+												strokeWidth="3"
+												pathLength={1}
+												strokeDasharray="1"
+												strokeDashoffset={beat / OFFER_BEATS.length}
+												className={beat === 0 ? undefined : 'transition-[stroke-dashoffset] duration-1000 ease-linear'}
+											/>
+										</svg>
+									</span>
+								</span>
+							</Field>
+						</div>
+					</div>
+				</div>
+			</div>
+		</Frame>
+	);
+}
+
+/** An empty box, the shopper typing in their own words, then what the store understood and found. */
+const SEARCH_BEATS = [800, 2600, 4600] as const;
+const QUERY = 'a gift for my dad who loves hiking';
+const TYPE_MS = 55;
+/** Words the search understood, colored like the digits and symbols in 1Password's generator. */
+const KEYWORDS: Readonly<Record<string, string>> = { gift: 'text-public-blue', dad: 'text-[#e0245e]', hiking: 'text-[#16a34a]' };
+const MATCHES = [PHOTOS.daypack, PHOTOS.compass, PHOTOS.bottle] as const;
+
+function Toggle({ on }: { on: boolean }) {
+	return (
+		<span className={cn('flex h-7 w-12 items-center rounded-full p-0.5 transition-colors duration-300', on ? 'bg-public-blue' : 'bg-[#e3e5e9]')}>
+			<span className={cn('size-6 rounded-full bg-white shadow transition-transform duration-300', on && 'translate-x-5')} />
 		</span>
 	);
 }
 
-function WindowTitle({ icon: Glyph, children }: { icon: Icon; children: ReactNode }) {
+function SearchRow({ label, children }: { label: string; children: ReactNode }) {
 	return (
-		<p className="flex items-center gap-2 text-[15px] font-semibold">
-			<Glyph weight="fill" className="size-4 text-public-blue" />
+		<div className="flex items-center justify-between py-3.5">
+			<span className={cn('text-[16px]', MUTED)}>{label}</span>
 			{children}
-		</p>
-	);
-}
-
-/** One beat per shopper: their products swap in as they browse something else. */
-const PICKS_BEATS = [3400, 3400] as const;
-const SHOPPERS = [
-	{
-		interest: 'running',
-		products: [
-			{ name: 'Trail runners', price: '$128', icon: SneakerIcon, tint: 'bg-[#e8f0ff] text-[#145fe4]' },
-			{ name: 'Running socks', price: '$16', icon: SockIcon, tint: 'bg-[#fff1e6] text-[#d9692b]' },
-			{ name: 'Water flask', price: '$24', icon: DropIcon, tint: 'bg-[#e7f7f1] text-[#14865f]' },
-		],
-	},
-	{
-		interest: 'yoga',
-		products: [
-			{ name: 'Yoga mat', price: '$68', icon: FlowerLotusIcon, tint: 'bg-[#f3ecff] text-[#7a4bd6]' },
-			{ name: 'Yoga blocks', price: '$24', icon: PersonSimpleTaiChiIcon, tint: 'bg-[#e8f0ff] text-[#145fe4]' },
-			{ name: 'Linen towel', price: '$32', icon: WavesIcon, tint: 'bg-[#e7f7f1] text-[#14865f]' },
-		],
-	},
-] as const;
-
-function PicksMock() {
-	const [ref, beat] = useStory<HTMLDivElement>(PICKS_BEATS);
-	const shopper = SHOPPERS[beat];
-	return (
-		<ShopWindow storyRef={ref}>
-			<div className="flex items-center justify-between gap-3">
-				<WindowTitle icon={SparkleIcon}>Picked for you</WindowTitle>
-				<span key={shopper.interest} className="animate-public-rise rounded-full bg-[#eef3ff] px-3 py-1 text-xs text-public-blue">
-					Browsing: {shopper.interest}
-				</span>
-			</div>
-			<div className="mt-5 grid grid-cols-3 gap-3">
-				{shopper.products.map((product, index) => (
-					<div key={product.name} className="animate-public-rise" style={{ animationDelay: `${index * 120}ms` }}>
-						<Thumb icon={product.icon} tint={product.tint} size="aspect-square w-full" />
-						<p className="mt-2 truncate text-[13px] font-medium">{product.name}</p>
-						<p className="text-[13px] text-[#5b6576]">{product.price}</p>
-					</div>
-				))}
-			</div>
-			<div className="mt-5 h-2 rounded-full bg-[#f1f3f7]" />
-			<div className="mt-2 h-2 w-2/3 rounded-full bg-[#f1f3f7]" />
-		</ShopWindow>
-	);
-}
-
-function CartLine({ icon, tint, name, price, className }: { icon: Icon; tint: string; name: string; price: string; className?: string }) {
-	return (
-		<div className={cn('flex items-center gap-3', className)}>
-			<Thumb icon={icon} tint={tint} />
-			<p className="min-w-0 flex-1 truncate text-sm font-medium">{name}</p>
-			<p className="text-sm">{price}</p>
 		</div>
 	);
 }
 
-/** The cart alone, the suggestion, the tap on Add, then the bundle in the cart. */
-const CART_BEATS = [1400, 1700, 600, 3600] as const;
-
-function CartMock() {
-	const [ref, beat] = useStory<HTMLDivElement>(CART_BEATS);
-	const suggesting = beat === 1 || beat === 2;
-	const added = beat === 3;
-	return (
-		<ShopWindow storyRef={ref}>
-			<div className="flex items-center justify-between">
-				<WindowTitle icon={ShoppingBagIcon}>Your cart</WindowTitle>
-				<span className="text-xs text-[#5b6576]">{added ? '2 items' : '1 item'}</span>
-			</div>
-			<div className="mt-4 grid gap-3">
-				<CartLine icon={CoffeeBeanIcon} tint="bg-[#fff1e6] text-[#b5651d]" name="House blend, 1 kg" price="$38" />
-				{added && <CartLine icon={FunnelSimpleIcon} tint="bg-[#e8f0ff] text-[#145fe4]" name="Ceramic dripper" price="$24" className="animate-public-rise" />}
-			</div>
-			{suggesting && (
-				<div className="mt-4 animate-public-rise rounded-xl bg-[#f5f8ff] p-3 ring-1 ring-[#dfe8fb]">
-					<p className="text-[11px] font-medium tracking-[0.08em] text-public-blue uppercase">Goes well with</p>
-					<div className="mt-2 flex items-center gap-3">
-						<Thumb icon={FunnelSimpleIcon} tint="bg-white text-[#145fe4]" />
-						<div className="min-w-0 flex-1">
-							<p className="truncate text-sm font-medium">Ceramic dripper</p>
-							<p className="text-[13px] text-[#5b6576]">$24</p>
-						</div>
-						<span
-							className={cn(
-								'rounded-full px-3.5 py-1.5 text-xs font-medium text-white transition-transform duration-150',
-								beat === 2 ? 'scale-90 bg-public-blue-hover' : 'bg-public-blue',
-							)}
-						>
-							Add
-						</span>
-					</div>
-				</div>
-			)}
-			<div className="mt-4 flex items-center justify-between border-t border-[#eef1f5] pt-3 text-sm">
-				<span className="text-[#5b6576]">Subtotal</span>
-				<span key={added ? 'bundle' : 'single'} className="flex animate-public-rise items-center gap-2">
-					{added && <span className="rounded-full bg-[#e7f7f1] px-2 py-0.5 text-[11px] font-medium text-[#14865f]">Bundle saves 10%</span>}
-					{added && <s className="text-[#9aa3b2]">$62</s>}
-					<span className="font-semibold">{added ? '$55.80' : '$38'}</span>
-				</span>
-			</div>
-		</ShopWindow>
-	);
-}
-
-/** The order is confirmed, then a one-time offer rises with its timer running out. */
-const OFFER_BEATS = [1800, 4400] as const;
-
-function OfferMock() {
-	const [ref, beat] = useStory<HTMLDivElement>(OFFER_BEATS);
-	const offering = beat === 1;
-	return (
-		<ShopWindow storyRef={ref}>
-			<div className="flex items-center gap-3">
-				<svg viewBox="0 0 40 40" className="size-10 shrink-0">
-					<circle cx="20" cy="20" r="20" fill="#e7f7f1" />
-					{/* Drawn again each time the story starts over. */}
-					<path
-						key={beat}
-						d="M12.5 20.5l5 5 10-11"
-						fill="none"
-						stroke="#14865f"
-						strokeWidth="3"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-						pathLength={1}
-						strokeDasharray="1"
-						className={offering ? undefined : 'animate-public-draw'}
-					/>
-				</svg>
-				<div>
-					<p className="text-[15px] font-semibold">Order confirmed</p>
-					<p className="text-[13px] text-[#5b6576]">Thanks, Maya. Order #1042 is on its way.</p>
-				</div>
-			</div>
-			{offering ? (
-				<div className="mt-5 animate-public-rise rounded-xl bg-[#fff8ee] p-4 ring-1 ring-[#f3e3c8]">
-					<div className="flex items-center justify-between">
-						<p className="text-[11px] font-medium tracking-[0.08em] text-[#b5651d] uppercase">Just for this order</p>
-						<span className="flex items-center gap-1.5 text-xs text-[#5b6576]">
-							<svg viewBox="0 0 20 20" className="size-4 -rotate-90">
-								<circle cx="10" cy="10" r="7" fill="none" stroke="#f3e3c8" strokeWidth="3" />
-								<circle cx="10" cy="10" r="7" fill="none" stroke="#14865f" strokeWidth="3" pathLength={1} strokeDasharray="1" className="animate-public-drain" />
-							</svg>
-							5 min
-						</span>
-					</div>
-					<div className="mt-3 flex items-center gap-3">
-						<Thumb icon={JarIcon} tint="bg-white text-[#b5651d]" />
-						<div className="min-w-0 flex-1">
-							<p className="truncate text-sm font-medium">Add Ethiopia Guji, 250 g</p>
-							<p className="text-[13px]">
-								<span className="font-semibold">$12</span> <s className="text-[#9aa3b2]">$16</s>
-							</p>
-						</div>
-					</div>
-					<span className="mt-3 block rounded-full bg-public-charcoal py-2 text-center text-xs font-medium text-white">Add to my order</span>
-				</div>
-			) : (
-				<div className="mt-5 grid gap-2.5 text-sm">
-					{[
-						['House blend, 1 kg', '$38'],
-						['Shipping', 'Free'],
-					].map(([label, value]) => (
-						<div key={label} className="flex justify-between">
-							<span className="text-[#5b6576]">{label}</span>
-							<span>{value}</span>
-						</div>
-					))}
-				</div>
-			)}
-		</ShopWindow>
-	);
-}
-
-/** An empty box, the shopper typing in their own words, then what the store found. */
-const SEARCH_BEATS = [900, 2400, 3800] as const;
-const QUERY = 'a gift for my dad who loves hiking';
-const TYPE_MS = 55;
-const RESULTS = [
-	{ name: 'Trail daypack, 20 L', price: '$89', icon: BackpackIcon, tint: 'bg-[#e7f7f1] text-[#14865f]', fits: ['Hiking', 'Gift idea'] },
-	{ name: 'Pocket compass', price: '$29', icon: CompassIcon, tint: 'bg-[#fff1e6] text-[#d9692b]', fits: ['Gift idea'] },
-	{ name: 'Two-person tent', price: '$189', icon: TentIcon, tint: 'bg-[#e8f0ff] text-[#145fe4]', fits: ['Hiking'] },
-] as const;
-
-function SearchMock() {
+function SearchArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(SEARCH_BEATS);
 	const [typed, setTyped] = useState(0);
 
@@ -253,49 +306,84 @@ function SearchMock() {
 		};
 	}, [beat]);
 
-	const query = beat === 0 ? '' : beat === 1 ? QUERY.slice(0, typed) : QUERY;
+	const understood = beat === 2;
+	const query = beat === 0 ? '' : understood ? QUERY : QUERY.slice(0, typed);
+	const progress = understood ? 1 : query.length / QUERY.length;
 	return (
-		<ShopWindow storyRef={ref}>
-			<div className="flex items-center gap-2 rounded-xl px-3 py-2.5 ring-1 ring-[#dfe3ea]">
-				<MagnifyingGlassIcon className="size-4 shrink-0 text-[#5b6576]" />
-				<p className="min-w-0 flex-1 truncate text-sm">
-					{query || <span className="text-[#9aa3b2]">Search the store</span>}
-					{beat < 2 && <span className="ml-px inline-block h-4 w-px translate-y-[3px] animate-public-blink bg-public-blue" />}
-				</p>
-			</div>
-			{beat === 2 && (
-				<div className="mt-4 grid gap-3">
-					{RESULTS.map((result, index) => (
-						<div key={result.name} className="flex animate-public-rise items-center gap-3" style={{ animationDelay: `${index * 140}ms` }}>
-							<Thumb icon={result.icon} tint={result.tint} />
-							<div className="min-w-0 flex-1">
-								<p className="truncate text-sm font-medium">{result.name}</p>
-								<p className="mt-1 flex gap-1.5">
-									{result.fits.map((fit) => (
-										<span key={fit} className="rounded-full bg-[#f1f3f7] px-2 py-0.5 text-[11px] text-[#5b6576]">
-											{fit}
-										</span>
-									))}
-								</p>
-							</div>
-							<p className="text-sm">{result.price}</p>
-						</div>
-					))}
+		<Frame storyRef={ref}>
+			<div className={cn(PANEL, 'mx-auto w-[456px] overflow-hidden')}>
+				<div className="relative flex h-16 items-center justify-center border-b border-[#e7e8ec]">
+					<CaretLeftIcon className="absolute left-6 size-5 text-[#6b7280]" />
+					<p className="text-[20px] font-semibold">Smart search</p>
 				</div>
-			)}
-		</ShopWindow>
+				<div className="px-7 pt-5 pb-12">
+					<div className="flex items-center justify-between">
+						<span className="rounded-lg bg-[#f3f4f6] px-4 py-1.5 text-[16px] ring-1 ring-black/10">Clear</span>
+						<ArrowClockwiseIcon className="size-5 text-[#4b5563]" />
+						<span className="rounded-lg bg-public-blue px-4 py-1.5 text-[16px] text-white">Search</span>
+					</div>
+					<p className="mt-4 h-[52px] truncate rounded-[10px] px-4 py-3 text-[18px] tracking-[0.01em] ring-1 ring-[#d9dce3]">
+						{query.split(' ').map((word, index) => (
+							<span key={`${word}-${index}`} className={cn(understood && KEYWORDS[word], understood && KEYWORDS[word] && 'font-semibold')}>
+								{index > 0 && ' '}
+								{word}
+							</span>
+						))}
+						{!understood && <span className="ml-px inline-block h-5 w-px translate-y-1 animate-public-blink bg-public-blue" />}
+					</p>
+					<div className="mt-3 h-[3px] rounded-full bg-[#e5e7eb]">
+						<div className="h-full rounded-full bg-[#22b021] transition-[width] duration-300" style={{ width: `${progress * 88}%` }} />
+					</div>
+					<div className="mt-2 divide-y divide-[#eceef1]">
+						<SearchRow label="Looking for">
+							<span className="flex items-center gap-5 rounded-lg px-3 py-1.5 text-[16px] ring-1 ring-[#d9dce3]">
+								{understood ? 'A gift for dad' : 'Anything'}
+								<CaretUpDownIcon className="size-4 text-[#6b7280]" />
+							</span>
+						</SearchRow>
+						<SearchRow label="Into hiking">
+							<Toggle on={understood} />
+						</SearchRow>
+						<SearchRow label="Best matches">
+							<span className="flex items-center gap-2">
+								{MATCHES.map((photo, index) => (
+									<Photo
+										key={photo}
+										src={photo}
+										className={cn('size-10 rounded-lg', understood ? 'animate-public-rise' : 'opacity-0')}
+										style={{ animationDelay: `${index * 140}ms` }}
+									/>
+								))}
+							</span>
+						</SearchRow>
+					</div>
+				</div>
+			</div>
+		</Frame>
 	);
 }
 
-const MOCKS: Readonly<Record<ShopperCardId, () => ReactNode>> = {
-	picks: PicksMock,
-	cart: CartMock,
-	offer: OfferMock,
-	search: SearchMock,
+const ARTS: Readonly<Record<ShopperCardId, () => ReactNode>> = {
+	picks: ScoreArt,
+	cart: CartArt,
+	offer: OfferArt,
+	search: SearchArt,
 };
 
-/** A shopper's moment in the store; the card's text carries the meaning, so the picture stays decorative. */
-export function ShopperMock({ id }: { id: ShopperCardId }) {
-	const Mock = MOCKS[id];
-	return <Mock />;
+/** A card's picture on its white-to-cream fade, cut off by the card's edge as on 1Password; decorative, since the card's text carries the meaning. */
+export function ShopperArt({ id }: { id: ShopperCardId }) {
+	const [ref, zoom] = useFitZoom<HTMLDivElement>(ART_WIDTH);
+	const Art = ARTS[id];
+	return (
+		<div
+			ref={ref}
+			aria-hidden
+			className="mt-8 overflow-hidden bg-[linear-gradient(180deg,#ffffff_0%,#fbf6ec_100%)] px-5 sm:mt-10 sm:px-10"
+			style={{ height: ART_HEIGHT * zoom }}
+		>
+			<div className="mx-auto" style={{ width: ART_WIDTH, zoom }}>
+				<Art />
+			</div>
+		</div>
+	);
 }
