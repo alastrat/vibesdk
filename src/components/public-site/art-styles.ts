@@ -14,6 +14,12 @@ export const PHOTOS = {
 	guji: '/marketing/products/ethiopia-guji.webp',
 } as const;
 
+/** A store on desktop and on a phone, for the live preview card: the desktop shot cropped to its top, the phone shot at the frame's size. */
+export const PREVIEW_SHOTS = {
+	desktop: '/marketing/preview-desktop.webp',
+	phone: '/marketing/preview-phone.webp',
+} as const;
+
 /** 1Password's floating panels: white, softly shadowed. */
 export const PANEL = 'rounded-[18px] bg-white shadow-[0_2px_6px_rgba(17,24,39,0.05),0_14px_40px_rgba(17,24,39,0.09)] ring-1 ring-black/[0.04]';
 export const FIELDS = 'divide-y divide-[#e7e8ec] rounded-[14px] ring-1 ring-[#e2e4e9]';

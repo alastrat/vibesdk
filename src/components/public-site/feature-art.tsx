@@ -7,7 +7,7 @@ import { useTypedText } from '@/hooks/use-typed-text';
 import { cn } from '@/lib/utils';
 import { HERO_STORE_IMAGE } from '@/routes/landing/Hero';
 import { ArtCanvas, Photo, StoryFrame } from './art-kit';
-import { MUTED, PHOTOS } from './art-styles';
+import { MUTED, PHOTOS, PREVIEW_SHOTS } from './art-styles';
 
 /** Each picture is drawn at this size and zoomed to its card's width; the card's bottom edge cuts it off. */
 const ART_WIDTH = 400;
@@ -208,7 +208,7 @@ function PreviewArt() {
 					<span className="size-1.5 rounded-full bg-[#16a34a]" />
 					<span className={cn(MONO, 'text-[11px]')}>Live preview</span>
 				</div>
-				<Photo src={HERO_STORE_IMAGE} className="h-[150px] w-full object-left-top" />
+				<Photo src={PREVIEW_SHOTS.desktop} className="h-[200px] w-full object-top" />
 			</div>
 			<div
 				className={cn(
@@ -216,7 +216,7 @@ function PreviewArt() {
 					phone ? '-translate-y-3 ring-2 ring-public-blue' : '',
 				)}
 			>
-				<Photo src={HERO_STORE_IMAGE} className="h-full w-full object-cover object-[12%_0%]" />
+				<Photo src={PREVIEW_SHOTS.phone} className="h-full w-full object-top" />
 			</div>
 		</StoryFrame>
 	);

@@ -7,6 +7,9 @@ const sources = import.meta.glob<string>(['/src/routes/landing/Features.tsx', '/
 	eager: true,
 });
 
+const PREVIEW_FILES = import.meta.glob('/public/marketing/preview-*.webp', { query: '?url', import: 'default', eager: true });
+const STYLES = import.meta.glob<string>('/src/components/public-site/art-styles.ts', { query: '?raw', import: 'default', eager: true });
+
 function source(path: string): string {
 	const text = sources[path];
 	if (text === undefined) throw new Error(`Source not found: ${path}`);
@@ -52,6 +55,16 @@ describe('store builder features', () => {
 		expect(section).toContain('group-hover:bg-public-blue group-hover:text-white');
 		// The whole card opens the link.
 		expect(section).toContain('after:absolute after:inset-0');
+	});
+
+	it('previews a real store on desktop and phone, from bundled screenshots', () => {
+		const styles = STYLES['/src/components/public-site/art-styles.ts'] ?? '';
+		expect(styles).toContain("desktop: '/marketing/preview-desktop.webp'");
+		expect(styles).toContain("phone: '/marketing/preview-phone.webp'");
+		expect(Object.keys(PREVIEW_FILES).sort()).toEqual(['/public/marketing/preview-desktop.webp', '/public/marketing/preview-phone.webp']);
+		const preview = source(ART).slice(source(ART).indexOf('function PreviewArt'), source(ART).indexOf('function DiscoverArt'));
+		expect(preview).toContain('src={PREVIEW_SHOTS.desktop}');
+		expect(preview).toContain('src={PREVIEW_SHOTS.phone}');
 	});
 
 	it('keeps payments marked as coming soon', () => {
