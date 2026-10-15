@@ -1,17 +1,9 @@
 import { contactTopicLabel, type ContactRequestInput } from '../../../shared/types/contact';
+import { escapeHtml } from '../../utils/html';
 import type { OutgoingEmail } from './types';
 
 const BUTTON_STYLE =
 	'display:inline-block;padding:12px 20px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;';
-
-function escapeHtml(value: string): string {
-	return value
-		.replace(/&/g, '&amp;')
-		.replace(/</g, '&lt;')
-		.replace(/>/g, '&gt;')
-		.replace(/"/g, '&quot;')
-		.replace(/'/g, '&#39;');
-}
 
 interface EmailContent {
 	to: string;

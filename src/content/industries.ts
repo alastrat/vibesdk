@@ -1,5 +1,6 @@
-import { BRAND, pageTitle } from '@/brand';
+import { pageTitle } from '@/brand/page-title';
 import { SCHEMA_CONTEXT, absoluteUrl, breadcrumbList, faqPage, type Crumb, type JsonLdNode } from '@/lib/seo';
+import { BRAND } from '../../shared/brand';
 import { FREE_PLAN_ANSWER, PAYMENTS_ANSWER, type CardCopy, type FaqItem } from './positioning';
 
 export type IndustrySlug =
