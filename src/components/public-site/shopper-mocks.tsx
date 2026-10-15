@@ -1,66 +1,15 @@
-import { useEffect, useId, useState, type CSSProperties, type ReactNode, type Ref } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { ArrowClockwiseIcon, CaretLeftIcon, CaretUpDownIcon, SparkleIcon } from '@phosphor-icons/react';
 import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { ShopperCardId } from '@/content/positioning';
-import { useFitZoom } from '@/hooks/use-fit-zoom';
 import { useStory } from '@/hooks/use-story';
 import { cn } from '@/lib/utils';
-
-/**
- * Product photos from Unsplash, under its free license (unsplash.com/license), cropped square and
- * bundled. Unsplash photo ids: wool socks 1615486364462, insulated bottle 1602143407151, trail
- * daypack 1509762774605, brass compass 1516503424803, house blend 1695245503558, ceramic dripper
- * 1759259639356, Ethiopia Guji 1712402832925.
- */
-const PHOTOS = {
-	socks: '/marketing/products/wool-socks.webp',
-	bottle: '/marketing/products/insulated-bottle.webp',
-	daypack: '/marketing/products/trail-daypack.webp',
-	compass: '/marketing/products/brass-compass.webp',
-	houseBlend: '/marketing/products/house-blend.webp',
-	dripper: '/marketing/products/ceramic-dripper.webp',
-	guji: '/marketing/products/ethiopia-guji.webp',
-} as const;
+import { ArtCanvas, Field, GreenRing, Photo, StoryFrame } from './art-kit';
+import { FIELDS, MUTED, PANEL, PHOTOS } from './art-styles';
 
 /** Each picture is drawn at this size and zoomed to its card's width, so it scales like an image. */
 const ART_WIDTH = 512;
 const ART_HEIGHT = 432;
-
-/** 1Password's floating panels: white, softly shadowed. */
-const PANEL = 'rounded-[18px] bg-white shadow-[0_2px_6px_rgba(17,24,39,0.05),0_14px_40px_rgba(17,24,39,0.09)] ring-1 ring-black/[0.04]';
-const FIELDS = 'divide-y divide-[#e7e8ec] rounded-[14px] ring-1 ring-[#e2e4e9]';
-const MUTED = 'text-[#6b7280]';
-
-function Photo({ src, className, style }: { src: string; className?: string; style?: CSSProperties }) {
-	return <img src={src} alt="" loading="lazy" decoding="async" className={cn('shrink-0 object-cover', className)} style={style} />;
-}
-
-/** A labeled row in a field group, as in a 1Password item. */
-function Field({ label, children }: { label: string; children: ReactNode }) {
-	return (
-		<div className="px-5 py-3">
-			<p className="text-[14px] text-public-blue">{label}</p>
-			<div className="mt-0.5 text-[17px]">{children}</div>
-		</div>
-	);
-}
-
-/** The green ring 1Password draws beside a strong password; drawn in when it appears. */
-function GreenRing() {
-	return (
-		<svg viewBox="0 0 24 24" className="size-6 shrink-0">
-			<circle cx="12" cy="12" r="9" fill="none" stroke="#17a317" strokeWidth="3.5" pathLength={1} strokeDasharray="1" className="animate-public-draw" />
-		</svg>
-	);
-}
-
-function Frame({ storyRef, className, children }: { storyRef: Ref<HTMLDivElement>; className?: string; children: ReactNode }) {
-	return (
-		<div ref={storyRef} className={cn('pt-2 text-left text-[#1d1d21]', className)}>
-			{children}
-		</div>
-	);
-}
 
 /** The gauge: a 270 degree arc from bottom left to bottom right, green into blue, with ticks and a marker. */
 const GAUGE_ARC = 'M43.43 160.57 A80 80 0 1 1 156.57 160.57';
@@ -117,7 +66,7 @@ function ScoreArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(SCORE_BEATS);
 	const scored = beat === 1;
 	return (
-		<Frame storyRef={ref}>
+		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'flex items-center justify-between gap-3 py-5 pr-5 pl-7')}>
 				<div className="min-w-0">
 					<p className="flex items-center gap-2.5 text-[26px] leading-none font-bold tracking-[-0.02em]">
@@ -148,7 +97,7 @@ function ScoreArt() {
 					</div>
 				))}
 			</div>
-		</Frame>
+		</StoryFrame>
 	);
 }
 
@@ -159,7 +108,7 @@ function CartArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(CART_BEATS);
 	const added = beat === 2;
 	return (
-		<Frame storyRef={ref}>
+		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'mx-auto w-[456px] px-8 pt-8 pb-7')}>
 				<div className="flex items-center gap-5">
 					<Photo src={PHOTOS.houseBlend} className="size-[84px] rounded-[20px]" />
@@ -210,7 +159,7 @@ function CartArt() {
 					<Field label="ships">Free, in 2 days</Field>
 				</div>
 			</div>
-		</Frame>
+		</StoryFrame>
 	);
 }
 
@@ -220,7 +169,7 @@ const OFFER_BEATS = Array.from({ length: 10 }, () => 1000);
 function OfferArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(OFFER_BEATS);
 	return (
-		<Frame storyRef={ref}>
+		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'mx-auto w-[440px] px-8 pt-9 pb-8')}>
 				<p className="text-center text-[28px] leading-[1.15] font-bold tracking-[-0.02em] text-balance">Thanks for your order, Maya</p>
 				<div className="mt-7 overflow-hidden rounded-[16px] ring-1 ring-[#e2e4e9]">
@@ -260,7 +209,7 @@ function OfferArt() {
 					</div>
 				</div>
 			</div>
-		</Frame>
+		</StoryFrame>
 	);
 }
 
@@ -310,7 +259,7 @@ function SearchArt() {
 	const query = beat === 0 ? '' : understood ? QUERY : QUERY.slice(0, typed);
 	const progress = understood ? 1 : query.length / QUERY.length;
 	return (
-		<Frame storyRef={ref}>
+		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'mx-auto w-[456px] overflow-hidden')}>
 				<div className="relative flex h-16 items-center justify-center border-b border-[#e7e8ec]">
 					<CaretLeftIcon className="absolute left-6 size-5 text-[#6b7280]" />
@@ -359,7 +308,7 @@ function SearchArt() {
 					</div>
 				</div>
 			</div>
-		</Frame>
+		</StoryFrame>
 	);
 }
 
@@ -370,20 +319,12 @@ const ARTS: Readonly<Record<ShopperCardId, () => ReactNode>> = {
 	search: SearchArt,
 };
 
-/** A card's picture on its white-to-cream fade, cut off by the card's edge as on 1Password; decorative, since the card's text carries the meaning. */
+/** A card's picture on its white-to-cream fade, cut off by the card's edge as on 1Password. */
 export function ShopperArt({ id }: { id: ShopperCardId }) {
-	const [ref, zoom] = useFitZoom<HTMLDivElement>(ART_WIDTH);
 	const Art = ARTS[id];
 	return (
-		<div
-			ref={ref}
-			aria-hidden
-			className="mt-8 overflow-hidden bg-[linear-gradient(180deg,#ffffff_0%,#fbf6ec_100%)] px-5 sm:mt-10 sm:px-10"
-			style={{ height: ART_HEIGHT * zoom }}
-		>
-			<div className="mx-auto" style={{ width: ART_WIDTH, zoom }}>
-				<Art />
-			</div>
-		</div>
+		<ArtCanvas width={ART_WIDTH} height={ART_HEIGHT} className="mt-8 bg-[linear-gradient(180deg,#ffffff_0%,#fbf6ec_100%)] px-5 sm:mt-10 sm:px-10">
+			<Art />
+		</ArtCanvas>
 	);
 }

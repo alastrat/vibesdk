@@ -73,8 +73,8 @@ describe('landing page', () => {
 		expect(hero).not.toMatch(/agentic|wherever shoppers ask AI/i);
 		expect(source('/src/routes/landing/Features.tsx')).toContain('What your store comes with today');
 		const band = source('/src/routes/landing/SellersBand.tsx');
-		expect(band).toContain('CREATOR_ITEMS.map');
-		expect(band).toContain('<LinkCard');
+		expect(band).toContain('SELLER_STORIES');
+		expect(band).toContain('<SellerArt id={seller.id} />');
 	});
 
 	it('always underlines the Discover link under the build box', () => {

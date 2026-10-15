@@ -6,6 +6,8 @@ const sources = import.meta.glob<string>(
 		'/src/components/public-site/shopper-mocks.tsx',
 		'/src/hooks/use-story.ts',
 		'/src/hooks/use-fit-zoom.ts',
+		'/src/components/public-site/art-kit.tsx',
+		'/src/components/public-site/art-styles.ts',
 		'/src/lib/motion.ts',
 		'/src/styles/public-site.css',
 		'/src/content/positioning.ts',
@@ -23,6 +25,7 @@ function source(path: string): string {
 
 const SECTION = '/src/components/public-site/capability-sections.tsx';
 const MOCKS = '/src/components/public-site/shopper-mocks.tsx';
+const KIT = '/src/components/public-site/art-kit.tsx';
 
 function personalizationSection(): string {
 	const text = source(SECTION);
@@ -46,24 +49,24 @@ describe('personalized shopping cards', () => {
 		expect(personalizationSection()).toContain('<ShopperArt id={card.id} />');
 		const mocks = source(MOCKS);
 		expect(mocks).toContain('export function ShopperArt(');
-		expect(mocks).toMatch(/aria-hidden\s+className="[^"]*bg-\[linear-gradient\(180deg,#ffffff_0%,#fbf6ec_100%\)\]/);
+		expect(mocks).toContain('<ArtCanvas width={ART_WIDTH} height={ART_HEIGHT} className="mt-8 bg-[linear-gradient(180deg,#ffffff_0%,#fbf6ec_100%)]');
+		expect(source(KIT)).toContain("<div ref={ref} aria-hidden className={cn('overflow-hidden', className)} style={{ height: height * zoom }}>");
 	});
 
 	it('scales each picture like an image, so nothing in it wraps on narrower cards', () => {
-		const mocks = source(MOCKS);
-		expect(mocks).toContain('useFitZoom<HTMLDivElement>(ART_WIDTH)');
-		expect(mocks).toContain('style={{ height: ART_HEIGHT * zoom }}');
-		expect(mocks).toContain('style={{ width: ART_WIDTH, zoom }}');
+		const kit = source(KIT);
+		expect(kit).toContain('useFitZoom<HTMLDivElement>(width)');
+		expect(kit).toContain('style={{ width, zoom }}');
 		expect(source('/src/hooks/use-fit-zoom.ts')).toContain('new ResizeObserver(fit)');
 	});
 
 	it('shows real product photos, bundled and decorative', () => {
-		const mocks = source(MOCKS);
-		const paths = [...mocks.matchAll(/'(\/marketing\/products\/[a-z-]+\.webp)'/g)].map((match) => match[1]);
+		const styles = source('/src/components/public-site/art-styles.ts');
+		const paths = [...styles.matchAll(/'(\/marketing\/products\/[a-z-]+\.webp)'/g)].map((match) => match[1]);
 		expect(paths).toHaveLength(7);
 		for (const path of paths) expect(Object.keys(PRODUCT_PHOTOS), path).toContain(`/public${path}`);
-		expect(mocks).toContain('<img src={src} alt="" loading="lazy"');
-		expect(mocks).toContain('unsplash.com/license');
+		expect(source(KIT)).toContain('<img src={src} alt="" loading="lazy"');
+		expect(styles).toContain('unsplash.com/license');
 	});
 
 	it('has the approved copy, with bundles folded into the cart card', () => {

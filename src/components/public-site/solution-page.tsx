@@ -1,10 +1,8 @@
 import type { ReactNode } from 'react';
-import { Link } from 'react-router';
 import { pageTitle } from '@/brand';
 import { BlurFade } from '@/components/magicui/blur-fade';
 import type { CardCopy } from '@/content/positioning';
 import type { CapabilityId } from '@/lib/capabilities';
-import type { NavItem } from '@/lib/site-nav';
 import { cn } from '@/lib/utils';
 import { CapabilityTag } from './CapabilityTag';
 import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, PillLink } from './primitives';
@@ -111,22 +109,5 @@ export function HowItWorks({ steps }: { steps: readonly string[] }) {
 				</ol>
 			</div>
 		</section>
-	);
-}
-
-/** An audience or program card that links to its page, with its status tag. */
-export function LinkCard({ item }: { item: NavItem }) {
-	return (
-		<Link
-			to={item.to}
-			className="group block rounded-[24px] p-7 ring ring-public-line transition-colors hover:bg-[#f7f7f8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue"
-		>
-			<span className="flex flex-wrap items-center gap-2">
-				<span className={cn(HEADING_CARD, 'text-public-ink')}>{item.label}</span>
-				{item.capability && <CapabilityTag id={item.capability} />}
-			</span>
-			<span className="mt-3 block text-[15px] font-light text-public-muted">{item.description}</span>
-			<span className="mt-6 inline-block text-[15px] text-public-ink underline decoration-1 underline-offset-[5px] group-hover:decoration-2">Learn more</span>
-		</Link>
 	);
 }

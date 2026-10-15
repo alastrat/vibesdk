@@ -168,3 +168,35 @@ export const CONTENT_FAQ: readonly FaqItem[] = [
 	{ question: 'How much can I earn?', answer: "Each merchant sets its commission. Estori's share is announced when the program launches." },
 	{ question: 'Is it available yet?', answer: "Not yet. It's in early access: request it and we'll email you when it opens." },
 ];
+
+export type SellerId = 'resellers' | 'digital' | 'developers' | 'creators';
+
+/** The landing page's sellers after brands: each story beside its card, keyed to its page in the menus. */
+export interface SellerStory {
+	id: SellerId;
+	to: string;
+	story: string;
+}
+
+export const SELLER_STORIES: readonly SellerStory[] = [
+	{
+		id: 'resellers',
+		to: '/solutions/resellers',
+		story: 'Skip the supplier hunt. The catalog will list vetted products with clear costs and shipping times. Add what fits in a few clicks, and Estori writes the product pages.',
+	},
+	{
+		id: 'digital',
+		to: '/solutions/digital',
+		story: 'Sell e-books, images and videos with instant delivery, and keep your buyers close in a community that lives inside your store.',
+	},
+	{
+		id: 'developers',
+		to: '/creators/developers',
+		story: `Build a store once and sell it as a template in Discover. Every buyer gets their own copy to make theirs, and you keep the price minus ${PLATFORM_FEE_LABEL}.`,
+	},
+	{
+		id: 'creators',
+		to: '/creators/content',
+		story: 'Share products you love with your own link or store, and get paid for every sale you bring to a merchant.',
+	},
+];
