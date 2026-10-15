@@ -10,7 +10,7 @@ export interface NavItem {
 
 /** The Solutions menu's "Estori for" column. */
 export const AUDIENCES: readonly NavItem[] = [
-	{ to: '/solutions/brands', label: 'Brands and store owners', description: 'Build, sell everywhere, run with agents' },
+	{ to: '/solutions/brands', label: 'Brands and store owners', description: 'Build your store in minutes, run it with AI help' },
 	{ to: '/solutions/resellers', label: 'Dropshippers and resellers', description: 'Curated products, added in a few clicks', capability: 'product-catalog' },
 	{ to: '/solutions/digital', label: 'Digital businesses', description: 'Sell e-books, images and videos, and run your community', capability: 'digital-products' },
 ];

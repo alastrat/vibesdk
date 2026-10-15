@@ -5,7 +5,7 @@
 export const BRAND = {
 	name: 'Estori',
 	assistantName: 'Estori',
-	description: 'Estori is the agentic commerce platform: build your store with AI today, with selling through AI assistants and operations agents coming soon.',
+	description: 'Describe your store and Estori builds it in minutes, with your products, cart and checkout. Free to build.',
 	domain: 'getestori.com',
 	gitAuthor: { name: 'Estori', email: 'bot@getestori.com' },
 } as const;

@@ -12,7 +12,7 @@ export interface FaqItem {
 }
 
 export const AGENTIC_COMMERCE_SUMMARY =
-	'Shoppers increasingly ask AI assistants what to buy. Every Estori store will publish its catalog and checkout in the open agentic commerce standards (UCP and ACP), so assistants can find your products, answer questions about them and complete the purchase, with you as the seller.';
+	'More and more people ask AI assistants for product recommendations. Your store will share its products in a way those assistants can read, so they can recommend you and send buyers to your store.';
 
 export const TODAY_CARDS: readonly CardCopy[] = [
 	{ title: 'A complete store from a sentence', body: 'Catalog, product pages, cart, checkout flow and order records, built and deployed from your description.' },
@@ -20,12 +20,29 @@ export const TODAY_CARDS: readonly CardCopy[] = [
 	{ title: 'Desktop and phone', body: 'Every store works on both, and you preview it live on each.' },
 ];
 
-export const OPERATIONS_CARDS: readonly CardCopy[] = [
-	{ title: 'Merchandising', body: 'Collections, featured products and prices stay in order as your catalog changes.' },
-	{ title: 'Stock alerts', body: 'A warning before a best-seller runs out, with a suggested reorder.' },
-	{ title: 'Order follow-ups', body: 'Shipping updates and review requests go out on time.' },
-	{ title: 'Customer replies', body: "Questions about orders, sizes and returns get answers from your store's own information." },
-	{ title: 'Visibility in AI answers', body: 'Product pages written and structured so AI answers can cite your store.' },
+export const ASSISTANTS_HEADING = 'Hand off the daily work of running your store';
+
+export const ASSISTANTS_LEAD =
+	"Estori's assistants keep an eye on your stock, your customers and your sales, and take care of the routine work, following rules you set.";
+
+export type AssistantId = 'inventory' | 'support' | 'marketing';
+
+export interface StoreAssistant {
+	id: AssistantId;
+	name: string;
+	title: string;
+	body: string;
+}
+
+export const STORE_ASSISTANTS: readonly StoreAssistant[] = [
+	{ id: 'inventory', name: 'Inventory assistant', title: 'Never run out of best-sellers', body: 'Warns you before a product sells out and suggests how much to reorder.' },
+	{
+		id: 'support',
+		name: 'Customer service assistant',
+		title: 'Questions answered, day and night',
+		body: "Replies to questions about orders, sizes and returns using your store's own information.",
+	},
+	{ id: 'marketing', name: 'Marketing assistant', title: 'Bring shoppers back', body: 'Reminds shoppers who left items in their cart and sends offers to your repeat customers.' },
 ];
 
 export const PERSONALIZATION_CARDS: readonly CardCopy[] = [
@@ -37,16 +54,19 @@ export const PERSONALIZATION_CARDS: readonly CardCopy[] = [
 ];
 
 export const AGENTIC_BASICS_CARDS: readonly CardCopy[] = [
-	{ title: 'Shoppers ask, assistants act', body: 'A shopper describes what they need, and an AI assistant finds products, compares them and can complete the purchase.' },
-	{ title: 'Open standards', body: 'The open agentic commerce standards (UCP and ACP) define how stores share their catalog and checkout with assistants.' },
+	{ title: 'Shoppers ask, assistants answer', body: 'A shopper describes what they need, and an AI assistant suggests products and can help them buy.' },
+	{
+		title: 'A shared language for stores',
+		body: 'Stores and AI assistants talk through the open agentic commerce standards (UCP and ACP), so any assistant that supports them can read your store.',
+	},
 	{ title: 'You stay the seller', body: 'Orders, payments and the customer relationship stay with your store.' },
 ];
 
 export const AGENT_READY_CARDS: readonly CardCopy[] = [
-	{ title: 'A clean product feed', body: 'Prices, stock, shipping and policies kept current for assistants to read.' },
-	{ title: 'Checkout assistants can use', body: 'Cart and checkout endpoints described the way the standards expect.' },
-	{ title: 'Verified agents', body: 'Requests from shopping agents are verified before they are trusted.' },
-	{ title: 'Secure payment tokens', body: 'Assistants pay with tokens, never with raw card numbers.' },
+	{ title: 'Up-to-date product details', body: 'Prices, stock, shipping and policies kept current, so assistants recommend what you can actually sell.' },
+	{ title: 'A checkout assistants can use', body: 'Shoppers can finish buying without getting lost between the assistant and your store.' },
+	{ title: 'Only trusted assistants', body: 'Requests from AI assistants are checked before your store answers them.' },
+	{ title: 'Secure payments', body: 'Assistants pay with secure tokens, never with raw card numbers.' },
 ];
 
 export const CATALOG_CARDS: readonly CardCopy[] = [
@@ -120,7 +140,10 @@ export const DIGITAL_FAQ: readonly FaqItem[] = [
 ];
 
 export const AGENTIC_FAQ: readonly FaqItem[] = [
-	{ question: 'Which AI assistants will Estori stores work with?', answer: 'Any assistant that supports the open agentic commerce standards (UCP and ACP).' },
+	{
+		question: 'Which AI assistants will Estori stores work with?',
+		answer: 'Any assistant that supports the open agentic commerce standards (UCP and ACP), the shared rules for how assistants read stores.',
+	},
 	{ question: 'Do I need to set anything up?', answer: 'No. When it launches, it comes with every Estori store.' },
 	{ question: 'Is it available yet?', answer: "Not yet. It's coming soon to every Estori store." },
 ];

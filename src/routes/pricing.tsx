@@ -186,7 +186,7 @@ export default function PricingPage() {
 				<Eyebrow tone="dark">Pricing</Eyebrow>
 				<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-3xl text-balance')}>Plans for every stage of your store</h1>
 				<p className={cn(LEAD, 'mx-auto mt-5 max-w-xl text-white/80')}>
-					Start free today. Paid plans with live stores, agentic commerce and agents that help run your store are coming soon.
+					Start free today. Paid plans with a live store, AI recommendations and store assistants are coming soon.
 				</p>
 			</section>
 			<section className="bg-white px-4 py-16 sm:px-6 sm:py-20">

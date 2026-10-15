@@ -22,11 +22,10 @@ export function Hero({ stores }: { stores: readonly ShowcaseStore[] }) {
 		<section className="overflow-x-clip bg-public-charcoal text-white">
 			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
 			<div className="mx-auto max-w-[1248px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
-				<Eyebrow tone="dark">The agentic commerce platform</Eyebrow>
-				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>Build your store with AI. Sell wherever shoppers ask AI.</h1>
+				<Eyebrow tone="dark">AI-powered online stores</Eyebrow>
+				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>Describe your store. Estori builds it in minutes.</h1>
 				<p className={cn(LEAD, 'mx-auto mt-6 max-w-2xl text-pretty text-white/80')}>
-					Describe your brand and Estori builds and deploys a complete store: catalog, cart, checkout flow and order records. Agentic commerce,
-					operations agents and personalized shopping are coming soon to every store.
+					Tell Estori what you sell, and it builds a complete online store with your products, cart and checkout. Next: assistants that help you sell more and handle the daily work.
 				</p>
 				{/* The frame resets the band's white text so the box's own controls stay readable. */}
 				<div

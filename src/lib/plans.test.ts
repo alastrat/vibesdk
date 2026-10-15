@@ -27,6 +27,12 @@ describe('plans', () => {
 		}
 	});
 
+	it('titles capability sections with the registry names, so a rename reaches pricing', () => {
+		for (const section of PLAN_COMPARISON) {
+			if (section.capability) expect(section.title).toBe(CAPABILITIES[section.capability].name);
+		}
+	});
+
 	it('never gives the free plan a capability that is not available yet', () => {
 		for (const section of PLAN_COMPARISON) {
 			if (!section.capability || CAPABILITIES[section.capability].status === 'available') continue;

@@ -11,7 +11,7 @@ const LINK_COLUMNS = [
 			{ to: '/solutions/brands', label: 'Brands' },
 			{ to: '/solutions/resellers', label: 'Resellers' },
 			{ to: '/solutions/digital', label: 'Digital businesses' },
-			{ to: '/agentic-commerce', label: 'Agentic commerce' },
+			{ to: '/agentic-commerce', label: 'AI recommendations' },
 			{ to: '/pricing', label: 'Pricing' },
 		],
 	},

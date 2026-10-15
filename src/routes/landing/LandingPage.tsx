@@ -1,5 +1,6 @@
 import { pageTitle } from '@/brand';
-import { AgenticCommerceSection, OperationsSection, PersonalizationSection } from '@/components/public-site/capability-sections';
+import { AssistantsPanel } from '@/components/public-site/AssistantsPanel';
+import { AgenticCommerceSection, PersonalizationSection } from '@/components/public-site/capability-sections';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
 import { Features } from './Features';
@@ -16,11 +17,11 @@ export function LandingPage() {
 			<title>{pageTitle()}</title>
 			<meta
 				name="description"
-				content="Estori is the agentic commerce platform: build your store with AI today, with selling through AI assistants and operations agents coming soon."
+				content="Describe your store and Estori builds it in minutes, with your products, cart and checkout. AI assistants that help you sell and run it are coming soon."
 			/>
 			<Hero stores={stores} />
 			<AgenticCommerceSection />
-			<OperationsSection />
+			<AssistantsPanel />
 			<PersonalizationSection />
 			<Features />
 			<SellersBand />

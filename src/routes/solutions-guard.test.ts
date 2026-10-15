@@ -37,7 +37,7 @@ describe('solution pages', () => {
 
 	it('give the menu links their anchors', () => {
 		const brands = source('/src/routes/solutions/brands.tsx');
-		expect(brands).toContain('<OperationsSection id="operations" />');
+		expect(brands).toMatch(/<AssistantsPanel\s+id="operations"/);
 		expect(brands).toContain('<PersonalizationSection id="personalization" />');
 		expect(source('/src/routes/solutions/resellers.tsx')).toContain('id="catalog"');
 	});

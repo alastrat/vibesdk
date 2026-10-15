@@ -58,12 +58,13 @@ describe('landing page', () => {
 		expect(hero).toContain('<section className="overflow-x-clip bg-public-charcoal text-white">');
 	});
 
-	it('speaks to brands first and marks what is coming soon', () => {
+	it('speaks to brands first, in plain words, and marks what is still to come', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
-		expect(hero).toContain('The agentic commerce platform');
-		expect(hero).toContain('Build your store with AI. Sell wherever shoppers ask AI.');
-		expect(hero).toContain('are coming soon to every store');
-		expect(source('/src/routes/landing/Features.tsx')).toContain('What Estori builds today');
+		expect(hero).toContain('AI-powered online stores');
+		expect(hero).toContain('Describe your store. Estori builds it in minutes.');
+		expect(hero).toContain('Next: assistants that help you sell more and handle the daily work.');
+		expect(hero).not.toMatch(/agentic|wherever shoppers ask AI/i);
+		expect(source('/src/routes/landing/Features.tsx')).toContain('What your store comes with today');
 		const band = source('/src/routes/landing/SellersBand.tsx');
 		expect(band).toContain('CREATOR_ITEMS.map');
 		expect(band).toContain('<LinkCard');
@@ -111,7 +112,7 @@ describe('landing page', () => {
 		const order = [
 			'<Hero stores={stores} />',
 			'<AgenticCommerceSection />',
-			'<OperationsSection />',
+			'<AssistantsPanel />',
 			'<PersonalizationSection />',
 			'<Features />',
 			'<SellersBand />',
