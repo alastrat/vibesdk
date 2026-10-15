@@ -15,6 +15,7 @@ import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
 import PricingPage from './routes/pricing';
+import PricingCalculatorPage from './routes/pricing-calculator';
 import BrandsPage from './routes/solutions/brands';
 import ResellersPage from './routes/solutions/resellers';
 import DigitalPage from './routes/solutions/digital';
@@ -111,6 +112,10 @@ const routes = [
 					{
 						path: 'pricing',
 						Component: PricingPage,
+					},
+					{
+						path: 'pricing/calculator',
+						Component: PricingCalculatorPage,
 					},
 					{
 						path: 'solutions/brands',

@@ -1,29 +1,42 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from './capabilities';
-import { PLANS, PLAN_COMPARISON, formatCredits, formatPlanPrice, liveStoresLabel } from './plans';
+import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, formatCredits, formatUsd, premiumTierFor } from './plans';
 
 describe('plans', () => {
-	it('offers Free today and three paid plans marked coming soon', () => {
-		expect(PLANS.map((plan) => [plan.id, plan.status, plan.priceCents, plan.monthlyCredits, plan.liveStores])).toEqual([
-			['free', 'available', 0, null, null],
-			['starter', 'coming-soon', 2_900, 10_000, 1],
-			['growth', 'coming-soon', 7_900, 30_000, 3],
-			['scale', 'coming-soon', 24_900, 100_000, 10],
-		]);
+	it('offers Basic, Premium and Enterprise, in that order', () => {
+		expect(PLANS.map((plan) => plan.id)).toEqual(['basic', 'premium', 'enterprise']);
 	});
 
-	it('formats prices, credits and store counts for the cards', () => {
-		expect(PLANS.map(formatPlanPrice)).toEqual(['$0', '$29', '$79', '$249']);
-		expect(formatCredits(10_000)).toBe('10,000');
-		expect(liveStoresLabel(null)).toBe('Build and preview');
-		expect(liveStoresLabel(1)).toBe('1 live store');
-		expect(liveStoresLabel(3)).toBe('3 live stores');
+	it('starts Premium at 99 USD, with larger credit pools at higher prices', () => {
+		expect(PREMIUM_TIERS[0]).toEqual({ credits: 20_000, priceCents: 9_900 });
+		for (let index = 1; index < PREMIUM_TIERS.length; index++) {
+			expect(PREMIUM_TIERS[index].credits).toBeGreaterThan(PREMIUM_TIERS[index - 1].credits);
+			expect(PREMIUM_TIERS[index].priceCents).toBeGreaterThan(PREMIUM_TIERS[index - 1].priceCents);
+			// Bigger pools cost less per credit.
+			expect(PREMIUM_TIERS[index].priceCents / PREMIUM_TIERS[index].credits).toBeLessThan(PREMIUM_TIERS[index - 1].priceCents / PREMIUM_TIERS[index - 1].credits);
+		}
+	});
+
+	it('picks the smallest Premium pool that covers a need, and none past the largest', () => {
+		expect(premiumTierFor(1)).toEqual(PREMIUM_TIERS[0]);
+		expect(premiumTierFor(20_000)).toEqual(PREMIUM_TIERS[0]);
+		expect(premiumTierFor(20_001)).toEqual(PREMIUM_TIERS[1]);
+		const largest = PREMIUM_TIERS[PREMIUM_TIERS.length - 1];
+		expect(premiumTierFor(largest.credits)).toEqual(largest);
+		expect(premiumTierFor(largest.credits + 1)).toBeNull();
+	});
+
+	it('formats prices and credits for the cards', () => {
+		expect(formatUsd(9_900)).toBe('$99');
+		expect(formatUsd(0)).toBe('$0');
+		expect(formatUsd(34_950)).toBe('$349.50');
+		expect(formatCredits(20_000)).toBe('20,000');
 	});
 
 	it('fills every comparison row for every plan, grouped by real capabilities', () => {
 		for (const section of PLAN_COMPARISON) {
 			if (section.capability) expect(CAPABILITIES[section.capability]).toBeDefined();
-			for (const row of section.rows) expect(Object.keys(row.cells).sort()).toEqual(['free', 'growth', 'scale', 'starter']);
+			for (const row of section.rows) expect(Object.keys(row.cells).sort()).toEqual(['basic', 'enterprise', 'premium']);
 		}
 	});
 
@@ -33,10 +46,10 @@ describe('plans', () => {
 		}
 	});
 
-	it('never gives the free plan a capability that is not available yet', () => {
+	it('never gives Basic a capability that is not available yet', () => {
 		for (const section of PLAN_COMPARISON) {
 			if (!section.capability || CAPABILITIES[section.capability].status === 'available') continue;
-			for (const row of section.rows) expect(row.cells.free).toBe(false);
+			for (const row of section.rows) expect(row.cells.basic).toBe(false);
 		}
 	});
 });

@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
-const sources = import.meta.glob<string>(['/src/routes/pricing.tsx', '/src/routes.tsx'], {
-	query: '?raw',
-	import: 'default',
-	eager: true,
-});
+const sources = import.meta.glob<string>(
+	[
+		'/src/routes/pricing.tsx',
+		'/src/routes.tsx',
+		'/src/components/pricing/*.tsx',
+		'/src/components/marketing/PlanLimits.tsx',
+		'/src/content/positioning.ts',
+	],
+	{ query: '?raw', import: 'default', eager: true },
+);
 
 function source(path: string): string {
 	const text = sources[path];
@@ -12,66 +17,107 @@ function source(path: string): string {
 	return text;
 }
 
+const CARDS = '/src/components/pricing/PlanCards.tsx';
+const COMPARE = '/src/components/pricing/ComparePlans.tsx';
+const CREDITS = '/src/components/pricing/CreditsExplainer.tsx';
+
 describe('pricing page', () => {
 	const page = source('/src/routes/pricing.tsx');
 
-	it('shows the four plans from the plan data, never typed-in prices', () => {
-		expect(page).toContain('PLANS.map');
-		expect(page).toContain('<PlanPrice');
-		expect(page).not.toMatch(/\$(29|79|249)\b/);
-		expect(page).not.toMatch(/10,000|30,000|100,000/);
+	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
+		const order = ['<PlanCards />', '<ComparePlans />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={PRICING_FAQ} />'];
+		const positions = order.map((tag) => page.indexOf(tag));
+		expect(positions.every((position) => position > -1)).toBe(true);
+		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 	});
 
-	it('offers a button only on plans available today', () => {
-		const card = page.slice(page.indexOf('function PlanCard('), page.indexOf('function Cell('));
-		expect(card.match(/<PillLink/g)).toHaveLength(1);
-		expect(card.indexOf('<PillLink')).toBeGreaterThan(card.indexOf("plan.status === 'available' && ("));
-		expect(card).toContain("plan.status === 'coming-soon' && <ComingSoon />");
-		expect(page).not.toMatch(/Subscribe|Upgrade/);
+	it('shows Basic and Premium side by side in one frame, with Enterprise on its own band', () => {
+		const cards = source(CARDS);
+		expect(cards).toContain('md:grid-cols-2');
+		expect(cards).toContain('<BasicPlan />');
+		expect(cards).toContain('<PremiumPlan />');
+		expect(cards).toContain('<EnterpriseBand />');
 	});
 
-	it('compares plans by capability, with tags from the registry', () => {
-		expect(page).toContain('PLAN_COMPARISON.map');
-		expect(page).toContain('<CapabilityTag id={section.capability} />');
-		expect(page).toContain('<caption className="sr-only">What each plan includes</caption>');
+	it('states the free allowance from the live limits, never typed in', () => {
+		const cards = source(CARDS);
+		expect(cards).toContain('<PlanLimits');
+		expect(cards).not.toMatch(/200 (AI )?credits/);
+		expect(source('/src/components/marketing/PlanLimits.tsx')).toContain('fallback');
 	});
 
-	it("tells screen readers each row's status, not only the section heading", () => {
-		expect(page).toContain('scope="rowgroup"');
-		expect(page).not.toContain('scope="colgroup"');
-		expect(page).toContain('STATUS_LABELS[');
-		expect(page).toContain('<span className="sr-only">, {note}</span>');
+	it('lets visitors pick a Premium credit pool, with the price following it', () => {
+		const cards = source(CARDS);
+		expect(cards).toContain('PREMIUM_TIERS.map');
+		expect(cards).toContain('<Price cents={tier.priceCents} />');
+		expect(cards).not.toMatch(/\$(99|199|349|599)\b/);
 	});
 
-	it('states the free limits and the template fee from the code that applies them', () => {
+	it("doesn't sell Premium before subscriptions exist: it leads to sales with the chosen pool, marked coming soon", () => {
+		const cards = source(CARDS);
+		expect(cards).toContain("contactPath('premium', tier.credits)");
+		expect(cards).toContain('<ComingSoon />');
+		expect(cards).toContain('Paid plans are coming soon');
+		expect(cards).not.toMatch(/Buy now|Subscribe|checkout/i);
+	});
+
+	it('sends Enterprise to sales, without a public price', () => {
+		const cards = source(CARDS);
+		const band = cards.slice(cards.indexOf('function EnterpriseBand'));
+		expect(band).toContain("contactPath('enterprise')");
+		expect(band).toContain('Talk to sales');
+		expect(band).not.toMatch(/\$\d/);
+	});
+
+	it('shows phones one plan beside the labels, picked from the corner of the header', () => {
+		const compare = source(COMPARE);
+		expect(compare).toContain('const isPhone = useIsMobile();');
+		expect(compare).toContain('const shown = isPhone ? PLANS.filter((entry) => entry.id === phonePlan) : PLANS;');
+		expect(compare).toContain('colSpan={shown.length + 1}');
+		expect(compare).toContain('md:min-w-[760px]');
+		expect(compare).toMatch(/<select[^>]*aria-label="Plan to compare"/);
+	});
+
+	it('compares plans with pinned headers, and groups that fold', () => {
+		const compare = source(COMPARE);
+		expect(compare).toContain('PLAN_COMPARISON.map');
+		expect(compare).toContain('sticky top-[var(--public-header-h)] z-10');
+		// Only tablets scroll the table sideways; a scrolling box anywhere else would stop the headers from pinning.
+		expect(compare).toContain('md:max-lg:overflow-x-auto');
+		expect(compare).not.toMatch(/[^:]overflow-x-auto/);
+		expect(compare).toContain('aria-expanded={!isFolded}');
+		expect(compare).toContain('<CapabilityTag id={section.capability} />');
+		expect(compare).toContain('<caption className="sr-only">What each plan includes</caption>');
+		expect(compare).toContain('<span className="sr-only">, {note}</span>');
+	});
+
+	it('explains credits from the same table the calculator uses, and links to the calculator', () => {
+		const credits = source(CREDITS);
+		expect(credits).toContain('CREDIT_ACTIONS.map');
+		expect(credits).toContain('actionCreditsRange(');
+		expect(credits).toContain('to="/pricing/calculator"');
+		expect(credits).toContain('Calculate my credit needs');
+	});
+
+	it('keeps template selling, with the fee from the code', () => {
 		expect(page).toContain('PLATFORM_FEE_LABEL');
 		expect(page).toContain('sellerKeepsTable()');
-		expect(page).toContain('<PlanLimits');
 		expect(page).not.toMatch(/7% \+ \$0\.60/);
-	});
-
-	it('explains that models use credits at different rates', () => {
-		expect(page).toContain('Each model uses credits at its own rate, so lighter models go further.');
-		expect(page).toContain('usePublicPlan()');
-		expect(page).toContain('aiCreditsPerDay == null');
-	});
-
-	it("doesn't promise store payments yet", () => {
-		expect(page).toContain('Accept payments in your store');
-	});
-
-	it('keeps template selling in its own section that the developer page links to', () => {
-		expect(page).toContain('id="developers"');
 		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
-		const sell = page.slice(page.lastIndexOf('<article', page.indexOf('>Sell</h3>')), page.indexOf('>Sell</h3>'));
-		expect(sell).toMatch(/<article className=\{cn\(CARD, '[^']*\brelative\b/);
 	});
 
-	it('is a public page in the 1Password layout', () => {
+	it('answers the credit questions', () => {
+		const copy = source('/src/content/positioning.ts');
+		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I change my Premium credits?', 'Is Premium available now?']) {
+			expect(copy, question).toContain(question);
+		}
+	});
+
+	it('is a public page, with the calculator beside it', () => {
 		const routes = source('/src/routes.tsx');
-		expect(routes.slice(routes.indexOf('Component: PublicShell'))).toContain("path: 'pricing'");
-		expect(page).toContain('bg-public-charcoal');
-		expect(page).toContain('<PublicFaq />');
+		const publicRoutes = routes.slice(routes.indexOf('Component: PublicShell'));
+		expect(publicRoutes).toContain("path: 'pricing'");
+		expect(publicRoutes).toContain("path: 'pricing/calculator'");
 		expect(page).not.toContain('kumo-');
 	});
 });

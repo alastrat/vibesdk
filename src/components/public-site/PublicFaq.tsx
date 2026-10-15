@@ -25,8 +25,9 @@ const LAUNCH_FAQ: readonly FaqItem[] = [
 	},
 ];
 
-/** The launch questions, shared by the landing and pricing pages. */
-export function PublicFaq({ items = LAUNCH_FAQ }: { items?: readonly FaqItem[] }) {
+/** The launch questions, or a page's own; `leading` puts a page's questions before the launch ones. */
+export function PublicFaq({ items = LAUNCH_FAQ, leading = [] }: { items?: readonly FaqItem[]; leading?: readonly FaqItem[] }) {
+	const questions = [...leading, ...items];
 	return (
 		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
 			<div className="mx-auto grid max-w-[1248px] gap-10 lg:grid-cols-[1fr_2fr]">
@@ -35,7 +36,7 @@ export function PublicFaq({ items = LAUNCH_FAQ }: { items?: readonly FaqItem[] }
 					<h2 className="mt-4 text-4xl leading-[1.1] font-light tracking-[-0.02em] text-public-ink sm:text-5xl">Questions, answered</h2>
 				</div>
 				<div className="divide-y divide-public-line border-y border-public-line">
-					{items.map((item) => (
+					{questions.map((item) => (
 						<details key={item.question} className="group py-5">
 							<summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-normal text-public-ink [&::-webkit-details-marker]:hidden">
 								{item.question}

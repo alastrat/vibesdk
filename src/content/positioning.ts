@@ -254,3 +254,24 @@ export const STORE_FEATURES: readonly StoreFeature[] = [
 		link: { to: '/discover', label: 'Browse Discover' },
 	},
 ];
+
+/** The pricing page's questions, shown before the launch questions. */
+export const PRICING_FAQ: readonly FaqItem[] = [
+	{
+		question: 'What are AI credits?',
+		answer: "Credits pay for the AI's work. Each step it takes while building or changing your store uses credits at the rate of the model you pick, so lighter models go further.",
+	},
+	{
+		question: 'What happens when I run out of credits?',
+		answer: 'On Basic, building and chatting pause until your allowance refills at midnight UTC. Your stores and their previews keep working.',
+	},
+	{
+		question: 'Can I change my Premium credits?',
+		answer: 'Yes. When Premium launches you can move to a bigger or smaller pool at any time, and the new price applies from your next month.',
+	},
+	{
+		question: 'Is Premium available now?',
+		answer: "Not yet, it's coming soon. Tell us what you need and we'll set you up as it opens.",
+	},
+	{ question: 'Do unused credits roll over?', answer: "No. Basic's allowance refills every day, and Premium's pool will refill every month." },
+];

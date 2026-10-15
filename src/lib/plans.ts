@@ -1,37 +1,46 @@
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
-export type PlanId = 'free' | 'starter' | 'growth' | 'scale';
+export type PlanId = 'basic' | 'premium' | 'enterprise';
 
 export interface Plan {
 	id: PlanId;
 	name: string;
-	status: 'available' | 'coming-soon';
-	priceCents: number;
-	/** Monthly AI credits for building sites and agents' work; null for Free, whose daily allowance is read live. */
-	monthlyCredits: number | null;
-	/** Live stores included; null for Free, which builds and previews only. */
-	liveStores: number | null;
-	summary: string;
+	tagline: string;
 }
 
 export const PLANS: readonly Plan[] = [
-	{ id: 'free', name: 'Free', status: 'available', priceCents: 0, monthlyCredits: null, liveStores: null, summary: 'Build and preview stores with AI.' },
-	{ id: 'starter', name: 'Starter', status: 'coming-soon', priceCents: 2_900, monthlyCredits: 10_000, liveStores: 1, summary: 'One live store, ready to be recommended by AI assistants.' },
-	{ id: 'growth', name: 'Growth', status: 'coming-soon', priceCents: 7_900, monthlyCredits: 30_000, liveStores: 3, summary: 'Store assistants that handle the daily work, and the product catalog.' },
-	{ id: 'scale', name: 'Scale', status: 'coming-soon', priceCents: 24_900, monthlyCredits: 100_000, liveStores: 10, summary: 'More stores, more AI credits and priority support.' },
+	{ id: 'basic', name: 'Basic', tagline: 'Build and preview your stores with AI, free.' },
+	{ id: 'premium', name: 'Premium', tagline: 'A monthly pool of credits for brands building and running their stores.' },
+	{ id: 'enterprise', name: 'Enterprise', tagline: 'Custom credits, terms and support for larger teams.' },
 ];
 
-export function formatPlanPrice(plan: Plan): string {
-	return `$${plan.priceCents / 100}`;
+/** A Premium credit pool and its monthly price. */
+export interface PremiumTier {
+	credits: number;
+	priceCents: number;
+}
+
+/** Premium's monthly credit pools, smallest first; the first sets the advertised price. Bigger pools cost less per credit. */
+export const PREMIUM_TIERS: readonly PremiumTier[] = [
+	{ credits: 20_000, priceCents: 9_900 },
+	{ credits: 50_000, priceCents: 19_900 },
+	{ credits: 100_000, priceCents: 34_900 },
+	{ credits: 200_000, priceCents: 59_900 },
+];
+
+/** The smallest Premium pool that covers `credits` a month, or null when only Enterprise can. */
+export function premiumTierFor(credits: number): PremiumTier | null {
+	return PREMIUM_TIERS.find((tier) => tier.credits >= credits) ?? null;
+}
+
+/** "$99", or "$349.50" when there are cents. */
+export function formatUsd(cents: number): string {
+	const dollars = cents / 100;
+	return `$${Number.isInteger(dollars) ? dollars.toLocaleString('en-US') : dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function formatCredits(credits: number): string {
 	return credits.toLocaleString('en-US');
-}
-
-export function liveStoresLabel(count: number | null): string {
-	if (count === null) return 'Build and preview';
-	return count === 1 ? '1 live store' : `${count} live stores`;
 }
 
 /** A check (true), a dash (false) or a short text. */
@@ -49,31 +58,41 @@ export interface ComparisonSection {
 	rows: readonly ComparisonRow[];
 }
 
-const ALL: Record<PlanId, PlanCell> = { free: true, starter: true, growth: true, scale: true };
-const PAID: Record<PlanId, PlanCell> = { free: false, starter: true, growth: true, scale: true };
-const GROWTH_AND_UP: Record<PlanId, PlanCell> = { free: false, starter: false, growth: true, scale: true };
+const ALL: Record<PlanId, PlanCell> = { basic: true, premium: true, enterprise: true };
+const PAID: Record<PlanId, PlanCell> = { basic: false, premium: true, enterprise: true };
+const ENTERPRISE: Record<PlanId, PlanCell> = { basic: false, premium: false, enterprise: true };
 
 /** A section titled with the capability's registry name, so renaming a capability reaches pricing. */
 function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRow[]): ComparisonSection {
 	return { title: CAPABILITIES[capability].name, capability, rows };
 }
 
-/** What each plan includes, by capability. The pricing page adds the live stores and AI credits rows from PLANS. */
+/** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PREMIUM_TIERS. */
 export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 	capabilitySection('store-builder', [
 		{ label: 'Build and change stores just by asking', cells: ALL },
+		{ label: 'Live preview on desktop and phone', cells: ALL },
 		{ label: 'Start from templates in Discover', cells: ALL },
+		{ label: 'Sell your stores as templates', cells: ALL },
 	]),
 	capabilitySection('agentic-commerce', [{ label: 'Get recommended by AI assistants', cells: PAID }]),
 	capabilitySection('operations-agents', [
-		{ label: 'Inventory and marketing assistants', cells: GROWTH_AND_UP },
-		{ label: 'Customer service assistant', cells: GROWTH_AND_UP },
+		{ label: 'Inventory and marketing assistants', cells: PAID },
+		{ label: 'Customer service assistant', cells: PAID },
 	]),
 	capabilitySection('personalized-shopping', [
-		{ label: 'Product suggestions and a smart cart', cells: PAID },
-		{ label: 'Bundles, after-purchase offers and smart search', cells: GROWTH_AND_UP },
+		{ label: 'Product picks and a smart cart', cells: PAID },
+		{ label: 'Bundles, after-checkout offers and smart search', cells: PAID },
 	]),
-	capabilitySection('product-catalog', [{ label: 'Curated supplier catalog', cells: GROWTH_AND_UP }]),
-	capabilitySection('digital-products', [{ label: 'Sell digital products and run a community', cells: GROWTH_AND_UP }]),
-	{ title: 'Support', capability: null, rows: [{ label: 'Support', cells: { free: 'Email', starter: 'Email', growth: 'Email', scale: 'Priority' } }] },
+	capabilitySection('product-catalog', [{ label: 'Curated supplier catalog', cells: PAID }]),
+	capabilitySection('digital-products', [{ label: 'Sell digital products and run a community', cells: PAID }]),
+	{
+		title: 'Support and billing',
+		capability: null,
+		rows: [
+			{ label: 'Support', cells: { basic: 'Email', premium: 'Priority email', enterprise: 'A named contact' } },
+			{ label: 'Custom credit volume', cells: ENTERPRISE },
+			{ label: 'Invoiced billing', cells: ENTERPRISE },
+		],
+	},
 ];
