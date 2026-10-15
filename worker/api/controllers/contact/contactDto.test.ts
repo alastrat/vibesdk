@@ -60,8 +60,18 @@ describe('parseContactRequest', () => {
 			[{ company: 'C'.repeat(121) }, 'Keep the company name under 120 characters'],
 			[{ message: 'M'.repeat(2_001) }, 'Keep the message under 2,000 characters'],
 			[{ firstName: 7 }, 'Enter your first name'],
+			[{ firstName: 'Ana\nBcc: x@y.z' }, 'Use plain text in your name'],
+			[{ lastName: 'Ruiz\u0000' }, 'Use plain text in your name'],
+			[{ company: 'Acme\r\nBcc: x@y.z' }, 'Use plain text in the company name'],
+			[{ company: 'Acme\tCo' }, 'Use plain text in the company name'],
+			[{ message: 'Hello\u0007' }, 'Use plain text in the message'],
 		];
 		for (const [change, error] of cases) expect(parseContactRequest({ ...VALID, ...change }), error).toEqual({ ok: false, error });
+	});
+
+	it('lets the message run over several lines', () => {
+		const parsed = parseContactRequest({ ...VALID, message: 'We run 30 stores.\r\n\tCan you help?' });
+		expect(parsed.ok && parsed.value.message).toBe('We run 30 stores.\r\n\tCan you help?');
 	});
 
 	it('rejects bodies that are not objects', () => {

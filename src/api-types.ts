@@ -437,6 +437,14 @@ export type {
     MyEarlyAccessData,
 } from 'worker/api/controllers/earlyAccess/types';
 export type { ContactAdminData, ContactAdminRequest, ContactReceivedData } from 'worker/api/controllers/contact/types';
-export { COMPANY_SIZES, CONTACT_FIELD_LIMITS, CONTACT_TOPICS, contactTopicLabel, isCompanySize, isContactTopic } from '../shared/types/contact.js';
+export {
+	COMPANY_SIZES,
+	CONTACT_FAILED_MESSAGE,
+	CONTACT_FIELD_LIMITS,
+	CONTACT_TOPICS,
+	contactTopicLabel,
+	isCompanySize,
+	isContactTopic,
+} from '../shared/types/contact.js';
 export type { CompanySize, ContactRequestBody, ContactTopic } from '../shared/types/contact.js';
 export type { PublicPlanLimits } from '../shared/types/plan.js';

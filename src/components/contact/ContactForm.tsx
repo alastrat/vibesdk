@@ -8,6 +8,9 @@ import { contactPrefill } from '@/lib/contact';
 import { formatCredits } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 
+/** The hidden field only bots fill in, named so no autofill profile matches it. */
+const HONEYPOT = 'leave_empty';
+
 const LABEL = 'text-[12px] font-medium tracking-[0.06em] text-public-ink uppercase';
 const INPUT =
 	'mt-2 block w-full rounded-[10px] border border-[#c9ced8] bg-white px-4 py-3 text-[15px] text-public-ink outline-none transition-shadow placeholder:text-[#9aa3b2] focus:border-public-blue focus:ring-2 focus:ring-public-blue/25';
@@ -31,7 +34,7 @@ export function ContactForm() {
 	const prefill = contactPrefill(location.search);
 	const submit = useSubmitContact();
 	const [topic, setTopic] = useState<string>(prefill.topic ?? '');
-	const [sent, setSent] = useState<{ firstName: string; email: string } | null>(null);
+	const [sent, setSent] = useState<{ firstName: string; email: string; confirmationSent: boolean } | null>(null);
 	const confirmationRef = useRef<HTMLDivElement>(null);
 
 	useEffect(() => {
@@ -54,9 +57,11 @@ export function ContactForm() {
 			topic: chosenTopic,
 			message: text('message'),
 			premiumCredits: chosenTopic === 'premium' ? prefill.premiumCredits : null,
-			website: text('website'),
+			website: text(HONEYPOT),
 		};
-		submit.mutate(body, { onSuccess: () => setSent({ firstName: body.firstName.trim(), email: body.email.trim() }) });
+		submit.mutate(body, {
+			onSuccess: (data) => setSent({ firstName: body.firstName.trim(), email: body.email.trim(), confirmationSent: data.confirmationSent }),
+		});
 	};
 
 	if (sent) {
@@ -65,7 +70,7 @@ export function ContactForm() {
 				<CheckCircleIcon weight="fill" className="size-10 text-[#16a34a]" aria-hidden />
 				<h2 className="mt-5 text-3xl font-light tracking-[-0.02em] text-public-ink">Thanks, {sent.firstName}. We got your message.</h2>
 				<p className="mt-4 text-[17px] font-light text-public-muted">
-					We've emailed {sent.email} a confirmation, and we'll be in touch soon.
+					{sent.confirmationSent ? `We've emailed ${sent.email} a confirmation, and we'll be in touch soon.` : `We'll reply to ${sent.email} soon.`}
 				</p>
 				<Link to="/pricing" className="mt-8 inline-block text-[15px] text-public-ink underline underline-offset-[5px]">
 					Back to pricing
@@ -145,8 +150,8 @@ export function ContactForm() {
 				{/* Honeypot: hidden from people, keyboards and screen readers, so only bots fill it in. */}
 				<div aria-hidden className="absolute -left-[10000px] size-px overflow-hidden">
 					<label>
-						Website
-						<input name="website" type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
+						Leave this field empty
+						<input name={HONEYPOT} type="text" tabIndex={-1} autoComplete="off" defaultValue="" />
 					</label>
 				</div>
 			</div>

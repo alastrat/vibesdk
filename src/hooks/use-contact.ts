@@ -1,12 +1,12 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
-import type { ContactRequestBody } from '@/api-types';
+import { CONTACT_FAILED_MESSAGE, type ContactRequestBody } from '@/api-types';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 
 export function useSubmitContact() {
 	return useMutation({
-		mutationFn: (body: ContactRequestBody) => unwrap(apiClient.submitContact(body), "Couldn't send your message. Please try again."),
+		mutationFn: (body: ContactRequestBody) => unwrap(apiClient.submitContact(body), CONTACT_FAILED_MESSAGE),
 	});
 }
 

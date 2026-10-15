@@ -94,12 +94,15 @@ export function verifyEmailEmail(to: string, link: string): OutgoingEmail {
 	});
 }
 
-/** Tells the person who wrote to sales that we received it and will reply. */
-export function contactReceivedEmail(request: ContactRequestInput): OutgoingEmail {
+/**
+ * Tells the person who wrote to sales that we received it and will reply. Anyone can name any address, so it carries
+ * nothing the sender typed: only the topic they picked from our list.
+ */
+export function contactReceivedEmail(request: Pick<ContactRequestInput, 'email' | 'topic'>): OutgoingEmail {
 	return renderEmail({
 		to: request.email,
 		subject: 'We got your message',
-		heading: `Thanks, ${request.firstName}`,
+		heading: 'Thanks for contacting Estori',
 		body: `We received your message about ${contactTopicLabel(request.topic)}. We'll be in touch by email soon.`,
 		footer: "If you didn't contact Estori, you can ignore this email.",
 	});

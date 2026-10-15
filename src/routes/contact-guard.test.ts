@@ -41,10 +41,14 @@ describe('contact sales page', () => {
 
 	it('hides a honeypot field from people, keyboards and screen readers', () => {
 		const form = source(FORM);
-		const honeypot = form.slice(form.indexOf('{/* Honeypot'), form.indexOf('name="website"') + 200);
+		const honeypot = form.slice(form.indexOf('{/* Honeypot'), form.indexOf('name={HONEYPOT}') + 200);
 		expect(honeypot).toContain('aria-hidden');
 		expect(honeypot).toContain('tabIndex={-1}');
 		expect(honeypot).toContain('autoComplete="off"');
+		// A name and label no autofill profile matches, so a real person's password manager can't trip it.
+		expect(form).toContain("const HONEYPOT = 'leave_empty';");
+		expect(honeypot).toContain('Leave this field empty');
+		expect(form).toContain('website: text(HONEYPOT)');
 	});
 
 	it('opens on the topic and Premium pool a link asks for', () => {
@@ -59,6 +63,13 @@ describe('contact sales page', () => {
 		expect(source('/src/hooks/use-contact.ts')).toContain('apiClient.submitContact(');
 		// The form shows its own errors, so the client stays quiet.
 		expect(source('/src/lib/api-client.ts')).toContain("return this.request<ContactReceivedData>('/api/contact', { method: 'POST', body }, true);");
+	});
+
+	it('only says a confirmation was emailed when one was', () => {
+		const form = source(FORM);
+		expect(form).toContain('sent.confirmationSent ?');
+		expect(form).toContain("We'll reply to");
+		expect(source('/src/hooks/use-contact.ts')).toContain('unwrap(apiClient.submitContact(body), CONTACT_FAILED_MESSAGE)');
 	});
 
 	it('moves focus to the confirmation, so it scrolls into view and is announced', () => {

@@ -13,6 +13,17 @@ import { toContactAdminData } from './contactDto';
 import { submitContact } from './submitContact';
 import type { ContactAdminData, ContactReceivedData } from './types';
 
+/** True when the check passes, false when it reports the limit was reached; other errors propagate. */
+async function withinLimit(check: () => Promise<void>): Promise<boolean> {
+	try {
+		await check();
+		return true;
+	} catch (error) {
+		if (error instanceof RateLimitExceededError) return false;
+		throw error;
+	}
+}
+
 export class ContactController extends BaseController {
 	static logger = createLogger('ContactController');
 
@@ -30,16 +41,10 @@ export class ContactController extends BaseController {
 			}
 			const sender = createEmailSender(env);
 			const service = new ContactService(env);
+			const limits = context.config.security.rateLimit;
 			const result = await submitContact(bodyResult.data, {
-				isLimited: async () => {
-					try {
-						await RateLimitService.enforceContactSalesRateLimit(env, context.config.security.rateLimit, request);
-						return false;
-					} catch (error) {
-						if (error instanceof RateLimitExceededError) return true;
-						throw error;
-					}
-				},
+				isLimited: async () => !(await withinLimit(() => RateLimitService.enforceContactSalesRateLimit(env, limits, request))),
+				canConfirm: (email) => withinLimit(() => RateLimitService.enforceContactRecipientRateLimit(env, limits, email)),
 				store: (input) => service.create(input),
 				send: async (email) => {
 					if (!sender) throw new Error('Email sending is not configured');
@@ -54,7 +59,7 @@ export class ContactController extends BaseController {
 			if (result.status === 'limited') {
 				return ContactController.createErrorResponse<ContactReceivedData>(CONTACT_LIMITED_MESSAGE, 429);
 			}
-			return ContactController.createSuccessResponse<ContactReceivedData>({ received: true });
+			return ContactController.createSuccessResponse<ContactReceivedData>({ received: true, confirmationSent: result.confirmationSent });
 		} catch (error) {
 			this.logger.error('Error saving a contact request', error);
 			return ContactController.createErrorResponse<ContactReceivedData>(CONTACT_FAILED_MESSAGE, 500);

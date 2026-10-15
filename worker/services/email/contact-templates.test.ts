@@ -16,17 +16,20 @@ const REQUEST: ContactRequestInput = {
 describe('contactReceivedEmail', () => {
 	const email = contactReceivedEmail(REQUEST);
 
-	it('thanks the sender by name and says we will be in touch', () => {
+	it('thanks the sender and says we will be in touch about the topic they picked', () => {
 		expect(email.to).toBe('ana@example.com');
 		expect(email.subject).toBe('We got your message');
-		expect(email.text).toContain('Thanks, Ana <b>');
+		expect(email.text).toContain('Thanks for contacting Estori');
 		expect(email.text).toContain("We'll be in touch by email soon.");
 		expect(email.text).toContain('the Premium plan');
 	});
 
-	it('escapes what the sender typed and has no button or images', () => {
-		expect(email.html).toContain('Thanks, Ana &lt;b&gt;');
-		expect(email.html).not.toContain('<b>');
+	// Anyone can name any address, so the confirmation must not carry text the sender typed to someone else's inbox.
+	it('repeats nothing the sender typed apart from the address it goes to, and has no button or images', () => {
+		for (const typed of ['Ana', 'Ruiz', 'North Ridge', 'We run 30 stores']) {
+			expect(email.text, typed).not.toContain(typed);
+			expect(email.html, typed).not.toContain(typed);
+		}
 		expect(email.html).not.toContain('<a href');
 		expect(email.html).not.toContain('<img');
 	});
@@ -42,5 +45,7 @@ describe('contactNotificationEmail', () => {
 			expect(email.text, value).toContain(value);
 		}
 		expect(email.html).toContain('North Ridge &amp; Co');
+		expect(email.html).toContain('Ana &lt;b&gt; Ruiz');
+		expect(email.html).not.toContain('<b>');
 	});
 });

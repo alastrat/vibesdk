@@ -36,6 +36,14 @@ describe('contact sales routes', () => {
 		expect(source('/worker/api/controllers/contact/controller.ts')).toContain('RateLimitService.enforceContactSalesRateLimit(');
 	});
 
+	it('sends each address at most a couple of confirmations a day, keyed by a hash of the address', () => {
+		const limit = DEFAULT_RATE_LIMIT_SETTINGS[RateLimitType.CONTACT_RECIPIENT];
+		expect(limit).toEqual({ enabled: true, store: RateLimitStore.DURABLE_OBJECT, limit: 2, period: 24 * 60 * 60 });
+		const controller = source('/worker/api/controllers/contact/controller.ts');
+		expect(controller).toContain('RateLimitService.enforceContactRecipientRateLimit(');
+		expect(controller).toContain('confirmationSent: result.confirmationSent');
+	});
+
 	it('sends the team notice to an inbox set in the environment, when there is one', () => {
 		expect(source('/worker/types/email-binding.d.ts')).toContain('SALES_INBOX?: string;');
 		expect(source('/worker/api/controllers/contact/controller.ts')).toContain('teamInbox: env.SALES_INBOX?.trim() || null');

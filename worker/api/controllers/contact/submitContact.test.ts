@@ -21,6 +21,7 @@ function fakeDeps(overrides: Partial<ContactSubmissionDeps> = {}) {
 	const logged: string[] = [];
 	const deps: ContactSubmissionDeps = {
 		isLimited: async () => false,
+		canConfirm: async () => true,
 		store: async (input) => {
 			stored.push(input);
 		},
@@ -39,7 +40,7 @@ function fakeDeps(overrides: Partial<ContactSubmissionDeps> = {}) {
 describe('submitContact', () => {
 	it('stores the request and emails the sender that we will be in touch', async () => {
 		const { deps, stored, sent } = fakeDeps();
-		expect(await submitContact(BODY, deps)).toEqual({ status: 'received' });
+		expect(await submitContact(BODY, deps)).toEqual({ status: 'received', confirmationSent: true });
 		expect(stored).toHaveLength(1);
 		expect(stored[0].email).toBe('ana@example.com');
 		expect(sent.map((email) => email.to)).toEqual(['ana@example.com']);
@@ -55,7 +56,7 @@ describe('submitContact', () => {
 
 	it('answers a filled honeypot as if received, without storing or sending anything', async () => {
 		const { deps, stored, sent } = fakeDeps();
-		expect(await submitContact({ ...BODY, website: 'https://spam.example' }, deps)).toEqual({ status: 'received' });
+		expect(await submitContact({ ...BODY, website: 'https://spam.example' }, deps)).toEqual({ status: 'received', confirmationSent: true });
 		expect(stored).toHaveLength(0);
 		expect(sent).toHaveLength(0);
 	});
@@ -81,6 +82,21 @@ describe('submitContact', () => {
 		expect(sent).toHaveLength(0);
 	});
 
+	it('stores the request but sends no confirmation to an address that has had enough of them lately', async () => {
+		const asked: string[] = [];
+		const { deps, stored, sent } = fakeDeps({
+			teamInbox: 'sales@estori.app',
+			canConfirm: async (email) => {
+				asked.push(email);
+				return false;
+			},
+		});
+		expect(await submitContact(BODY, deps)).toEqual({ status: 'received', confirmationSent: false });
+		expect(asked).toEqual(['ana@example.com']);
+		expect(stored).toHaveLength(1);
+		expect(sent.map((email) => email.to)).toEqual(['sales@estori.app']);
+	});
+
 	it('keeps the request when an email fails, and logs it', async () => {
 		const { deps, stored, logged } = fakeDeps({
 			teamInbox: 'sales@estori.app',
@@ -88,7 +104,7 @@ describe('submitContact', () => {
 				throw new Error('mail down');
 			},
 		});
-		expect(await submitContact(BODY, deps)).toEqual({ status: 'received' });
+		expect(await submitContact(BODY, deps)).toEqual({ status: 'received', confirmationSent: false });
 		expect(stored).toHaveLength(1);
 		expect(logged).toEqual(["Couldn't send the contact confirmation", "Couldn't send the contact notification"]);
 	});

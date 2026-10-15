@@ -61,6 +61,7 @@ export enum RateLimitType {
 	AUTH_EMAIL_RECIPIENT = 'authEmailRecipient',
 	EMAIL_CONFIRMATION_RESEND = 'emailConfirmationResend',
 	CONTACT_SALES = 'contactSales',
+	CONTACT_RECIPIENT = 'contactRecipient',
 }
 
 export interface RateLimitSettings {
@@ -76,6 +77,7 @@ export interface RateLimitSettings {
 	[RateLimitType.AUTH_EMAIL_RECIPIENT]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.EMAIL_CONFIRMATION_RESEND]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.CONTACT_SALES]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.CONTACT_RECIPIENT]: DORateLimitConfig | KVRateLimitConfig;
 }
 
 export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
@@ -170,5 +172,12 @@ export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
 		store: RateLimitStore.DURABLE_OBJECT,
 		limit: 5,
 		period: 60 * 60,
+	},
+	// Per-address cap on contact confirmations, so the form can't be used to fill someone else's inbox.
+	contactRecipient: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 2,
+		period: 24 * 60 * 60,
 	},
 };
