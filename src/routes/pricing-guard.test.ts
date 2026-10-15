@@ -7,6 +7,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/pricing/*.tsx',
 		'/src/components/marketing/PlanLimits.tsx',
 		'/src/content/positioning.ts',
+		'/src/components/public-site/PublicFaq.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -23,6 +24,19 @@ const CREDITS = '/src/components/pricing/CreditsExplainer.tsx';
 
 describe('pricing page', () => {
 	const page = source('/src/routes/pricing.tsx');
+
+	it("answers questions in 1Password's FAQ: a lavender panel, a big heading, and two columns of plus and minus rows", () => {
+		const faq = source('/src/components/public-site/PublicFaq.tsx');
+		expect(faq).toContain('Frequently asked questions');
+		expect(faq).toContain('rounded-[25px] bg-[#e4e8f8]');
+		expect(faq).toContain('lg:grid-cols-2');
+		// Down the left column, then the right, so reading order matches what people see.
+		expect(faq).toContain('const columns = [questions.slice(0, half), questions.slice(half)];');
+		expect(faq).toContain('<PlusIcon');
+		expect(faq).toContain('group-open:hidden');
+		expect(faq).toContain('<MinusIcon');
+		expect(faq).toContain('group-open:block');
+	});
 
 	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
 		const order = ['<PlanCards />', '<ComparePlans />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={PRICING_FAQ} />'];

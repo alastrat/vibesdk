@@ -1,7 +1,8 @@
 import { Link } from 'react-router';
+import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
 import { PLATFORM_FEE_LABEL } from '@/api-types';
 import type { FaqItem } from '@/content/positioning';
-import { Eyebrow } from './primitives';
+import { cn } from '@/lib/utils';
 
 const LAUNCH_FAQ: readonly FaqItem[] = [
 	{ question: 'Is Estori free?', answer: 'Yes. Building and editing stores is free within daily limits. Paid plans are coming soon.' },
@@ -16,7 +17,7 @@ const LAUNCH_FAQ: readonly FaqItem[] = [
 		answer: (
 			<>
 				If it can't be used, email us within 14 days and we'll fix it or refund you. See the{' '}
-				<Link to="/refunds" className="underline underline-offset-4">
+				<Link to="/refunds">
 					refund policy
 				</Link>
 				.
@@ -25,27 +26,44 @@ const LAUNCH_FAQ: readonly FaqItem[] = [
 	},
 ];
 
-/** The launch questions, or a page's own; `leading` puts a page's questions before the launch ones. */
+function Question({ item }: { item: FaqItem }) {
+	return (
+		<details className="group py-7">
+			<summary className="flex cursor-pointer list-none items-start justify-between gap-6 text-lg leading-snug font-medium text-public-ink sm:text-xl [&::-webkit-details-marker]:hidden">
+				{item.question}
+				<PlusIcon weight="light" className="mt-0.5 size-6 shrink-0 group-open:hidden" aria-hidden />
+				<MinusIcon weight="light" className="mt-0.5 hidden size-6 shrink-0 group-open:block" aria-hidden />
+			</summary>
+			<p className="mt-5 max-w-xl text-[15px] leading-relaxed text-public-ink/80 [&_a]:text-public-blue [&_a]:underline [&_a]:underline-offset-4">
+				{item.answer}
+			</p>
+		</details>
+	);
+}
+
+/**
+ * 1Password's FAQ: a lavender panel with a big heading, then the questions in two columns of plus and minus rows. The
+ * launch questions by default, or a page's own; `leading` puts a page's questions before the launch ones.
+ */
 export function PublicFaq({ items = LAUNCH_FAQ, leading = [] }: { items?: readonly FaqItem[]; leading?: readonly FaqItem[] }) {
 	const questions = [...leading, ...items];
+	const half = Math.ceil(questions.length / 2);
+	// Down the left column, then the right, so reading order matches what people see.
+	const columns = [questions.slice(0, half), questions.slice(half)];
 	return (
-		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
-			<div className="mx-auto grid max-w-[1248px] gap-10 lg:grid-cols-[1fr_2fr]">
-				<div>
-					<Eyebrow>FAQ</Eyebrow>
-					<h2 className="mt-4 text-4xl leading-[1.1] font-light tracking-[-0.02em] text-public-ink sm:text-5xl">Questions, answered</h2>
-				</div>
-				<div className="divide-y divide-public-line border-y border-public-line">
-					{questions.map((item) => (
-						<details key={item.question} className="group py-5">
-							<summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-lg font-normal text-public-ink [&::-webkit-details-marker]:hidden">
-								{item.question}
-								<span className="text-2xl font-light text-public-muted transition-transform group-open:rotate-45 motion-reduce:transition-none" aria-hidden>
-									+
-								</span>
-							</summary>
-							<p className="mt-3 max-w-2xl text-base leading-relaxed font-light text-public-muted">{item.answer}</p>
-						</details>
+		<section aria-labelledby="faq-title" className="bg-white px-3 py-6 sm:px-6">
+			<div className="mx-auto max-w-[1392px] rounded-[25px] bg-[#e4e8f8] px-6 py-16 sm:px-12 sm:py-20 lg:px-[72px] lg:py-28">
+				<h2 id="faq-title" className="text-4xl leading-[1.1] font-normal tracking-[-0.02em] text-public-ink sm:text-5xl lg:text-[64px]">
+					Frequently asked questions
+				</h2>
+				<div className="mt-12 grid gap-x-12 lg:mt-16 lg:grid-cols-2">
+					{columns.map((column, index) => (
+						// Stacked on phones, the first column's bottom line would double the second's top one.
+						<div key={index} className={cn('divide-y divide-public-ink/60 border-y border-public-ink/60', index === 0 && 'max-lg:border-b-0')}>
+							{column.map((item) => (
+								<Question key={item.question} item={item} />
+							))}
+						</div>
 					))}
 				</div>
 			</div>
