@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { CaretDownIcon, ListIcon, XIcon } from '@phosphor-icons/react';
 import { EstoriLogo, BRAND } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
-import { pillClass, preferredScrollBehavior } from '@/components/public-site/primitives';
+import { pillClass } from '@/components/public-site/primitives';
 import { cn } from '@/lib/utils';
 import { AnnouncementBar } from './AnnouncementBar';
 import { MenuPanel, MobileMenuGroups, type MenuId } from './NavMenu';
@@ -19,12 +19,11 @@ const NAV_LINKS = [
 	{ to: '/pricing', label: 'Pricing' },
 ] as const;
 
-/** Top of every public page: the gold announcement, then a white bar with the brand, the menus, sign-in and the build action. */
+/** Top of every public page: the gold announcement, then a white bar with the brand, the menus, Talk to sales and the build action. */
 export function PublicTopBar() {
 	const { isAuthenticated } = useAuth();
 	const { showAuthModal } = useAuthModal();
 	const { pathname, hash, key } = useLocation();
-	const navigate = useNavigate();
 	const [menuOpen, setMenuOpen] = useState(false);
 	const [openPanel, setOpenPanel] = useState<MenuId | null>(null);
 	const headerRef = useRef<HTMLElement>(null);
@@ -55,14 +54,8 @@ export function PublicTopBar() {
 		};
 	}, [openPanel]);
 
-	const startBuilding = () => {
-		setMenuOpen(false);
-		if (pathname === '/') {
-			document.getElementById('build')?.scrollIntoView({ behavior: preferredScrollBehavior(), block: 'center' });
-			return;
-		}
-		navigate('/');
-	};
+	// New visitors sign up first; signed-in people go straight to the builder.
+	const buildPath = isAuthenticated ? '/' : '/signup';
 
 	return (
 		<header ref={headerRef} className="sticky top-0 z-40">
@@ -116,13 +109,13 @@ export function PublicTopBar() {
 								Open app
 							</Link>
 						) : (
-							<button type="button" onClick={() => showAuthModal()} className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
-								Sign in
-							</button>
+							<Link to="/contact" className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
+								Talk to sales
+							</Link>
 						)}
-						<button type="button" onClick={startBuilding} className={pillClass('blue', 'hidden sm:inline-flex')}>
+						<Link to={buildPath} className={pillClass('blue', 'hidden sm:inline-flex')}>
 							Start building free
-						</button>
+						</Link>
 						<button
 							type="button"
 							className="rounded-full p-2 text-public-charcoal lg:hidden"
@@ -147,9 +140,15 @@ export function PublicTopBar() {
 								{link.label}
 							</Link>
 						))}
-						<button type="button" onClick={startBuilding} className={pillClass('blue', 'mt-3 w-full sm:hidden')}>
+						{/* The announcement's Sign in is hidden on phones, so the menu carries one. */}
+						{!isAuthenticated && (
+							<button type="button" onClick={() => showAuthModal()} className="py-2 text-left text-lg text-public-charcoal sm:hidden">
+								Sign in
+							</button>
+						)}
+						<Link to={buildPath} className={pillClass('blue', 'mt-3 w-full sm:hidden')}>
 							Start building free
-						</button>
+						</Link>
 					</nav>
 				)}
 			</div>

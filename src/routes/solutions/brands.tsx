@@ -23,7 +23,7 @@ export default function BrandsPage() {
 			<AssistantsPanel
 				id="operations"
 				action={
-					<PillLink to="/#build" variant="white">
+					<PillLink to="/signup" variant="white">
 						Start building free
 					</PillLink>
 				}

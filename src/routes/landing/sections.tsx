@@ -13,7 +13,7 @@ export function ClosingPanel() {
 					<h2 className={cn(HEADING_SECTION, 'max-w-xl text-balance text-public-ink')}>Your next store starts with a sentence.</h2>
 					<p className={cn(LEAD, 'mt-5 max-w-md text-public-ink/75')}>Describe it, watch it build, and publish it when it's ready.</p>
 					<div className="mt-10 flex flex-wrap gap-3">
-						<PillLink to="/#build" variant="blue">
+						<PillLink to="/signup" variant="blue">
 							Start building free
 						</PillLink>
 						<PillLink to="/pricing" variant="outline-on-light">

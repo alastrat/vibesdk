@@ -21,7 +21,7 @@ export default function ContentCreatorsPage() {
 				lead="Promote merchants' products with your own link or your own Estori store, and earn a commission on every sale you bring."
 				actions={
 					<>
-						<PillLink to="/#build" variant="white">
+						<PillLink to="/signup" variant="white">
 							Start building free
 						</PillLink>
 						<EarlyAccessButton capability="content-creators" variant="outline-on-dark" listedClassName="text-white" />

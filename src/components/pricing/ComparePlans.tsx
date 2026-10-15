@@ -14,7 +14,7 @@ const LARGEST = PREMIUM_TIERS[PREMIUM_TIERS.length - 1];
 
 /** What each column header shows under the plan's name, and where its button leads. */
 const HEADERS: Readonly<Record<PlanId, { price: string; note: string; action: { to: string; label: string; variant: 'blue' | 'charcoal' | 'outline-on-light' } }>> = {
-	basic: { price: '$0', note: 'Free forever', action: { to: '/#build', label: 'Start building', variant: 'blue' } },
+	basic: { price: '$0', note: 'Free forever', action: { to: '/signup', label: 'Start building', variant: 'blue' } },
 	premium: {
 		price: `From ${formatUsd(SMALLEST.priceCents)}`,
 		note: `${formatCredits(SMALLEST.credits)} to ${formatCredits(LARGEST.credits)} credits a month`,

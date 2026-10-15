@@ -21,7 +21,7 @@ export default function DigitalPage() {
 				tag="digital-products"
 				actions={
 					<>
-						<PillLink to="/#build" variant="white">
+						<PillLink to="/signup" variant="white">
 							Start building free
 						</PillLink>
 						<EarlyAccessButton capability="digital-products" variant="outline-on-dark" listedClassName="text-white" />

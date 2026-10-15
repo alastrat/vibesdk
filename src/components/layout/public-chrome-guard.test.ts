@@ -50,6 +50,17 @@ describe('public chrome', () => {
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
+	it('offers Talk to sales in the bar, keeps Sign in reachable on every screen, and sends Start building free to signup', () => {
+		const top = source(TOP);
+		expect(top).toMatch(/<Link to="\/contact" className="text-\[15px\] text-public-charcoal underline-offset-4 hover:underline">\s*Talk to sales/);
+		// The announcement's Sign in hides below sm, so the phone menu carries one.
+		expect(source(ANNOUNCE)).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
+		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className="[^"]*sm:hidden[^"]*">\s*Sign in/);
+		expect(top).toContain("const buildPath = isAuthenticated ? '/' : '/signup';");
+		expect(top.match(/to=\{buildPath\}/g)).toHaveLength(2);
+		expect(top).not.toContain('startBuilding');
+	});
+
 	it('keeps the bar on one line: the menus and links move to the menu below lg, and nothing in the bar wraps', () => {
 		const top = source(TOP);
 		expect(top).toMatch(/<nav aria-label="Main" className="hidden lg:flex [^"]*whitespace-nowrap/);
@@ -135,7 +146,6 @@ describe('public chrome', () => {
 	it('scrolls without animation for people who asked for reduced motion', () => {
 		expect(source(PRIMITIVES)).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'");
 		expect(source(LAYOUT)).toContain('behavior: preferredScrollBehavior()');
-		expect(source(TOP)).toContain('behavior: preferredScrollBehavior()');
 		expect(source(LAYOUT)).not.toContain("behavior: 'smooth'");
 		expect(source(TOP)).not.toContain("behavior: 'smooth'");
 	});

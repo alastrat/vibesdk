@@ -15,7 +15,7 @@ export default function DevelopersPage() {
 				lead="Build stores with Estori, publish them to Discover as templates, and get paid through Stripe when someone starts from yours."
 				actions={
 					<>
-						<PillLink to="/#build" variant="white">
+						<PillLink to="/signup" variant="white">
 							Start building free
 						</PillLink>
 						<PillLink to="/discover" variant="outline-on-dark">

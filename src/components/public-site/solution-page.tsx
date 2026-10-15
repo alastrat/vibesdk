@@ -40,7 +40,7 @@ export function SolutionHero({
 			<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-pretty text-white/80')}>{lead}</p>
 			<div className="mt-10 flex flex-wrap items-center justify-center gap-3">
 				{actions ?? (
-					<PillLink to="/#build" variant="white">
+					<PillLink to="/signup" variant="white">
 						Start building free
 					</PillLink>
 				)}

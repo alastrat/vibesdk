@@ -55,7 +55,7 @@ function BasicPlan() {
 				<CoinsIcon className="size-5 shrink-0 text-public-blue" aria-hidden />
 				<PlanLimits className="text-sm" fallback="A daily allowance of AI credits" />
 			</div>
-			<PillLink to="/#build" variant="blue" className="mt-6">
+			<PillLink to="/signup" variant="blue" className="mt-6">
 				Start building free
 			</PillLink>
 			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8">

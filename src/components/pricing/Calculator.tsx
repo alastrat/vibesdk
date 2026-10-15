@@ -316,7 +316,7 @@ export function Calculator() {
 								</div>
 								<div className="mt-2 grid gap-2">
 									{recommendation.plan === 'basic' && (
-										<PillLink to="/#build" variant="blue">
+										<PillLink to="/signup" variant="blue">
 											Start building free
 										</PillLink>
 									)}

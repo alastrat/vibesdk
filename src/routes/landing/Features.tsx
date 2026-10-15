@@ -64,7 +64,7 @@ export function Features({ tone = 'light' }: { tone?: SectionTone }) {
 							Start from scratch or from a store in Discover, then change anything by chatting.
 						</p>
 					</div>
-					<PillLink to="/#build" variant={colors.action}>
+					<PillLink to="/signup" variant={colors.action}>
 						Start building free
 					</PillLink>
 				</div>

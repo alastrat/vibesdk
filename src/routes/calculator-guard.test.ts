@@ -41,7 +41,7 @@ describe('credits calculator', () => {
 
 	it('sends each recommendation to its next step: build, Premium with the pool, or sales', () => {
 		const calculator = source(CALCULATOR);
-		expect(calculator).toContain('to="/#build"');
+		expect(calculator).toContain('to="/signup"');
 		expect(calculator).toContain("contactPath('premium', recommendation.tier.credits)");
 		expect(calculator).toContain("contactPath('enterprise')");
 		expect(calculator).toContain('to="/pricing#compare"');
