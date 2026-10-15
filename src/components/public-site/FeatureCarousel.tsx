@@ -9,15 +9,18 @@ import { StartBuildingButton } from './StartBuildingButton';
 
 /**
  * Rebuy's case-study carousel, for what a store can include: a tab per feature, whose bar fills while its slide shows
- * and then hands over to the next. The bar runs only while the carousel is on screen and nobody is pointing at it or
- * focused in it; with reduced motion it doesn't run at all, and the tabs and arrow keys still switch slides.
+ * and then hands over to the next. Clicking a tab starts its bar again. The bar holds while the carousel is off screen,
+ * and while keyboard focus is in a slide, so the slide can't change under it; with reduced motion it doesn't run at all,
+ * and the tabs and arrow keys still switch slides.
  */
 export function FeatureCarousel({ title, features }: { title: string; features: readonly IndustryFeature[] }) {
 	const id = useId();
 	const sectionRef = useRef<HTMLElement>(null);
 	const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 	const [active, setActive] = useState(0);
-	const [held, setHeld] = useState(false);
+	/** Counts every change of slide, so the bar restarts even when the tab clicked is the one showing. */
+	const [cycle, setCycle] = useState(0);
+	const [focusInSlide, setFocusInSlide] = useState(false);
 	const [onScreen, setOnScreen] = useState(false);
 
 	useEffect(() => {
@@ -31,6 +34,7 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 	const show = (index: number, focus: boolean) => {
 		const next = (index + features.length) % features.length;
 		setActive(next);
+		setCycle((count) => count + 1);
 		if (focus) tabRefs.current[next]?.focus();
 	};
 
@@ -46,12 +50,6 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 			ref={sectionRef}
 			aria-labelledby={`${id}-title`}
 			className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28"
-			onPointerEnter={() => setHeld(true)}
-			onPointerLeave={() => setHeld(false)}
-			onFocus={() => setHeld(true)}
-			onBlur={(event) => {
-				if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setHeld(false);
-			}}
 		>
 			<div className="mx-auto max-w-[1248px]">
 				<h2 id={`${id}-title`} className="text-center text-3xl leading-[1.15] font-light tracking-[-0.015em] text-balance text-public-ink sm:text-[40px]">
@@ -81,11 +79,12 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 								{/* The bar grows from the left by its animation alone; with reduced motion it simply fills the selected tab. */}
 								{selected && (
 									<span
+										key={cycle}
 										aria-hidden
 										onAnimationEnd={() => show(active + 1, false)}
 										className={cn(
 											'absolute inset-0 origin-left bg-[#dedad5] animate-public-autoplay',
-											(held || !onScreen) && '[animation-play-state:paused]',
+											(focusInSlide || !onScreen) && '[animation-play-state:paused]',
 										)}
 									/>
 								)}
@@ -95,7 +94,14 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 					})}
 				</div>
 				{/* Every slide sits in the same cell, so the card keeps the tallest one's height as they fade between each other. */}
-				<div className="mt-10 grid">
+				<div
+					className="mt-10 grid"
+					// Only keyboard focus holds the slide; a mouse click on a link in it doesn't.
+					onFocus={(event) => setFocusInSlide(event.target.matches(':focus-visible'))}
+					onBlur={(event) => {
+						if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) setFocusInSlide(false);
+					}}
+				>
 					{features.map((feature, index) => (
 						<div
 							key={feature.title}

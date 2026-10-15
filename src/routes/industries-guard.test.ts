@@ -48,7 +48,7 @@ describe('industry pages', () => {
 		expect(page).toContain("We couldn't find that industry");
 	});
 
-	it("plays the features as Rebuy's carousel: tabs that fill and advance on their own, pausing on hover, focus or off screen", () => {
+	it("plays the features as Rebuy's carousel: tabs that fill and advance on their own, pausing only off screen or for focus in a slide", () => {
 		const carousel = source(CAROUSEL);
 		for (const part of [
 			'role="tablist"',
@@ -64,6 +64,12 @@ describe('industry pages', () => {
 		]) {
 			expect(carousel, part).toContain(part);
 		}
+		// Pointing at the carousel or clicking a tab never holds it, as on Rebuy.
+		expect(carousel).not.toContain('onPointerEnter');
+		expect(carousel).toContain("(focusInSlide || !onScreen) && '[animation-play-state:paused]'");
+		// A click on any tab, even the one showing, starts its bar again from empty.
+		expect(carousel).toContain('key={cycle}');
+		expect(carousel).toMatch(/setCycle\(\(count\) => count \+ 1\)/);
 		expect(publicCss).toMatch(/--animate-public-autoplay: public-autoplay 6s linear/);
 		expect(publicCss).toMatch(/@keyframes public-autoplay \{\s*from \{\s*transform: scaleX\(0\);/);
 	});
