@@ -92,6 +92,17 @@ describe('landing page', () => {
 		expect(showcase).toContain('aria-pressed={activeFilter === option}');
 		expect(showcase).toContain('to={`/discover/${store.id}`}');
 		expect(showcase).toContain('id="discover"');
+		expect(showcase).toContain('See what people are building on Estori');
+		expect(showcase).not.toMatch(/creators are building/);
+	});
+
+	it('keeps the hero and the showcase on one charcoal band, so no light seam shows between them', () => {
+		const page = source('/src/routes/landing/LandingPage.tsx');
+		expect(page).toMatch(/<div className="bg-public-charcoal">\s*<Hero stores=\{stores\} \/>\s*<StoreShowcase stores=\{stores\} \/>\s*<\/div>/);
+	});
+
+	it('separates the white sections that now meet after the showcase moved up', () => {
+		expect(source('/src/routes/landing/LivePreview.tsx')).toContain('<section className="border-t border-public-line bg-white');
 	});
 
 	it('shows the store names right under the build box, above the builder demo, inside the hero', () => {
@@ -111,12 +122,12 @@ describe('landing page', () => {
 		const page = source('/src/routes/landing/LandingPage.tsx');
 		const order = [
 			'<Hero stores={stores} />',
+			'<StoreShowcase',
 			'<AgenticCommerceSection />',
 			'<AssistantsPanel />',
 			'<PersonalizationSection />',
 			'<Features />',
 			'<SellersBand />',
-			'<StoreShowcase',
 			'<LivePreview />',
 			'<PricingSummary />',
 			'<PublicFaq />',

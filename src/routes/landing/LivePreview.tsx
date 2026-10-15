@@ -11,7 +11,7 @@ const PREVIEW_PHONE_IMAGE = '/marketing/preview-phone.jpg';
 /** 1Password's customer-story layout, used for the live preview since Estori shows no testimonials. */
 export function LivePreview() {
 	return (
-		<section className="bg-white px-4 py-20 sm:px-6 sm:py-28">
+		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
 			<BlurFade inView className="mx-auto grid max-w-[1248px] items-center gap-12 lg:grid-cols-2 lg:gap-20">
 				<div aria-hidden className="relative overflow-hidden rounded-[25px] bg-[linear-gradient(160deg,#f4efe6,#e7ddcc)] px-6 pt-10 pb-16 sm:px-10">
 					<div className="w-[88%] leading-none">

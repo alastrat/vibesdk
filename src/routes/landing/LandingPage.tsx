@@ -19,13 +19,16 @@ export function LandingPage() {
 				name="description"
 				content="Describe your store and Estori builds it in minutes, with your products, cart and checkout. AI assistants that help you sell and run it are coming soon."
 			/>
-			<Hero stores={stores} />
+			{/* One band under both: where the hero ends on a fractional pixel, the page's white would show through as a seam. */}
+			<div className="bg-public-charcoal">
+				<Hero stores={stores} />
+				<StoreShowcase stores={stores} />
+			</div>
 			<AgenticCommerceSection />
 			<AssistantsPanel />
 			<PersonalizationSection />
 			<Features />
 			<SellersBand />
-			<StoreShowcase stores={stores} />
 			<LivePreview />
 			<PricingSummary />
 			<PublicFaq />
