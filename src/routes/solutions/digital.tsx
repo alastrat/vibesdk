@@ -1,10 +1,10 @@
 import { EarlyAccessButton } from '@/components/public-site/EarlyAccessButton';
-import { PillLink } from '@/components/public-site/primitives';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { COMMUNITY_CARDS, DIGITAL_FAQ, DIGITAL_PRODUCT_CARDS, DIGITAL_STEPS } from '@/content/positioning';
 import { useEarlyAccessFromUrl } from '@/hooks/use-early-access';
 import { ClosingPanel } from '@/routes/landing/sections';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 export default function DigitalPage() {
 	useEarlyAccessFromUrl();
@@ -21,9 +21,7 @@ export default function DigitalPage() {
 				tag="digital-products"
 				actions={
 					<>
-						<PillLink to="/signup" variant="white">
-							Start building free
-						</PillLink>
+						<StartBuildingButton variant="white" />
 						<EarlyAccessButton capability="digital-products" variant="outline-on-dark" listedClassName="text-white" />
 					</>
 				}

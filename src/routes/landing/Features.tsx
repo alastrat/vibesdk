@@ -2,9 +2,10 @@ import type { ReactNode, Ref } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import { DeviceSwitch, FeatureArt, PreviewArt, PreviewStory } from '@/components/public-site/feature-art';
-import { Eyebrow, HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
+import { Eyebrow, HEADING_SECTION, LEAD } from '@/components/public-site/primitives';
 import { STORE_FEATURES, type StoreFeature } from '@/content/positioning';
 import { cn } from '@/lib/utils';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 /** Vori's product card: light gray with a hairline border, a picture at the bottom, and a tab that rises on hover. */
 function FeatureCard({ feature, art, aside, storyRef }: { feature: StoreFeature; art: ReactNode; aside?: ReactNode; storyRef?: Ref<HTMLElement> }) {
@@ -64,9 +65,7 @@ export function Features({ tone = 'light' }: { tone?: SectionTone }) {
 							Start from scratch or from a store in Discover, then change anything by chatting.
 						</p>
 					</div>
-					<PillLink to="/signup" variant={colors.action}>
-						Start building free
-					</PillLink>
+					<StartBuildingButton variant={colors.action} />
 				</div>
 				{/* Row gaps leave room for the tab each card raises on hover. */}
 				<div className="mt-16 grid grid-cols-1 gap-x-5 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">

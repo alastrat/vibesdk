@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CaretDownIcon, CheckIcon, MinusIcon } from '@phosphor-icons/react';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { HEADING_SECTION, PillLink } from '@/components/public-site/primitives';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePublicPlan } from '@/hooks/use-public-plan';
 import { CAPABILITIES, STATUS_LABELS, type CapabilityId } from '@/lib/capabilities';
@@ -12,15 +13,37 @@ import { cn } from '@/lib/utils';
 const SMALLEST = PREMIUM_TIERS[0];
 const LARGEST = PREMIUM_TIERS[PREMIUM_TIERS.length - 1];
 
-/** What each column header shows under the plan's name, and where its button leads. */
-const HEADERS: Readonly<Record<PlanId, { price: string; note: string; action: { to: string; label: string; variant: 'blue' | 'charcoal' | 'outline-on-light' } }>> = {
-	basic: { price: '$0', note: 'Free forever', action: { to: '/signup', label: 'Start building', variant: 'blue' } },
+const ACTION = 'mt-4 w-full py-2 text-sm';
+
+/** What each column header shows under the plan's name, and its button: sign up for Basic, contact sales otherwise. */
+const HEADERS: Readonly<Record<PlanId, { price: string; note: string; action: ReactNode }>> = {
+	basic: {
+		price: '$0',
+		note: 'Free forever',
+		action: (
+			<StartBuildingButton variant="blue" className={ACTION}>
+				Start building
+			</StartBuildingButton>
+		),
+	},
 	premium: {
 		price: `From ${formatUsd(SMALLEST.priceCents)}`,
 		note: `${formatCredits(SMALLEST.credits)} to ${formatCredits(LARGEST.credits)} credits a month`,
-		action: { to: contactPath('premium'), label: 'Get Premium', variant: 'charcoal' },
+		action: (
+			<PillLink to={contactPath('premium')} variant="charcoal" className={ACTION}>
+				Get Premium
+			</PillLink>
+		),
 	},
-	enterprise: { price: 'Custom', note: 'Volume credits and terms', action: { to: contactPath('enterprise'), label: 'Talk to sales', variant: 'outline-on-light' } },
+	enterprise: {
+		price: 'Custom',
+		note: 'Volume credits and terms',
+		action: (
+			<PillLink to={contactPath('enterprise')} variant="outline-on-light" className={ACTION}>
+				Talk to sales
+			</PillLink>
+		),
+	},
 };
 
 function Cell({ value }: { value: PlanCell }) {
@@ -142,9 +165,7 @@ export function ComparePlans() {
 											<span className="block text-lg text-public-ink">{entry.name}</span>
 											<span className="mt-2 block text-3xl font-light tracking-[-0.02em] text-public-ink">{header.price}</span>
 											<span className="mt-2 block min-h-10 text-[13px] font-light text-public-muted">{header.note}</span>
-											<PillLink to={header.action.to} variant={header.action.variant} className="mt-4 w-full py-2 text-sm">
-												{header.action.label}
-											</PillLink>
+											{header.action}
 										</th>
 									);
 								})}

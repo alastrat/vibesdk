@@ -23,6 +23,7 @@ import {
 import { formatCredits, formatUsd, planById } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 import { Stepper } from './Stepper';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 /** The amounts a visitor sets, without the model rate, which comes from the model they pick. */
 type Amounts = Omit<Usage, 'creditsPerStep'>;
@@ -316,9 +317,7 @@ export function Calculator() {
 								</div>
 								<div className="mt-2 grid gap-2">
 									{recommendation.plan === 'basic' && (
-										<PillLink to="/signup" variant="blue">
-											Start building free
-										</PillLink>
+										<StartBuildingButton variant="blue" />
 									)}
 									{recommendation.plan === 'premium' && (
 										<>

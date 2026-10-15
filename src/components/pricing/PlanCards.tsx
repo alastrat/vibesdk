@@ -7,6 +7,7 @@ import { PillLink } from '@/components/public-site/primitives';
 import type { CapabilityId } from '@/lib/capabilities';
 import { PREMIUM_TIERS, formatCredits, formatUsd, planById, type PlanId } from '@/lib/plans';
 import { contactPath } from '@/lib/contact';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 function Feature({ children, capability }: { children: ReactNode; capability?: CapabilityId }) {
 	return (
@@ -55,9 +56,7 @@ function BasicPlan() {
 				<CoinsIcon className="size-5 shrink-0 text-public-blue" aria-hidden />
 				<PlanLimits className="text-sm" fallback="A daily allowance of AI credits" />
 			</div>
-			<PillLink to="/signup" variant="blue" className="mt-6">
-				Start building free
-			</PillLink>
+			<StartBuildingButton variant="blue" className="mt-6" />
 			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8">
 				<Feature>Build and change stores just by asking</Feature>
 				<Feature>Live preview on desktop and phone</Feature>

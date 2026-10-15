@@ -39,7 +39,7 @@ describe('store builder features', () => {
 		expect(section).toContain("light: { section: 'border-t border-public-line bg-white'");
 		expect(section).toContain("dark: { section: 'bg-public-charcoal'");
 		expect(section).toContain("export function Features({ tone = 'light' }: { tone?: SectionTone })");
-		expect(section).toMatch(/<PillLink to="\/signup" variant=\{colors\.action\}>\s*Start building free/);
+		expect(section).toContain('<StartBuildingButton variant={colors.action} />');
 		expect(section).toContain('What your store comes with today');
 	});
 

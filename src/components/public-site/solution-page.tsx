@@ -5,7 +5,8 @@ import type { CardCopy } from '@/content/positioning';
 import type { CapabilityId } from '@/lib/capabilities';
 import { cn } from '@/lib/utils';
 import { CapabilityTag } from './CapabilityTag';
-import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, PillLink } from './primitives';
+import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD } from './primitives';
+import { StartBuildingButton } from './StartBuildingButton';
 
 export function PageMeta({ title, description }: { title: string; description: string }) {
 	return (
@@ -40,9 +41,7 @@ export function SolutionHero({
 			<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-pretty text-white/80')}>{lead}</p>
 			<div className="mt-10 flex flex-wrap items-center justify-center gap-3">
 				{actions ?? (
-					<PillLink to="/signup" variant="white">
-						Start building free
-					</PillLink>
+					<StartBuildingButton variant="white" />
 				)}
 			</div>
 		</section>

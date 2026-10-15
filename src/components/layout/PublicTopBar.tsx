@@ -4,7 +4,7 @@ import { CaretDownIcon, ListIcon, XIcon } from '@phosphor-icons/react';
 import { EstoriLogo, BRAND } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
-import { pillClass } from '@/components/public-site/primitives';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import { cn } from '@/lib/utils';
 import { AnnouncementBar } from './AnnouncementBar';
 import { MenuPanel, MobileMenuGroups, type MenuId } from './NavMenu';
@@ -54,8 +54,6 @@ export function PublicTopBar() {
 		};
 	}, [openPanel]);
 
-	// New visitors sign up first; signed-in people go straight to the builder.
-	const buildPath = isAuthenticated ? '/' : '/signup';
 
 	return (
 		<header ref={headerRef} className="sticky top-0 z-40">
@@ -113,9 +111,7 @@ export function PublicTopBar() {
 								Talk to sales
 							</Link>
 						)}
-						<Link to={buildPath} className={pillClass('blue', 'hidden sm:inline-flex')}>
-							Start building free
-						</Link>
+						<StartBuildingButton className="hidden sm:inline-flex" />
 						<button
 							type="button"
 							className="rounded-full p-2 text-public-charcoal lg:hidden"
@@ -146,9 +142,7 @@ export function PublicTopBar() {
 								Sign in
 							</button>
 						)}
-						<Link to={buildPath} className={pillClass('blue', 'mt-3 w-full sm:hidden')}>
-							Start building free
-						</Link>
+						<StartBuildingButton className="mt-3 w-full sm:hidden" onOpen={() => setMenuOpen(false)} />
 					</nav>
 				)}
 			</div>

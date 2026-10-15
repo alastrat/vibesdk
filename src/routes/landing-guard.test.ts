@@ -176,7 +176,7 @@ describe('landing page', () => {
 		expect(closing).toContain('rounded-[25px] bg-[#dce9fc]');
 		expect(closing).toContain('<CloudLaptop />');
 		expect(closing).toContain('Your next store starts with a sentence.');
-		expect(closing).toContain('Start building free');
+		expect(closing).toContain('<StartBuildingButton variant="blue" />');
 		expect(source('/src/components/public-site/CloudLaptop.tsx')).toMatch(/^\s*<svg aria-hidden /m);
 	});
 

@@ -42,22 +42,20 @@ describe('public chrome', () => {
 		const top = source(TOP);
 		expect(top).toContain('<AnnouncementBar />');
 		expect(top).toContain('hidden lg:flex');
-		expect(top).toContain('Start building free');
-		expect(top).toContain("pillClass('blue'");
+		expect(top).toContain('<StartBuildingButton className="hidden sm:inline-flex" />');
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
 		expect(top).toContain('<MobileMenuGroups />');
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
-	it('offers Talk to sales in the bar, keeps Sign in reachable on every screen, and sends Start building free to signup', () => {
+	it('offers Talk to sales in the bar, keeps Sign in reachable on every screen, and opens sign-up from Start building free', () => {
 		const top = source(TOP);
 		expect(top).toMatch(/<Link to="\/contact" className="text-\[15px\] text-public-charcoal underline-offset-4 hover:underline">\s*Talk to sales/);
 		// The announcement's Sign in hides below sm, so the phone menu carries one.
 		expect(source(ANNOUNCE)).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
 		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className="[^"]*sm:hidden[^"]*">\s*Sign in/);
-		expect(top).toContain("const buildPath = isAuthenticated ? '/' : '/signup';");
-		expect(top.match(/to=\{buildPath\}/g)).toHaveLength(2);
+		expect(top.match(/<StartBuildingButton /g)).toHaveLength(2);
 		expect(top).not.toContain('startBuilding');
 	});
 
@@ -67,7 +65,7 @@ describe('public chrome', () => {
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
 		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
 		expect(top).toMatch(/id="public-menu"[^>]*lg:hidden/);
-		expect(top).toContain("pillClass('blue', 'mt-3 w-full sm:hidden')");
+		expect(top).toContain('<StartBuildingButton className="mt-3 w-full sm:hidden" onOpen={() => setMenuOpen(false)} />');
 	});
 
 	it('opens one menu panel at a time, closes it on Escape, a click outside or navigation, and returns focus', () => {

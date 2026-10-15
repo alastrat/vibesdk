@@ -1,10 +1,10 @@
 import { AssistantsPanel } from '@/components/public-site/AssistantsPanel';
 import { AgenticCommerceSection, PersonalizationSection } from '@/components/public-site/capability-sections';
-import { PillLink } from '@/components/public-site/primitives';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { BRAND_FAQ, BRAND_STEPS, TODAY_CARDS } from '@/content/positioning';
 import { ClosingPanel } from '@/routes/landing/sections';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 export default function BrandsPage() {
 	return (
@@ -23,9 +23,7 @@ export default function BrandsPage() {
 			<AssistantsPanel
 				id="operations"
 				action={
-					<PillLink to="/signup" variant="white">
-						Start building free
-					</PillLink>
+					<StartBuildingButton variant="white" />
 				}
 			/>
 			<PersonalizationSection id="personalization" />

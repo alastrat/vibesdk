@@ -1,16 +1,17 @@
 /**
- * Enhanced Login Modal
- * Supports both OAuth and email/password authentication with backward compatibility
+ * The sign-in and sign-up window: a photo filling the left column on wider screens, and on the right Google first,
+ * the other providers, then email and password.
  */
 
 import { useState } from 'react';
 import {
 	Banner,
 	Button,
-	cn,
 	Dialog,
 	Input,
 } from '@cloudflare/kumo';
+import { EstoriLogo } from '@/brand';
+import { pillClass } from '@/components/public-site/primitives';
 import { useAuth } from '@/contexts/auth-context';
 import { Checkbox } from '@/components/ui/checkbox';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
@@ -24,7 +25,35 @@ import {
 	WarningCircleIcon,
 	XIcon,
 } from '@phosphor-icons/react';
-import { OrangeButton } from '../shared/OrangeButton';
+
+const AUTH_PANEL_IMAGE = '/marketing/auth-panel.webp';
+
+const GOOGLE_BUTTON = 'flex h-12 w-full items-center justify-center gap-3 rounded-full bg-[#22252f] text-[15px] font-medium text-white transition-colors hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue dark:bg-white dark:text-[#22252f] dark:hover:bg-white/90';
+const PROVIDER_BUTTON = 'flex h-12 w-full items-center justify-center gap-3 rounded-full text-[15px] font-medium text-kumo-default ring-1 ring-inset ring-kumo-line transition-colors hover:bg-kumo-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue';
+const TEXT_BUTTON = 'text-kumo-default underline underline-offset-4 transition-colors hover:text-public-blue';
+
+function GoogleLogo() {
+	return (
+		<svg className="size-5" viewBox="0 0 24 24" aria-hidden>
+			<path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+			<path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+			<path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+			<path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+		</svg>
+	);
+}
+
+function GitHubLogo() {
+	return (
+		<svg className="size-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
+			<path
+				fillRule="evenodd"
+				clipRule="evenodd"
+				d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
+			/>
+		</svg>
+	);
+}
 
 interface LoginModalProps {
 	isOpen: boolean;
@@ -235,28 +264,40 @@ export function LoginModal({
 	const title =
 		mode === 'forgot'
 			? 'Reset your password'
-			: actionContext
-				? `Sign in ${actionContext}`
-				: hasEmailAuth && mode === 'register'
-					? 'Create an account'
+			: mode === 'register'
+				? 'Create your free account'
+				: actionContext
+					? `Sign in ${actionContext}`
 					: 'Welcome back';
 
 	const description =
 		mode === 'forgot'
 			? "Enter your account's email and we'll send you a link to choose a new password."
-			: actionContext
-				? 'Authentication required for this action'
-				: hasEmailAuth && mode === 'register'
-					? 'Join to start building amazing applications'
-					: 'Sign in to save your apps and access your workspace';
+			: mode === 'register'
+				? 'Start building your store in minutes. No credit card needed.'
+				: actionContext
+					? 'Sign in, or create a free account, to continue.'
+					: 'Sign in to keep building your stores.';
 
 	const bannerError = mode === 'forgot' ? forgotError : error;
 
 	return (
 		<Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
-			<Dialog size="base" className="p-0 overflow-hidden">
-				{/* Header */}
-				<div className="relative p-6 pb-0">
+			<Dialog
+				size="xl"
+				className="top-1/2 flex max-h-[calc(100svh-2rem)] -translate-y-1/2 p-0 font-public sm:top-1/2 sm:w-[28rem] md:w-[56rem]"
+			>
+				{/* A photo filling the left column on wider screens */}
+				<aside className="relative hidden w-[44%] shrink-0 overflow-hidden md:block">
+					<img src={AUTH_PANEL_IMAGE} alt="" className="absolute inset-0 size-full object-cover" />
+					<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+					<div className="absolute inset-x-0 bottom-0 p-8 text-white">
+						<p className="text-2xl leading-snug font-normal tracking-[-0.01em] text-balance">From first idea to first order.</p>
+						<p className="mt-2 text-sm text-white/80">Build your store with AI, launch it, and start selling.</p>
+					</div>
+				</aside>
+
+				<div className="relative min-w-0 flex-1 overflow-y-auto px-6 py-8 sm:px-10">
 					{showCloseButton && (
 						<Dialog.Close
 							aria-label="Close dialog"
@@ -273,300 +314,214 @@ export function LoginModal({
 						/>
 					)}
 
-					<div className="text-center space-y-2">
-						<div className="mx-auto w-12 h-12 rounded-full bg-kumo-elevated flex items-center justify-center mb-4">
-							<svg
-								className="w-6 h-6"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-							>
-								<path
-									strokeLinecap="round"
-									strokeLinejoin="round"
-									strokeWidth={2}
-									d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-								/>
-							</svg>
-						</div>
-						<Dialog.Title className="text-2xl font-semibold mb-2">
-							{title}
-						</Dialog.Title>
-						<Dialog.Description className="text-kumo-subtle">
-							{description}
-						</Dialog.Description>
-					</div>
-				</div>
+					<EstoriLogo className="h-7 w-auto text-public-brand dark:text-white" />
+					<Dialog.Title className="mt-6 text-[28px] leading-tight font-normal tracking-[-0.02em] text-kumo-default">
+						{title}
+					</Dialog.Title>
+					<Dialog.Description className="mt-2 text-[15px] text-kumo-subtle">
+						{description}
+					</Dialog.Description>
 
-				{/* Error display */}
-				{bannerError && (
-					<div className="px-6 mt-4">
-						<Banner
-							variant="error"
-							icon={<WarningCircleIcon />}
-							title={bannerError}
-						/>
-					</div>
-				)}
-
-				{/* Authentication Options */}
-				<div className={cn('p-6 space-y-4 pt-6')}>
-					{/* GitHub */}
-					{showGitHub && (
-						<Button
-							type="button"
-							variant="secondary"
-							className="w-full justify-center"
-							onClick={() => handleOAuthClick('github')}
-							icon={
-								<svg
-									className="h-5 w-5"
-									fill="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										fillRule="evenodd"
-										clipRule="evenodd"
-										d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
-									/>
-								</svg>
-							}
-						>
-							Continue with GitHub
-						</Button>
-					)}
-
-					{/* Google */}
-					{showGoogle && (
-						<Button
-							type="button"
-							variant="secondary"
-							className="w-full justify-center"
-							onClick={() => handleOAuthClick('google')}
-							icon={
-								<svg className="h-5 w-5" viewBox="0 0 24 24">
-									<path
-										d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-										fill="#4285F4"
-									/>
-									<path
-										d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-										fill="#34A853"
-									/>
-									<path
-										d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-										fill="#FBBC05"
-									/>
-									<path
-										d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-										fill="#EA4335"
-									/>
-								</svg>
-							}
-						>
-							Continue with Google
-						</Button>
-					)}
-
-					{/* Cloudflare */}
-					{showCloudflare && (
-						<Button
-							type="button"
-							variant="secondary"
-							className="w-full justify-center mb-4"
-							onClick={() => handleOAuthClick('cloudflare')}
-							icon={<CloudflareLogo className="h-5 w-5" />}
-						>
-							Continue with Cloudflare
-						</Button>
-					)}
-
-					{/* Divider (only if both OAuth and email are available) */}
-					{hasEmailAuth && showProviders && (
-						<div className="relative">
-							<div className="absolute inset-0 flex items-center">
-								<div className="w-full border-t" />
-							</div>
-							<div className="relative flex justify-center text-xs uppercase">
-								<span className="bg-kumo-base px-2 text-kumo-subtle">
-									Or continue with
-								</span>
-							</div>
-						</div>
-					)}
-
-					{/* Reset link requested: the server's answer replaces the form */}
-					{mode === 'forgot' && resetLinkMessage && (
-						<div className="grid gap-4">
+					{bannerError && (
+						<div className="mt-6">
 							<Banner
-								variant="default"
-								icon={<EnvelopeSimpleIcon />}
-								description={resetLinkMessage}
+								variant="error"
+								icon={<WarningCircleIcon />}
+								title={bannerError}
 							/>
-							<Button
-								type="button"
-								variant="secondary"
-								className="w-full justify-center"
-								onClick={() => switchMode('login')}
-							>
-								Back to sign in
-							</Button>
 						</div>
 					)}
 
-					{/* Email/Password Form */}
-					{hasEmailAuth && !(mode === 'forgot' && resetLinkMessage) && (
-						<form
-							onSubmit={handleSubmit}
-							className="flex w-full flex-col gap-3"
-						>
-							{mode === 'register' && (
-								<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
-									<Input
-										label="Full name"
-										type="text"
-										placeholder="Full name"
-										value={name}
-										onChange={(e) =>
-											setName(e.target.value)
-										}
-										error={validationErrors.name}
-										disabled={isLoading}
-										autoComplete="name"
-										className="w-full"
-									/>
-								</div>
+					{showProviders && (
+						<div className="mt-6 grid gap-3">
+							{showGoogle && (
+								<button type="button" onClick={() => handleOAuthClick('google')} className={GOOGLE_BUTTON}>
+									<GoogleLogo />
+									Continue with Google
+								</button>
 							)}
+							{showGitHub && (
+								<button type="button" onClick={() => handleOAuthClick('github')} className={PROVIDER_BUTTON}>
+									<GitHubLogo />
+									Continue with GitHub
+								</button>
+							)}
+							{showCloudflare && (
+								<button type="button" onClick={() => handleOAuthClick('cloudflare')} className={PROVIDER_BUTTON}>
+									<CloudflareLogo className="size-5" aria-hidden />
+									Continue with Cloudflare
+								</button>
+							)}
+						</div>
+					)}
 
-							<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
-								<Input
-									label="Email address"
-									type="email"
-									placeholder="Email address"
-									value={email}
-									onChange={(e) => setEmail(e.target.value)}
-									error={validationErrors.email}
-									disabled={isLoading}
-									autoComplete="email"
-									className="w-full"
+					{/* Divider, when both providers and email are offered */}
+					{hasEmailAuth && showProviders && (
+						<div className="my-5 flex items-center gap-3 text-xs text-kumo-subtle">
+							<span className="h-px flex-1 bg-kumo-line" />
+							or
+							<span className="h-px flex-1 bg-kumo-line" />
+						</div>
+					)}
+
+					<div className={showProviders && hasEmailAuth ? undefined : 'mt-6'}>
+						{/* Reset link requested: the server's answer replaces the form */}
+						{mode === 'forgot' && resetLinkMessage && (
+							<div className="grid gap-4">
+								<Banner
+									variant="default"
+									icon={<EnvelopeSimpleIcon />}
+									description={resetLinkMessage}
 								/>
+								<button type="button" onClick={() => switchMode('login')} className={PROVIDER_BUTTON}>
+									Back to sign in
+								</button>
 							</div>
+						)}
 
-							{mode !== 'forgot' && (
-								<PasswordField
-									label="Password"
-									value={password}
-									onChange={setPassword}
-									error={validationErrors.password}
-									disabled={isLoading}
-									autoComplete={
-										mode === 'register'
-											? 'new-password'
-											: 'current-password'
-									}
-									visible={showPassword}
-									onVisibleChange={setShowPassword}
-								/>
-							)}
+						{/* Email and password */}
+						{hasEmailAuth && !(mode === 'forgot' && resetLinkMessage) && (
+							<form
+								onSubmit={handleSubmit}
+								className="flex w-full flex-col gap-3"
+							>
+								{mode === 'register' && (
+									<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
+										<Input
+											label="Full name"
+											type="text"
+											placeholder="Full name"
+											value={name}
+											onChange={(e) =>
+												setName(e.target.value)
+											}
+											error={validationErrors.name}
+											disabled={isLoading}
+											autoComplete="name"
+											className="w-full"
+										/>
+									</div>
+								)}
 
-							{mode === 'login' && canResetPassword && (
-								<div className="-mt-1 flex justify-end">
-									<button
-										type="button"
-										onClick={openForgotPassword}
-										disabled={isLoading}
-										className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
-									>
-										Forgot password?
-									</button>
-								</div>
-							)}
-
-							{mode === 'register' && (
 								<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
 									<Input
-										label="Confirm password"
-										type="password"
-										placeholder="Confirm password"
-										value={confirmPassword}
-										onChange={(e) =>
-											setConfirmPassword(e.target.value)
-										}
-										error={validationErrors.confirmPassword}
+										label="Email address"
+										type="email"
+										placeholder="Email address"
+										value={email}
+										onChange={(e) => setEmail(e.target.value)}
+										error={validationErrors.email}
 										disabled={isLoading}
-										autoComplete="new-password"
+										autoComplete="email"
 										className="w-full"
 									/>
 								</div>
-							)}
 
-							{mode === 'register' && (
-								<div className="grid gap-1">
-									<label className="flex items-start gap-2 text-sm text-kumo-default">
-										<Checkbox
-											checked={agreeToTerms}
-											onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+								{mode !== 'forgot' && (
+									<PasswordField
+										label="Password"
+										value={password}
+										onChange={setPassword}
+										error={validationErrors.password}
+										disabled={isLoading}
+										autoComplete={
+											mode === 'register'
+												? 'new-password'
+												: 'current-password'
+										}
+										visible={showPassword}
+										onVisibleChange={setShowPassword}
+									/>
+								)}
+
+								{mode === 'login' && canResetPassword && (
+									<div className="-mt-1 flex justify-end">
+										<button
+											type="button"
+											onClick={openForgotPassword}
 											disabled={isLoading}
-											className="mt-0.5"
+											className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
+										>
+											Forgot password?
+										</button>
+									</div>
+								)}
+
+								{mode === 'register' && (
+									<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
+										<Input
+											label="Confirm password"
+											type="password"
+											placeholder="Confirm password"
+											value={confirmPassword}
+											onChange={(e) =>
+												setConfirmPassword(e.target.value)
+											}
+											error={validationErrors.confirmPassword}
+											disabled={isLoading}
+											autoComplete="new-password"
+											className="w-full"
 										/>
-										<TermsAgreementLabel />
-									</label>
-									{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
-								</div>
-							)}
+									</div>
+								)}
 
-							<OrangeButton
-								type="submit"
-								disabled={isLoading}
-								className="w-full justify-center"
-							>
-								{isLoading
-									? mode === 'register'
-										? 'Creating account...'
-										: mode === 'forgot'
-											? 'Sending...'
-											: 'Signing in...'
-									: mode === 'register'
-										? 'Create account'
-										: mode === 'forgot'
-											? 'Send reset link'
-											: 'Sign in'}
-							</OrangeButton>
-						</form>
-					)}
-				</div>
+								{mode === 'register' && (
+									<div className="grid gap-1">
+										<label className="flex items-start gap-2 text-sm text-kumo-default">
+											<Checkbox
+												checked={agreeToTerms}
+												onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+												disabled={isLoading}
+												className="mt-0.5"
+											/>
+											<TermsAgreementLabel />
+										</label>
+										{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
+									</div>
+								)}
 
-				{/* Footer */}
-				<div className="px-6 pb-6 space-y-4">
+								<button
+									type="submit"
+									disabled={isLoading}
+									className={pillClass('blue', 'mt-2 h-12 w-full text-[15px] font-medium disabled:cursor-wait disabled:opacity-70')}
+								>
+									{isLoading
+										? mode === 'register'
+											? 'Creating account...'
+											: mode === 'forgot'
+												? 'Sending...'
+												: 'Signing in...'
+										: mode === 'register'
+											? 'Create account'
+											: mode === 'forgot'
+												? 'Send reset link'
+												: 'Sign in'}
+								</button>
+							</form>
+						)}
+					</div>
+
+					{/* Footer */}
 					{mode === 'forgot' && !resetLinkMessage && (
-						<div className="text-center">
-							<button
-								type="button"
-								onClick={() => switchMode('login')}
-								className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
-							>
+						<p className="mt-6 text-center text-sm">
+							<button type="button" onClick={() => switchMode('login')} className={TEXT_BUTTON}>
 								Back to sign in
 							</button>
-						</div>
+						</p>
 					)}
 
-					{/* Mode switching (only if registration is available) */}
+					{/* Switching between sign-in and sign-up, when registration is available */}
 					{mode !== 'forgot' && hasRegistration && hasEmailAuth && (
-						<div className="text-center">
+						<p className="mt-6 text-center text-sm text-kumo-subtle">
+							{mode === 'login' ? 'New to Estori? ' : 'Already have an account? '}
 							<button
 								type="button"
-								onClick={() =>
-									switchMode(
-										mode === 'login' ? 'register' : 'login',
-									)
-								}
-								className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
+								onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+								className={TEXT_BUTTON}
 							>
-								{mode === 'login'
-									? "Don't have an account? Sign up"
-									: 'Already have an account? Sign in'}
+								{mode === 'login' ? 'Create an account' : 'Sign in'}
 							</button>
-						</div>
+						</p>
 					)}
 				</div>
 			</Dialog>

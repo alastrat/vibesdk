@@ -1,6 +1,7 @@
 import { Cloud, CloudLaptop } from '@/components/public-site/CloudLaptop';
 import { HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
 import { cn } from '@/lib/utils';
+import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 
 /** 1Password's closing panel: big words on the left, a laptop on a cloud on the right, clouds drifting at the corners. */
 export function ClosingPanel() {
@@ -13,9 +14,7 @@ export function ClosingPanel() {
 					<h2 className={cn(HEADING_SECTION, 'max-w-xl text-balance text-public-ink')}>Your next store starts with a sentence.</h2>
 					<p className={cn(LEAD, 'mt-5 max-w-md text-public-ink/75')}>Describe it, watch it build, and publish it when it's ready.</p>
 					<div className="mt-10 flex flex-wrap gap-3">
-						<PillLink to="/signup" variant="blue">
-							Start building free
-						</PillLink>
+						<StartBuildingButton variant="blue" />
 						<PillLink to="/pricing" variant="outline-on-light">
 							View pricing
 						</PillLink>
