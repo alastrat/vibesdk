@@ -53,10 +53,11 @@ describe('every kind of seller', () => {
 		expect(band).toContain('<div ref={listRef} className="grid grid-cols-1 ');
 	});
 
-	it('keeps every story in its card for screen readers and phones; the pinned copy is visual only', () => {
+	it('pins only the heading and the index on the left; the story shows in each card on phones', () => {
 		const band = source(BAND);
 		expect(band).toMatch(/<div aria-hidden className="mt-10 hidden lg:block">/);
-		expect(band).toContain("'mt-4 text-pretty text-public-muted lg:sr-only'");
+		expect(band).not.toContain('current.story');
+		expect(band).toContain("'mt-4 text-pretty text-public-muted lg:hidden'");
 		expect(band).toContain('<TextLink to={seller.item.to}');
 	});
 

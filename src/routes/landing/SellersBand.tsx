@@ -62,7 +62,7 @@ export function SellersBand() {
 				<div className="lg:sticky lg:top-[calc(var(--public-header-h)+3rem)] lg:self-start">
 					<Eyebrow>Solutions</Eyebrow>
 					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>Estori for every kind of seller</h2>
-					{/* Repeats the card in view, so screen readers hear each story once, from its card. */}
+					{/* Marks the card in view; the cards carry the same names, so screen readers skip it. */}
 					<div aria-hidden className="mt-10 hidden lg:block">
 						<ol className="grid border-l border-public-line">
 							{SELLERS.filter((seller) => !seller.forCreators).map((seller) => (
@@ -76,15 +76,6 @@ export function SellersBand() {
 								<IndexEntry key={seller.id} seller={seller} active={seller === current} />
 							))}
 						</ol>
-						{current && (
-							<div key={current.id} className="mt-10 animate-public-rise">
-								<div className="flex flex-wrap items-center gap-3">
-									<p className={cn(HEADING_CARD, 'text-public-ink')}>{current.item.label}</p>
-									{current.item.capability && <CapabilityTag id={current.item.capability} />}
-								</div>
-								<p className={cn(LEAD, 'mt-4 text-pretty text-public-muted')}>{current.story}</p>
-							</div>
-						)}
 					</div>
 				</div>
 				<div ref={listRef} className="grid grid-cols-1 gap-16 lg:gap-28">
@@ -101,7 +92,8 @@ export function SellersBand() {
 								{seller.item.capability && <CapabilityTag id={seller.item.capability} />}
 							</div>
 							<p className="mt-3 text-[17px] font-light text-public-muted">{seller.item.description}</p>
-							<p className={cn(LEAD, 'mt-4 text-pretty text-public-muted lg:sr-only')}>{seller.story}</p>
+							{/* On phones nothing is pinned beside the card, so it tells its own story. */}
+							<p className={cn(LEAD, 'mt-4 text-pretty text-public-muted lg:hidden')}>{seller.story}</p>
 							<TextLink to={seller.item.to} className="mt-5">
 								Learn more
 							</TextLink>
