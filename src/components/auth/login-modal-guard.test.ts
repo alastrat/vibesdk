@@ -9,6 +9,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/auth/AuthModalProvider.tsx',
 		'/src/components/auth/AuthPageLayout.tsx',
 		'/src/components/public-site/StartBuildingButton.tsx',
+		'/src/contexts/auth-context.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -89,6 +90,12 @@ describe('signing in and up', () => {
 		expect(layout).toContain('<AuthPhoto view={view}');
 		expect(layout).toContain('<Link to="/" aria-label="Estori home"');
 		expect(layout).toContain('<h1');
+	});
+
+	it('checks which sign-in providers are on at every page load, so a newly enabled one shows without waiting', () => {
+		const auth = source('/src/contexts/auth-context.tsx');
+		const query = auth.slice(auth.indexOf('const providersQuery = useQuery({'), auth.indexOf('});', auth.indexOf('const providersQuery = useQuery({')));
+		expect(query).toContain("refetchOnMount: 'always'");
 	});
 
 	it('stacks above page content that sets its own z-index, such as the landing composer', () => {
