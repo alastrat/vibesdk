@@ -25,8 +25,22 @@ describe('sign-in window', () => {
 		expect(modal).toContain("const panelId: PanelId = mode === 'register' ? 'register' : 'login';");
 		expect(modal).toMatch(/<aside[^>]*className="[^"]*hidden[^"]*md:block/);
 		expect(modal).toContain('absolute inset-0 size-full object-cover');
-		expect(modal).toContain('<EstoriLogo');
+		expect(modal).not.toContain('<EstoriLogo');
 		expect(modal).toContain('font-public');
+	});
+
+	it('keeps sign-in and sign-up the same size, centring the shorter form', () => {
+		const modal = sources['/src/components/auth/login-modal.tsx'] ?? '';
+		expect(modal).toContain('h-[min(52rem,calc(100svh-2rem))]');
+		expect(modal).not.toContain('max-h-[calc(100svh');
+		expect(modal).toContain('<div className="my-auto">');
+	});
+
+	it('dims the page behind it more than other dialogs', () => {
+		const modal = sources['/src/components/auth/login-modal.tsx'] ?? '';
+		expect(modal).toContain('auth-dialog');
+		// Kumo's styled backdrop, not Base UI's bare one; focus guards sit between it and the window.
+		expect(indexCss).toMatch(/\[role='presentation'\]\[class\]:has\(~ \.auth-dialog\)\s*\{\s*background-color: rgb\(0 0 0 \/ 0\.6\);/);
 	});
 
 	it('leads with a dark Continue with Google button, above the other providers', () => {
@@ -39,6 +53,7 @@ describe('sign-in window', () => {
 	it('speaks as Estori, with the blue action of the public site', () => {
 		const modal = sources['/src/components/auth/login-modal.tsx'] ?? '';
 		expect(modal).toContain('Create your free account');
+		expect(modal).toContain('Sign in to keep building your internet empire.');
 		expect(modal).not.toContain('amazing applications');
 		expect(modal).not.toContain('Authentication required for this action');
 		expect(modal).not.toContain('OrangeButton');

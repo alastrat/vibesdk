@@ -10,7 +10,6 @@ import {
 	Dialog,
 	Input,
 } from '@cloudflare/kumo';
-import { EstoriLogo } from '@/brand';
 import { pillClass } from '@/components/public-site/primitives';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/auth-context';
@@ -303,7 +302,7 @@ export function LoginModal({
 				? 'Start building your store in minutes. No credit card needed.'
 				: actionContext
 					? 'Sign in, or create a free account, to continue.'
-					: 'Sign in to keep building your stores.';
+					: 'Sign in to keep building your internet empire.';
 
 	const bannerError = mode === 'forgot' ? forgotError : error;
 	const panelId: PanelId = mode === 'register' ? 'register' : 'login';
@@ -312,7 +311,7 @@ export function LoginModal({
 		<Dialog.Root open={isOpen} onOpenChange={handleOpenChange}>
 			<Dialog
 				size="xl"
-				className="top-1/2 flex max-h-[calc(100svh-2rem)] -translate-y-1/2 p-0 font-public sm:top-1/2 sm:w-[28rem] md:w-[56rem]"
+				className="auth-dialog top-1/2 flex h-[min(52rem,calc(100svh-2rem))] -translate-y-1/2 p-0 font-public sm:top-1/2 sm:w-[28rem] md:w-[56rem]"
 			>
 				{/* A photo filling the left column on wider screens; both load at once and cross-fade when the view changes. */}
 				<aside className="relative hidden w-[44%] shrink-0 overflow-hidden md:block">
@@ -335,7 +334,7 @@ export function LoginModal({
 					</div>
 				</aside>
 
-				<div className="relative min-w-0 flex-1 overflow-y-auto px-6 py-8 sm:px-10">
+				<div className="relative flex min-w-0 flex-1 flex-col overflow-y-auto px-6 py-8 sm:px-10">
 					{showCloseButton && (
 						<Dialog.Close
 							aria-label="Close dialog"
@@ -352,215 +351,217 @@ export function LoginModal({
 						/>
 					)}
 
-					<EstoriLogo className="h-7 w-auto text-public-brand dark:text-white" />
-					<Dialog.Title className="mt-6 text-[28px] leading-tight font-normal tracking-[-0.02em] text-kumo-default">
-						{title}
-					</Dialog.Title>
-					<Dialog.Description className="mt-2 text-[15px] text-kumo-subtle">
-						{description}
-					</Dialog.Description>
+					{/* Centred, so sign-in sits in the middle of the same-size window as the longer sign-up */}
+					<div className="my-auto">
+						<Dialog.Title className="text-[28px] leading-tight font-normal tracking-[-0.02em] text-kumo-default">
+							{title}
+						</Dialog.Title>
+						<Dialog.Description className="mt-2 text-[15px] text-kumo-subtle">
+							{description}
+						</Dialog.Description>
 
-					{bannerError && (
-						<div className="mt-6">
-							<Banner
-								variant="error"
-								icon={<WarningCircleIcon />}
-								title={bannerError}
-							/>
-						</div>
-					)}
-
-					{showProviders && (
-						<div className="mt-6 grid gap-3">
-							{showGoogle && (
-								<button type="button" onClick={() => handleOAuthClick('google')} className={GOOGLE_BUTTON}>
-									<GoogleLogo />
-									Continue with Google
-								</button>
-							)}
-							{showGitHub && (
-								<button type="button" onClick={() => handleOAuthClick('github')} className={PROVIDER_BUTTON}>
-									<GitHubLogo />
-									Continue with GitHub
-								</button>
-							)}
-							{showCloudflare && (
-								<button type="button" onClick={() => handleOAuthClick('cloudflare')} className={PROVIDER_BUTTON}>
-									<CloudflareLogo className="size-5" aria-hidden />
-									Continue with Cloudflare
-								</button>
-							)}
-						</div>
-					)}
-
-					{/* Divider, when both providers and email are offered */}
-					{hasEmailAuth && showProviders && (
-						<div className="my-5 flex items-center gap-3 text-xs text-kumo-subtle">
-							<span className="h-px flex-1 bg-kumo-line" />
-							or
-							<span className="h-px flex-1 bg-kumo-line" />
-						</div>
-					)}
-
-					<div className={showProviders && hasEmailAuth ? undefined : 'mt-6'}>
-						{/* Reset link requested: the server's answer replaces the form */}
-						{mode === 'forgot' && resetLinkMessage && (
-							<div className="grid gap-4">
+						{bannerError && (
+							<div className="mt-6">
 								<Banner
-									variant="default"
-									icon={<EnvelopeSimpleIcon />}
-									description={resetLinkMessage}
+									variant="error"
+									icon={<WarningCircleIcon />}
+									title={bannerError}
 								/>
-								<button type="button" onClick={() => switchMode('login')} className={PROVIDER_BUTTON}>
-									Back to sign in
-								</button>
 							</div>
 						)}
 
-						{/* Email and password */}
-						{hasEmailAuth && !(mode === 'forgot' && resetLinkMessage) && (
-							<form
-								onSubmit={handleSubmit}
-								className="flex w-full flex-col gap-3"
-							>
-								{mode === 'register' && (
-									<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
-										<Input
-											label="Full name"
-											type="text"
-											placeholder="Full name"
-											value={name}
-											onChange={(e) =>
-												setName(e.target.value)
-											}
-											error={validationErrors.name}
-											disabled={isLoading}
-											autoComplete="name"
-											className="w-full"
-										/>
-									</div>
+						{showProviders && (
+							<div className="mt-6 grid gap-3">
+								{showGoogle && (
+									<button type="button" onClick={() => handleOAuthClick('google')} className={GOOGLE_BUTTON}>
+										<GoogleLogo />
+										Continue with Google
+									</button>
 								)}
+								{showGitHub && (
+									<button type="button" onClick={() => handleOAuthClick('github')} className={PROVIDER_BUTTON}>
+										<GitHubLogo />
+										Continue with GitHub
+									</button>
+								)}
+								{showCloudflare && (
+									<button type="button" onClick={() => handleOAuthClick('cloudflare')} className={PROVIDER_BUTTON}>
+										<CloudflareLogo className="size-5" aria-hidden />
+										Continue with Cloudflare
+									</button>
+								)}
+							</div>
+						)}
 
-								<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
-									<Input
-										label="Email address"
-										type="email"
-										placeholder="Email address"
-										value={email}
-										onChange={(e) => setEmail(e.target.value)}
-										error={validationErrors.email}
-										disabled={isLoading}
-										autoComplete="email"
-										className="w-full"
+						{/* Divider, when both providers and email are offered */}
+						{hasEmailAuth && showProviders && (
+							<div className="my-5 flex items-center gap-3 text-xs text-kumo-subtle">
+								<span className="h-px flex-1 bg-kumo-line" />
+								or
+								<span className="h-px flex-1 bg-kumo-line" />
+							</div>
+						)}
+
+						<div className={showProviders && hasEmailAuth ? undefined : 'mt-6'}>
+							{/* Reset link requested: the server's answer replaces the form */}
+							{mode === 'forgot' && resetLinkMessage && (
+								<div className="grid gap-4">
+									<Banner
+										variant="default"
+										icon={<EnvelopeSimpleIcon />}
+										description={resetLinkMessage}
 									/>
+									<button type="button" onClick={() => switchMode('login')} className={PROVIDER_BUTTON}>
+										Back to sign in
+									</button>
 								</div>
+							)}
 
-								{mode !== 'forgot' && (
-									<PasswordField
-										label="Password"
-										value={password}
-										onChange={setPassword}
-										error={validationErrors.password}
-										disabled={isLoading}
-										autoComplete={
-											mode === 'register'
-												? 'new-password'
-												: 'current-password'
-										}
-										visible={showPassword}
-										onVisibleChange={setShowPassword}
-									/>
-								)}
+							{/* Email and password */}
+							{hasEmailAuth && !(mode === 'forgot' && resetLinkMessage) && (
+								<form
+									onSubmit={handleSubmit}
+									className="flex w-full flex-col gap-3"
+								>
+									{mode === 'register' && (
+										<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
+											<Input
+												label="Full name"
+												type="text"
+												placeholder="Full name"
+												value={name}
+												onChange={(e) =>
+													setName(e.target.value)
+												}
+												error={validationErrors.name}
+												disabled={isLoading}
+												autoComplete="name"
+												className="w-full"
+											/>
+										</div>
+									)}
 
-								{mode === 'login' && canResetPassword && (
-									<div className="-mt-1 flex justify-end">
-										<button
-											type="button"
-											onClick={openForgotPassword}
-											disabled={isLoading}
-											className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
-										>
-											Forgot password?
-										</button>
-									</div>
-								)}
-
-								{mode === 'register' && (
 									<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
 										<Input
-											label="Confirm password"
-											type="password"
-											placeholder="Confirm password"
-											value={confirmPassword}
-											onChange={(e) =>
-												setConfirmPassword(e.target.value)
-											}
-											error={validationErrors.confirmPassword}
+											label="Email address"
+											type="email"
+											placeholder="Email address"
+											value={email}
+											onChange={(e) => setEmail(e.target.value)}
+											error={validationErrors.email}
 											disabled={isLoading}
-											autoComplete="new-password"
+											autoComplete="email"
 											className="w-full"
 										/>
 									</div>
-								)}
 
-								{mode === 'register' && (
-									<div className="grid gap-1">
-										<label className="flex items-start gap-2 text-sm text-kumo-default">
-											<Checkbox
-												checked={agreeToTerms}
-												onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+									{mode !== 'forgot' && (
+										<PasswordField
+											label="Password"
+											value={password}
+											onChange={setPassword}
+											error={validationErrors.password}
+											disabled={isLoading}
+											autoComplete={
+												mode === 'register'
+													? 'new-password'
+													: 'current-password'
+											}
+											visible={showPassword}
+											onVisibleChange={setShowPassword}
+										/>
+									)}
+
+									{mode === 'login' && canResetPassword && (
+										<div className="-mt-1 flex justify-end">
+											<button
+												type="button"
+												onClick={openForgotPassword}
 												disabled={isLoading}
-												className="mt-0.5"
-											/>
-											<TermsAgreementLabel />
-										</label>
-										{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
-									</div>
-								)}
+												className="text-sm text-kumo-subtle hover:text-kumo-default transition-colors"
+											>
+												Forgot password?
+											</button>
+										</div>
+									)}
 
-								<button
-									type="submit"
-									disabled={isLoading}
-									className={pillClass('blue', 'mt-2 h-12 w-full text-[15px] font-medium disabled:cursor-wait disabled:opacity-70')}
-								>
-									{isLoading
-										? mode === 'register'
-											? 'Creating account...'
-											: mode === 'forgot'
-												? 'Sending...'
-												: 'Signing in...'
-										: mode === 'register'
-											? 'Create account'
-											: mode === 'forgot'
-												? 'Send reset link'
-												: 'Sign in'}
+									{mode === 'register' && (
+										<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
+											<Input
+												label="Confirm password"
+												type="password"
+												placeholder="Confirm password"
+												value={confirmPassword}
+												onChange={(e) =>
+													setConfirmPassword(e.target.value)
+												}
+												error={validationErrors.confirmPassword}
+												disabled={isLoading}
+												autoComplete="new-password"
+												className="w-full"
+											/>
+										</div>
+									)}
+
+									{mode === 'register' && (
+										<div className="grid gap-1">
+											<label className="flex items-start gap-2 text-sm text-kumo-default">
+												<Checkbox
+													checked={agreeToTerms}
+													onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+													disabled={isLoading}
+													className="mt-0.5"
+												/>
+												<TermsAgreementLabel />
+											</label>
+											{validationErrors.terms && <p className="text-xs text-kumo-danger">{validationErrors.terms}</p>}
+										</div>
+									)}
+
+									<button
+										type="submit"
+										disabled={isLoading}
+										className={pillClass('blue', 'mt-2 h-12 w-full text-[15px] font-medium disabled:cursor-wait disabled:opacity-70')}
+									>
+										{isLoading
+											? mode === 'register'
+												? 'Creating account...'
+												: mode === 'forgot'
+													? 'Sending...'
+													: 'Signing in...'
+											: mode === 'register'
+												? 'Create account'
+												: mode === 'forgot'
+													? 'Send reset link'
+													: 'Sign in'}
+									</button>
+								</form>
+							)}
+						</div>
+
+						{/* Footer */}
+						{mode === 'forgot' && !resetLinkMessage && (
+							<p className="mt-6 text-center text-sm">
+								<button type="button" onClick={() => switchMode('login')} className={TEXT_BUTTON}>
+									Back to sign in
 								</button>
-							</form>
+							</p>
+						)}
+
+						{/* Switching between sign-in and sign-up, when registration is available */}
+						{mode !== 'forgot' && hasRegistration && hasEmailAuth && (
+							<p className="mt-6 text-center text-sm text-kumo-subtle">
+								{mode === 'login' ? 'New to Estori? ' : 'Already have an account? '}
+								<button
+									type="button"
+									onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+									className={TEXT_BUTTON}
+								>
+									{mode === 'login' ? 'Create an account' : 'Sign in'}
+								</button>
+							</p>
 						)}
 					</div>
-
-					{/* Footer */}
-					{mode === 'forgot' && !resetLinkMessage && (
-						<p className="mt-6 text-center text-sm">
-							<button type="button" onClick={() => switchMode('login')} className={TEXT_BUTTON}>
-								Back to sign in
-							</button>
-						</p>
-					)}
-
-					{/* Switching between sign-in and sign-up, when registration is available */}
-					{mode !== 'forgot' && hasRegistration && hasEmailAuth && (
-						<p className="mt-6 text-center text-sm text-kumo-subtle">
-							{mode === 'login' ? 'New to Estori? ' : 'Already have an account? '}
-							<button
-								type="button"
-								onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
-								className={TEXT_BUTTON}
-							>
-								{mode === 'login' ? 'Create an account' : 'Sign in'}
-							</button>
-						</p>
-					)}
 				</div>
 			</Dialog>
 		</Dialog.Root>
