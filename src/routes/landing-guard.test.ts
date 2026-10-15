@@ -93,11 +93,23 @@ describe('landing page', () => {
 		expect(showcase).toContain('id="discover"');
 	});
 
+	it('shows the store names right under the build box, above the builder demo, inside the hero', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		const build = hero.indexOf('id="build"');
+		const logos = hero.indexOf('<StoreLogos stores={stores} />');
+		const demo = hero.indexOf('<BuilderDemo />');
+		expect(build).toBeGreaterThan(-1);
+		expect(logos).toBeGreaterThan(build);
+		expect(demo).toBeGreaterThan(logos);
+		expect(source('/src/routes/landing/LandingPage.tsx')).not.toContain('<StoreLogos');
+		// Inside the charcoal hero, the strip has no background or divider of its own.
+		expect(source('/src/routes/landing/StoreLogos.tsx')).not.toMatch(/<section[^>]*(bg-public-charcoal|border-b)/);
+	});
+
 	it('lays the page out in the approved order', () => {
 		const page = source('/src/routes/landing/LandingPage.tsx');
 		const order = [
-			'<Hero />',
-			'<StoreLogos',
+			'<Hero stores={stores} />',
 			'<AgenticCommerceSection />',
 			'<OperationsSection />',
 			'<PersonalizationSection />',

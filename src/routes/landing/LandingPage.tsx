@@ -6,7 +6,6 @@ import { Features } from './Features';
 import { Hero } from './Hero';
 import { LivePreview } from './LivePreview';
 import { SellersBand } from './SellersBand';
-import { StoreLogos } from './StoreLogos';
 import { StoreShowcase } from './StoreShowcase';
 import { ClosingPanel, PricingSummary } from './sections';
 
@@ -19,8 +18,7 @@ export function LandingPage() {
 				name="description"
 				content="Estori is the agentic commerce platform: build your store with AI today, with selling through AI assistants and operations agents coming soon."
 			/>
-			<Hero />
-			<StoreLogos stores={stores} />
+			<Hero stores={stores} />
 			<AgenticCommerceSection />
 			<OperationsSection />
 			<PersonalizationSection />

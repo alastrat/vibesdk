@@ -5,7 +5,9 @@ import { AnimatedList } from '@/components/magicui/animated-list';
 import { BorderBeam } from '@/components/magicui/border-beam';
 import { Safari } from '@/components/magicui/safari';
 import { Eyebrow, HEADING_HERO, LEAD } from '@/components/public-site/primitives';
+import type { ShowcaseStore } from '@/lib/showcase';
 import { cn } from '@/lib/utils';
+import { StoreLogos } from './StoreLogos';
 
 const STORE_PHRASES = ['a specialty coffee store', 'a handmade ceramics shop', 'a streetwear store', 'a plant shop with local delivery', 'a vintage camera store'];
 
@@ -15,7 +17,7 @@ const BUILD_STEPS = ['Catalog with 12 roasts', 'Product pages and filters', 'Car
 /** A store built on Estori, bundled so the hero never depends on what Discover holds. */
 export const HERO_STORE_IMAGE = '/marketing/hero-store.jpg';
 
-export function Hero() {
+export function Hero({ stores }: { stores: readonly ShowcaseStore[] }) {
 	return (
 		<section className="overflow-x-clip bg-public-charcoal text-white">
 			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
@@ -41,6 +43,7 @@ export function Hero() {
 					</Link>
 				</div>
 			</div>
+			<StoreLogos stores={stores} />
 			<BuilderDemo />
 		</section>
 	);
