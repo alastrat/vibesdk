@@ -1,7 +1,6 @@
 import type { ReactNode, Ref } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
-import { ComingSoon } from '@/components/marketing/ComingSoon';
 import { DeviceSwitch, FeatureArt, PreviewArt, PreviewStory } from '@/components/public-site/feature-art';
 import { Eyebrow, HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
 import { STORE_FEATURES, type StoreFeature } from '@/content/positioning';
@@ -22,16 +21,18 @@ function FeatureCard({ feature, art, aside, storyRef }: { feature: StoreFeature;
 				<div className="flex flex-col items-start gap-3 p-7">
 					<h3 className="text-[19px] leading-snug font-medium text-public-ink">{feature.title}</h3>
 					<p className="text-[15px] leading-relaxed font-light text-public-muted">{feature.body}</p>
-					<div className="mt-3 flex w-full items-center justify-between gap-3">
-						<Link
-							to={feature.link.to}
-							className="inline-flex items-center gap-2 text-[15px] font-medium text-public-ink after:absolute after:inset-0 after:rounded-[16px] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-public-blue"
-						>
-							{feature.link.label}
-							<span className="grid size-6 place-items-center rounded-[5px] transition-colors duration-300 group-hover:bg-public-blue group-hover:text-white motion-reduce:transition-none">
-								<ArrowRightIcon weight="bold" className="size-3.5" />
-							</span>
-						</Link>
+					<div className="mt-3 flex min-h-6 w-full items-center justify-between gap-3">
+						{feature.link && (
+							<Link
+								to={feature.link.to}
+								className="inline-flex items-center gap-2 text-[15px] font-medium text-public-ink after:absolute after:inset-0 after:rounded-[16px] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-public-blue"
+							>
+								{feature.link.label}
+								<span className="grid size-6 place-items-center rounded-[5px] transition-colors duration-300 group-hover:bg-public-blue group-hover:text-white motion-reduce:transition-none">
+									<ArrowRightIcon weight="bold" className="size-3.5" />
+								</span>
+							</Link>
+						)}
 						{aside}
 					</div>
 				</div>
@@ -44,9 +45,9 @@ function FeatureCard({ feature, art, aside, storyRef }: { feature: StoreFeature;
 type SectionTone = 'light' | 'dark';
 
 /** The section around the cards: white as on Vori, or the charcoal the landing page used before. */
-const TONES: Readonly<Record<SectionTone, { section: string; heading: string; lead: string; action: 'blue' | 'white'; note: string }>> = {
-	light: { section: 'border-t border-public-line bg-white', heading: 'text-public-ink', lead: 'text-public-muted', action: 'blue', note: 'text-public-muted' },
-	dark: { section: 'bg-public-charcoal', heading: 'text-white', lead: 'text-white/80', action: 'white', note: 'text-white/75' },
+const TONES: Readonly<Record<SectionTone, { section: string; heading: string; lead: string; action: 'blue' | 'white' }>> = {
+	light: { section: 'border-t border-public-line bg-white', heading: 'text-public-ink', lead: 'text-public-muted', action: 'blue' },
+	dark: { section: 'bg-public-charcoal', heading: 'text-white', lead: 'text-white/80', action: 'white' },
 };
 
 /** What every store has today, in Vori's layout: the heading on the left, the action on the right, and six cards. */
@@ -86,9 +87,6 @@ export function Features({ tone = 'light' }: { tone?: SectionTone }) {
 						),
 					)}
 				</div>
-				<p className={cn('mt-14 flex flex-wrap items-center gap-3 text-sm', colors.note)}>
-					Accept payments in your store <ComingSoon tone={tone} />
-				</p>
 			</div>
 		</section>
 	);

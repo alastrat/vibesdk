@@ -71,12 +71,19 @@ describe('store builder features', () => {
 
 	it('puts the device switch on the link row, so the preview pictures sit higher, in step with the switch', () => {
 		const section = source(SECTION);
-		expect(section).toContain('<div className="mt-3 flex w-full items-center justify-between gap-3">');
+		expect(section).toContain('<div className="mt-3 flex min-h-6 w-full items-center justify-between gap-3">');
 		expect(section).toContain('aside={<DeviceSwitch phone={phone} />}');
 		expect(section).toContain('art={<PreviewArt phone={phone} />}');
 		// One story drives both, so they never drift apart.
 		expect(source(ART)).toContain('export function PreviewStory(');
 		expect(source(ART)).toContain('useStory<HTMLElement>(PREVIEW_BEATS)');
+	});
+
+	it('calls the Discover card Start with a Template', () => {
+		const discover = STORE_FEATURES.find((feature) => feature.id === 'discover');
+		expect(discover?.title).toBe('Start with a Template');
+		expect(discover?.tag).toBe('Templates');
+		expect(discover?.link?.to).toBe('/discover');
 	});
 
 	it('starts from the community garden store in Discover', () => {
@@ -87,8 +94,14 @@ describe('store builder features', () => {
 		expect(Object.keys(DISCOVER_FILES)).toEqual(['/public/marketing/discover-garden.webp']);
 	});
 
-	it('keeps payments marked as coming soon', () => {
-		expect(source(SECTION)).toContain('Accept payments in your store <ComingSoon tone={tone} />');
+	it('ends with the cards: no payments note, and no Start building link on the preview card', () => {
+		const section = source(SECTION);
+		expect(section).not.toContain('Accept payments');
+		expect(section).not.toContain('ComingSoon');
+		const preview = STORE_FEATURES.find((feature) => feature.id === 'preview');
+		expect(preview?.link).toBeUndefined();
+		// Without a link, the card shows the switch where the others show theirs.
+		expect(section).toContain('{feature.link && (');
 	});
 
 	it('draws a small moving picture for each feature with the shared art kit', () => {

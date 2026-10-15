@@ -225,7 +225,7 @@ describe('landing page', () => {
 	});
 
 	it("doesn't promise store payments, and states the seller fee from the code", () => {
-		expect(landing).toContain('<ComingSoon');
+		expect(landing).not.toMatch(/accept payments|take payments today/i);
 		expect(landing).toContain('PLATFORM_FEE_LABEL');
 		expect(landing).not.toMatch(/7% \+ \$0\.60/);
 	});

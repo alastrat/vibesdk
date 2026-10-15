@@ -207,7 +207,8 @@ export type StoreFeatureId = 'catalog' | 'checkout' | 'orders' | 'chat' | 'previ
 export interface StoreFeature extends CardCopy {
 	id: StoreFeatureId;
 	tag: string;
-	link: { to: string; label: string };
+	/** Where the card leads; the preview card has none, its device switch takes the link's place. */
+	link?: { to: string; label: string };
 }
 
 export const STORE_FEATURES: readonly StoreFeature[] = [
@@ -244,12 +245,11 @@ export const STORE_FEATURES: readonly StoreFeature[] = [
 		tag: 'Live preview',
 		title: 'Desktop and phone preview',
 		body: 'Every store works on both, and you watch every change live on each before you share it.',
-		link: { to: '/#build', label: 'Start building' },
 	},
 	{
 		id: 'discover',
-		tag: 'Discover',
-		title: 'Start from Discover',
+		tag: 'Templates',
+		title: 'Start with a Template',
 		body: 'Pick a store someone built, get your own copy and make it yours by chatting.',
 		link: { to: '/discover', label: 'Browse Discover' },
 	},
