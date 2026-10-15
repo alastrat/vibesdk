@@ -1,7 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react';
+import { REDUCED_MOTION_QUERY } from '@/lib/motion';
 import { canGrow, GROW_TRACK_EXTRA, growLayout, growProgress, type GrowGeometry } from '@/lib/scroll-grow';
-
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
 
 export interface ScrollGrowSizes {
 	track: number;
@@ -38,7 +37,7 @@ export function useScrollGrow() {
 		if (!track || !stage || !panel || !card || !frame) return;
 		const scroller = scrollParent(stage);
 		const scrollsDocument = scroller === document.documentElement;
-		const motion = window.matchMedia(REDUCED_MOTION);
+		const motion = window.matchMedia(REDUCED_MOTION_QUERY);
 		let geometry: GrowGeometry | null = null;
 		let pinTop = 0;
 		let growing = false;

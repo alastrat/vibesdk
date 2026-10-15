@@ -100,7 +100,7 @@ describe('landing page', () => {
 
 	it('scrolls the demo smoothly, and keeps it still for reduced motion or a window too short to show it', () => {
 		const hook = source('/src/hooks/use-scroll-grow.ts');
-		expect(hook).toContain("'(prefers-reduced-motion: reduce)'");
+		expect(hook).toContain('window.matchMedia(REDUCED_MOTION_QUERY)');
 		expect(hook).toContain('canGrow(geometry)');
 		expect(hook).toContain('requestAnimationFrame(apply)');
 		expect(hook).toContain("addEventListener('scroll', schedule, { passive: true })");
@@ -161,8 +161,6 @@ describe('landing page', () => {
 			'<Features />',
 			'<SellersBand />',
 			'<LivePreview />',
-			'<PricingSummary />',
-			'<PublicFaq />',
 			'<ClosingPanel />',
 		];
 		const positions = order.map((tag) => page.indexOf(tag));
@@ -170,10 +168,28 @@ describe('landing page', () => {
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 	});
 
-	it('uses the 1Password layout: charcoal features and a charcoal closing panel', () => {
+	it('leaves pricing and the questions to the pricing page', () => {
+		const page = source('/src/routes/landing/LandingPage.tsx');
+		expect(page).not.toContain('<PricingSummary');
+		expect(page).not.toContain('<PublicFaq');
+		expect(source('/src/routes/landing/sections.tsx')).not.toContain('export function PricingSummary');
+	});
+
+	it('uses the 1Password layout: charcoal features, and a light blue closing panel with a laptop on a cloud', () => {
 		expect(source('/src/routes/landing/Features.tsx')).toContain('bg-public-charcoal');
 		const sections = source('/src/routes/landing/sections.tsx');
-		expect(sections.slice(sections.indexOf('export function ClosingPanel'))).toContain('bg-public-charcoal');
+		const closing = sections.slice(sections.indexOf('export function ClosingPanel'));
+		expect(closing).toContain('rounded-[25px] bg-[#dce9fc]');
+		expect(closing).toContain('<CloudLaptop />');
+		expect(closing).toContain('Your next store starts with a sentence.');
+		expect(closing).toContain('Start building free');
+		expect(source('/src/components/public-site/CloudLaptop.tsx')).toMatch(/^\s*<svg aria-hidden /m);
+	});
+
+	it('closes with our own words, not a customer review we do not have', () => {
+		const sections = source('/src/routes/landing/sections.tsx');
+		const closing = sections.slice(sections.indexOf('export function ClosingPanel'));
+		expect(closing).not.toMatch(/[\u201c\u201d]|review|<blockquote/i);
 	});
 
 	it('shows the live preview on bundled desktop and phone images', () => {

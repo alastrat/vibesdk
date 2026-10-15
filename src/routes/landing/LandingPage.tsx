@@ -1,14 +1,13 @@
 import { pageTitle } from '@/brand';
 import { AssistantsPanel } from '@/components/public-site/AssistantsPanel';
 import { AgenticCommerceSection, PersonalizationSection } from '@/components/public-site/capability-sections';
-import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
 import { Features } from './Features';
 import { Hero } from './Hero';
 import { LivePreview } from './LivePreview';
 import { SellersBand } from './SellersBand';
 import { StoreShowcase } from './StoreShowcase';
-import { ClosingPanel, PricingSummary } from './sections';
+import { ClosingPanel } from './sections';
 
 export function LandingPage() {
 	const stores = useShowcaseStores().data ?? [];
@@ -30,8 +29,6 @@ export function LandingPage() {
 			<Features />
 			<SellersBand />
 			<LivePreview />
-			<PricingSummary />
-			<PublicFaq />
 			<ClosingPanel />
 		</>
 	);

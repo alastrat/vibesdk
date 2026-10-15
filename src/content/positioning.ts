@@ -45,12 +45,17 @@ export const STORE_ASSISTANTS: readonly StoreAssistant[] = [
 	{ id: 'marketing', name: 'Marketing assistant', title: 'Bring shoppers back', body: 'Reminds shoppers who left items in their cart and sends offers to your repeat customers.' },
 ];
 
-export const PERSONALIZATION_CARDS: readonly CardCopy[] = [
-	{ title: 'Recommendations', body: 'Each shopper sees products that fit what they browse and buy.' },
-	{ title: 'Smart cart', body: 'The cart suggests what goes well with what is already in it.' },
-	{ title: 'Bundles', body: 'Products that sell together are offered together.' },
-	{ title: 'Post-purchase offers', body: 'A relevant offer right after checkout, while the shopper is still with you.' },
-	{ title: 'AI search', body: 'Shoppers describe what they want and find it, even without the exact words.' },
+export type ShopperCardId = 'picks' | 'cart' | 'offer' | 'search';
+
+export interface ShopperCard extends CardCopy {
+	id: ShopperCardId;
+}
+
+export const PERSONALIZATION_CARDS: readonly ShopperCard[] = [
+	{ id: 'picks', title: 'Products picked for each shopper', body: 'Each shopper sees products that fit what they browse and buy.' },
+	{ id: 'cart', title: 'A cart that suggests what goes with it', body: "Add-ons and bundles that go with what's already in the cart." },
+	{ id: 'offer', title: 'An offer right after checkout', body: 'A relevant offer right after checkout, while the shopper is still with you.' },
+	{ id: 'search', title: 'Search that understands shoppers', body: 'Shoppers describe what they want and find it, even without the exact words.' },
 ];
 
 export const AGENTIC_BASICS_CARDS: readonly CardCopy[] = [

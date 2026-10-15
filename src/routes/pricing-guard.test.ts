@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-const sources = import.meta.glob<string>(['/src/routes/pricing.tsx', '/src/routes.tsx', '/src/routes/landing/sections.tsx'], {
+const sources = import.meta.glob<string>(['/src/routes/pricing.tsx', '/src/routes.tsx'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -73,15 +73,5 @@ describe('pricing page', () => {
 		expect(page).toContain('bg-public-charcoal');
 		expect(page).toContain('<PublicFaq />');
 		expect(page).not.toContain('kumo-');
-	});
-});
-
-describe('landing pricing summary', () => {
-	it('shows the same plans from the same data', () => {
-		const sections = source('/src/routes/landing/sections.tsx');
-		const summary = sections.slice(sections.indexOf('export function PricingSummary'), sections.indexOf('export function ClosingPanel'));
-		expect(summary).toContain('PLANS.map');
-		expect(summary).toContain('<PlanPrice');
-		expect(summary).toContain('<ComingSoon />');
 	});
 });
