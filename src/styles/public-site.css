@@ -33,6 +33,8 @@
 	--animate-public-menu-in: public-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 	--animate-public-underline: public-underline-fill 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
 	--animate-public-menu-item: public-menu-item 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	/* A carousel tab's progress bar; when it ends, the next slide shows. */
+	--animate-public-autoplay: public-autoplay 6s linear;
 
 	@keyframes public-rise {
 		from {
@@ -95,6 +97,14 @@
 		from {
 			opacity: 0;
 			transform: translateY(-6px);
+		}
+	}
+	@keyframes public-autoplay {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
 		}
 	}
 	@keyframes public-underline-fill {

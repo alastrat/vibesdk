@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import publicCss from '../styles/public-site.css?raw';
 
 const sources = import.meta.glob<string>(
 	[
@@ -6,6 +7,8 @@ const sources = import.meta.glob<string>(
 		'/src/routes/industries/IndustryPage.tsx',
 		'/src/routes/industries/IndustriesPage.tsx',
 		'/src/components/public-site/IndustryCards.tsx',
+		'/src/components/public-site/FeatureCarousel.tsx',
+		'/src/components/public-site/FeaturePreview.tsx',
 		'/src/components/public-site/solution-page.tsx',
 		'/src/components/public-site/JsonLd.tsx',
 		'/src/components/layout/NavMenu.tsx',
@@ -25,6 +28,7 @@ function source(path: string): string {
 const PAGE = '/src/routes/industries/IndustryPage.tsx';
 const HUB = '/src/routes/industries/IndustriesPage.tsx';
 const NAV = '/src/components/layout/NavMenu.tsx';
+const CAROUSEL = '/src/components/public-site/FeatureCarousel.tsx';
 
 describe('industry pages', () => {
 	it('has a page per industry, and a page that lists them all, in the public site', () => {
@@ -33,12 +37,53 @@ describe('industry pages', () => {
 		expect(routes).toMatch(/path: 'industries',\s*Component: IndustriesPage,/);
 	});
 
-	it('uses the solution page template, with example requests and what the stores can include', () => {
+	it('uses the solution page template, with example requests, then what the stores can include as a carousel', () => {
 		const page = source(PAGE);
-		for (const part of ['<SolutionHero', 'industry.prompts.map', 'cards={industry.features}', 'cards={TODAY_CARDS}', '<HowItWorks', '<ClosingPanel']) {
-			expect(page, part).toContain(part);
-		}
+		for (const part of ['<SolutionHero', 'industry.prompts.map', '<ClosingPanel']) expect(page, part).toContain(part);
+		const carousel = page.indexOf('<FeatureCarousel title={`What your ${industry.store} can include`} features={industry.features} />');
+		expect(carousel).toBeGreaterThan(page.indexOf('industry.prompts.map'));
+		expect(carousel).toBeLessThan(page.indexOf('<PublicFaq'));
+		// What every store comes with, and how it works, belong on the general pages, not each industry's.
+		for (const gone of ['TODAY_CARDS', '<HowItWorks', '<CardSection']) expect(page, gone).not.toContain(gone);
 		expect(page).toContain("We couldn't find that industry");
+	});
+
+	it("plays the features as Rebuy's carousel: tabs that fill and advance on their own, pausing on hover, focus or off screen", () => {
+		const carousel = source(CAROUSEL);
+		for (const part of [
+			'role="tablist"',
+			'role="tab"',
+			'aria-selected={',
+			'role="tabpanel"',
+			'animate-public-autoplay',
+			'onAnimationEnd=',
+			"'ArrowRight'",
+			"'ArrowLeft'",
+			'[animation-play-state:paused]',
+			'new IntersectionObserver(',
+		]) {
+			expect(carousel, part).toContain(part);
+		}
+		expect(publicCss).toMatch(/--animate-public-autoplay: public-autoplay 6s linear/);
+		expect(publicCss).toMatch(/@keyframes public-autoplay \{\s*from \{\s*transform: scaleX\(0\);/);
+	});
+
+	it("shows each feature's photo with a drawn piece of the store over it, beside a panel in the feature's color", () => {
+		const carousel = source(CAROUSEL);
+		for (const part of [
+			'srcSet={industryPhotoSrcSet(feature.photo)}',
+			'loading="lazy"',
+			'alt={feature.photo.alt}',
+			'<FeaturePreview preview={feature.preview} />',
+			'style={{ backgroundColor: feature.accent }}',
+			'{feature.request}',
+			'Photo by {feature.photo.photographer} on Unsplash',
+			'<StartBuildingButton variant="outline-on-dark"',
+		]) {
+			expect(carousel, part).toContain(part);
+		}
+		const preview = source('/src/components/public-site/FeaturePreview.tsx');
+		for (const kind of ['swatches', 'options', 'table', 'list', 'bundle']) expect(preview, kind).toContain(`case '${kind}':`);
 	});
 
 	it('shows the industry photo under the hero, sized for each screen and credited to its photographer', () => {

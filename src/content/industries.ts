@@ -27,6 +27,24 @@ export interface TextFaqItem extends FaqItem {
 	answer: string;
 }
 
+/** The piece of a store drawn over a feature's photo: what a shopper would see once the feature is built. */
+export type StorePreview =
+	| { kind: 'swatches'; title: string; swatches: readonly string[]; selected: number; caption: string }
+	| { kind: 'options'; title: string; options: readonly string[]; selected: number; caption?: string }
+	| { kind: 'table'; title: string; rows: readonly (readonly [string, string])[] }
+	| { kind: 'list'; title: string; items: readonly string[]; style: 'steps' | 'checks' | 'plain' }
+	| { kind: 'bundle'; title: string; items: readonly string[]; price: string };
+
+/** Something an industry's stores can include, as a slide of the page's carousel. */
+export interface IndustryFeature extends CardCopy {
+	/** What a seller would ask Estori for to get it, in their own words. */
+	request: string;
+	photo: IndustryPhoto;
+	/** The slide's panel color, dark enough for white text. */
+	accent: string;
+	preview: StorePreview;
+}
+
 /**
  * The verticals Estori speaks to, each with its own page. There is no catch-all "E-commerce" entry: every Estori store
  * is an online store, so each industry names a kind of seller instead.
@@ -49,7 +67,7 @@ export interface Industry {
 	/** What a seller in this industry might ask Estori for, in their own words. */
 	prompts: readonly string[];
 	/** What this industry's stores can include; each is something to ask Estori for. */
-	features: readonly CardCopy[];
+	features: readonly IndustryFeature[];
 	/** Questions only this industry asks; industryFaq adds the ones every industry shares. */
 	questions: readonly TextFaqItem[];
 }
@@ -81,9 +99,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			"A men's grooming store with starter kits and a how-to page for each product.",
 		],
 		features: [
-			{ title: 'Shades and skin types', body: 'Ask for swatches, shade finders or skin-type filters, and Estori adds them to your catalog.' },
-			{ title: 'Routines and kits', body: 'Group products into step-by-step routines and gift sets, each with its own page.' },
-			{ title: 'Ingredients up front', body: 'Give every product a clear ingredients list and how-to-use notes.' },
+			{
+				title: 'Shades and skin types',
+				body: 'Ask for swatches, shade finders or skin-type filters, and Estori adds them to your catalog.',
+				request: 'Add a shade finder that matches each foundation to warm, cool or neutral undertones.',
+				photo: {
+					src: '/marketing/industries/features/beauty-personal-care-shades.webp',
+					alt: 'Makeup brushes beside an open eyeshadow palette in warm shades on a grey surface',
+					photographer: 'Kelly Sikkema',
+					url: 'https://unsplash.com/photos/brown-and-black-makeup-palette-47x_lN_VAFw',
+				},
+				accent: '#4a3b35',
+				preview: { kind: 'swatches', title: 'Find your shade', swatches: ['#f3d6c1', '#e8bf9f', '#d4a07a', '#b9825c', '#8d5a3b', '#5e3a26'], selected: 2, caption: '3W: medium, warm undertone' },
+			},
+			{
+				title: 'Routines and kits',
+				body: 'Group products into step-by-step routines and gift sets, each with its own page.',
+				request: 'Build a night routine page that walks through cleanser, serum and moisturizer, with each product linked.',
+				photo: {
+					src: '/marketing/industries/features/beauty-personal-care-routines.webp',
+					alt: 'Drops of serum, oil and cream on a peach background with green leaves',
+					photographer: 'ibnu ihza',
+					url: 'https://unsplash.com/photos/skincare-products-with-leaves-on-a-light-background-g6q3lFAe3kA',
+				},
+				accent: '#2f5a3f',
+				preview: { kind: 'list', title: 'Night routine', items: ['Gentle cleanser', 'Vitamin C serum', 'Barrier cream'], style: 'steps' },
+			},
+			{
+				title: 'Ingredients up front',
+				body: 'Give every product a clear ingredients list and how-to-use notes.',
+				request: "Show every product's full ingredients list, with a short note on what each key ingredient does.",
+				photo: {
+					src: '/marketing/industries/features/beauty-personal-care-ingredients.webp',
+					alt: 'An amber glass dropper bottle with a blank label standing on a concrete block',
+					photographer: 'Avtar Singh',
+					url: 'https://unsplash.com/photos/amber-glass-dropper-bottle-with-blank-label-on-concrete-block-MkuwnDkT1s0',
+				},
+				accent: '#6a3f1d',
+				preview: { kind: 'table', title: 'Key ingredients', rows: [['Niacinamide', 'Evens tone'], ['Hyaluronic acid', 'Holds moisture'], ['Squalane', 'Softens skin']] },
+			},
 		],
 		questions: [
 			{
@@ -120,9 +174,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			"A kids' clothing store organized by age, with back-to-school bundles.",
 		],
 		features: [
-			{ title: 'Sizes and fit', body: 'Add size charts and fit notes to every product, and let shoppers pick size and color.' },
-			{ title: 'Collections and drops', body: 'Organize products into seasonal collections, new arrivals and limited drops.' },
-			{ title: 'Lookbooks', body: 'Show outfits on editorial pages that link to every piece in them.' },
+			{
+				title: 'Sizes and fit',
+				body: 'Add size charts and fit notes to every product, and let shoppers pick size and color.',
+				request: 'Add a size chart and fit notes to every product, and let shoppers pick a size and color before adding to cart.',
+				photo: {
+					src: '/marketing/industries/features/fashion-apparel-sizes.webp',
+					alt: 'Two cloth measuring tapes lying on a bright pink surface',
+					photographer: 'Ekaterina Grosheva',
+					url: 'https://unsplash.com/photos/a-group-of-measuring-tape-sitting-on-top-of-a-pink-surface-F9_xTexVoME',
+				},
+				accent: '#7a1f45',
+				preview: { kind: 'options', title: 'Size', options: ['XS', 'S', 'M', 'L', 'XL'], selected: 2, caption: 'Fits true to size. Model wears M.' },
+			},
+			{
+				title: 'Collections and drops',
+				body: 'Organize products into seasonal collections, new arrivals and limited drops.',
+				request: "Create a page for Friday's drop with a countdown, and move it to New arrivals when it goes live.",
+				photo: {
+					src: '/marketing/industries/features/fashion-apparel-drops.webp',
+					alt: 'Five jackets and a hat hanging on a clothing rack against a white wall',
+					photographer: 'Amanda Vick',
+					url: 'https://unsplash.com/photos/one-cowboy-hat-and-five-jackets-hanged-on-clothes-rack-ohWf6YuzOQk',
+				},
+				accent: '#3d3f4a',
+				preview: { kind: 'list', title: 'Drop 04, Friday at 10am', items: ['Waxed field jacket', 'Denim overshirt', 'Wool chore coat'], style: 'plain' },
+			},
+			{
+				title: 'Lookbooks',
+				body: 'Show outfits on editorial pages that link to every piece in them.',
+				request: 'Make a spring lookbook where every outfit links to each piece in it.',
+				photo: {
+					src: '/marketing/industries/features/fashion-apparel-lookbooks.webp',
+					alt: 'A woman with braided hair in a red outfit sitting against a clear blue sky',
+					photographer: 'Marjan Taghipour',
+					url: 'https://unsplash.com/photos/woman-in-red-outfit-against-sky-1tjMpBTvFAA',
+				},
+				accent: '#1f3a6e',
+				preview: { kind: 'list', title: 'Shop the look', items: ['Red linen set', 'Gold hoops', 'Canvas sneakers'], style: 'plain' },
+			},
 		],
 		questions: [
 			{
@@ -159,9 +249,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			'A herbal tea brand with blends organized by mood and time of day.',
 		],
 		features: [
-			{ title: 'Clear product details', body: 'Give every product its ingredients, suggested use and questions, written in your voice.' },
-			{ title: 'Starter sets', body: 'Pair products into starter sets and bundles, each with its own page.' },
-			{ title: 'Guides that link to products', body: 'Add guides that explain your products and link straight to them.' },
+			{
+				title: 'Clear product details',
+				body: 'Give every product its ingredients, suggested use and questions, written in your voice.',
+				request: 'Give each supplement a facts table, suggested use and answers to common questions.',
+				photo: {
+					src: '/marketing/industries/features/health-wellness-details.webp',
+					alt: 'Beige capsules spilled from a white bottle beside green pine needles',
+					photographer: 'Supliful',
+					url: 'https://unsplash.com/photos/beige-capsules-and-pine-needles-UTPZnnEVW4E',
+				},
+				accent: '#35503a',
+				preview: { kind: 'table', title: 'Supplement facts', rows: [['Serving', '2 capsules'], ['Magnesium', '200 mg'], ['Vitamin D3', '25 mcg']] },
+			},
+			{
+				title: 'Starter sets',
+				body: 'Pair products into starter sets and bundles, each with its own page.',
+				request: 'Bundle a mat, a block and a towel into a yoga starter set with its own page.',
+				photo: {
+					src: '/marketing/industries/features/health-wellness-sets.webp',
+					alt: 'A pink yoga block, two small dumbbells and a towel on a pink exercise mat',
+					photographer: 'Elena Kloppenburg',
+					url: 'https://unsplash.com/photos/pink-dumbbell-on-pink-textile-erUC4fTtCuo',
+				},
+				accent: '#7a2a3a',
+				preview: { kind: 'bundle', title: 'Yoga starter set', items: ['Cork block', 'Non-slip mat', 'Microfiber towel'], price: 'Save 15%' },
+			},
+			{
+				title: 'Guides that link to products',
+				body: 'Add guides that explain your products and link straight to them.',
+				request: 'Write an evening tea guide that suggests a blend for each mood and links to it.',
+				photo: {
+					src: '/marketing/industries/features/health-wellness-guides.webp',
+					alt: 'A cup of tea on a saucer beside an open book and white flowers',
+					photographer: 'Thought Catalog',
+					url: 'https://unsplash.com/photos/white-cup-with-saucer-near-bok-OJZB0VUQKKc',
+				},
+				accent: '#4a3f5a',
+				preview: { kind: 'list', title: 'Evening tea guide', items: ['To wind down: chamomile', 'To feel calm: lemon balm', 'To sleep: lavender'], style: 'plain' },
+			},
 		],
 		questions: [
 			{
@@ -198,9 +324,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			'A hot sauce brand with heat levels, recipes and gift boxes.',
 		],
 		features: [
-			{ title: 'Origins and tasting notes', body: "Tell each product's story: where it comes from, how it tastes and how to enjoy it." },
-			{ title: 'Gift boxes and sets', body: 'Combine products into gift boxes and tasting sets.' },
-			{ title: 'Recipes and guides', body: 'Add recipes and brewing guides that link to the products they use.' },
+			{
+				title: 'Origins and tasting notes',
+				body: "Tell each product's story: where it comes from, how it tastes and how to enjoy it.",
+				request: "Show each coffee's origin, roast and tasting notes at the top of its page.",
+				photo: {
+					src: '/marketing/industries/features/food-beverage-origins.webp',
+					alt: 'A scoop of roasted coffee beans beside a burlap sack full of beans',
+					photographer: 'Sergey Kotenev',
+					url: 'https://unsplash.com/photos/a-scoop-full-of-coffee-beans-next-to-a-sack-of-coffee-beans-Qx_S2YE5I1o',
+				},
+				accent: '#5a3a24',
+				preview: { kind: 'table', title: 'Huila, Colombia', rows: [['Process', 'Washed'], ['Roast', 'Medium'], ['Notes', 'Cocoa, cherry']] },
+			},
+			{
+				title: 'Gift boxes and sets',
+				body: 'Combine products into gift boxes and tasting sets.',
+				request: 'Create a tasting box with three single origins and a brewing guide, sold as one product.',
+				photo: {
+					src: '/marketing/industries/features/food-beverage-gifts.webp',
+					alt: 'A wooden crate lined with linen, holding jars of preserves tied with paper tags',
+					photographer: 'Dmitry Mashkin',
+					url: 'https://unsplash.com/photos/brown-wooden-box-N5fp98wt6h8',
+				},
+				accent: '#6a4a2a',
+				preview: { kind: 'bundle', title: 'Tasting box', items: ['Three single origins', 'Brewing guide', 'Gift note'], price: '$48' },
+			},
+			{
+				title: 'Recipes and guides',
+				body: 'Add recipes and brewing guides that link to the products they use.',
+				request: 'Add a pour-over guide with brewing times for each step, linked to the beans it uses.',
+				photo: {
+					src: '/marketing/industries/features/food-beverage-recipes.webp',
+					alt: 'A pour-over coffee dripper on a digital scale beside a kettle and a scoop',
+					photographer: 'Jason An',
+					url: 'https://unsplash.com/photos/a-cup-of-coffee-sitting-on-top-of-a-scale-S9QYhiZ0tFE',
+				},
+				accent: '#2f2a28',
+				preview: { kind: 'list', title: 'Pour-over guide', items: ['18 g coffee, medium-fine', '300 g water at 94 °C', 'Pour in three stages'], style: 'steps' },
+			},
 		],
 		questions: [
 			{
@@ -237,9 +399,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			'A candle brand with scents grouped by season and a gift guide.',
 		],
 		features: [
-			{ title: 'Shop by room or style', body: 'Organize your catalog by room, style or material.' },
-			{ title: 'Dimensions and care', body: 'Give every product its size, materials and care instructions.' },
-			{ title: 'Gift guides', body: 'Curate gift guides and seasonal edits that link to your products.' },
+			{
+				title: 'Shop by room or style',
+				body: 'Organize your catalog by room, style or material.',
+				request: 'Organize the catalog by room, with pages for the living room, bedroom, dining room and office.',
+				photo: {
+					src: '/marketing/industries/features/home-living-rooms.webp',
+					alt: 'A bright living room with a white sofa, round mirrors and a soft rug',
+					photographer: 'Spacejoy',
+					url: 'https://unsplash.com/photos/a-living-room-filled-with-furniture-and-a-mirror-c0JoR_-2x3E',
+				},
+				accent: '#6a5236',
+				preview: { kind: 'options', title: 'Shop by room', options: ['Living', 'Bedroom', 'Dining', 'Office'], selected: 0 },
+			},
+			{
+				title: 'Dimensions and care',
+				body: 'Give every product its size, materials and care instructions.',
+				request: "Show each chair's height, seat height and materials in the same table on every product page.",
+				photo: {
+					src: '/marketing/industries/features/home-living-dimensions.webp',
+					alt: 'A light wooden chair standing alone against a pale lilac background',
+					photographer: 'Hongly Oung',
+					url: 'https://unsplash.com/photos/a-wooden-chair-on-a-white-background-iBxQvOLuKb4',
+				},
+				accent: '#5a4a66',
+				preview: { kind: 'table', title: 'Dimensions', rows: [['Height', '79 cm'], ['Seat height', '45 cm'], ['Material', 'Solid oak']] },
+			},
+			{
+				title: 'Gift guides',
+				body: 'Curate gift guides and seasonal edits that link to your products.',
+				request: 'Curate a holiday page of gifts under $50.',
+				photo: {
+					src: '/marketing/industries/features/home-living-gifts.webp',
+					alt: 'A gift wrapped in pink tissue paper and tied with a pale blue ribbon',
+					photographer: 'Katie Goertzen',
+					url: 'https://unsplash.com/photos/a-wrapped-present-with-a-blue-ribbon-on-a-white-background-8oMwa5Ofz4Q',
+				},
+				accent: '#3a5a6e',
+				preview: { kind: 'list', title: 'Gifts under $50', items: ['Linen napkins', 'Soy candle', 'Stoneware mug'], style: 'plain' },
+			},
 		],
 		questions: [
 			{
@@ -276,9 +474,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			'A leather bag brand with colors, materials and the story of each design.',
 		],
 		features: [
-			{ title: 'Sizes and materials', body: 'Add ring size guides, metal options and material details to every piece.' },
-			{ title: 'Collections with a story', body: 'Group pieces into collections, each with a page that tells its story.' },
-			{ title: 'Ready to gift', body: 'Add gift sets and a gift guide for every occasion.' },
+			{
+				title: 'Sizes and materials',
+				body: 'Add ring size guides, metal options and material details to every piece.',
+				request: 'Add a ring size guide, and let shoppers choose gold or silver on every ring.',
+				photo: {
+					src: '/marketing/industries/features/jewelry-accessories-sizes.webp',
+					alt: 'A hand wearing several silver rings against a soft, sunlit field',
+					photographer: 'Maddi Bazzocco',
+					url: 'https://unsplash.com/photos/selective-focus-photo-of-persons-hand-with-five-rings-lk7s8i5NdqE',
+				},
+				accent: '#6e3f3a',
+				preview: { kind: 'options', title: 'Ring size', options: ['5', '6', '7', '8', '9'], selected: 2, caption: '14k gold or sterling silver' },
+			},
+			{
+				title: 'Collections with a story',
+				body: 'Group pieces into collections, each with a page that tells its story.',
+				request: 'Give the Initials collection its own page, with the story behind it.',
+				photo: {
+					src: '/marketing/industries/features/jewelry-accessories-collections.webp',
+					alt: 'Gold necklaces with initial pendants hanging against a black background',
+					photographer: 'Zayed Ahmed Zadu',
+					url: 'https://unsplash.com/photos/several-gold-necklaces-with-initial-pendants-displayed-A-OEreql4AU',
+				},
+				accent: '#3a2f1a',
+				preview: { kind: 'list', title: 'The Initials collection', items: ['Letter pendant', 'Fine gold chain', 'Engraved clasp'], style: 'plain' },
+			},
+			{
+				title: 'Ready to gift',
+				body: 'Add gift sets and a gift guide for every occasion.',
+				request: 'Offer gift wrapping and a handwritten note on every necklace.',
+				photo: {
+					src: '/marketing/industries/features/jewelry-accessories-gifts.webp',
+					alt: 'A pearl necklace laid in an open red jewelry box',
+					photographer: 'Cornelia Ng',
+					url: 'https://unsplash.com/photos/white-pearl-necklace-with-box-2zHQhfEpisc',
+				},
+				accent: '#6e1f2a',
+				preview: { kind: 'bundle', title: 'Gift set', items: ['Pearl necklace', 'Gift box', 'Handwritten note'], price: '$120' },
+			},
 		],
 		questions: [
 			{
@@ -315,9 +549,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			'An outdoor gear brand with packing lists for every kind of trip.',
 		],
 		features: [
-			{ title: 'Shop by activity', body: 'Organize gear by sport, terrain or level, so shoppers find what fits.' },
-			{ title: 'Specs that matter', body: 'Show sizes, weights and materials on every product.' },
-			{ title: 'Guides and checklists', body: 'Add packing lists and buying guides that link to your gear.' },
+			{
+				title: 'Shop by activity',
+				body: 'Organize gear by sport, terrain or level, so shoppers find what fits.',
+				request: 'Organize the running shoes by terrain: road, trail and mountain.',
+				photo: {
+					src: '/marketing/industries/features/sports-outdoors-activity.webp',
+					alt: 'A runner in red on a forest trail between tall pine trees',
+					photographer: 'Hendrik Morkel',
+					url: 'https://unsplash.com/photos/a-man-in-red-running-through-a-forest-PEuBo_tBHDw',
+				},
+				accent: '#2f4a2a',
+				preview: { kind: 'options', title: 'Shop by terrain', options: ['Road', 'Trail', 'Mountain'], selected: 1 },
+			},
+			{
+				title: 'Specs that matter',
+				body: 'Show sizes, weights and materials on every product.',
+				request: 'Show weight, materials and sole in a specs table on every boot.',
+				photo: {
+					src: '/marketing/industries/features/sports-outdoors-specs.webp',
+					alt: 'A pair of worn brown leather hiking boots on a rug',
+					photographer: 'Glenn Carstens-Peters',
+					url: 'https://unsplash.com/photos/brown-leather-lace-up-boots-s8TQiOfGlz0',
+				},
+				accent: '#5a3f2a',
+				preview: { kind: 'table', title: 'Specs', rows: [['Weight', '540 g per boot'], ['Upper', 'Full-grain leather'], ['Sole', 'Lugged rubber']] },
+			},
+			{
+				title: 'Guides and checklists',
+				body: 'Add packing lists and buying guides that link to your gear.',
+				request: 'Publish a weekend hike checklist that links to every item on it.',
+				photo: {
+					src: '/marketing/industries/features/sports-outdoors-guides.webp',
+					alt: 'Two hiking backpacks with red sleeping mats on the grass below colorful hills',
+					photographer: 'S&B Vonlanthen',
+					url: 'https://unsplash.com/photos/hiking-backpacks-on-grass-with-mountains-background-D75_5tWZDQ4',
+				},
+				accent: '#234a6e',
+				preview: { kind: 'list', title: 'Weekend hike checklist', items: ['30 L backpack', 'Rain shell', 'Water filter'], style: 'checks' },
+			},
 		],
 		questions: [
 			{
@@ -354,9 +624,45 @@ export const INDUSTRIES: readonly Industry[] = [
 			'A cat toy shop with bundles and a page for new cat owners.',
 		],
 		features: [
-			{ title: 'Shop by pet', body: 'Organize products by animal, size and age.' },
-			{ title: 'Size guides', body: 'Help owners pick the right collar, bed or harness with size guides.' },
-			{ title: 'Starter kits', body: 'Bundle the essentials for new owners into starter kits.' },
+			{
+				title: 'Shop by pet',
+				body: 'Organize products by animal, size and age.',
+				request: 'Let owners shop by pet, with separate pages for dogs, cats and small pets.',
+				photo: {
+					src: '/marketing/industries/features/pets-shop.webp',
+					alt: 'A tabby cat and a black and white puppy lying together in the grass',
+					photographer: 'Andrew S',
+					url: 'https://unsplash.com/photos/a-dog-and-a-cat-laying-in-the-grass-ouo1hbizWwo',
+				},
+				accent: '#3a5a2a',
+				preview: { kind: 'options', title: 'Shop by pet', options: ['Dogs', 'Cats', 'Small pets'], selected: 0 },
+			},
+			{
+				title: 'Size guides',
+				body: 'Help owners pick the right collar, bed or harness with size guides.',
+				request: 'Add a harness size guide that goes by chest size.',
+				photo: {
+					src: '/marketing/industries/features/pets-sizes.webp',
+					alt: 'A cream-colored dog in a black harness on a lead beside a lake',
+					photographer: 'Victoria V',
+					url: 'https://unsplash.com/photos/a-white-dog-wearing-a-black-harness-by-a-body-of-water-tPl0PqaFBvQ',
+				},
+				accent: '#2f4a46',
+				preview: { kind: 'table', title: 'Harness sizes', rows: [['S', 'Chest 35–45 cm'], ['M', 'Chest 45–60 cm'], ['L', 'Chest 60–80 cm']] },
+			},
+			{
+				title: 'Starter kits',
+				body: 'Bundle the essentials for new owners into starter kits.',
+				request: 'Bundle a toy, a chew rope and starter food into a new puppy kit.',
+				photo: {
+					src: '/marketing/industries/features/pets-kits.webp',
+					alt: 'A white and brown puppy holding a plush toy among other soft toys',
+					photographer: 'marieke koenders',
+					url: 'https://unsplash.com/photos/white-and-brown-short-coated-dog-on-brown-bear-plush-toy--Elf7vDV7Rk',
+				},
+				accent: '#6a4a2a',
+				preview: { kind: 'bundle', title: 'New puppy kit', items: ['Plush toy', 'Chew rope', 'Starter food'], price: 'Save 20%' },
+			},
 		],
 		questions: [
 			{

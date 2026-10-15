@@ -1,10 +1,11 @@
 import { Link, useParams } from 'react-router';
 import { ChatCircleTextIcon } from '@phosphor-icons/react';
+import { FeatureCarousel } from '@/components/public-site/FeatureCarousel';
 import { IndustryCards } from '@/components/public-site/IndustryCards';
 import { JsonLd } from '@/components/public-site/JsonLd';
 import { Eyebrow, HEADING_SECTION, LEAD, PillLink, UNDERLINE_GROW } from '@/components/public-site/primitives';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
-import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
+import { PageMeta, SolutionHero } from '@/components/public-site/solution-page';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import {
 	INDUSTRIES,
@@ -17,7 +18,6 @@ import {
 	industryStructuredData,
 	type Industry,
 } from '@/content/industries';
-import { BRAND_STEPS, TODAY_CARDS } from '@/content/positioning';
 import { cn } from '@/lib/utils';
 import { ClosingPanel } from '@/routes/landing/sections';
 
@@ -125,11 +125,7 @@ export default function IndustryPage() {
 					</ul>
 				</div>
 			</section>
-			<CardSection eyebrow={industry.name} title={`What your ${industry.store} can include`} cards={industry.features}>
-				<StartBuildingButton />
-			</CardSection>
-			<CardSection eyebrow="Available today" title="What every store comes with" cards={TODAY_CARDS} />
-			<HowItWorks steps={BRAND_STEPS} />
+			<FeatureCarousel title={`What your ${industry.store} can include`} features={industry.features} />
 			<PublicFaq items={industryFaq(industry)} />
 			<section className="bg-white px-4 py-20 sm:px-6 sm:py-28">
 				<div className="mx-auto max-w-[1248px]">

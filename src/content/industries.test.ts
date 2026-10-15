@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { pageTitle } from '@/brand';
+import { contrastRatio } from '@/lib/color-contrast';
 import {
 	INDUSTRIES,
 	findIndustry,
@@ -12,6 +13,9 @@ import {
 } from './industries';
 
 const PHOTOS = import.meta.glob('/public/marketing/industries/*.webp', { query: '?url', import: 'default', eager: true });
+const FEATURE_PHOTOS = import.meta.glob('/public/marketing/industries/features/*.webp', { query: '?url', import: 'default', eager: true });
+const UNSPLASH_PAGE = /^https:\/\/unsplash\.com\/photos\/[\w-]+$/;
+const HEX = /^#[0-9a-f]{6}$/;
 const ORIGIN = 'https://estori.example';
 
 function words(text: string): number {
@@ -57,6 +61,67 @@ describe('industries', () => {
 			expect(photo.url, industry.slug).toMatch(/^https:\/\/unsplash\.com\/photos\/[\w-]+$/);
 		}
 		expect(new Set(INDUSTRIES.map((industry) => industry.photo.url)).size).toBe(INDUSTRIES.length);
+	});
+
+	it('gives every feature its own credited photo, in a full and a phone size', () => {
+		const files = Object.keys(FEATURE_PHOTOS);
+		const features = INDUSTRIES.flatMap((industry) => industry.features.map((feature) => ({ industry, feature })));
+		expect(new Set(features.map(({ feature }) => feature.photo.url)).size).toBe(features.length);
+		for (const { industry, feature } of features) {
+			const label = `${industry.slug}: ${feature.title}`;
+			expect(feature.photo.src, label).toMatch(new RegExp(`^/marketing/industries/features/${industry.slug}-[a-z]+\\.webp$`));
+			for (const candidate of industryPhotoSrcSet(feature.photo).split(', ')) {
+				expect(files, label).toContain(`/public${candidate.split(' ')[0]}`);
+			}
+			expect(words(feature.photo.alt), label).toBeGreaterThanOrEqual(6);
+			expect(feature.photo.photographer.trim(), label).not.toBe('');
+			expect(feature.photo.url, label).toMatch(UNSPLASH_PAGE);
+			expect(feature.photo.url, label).not.toBe(industry.photo.url);
+		}
+	});
+
+	it('pairs every feature with an example request and its own panel color that white text reads on', () => {
+		for (const industry of INDUSTRIES) {
+			expect(new Set(industry.features.map((feature) => feature.accent)).size, industry.slug).toBe(industry.features.length);
+			for (const feature of industry.features) {
+				const label = `${industry.slug}: ${feature.title}`;
+				// Written as the seller would ask, without quote marks: the carousel adds them.
+				expect(feature.request, label).toMatch(/^[A-Z][^"\u201c\u201d]+\.$/);
+				expect(feature.accent, label).toMatch(HEX);
+				expect(contrastRatio('#ffffff', feature.accent), label).toBeGreaterThanOrEqual(7);
+			}
+		}
+	});
+
+	it('draws a piece of the store over each feature photo, filled with content for that feature', () => {
+		for (const industry of INDUSTRIES) {
+			for (const { title, preview } of industry.features) {
+				const label = `${industry.slug}: ${title}`;
+				expect(preview.title.trim(), label).not.toBe('');
+				switch (preview.kind) {
+					case 'swatches':
+						expect(preview.swatches.length, label).toBeGreaterThanOrEqual(4);
+						for (const swatch of preview.swatches) expect(swatch, label).toMatch(HEX);
+						expect(preview.selected, label).toBeLessThan(preview.swatches.length);
+						expect(preview.caption.trim(), label).not.toBe('');
+						break;
+					case 'options':
+						expect(preview.options.length, label).toBeGreaterThanOrEqual(3);
+						expect(preview.selected, label).toBeLessThan(preview.options.length);
+						break;
+					case 'table':
+						expect(preview.rows.length, label).toBeGreaterThanOrEqual(3);
+						break;
+					case 'list':
+						expect(preview.items.length, label).toBeGreaterThanOrEqual(3);
+						break;
+					case 'bundle':
+						expect(preview.items.length, label).toBeGreaterThanOrEqual(3);
+						expect(preview.price.trim(), label).not.toBe('');
+						break;
+				}
+			}
+		}
 	});
 
 	it('gives every page a search title and description that fit in search results', () => {
