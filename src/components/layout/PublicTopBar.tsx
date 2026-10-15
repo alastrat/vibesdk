@@ -17,9 +17,10 @@ const MENUS: ReadonlyArray<{ id: MenuId; label: string }> = [
 const NAV_LINKS = [
 	{ to: '/discover', label: 'Discover' },
 	{ to: '/pricing', label: 'Pricing' },
+	{ to: '/contact', label: 'Talk to sales' },
 ] as const;
 
-/** Top of every public page: the gold announcement, then a white bar with the brand, the menus, Talk to sales and the build action. */
+/** Top of every public page: the gold announcement, then a white bar with the brand, the menus, sign-in and the build action. */
 export function PublicTopBar() {
 	const { isAuthenticated } = useAuth();
 	const { showAuthModal } = useAuthModal();
@@ -107,9 +108,9 @@ export function PublicTopBar() {
 								Open app
 							</Link>
 						) : (
-							<Link to="/contact" className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
-								Talk to sales
-							</Link>
+							<button type="button" onClick={() => showAuthModal()} className="text-[15px] text-public-charcoal underline-offset-4 hover:underline">
+								Sign in
+							</button>
 						)}
 						<StartBuildingButton className="hidden sm:inline-flex" />
 						<button
@@ -136,12 +137,6 @@ export function PublicTopBar() {
 								{link.label}
 							</Link>
 						))}
-						{/* The announcement's Sign in is hidden on phones, so the menu carries one. */}
-						{!isAuthenticated && (
-							<button type="button" onClick={() => showAuthModal()} className="py-2 text-left text-lg text-public-charcoal sm:hidden">
-								Sign in
-							</button>
-						)}
 						<StartBuildingButton className="mt-3 w-full sm:hidden" />
 					</nav>
 				)}

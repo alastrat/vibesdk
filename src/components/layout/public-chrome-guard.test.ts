@@ -49,12 +49,12 @@ describe('public chrome', () => {
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
-	it('offers Talk to sales in the bar, keeps Sign in reachable on every screen, and opens sign-up from Start building free', () => {
+	it('offers Sign in in the bar on every screen, Talk to sales beside Pricing, and sign-up from Start building free', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<Link to="\/contact" className="text-\[15px\] text-public-charcoal underline-offset-4 hover:underline">\s*Talk to sales/);
-		// The announcement's Sign in hides below sm, so the phone menu carries one.
-		expect(source(ANNOUNCE)).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
-		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className="[^"]*sm:hidden[^"]*">\s*Sign in/);
+		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className="text-\[15px\] text-public-charcoal underline-offset-4 hover:underline">\s*Sign in/);
+		expect(top).toMatch(/\{ to: '\/pricing', label: 'Pricing' \},\s*\{ to: '\/contact', label: 'Talk to sales' \},/);
+		// The bar's Sign in shows on phones too, so the phone menu doesn't repeat it.
+		expect(top.match(/>\s*Sign in\s*</g)).toHaveLength(1);
 		expect(top.match(/<StartBuildingButton /g)).toHaveLength(2);
 		expect(top).not.toContain('startBuilding');
 	});
