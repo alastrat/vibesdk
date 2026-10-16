@@ -1,6 +1,7 @@
 import { contactTopicLabel, type ContactRequestInput } from '../../../shared/types/contact';
 import { escapeHtml } from '../../utils/html';
 import type { OutgoingEmail } from './types';
+import type { PlatformAlert } from '../alerts/platform-alerts';
 
 const BUTTON_STYLE =
 	'display:inline-block;padding:12px 20px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;';
@@ -118,5 +119,17 @@ export function contactNotificationEmail(to: string, request: ContactRequestInpu
 		body: `${request.firstName} ${request.lastName} wrote from the contact page. Reply to them at ${request.email}.`,
 		details,
 		footer: 'Every request is also listed in the admin area.',
+	});
+}
+
+/** An alert for the people who run Estori: what happened, to which order or product, and what's known. */
+export function platformAlertEmail(to: string, alert: PlatformAlert, label: string): OutgoingEmail {
+	return renderEmail({
+		to,
+		subject: `Estori alert: ${label} (${alert.subject})`,
+		heading: label,
+		body: alert.message,
+		details: [['About', alert.subject], ...(alert.details ?? [])],
+		footer: 'Each alert repeats at most once a day for the same order or product.',
 	});
 }

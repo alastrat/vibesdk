@@ -9,6 +9,7 @@ import { refundCatalogItems, type RefundItemsDeps } from './refund-items';
 import type { CatalogOrderItemRow, CatalogOrderStore } from './store';
 import type { SupplierUpdate } from './supplier';
 import { applySupplierUpdate } from './updates';
+import type { PlatformAlertKind } from '../alerts/platform-alerts';
 
 export const RUNNER_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 export const RUNNER_SYNC_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -37,7 +38,7 @@ export interface RunnerDeps {
 	adapters: PlacementDeps['adapters'];
 	stripe: RefundItemsDeps['stripe'] | null;
 	supplierUpdates(supplierOrderId: string): Promise<readonly SupplierUpdate[]>;
-	alert(alert: { kind: string; orderId: string; message: string }): Promise<void>;
+	alert(alert: { kind: PlatformAlertKind; orderId: string; message: string }): Promise<void>;
 }
 
 export function initialRunnerState(orderId: string, nowMs: number): RunnerState {

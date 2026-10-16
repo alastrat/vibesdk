@@ -4,6 +4,7 @@
  * production it creates sandbox orders and pays them by simulation.
  */
 
+import type { PlatformAlertKind } from '../../alerts/platform-alerts';
 import { CATALOG_MAX_DELIVERY_DAYS } from '../config';
 import { chooseFreight } from '../refresh';
 import type { PlaceOrderResult, ShippingAddress, SupplierAdapter, SupplierOrderLine } from '../supplier';
@@ -14,7 +15,7 @@ import { cjOrderNumber } from './order-number';
 import type { CjOrderDetail } from './types';
 
 export interface SupplierAlert {
-	kind: 'held-order' | 'low-balance' | 'supplier-account' | 'lines-mismatch';
+	kind: Extract<PlatformAlertKind, 'held-order' | 'low-balance' | 'supplier-account' | 'lines-mismatch'>;
 	reference: string;
 	message: string;
 }

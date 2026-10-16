@@ -9,6 +9,7 @@ import { createLogger } from '../../logger';
 import { CatalogOrderService } from '../../database';
 import { isProd } from '../../utils/envs';
 import { stripeFromEnv } from '../payments/config';
+import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 import { CJDropshippingAdapter } from './cj/adapter';
 import { cjClientFromEnv } from './cj/client';
 import { cjOrderToUpdates } from './cj/updates';
@@ -25,9 +26,8 @@ export function catalogSupplierMode(env: Env): 'live' | 'sandbox' {
 
 function runnerDeps(env: Env): RunnerDeps {
 	const client = cjClientFromEnv(env);
-	const alert: RunnerDeps['alert'] = async (event) => {
-		logger.error('Catalog order needs the owner', event);
-	};
+	const sendAlert = platformAlertsFromEnv(env);
+	const alert: RunnerDeps['alert'] = (event) => sendAlert({ kind: event.kind, subject: event.orderId, message: event.message });
 	const adapter = client
 		? new CJDropshippingAdapter({ client, destinations: CATALOG_DESTINATIONS, mode: catalogSupplierMode(env), alert: (event) => alert({ kind: event.kind, orderId: event.reference, message: event.message }) })
 		: { supplier: 'cjdropshipping' as const, placeOrder: async () => ({ ok: false as const, kind: 'retryable' as const, reason: 'The catalog supplier is not configured' }) };
