@@ -15,4 +15,11 @@ describe('catalog routes', () => {
 		for (const line of routes.filter((candidate) => candidate.includes("'/api/admin/catalog/"))) expect(line).toContain('setAuthLevel(AuthConfig.admin)');
 		expect(source('/worker/api/routes/index.ts')).toContain('setupCatalogRoutes(app)');
 	});
+
+	it('exposes the runner and sandbox moves to admins only', () => {
+		const routes = source('/worker/api/routes/catalogRoutes.ts');
+		for (const path of ["'/api/admin/catalog/orders/:id/runner'", "'/api/admin/catalog/orders/:id/sync'", "'/api/admin/catalog/orders/:id/retry'", "'/api/admin/catalog/orders/:id/sandbox'"]) {
+			expect(routes.split('\n').find((line) => line.includes(path))).toContain('setAuthLevel(AuthConfig.admin)');
+		}
+	});
 });
