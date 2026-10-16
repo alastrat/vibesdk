@@ -73,6 +73,9 @@ export const users = sqliteTable('users', {
     // Terms of Service agreement: when and which version; null until the user agrees.
     termsAcceptedAt: integer('terms_accepted_at', { mode: 'timestamp' }),
     termsVersion: text('terms_version'),
+    /** The selling-terms version the user agreed to before their stores take payments; null until they do. */
+    sellerTermsVersion: text('seller_terms_version'),
+    sellerTermsAcceptedAt: integer('seller_terms_accepted_at', { mode: 'timestamp' }),
     
     // Soft delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
@@ -360,6 +363,8 @@ export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
     chargesEnabled: integer('charges_enabled', { mode: 'boolean' }).notNull().default(false),
     payoutsEnabled: integer('payouts_enabled', { mode: 'boolean' }).notNull().default(false),
     transfersActive: integer('transfers_active', { mode: 'boolean' }).notNull().default(false),
+    /** The seller can be the merchant of record (on_behalf_of); store checkout requires it. */
+    cardPaymentsActive: integer('card_payments_active', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 });

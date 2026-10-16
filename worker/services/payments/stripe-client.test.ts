@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PLATFORM_FEE_LABEL, platformFeeCents } from '../../../shared/types/templates';
-import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, type StripeAccount } from './stripe-client';
+import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, sellerReadiness, type StripeAccount } from './stripe-client';
 
 /** A fetch that answers every call with `response` and remembers what it was sent. */
 function recordingFetch(response: unknown) {
@@ -43,7 +43,7 @@ describe('encodeForm', () => {
 });
 
 describe('accountFlags', () => {
-	it('reads payout readiness from the account', () => {
+	it('reads payout readiness and card payments from the account', () => {
 		const account: StripeAccount = {
 			id: 'acct_1',
 			details_submitted: true,
@@ -56,8 +56,36 @@ describe('accountFlags', () => {
 			chargesEnabled: true,
 			payoutsEnabled: false,
 			transfersActive: true,
+			cardPaymentsActive: false,
 		});
-		expect(accountFlags({ ...account, capabilities: undefined }).transfersActive).toBe(false);
+		expect(accountFlags({ ...account, capabilities: { transfers: 'active', card_payments: 'active' } }).cardPaymentsActive).toBe(true);
+		expect(accountFlags({ ...account, capabilities: undefined })).toMatchObject({ transfersActive: false, cardPaymentsActive: false });
+	});
+});
+
+describe('sellerReadiness', () => {
+	const FLAGS = { detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, transfersActive: true, cardPaymentsActive: true };
+
+	it('combines the stored flags with the selling-terms agreement', () => {
+		expect(sellerReadiness(FLAGS, true)).toEqual({
+			termsAccepted: true,
+			connected: true,
+			detailsSubmitted: true,
+			cardPaymentsActive: true,
+			transfersActive: true,
+			payoutsEnabled: true,
+		});
+	});
+
+	it('reads a seller with no Connect account as not connected', () => {
+		expect(sellerReadiness(null, true)).toEqual({
+			termsAccepted: true,
+			connected: false,
+			detailsSubmitted: false,
+			cardPaymentsActive: false,
+			transfersActive: false,
+			payoutsEnabled: false,
+		});
 	});
 });
 

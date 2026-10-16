@@ -93,6 +93,7 @@ export class StripeConnectController extends BaseController {
                 chargesEnabled: stored.chargesEnabled,
                 payoutsEnabled: stored.payoutsEnabled,
                 transfersActive: stored.transfersActive,
+                cardPaymentsActive: stored.cardPaymentsActive,
             };
             try {
                 const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));

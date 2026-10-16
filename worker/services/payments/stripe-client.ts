@@ -3,6 +3,8 @@
  * no SDK. Covers Connect Express onboarding and Checkout for paid sites.
  */
 
+import type { SellerReadiness } from '../../../shared/types/seller-setup';
+
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 /** Stripe replays a failed request for 24 hours per idempotency key, so keys rotate every 10 minutes. */
@@ -137,6 +139,7 @@ export interface SellerFlags {
 	chargesEnabled: boolean;
 	payoutsEnabled: boolean;
 	transfersActive: boolean;
+	cardPaymentsActive: boolean;
 }
 
 export interface StripeClient {
@@ -177,6 +180,19 @@ export function accountFlags(account: StripeAccount): SellerFlags {
 		chargesEnabled: account.charges_enabled,
 		payoutsEnabled: account.payouts_enabled,
 		transfersActive: account.capabilities?.transfers === 'active',
+		cardPaymentsActive: account.capabilities?.card_payments === 'active',
+	};
+}
+
+/** The seller's readiness to take store payments, from their stored or fresh flags; null flags mean no Connect account. */
+export function sellerReadiness(flags: SellerFlags | null, termsAccepted: boolean): SellerReadiness {
+	return {
+		termsAccepted,
+		connected: flags !== null,
+		detailsSubmitted: flags?.detailsSubmitted ?? false,
+		cardPaymentsActive: flags?.cardPaymentsActive ?? false,
+		transfersActive: flags?.transfersActive ?? false,
+		payoutsEnabled: flags?.payoutsEnabled ?? false,
 	};
 }
 
