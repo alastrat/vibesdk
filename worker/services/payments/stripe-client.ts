@@ -49,6 +49,20 @@ export interface StripeLoginLink {
 	url: string;
 }
 
+export interface StripeAddress {
+	line1: string | null;
+	line2: string | null;
+	city: string | null;
+	state: string | null;
+	postal_code: string | null;
+	country: string | null;
+}
+
+export interface StripeShippingDetails {
+	name: string | null;
+	address: StripeAddress | null;
+}
+
 export interface StripeCheckoutSession {
 	id: string;
 	url: string | null;
@@ -59,6 +73,11 @@ export interface StripeCheckoutSession {
 	amount_total: number | null;
 	currency: string | null;
 	payment_intent: string | null;
+	customer_details?: { email: string | null; name: string | null; phone: string | null } | null;
+	/** Where Stripe puts the collected shipping address from API version 2025-03-31. */
+	collected_information?: { shipping_details: StripeShippingDetails | null } | null;
+	/** Where earlier API versions put it. */
+	shipping_details?: StripeShippingDetails | null;
 }
 
 export interface StripeTransferSummary {
@@ -97,6 +116,20 @@ export interface CheckoutSessionInput {
 	nowMs: number;
 }
 
+export interface StoreCheckoutSessionInput {
+	checkoutId: string;
+	lines: readonly { name: string; quantity: number; unitPriceCents: number }[];
+	shippingCents: number;
+	/** The one country Checkout may ship to: catalog prices were locked for it. */
+	shipToCountry: string;
+	applicationFeeCents: number;
+	sellerStripeAccountId: string;
+	metadata: Record<string, string>;
+	successUrl: string;
+	cancelUrl: string;
+	nowMs: number;
+}
+
 export interface SellerFlags {
 	detailsSubmitted: boolean;
 	chargesEnabled: boolean;
@@ -110,6 +143,7 @@ export interface StripeClient {
 	createAccountLink(input: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<StripeAccountLink>;
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
+	createStoreCheckoutSession(input: StoreCheckoutSessionInput): Promise<StripeCheckoutSession>;
 	retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>;
 	retrievePaymentIntent(paymentIntentId: string): Promise<StripePaymentIntent>;
 	createRefund(input: { paymentIntentId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeRefund>;
@@ -221,6 +255,42 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				cancel_url: input.cancelUrl,
 				expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
 			}),
+		// The seller is the merchant of record (on_behalf_of); a retried start reuses the session through its key.
+		createStoreCheckoutSession: (input) =>
+			request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'payment',
+					line_items: input.lines.map((line) => ({
+						quantity: line.quantity,
+						price_data: { currency: 'usd', unit_amount: line.unitPriceCents, product_data: { name: line.name } },
+					})),
+					shipping_address_collection: { allowed_countries: [input.shipToCountry] },
+					shipping_options: [
+						{
+							shipping_rate_data: {
+								type: 'fixed_amount',
+								display_name: input.shippingCents === 0 ? 'Free shipping' : 'Shipping',
+								fixed_amount: { amount: input.shippingCents, currency: 'usd' },
+							},
+						},
+					],
+					payment_method_types: ['card'],
+					payment_intent_data: {
+						application_fee_amount: input.applicationFeeCents,
+						on_behalf_of: input.sellerStripeAccountId,
+						transfer_data: { destination: input.sellerStripeAccountId },
+						metadata: input.metadata,
+					},
+					metadata: input.metadata,
+					client_reference_id: input.checkoutId,
+					success_url: input.successUrl,
+					cancel_url: input.cancelUrl,
+					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
+				},
+				`store-checkout-${input.checkoutId}`,
+			),
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
 		retrievePaymentIntent: (paymentIntentId) =>

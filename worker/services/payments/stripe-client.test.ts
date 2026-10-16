@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { PLATFORM_FEE_LABEL, platformFeeCents } from '../../../shared/types/templates';
 import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, type StripeAccount } from './stripe-client';
 
+/** A fetch that answers every call with `response` and remembers what it was sent. */
+function recordingFetch(response: unknown) {
+	const calls: Array<{ url: string; init: RequestInit }> = [];
+	const fakeFetch: typeof fetch = async (input, init) => {
+		calls.push({ url: String(input), init: init ?? {} });
+		return new Response(JSON.stringify(response), { status: 200 });
+	};
+	return { calls, fakeFetch };
+}
+
 describe('platformFeeCents', () => {
 	it('keeps 7% plus 60 cents of every price option, and nothing of a free site', () => {
 		expect([900, 1900, 2900, 4900].map(platformFeeCents)).toEqual([123, 193, 263, 403]);
@@ -175,15 +185,6 @@ describe('createStripeClient', () => {
 });
 
 describe('refunds for catalog items', () => {
-	function recordingFetch(response: unknown) {
-		const calls: Array<{ url: string; init: RequestInit }> = [];
-		const fakeFetch: typeof fetch = async (input, init) => {
-			calls.push({ url: String(input), init: init ?? {} });
-			return new Response(JSON.stringify(response), { status: 200 });
-		};
-		return { calls, fakeFetch };
-	}
-
 	it("reads the payment's charge and its transfer to the seller", async () => {
 		const transfer = { id: 'tr_1', amount: 5109, amount_reversed: 0 };
 		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: { id: 'ch_1', transfer } });
@@ -226,3 +227,53 @@ describe('refunds for catalog items', () => {
 	});
 });
 
+describe('store checkout sessions', () => {
+	const INPUT = {
+		checkoutId: 'chk_1',
+		lines: [{ name: 'Trail Mug, Blue', quantity: 2, unitPriceCents: 2000 }],
+		shippingCents: 600,
+		shipToCountry: 'US',
+		applicationFeeCents: 163,
+		sellerStripeAccountId: 'acct_1',
+		metadata: { kind: 'store_order', checkoutId: 'chk_1', storeAppId: 'app_1' },
+		successUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+		cancelUrl: 'https://store.test/cart',
+		nowMs: 1_800_000_000_000,
+	};
+
+	it('charges the priced lines and shipping, with the fee and the seller as merchant', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession(INPUT);
+
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('store-checkout-chk_1');
+		const body = decodeURIComponent(String(calls[0].init.body));
+		for (const part of [
+			'line_items[0][quantity]=2',
+			'line_items[0][price_data][currency]=usd',
+			'line_items[0][price_data][unit_amount]=2000',
+			'line_items[0][price_data][product_data][name]=Trail Mug, Blue',
+			'shipping_address_collection[allowed_countries][0]=US',
+			'shipping_options[0][shipping_rate_data][type]=fixed_amount',
+			'shipping_options[0][shipping_rate_data][fixed_amount][amount]=600',
+			'shipping_options[0][shipping_rate_data][display_name]=Shipping',
+			'payment_method_types[0]=card',
+			'payment_intent_data[application_fee_amount]=163',
+			'payment_intent_data[on_behalf_of]=acct_1',
+			'payment_intent_data[transfer_data][destination]=acct_1',
+			'payment_intent_data[metadata][checkoutId]=chk_1',
+			'metadata[kind]=store_order',
+			'client_reference_id=chk_1',
+			'success_url=https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+			`expires_at=${1_800_000_000 + 35 * 60}`,
+		]) {
+			expect(body).toContain(part);
+		}
+	});
+
+	it('labels free shipping', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_2', url: null });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({ ...INPUT, shippingCents: 0 });
+		expect(decodeURIComponent(String(calls[0].init.body))).toContain('shipping_options[0][shipping_rate_data][display_name]=Free shipping');
+	});
+});
