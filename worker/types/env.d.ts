@@ -33,5 +33,8 @@ declare namespace Cloudflare {
 
 		// The catalog supplier's API key; without it catalog prices read as unavailable.
 		CJDROPSHIPPING_API_KEY?: string;
+		// Live supplier orders need ENVIRONMENT prod and this set to "true"; anything else places sandbox orders.
+		CATALOG_SUPPLIER_LIVE?: string;
+		CATALOG_ORDER_RUNNER: DurableObjectNamespace<import('../services/catalog/CatalogOrderRunner').CatalogOrderRunner>;
 	}
 }

@@ -28,3 +28,13 @@ export async function runCatalogRefresh(env: Env): Promise<{ refreshed: number; 
 export async function runCatalogSchedule(cron: string, env: Env): Promise<void> {
 	if (cron === CATALOG_REFRESH_CRON) await runCatalogRefresh(env);
 }
+
+/** Starts the order's runner. A failure is logged, not thrown: the paid order is recorded either way. */
+export async function scheduleCatalogPlacement(env: Env, orderId: string): Promise<void> {
+	try {
+		const namespace = env.CATALOG_ORDER_RUNNER;
+		await namespace.get(namespace.idFromName(orderId)).start(orderId);
+	} catch (error) {
+		logger.error('Could not start the catalog order runner', { orderId, error });
+	}
+}

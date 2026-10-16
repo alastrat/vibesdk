@@ -21,6 +21,7 @@ interface WranglerConfig {
 	workers_dev?: boolean;
 	assets?: unknown;
 	worker_loaders?: unknown;
+	triggers?: { crons: string[] };
 }
 
 const estori = parse(estoriRaw) as WranglerConfig;
@@ -77,5 +78,10 @@ describe('wrangler.estori.jsonc', () => {
 		expect(estori.worker_loaders).toEqual(upstream.worker_loaders);
 		expect(estori.keep_vars).toBe(true);
 		expect(estori.workers_dev).toBe(false);
+	});
+
+	it('runs the catalog jobs on the same crons as upstream', () => {
+		expect(estori.triggers?.crons).toEqual(['*/15 * * * *', '5 * * * *', '35 6 * * *']);
+		expect(estori.triggers).toEqual(upstream.triggers);
 	});
 });

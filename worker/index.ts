@@ -29,6 +29,7 @@ import {
 export { UserAppSandboxService } from './services/sandbox/sandboxSdkClient';
 export { CodeGeneratorAgent } from './agents/core/codingAgent';
 export { UserSecretsStore } from './services/secrets/UserSecretsStore';
+export { CatalogOrderRunner } from './services/catalog/CatalogOrderRunner';
 // SpaceDO (same-worker integration) — git-backed files + preview/deploy for
 // `think` apps. Re-exported so wrangler can bind it via durable_objects.bindings.
 // AppDatabase is NOT exported here — it lives inside SpaceDO's Worker Loader
