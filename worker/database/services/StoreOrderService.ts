@@ -5,6 +5,7 @@ import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { NewStoreOrder, NewStoreOrderItem, StoreOrderView } from '../../services/store-payments/store';
 import type { ShippingAddress } from '../../services/catalog/supplier';
+import type { StorePaymentStatus } from '../../../shared/types/store-payments';
 
 const NUMBERING_ATTEMPTS = 3;
 
@@ -77,6 +78,14 @@ export class StoreOrderService extends BaseService {
     async findByPaymentIntent(paymentIntentId: string): Promise<StoreOrderView | null> {
         const [order] = await this.ordersWhere(eq(schema.storeOrders.stripePaymentIntentId, paymentIntentId), 1);
         return order ?? null;
+    }
+
+    async setPaymentStatus(orderId: string, status: StorePaymentStatus, now: Date): Promise<void> {
+        await this.database
+            .update(schema.storeOrders)
+            .set({ paymentStatus: status, revision: sql`${schema.storeOrders.revision} + 1`, updatedAt: now })
+            .where(eq(schema.storeOrders.id, orderId))
+            .run();
     }
 
     /** Sets the order's refund total and payment status from its recorded refunds; a dispute status is kept. */

@@ -1,13 +1,14 @@
 /**
  * Stripe webhook: verifies the signature, then records paid Checkout
- * sessions and refreshes sellers' payout flags. Public and exempt from CSRF;
+ * sessions, handles disputes of store payments and refreshes sellers' payout flags. Public and exempt from CSRF;
  * the signature is the authentication.
  */
 
 import { createLogger } from '../../../logger';
 import { StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
 import { STORE_ORDER_KIND } from '../../../../shared/types/store-payments';
-import { recordStoreSession } from '../../../services/store-payments/wiring';
+import { disputeDepsFromEnv, recordStoreSession } from '../../../services/store-payments/wiring';
+import { handleDisputeClosed, handleDisputeOpened, isStripeDispute } from '../../../services/store-payments/disputes';
 import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
 import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount } from '../../../services/payments/fulfill';
@@ -68,6 +69,12 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
     }
     if (event.type === 'checkout.session.expired' && isCheckoutSession(object) && object.metadata?.kind === STORE_ORDER_KIND && object.metadata.checkoutId) {
         await new StoreCheckoutService(env).expire(object.metadata.checkoutId);
+        return;
+    }
+    if ((event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed') && isStripeDispute(object)) {
+        const deps = disputeDepsFromEnv(env, object);
+        const result = event.type === 'charge.dispute.created' ? await handleDisputeOpened(deps, object) : await handleDisputeClosed(deps, object);
+        logger.info('Dispute handled', { id: object.id, type: event.type, result });
         return;
     }
     if (event.type === 'account.updated' && isStripeAccount(object)) {

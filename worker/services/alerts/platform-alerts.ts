@@ -23,6 +23,8 @@ export const PLATFORM_ALERT_KINDS = [
 	'refresh-stalled',
 	'not-shipped',
 	'not-delivered',
+	'dispute-opened',
+	'dispute-closed',
 ] as const;
 export type PlatformAlertKind = (typeof PLATFORM_ALERT_KINDS)[number];
 
@@ -38,6 +40,8 @@ const ALERT_LABELS: Readonly<Record<PlatformAlertKind, string>> = {
 	'refresh-stalled': 'The catalog stopped refreshing',
 	'not-shipped': "An order hasn't shipped",
 	'not-delivered': "An order hasn't been delivered",
+	'dispute-opened': 'A shopper disputed a payment',
+	'dispute-closed': 'A dispute was decided',
 };
 
 export interface PlatformAlert {

@@ -157,4 +157,19 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
             .get();
         return row ?? null;
     }
+
+    /** A disputed order's catalog items not yet bought: neither placed nor refunded, since the dispute returned the money. */
+    async withholdPending(checkoutSessionId: string): Promise<void> {
+        await this.database
+            .update(schema.catalogOrderItems)
+            .set({ status: 'withheld', updatedAt: new Date() })
+            .where(and(
+                eq(schema.catalogOrderItems.status, 'pending'),
+                inArray(
+                    schema.catalogOrderItems.orderId,
+                    this.database.select({ id: schema.catalogOrders.id }).from(schema.catalogOrders).where(eq(schema.catalogOrders.stripeCheckoutSessionId, checkoutSessionId)),
+                ),
+            ))
+            .run();
+    }
 }

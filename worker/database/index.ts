@@ -16,6 +16,7 @@ export { StripeConnectService } from './services/StripeConnectService';
 export { SellerTermsService } from './services/SellerTermsService';
 export { SellerChargeService } from './services/SellerChargeService';
 export { StoreRefundService } from './services/StoreRefundService';
+export { StoreDisputeService } from './services/StoreDisputeService';
 export { CatalogOrderService } from './services/CatalogOrderService';
 export { CatalogProductService } from './services/CatalogProductService';
 export { StoreCheckoutService } from './services/StoreCheckoutService';

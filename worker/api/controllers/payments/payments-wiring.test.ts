@@ -39,6 +39,13 @@ describe('payments routes', () => {
 		expect(source('/worker/app.ts')).toContain("pathname === '/api/stripe/webhook'");
 	});
 
+	it('routes disputes on store payments to the dispute handlers', () => {
+		const webhook = source('/worker/api/controllers/payments/webhook.ts');
+		expect(webhook).toContain("event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed'");
+		expect(webhook).toContain('handleDisputeOpened(deps, object)');
+		expect(webhook).toContain('handleDisputeClosed(deps, object)');
+	});
+
 	it('verifies the signature before reading the event', () => {
 		const webhook = source('/worker/api/controllers/payments/webhook.ts');
 		expect(webhook.indexOf('verifyStripeSignature(')).toBeGreaterThan(-1);

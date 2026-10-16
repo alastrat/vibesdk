@@ -1,12 +1,14 @@
 /** D1 and Stripe wiring for recording store orders, shared by the webhook and the return page. */
 
-import { CatalogOrderService, SellerChargeService, StoreCheckoutService, StoreOrderService } from '../../database';
+import { CatalogOrderService, SellerChargeService, StoreCheckoutService, StoreDisputeService, StoreOrderService } from '../../database';
 import { generateId } from '../../utils/idGenerator';
 import { recordPaidCatalogOrder } from '../catalog/record';
 import { scheduleCatalogPlacement } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
 import { settleSale } from './settle';
+import type { DisputeDeps, StripeDispute } from './disputes';
+import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 
 export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 	const checkouts = new StoreCheckoutService(env);
@@ -44,4 +46,45 @@ export async function recordStoreSession(env: Env, sessionId: string): Promise<R
 	const stripe = stripeFromEnv(env);
 	if (!stripe) throw new Error('Stripe is not configured');
 	return recordStoreOrder(recordStoreOrderDeps(env), await stripe.retrieveCheckoutSession(sessionId));
+}
+
+/** Dispute handling's D1, Stripe and alert wiring, for one dispute event. */
+export function disputeDepsFromEnv(env: Env, dispute: StripeDispute): DisputeDeps {
+	const stripe = stripeFromEnv(env);
+	if (!stripe) throw new Error('Stripe is not configured');
+	const orders = new StoreOrderService(env);
+	const disputes = new StoreDisputeService(env);
+	const charges = new SellerChargeService(env);
+	let orderId: string | null = null;
+	return {
+		findOrder: async (paymentIntentId) => {
+			const order = await orders.findByPaymentIntent(paymentIntentId);
+			// Without the seller's account there is nothing to take back or return; such an order isn't a store sale.
+			if (!order?.sellerStripeAccountId) return null;
+			orderId = order.id;
+			return { id: order.id, sellerUserId: order.sellerUserId, sellerStripeAccountId: order.sellerStripeAccountId, checkoutSessionId: order.stripeCheckoutSessionId };
+		},
+		stripe,
+		storedDispute: (disputeId) => disputes.get(disputeId),
+		saveDispute: (row) => disputes.save(row),
+		addCharge: async (charge) => {
+			await charges.add(charge);
+		},
+		setFeeCharge: async (amountCents) => {
+			const charge = await charges.findBySource('dispute-fee', dispute.id);
+			const order = dispute.payment_intent ? await orders.findByPaymentIntent(dispute.payment_intent) : null;
+			if (!charge || !order?.sellerStripeAccountId) return;
+			const excess = charge.collectedCents - amountCents;
+			if (excess > 0) {
+				await stripe.createTransfer({ destination: order.sellerStripeAccountId, amountCents: excess, idempotencyKey: `dispute-fee-return-${dispute.id}`, metadata: { disputeId: dispute.id } });
+			}
+			await charges.setAmount(charge.id, amountCents, new Date());
+		},
+		withholdCatalog: (checkoutSessionId) => new CatalogOrderService(env).withholdPending(checkoutSessionId),
+		setOrderStatus: async (status) => {
+			if (orderId) await orders.setPaymentStatus(orderId, status, new Date());
+		},
+		alert: platformAlertsFromEnv(env),
+		now: () => new Date(),
+	};
 }
