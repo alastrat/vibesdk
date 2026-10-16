@@ -169,27 +169,39 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 	return json(response, response.ok ? 200 : REFUSAL_STATUS[response.reason]);
 }
 
+/** A shopper who just paid always lands back on the store; the webhook records the order if this page couldn't. */
 async function serveReturn(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const url = new URL(request.url);
 	const home = `${url.origin}${target.basePath}/`;
+	const processing = (path: string): Response => Response.redirect(`${url.origin}${target.basePath}${path}${path.includes('?') ? '&' : '?'}status=processing`, 303);
 	const sessionId = url.searchParams.get('session_id');
 	const stripe = stripeFromEnv(env);
 	if (!sessionId || !stripe) return Response.redirect(home, 303);
-	const session = await stripe.retrieveCheckoutSession(sessionId);
-	if (session.metadata?.storeAppId !== target.appId) return Response.redirect(home, 303);
+	let successPath = '/';
+	try {
+		const session = await stripe.retrieveCheckoutSession(sessionId);
+		if (session.metadata?.storeAppId !== target.appId) return Response.redirect(home, 303);
+		const recorded = await recordStoreOrder(recordStoreOrderDeps(env), session);
+		if (recorded.result === 'not-ours') return Response.redirect(home, 303);
+		successPath = recorded.checkout.successPath;
+		if (recorded.result === 'not-paid') return processing(successPath);
+		return await withReceipt(request, env, target, recorded.orderId, `${url.origin}${target.basePath}${successPath}`);
+	} catch (error) {
+		logger.error('Store return could not record the order; the webhook will', { appId: target.appId, sessionId, error });
+		return processing(successPath);
+	}
+}
 
-	const recorded = await recordStoreOrder(recordStoreOrderDeps(env), session);
-	if (recorded.result === 'not-ours') return Response.redirect(home, 303);
-	const successPath = recorded.checkout.successPath;
-	const join = successPath.includes('?') ? '&' : '?';
-	if (recorded.result === 'not-paid') return Response.redirect(`${url.origin}${target.basePath}${successPath}${join}status=processing`, 303);
-
-	const claims = addReceiptOrder(await verifyReceipt(env, readReceiptCookie(request)), target.appId, recorded.orderId);
+/** Redirects to the success page with the order id, adding the order to the shopper's receipt cookie. */
+async function withReceipt(request: Request, env: Env, target: StorePlatformTarget, orderId: string, successUrl: string): Promise<Response> {
+	const url = new URL(request.url);
+	const join = successUrl.includes('?') ? '&' : '?';
+	const claims = addReceiptOrder(await verifyReceipt(env, readReceiptCookie(request)), target.appId, orderId);
 	const token = await signReceipt(env, claims);
 	return new Response(null, {
 		status: 303,
 		headers: {
-			Location: `${url.origin}${target.basePath}${successPath}${join}order=${encodeURIComponent(recorded.orderId)}`,
+			Location: `${successUrl}${join}order=${encodeURIComponent(orderId)}`,
 			'Set-Cookie': receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:'),
 		},
 	});

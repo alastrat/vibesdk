@@ -7,6 +7,12 @@ describe('safeReturnPath', () => {
 		expect(safeReturnPath('/orders/done?x=1', '/')).toBe('/orders/done?x=1');
 	});
 
+	it('normalizes a path so the redirect after payment always works', () => {
+		expect(safeReturnPath('/thanks#top', '/')).toBe('/thanks');
+		expect(safeReturnPath('/a/../../b', '/')).toBe('/b');
+		expect(safeReturnPath('/caf\u00e9', '/')).toBe('/caf%C3%A9');
+	});
+
 	it('falls back for anything that could leave the store', () => {
 		for (const value of ['//evil.example', 'https://evil.example', 'javascript:alert(1)', '/a\\b', '/a\nb', `/${'a'.repeat(200)}`, 42, undefined]) {
 			expect(safeReturnPath(value, '/')).toBe('/');

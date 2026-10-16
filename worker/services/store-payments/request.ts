@@ -8,6 +8,7 @@ const MAX_PATH = 200;
 const MAX_NOTE = 500;
 const MAX_VARIANT_ID = 64;
 const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
+const RESOLVE_BASE = 'https://store.invalid';
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -17,11 +18,15 @@ function hasOnly(value: Record<string, unknown>, keys: readonly string[]): boole
 	return Object.keys(value).every((key) => keys.includes(key));
 }
 
-/** A path on the store, or the fallback: never `//host`, a scheme, a backslash or a control character. */
+/**
+ * A path on the store, or the fallback: never `//host`, a scheme, a backslash or a control character. It comes back
+ * normalized (dot segments resolved, no fragment, non-ASCII percent-encoded), so it is always a valid redirect.
+ */
 export function safeReturnPath(value: unknown, fallback: string): string {
 	if (typeof value !== 'string' || value.length > MAX_PATH) return fallback;
 	if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\') || CONTROL_CHARACTER.test(value)) return fallback;
-	return value;
+	const url = new URL(value, RESOLVE_BASE);
+	return url.origin === RESOLVE_BASE ? `${url.pathname}${url.search}` : fallback;
 }
 
 /** Null for any other shape, including one carrying an amount, price, fee or account: Estori derives those itself. */
