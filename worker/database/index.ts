@@ -13,6 +13,7 @@ export { UserService } from './services/UserService';
 export { AppService } from './services/AppService';
 export { TemplateService } from './services/TemplateService';
 export { StripeConnectService } from './services/StripeConnectService';
+export { CatalogOrderService } from './services/CatalogOrderService';
 export { SitePageService } from './services/SitePageService';
 export { EarlyAccessService } from './services/EarlyAccessService';
 export { ContactService } from './services/ContactService';
