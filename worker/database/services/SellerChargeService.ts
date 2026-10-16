@@ -33,21 +33,55 @@ export class SellerChargeService extends BaseService {
 			.all();
 	}
 
-	/** Records what one sale collected for one charge; repeated for the same charge and order, it changes nothing. */
-	async recordCollection(input: { chargeId: string; orderId: string; reversalId: string; amountCents: number; now: Date }): Promise<void> {
-		await this.database.batch([
-			this.database
-				.insert(schema.sellerChargeCollections)
-				.values({ chargeId: input.chargeId, orderId: input.orderId, reversalId: input.reversalId, amountCents: input.amountCents, createdAt: input.now })
-				.onConflictDoNothing(),
-			this.database
-				.update(schema.sellerCharges)
-				.set({
-					collectedCents: sql`(SELECT COALESCE(SUM(${schema.sellerChargeCollections.amountCents}), 0) FROM ${schema.sellerChargeCollections} WHERE ${schema.sellerChargeCollections.chargeId} = ${input.chargeId})`,
-					updatedAt: input.now,
-				})
-				.where(eq(schema.sellerCharges.id, input.chargeId)),
-		]);
+	/** This order's collections, finished (a reversal id) or only claimed. */
+	async claims(orderId: string): Promise<Array<{ chargeId: string; amountCents: number; reversalId: string | null }>> {
+		return this.database
+			.select({ chargeId: schema.sellerChargeCollections.chargeId, amountCents: schema.sellerChargeCollections.amountCents, reversalId: schema.sellerChargeCollections.reversalId })
+			.from(schema.sellerChargeCollections)
+			.where(eq(schema.sellerChargeCollections.orderId, orderId))
+			.all();
+	}
+
+	/**
+	 * Claims an amount of a charge for one sale before Stripe is called. One statement, so it only inserts while that much
+	 * is still owed: two sales collecting at once can't both claim it. True when the claim belongs to this sale.
+	 */
+	async claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<boolean> {
+		const at = Math.floor(claim.now.getTime() / 1000);
+		await this.database.run(sql`INSERT INTO seller_charge_collections (charge_id, order_id, reversal_id, amount_cents, created_at)
+			SELECT ${claim.chargeId}, ${claim.orderId}, NULL, ${claim.amountCents}, ${at} FROM seller_charges c
+			WHERE c.id = ${claim.chargeId}
+				AND c.amount_cents - (SELECT COALESCE(SUM(amount_cents), 0) FROM seller_charge_collections WHERE charge_id = ${claim.chargeId}) >= ${claim.amountCents}
+			ON CONFLICT (charge_id, order_id) DO NOTHING`);
+		await this.refreshCollected(claim.chargeId, claim.now);
+		const row = await this.database
+			.select({ chargeId: schema.sellerChargeCollections.chargeId })
+			.from(schema.sellerChargeCollections)
+			.where(and(eq(schema.sellerChargeCollections.chargeId, claim.chargeId), eq(schema.sellerChargeCollections.orderId, claim.orderId)))
+			.get();
+		return row !== undefined;
+	}
+
+	async completeCollection(done: { chargeId: string; orderId: string; reversalId: string }): Promise<void> {
+		await this.database
+			.update(schema.sellerChargeCollections)
+			.set({ reversalId: done.reversalId })
+			.where(and(eq(schema.sellerChargeCollections.chargeId, done.chargeId), eq(schema.sellerChargeCollections.orderId, done.orderId)))
+			.run();
+	}
+
+	/** Stripe refused the reversal: the claim goes back, so a later sale can collect the charge. */
+	async releaseClaim(release: { chargeId: string; orderId: string }): Promise<void> {
+		await this.database
+			.delete(schema.sellerChargeCollections)
+			.where(and(eq(schema.sellerChargeCollections.chargeId, release.chargeId), eq(schema.sellerChargeCollections.orderId, release.orderId)))
+			.run();
+		await this.refreshCollected(release.chargeId, new Date());
+	}
+
+	private async refreshCollected(chargeId: string, now: Date): Promise<void> {
+		const at = Math.floor(now.getTime() / 1000);
+		await this.database.run(sql`UPDATE seller_charges SET collected_cents = (SELECT COALESCE(SUM(amount_cents), 0) FROM seller_charge_collections WHERE charge_id = ${chargeId}), updated_at = ${at} WHERE id = ${chargeId}`);
 	}
 
 	/** Sets a charge's amount, creating it when missing, and returns what was already collected for it. */

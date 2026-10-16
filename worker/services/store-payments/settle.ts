@@ -1,11 +1,14 @@
 /**
  * After a store sale is recorded: take back any card fee above what the sale collected, then the seller's open
- * charges, all from this sale's transfer and never past the seller's share of it. Safe to run again: each reversal
- * has a stable key, and the fee adjustment is recorded once per order.
+ * charges, all from this sale's transfer and never past the seller's share of it.
+ *
+ * Each move is written to D1 before Stripe is called: the fee difference as a plan, each collection as a claim that
+ * only succeeds while the charge is still owed. A retry reuses the stored amount and key, and two sales settling at
+ * once can't both collect the same charge.
  */
 
 import { processingFeeCents } from '../../../shared/types/catalog';
-import type { StripeClient, StripePaymentIntent } from '../payments/stripe-client';
+import { StripeApiError, type StripeClient, type StripePaymentIntent } from '../payments/stripe-client';
 
 export interface SettleOrder {
 	id: string;
@@ -17,10 +20,17 @@ export interface SettleOrder {
 
 export interface SettleSaleDeps {
 	stripe: Pick<StripeClient, 'retrievePaymentIntent' | 'createTransferReversal'>;
-	feeAdjusted(orderId: string): Promise<boolean>;
-	recordFeeAdjustment(adjustment: { orderId: string; collectedCents: number; actualFeeCents: number; reversalId: string | null; now: Date }): Promise<void>;
+	feeAdjustment(orderId: string): Promise<{ differenceCents: number; reversalId: string | null } | null>;
+	/** Saves the difference to take back; a second plan for the order changes nothing. */
+	planFeeAdjustment(plan: { orderId: string; collectedCents: number; actualFeeCents: number; differenceCents: number; now: Date }): Promise<void>;
+	completeFeeAdjustment(orderId: string, reversalId: string): Promise<void>;
 	openCharges(sellerUserId: string): Promise<Array<{ id: string; amountCents: number; collectedCents: number }>>;
-	recordCollection(collection: { chargeId: string; orderId: string; reversalId: string; amountCents: number; now: Date }): Promise<void>;
+	/** This order's claims, finished or not. */
+	claims(orderId: string): Promise<Array<{ chargeId: string; amountCents: number; reversalId: string | null }>>;
+	/** Claims an amount of a charge for this order only while that much is still owed; true when the claim is this order's. */
+	claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<boolean>;
+	completeCollection(done: { chargeId: string; orderId: string; reversalId: string }): Promise<void>;
+	releaseClaim(release: { chargeId: string; orderId: string }): Promise<void>;
 	now(): Date;
 }
 
@@ -37,39 +47,62 @@ function chargeOf(intent: StripePaymentIntent): { transferId: string; reversible
 	};
 }
 
+/** A refusal Stripe won't change on a retry, such as too little left to reverse. */
+function isRefusal(error: unknown): boolean {
+	return error instanceof StripeApiError && error.status >= 400 && error.status < 500 && error.status !== 409 && error.status !== 429 && error.type !== 'idempotency_error';
+}
+
 export async function settleSale(deps: SettleSaleDeps, order: SettleOrder): Promise<{ feeDifferenceCents: number; collectedCents: number }> {
 	const charge = chargeOf(await deps.stripe.retrievePaymentIntent(order.paymentIntentId));
 	if (!charge) return { feeDifferenceCents: 0, collectedCents: 0 };
-	// The seller's share left in this sale: the transfer is the whole charge, and Estori's fee was taken from it.
-	let sellerShare = charge.reversibleCents - order.applicationFeeCents;
 	const metadata = { storeOrderId: order.id };
+	const reverse = async (amountCents: number, idempotencyKey: string, extra: Record<string, string> = {}) =>
+		(await deps.stripe.createTransferReversal({ transferId: charge.transferId, amountCents, idempotencyKey, metadata: { ...metadata, ...extra } })).id;
+
+	// The seller's share left in this sale: the transfer is the whole charge, and Estori's fee was taken from it.
+	// Moves claimed but not yet sent aren't in the transfer's reversed amount yet, so they come off here.
+	const existing = await deps.claims(order.id);
+	let sellerShare = charge.reversibleCents - order.applicationFeeCents - existing.filter((claim) => !claim.reversalId).reduce((sum, claim) => sum + claim.amountCents, 0);
 
 	let feeDifferenceCents = 0;
-	if (charge.feeCents !== null && !(await deps.feeAdjusted(order.id))) {
+	let adjustment = await deps.feeAdjustment(order.id);
+	if (!adjustment && charge.feeCents !== null) {
 		const collectedCents = processingFeeCents(order.totalCents);
-		const difference = Math.min(Math.max(charge.feeCents - collectedCents, 0), Math.max(sellerShare, 0));
-		let reversalId: string | null = null;
-		if (difference > 0) {
-			const reversal = await deps.stripe.createTransferReversal({ transferId: charge.transferId, amountCents: difference, idempotencyKey: `fee-difference-${order.id}`, metadata });
-			reversalId = reversal.id;
-			sellerShare -= difference;
-			feeDifferenceCents = difference;
-		}
-		await deps.recordFeeAdjustment({ orderId: order.id, collectedCents, actualFeeCents: charge.feeCents, reversalId, now: deps.now() });
+		const differenceCents = Math.min(Math.max(charge.feeCents - collectedCents, 0), Math.max(sellerShare, 0));
+		await deps.planFeeAdjustment({ orderId: order.id, collectedCents, actualFeeCents: charge.feeCents, differenceCents, now: deps.now() });
+		adjustment = (await deps.feeAdjustment(order.id)) ?? { differenceCents, reversalId: null };
+	}
+	if (adjustment && adjustment.differenceCents > 0 && !adjustment.reversalId) {
+		sellerShare -= adjustment.differenceCents;
+		await deps.completeFeeAdjustment(order.id, await reverse(adjustment.differenceCents, `fee-difference-${order.id}`));
+		feeDifferenceCents = adjustment.differenceCents;
 	}
 
 	let collectedCents = 0;
+	// First finish what this order claimed before a crash, with the claimed amount and key.
+	for (const claim of existing.filter((made) => !made.reversalId)) {
+		const reversalId = await reverse(claim.amountCents, `seller-charge-${claim.chargeId}-${order.id}`, { sellerChargeId: claim.chargeId });
+		await deps.completeCollection({ chargeId: claim.chargeId, orderId: order.id, reversalId });
+		collectedCents += claim.amountCents;
+	}
+	const claimed = new Set(existing.map((claim) => claim.chargeId));
 	for (const open of await deps.openCharges(order.sellerUserId)) {
 		if (sellerShare <= 0) break;
+		if (claimed.has(open.id)) continue;
 		const amount = Math.min(open.amountCents - open.collectedCents, sellerShare);
 		if (amount <= 0) continue;
-		const reversal = await deps.stripe.createTransferReversal({
-			transferId: charge.transferId,
-			amountCents: amount,
-			idempotencyKey: `seller-charge-${open.id}-${order.id}`,
-			metadata: { ...metadata, sellerChargeId: open.id },
-		});
-		await deps.recordCollection({ chargeId: open.id, orderId: order.id, reversalId: reversal.id, amountCents: amount, now: deps.now() });
+		// Another sale collecting the same charge at the same time loses this claim and moves on.
+		if (!(await deps.claimCollection({ chargeId: open.id, orderId: order.id, amountCents: amount, now: deps.now() }))) continue;
+		let reversalId: string;
+		try {
+			reversalId = await reverse(amount, `seller-charge-${open.id}-${order.id}`, { sellerChargeId: open.id });
+		} catch (error) {
+			if (!isRefusal(error)) throw error;
+			// Stripe won't take it from this sale: give the claim back for a later sale, and stop collecting here.
+			await deps.releaseClaim({ chargeId: open.id, orderId: order.id });
+			break;
+		}
+		await deps.completeCollection({ chargeId: open.id, orderId: order.id, reversalId });
 		sellerShare -= amount;
 		collectedCents += amount;
 	}

@@ -28,10 +28,14 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 			await settleSale(
 				{
 					stripe,
-					feeAdjusted: (id) => orders.feeAdjusted(id),
-					recordFeeAdjustment: (adjustment) => orders.recordFeeAdjustment(adjustment),
+					feeAdjustment: (id) => orders.feeAdjustment(id),
+					planFeeAdjustment: (plan) => orders.planFeeAdjustment(plan),
+					completeFeeAdjustment: (id, reversalId) => orders.completeFeeAdjustment(id, reversalId),
 					openCharges: (sellerUserId) => charges.open(sellerUserId),
-					recordCollection: (collection) => charges.recordCollection(collection),
+					claims: (id) => charges.claims(id),
+					claimCollection: (claim) => charges.claimCollection(claim),
+					completeCollection: (done) => charges.completeCollection(done),
+					releaseClaim: (release) => charges.releaseClaim(release),
 					now: () => new Date(),
 				},
 				{ id: order.id, sellerUserId: order.sellerUserId, paymentIntentId: order.stripePaymentIntentId, totalCents: order.totalCents, applicationFeeCents: order.applicationFeeCents },

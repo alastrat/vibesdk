@@ -113,21 +113,26 @@ export class StoreOrderService extends BaseService {
             .run();
     }
 
-    async feeAdjusted(orderId: string): Promise<boolean> {
+    async feeAdjustment(orderId: string): Promise<{ differenceCents: number; reversalId: string | null } | null> {
         const row = await this.database
-            .select({ orderId: schema.storeFeeAdjustments.orderId })
+            .select({ differenceCents: schema.storeFeeAdjustments.differenceCents, reversalId: schema.storeFeeAdjustments.reversalId })
             .from(schema.storeFeeAdjustments)
             .where(eq(schema.storeFeeAdjustments.orderId, orderId))
             .get();
-        return row !== undefined;
+        return row ?? null;
     }
 
-    async recordFeeAdjustment(input: { orderId: string; collectedCents: number; actualFeeCents: number; reversalId: string | null; now: Date }): Promise<void> {
+    /** Saves the fee difference to take back before Stripe is called; a second plan for the order changes nothing. */
+    async planFeeAdjustment(plan: { orderId: string; collectedCents: number; actualFeeCents: number; differenceCents: number; now: Date }): Promise<void> {
         await this.database
             .insert(schema.storeFeeAdjustments)
-            .values({ orderId: input.orderId, collectedCents: input.collectedCents, actualFeeCents: input.actualFeeCents, reversalId: input.reversalId, createdAt: input.now })
+            .values({ orderId: plan.orderId, collectedCents: plan.collectedCents, actualFeeCents: plan.actualFeeCents, differenceCents: plan.differenceCents, reversalId: null, createdAt: plan.now })
             .onConflictDoNothing()
             .run();
+    }
+
+    async completeFeeAdjustment(orderId: string, reversalId: string): Promise<void> {
+        await this.database.update(schema.storeFeeAdjustments).set({ reversalId }).where(eq(schema.storeFeeAdjustments.orderId, orderId)).run();
     }
 
     private async ordersWhere(condition: ReturnType<typeof eq>, limit: number): Promise<StoreOrderView[]> {
