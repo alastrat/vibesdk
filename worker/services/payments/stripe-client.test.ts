@@ -267,7 +267,6 @@ describe('store checkout sessions', () => {
 		successUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
 		cancelUrl: 'https://store.test/cart',
 		nowMs: 1_800_000_000_000,
-		sellerIsMerchant: true,
 	};
 
 	it('charges the priced lines and shipping, with the fee and the seller as merchant', async () => {
@@ -298,14 +297,6 @@ describe('store checkout sessions', () => {
 		]) {
 			expect(body).toContain(part);
 		}
-	});
-
-	it("leaves the seller out as merchant when their account can't take card payments yet", async () => {
-		const { calls, fakeFetch } = recordingFetch({ id: 'cs_3', url: null });
-		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({ ...INPUT, sellerIsMerchant: false });
-		const body = decodeURIComponent(String(calls[0].init.body));
-		expect(body).not.toContain('on_behalf_of');
-		expect(body).toContain('payment_intent_data[transfer_data][destination]=acct_1');
 	});
 
 	it('labels free shipping', async () => {

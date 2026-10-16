@@ -17,6 +17,7 @@ import { parseStoreManifest } from './manifest';
 import { priceCart, requestedCatalogVariantIds, type CatalogLock } from './pricing';
 import { parseCheckoutRequest, safeReturnPath } from './request';
 import type { StoreCheckoutRecord } from './store';
+import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/seller-setup';
 
 /** As long as template sales' sessions. */
 const CHECKOUT_TTL_MS = 35 * 60 * 1000;
@@ -24,8 +25,8 @@ const CHECKOUT_TTL_MS = 35 * 60 * 1000;
 export interface StartCheckoutDeps {
 	/** The deployed preview's `estori-store.json`, or null when it has none. */
 	loadManifest(): Promise<{ commitHash: string; text: string } | null>;
-	/** `cardPaymentsActive` decides whether the seller can be the merchant of record. */
-	sellerAccount(): Promise<{ stripeAccountId: string; paymentsEnabled: boolean; cardPaymentsActive: boolean } | null>;
+	/** The seller's Stripe account and how far their payments setup has come; null when they never connected Stripe. */
+	sellerAccount(): Promise<{ stripeAccountId: string; readiness: SellerReadiness } | null>;
 	lockCatalogPrices(catalogVariantIds: readonly string[], shipToCountry: string): Promise<readonly CatalogLock[]>;
 	saveCheckout(checkout: StoreCheckoutRecord): Promise<void>;
 	createSession(input: StoreCheckoutSessionInput): Promise<{ id: string; url: string | null }>;
@@ -62,7 +63,8 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	if (!request) return refusal('invalid_request');
 
 	const seller = await deps.sellerAccount();
-	if (!seller?.paymentsEnabled) return refusal('payments_unavailable');
+	// The seller must be able to be the merchant of record, with a bank account Stripe can recover from.
+	if (!seller || sellerSetupStep(seller.readiness) !== null) return refusal('payments_unavailable');
 	const file = await deps.loadManifest();
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	if (!file || !parsed?.ok) return refusal('payments_unavailable');
@@ -116,7 +118,6 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 			successUrl: `${input.storeBaseUrl}${STORE_PLATFORM_PREFIX}/return?session_id={CHECKOUT_SESSION_ID}`,
 			cancelUrl: `${input.storeBaseUrl}${cancelPath}`,
 			nowMs,
-			sellerIsMerchant: seller.cardPaymentsActive,
 		});
 	} catch {
 		await deps.markFailed(checkoutId);

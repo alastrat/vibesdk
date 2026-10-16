@@ -5,10 +5,11 @@
 
 import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal } from '../../../shared/types/store-payments';
 import { createLogger } from '../../logger';
-import { StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
+import { SellerTermsService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
 import { AppService } from '../../database/services/AppService';
 import { stripeFromEnv } from '../../services/payments/config';
-import { accountFlags, type StripeClient } from '../../services/payments/stripe-client';
+import { accountFlags, sellerReadiness, type StripeClient } from '../../services/payments/stripe-client';
+import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/seller-setup';
 import { lockCatalogPricesFor } from '../../services/store-payments/catalog-locks';
 import { refusal, startStoreCheckout, storeInfoOf } from '../../services/store-payments/checkout';
 import { recordStoreOrder } from '../../services/store-payments/fulfill';
@@ -101,31 +102,21 @@ async function loadManifest(env: Env, target: StorePlatformTarget): Promise<{ co
 }
 
 /**
- * The seller's account for a checkout: payments need charges and transfers; the seller is the merchant of record only
- * once their card payments capability is active. Stored flags this fresh skip the Stripe call; a checkout always reads
- * the capability from Stripe, which stores don't keep.
+ * The seller's Connect account and payments readiness. Checkout reads the account live from Stripe, and rewrites stored
+ * flags older than the freshness window; the store's info, which runs on every page load, reads the stored flags only.
  */
-async function sellerAccount(
-	env: Env,
-	userId: string,
-	stripe: StripeClient | null,
-): Promise<{ stripeAccountId: string; paymentsEnabled: boolean; cardPaymentsActive: boolean } | null> {
+async function sellerAccount(env: Env, userId: string, stripe: StripeClient | null): Promise<{ stripeAccountId: string; readiness: SellerReadiness } | null> {
 	const accounts = new StripeConnectService(env);
 	const stored = await accounts.getByUser(userId);
 	if (!stored) return null;
-	if (!stripe) {
-		return { stripeAccountId: stored.stripeAccountId, paymentsEnabled: stored.chargesEnabled && stored.transfersActive, cardPaymentsActive: false };
-	}
+	const termsAccepted = await new SellerTermsService(env).hasAccepted(userId);
+	if (!stripe) return { stripeAccountId: stored.stripeAccountId, readiness: sellerReadiness(stored, termsAccepted) };
 	const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
 	if (!account) return null;
 	const fresh = accountFlags(account);
 	// A row with no update time, or one older than the freshness window, is rewritten with what Stripe says now.
 	if (Date.now() - (stored.updatedAt?.getTime() ?? 0) > SELLER_FLAGS_MAX_AGE_MS) await accounts.updateFlags(stored.stripeAccountId, fresh);
-	return {
-		stripeAccountId: stored.stripeAccountId,
-		paymentsEnabled: fresh.chargesEnabled && fresh.transfersActive,
-		cardPaymentsActive: account.capabilities?.card_payments === 'active',
-	};
+	return { stripeAccountId: stored.stripeAccountId, readiness: sellerReadiness(fresh, termsAccepted) };
 }
 
 async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Response> {
@@ -134,7 +125,7 @@ async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Re
 	if (!parsed?.ok) return json({ error: 'This store has no valid estori-store.json' }, 404);
 	const access = await previewAccess(env, target);
 	const seller = access === 'owner' && stripeMode(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
-	return json(storeInfoOf(parsed.manifest, seller?.paymentsEnabled === true));
+	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null));
 }
 
 async function serveCheckout(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {

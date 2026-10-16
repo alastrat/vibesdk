@@ -4,6 +4,7 @@ import type { StoreCheckoutSessionInput } from '../payments/stripe-client';
 import { startStoreCheckout, type StartCheckoutDeps, type StartCheckoutInput } from './checkout';
 import type { CatalogLock } from './pricing';
 import type { StoreCheckoutRecord } from './store';
+import type { SellerReadiness } from '../../../shared/types/seller-setup';
 
 const MANIFEST: StoreManifest = {
 	version: 1,
@@ -24,6 +25,8 @@ const INPUT: StartCheckoutInput = {
 	storeBaseUrl: 'https://preview.test/space/app_1/preview/main',
 };
 
+const READY: SellerReadiness = { termsAccepted: true, connected: true, detailsSubmitted: true, cardPaymentsActive: true, transfersActive: true, payoutsEnabled: true };
+
 function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 	const saved: StoreCheckoutRecord[] = [];
 	const sessions: StoreCheckoutSessionInput[] = [];
@@ -32,7 +35,7 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 	const failed: string[] = [];
 	const deps: StartCheckoutDeps = {
 		loadManifest: async () => ({ commitHash: 'c0ffee', text: JSON.stringify(MANIFEST) }),
-		sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: true, cardPaymentsActive: true }),
+		sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: READY }),
 		lockCatalogPrices: async (ids, country) => {
 			locked.push({ ids, country });
 			const lock: CatalogLock = { ok: true, catalogVariantId: 'cv_lamp', supplier: 'cjdropshipping', supplierVariantId: 'cj_vid_lamp', lockedCatalogPriceCents: 1200 };
@@ -96,7 +99,10 @@ describe('startStoreCheckout', () => {
 			[{ stripeMode: 'live' }, {}, 'payments_unavailable'],
 			[{ stripeMode: null }, {}, 'payments_unavailable'],
 			[{}, { sellerAccount: async () => null }, 'payments_unavailable'],
-			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: false, cardPaymentsActive: false }) }, 'payments_unavailable'],
+			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: { ...READY, termsAccepted: false } }) }, 'payments_unavailable'],
+			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: { ...READY, cardPaymentsActive: false } }) }, 'payments_unavailable'],
+			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: { ...READY, transfersActive: false } }) }, 'payments_unavailable'],
+			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: { ...READY, payoutsEnabled: false } }) }, 'payments_unavailable'],
 			[{}, { loadManifest: async () => null }, 'payments_unavailable'],
 			[{}, { loadManifest: async () => ({ commitHash: 'c0ffee', text: '{' }) }, 'payments_unavailable'],
 		];
@@ -123,14 +129,15 @@ describe('startStoreCheckout', () => {
 		expect(sessions).toHaveLength(0);
 	});
 
-	it("makes the seller the merchant only when their account takes card payments", async () => {
-		const merchant = fakeDeps();
-		await startStoreCheckout(merchant.deps, INPUT);
-		expect(merchant.sessions[0].sellerIsMerchant).toBe(true);
+	it('never makes Estori the merchant: a session goes out only for a seller who can be one', async () => {
+		const ready = fakeDeps();
+		await startStoreCheckout(ready.deps, INPUT);
+		expect(ready.sessions).toHaveLength(1);
+		expect('sellerIsMerchant' in ready.sessions[0]).toBe(false);
 
-		const transfersOnly = fakeDeps({ sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: true, cardPaymentsActive: false }) });
-		expect(await startStoreCheckout(transfersOnly.deps, INPUT)).toMatchObject({ ok: true });
-		expect(transfersOnly.sessions[0].sellerIsMerchant).toBe(false);
+		const transfersOnly = fakeDeps({ sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: { ...READY, cardPaymentsActive: false } }) });
+		expect(await startStoreCheckout(transfersOnly.deps, INPUT)).toEqual({ ok: false, reason: 'payments_unavailable', message: "This store can't take payments right now." });
+		expect(transfersOnly.sessions).toHaveLength(0);
 	});
 
 	it('marks the checkout failed when Stripe refuses the session', async () => {
