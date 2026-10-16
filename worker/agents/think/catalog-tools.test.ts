@@ -1,0 +1,56 @@
+import { describe, expect, it } from 'vitest';
+import type { CatalogProductView } from '../../../shared/types/catalog';
+import { createCatalogTools } from './catalog-tools';
+
+const PRODUCT: CatalogProductView = {
+	productId: 'cp_1',
+	title: 'Gravity Pet Feeder',
+	description: 'Feeds and waters.',
+	category: 'Pet supplies',
+	imageUrls: ['https://estori.test/api/catalog/images/cp_1/a.jpg'],
+	shipsTo: ['US'],
+	variants: [
+		{ catalogVariantId: 'cv_blue', name: 'Blue', options: { Color: 'Blue' }, imageUrl: null, available: true, deliveryDays: { min: 3, max: 5 }, catalogPriceCents: 2028, minimumRetailPriceCents: 2120, suggestedRetailPriceCents: 4099 },
+	],
+};
+
+const tools = createCatalogTools({
+	search: async () => [PRODUCT],
+	get: async (productId) => (productId === 'cp_1' ? PRODUCT : null),
+});
+
+type Executable = { execute?: (input: unknown, options: unknown) => unknown };
+
+async function run(tool: unknown, input: unknown): Promise<string> {
+	const execute = (tool as Executable).execute;
+	if (!execute) throw new Error('tool has no execute');
+	return String(await execute(input, { toolCallId: 't1', messages: [] }));
+}
+
+describe('the catalog tools', () => {
+	it('return products with retail price guidance and no catalog price', async () => {
+		for (const output of [await run(tools.search_catalog, { query: 'pet' }), await run(tools.get_catalog_product, { productId: 'cp_1' })]) {
+			expect(output).toContain('cv_blue');
+			expect(output).toContain('"minimumRetailPriceCents":2120');
+			expect(output).not.toContain('catalogPriceCents');
+		}
+	});
+
+	it('answer an unknown product with an error the model can act on', async () => {
+		expect(JSON.parse(await run(tools.get_catalog_product, { productId: 'cp_x' }))).toEqual({ error: 'No catalog product cp_x. Use search_catalog to find one.' });
+	});
+
+	it('tell the model how to add a product to a store', () => {
+		const description = `${tools.search_catalog.description} ${tools.get_catalog_product.description}`;
+		for (const phrase of ['estori-store.json', 'catalogVariantId', 'minimumRetailPriceCents']) expect(description).toContain(phrase);
+	});
+});
+
+const agentSources = import.meta.glob<string>('/worker/agents/think/ThinkAgent.ts', { query: '?raw', import: 'default', eager: true });
+
+describe('the agent', () => {
+	it('registers the catalog tools', () => {
+		const agent = Object.values(agentSources)[0] ?? '';
+		expect(agent).toContain('...createCatalogTools(catalogToolDepsFromEnv(this.env))');
+	});
+});

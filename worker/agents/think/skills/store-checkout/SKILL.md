@@ -92,3 +92,15 @@ async function showConfirmation() {
 
 In the preview, the store's owner pays with Stripe's test cards (4242 4242 4242 4242, any future date, any CVC). Anyone
 else viewing the preview sees "This is a demo".
+
+## 6. Catalog products
+
+Estori's catalog has products a store can sell without holding stock: Estori ships each order to the shopper.
+
+1. Call `search_catalog` (or `get_catalog_product` with a `productId`) to find products. Each variant has a
+   `catalogVariantId`, a `minimumRetailPriceCents` and a `suggestedRetailPriceCents`.
+2. Add the product to `estori-store.json`. On each variant, set `catalogVariantId`, and set `priceCents` to the seller's
+   price: at least `minimumRetailPriceCents`, by default `suggestedRetailPriceCents`.
+3. Use the catalog's `imageUrls` as the product `image`.
+4. Catalog products ship to the US only: keep `"US"` in `shipping.countries`.
+5. Never write a catalog price, a supplier name or a SKU anywhere in the store.

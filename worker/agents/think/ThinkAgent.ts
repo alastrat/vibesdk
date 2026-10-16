@@ -21,6 +21,7 @@ import { createBrowserConsoleLogsTool } from './browser-logs-tool';
 import { createDeploySpaceTool } from './deploy-tool';
 import { createCommitTool } from './commit-tool';
 import { createSetTitleTool } from './set-title-tool';
+import { catalogToolDepsFromEnv, createCatalogTools } from './catalog-tools';
 import { serializeTools } from './serial-tools';
 import { selectThinkContextMessages } from './context-selector';
 import { getUserConfigurableSettings } from '../../config';
@@ -334,6 +335,8 @@ export class ThinkAgent extends Think<Env> {
 					defaultUrl: previewUrl,
 				}),
 			}),
+			// Estori's catalog, for stores that sell catalog products.
+			...createCatalogTools(catalogToolDepsFromEnv(this.env)),
 			// Set the project's short display title (host observes the output).
 			set_title: createSetTitleTool(),
 			// Ask the user clarifying questions via a frontend popup.
