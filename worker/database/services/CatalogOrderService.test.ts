@@ -41,6 +41,16 @@ describe('CatalogOrderService', () => {
 		expect(await orders.insertPaidOrder(ORDER)).toBe(false);
 	});
 
+	it("writes each item in its own statement, so a large order stays under D1's 100 parameters per statement", async () => {
+		const { d1, batches } = recordingD1();
+		const orders = new CatalogOrderService({ DB: d1 } as unknown as Env);
+		const items = Array.from({ length: 12 }, (_, index) => ({ ...ORDER.items[0], id: `ci_${index}` }));
+
+		expect(await orders.insertPaidOrder({ ...ORDER, items })).toBe(true);
+		expect(batches[0]).toHaveLength(13);
+		expect(Math.max(...batches[0].map((entry) => entry.params.length))).toBeLessThanOrEqual(100);
+	});
+
 	it('rethrows any other failure', async () => {
 		const { d1 } = recordingD1();
 		const broken = { ...d1, batch: async () => Promise.reject(new Error('Network connection lost')) };

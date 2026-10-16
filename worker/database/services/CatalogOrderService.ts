@@ -30,7 +30,8 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
                     createdAt: at,
                     updatedAt: at,
                 }),
-                this.database.insert(schema.catalogOrderItems).values(order.items.map((item) => ({ ...item, orderId: order.id, updatedAt: at }))),
+                // One statement per item: D1 binds at most 100 parameters per statement, and an item takes 11.
+                ...order.items.map((item) => this.database.insert(schema.catalogOrderItems).values({ ...item, orderId: order.id, updatedAt: at })),
             ]);
             return true;
         } catch (error) {
