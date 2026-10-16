@@ -1,6 +1,6 @@
 /** D1 reads and writes for catalog products, variants and offers. */
 
-import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, lt, max, or, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { generateId } from '../../utils/idGenerator';
@@ -280,5 +280,15 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
                 .map(({ productId: _productId, options, ...variant }) => ({ ...variant, options: JSON.parse(options) as Record<string, string> })),
             offers: offers.filter((offer) => variants.some((variant) => variant.productId === product.id && variant.id === offer.variantId)),
         }));
+    }
+
+    /** How many products sell, and when any product last refreshed from the supplier. */
+    async refreshHealth(): Promise<{ activeProducts: number; lastRefreshAt: Date | null }> {
+        const row = await this.database
+            .select({ active: count(), last: max(schema.catalogProducts.detailsRefreshedAt) })
+            .from(schema.catalogProducts)
+            .where(eq(schema.catalogProducts.status, 'active'))
+            .get();
+        return { activeProducts: row?.active ?? 0, lastRefreshAt: row?.last ?? null };
     }
 }

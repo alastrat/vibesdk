@@ -126,4 +126,15 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
             .all();
         return rows.map((row) => row.id);
     }
+
+    /** Orders with an item in this status since before `before`: late to ship ('placed') or to arrive ('shipped'). */
+    async lateItems(status: 'placed' | 'shipped', before: Date): Promise<string[]> {
+        const rows = await this.database
+            .selectDistinct({ orderId: schema.catalogOrderItems.orderId })
+            .from(schema.catalogOrderItems)
+            .where(and(eq(schema.catalogOrderItems.status, status), lt(schema.catalogOrderItems.updatedAt, before)))
+            .limit(100)
+            .all();
+        return rows.map((row) => row.orderId);
+    }
 }

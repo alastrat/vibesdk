@@ -7,6 +7,8 @@ import { CURATED_PRODUCTS } from './curated';
 import { createImageCopier } from './images';
 import { refreshCatalogBatch } from './refresh';
 import { sweepUnstartedOrders } from './runner';
+import { CATALOG_HEALTH_CRON, runCatalogHealth } from './health';
+import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 
 const logger = createLogger('CatalogSchedule');
 
@@ -37,6 +39,15 @@ export async function runCatalogSchedule(cron: string, env: Env): Promise<void> 
 			Date.now(),
 		);
 		if (started > 0) logger.warn('Started catalog orders whose hand-off was lost', { started });
+	}
+	if (cron === CATALOG_HEALTH_CRON) {
+		const products = new CatalogProductService(env);
+		const orders = new CatalogOrderService(env);
+		const raised = await runCatalogHealth(
+			{ refreshHealth: () => products.refreshHealth(), lateItems: (status, before) => orders.lateItems(status, before), alert: platformAlertsFromEnv(env) },
+			Date.now(),
+		);
+		if (raised > 0) logger.warn('Catalog health check raised alerts', { raised });
 	}
 }
 

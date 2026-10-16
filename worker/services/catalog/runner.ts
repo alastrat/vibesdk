@@ -112,6 +112,7 @@ async function sync(state: RunnerState, deps: RunnerDeps, nowMs: number): Promis
 			const patches = applySupplierUpdate(items, update);
 			if (patches.length === 0) continue;
 			await deps.store.patchItems(patches);
+			if (update.kind === 'cancelled') await deps.alert({ kind: 'supplier-cancelled', orderId: state.orderId, message: update.reason });
 			items = items.map((item) => {
 				const patch = patches.find((candidate) => candidate.itemId === item.id);
 				if (!patch) return item;

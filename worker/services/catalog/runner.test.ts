@@ -107,12 +107,13 @@ describe('runnerStep', () => {
 
 	it('refunds items the supplier cancels after payment', async () => {
 		const store = await storeWithOrder();
-		const { runnerDeps, refunds } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }], [[{ kind: 'cancelled', supplierOrderId: 'cj_9', supplierVariantIds: [], reason: 'Cancelled' }]]);
+		const { runnerDeps, refunds, alerts } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }], [[{ kind: 'cancelled', supplierOrderId: 'cj_9', supplierVariantIds: [], reason: 'Cancelled' }]]);
 
 		const first = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
 		await runnerStep(first.state, runnerDeps, NOW + RUNNER_SYNC_INTERVAL_MS);
 		expect(refunds.sort()).toEqual([4000, 5000]);
 		expect(store.orders.get('co_1')?.items.every((item) => item.status === 'refunded')).toBe(true);
+		expect(alerts).toContain('supplier-cancelled');
 	});
 
 	it('hands a refund that keeps failing to the owner', async () => {
