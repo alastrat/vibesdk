@@ -17,6 +17,7 @@ import {
 import { getAgentStub } from './agents';
 import { servePublicSite } from './services/public-site/serve';
 import { AppService } from './database/services/AppService';
+import { runCatalogSchedule } from './services/catalog/scheduler';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -342,6 +343,9 @@ const worker = {
 		}
 
 		return new Response('Not Found', { status: 404 });
+	},
+	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+		ctx.waitUntil(runCatalogSchedule(controller.cron, env));
 	},
 } satisfies ExportedHandler<Env>;
 
