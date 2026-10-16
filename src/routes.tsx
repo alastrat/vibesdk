@@ -27,6 +27,11 @@ import LoginPage from './routes/auth/LoginPage';
 import BrandsPage from './routes/solutions/brands';
 import ResellersPage from './routes/solutions/resellers';
 import DigitalPage from './routes/solutions/digital';
+import SubscriptionsPage from './routes/solutions/subscriptions';
+import CommunitiesPage from './routes/solutions/communities';
+import EmailMarketingPage from './routes/platform/email-marketing';
+import WebAnalyticsPage from './routes/platform/web-analytics';
+import SearchOptimizationPage from './routes/platform/seo';
 import AgenticCommercePage from './routes/agentic-commerce';
 import DevelopersPage from './routes/creators/developers';
 import ContentCreatorsPage from './routes/creators/content';
@@ -173,6 +178,26 @@ const routes = [
 					{
 						path: 'solutions/digital',
 						Component: DigitalPage,
+					},
+					{
+						path: 'solutions/subscriptions',
+						Component: SubscriptionsPage,
+					},
+					{
+						path: 'solutions/communities',
+						Component: CommunitiesPage,
+					},
+					{
+						path: 'platform/email-marketing',
+						Component: EmailMarketingPage,
+					},
+					{
+						path: 'platform/web-analytics',
+						Component: WebAnalyticsPage,
+					},
+					{
+						path: 'platform/seo',
+						Component: SearchOptimizationPage,
 					},
 					{
 						path: 'agentic-commerce',

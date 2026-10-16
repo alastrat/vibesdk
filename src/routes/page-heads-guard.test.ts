@@ -4,6 +4,8 @@ const sources = import.meta.glob<string>(
 	[
 		'/src/routes/landing/LandingPage.tsx',
 		'/src/routes/solutions/*.tsx',
+		'/src/routes/platform/*.tsx',
+		'/src/components/public-site/SolutionCopyPage.tsx',
 		'/src/routes/agentic-commerce.tsx',
 		'/src/routes/creators/*.tsx',
 		'/src/routes/discover/index.tsx',
@@ -28,6 +30,13 @@ const PAGE_HEADS: Readonly<Record<string, string>> = {
 	'/src/routes/solutions/brands.tsx': '<PageMeta {...BRANDS_PAGE} />',
 	'/src/routes/solutions/resellers.tsx': '<PageMeta {...RESELLERS_PAGE} />',
 	'/src/routes/solutions/digital.tsx': '<PageMeta {...DIGITAL_PAGE} />',
+	'/src/routes/solutions/subscriptions.tsx': 'head={SUBSCRIPTIONS_PAGE}',
+	'/src/routes/solutions/communities.tsx': 'head={COMMUNITIES_PAGE}',
+	'/src/routes/platform/email-marketing.tsx': 'head={EMAIL_MARKETING_PAGE}',
+	'/src/routes/platform/web-analytics.tsx': 'head={WEB_ANALYTICS_PAGE}',
+	'/src/routes/platform/seo.tsx': 'head={SEARCH_OPTIMIZATION_PAGE}',
+	// The template the five pages above share renders the head it's given.
+	'/src/components/public-site/SolutionCopyPage.tsx': '<PageMeta {...head} />',
 	'/src/routes/agentic-commerce.tsx': '<PageMeta {...AGENTIC_COMMERCE_PAGE} />',
 	'/src/routes/creators/developers.tsx': '<PageMeta {...DEVELOPERS_PAGE} />',
 	'/src/routes/creators/content.tsx': '<PageMeta {...CONTENT_CREATORS_PAGE} />',

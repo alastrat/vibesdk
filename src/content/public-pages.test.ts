@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { BLOG_POSTS, blogPostPath } from './blog';
 import { INDUSTRIES, INDUSTRIES_PAGE, INDUSTRIES_PATH, industriesStructuredData, industryPath, industryStructuredData } from './industries';
 import { LEGAL_DOCUMENTS, LEGAL_LINKS } from './legal/legal-documents';
+import { CAPABILITIES, PLATFORM_CAPABILITIES } from '@/lib/capabilities';
+import { AUDIENCES } from '@/lib/site-nav';
 import { PUBLIC_PAGES, findPublicPage } from './public-pages';
 
 const ORIGIN = 'https://estori.example';
@@ -16,6 +18,11 @@ describe('public pages', () => {
 		}
 	});
 
+	it("has a page for every link in the Solutions menu's Estori for and Platform columns", () => {
+		const links = [...AUDIENCES.map((item) => item.to), ...PLATFORM_CAPABILITIES.map((id) => CAPABILITIES[id].path)];
+		for (const link of links) expect(findPublicPage(link.split('#')[0] ?? link), link).toBeDefined();
+	});
+
 	it('covers the marketing pages, Discover, every industry, every blog post and the legal texts', () => {
 		const paths = PUBLIC_PAGES.map((page) => page.path);
 		for (const path of [
@@ -28,6 +35,11 @@ describe('public pages', () => {
 			'/solutions/brands',
 			'/solutions/resellers',
 			'/solutions/digital',
+			'/solutions/subscriptions',
+			'/solutions/communities',
+			'/platform/email-marketing',
+			'/platform/web-analytics',
+			'/platform/seo',
 			'/agentic-commerce',
 			'/creators/developers',
 			'/creators/content',

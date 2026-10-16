@@ -1,7 +1,7 @@
 import { pageTitle } from '@/brand/page-title';
 import { SCHEMA_CONTEXT, absoluteUrl, breadcrumbList, faqPage, type Crumb, type JsonLdNode } from '@/lib/seo';
 import { BRAND } from '../../shared/brand';
-import { FREE_PLAN_ANSWER, PAYMENTS_ANSWER, type CardCopy, type FaqItem } from './positioning';
+import { FREE_PLAN_ANSWER, PAYMENTS_ANSWER, type CardCopy, type TextFaqItem } from './positioning';
 
 export type IndustrySlug =
 	| 'beauty-personal-care'
@@ -20,11 +20,6 @@ export interface IndustryPhoto {
 	photographer: string;
 	/** The photo's page on Unsplash, which the credit links to. */
 	url: string;
-}
-
-/** A question with a plain-text answer, so it can go in structured data as well as on the page. */
-export interface TextFaqItem extends FaqItem {
-	answer: string;
 }
 
 /** The piece of a store drawn over a feature's photo: what a shopper would see once the feature is built. */

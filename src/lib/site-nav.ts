@@ -1,7 +1,7 @@
 import type { CapabilityId } from './capabilities';
 
 /** The menu icon for an item, by name; the menu maps each to its drawing. */
-export type NavIcon = 'storefront' | 'package' | 'download' | 'code' | 'megaphone';
+export type NavIcon = 'storefront' | 'package' | 'download' | 'repeat' | 'users' | 'code' | 'megaphone';
 
 export interface NavItem {
 	to: string;
@@ -17,6 +17,8 @@ export const AUDIENCES: readonly NavItem[] = [
 	{ to: '/solutions/brands', label: 'Brands and store owners', description: 'Build your store in minutes, run it with AI help', icon: 'storefront' },
 	{ to: '/solutions/resellers', label: 'Dropshippers and resellers', description: 'Curated products, added in a few clicks', icon: 'package', capability: 'product-catalog' },
 	{ to: '/solutions/digital', label: 'Digital businesses', description: 'Sell e-books, images and videos, and run your community', icon: 'download', capability: 'digital-products' },
+	{ to: '/solutions/subscriptions', label: 'Subscriptions', description: 'Boxes, memberships and refills that renew on their own', icon: 'repeat', capability: 'subscriptions' },
+	{ to: '/solutions/communities', label: 'Communities', description: 'Members-only posts, events and downloads in your store', icon: 'users', capability: 'digital-products' },
 ];
 
 export const CREATORS_CAPTION = 'Take part in Estori without running a store.';

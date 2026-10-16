@@ -11,6 +11,11 @@ export interface FaqItem {
 	answer: ReactNode;
 }
 
+/** A question with a plain-text answer, so it can go in structured data as well as on the page. */
+export interface TextFaqItem extends FaqItem {
+	answer: string;
+}
+
 export const AGENTIC_COMMERCE_SUMMARY =
 	'More and more people ask AI assistants for product recommendations. Your store will share its products in a way those assistants can read, so they can recommend you and send buyers to your store.';
 
@@ -126,6 +131,8 @@ export const DEVELOPER_STEPS = [
 
 export const CONTENT_STEPS = ['Request early access.', 'Choose merchants and products to promote.', 'Share your link or store, and earn per sale.'] as const;
 
+export const COMING_SOON_ANSWER = "A capability we're building. It isn't part of Estori until it launches, and its details may change before then.";
+
 export const FREE_PLAN_ANSWER = 'Building and editing stores is free within daily limits. Paid plans are coming soon.';
 
 export const PAYMENTS_ANSWER = 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.';
@@ -134,7 +141,7 @@ export const BRAND_FAQ: readonly FaqItem[] = [
 	{ question: 'Do I need to code?', answer: 'No. You describe your store and ask for changes in plain words.' },
 	{ question: 'What can I use today?', answer: 'Building, editing and previewing complete stores. Everything marked Coming soon is on the way.' },
 	{ question: 'Can my store take payments?', answer: PAYMENTS_ANSWER },
-	{ question: 'What does Coming soon mean?', answer: "A capability we're building. It isn't part of Estori until it launches, and its details may change before then." },
+	{ question: 'What does Coming soon mean?', answer: COMING_SOON_ANSWER },
 ];
 
 export const RESELLER_FAQ: readonly FaqItem[] = [

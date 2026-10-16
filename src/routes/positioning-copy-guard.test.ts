@@ -6,6 +6,8 @@ const pages = import.meta.glob<string>(
 	[
 		'/src/routes/landing/*.tsx',
 		'/src/routes/solutions/*.tsx',
+		'/src/routes/platform/*.tsx',
+		'/src/content/solution-pages.ts',
 		'/src/routes/creators/*.tsx',
 		'/src/routes/agentic-commerce.tsx',
 		'/src/routes/pricing.tsx',

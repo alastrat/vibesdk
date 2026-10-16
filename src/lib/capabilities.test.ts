@@ -13,6 +13,10 @@ describe('capability registry', () => {
 			'digital-products': 'early-access',
 			'developer-templates': 'available',
 			'content-creators': 'early-access',
+			subscriptions: 'coming-soon',
+			'email-marketing': 'coming-soon',
+			'web-analytics': 'coming-soon',
+			'search-optimization': 'coming-soon',
 		};
 		for (const [id, status] of Object.entries(statuses)) expect(CAPABILITIES[id as CapabilityId].status).toBe(status);
 	});
@@ -31,7 +35,14 @@ describe('capability registry', () => {
 		expect(ids).toEqual([...EARLY_ACCESS_CAPABILITIES].sort());
 	});
 
+	it('names the new platform capabilities the way the menu shows them, each at its own page', () => {
+		expect(CAPABILITIES['email-marketing']).toMatchObject({ name: 'Email marketing', path: '/platform/email-marketing' });
+		expect(CAPABILITIES['web-analytics']).toMatchObject({ name: 'Web analytics', path: '/platform/web-analytics' });
+		expect(CAPABILITIES['search-optimization']).toMatchObject({ name: 'SEO, GEO & AEO optimization', path: '/platform/seo' });
+		expect(CAPABILITIES.subscriptions.path).toBe('/solutions/subscriptions');
+	});
+
 	it('lists the Platform menu in the approved order', () => {
-		expect(PLATFORM_CAPABILITIES).toEqual(['store-builder', 'agentic-commerce', 'operations-agents', 'personalized-shopping', 'product-catalog', 'digital-products']);
+		expect(PLATFORM_CAPABILITIES).toEqual(['store-builder', 'operations-agents', 'personalized-shopping', 'email-marketing', 'web-analytics', 'search-optimization']);
 	});
 });

@@ -15,6 +15,7 @@
 		"./src/content",
 		"./src/api-types.ts",
 		"./src/brand/page-title.ts",
+		"./src/lib/capabilities.ts",
 		"./src/lib/legal-document.ts",
 		"./src/lib/page-head.ts",
 		"./src/lib/seo.ts",

@@ -1,6 +1,8 @@
 import { Link } from 'react-router';
 import {
 	ArmchairIcon,
+	ArrowsClockwiseIcon,
+	ChartLineUpIcon,
 	ChatCircleTextIcon,
 	ChatsCircleIcon,
 	CoatHangerIcon,
@@ -12,11 +14,13 @@ import {
 	FlowerLotusIcon,
 	ForkKnifeIcon,
 	HandSoapIcon,
+	ListMagnifyingGlassIcon,
 	MagicWandIcon,
 	MagnifyingGlassIcon,
 	MegaphoneIcon,
 	MountainsIcon,
 	PackageIcon,
+	PaperPlaneTiltIcon,
 	PawPrintIcon,
 	PercentIcon,
 	RobotIcon,
@@ -40,6 +44,8 @@ const NAV_ICONS: Readonly<Record<NavIcon, Icon>> = {
 	storefront: StorefrontIcon,
 	package: PackageIcon,
 	download: DownloadSimpleIcon,
+	repeat: ArrowsClockwiseIcon,
+	users: UsersThreeIcon,
 	code: CodeIcon,
 	megaphone: MegaphoneIcon,
 };
@@ -64,6 +70,10 @@ const CAPABILITY_ICONS: Readonly<Record<CapabilityId, Icon>> = {
 	'digital-products': UsersThreeIcon,
 	'developer-templates': CodeIcon,
 	'content-creators': MegaphoneIcon,
+	subscriptions: ArrowsClockwiseIcon,
+	'email-marketing': PaperPlaneTiltIcon,
+	'web-analytics': ChartLineUpIcon,
+	'search-optimization': ListMagnifyingGlassIcon,
 };
 
 /** One item in a menu column: every item has an icon; some add a line of description or a status tag. */

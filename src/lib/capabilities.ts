@@ -15,7 +15,11 @@ export type CapabilityId =
 	| 'product-catalog'
 	| 'digital-products'
 	| 'developer-templates'
-	| 'content-creators';
+	| 'content-creators'
+	| 'subscriptions'
+	| 'email-marketing'
+	| 'web-analytics'
+	| 'search-optimization';
 
 export interface Capability {
 	id: CapabilityId;
@@ -83,16 +87,44 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, Capability>> = {
 		status: 'early-access',
 		path: '/creators/content',
 	},
+	subscriptions: {
+		id: 'subscriptions',
+		name: 'Subscriptions',
+		description: 'Boxes, memberships and refills that renew on their own',
+		status: 'coming-soon',
+		path: '/solutions/subscriptions',
+	},
+	'email-marketing': {
+		id: 'email-marketing',
+		name: 'Email marketing',
+		description: 'Newsletters and automatic emails, written by asking',
+		status: 'coming-soon',
+		path: '/platform/email-marketing',
+	},
+	'web-analytics': {
+		id: 'web-analytics',
+		name: 'Web analytics',
+		description: 'Visitors, sources and sales, built into your store',
+		status: 'coming-soon',
+		path: '/platform/web-analytics',
+	},
+	'search-optimization': {
+		id: 'search-optimization',
+		name: 'SEO, GEO & AEO optimization',
+		description: 'Show up in search results and in AI answers',
+		status: 'coming-soon',
+		path: '/platform/seo',
+	},
 };
 
 /** The Solutions menu's Platform column, in order. */
 export const PLATFORM_CAPABILITIES: readonly CapabilityId[] = [
 	'store-builder',
-	'agentic-commerce',
 	'operations-agents',
 	'personalized-shopping',
-	'product-catalog',
-	'digital-products',
+	'email-marketing',
+	'web-analytics',
+	'search-optimization',
 ];
 
 export function capabilitiesWithStatus(status: CapabilityStatus): Capability[] {

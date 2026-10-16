@@ -41,6 +41,36 @@ export const DIGITAL_PAGE: PublicPage = {
 	description: 'Sell e-books, images and videos and run a community from your Estori store. In early access.',
 };
 
+export const SUBSCRIPTIONS_PAGE: PublicPage = {
+	path: '/solutions/subscriptions',
+	title: 'For subscription businesses',
+	description: 'Sell boxes, memberships and refills that renew on their own from your Estori store. Subscriptions are coming soon; build your store today.',
+};
+
+export const COMMUNITIES_PAGE: PublicPage = {
+	path: '/solutions/communities',
+	title: 'For communities',
+	description: 'Run a members-only community inside your Estori store, with posts, events and downloads. In early access.',
+};
+
+export const EMAIL_MARKETING_PAGE: PublicPage = {
+	path: '/platform/email-marketing',
+	title: 'Email marketing',
+	description: 'Grow a list from your Estori store, write newsletters by asking and set up emails that send themselves. Coming soon.',
+};
+
+export const WEB_ANALYTICS_PAGE: PublicPage = {
+	path: '/platform/web-analytics',
+	title: 'Web analytics',
+	description: 'See who visits your Estori store, where they come from and which pages turn visitors into buyers, built in. Coming soon.',
+};
+
+export const SEARCH_OPTIMIZATION_PAGE: PublicPage = {
+	path: '/platform/seo',
+	title: 'SEO, GEO & AEO optimization',
+	description: 'Help your Estori store show up in search results and in the answers AI assistants give. Coming soon.',
+};
+
 export const INDUSTRIES_HUB_PAGE: PublicPage = {
 	path: INDUSTRIES_PATH,
 	title: INDUSTRIES_PAGE.metaTitle,
@@ -121,9 +151,14 @@ export const PUBLIC_PAGES: readonly PublicPage[] = [
 	BRANDS_PAGE,
 	RESELLERS_PAGE,
 	DIGITAL_PAGE,
+	SUBSCRIPTIONS_PAGE,
+	COMMUNITIES_PAGE,
 	INDUSTRIES_HUB_PAGE,
 	...INDUSTRIES.map(industryPage),
 	AGENTIC_COMMERCE_PAGE,
+	EMAIL_MARKETING_PAGE,
+	WEB_ANALYTICS_PAGE,
+	SEARCH_OPTIMIZATION_PAGE,
 	DEVELOPERS_PAGE,
 	CONTENT_CREATORS_PAGE,
 	DISCOVER_PAGE,
