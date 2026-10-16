@@ -37,6 +37,7 @@ describe('public pages', () => {
 			'/solutions/digital',
 			'/solutions/subscriptions',
 			'/solutions/communities',
+			'/platform/catalog-fulfillment',
 			'/platform/email-marketing',
 			'/platform/web-analytics',
 			'/platform/seo',

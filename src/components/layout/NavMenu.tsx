@@ -25,8 +25,8 @@ import {
 	PercentIcon,
 	RobotIcon,
 	ShoppingCartIcon,
-	SquaresFourIcon,
 	StorefrontIcon,
+	TruckIcon,
 	UsersThreeIcon,
 	type Icon,
 } from '@phosphor-icons/react';
@@ -66,7 +66,7 @@ const CAPABILITY_ICONS: Readonly<Record<CapabilityId, Icon>> = {
 	'agentic-commerce': ChatsCircleIcon,
 	'operations-agents': RobotIcon,
 	'personalized-shopping': ShoppingCartIcon,
-	'product-catalog': SquaresFourIcon,
+	'product-catalog': TruckIcon,
 	'digital-products': UsersThreeIcon,
 	'developer-templates': CodeIcon,
 	'content-creators': MegaphoneIcon,

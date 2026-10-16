@@ -53,6 +53,12 @@ export const COMMUNITIES_PAGE: PublicPage = {
 	description: 'Run a members-only community inside your Estori store, with posts, events and downloads. In early access.',
 };
 
+export const CATALOG_FULFILLMENT_PAGE: PublicPage = {
+	path: '/platform/catalog-fulfillment',
+	title: 'Catalog & fulfillment',
+	description: 'Add products from a curated catalog of vetted suppliers to your Estori store, and let suppliers ship each order. Coming soon.',
+};
+
 export const EMAIL_MARKETING_PAGE: PublicPage = {
 	path: '/platform/email-marketing',
 	title: 'Email marketing',
@@ -156,6 +162,7 @@ export const PUBLIC_PAGES: readonly PublicPage[] = [
 	INDUSTRIES_HUB_PAGE,
 	...INDUSTRIES.map(industryPage),
 	AGENTIC_COMMERCE_PAGE,
+	CATALOG_FULFILLMENT_PAGE,
 	EMAIL_MARKETING_PAGE,
 	WEB_ANALYTICS_PAGE,
 	SEARCH_OPTIMIZATION_PAGE,

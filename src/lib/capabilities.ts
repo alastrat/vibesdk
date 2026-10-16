@@ -61,10 +61,10 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, Capability>> = {
 	},
 	'product-catalog': {
 		id: 'product-catalog',
-		name: 'Product catalog',
-		description: 'Vetted suppliers, added in a few clicks',
+		name: 'Catalog & fulfillment',
+		description: "Vetted suppliers' products, shipped for you",
 		status: 'coming-soon',
-		path: '/solutions/resellers#catalog',
+		path: '/platform/catalog-fulfillment',
 	},
 	'digital-products': {
 		id: 'digital-products',
@@ -120,6 +120,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, Capability>> = {
 /** The Solutions menu's Platform column, in order. */
 export const PLATFORM_CAPABILITIES: readonly CapabilityId[] = [
 	'store-builder',
+	'product-catalog',
 	'operations-agents',
 	'personalized-shopping',
 	'email-marketing',

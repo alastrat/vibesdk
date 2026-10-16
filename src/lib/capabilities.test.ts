@@ -40,9 +40,19 @@ describe('capability registry', () => {
 		expect(CAPABILITIES['web-analytics']).toMatchObject({ name: 'Web analytics', path: '/platform/web-analytics' });
 		expect(CAPABILITIES['search-optimization']).toMatchObject({ name: 'SEO, GEO & AEO optimization', path: '/platform/seo' });
 		expect(CAPABILITIES.subscriptions.path).toBe('/solutions/subscriptions');
+		// The catalog now promises fulfillment too, right below the store builder.
+		expect(CAPABILITIES['product-catalog']).toMatchObject({ name: 'Catalog & fulfillment', path: '/platform/catalog-fulfillment' });
 	});
 
 	it('lists the Platform menu in the approved order', () => {
-		expect(PLATFORM_CAPABILITIES).toEqual(['store-builder', 'operations-agents', 'personalized-shopping', 'email-marketing', 'web-analytics', 'search-optimization']);
+		expect(PLATFORM_CAPABILITIES).toEqual([
+			'store-builder',
+			'product-catalog',
+			'operations-agents',
+			'personalized-shopping',
+			'email-marketing',
+			'web-analytics',
+			'search-optimization',
+		]);
 	});
 });

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from '@/lib/capabilities';
-import { COMMUNITIES_COPY, EMAIL_MARKETING_COPY, SEARCH_OPTIMIZATION_COPY, SUBSCRIPTIONS_COPY, WEB_ANALYTICS_COPY } from './solution-pages';
+import { CATALOG_FULFILLMENT_COPY, COMMUNITIES_COPY, EMAIL_MARKETING_COPY, SEARCH_OPTIMIZATION_COPY, SUBSCRIPTIONS_COPY, WEB_ANALYTICS_COPY } from './solution-pages';
 
 const COPIES = {
+	'catalog & fulfillment': CATALOG_FULFILLMENT_COPY,
 	subscriptions: SUBSCRIPTIONS_COPY,
 	communities: COMMUNITIES_COPY,
 	'email marketing': EMAIL_MARKETING_COPY,
@@ -18,6 +19,14 @@ describe('solution and platform pages', () => {
 		expect(EMAIL_MARKETING_COPY.capability).toBe('email-marketing');
 		expect(WEB_ANALYTICS_COPY.capability).toBe('web-analytics');
 		expect(SEARCH_OPTIMIZATION_COPY.capability).toBe('search-optimization');
+		expect(CATALOG_FULFILLMENT_COPY.capability).toBe('product-catalog');
+	});
+
+	it('says suppliers ship catalog orders, and sellers ship the products they make themselves', () => {
+		const answers = CATALOG_FULFILLMENT_COPY.faq.map((item) => item.answer).join(' ');
+		expect(answers).toContain('the supplier ships each order directly to your customer');
+		expect(answers).toContain('you ship them yourself');
+		expect(CATALOG_FULFILLMENT_COPY.more).toEqual({ to: '/solutions/resellers', label: 'Estori for dropshippers and resellers' });
 	});
 
 	it('gives every page two sections of three cards, three steps and its questions', () => {

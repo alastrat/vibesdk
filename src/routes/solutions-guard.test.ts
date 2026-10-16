@@ -28,6 +28,7 @@ describe('solution pages', () => {
 			"path: 'solutions/digital'",
 			"path: 'solutions/subscriptions'",
 			"path: 'solutions/communities'",
+			"path: 'platform/catalog-fulfillment'",
 			"path: 'platform/email-marketing'",
 			"path: 'platform/web-analytics'",
 			"path: 'platform/seo'",
@@ -49,6 +50,7 @@ describe('solution pages', () => {
 		const pages: Readonly<Record<string, string>> = {
 			'/src/routes/solutions/subscriptions.tsx': '<SolutionCopyPage head={SUBSCRIPTIONS_PAGE} copy={SUBSCRIPTIONS_COPY} />',
 			'/src/routes/solutions/communities.tsx': '<SolutionCopyPage head={COMMUNITIES_PAGE} copy={COMMUNITIES_COPY} />',
+			'/src/routes/platform/catalog-fulfillment.tsx': '<SolutionCopyPage head={CATALOG_FULFILLMENT_PAGE} copy={CATALOG_FULFILLMENT_COPY} />',
 			'/src/routes/platform/email-marketing.tsx': '<SolutionCopyPage head={EMAIL_MARKETING_PAGE} copy={EMAIL_MARKETING_COPY} />',
 			'/src/routes/platform/web-analytics.tsx': '<SolutionCopyPage head={WEB_ANALYTICS_PAGE} copy={WEB_ANALYTICS_COPY} />',
 			'/src/routes/platform/seo.tsx': '<SolutionCopyPage head={SEARCH_OPTIMIZATION_PAGE} copy={SEARCH_OPTIMIZATION_COPY} />',
@@ -79,6 +81,8 @@ describe('solution pages', () => {
 		expect(brands).toMatch(/<AssistantsPanel\s+id="operations"/);
 		expect(brands).toContain('<PersonalizationSection id="personalization" />');
 		expect(source('/src/routes/solutions/resellers.tsx')).toContain('id="catalog"');
+		// The resellers page's catalog section leads to the page about catalog and fulfillment.
+		expect(source('/src/routes/solutions/resellers.tsx')).toContain('to="/platform/catalog-fulfillment"');
 	});
 
 	it('takes early-access requests for digital products, including after a sign-in that reloads the page', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BRAND } from '@/brand';
-import { AI_ASSISTANT_NAMES, COMPETITORS } from './copy-rules';
+import { AI_ASSISTANT_NAMES, COMPETITORS, SUPPLIER_NAMES } from './copy-rules';
 
 const pages = import.meta.glob<string>(
 	[
@@ -35,6 +35,11 @@ describe('positioning copy rules', () => {
 	it('names no competitor and no AI assistant or its maker', () => {
 		const lower = all.toLowerCase();
 		for (const name of [...COMPETITORS, ...AI_ASSISTANT_NAMES]) expect(lower, name).not.toContain(name);
+	});
+
+	it('names no supplier, since the catalog has none signed yet', () => {
+		const lower = all.toLowerCase();
+		for (const name of SUPPLIER_NAMES) expect(lower, name).not.toContain(name);
 	});
 
 	it('names the standards only as the open agentic commerce standards, never as "the standard"', () => {

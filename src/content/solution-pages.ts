@@ -23,6 +23,49 @@ export interface SolutionCopy {
 
 const COMING_SOON_QUESTION: TextFaqItem = { question: 'What does Coming soon mean?', answer: COMING_SOON_ANSWER };
 
+export const CATALOG_FULFILLMENT_COPY: SolutionCopy = {
+	capability: 'product-catalog',
+	eyebrow: 'Catalog & fulfillment',
+	title: 'Products to sell, shipped for you',
+	lead: 'Pick products from a curated catalog of vetted suppliers, and Estori adds them to your store. When a customer orders, the supplier ships it.',
+	sections: [
+		{
+			eyebrow: 'Catalog',
+			title: 'Choose from vetted suppliers',
+			cards: [
+				{ title: 'Vetted suppliers', body: 'Every supplier is reviewed for product quality, shipping times and returns before joining.' },
+				{ title: 'Costs up front', body: "See each product's cost, shipping time and your margin before you add it." },
+				{ title: 'Product pages written for you', body: "Estori turns each supplier's details into a product page in your store's voice." },
+			],
+		},
+		{
+			eyebrow: 'Fulfillment',
+			title: 'Orders that ship themselves',
+			cards: [
+				{ title: 'Orders go straight to the supplier', body: 'When a customer buys, the supplier gets the order, with nothing for you to forward.' },
+				{ title: 'Tracking for your customers', body: 'Tracking numbers come back to your store, and your customers follow their delivery.' },
+				{ title: 'Your own products too', body: 'Sell what you make alongside catalog products, and ship those yourself from your order records.' },
+			],
+		},
+	],
+	steps: [
+		'Apply to the catalog when it opens.',
+		'Add products and set your prices, and Estori writes the product pages.',
+		"Customers order, and suppliers ship to them under your store's name.",
+	],
+	faq: [
+		{ question: 'Is the catalog available now?', answer: "Not yet, it's coming soon. You can build your store now and add products when the catalog opens." },
+		{
+			question: 'Who ships the orders?',
+			answer: 'For catalog products, the supplier ships each order directly to your customer. For products you make, you ship them yourself.',
+		},
+		{ question: 'Can I set my own prices?', answer: "Yes. You choose your price, and the margin over the supplier's cost is yours." },
+		{ question: 'Can my store take payments?', answer: PAYMENTS_ANSWER },
+		COMING_SOON_QUESTION,
+	],
+	more: { to: '/solutions/resellers', label: 'Estori for dropshippers and resellers' },
+};
+
 export const SUBSCRIPTIONS_COPY: SolutionCopy = {
 	capability: 'subscriptions',
 	eyebrow: 'For subscription businesses',
