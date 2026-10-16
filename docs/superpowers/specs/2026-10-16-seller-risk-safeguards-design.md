@@ -157,6 +157,30 @@ the alert list gets `seller-limit-reached`.
 - **On failure:** a failed Stripe update keeps the old values and alerts `seller-level-sync-failed`. The next check
   retries.
 
+### Payout frequency, chosen by the seller
+
+- **The choice.** The seller picks daily, weekly (on a day they choose) or monthly payouts in the Payouts card. Estori
+  sets `settings[payouts][schedule][interval]` and the matching day. Manual payouts aren't offered.
+- **Default:** weekly, on Monday.
+- **The delay still applies.** The level's payout delay applies whatever the frequency.
+- **Cost shown up front.** The card shows each option's estimated monthly cost at the seller's last 30 days of sales,
+  from the pass-through below. For example: "Daily: about $9.80 a month. Weekly: about $3.50. Monthly: about $2.75."
+
+### Stripe's seller-account costs, paid by the seller
+
+Stripe charges Estori for each seller account, apart from card processing:
+- $2 for each month in which the seller receives a payout;
+- 0.25% + 25¢ for each payout. [Connect pricing](https://stripe.com/connect/pricing)
+
+Sellers pay both through `seller_charges` (section 6):
+- **How it's recorded.** The Connect webhook gains `payout.paid` for connected accounts. Each payout adds a
+  `payout-fee` charge of 0.25% of the payout plus 25¢. The seller's first payout in a calendar month also adds an
+  `active-account-fee` charge of $2.
+- **How it's collected.** Both are taken from the seller's next sales, the same way as dispute fees.
+- **Terms.** The selling terms (section 9) list these charges.
+- **If Stripe changes its prices,** the two amounts are config values in `sellerLimits`, so the rates change without a
+  code change.
+
 ### What the seller sees
 
 A new `GET /api/stores/limits` (owner of the stores) returns:
@@ -305,6 +329,7 @@ There are two acceptances:
 - **New section.** `src/content/legal/terms.md` gains a "Selling in your own store" section. It says:
   - the seller is the merchant of record for their store's sales, and needs Stripe card payments to sell;
   - the seller pays refunds they make in full, including the product cost and card fees;
+  - the seller pays Stripe's account and payout charges for their account, and picks how often they're paid;
   - for disputes, the seller pays the amount and Stripe's dispute fee;
   - Estori recovers these from the sale, from the seller's Stripe balance, and from later sales;
   - Stripe may debit the seller's bank account to cover a negative balance;
@@ -322,14 +347,16 @@ There are two acceptances:
 ## 10. Data changes (migration 0020)
 
 - `stripe_connect_accounts`: `card_payments_active` (boolean, default false), `seller_level` (text, default `new`),
-  `payout_delay_days` (integer, nullable).
+  `payout_delay_days` (integer, nullable), `payout_interval` (text, default `weekly`), `payout_anchor` (text,
+  default `monday`).
 - `users`: `seller_terms_version` (text, nullable), `seller_terms_accepted_at` (timestamp, nullable).
 - `store_fee_adjustments`: `order_id` (primary key), `collected_cents`, `actual_fee_cents`, `reversal_id`, `created_at`.
 - `store_refunds`: `id` (Stripe refund id), `order_id`, `line_no`, `amount_cents`, `request_id`, `initiated_by`,
   `created_at`. Unique on (`request_id`, `line_no`).
 - `store_disputes`: `id` (Stripe dispute id), `order_id`, `amount_cents`, `reason`, `status`,
   `reversal_id`, `reversed_cents`, `fee_cents`, `returned_cents`, `created_at`, `updated_at`.
-- `seller_charges`: `id`, `seller_user_id`, `kind` (`dispute-fee`, `dispute-shortfall`), `source_id`,
+- `seller_charges`: `id`, `seller_user_id`, `kind` (`dispute-fee`, `dispute-shortfall`, `payout-fee`,
+  `active-account-fee`), `source_id`,
   `amount_cents`, `collected_cents`, `created_at`, `updated_at`.
 - `seller_charge_collections`: `charge_id`, `order_id`, `reversal_id`, `amount_cents`, `created_at`.
 - `catalog_orders.status` gains `risk-hold`. `catalog_order_items` rejection reasons gain `disputed`. Refund reasons gain
@@ -355,6 +382,7 @@ There are two acceptances:
 - risk-hold placement, release, and the 24-hour decline;
 - the webhook routing for the dispute events;
 - the payout-delay sync, called only on a change;
+- the payout frequency update, and the monthly and per-payout charges recorded from `payout.paid`, once per payout;
 - the alert throttle and recipients;
 - the setup checks: terms not accepted, details missing, card payments inactive, payouts not enabled; each one refuses
   checkout and names the right next step;
@@ -379,6 +407,8 @@ There are two acceptances:
 - Automated dispute evidence.
 - The seller Orders page UI (the refund endpoint is ready for it).
 - Live stores.
-- Passing Connect costs to sellers. These are $2 per active seller per month and 0.25% + 25¢ per payout. Estori keeps
-  absorbing them until live-store pricing is set.
 - CJ webhooks and reconciliation.
+- Charging a Premium seller's saved subscription card for unpaid seller charges. Premium billing doesn't exist yet. When
+  it does, the card can be a last fallback after sales and the Stripe balance, if the terms authorize it.
+- Supplier adapters, Estori's own delivery records and tracking verification. These belong to a separate spec.
+- Markets in other countries and currencies. These belong to a separate brief.
