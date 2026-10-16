@@ -9,7 +9,7 @@ import { StripeApiError, accountFlags, sellerReadiness, type SellerFlags } from 
 import { sellerSetupStep } from '../../../../shared/types/seller-setup';
 import { PAYOUT_INTERVALS, type PayoutInterval } from '../../../../shared/types/store-payments';
 import { estimatedMonthlyPayoutCostCents } from '../../../services/payments/seller-costs';
-import { getUserConfigurableSettings } from '../../../config';
+import { getSellerLimitsSettings } from '../../../config';
 import { limitsFor } from '../../../../shared/types/seller-levels';
 import { parsePayoutRequest, scheduleOf } from '../../../services/payments/payout-schedule';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
@@ -26,7 +26,7 @@ const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 /** How often the seller is paid, weekly on Monday until they choose, and what each choice costs at their last month's sales. */
 async function payoutStatusOf(env: Env, userId: string, stored: { payoutInterval: PayoutInterval; payoutAnchor: string } | null): Promise<PayoutStatus> {
     const volume = await new StoreOrderService(env).salesVolumeSince(userId, new Date(Date.now() - MONTH_MS));
-    const costs = (await getUserConfigurableSettings(env, userId)).sellerLimits.costs;
+    const costs = (await getSellerLimitsSettings(env, userId)).costs;
     const payoutCostEstimates = Object.fromEntries(PAYOUT_INTERVALS.map((interval) => [interval, estimatedMonthlyPayoutCostCents(volume, interval, costs)])) as Record<PayoutInterval, number>;
     return { payoutInterval: stored?.payoutInterval ?? 'weekly', payoutAnchor: stored?.payoutAnchor ?? 'monday', payoutCostEstimates };
 }
@@ -89,7 +89,7 @@ export class StripeConnectController extends BaseController {
                 accountId = created.id;
                 try {
                     // New sellers start at the New level's payout delay.
-                    const settings = (await getUserConfigurableSettings(env, user.id)).sellerLimits;
+                    const settings = await getSellerLimitsSettings(env, user.id);
                     const delay = limitsFor('new', settings).payoutDelayDays;
                     await stripe.updatePayoutSchedule(created.id, { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: delay });
                     await accounts.saveLevel(user.id, 'new', delay);

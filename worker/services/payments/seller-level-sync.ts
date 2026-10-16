@@ -7,7 +7,7 @@ import { scheduleOf } from './payout-schedule';
 import { platformAlertsFromEnv, type PlatformAlert } from '../alerts/platform-alerts';
 import { stripeFromEnv, stripeModeOf } from './config';
 import { StoreOrderService, StripeConnectService } from '../../database';
-import { getUserConfigurableSettings } from '../../config';
+import { getSellerLimitsSettings } from '../../config';
 import { createLogger } from '../../logger';
 
 const logger = createLogger('SellerLevelSync');
@@ -49,7 +49,7 @@ export async function syncSellerLevelFromEnv(env: Env, sellerUserId: string): Pr
 		await syncSellerLevel(
 			{
 				record: () => new StoreOrderService(env).sellerRecord(sellerUserId, mode, Date.now()),
-				settings: async () => (await getUserConfigurableSettings(env, sellerUserId)).sellerLimits,
+				settings: () => getSellerLimitsSettings(env, sellerUserId),
 				stored: async () => {
 					const row = await accounts.getByUser(sellerUserId);
 					return row ? { stripeAccountId: row.stripeAccountId, level: row.sellerLevel, payoutDelayDays: row.payoutDelayDays, payoutInterval: row.payoutInterval, payoutAnchor: row.payoutAnchor } : null;

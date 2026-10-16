@@ -5,7 +5,7 @@ import { RouteContext } from '../../types/route-context';
 import { ApiResponse, ControllerResponse } from '../types';
 import { CatalogOrderService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../../database';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, stripeFromEnv, stripeModeOf } from '../../../services/payments/config';
-import { getUserConfigurableSettings } from '../../../config';
+import { getSellerLimitsSettings } from '../../../config';
 import { limitsView } from './limits-view';
 import type { SellerLimitsData } from '../../../../shared/types/seller-levels';
 import { refundStoreLines } from '../../../services/store-payments/refund-lines';
@@ -53,11 +53,11 @@ export class StoreOrdersController extends BaseController {
             const nowMs = Date.now();
             const [record, settings, stored, weeklySalesUsedCents] = await Promise.all([
                 new StoreOrderService(env).sellerRecord(userId, mode, nowMs),
-                getUserConfigurableSettings(env, userId),
+                getSellerLimitsSettings(env, userId),
                 new StripeConnectService(env).getByUser(userId),
                 new StoreCheckoutService(env).weeklyUsage(userId, mode, new Date(nowMs - 7 * 24 * 60 * 60 * 1000)),
             ]);
-            return this.createSuccessResponse<SellerLimitsData>(limitsView({ record, settings: settings.sellerLimits, storedLevel: stored?.sellerLevel ?? 'new', weeklySalesUsedCents, nowMs }));
+            return this.createSuccessResponse<SellerLimitsData>(limitsView({ record, settings, storedLevel: stored?.sellerLevel ?? 'new', weeklySalesUsedCents, nowMs }));
         } catch (error) {
             this.logger.error('Failed to load store limits', error);
             return this.createErrorResponse<SellerLimitsData>('Failed to load your store limits', 500);

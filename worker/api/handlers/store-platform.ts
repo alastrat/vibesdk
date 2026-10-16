@@ -18,7 +18,7 @@ import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader,
 import { STORE_SCRIPT } from '../../services/store-payments/store-script';
 import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
-import { getUserConfigurableSettings } from '../../config';
+import { getSellerLimitsSettings } from '../../config';
 import { limitsFor, type SellerLevelLimits } from '../../../shared/types/seller-levels';
 import { platformAlertsFromEnv } from '../../services/alerts/platform-alerts';
 import { sellerNoticesFromEnv } from '../../services/alerts/seller-notices';
@@ -131,7 +131,7 @@ async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Re
 
 /** The seller's limits: an admin's pin wins over the stored level, which Estori keeps current. */
 async function sellerLimitsOf(env: Env, sellerUserId: string): Promise<SellerLevelLimits> {
-	const settings = (await getUserConfigurableSettings(env, sellerUserId)).sellerLimits;
+	const settings = await getSellerLimitsSettings(env, sellerUserId);
 	const level = settings.pinnedLevel ?? (await new StripeConnectService(env).getByUser(sellerUserId))?.sellerLevel ?? 'new';
 	return limitsFor(level, settings);
 }

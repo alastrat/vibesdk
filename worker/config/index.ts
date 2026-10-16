@@ -134,6 +134,18 @@ export async function getGlobalConfigurableSettings(env: Env): Promise<GlobalCon
     }
 }
 
+/**
+ * A seller's limits, read from KV every time rather than the per-user cache, so an admin's pin or override applies to
+ * the next checkout and level sync. Unreadable stored settings throw: guessing could drop a limit an admin set.
+ */
+export async function getSellerLimitsSettings(env: Env, userId: string): Promise<SellerLimitsSettings> {
+    const global = (await getGlobalConfigurableSettings(env)).sellerLimits;
+    const storedConfigJson = await env.VibecoderStore.get(`user_config:${userId}`);
+    if (!storedConfigJson) return global;
+    const storedConfig: StoredConfig = JSON.parse(storedConfigJson);
+    return storedConfig.sellerLimits ? deepMerge<SellerLimitsSettings>(global, storedConfig.sellerLimits) : global;
+}
+
 export async function getUserConfigurableSettings(env: Env, userId: string): Promise<GlobalConfigurableSettings> {
     const globalConfig = await getGlobalConfigurableSettings(env);
     if (!userId) {
