@@ -4,8 +4,8 @@ import type { CatalogItemStatus } from '../../../shared/types/catalog';
 import type { CatalogOrderItemRow, ItemPatch } from './store';
 import type { SupplierUpdate } from './supplier';
 
-/** How far an item has come; rejected and refunded items are closed and never move again. */
-const PROGRESS: Readonly<Record<CatalogItemStatus, number>> = { pending: 0, placed: 1, shipped: 2, delivered: 3, rejected: -1, refunded: -1 };
+/** How far an item has come; rejected, refunded and withheld items are closed and never move again. */
+const PROGRESS: Readonly<Record<CatalogItemStatus, number>> = { pending: 0, placed: 1, shipped: 2, delivered: 3, rejected: -1, refunded: -1, withheld: -1 };
 
 function namedIn(variantIds: readonly string[], item: CatalogOrderItemRow): boolean {
 	return variantIds.length === 0 || variantIds.includes(item.supplierVariantId);
