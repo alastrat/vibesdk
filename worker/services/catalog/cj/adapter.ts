@@ -96,7 +96,8 @@ export class CJDropshippingAdapter implements SupplierAdapter {
 			return { ok: false, kind: 'retryable', reason: 'The supplier order lists other lines' };
 		}
 		if (!order || UNCONFIRMED_STATUSES.includes(order.orderStatus)) await this.deps.client.confirmOrder(orderId);
-		if (this.deps.mode === 'sandbox') await this.deps.client.simulatePay(orderId);
+		// CJ's sandbox finds the order to pay only by its SD order code.
+		if (this.deps.mode === 'sandbox') await this.deps.client.simulatePay(order?.cjOrderCode ?? orderId);
 		else await this.deps.client.payBalance(shipmentOrderId ?? orderId);
 		const confirmed = await this.deps.client.getOrderDetail(orderId);
 		if (confirmed && PAID_STATUSES.includes(confirmed.orderStatus)) return { ok: true, supplierOrderId: orderId };

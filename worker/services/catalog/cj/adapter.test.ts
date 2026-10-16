@@ -9,7 +9,7 @@ const LINES = [{ supplierVariantId: 'v1', quantity: 2 }];
 const REFERENCE = 'co_1';
 
 function detail(status: string, lines = [{ vid: 'v1', quantity: 2 }]): CjOrderDetail {
-	return { orderId: 'cj_1', orderNum: 'n', orderStatus: status, trackNumber: null, trackingProvider: null, logisticName: 'USPS', orderAmount: 33.8, productList: lines };
+	return { orderId: 'cj_1', orderNum: 'n', cjOrderCode: 'SD1', orderStatus: status, trackNumber: null, trackingProvider: null, logisticName: 'USPS', orderAmount: 33.8, productList: lines };
 }
 
 function fakeClient(script: { existing?: CjOrderDetail | null; afterPay?: CjOrderDetail; create?: () => Promise<{ orderId: string; shipmentOrderId: string | null; orderStatus: string | null; interceptOrderReasons: null | Array<{ code: number; message: string }> }> } = {}) {
@@ -64,7 +64,7 @@ describe('CJDropshippingAdapter', () => {
 			products: [{ vid: 'v1', quantity: 2 }],
 		});
 		expect(JSON.stringify(created[0])).not.toContain('ada@example.com');
-		expect(paid).toEqual(['cj_1']);
+		expect(paid).toEqual(['SD1']);
 		expect(balancePaid).toEqual([]);
 	});
 
@@ -74,7 +74,8 @@ describe('CJDropshippingAdapter', () => {
 		const client = { ...fresh.client, getOrderDetail: async (id: string) => (reads.push(id), reads.length === 1 ? null : reads.length === 2 ? detail('CREATED') : detail('UNSHIPPED')) };
 		expect(await adapterWith(client).adapter.placeOrder({ orderReference: REFERENCE, lines: LINES, address: ADDRESS })).toEqual({ ok: true, supplierOrderId: 'cj_1' });
 		expect(fresh.confirmed).toEqual(['cj_1']);
-		expect(fresh.paid).toEqual(['cj_1']);
+		// CJ's sandbox finds an order to pay only by its SD order code.
+		expect(fresh.paid).toEqual(['SD1']);
 
 		const leftCreated = fakeClient({ existing: detail('CREATED') });
 		await adapterWith(leftCreated.client).adapter.placeOrder({ orderReference: REFERENCE, lines: LINES, address: ADDRESS });
@@ -91,7 +92,7 @@ describe('CJDropshippingAdapter', () => {
 	it('pays an unpaid order it finds only when its lines match, and alerts otherwise', async () => {
 		const matching = fakeClient({ existing: detail('UNPAID') });
 		expect(await adapterWith(matching.client).adapter.placeOrder({ orderReference: REFERENCE, lines: LINES, address: ADDRESS })).toEqual({ ok: true, supplierOrderId: 'cj_1' });
-		expect(matching.paid).toEqual(['cj_1']);
+		expect(matching.paid).toEqual(['SD1']);
 
 		const different = fakeClient({ existing: detail('UNPAID', [{ vid: 'v9', quantity: 1 }]) });
 		const { adapter, alerts } = adapterWith(different.client);

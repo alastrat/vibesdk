@@ -79,6 +79,8 @@ export interface CjCreatedOrder {
 export interface CjOrderDetail {
 	orderId: string;
 	orderNum: string | null;
+	/** The SD-prefixed code CJ's sandbox payment finds an order by. */
+	cjOrderCode: string | null;
 	/** CREATED, IN_CART, UNPAID, UNSHIPPED, SHIPPED, DELIVERED or CANCELLED. */
 	orderStatus: string;
 	trackNumber: string | null;
