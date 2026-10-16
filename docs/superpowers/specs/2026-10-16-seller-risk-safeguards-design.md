@@ -164,7 +164,7 @@ the alert list gets `seller-limit-reached`.
 - **Default:** weekly, on Monday.
 - **The delay still applies.** The level's payout delay applies whatever the frequency.
 - **Cost shown up front.** The card shows each option's estimated monthly cost at the seller's last 30 days of sales,
-  from the pass-through below. For example: "Daily: about $9.80 a month. Weekly: about $3.50. Monthly: about $2.75."
+  from the pass-through below. At $1,000 a month in sales, for example: "Daily: about $10.00 a month. Weekly: about $5.50. Monthly: about $4.75."
 
 ### Stripe's seller-account costs, paid by the seller
 
