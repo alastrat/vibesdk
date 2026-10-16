@@ -138,6 +138,7 @@ export class SpaceDO extends DurableObject<Env> {
         modules TEXT NOT NULL,
         assets TEXT NOT NULL DEFAULT '{}',
         asset_config TEXT NOT NULL DEFAULT '{}',
+        store_manifest TEXT,
         deployed_at INTEGER NOT NULL
       )
     `)
@@ -145,6 +146,7 @@ export class SpaceDO extends DurableObject<Env> {
     // Migrate existing deployments tables that lack new columns
     try { this.ctx.storage.sql.exec(`ALTER TABLE deployments ADD COLUMN assets TEXT NOT NULL DEFAULT '{}'`) } catch {}
     try { this.ctx.storage.sql.exec(`ALTER TABLE deployments ADD COLUMN asset_config TEXT NOT NULL DEFAULT '{}'`) } catch {}
+    try { this.ctx.storage.sql.exec(`ALTER TABLE deployments ADD COLUMN store_manifest TEXT`) } catch {}
 
     // Initialize git repo if not already done
     try {
@@ -632,6 +634,16 @@ export class SpaceDO extends DurableObject<Env> {
     }
     const res = await handleDeployCommand(ctx, "get_deployment", fakeRequest)
     return res.json()
+  }
+
+  /** The deployed branch's `estori-store.json` as committed, which prices checkout in previews. */
+  async getStoreManifest(branch: string): Promise<{ commitHash: string; manifest: string | null } | null> {
+    await this.ensureInit()
+    const row = this.ctx.storage.sql
+      .exec("SELECT commit_hash, store_manifest FROM deployments WHERE branch = ?", branch)
+      .toArray()[0]
+    if (!row) return null
+    return { commitHash: row.commit_hash as string, manifest: (row.store_manifest as string | null) ?? null }
   }
 
   // ── Space info ──────────────────────────────────────────────────
