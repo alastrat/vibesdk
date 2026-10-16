@@ -28,8 +28,11 @@ export const STORE_LINE_KINDS = ['own', 'catalog'] as const;
 export type StoreLineKind = (typeof STORE_LINE_KINDS)[number];
 export const STORE_REFUND_INITIATORS = ['seller', 'estori'] as const;
 export type StoreRefundInitiator = (typeof STORE_REFUND_INITIATORS)[number];
-export const SELLER_CHARGE_KINDS = ['dispute-fee', 'dispute-shortfall', 'payout-fee', 'active-account-fee'] as const;
+/** `refund-shortfall`: a refund's seller share that the sale's transfer could no longer cover, taken from later sales. */
+export const SELLER_CHARGE_KINDS = ['dispute-fee', 'dispute-shortfall', 'payout-fee', 'active-account-fee', 'refund-shortfall'] as const;
 export type SellerChargeKind = (typeof SELLER_CHARGE_KINDS)[number];
+export const DISPUTE_REVERSAL_STATES = ['none', 'planned', 'done', 'refused'] as const;
+export type DisputeReversalState = (typeof DISPUTE_REVERSAL_STATES)[number];
 export const PAYOUT_INTERVALS = ['daily', 'weekly', 'monthly'] as const;
 export type PayoutInterval = (typeof PAYOUT_INTERVALS)[number];
 

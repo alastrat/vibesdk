@@ -11,14 +11,23 @@ function uniqueIndex(table: Parameters<typeof getTableConfig>[0], name: string):
 }
 
 describe('seller money schema', () => {
-	it('records each refund once per request and line, and each Stripe refund once', () => {
-		expect(uniqueIndex(schema.storeRefunds, 'store_refunds_request_line_unique_idx')).toBe(true);
+	it('claims each order line once before Stripe is called, whoever asks, and keeps the refund and its reversal', () => {
+		expect(uniqueIndex(schema.storeRefunds, 'store_refunds_order_line_unique_idx')).toBe(true);
 		expect(schema.storeRefunds.initiatedBy.enumValues).toEqual(['seller', 'estori']);
+		expect(schema.storeRefunds.stripeRefundId.notNull).toBe(false);
+		expect(schema.storeRefunds.reversalId.notNull).toBe(false);
+		expect(schema.storeRefunds.reversalCents.default).toBe(0);
+	});
+
+	it('plans each money move before Stripe is called: dispute reversals, fee differences and charge collections', () => {
+		expect(schema.storeDisputes.reversalState.default).toBe('none');
+		expect(schema.storeFeeAdjustments.differenceCents.default).toBe(0);
+		expect(schema.sellerChargeCollections.reversalId.notNull).toBe(false);
 	});
 
 	it('keeps one charge per kind and source, so a redelivered event charges once', () => {
 		expect(uniqueIndex(schema.sellerCharges, 'seller_charges_kind_source_unique_idx')).toBe(true);
-		expect(schema.sellerCharges.kind.enumValues).toEqual(['dispute-fee', 'dispute-shortfall', 'payout-fee', 'active-account-fee']);
+		expect(schema.sellerCharges.kind.enumValues).toEqual(['dispute-fee', 'dispute-shortfall', 'payout-fee', 'active-account-fee', 'refund-shortfall']);
 		expect(schema.sellerCharges.collectedCents.default).toBe(0);
 		expect(uniqueIndex(schema.sellerChargeCollections, 'seller_charge_collections_unique_idx')).toBe(true);
 	});

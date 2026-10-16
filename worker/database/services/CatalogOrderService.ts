@@ -1,6 +1,6 @@
 /** D1 reads and writes for catalog orders and their items. */
 
-import { and, eq, inArray, lt } from 'drizzle-orm';
+import { and, eq, inArray, lt, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { CatalogOrderRow, CatalogOrderStore, ItemPatch, NewCatalogOrder } from '../../services/catalog/store';
@@ -171,5 +171,32 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
                 ),
             ))
             .run();
+    }
+
+    /** A won dispute's withheld items go back to be bought; returns the catalog order to restart, if any. */
+    async releaseWithheld(checkoutSessionId: string): Promise<string | null> {
+        const order = await this.database
+            .select({ id: schema.catalogOrders.id })
+            .from(schema.catalogOrders)
+            .where(eq(schema.catalogOrders.stripeCheckoutSessionId, checkoutSessionId))
+            .get();
+        if (!order) return null;
+        await this.database
+            .update(schema.catalogOrderItems)
+            .set({ status: 'pending', updatedAt: new Date() })
+            .where(and(eq(schema.catalogOrderItems.orderId, order.id), eq(schema.catalogOrderItems.status, 'withheld')))
+            .run();
+        return order.id;
+    }
+
+    /** The catalog price of a disputed order's withheld items: what Estori kept for goods it never bought. */
+    async withheldCatalogCents(checkoutSessionId: string): Promise<number> {
+        const row = await this.database
+            .select({ cents: sql<number>`COALESCE(SUM(${schema.catalogOrderItems.catalogPriceCents} * ${schema.catalogOrderItems.quantity}), 0)` })
+            .from(schema.catalogOrderItems)
+            .innerJoin(schema.catalogOrders, eq(schema.catalogOrders.id, schema.catalogOrderItems.orderId))
+            .where(and(eq(schema.catalogOrders.stripeCheckoutSessionId, checkoutSessionId), eq(schema.catalogOrderItems.status, 'withheld')))
+            .get();
+        return row?.cents ?? 0;
     }
 }

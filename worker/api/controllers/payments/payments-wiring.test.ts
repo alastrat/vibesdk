@@ -41,7 +41,7 @@ describe('payments routes', () => {
 
 	it('routes disputes on store payments to the dispute handlers', () => {
 		const webhook = source('/worker/api/controllers/payments/webhook.ts');
-		expect(webhook).toContain("event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed'");
+		expect(webhook).toContain("event.type === 'charge.dispute.created' || event.type === 'charge.dispute.funds_withdrawn' || event.type === 'charge.dispute.closed'");
 		expect(webhook).toContain('handleDisputeOpened(deps, object)');
 		expect(webhook).toContain('handleDisputeClosed(deps, object)');
 	});

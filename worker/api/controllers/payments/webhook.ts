@@ -76,9 +76,10 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
         await new StoreCheckoutService(env).expire(object.metadata.checkoutId);
         return;
     }
-    if ((event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed') && isStripeDispute(object)) {
-        const deps = disputeDepsFromEnv(env, object);
-        const result = event.type === 'charge.dispute.created' ? await handleDisputeOpened(deps, object) : await handleDisputeClosed(deps, object);
+    // An inquiry escalates to a chargeback with funds_withdrawn, which runs the opening again.
+    if ((event.type === 'charge.dispute.created' || event.type === 'charge.dispute.funds_withdrawn' || event.type === 'charge.dispute.closed') && isStripeDispute(object)) {
+        const deps = disputeDepsFromEnv(env);
+        const result = event.type === 'charge.dispute.closed' ? await handleDisputeClosed(deps, object) : await handleDisputeOpened(deps, object);
         logger.info('Dispute handled', { id: object.id, type: event.type, result });
         return;
     }

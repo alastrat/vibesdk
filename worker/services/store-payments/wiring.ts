@@ -3,11 +3,11 @@
 import { CatalogOrderService, SellerChargeService, StoreCheckoutService, StoreDisputeService, StoreOrderService } from '../../database';
 import { generateId } from '../../utils/idGenerator';
 import { recordPaidCatalogOrder } from '../catalog/record';
-import { scheduleCatalogPlacement } from '../catalog/scheduler';
+import { restartCatalogPlacement, scheduleCatalogPlacement } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
 import { settleSale } from './settle';
-import type { DisputeDeps, StripeDispute } from './disputes';
+import type { DisputeDeps } from './disputes';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 
 export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
@@ -49,7 +49,7 @@ export async function recordStoreSession(env: Env, sessionId: string): Promise<R
 }
 
 /** Dispute handling's D1, Stripe and alert wiring, for one dispute event. */
-export function disputeDepsFromEnv(env: Env, dispute: StripeDispute): DisputeDeps {
+export function disputeDepsFromEnv(env: Env): DisputeDeps {
 	const stripe = stripeFromEnv(env);
 	if (!stripe) throw new Error('Stripe is not configured');
 	const orders = new StoreOrderService(env);
@@ -70,19 +70,20 @@ export function disputeDepsFromEnv(env: Env, dispute: StripeDispute): DisputeDep
 		addCharge: async (charge) => {
 			await charges.add(charge);
 		},
-		setFeeCharge: async (amountCents) => {
-			const charge = await charges.findBySource('dispute-fee', dispute.id);
-			const order = dispute.payment_intent ? await orders.findByPaymentIntent(dispute.payment_intent) : null;
-			if (!charge || !order?.sellerStripeAccountId) return;
-			const excess = charge.collectedCents - amountCents;
-			if (excess > 0) {
-				await stripe.createTransfer({ destination: order.sellerStripeAccountId, amountCents: excess, idempotencyKey: `dispute-fee-return-${dispute.id}`, metadata: { disputeId: dispute.id } });
-			}
-			await charges.setAmount(charge.id, amountCents, new Date());
-		},
+		setCharge: (charge) => charges.setCharge(charge),
 		withholdCatalog: (checkoutSessionId) => new CatalogOrderService(env).withholdPending(checkoutSessionId),
+		releaseCatalog: async (checkoutSessionId) => {
+			const catalogOrderId = await new CatalogOrderService(env).releaseWithheld(checkoutSessionId);
+			if (catalogOrderId) await restartCatalogPlacement(env, catalogOrderId);
+		},
+		withheldCatalogCents: (checkoutSessionId) => new CatalogOrderService(env).withheldCatalogCents(checkoutSessionId),
 		setOrderStatus: async (status) => {
 			if (orderId) await orders.setPaymentStatus(orderId, status, new Date());
+		},
+		recomputeOrderStatus: async () => {
+			if (!orderId) return;
+			await orders.setPaymentStatus(orderId, 'paid', new Date());
+			await orders.applyRefunds(orderId, new Date());
 		},
 		alert: platformAlertsFromEnv(env),
 		now: () => new Date(),

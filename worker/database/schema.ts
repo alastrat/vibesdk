@@ -17,6 +17,7 @@ import {
     CATALOG_VARIANT_STATUSES,
 } from '../../shared/types/catalog';
 import {
+    DISPUTE_REVERSAL_STATES,
     PAYOUT_INTERVALS,
     SELLER_CHARGE_KINDS,
     STORE_CHECKOUT_STATUSES,
@@ -519,7 +520,10 @@ export const storeOrderItems = sqliteTable('store_order_items', {
     pk: primaryKey({ columns: [table.orderId, table.lineNo] }),
 }));
 
-/** Every refund of a store order line, by whoever started it; Stripe's refund id is the key. */
+/**
+ * Every refund of a store order line, by whoever started it. The row is claimed before Stripe is called, so a line is
+ * refunded once whoever asks; the Stripe refund and the seller's reversal are filled in as they happen.
+ */
 export const storeRefunds = sqliteTable('store_refunds', {
     id: text('id').primaryKey(),
     orderId: text('order_id').notNull().references(() => storeOrders.id),
@@ -527,9 +531,13 @@ export const storeRefunds = sqliteTable('store_refunds', {
     amountCents: integer('amount_cents').notNull(),
     requestId: text('request_id').notNull(),
     initiatedBy: text('initiated_by', { enum: STORE_REFUND_INITIATORS }).notNull(),
+    stripeRefundId: text('stripe_refund_id'),
+    /** What to take back from the seller's transfer for this line; 0 when the catalog refund handles it. */
+    reversalCents: integer('reversal_cents').notNull().default(0),
+    reversalId: text('reversal_id'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
-    requestLineUnique: uniqueIndex('store_refunds_request_line_unique_idx').on(table.requestId, table.lineNo),
+    orderLineUnique: uniqueIndex('store_refunds_order_line_unique_idx').on(table.orderId, table.lineNo),
     orderIdx: index('store_refunds_order_idx').on(table.orderId),
 }));
 
@@ -540,6 +548,8 @@ export const storeDisputes = sqliteTable('store_disputes', {
     amountCents: integer('amount_cents').notNull(),
     reason: text('reason').notNull(),
     status: text('status').notNull(),
+    /** none: nothing to take back yet (an inquiry); planned: saved before Stripe is called; done or refused after. */
+    reversalState: text('reversal_state', { enum: DISPUTE_REVERSAL_STATES }).notNull().default('none'),
     reversalId: text('reversal_id'),
     reversedCents: integer('reversed_cents').notNull().default(0),
     feeCents: integer('fee_cents').notNull().default(0),
@@ -566,7 +576,8 @@ export const sellerCharges = sqliteTable('seller_charges', {
 export const sellerChargeCollections = sqliteTable('seller_charge_collections', {
     chargeId: text('charge_id').notNull().references(() => sellerCharges.id),
     orderId: text('order_id').notNull().references(() => storeOrders.id),
-    reversalId: text('reversal_id').notNull(),
+    /** Null while the collection is claimed but not yet taken from the transfer. */
+    reversalId: text('reversal_id'),
     amountCents: integer('amount_cents').notNull(),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
@@ -578,6 +589,8 @@ export const storeFeeAdjustments = sqliteTable('store_fee_adjustments', {
     orderId: text('order_id').primaryKey().references(() => storeOrders.id),
     collectedCents: integer('collected_cents').notNull(),
     actualFeeCents: integer('actual_fee_cents').notNull(),
+    /** What to take back, saved before Stripe is called; the reversal id follows once it's done. */
+    differenceCents: integer('difference_cents').notNull().default(0),
     reversalId: text('reversal_id'),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 });

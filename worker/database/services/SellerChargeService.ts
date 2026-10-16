@@ -50,8 +50,14 @@ export class SellerChargeService extends BaseService {
 		]);
 	}
 
-	async setAmount(chargeId: string, amountCents: number, now: Date): Promise<void> {
-		await this.database.update(schema.sellerCharges).set({ amountCents, updatedAt: now }).where(eq(schema.sellerCharges.id, chargeId)).run();
+	/** Sets a charge's amount, creating it when missing, and returns what was already collected for it. */
+	async setCharge(input: { sellerUserId: string; kind: SellerChargeKind; sourceId: string; amountCents: number; now: Date }): Promise<number> {
+		await this.database
+			.insert(schema.sellerCharges)
+			.values({ id: `sc_${generateId()}`, sellerUserId: input.sellerUserId, kind: input.kind, sourceId: input.sourceId, amountCents: input.amountCents, createdAt: input.now, updatedAt: input.now })
+			.onConflictDoUpdate({ target: [schema.sellerCharges.kind, schema.sellerCharges.sourceId], set: { amountCents: input.amountCents, updatedAt: input.now } })
+			.run();
+		return (await this.findBySource(input.kind, input.sourceId))?.collectedCents ?? 0;
 	}
 
 	async findBySource(kind: SellerChargeKind, sourceId: string): Promise<(OpenSellerCharge & { sellerUserId: string }) | null> {

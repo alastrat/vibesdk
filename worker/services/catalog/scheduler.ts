@@ -60,3 +60,13 @@ export async function scheduleCatalogPlacement(env: Env, orderId: string): Promi
 		logger.error('Could not start the catalog order runner', { orderId, error });
 	}
 }
+
+/** Places a catalog order's pending items again, after a won dispute released them. A failure is logged, not thrown. */
+export async function restartCatalogPlacement(env: Env, orderId: string): Promise<void> {
+	try {
+		const namespace = env.CATALOG_ORDER_RUNNER;
+		await namespace.get(namespace.idFromName(orderId)).retry(orderId);
+	} catch (error) {
+		logger.error('Could not restart the catalog order runner', { orderId, error });
+	}
+}
