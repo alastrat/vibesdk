@@ -10,6 +10,7 @@ import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { getGlobalConfigurableSettings } from '../../config';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { JWTUtils } from '../../utils/jwtUtils';
+import { handleStorePlatform, matchStorePlatformPath } from './store-platform';
 
 const SPACE_PREVIEW_ROUTE_PATTERN = /^\/space\/([^/]+)\/preview\/([^/]+)(?:\/.*)?$/;
 
@@ -121,6 +122,21 @@ async function enforcePreviewRateLimit(
 	}
 }
 
+/** An authorized preview request: platform paths are answered here, everything else goes to the store. */
+async function serveAuthorizedPreview(
+	request: Request,
+	env: Env,
+	spaceName: string,
+	branch: string,
+	claims: SpacePreviewClaims,
+): Promise<Response> {
+	const platform = matchStorePlatformPath(new URL(request.url).pathname);
+	if (platform) {
+		return handleStorePlatform(request, env, { appId: spaceName, branch, ...platform, previewUserId: claims.userId });
+	}
+	return forwardToSpacePreview(request, env, spaceName);
+}
+
 /**
  * Unified, token-only preview auth. A request is authorized if it carries a
  * valid path/branch-scoped preview cookie, or a valid `?t=` token (which then
@@ -144,7 +160,7 @@ export async function handleSpacePreview(
 		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
 			const limited = await enforcePreviewRateLimit(env, cookieToken, request);
 			if (limited) return limited;
-			return forwardToSpacePreview(request, env, spaceName);
+			return serveAuthorizedPreview(request, env, spaceName, branch, claims);
 		}
 	}
 
@@ -155,7 +171,7 @@ export async function handleSpacePreview(
 		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
 			const limited = await enforcePreviewRateLimit(env, queryToken, request);
 			if (limited) return limited;
-			const response = await forwardToSpacePreview(request, env, spaceName);
+			const response = await serveAuthorizedPreview(request, env, spaceName, branch, claims);
 			if (isWebSocketResponse(response)) {
 				return response;
 			}

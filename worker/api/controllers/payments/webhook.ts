@@ -5,7 +5,9 @@
  */
 
 import { createLogger } from '../../../logger';
-import { StripeConnectService, TemplateService } from '../../../database';
+import { StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
+import { STORE_ORDER_KIND } from '../../../../shared/types/store-payments';
+import { recordStoreSession } from '../../../services/store-payments/wiring';
 import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
 import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount } from '../../../services/payments/fulfill';
@@ -37,6 +39,11 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
     const object = event.data.object;
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
         if (!isCheckoutSession(object)) return;
+        if (object.metadata?.kind === STORE_ORDER_KIND) {
+            const stored = await recordStoreSession(env, object.id);
+            logger.info('Store checkout session handled', { id: object.id, result: stored.result });
+            return;
+        }
         const listings = new TemplateService(env);
         const result = await fulfillCheckoutSession(
             {
@@ -57,6 +64,10 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
             return;
         }
         logger.info('Checkout session handled', { id: object.id, result });
+        return;
+    }
+    if (event.type === 'checkout.session.expired' && isCheckoutSession(object) && object.metadata?.kind === STORE_ORDER_KIND && object.metadata.checkoutId) {
+        await new StoreCheckoutService(env).expire(object.metadata.checkoutId);
         return;
     }
     if (event.type === 'account.updated' && isStripeAccount(object)) {
