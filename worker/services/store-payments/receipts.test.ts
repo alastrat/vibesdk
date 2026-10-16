@@ -95,4 +95,17 @@ describe('the store script', () => {
 		// Stripe Checkout can't be framed, so a framed store opens it in a new tab.
 		expect(STORE_SCRIPT).toContain('window.open(');
 	});
+
+	it('always resolves, so a store never waits on an unreadable answer', () => {
+		expect(STORE_SCRIPT).toContain('.catch(');
+		expect(STORE_SCRIPT).toContain("Checkout couldn't start. Refresh the page and try again.");
+	});
+
+	it('opens the checkout tab before waiting when framed, so pop-up blockers allow it', () => {
+		const open = STORE_SCRIPT.indexOf("window.open('', '_blank')");
+		expect(open).toBeGreaterThan(-1);
+		expect(open).toBeLessThan(STORE_SCRIPT.indexOf("call('/checkout'"));
+		expect(STORE_SCRIPT).toContain('tab.close()');
+		expect(STORE_SCRIPT).toContain('Allow pop-ups');
+	});
 });
