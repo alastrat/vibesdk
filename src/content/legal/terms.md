@@ -1,7 +1,7 @@
 ---
 title: Terms of Service
-version: 2026-10-13
-updated: October 13, 2026
+version: 2026-10-16
+updated: October 16, 2026
 ---
 
 These Terms of Service ("Terms") are an agreement between you and {{entity.name}}, {{entity.kind}} ("Globalink", "we", "us"), which operates Estori at estori.app (the "Service"). By creating an account or using the Service, you agree to these Terms and to our [Privacy Policy](/privacy). If you don't agree, don't use the Service.
@@ -70,7 +70,27 @@ Payouts follow Stripe's schedule and rules. Sellers are responsible for any taxe
 
 If we refund a purchase under our Refund Policy, or a buyer's card issuer reverses a payment (a chargeback), we reverse the seller's share of that sale. If the seller's share can't be recovered from their Stripe account, the seller owes it to us. We may revoke access to a refunded site.
 
-## 10. Acceptable use
+## 10. Selling in your own store
+
+This section applies when a store you build on Estori takes payments from shoppers. Sections 7 to 9 cover paid sites.
+
+**You are the seller.** You are the merchant of record for your store's sales. You sell to your shoppers under your store's name, and you're responsible for your products, prices and store policies, for delivering orders and for answering your shoppers. We provide the software, take payments for you through Stripe and, for products you sell from the Estori catalog, buy and ship them for you.
+
+**Setting up payments.** Your store takes payments only after you accept these terms, finish Stripe's setup with card payments active, and add a bank account Stripe has verified.
+
+**What each sale costs.** We keep our fee from each sale: card processing, plus the catalog price of any catalog products in the order. When a card costs more to process than our standard rate, for example a card from another country, we take the difference from that sale. You also pay what Stripe charges for your account, currently $2 for each month in which you receive a payout, and 0.25% plus 25 cents for each payout. You choose how often you're paid.
+
+**Refunds you give.** When you refund a shopper, you pay the whole refund, including the catalog price and card processing of what you refund. A refund goes through only when your Stripe balance can cover it.
+
+**Disputes.** If a shopper disputes a payment with their bank, you pay the disputed amount and the dispute fee Stripe charges. We take the amount back from the sale when the dispute opens, and return it if the dispute is decided in your favor.
+
+**How we recover what you owe.** We recover what you owe under this section from the sale it relates to, from your Stripe balance and from your later sales. If your Stripe balance becomes negative, Stripe may debit the bank account you connected.
+
+**Payouts and limits.** We set how long your sales wait before payout, and how large your store's orders and weekly sales can be, based on your history with us. New sellers start with lower limits and a longer wait, and both improve as your record grows. A store that reaches a limit stops taking new orders until the limit allows them again.
+
+**Orders we hold.** We may hold an order that our payment checks flag as risky before we buy its catalog products. If we can't clear it within 24 hours, we refund its catalog products to the shopper.
+
+## 11. Acceptable use
 
 You may not use the Service to build, host, publish or sell anything that:
 
@@ -89,15 +109,15 @@ You also may not:
 - scrape the Service or other users' sites, except through features we provide;
 - resell or share access to the Service.
 
-## 11. Our property
+## 12. Our property
 
 The Service, including its software, design, the Estori name and logo, and our content, belongs to us or our licensors and is protected by law. These Terms don't give you any rights to them except the right to use the Service as described here. If you send us feedback, we may use it without any obligation to you.
 
-## 12. Third-party services
+## 13. Third-party services
 
 The Service relies on third parties, including Cloudflare for hosting, AI model providers for generation, Stripe for payments, and GitHub if you choose to export. Your use of a third-party service may also be governed by its own terms. We aren't responsible for third-party services.
 
-## 13. Suspension and termination
+## 14. Suspension and termination
 
 You can stop using the Service at any time and ask us to delete your account at {{contact.privacy}}.
 
@@ -105,33 +125,33 @@ We may suspend or terminate your account, remove content, or limit features if y
 
 Sections 4 (the license for copies already made), 5, 6, 8, 9, 11 and 14 to 18 survive termination.
 
-## 14. Disclaimers
+## 15. Disclaimers
 
 THE SERVICE AND ALL CONTENT, INCLUDING AI OUTPUT AND SITES BOUGHT FROM OTHER USERS, ARE PROVIDED "AS IS" AND "AS AVAILABLE". TO THE FULLEST EXTENT THE LAW ALLOWS, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. WE DON'T WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, SECURE OR ERROR-FREE, OR THAT ANY CONTENT IS ACCURATE.
 
-## 15. Limitation of liability
+## 16. Limitation of liability
 
 TO THE FULLEST EXTENT THE LAW ALLOWS, GLOBALINK WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA OR GOODWILL, ARISING FROM OR RELATED TO THE SERVICE OR THESE TERMS, EVEN IF WE WERE TOLD THEY WERE POSSIBLE.
 
 OUR TOTAL LIABILITY FOR ALL CLAIMS ARISING FROM OR RELATED TO THE SERVICE OR THESE TERMS IS LIMITED TO THE GREATER OF US$100 OR THE AMOUNT YOU PAID US IN THE 12 MONTHS BEFORE THE EVENT GIVING RISE TO THE CLAIM. These limits apply to every theory of liability and don't limit liability that can't be limited by law.
 
-## 16. Indemnity
+## 17. Indemnity
 
 You will defend, indemnify and hold harmless Globalink and its officers, employees and agents from any claims, damages, losses and costs, including reasonable attorneys' fees, arising from your content, your sites, your sales, your use of the Service, or your breach of these Terms or of anyone's rights.
 
-## 17. Governing law and disputes
+## 18. Governing law and disputes
 
 These Terms are governed by the laws of the State of Texas and applicable US federal law, without regard to conflict-of-law rules. Any dispute arising from or related to these Terms or the Service will be brought only in the state or federal courts located in Harris County, Texas, and you and we consent to their jurisdiction. Either party may seek urgent relief in any competent court to protect its intellectual property.
 
-## 18. Changes to these Terms
+## 19. Changes to these Terms
 
 We may update these Terms. If a change is material, we'll tell you through the Service or by email before it takes effect, and we'll ask you to agree to the updated Terms the next time you sign in. If you don't agree, stop using the Service. The date at the top shows when these Terms last changed.
 
-## 19. General
+## 20. General
 
 These Terms, together with the policies they link to, are the entire agreement between you and us about the Service. If any part is found unenforceable, the rest stays in effect. Our not enforcing a right isn't a waiver of it. You may not assign these Terms without our consent; we may assign them in a merger, acquisition or sale of assets. Nothing in these Terms creates a partnership, employment or agency relationship.
 
-## 20. Contact
+## 21. Contact
 
 {{entity.name}}, {{entity.address}}.
 

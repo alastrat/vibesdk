@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { LEGAL_CONTACT, LEGAL_ENTITY, TERMS_VERSION, legalAddressLine } from '../../../shared/types/legal';
 import { PLATFORM_FEE_LABEL } from '../../../shared/types/templates';
 import { LEGAL_DOCUMENTS, LEGAL_LINKS, LEGAL_SLUGS } from './legal-documents';
+import { SELLER_TERMS_VERSION } from '../../../shared/types/seller-setup';
+import { SUPPLIER_NAMES } from '../../routes/copy-rules';
 
 describe('legal documents', () => {
 	it('has the four pages, each with a path and a label', () => {
@@ -44,5 +46,35 @@ describe('legal documents', () => {
 		expect(LEGAL_DOCUMENTS.privacy.body).toContain('We complete erasure within 45 days');
 		expect(LEGAL_DOCUMENTS.privacy.body).not.toContain('we delete the related personal data within 45 days');
 		expect(LEGAL_DOCUMENTS.terms.body).toContain('except for stored copies we keep until erasure is complete');
+	});
+
+	it('adds selling in your own store as section 10, in the version sellers agree to', () => {
+		const terms = LEGAL_DOCUMENTS.terms;
+		expect(terms.version).toBe('2026-10-16');
+		expect(SELLER_TERMS_VERSION).toBe(terms.version);
+		expect(terms.body).toContain('## 10. Selling in your own store');
+		expect(terms.body).toContain('## 21. Contact');
+		for (const promise of [
+			'You are the merchant of record for your store',
+			'you pay the whole refund',
+			'the dispute fee Stripe charges',
+			'from your later sales',
+			'Stripe may debit the bank account',
+			'$2 for each month in which you receive a payout',
+			'0.25% plus 25 cents for each payout',
+			'New sellers start with lower limits',
+		]) {
+			expect(terms.body).toContain(promise);
+		}
+		expect(terms.body).toContain('Globalink is the merchant of record for purchases of paid sites');
+	});
+
+	it("tells shoppers whose data goes where, and leaves store purchases to the store's policy", () => {
+		expect(LEGAL_DOCUMENTS.privacy.body).toContain('**Fulfillment partners**');
+		expect(LEGAL_DOCUMENTS.privacy.body).toContain('Shoppers who pay at a store');
+		expect(LEGAL_DOCUMENTS.refunds.body).toContain("follow that store's own refund policy");
+		for (const slug of LEGAL_SLUGS) {
+			for (const name of SUPPLIER_NAMES) expect(LEGAL_DOCUMENTS[slug].body.toLowerCase()).not.toContain(name);
+		}
 	});
 });

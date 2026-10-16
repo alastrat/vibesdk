@@ -1,10 +1,10 @@
 ---
 title: Refund Policy
-version: 2026-10-13
-updated: October 13, 2026
+version: 2026-10-16
+updated: October 16, 2026
 ---
 
-This policy covers purchases of paid sites on Estori, sold by {{entity.name}} ("Globalink", "we") as merchant of record. Building on Estori is free, so there's nothing to refund for building.
+This policy covers purchases of paid sites on Estori, sold by {{entity.name}} ("Globalink", "we") as merchant of record. Building on Estori is free, so there's nothing to refund for building. Purchases from a store built on Estori are sold by that store's owner, and follow that store's own refund policy.
 
 ## When you can get a refund
 
