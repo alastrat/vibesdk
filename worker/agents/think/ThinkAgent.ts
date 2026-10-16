@@ -22,6 +22,7 @@ import { createDeploySpaceTool } from './deploy-tool';
 import { createCommitTool } from './commit-tool';
 import { createSetTitleTool } from './set-title-tool';
 import { catalogToolDepsFromEnv, createCatalogTools } from './catalog-tools';
+import { createPaymentsSetupTool, paymentsSetupDepsFromEnv } from './payments-setup-tool';
 import { serializeTools } from './serial-tools';
 import { selectThinkContextMessages } from './context-selector';
 import { getUserConfigurableSettings } from '../../config';
@@ -337,6 +338,7 @@ export class ThinkAgent extends Think<Env> {
 			}),
 			// Estori's catalog, for stores that sell catalog products.
 			...createCatalogTools(catalogToolDepsFromEnv(this.env)),
+			...createPaymentsSetupTool(paymentsSetupDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
 			// Set the project's short display title (host observes the output).
 			set_title: createSetTitleTool(),
 			// Ask the user clarifying questions via a frontend popup.

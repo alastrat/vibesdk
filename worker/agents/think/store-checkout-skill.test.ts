@@ -25,6 +25,11 @@ describe('the store checkout skill', () => {
 		for (const phrase of ['search_catalog', 'get_catalog_product', 'minimumRetailPriceCents', 'suggestedRetailPriceCents']) expect(SKILL).toContain(phrase);
 	});
 
+	it("checks the owner's payments setup before promising checkout", () => {
+		expect(SKILL).toContain('get_payments_setup');
+		expect(SKILL).toContain('setupPath');
+	});
+
 	it('keeps payments on the platform', () => {
 		for (const rule of ['/__estori/store.js', 'Estori.checkout(', 'Estori.order(', 'Never collect card details', 'catalogVariantId']) expect(SKILL).toContain(rule);
 		expect(APP_FILE_STRUCTURE).toContain('store-checkout');
