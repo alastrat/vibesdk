@@ -67,5 +67,6 @@ export interface CatalogRefreshStore {
 	ensureCurated(entries: readonly CuratedProduct[], now: Date): Promise<void>;
 	claimForRefresh(limit: number, now: Date): Promise<ClaimedProduct[]>;
 	saveRefresh(product: RefreshedProduct): Promise<void>;
-	recordRefreshError(productId: string, message: string, now: Date): Promise<void>;
+	/** `retire` stops selling the product: the supplier removed it. */
+	recordRefreshError(productId: string, message: string, now: Date, retire: boolean): Promise<void>;
 }

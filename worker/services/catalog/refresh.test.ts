@@ -3,6 +3,7 @@ import { catalogText } from './catalog-text';
 import { chooseFreight, refreshCatalogBatch, type RefreshDeps } from './refresh';
 import type { CatalogRefreshStore, ClaimedProduct, RefreshedProduct } from './catalog-store';
 import type { CjFreightOption, CjProduct } from './cj/types';
+import { CjApiError } from './cj/errors';
 
 const NOW = 1_800_000_000_000;
 
@@ -25,15 +26,15 @@ const PRODUCT: CjProduct = {
 
 function fakeStore(claimed: ClaimedProduct[]) {
 	const saved: RefreshedProduct[] = [];
-	const errors: Array<{ productId: string; message: string }> = [];
+	const errors: Array<{ productId: string; message: string; retire: boolean }> = [];
 	const store: CatalogRefreshStore = {
 		ensureCurated: async () => {},
 		claimForRefresh: async () => claimed,
 		saveRefresh: async (product) => {
 			saved.push(product);
 		},
-		recordRefreshError: async (productId, message) => {
-			errors.push({ productId, message });
+		recordRefreshError: async (productId, message, _now, retire) => {
+			errors.push({ productId, message, retire });
 		},
 	};
 	return { store, saved, errors };
@@ -104,8 +105,21 @@ describe('refreshCatalogBatch', () => {
 			}),
 		);
 		expect(result).toEqual({ refreshed: 1, failed: 1, stoppedForPoints: false });
-		expect(errors).toEqual([{ productId: 'cp_1', message: 'Product removed' }]);
+		expect(errors).toEqual([{ productId: 'cp_1', message: 'Product removed', retire: false }]);
 		expect(saved.map((product) => product.productId)).toEqual(['cp_2']);
+	});
+
+	it('stops selling a product the supplier says is gone', async () => {
+		const { store, errors } = fakeStore([CLAIMED]);
+		await refreshCatalogBatch(deps(store, { queryProduct: async () => Promise.reject(new CjApiError('Product removed', 200, 1602001, 'r1')) }));
+		expect(errors).toEqual([{ productId: 'cp_1', message: 'Product removed', retire: true }]);
+	});
+
+	it('skips variants the supplier prices at nothing', async () => {
+		const { store, saved } = fakeStore([CLAIMED]);
+		const free = { ...PRODUCT, variants: [{ ...PRODUCT.variants[0], variantSellPrice: 0 }, PRODUCT.variants[1]] };
+		await refreshCatalogBatch(deps(store, { queryProduct: async () => free }));
+		expect(saved[0].variants.map((variant) => variant.supplierVariantId)).toEqual(['v-pink']);
 	});
 
 	it('stops before the points reserve', async () => {
@@ -123,6 +137,10 @@ describe('chooseFreight', () => {
 		{ logisticName: 'Cheap but slow', logisticAging: '15-25', totalPostageFee: '1.00', logisticPrice: '1.00' },
 		{ logisticName: 'Cheap too', logisticAging: '4-7', totalPostageFee: '3.10', logisticPrice: '3.10' },
 	];
+
+	it('never reads a shipping price below what the option charges', () => {
+		expect(chooseFreight([{ logisticName: 'Odd', logisticAging: '3-5', totalPostageFee: 0, logisticPrice: '4.50' }], 10)?.shippingCents).toBe(450);
+	});
 
 	it('takes the cheapest option that arrives in time, then the quicker one', () => {
 		expect(chooseFreight(options, 10)).toEqual({ logisticName: 'Cheap too', shippingCents: 310, daysMin: 4, daysMax: 7 });

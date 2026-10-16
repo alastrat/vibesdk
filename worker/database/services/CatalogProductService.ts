@@ -1,6 +1,6 @@
 /** D1 reads and writes for catalog products, variants and offers. */
 
-import { and, asc, eq, inArray, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { generateId } from '../../utils/idGenerator';
@@ -13,9 +13,20 @@ function imageKeysOf(images: string): string[] {
 }
 
 export class CatalogProductService extends BaseService implements CatalogRefreshStore {
-    /** Adds curated products not yet in the catalog, pauses or reactivates listed ones, and retires the rest. */
+    /**
+     * Adds curated products not yet in the catalog, pauses or reactivates listed ones, and retires the rest. The curated
+     * category and title are the authority; a title the list leaves out keeps the supplier's.
+     */
     async ensureCurated(entries: readonly CuratedProduct[], now: Date): Promise<void> {
-        const ids = entries.map((entry) => entry.supplierProductId);
+        const listed = new Set(entries.map((entry) => entry.supplierProductId));
+        const existing = await this.database
+            .select({ id: schema.catalogProducts.id, supplierProductId: schema.catalogProducts.supplierProductId })
+            .from(schema.catalogProducts)
+            .all();
+        // One statement per product: D1 binds at most 100 parameters per statement.
+        const retire = existing
+            .filter((product) => !listed.has(product.supplierProductId))
+            .map((product) => this.database.update(schema.catalogProducts).set({ status: 'retired', updatedAt: now }).where(eq(schema.catalogProducts.id, product.id)));
         const statements = entries.map((entry) =>
             this.database
                 .insert(schema.catalogProducts)
@@ -31,14 +42,12 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
                 })
                 .onConflictDoUpdate({
                     target: [schema.catalogProducts.supplier, schema.catalogProducts.supplierProductId],
-                    set: { status: entry.paused ? 'paused' : 'active', category: entry.category, title: entry.title ?? null, updatedAt: now },
+                    set: { status: entry.paused ? 'paused' : 'active', category: entry.category, ...(entry.title ? { title: entry.title } : {}), updatedAt: now },
                 }),
         );
-        const retire = this.database
-            .update(schema.catalogProducts)
-            .set({ status: 'retired', updatedAt: now })
-            .where(ids.length > 0 ? notInArray(schema.catalogProducts.supplierProductId, ids) : sql`1 = 1`);
-        await this.database.batch([retire, ...statements]);
+        const [first, ...rest] = [...retire, ...statements];
+        if (!first) return;
+        await this.database.batch([first, ...rest]);
     }
 
     /** Claims the stalest products due for a refresh, so overlapping runs never refresh the same one. */
@@ -86,7 +95,6 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
             .set({
                 title: product.title,
                 description: product.description,
-                category: product.category ?? undefined,
                 images: JSON.stringify(product.imageKeys),
                 attributes: JSON.stringify(product.attributes),
                 detailsRefreshedAt: at,
@@ -146,11 +154,27 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
         await this.database.batch([updateProduct, ...variants, ...offers, ...retire]);
     }
 
-    async recordRefreshError(productId: string, message: string, now: Date): Promise<void> {
-        await this.database
+    /**
+     * Stores the failure and moves the product to the back of the refresh queue, so failing products never starve the
+     * rest. `retire` stops selling a product the supplier removed.
+     */
+    async recordRefreshError(productId: string, message: string, now: Date, retire: boolean): Promise<void> {
+        const record = this.database
             .update(schema.catalogProducts)
-            .set({ lastRefreshError: message.slice(0, 500), refreshClaimedUntil: null, updatedAt: now })
+            .set({ lastRefreshError: message.slice(0, 500), refreshClaimedUntil: null, detailsRefreshedAt: now, updatedAt: now })
             .where(eq(schema.catalogProducts.id, productId));
+        if (!retire) {
+            await record;
+            return;
+        }
+        const variants = this.database.select({ id: schema.catalogVariants.id }).from(schema.catalogVariants).where(eq(schema.catalogVariants.productId, productId));
+        await this.database.batch([
+            record,
+            this.database
+                .update(schema.catalogVariantOffers)
+                .set({ available: false, unavailableReason: 'retired', updatedAt: now })
+                .where(inArray(schema.catalogVariantOffers.variantId, variants)),
+        ]);
     }
 
     async lookupOffers(catalogVariantIds: readonly string[], country: string): Promise<OfferLookup[]> {
@@ -162,8 +186,11 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
                 available: schema.catalogVariantOffers.available,
                 catalogPriceCents: schema.catalogVariantOffers.catalogPriceCents,
                 updatedAt: schema.catalogVariantOffers.updatedAt,
+                productStatus: schema.catalogProducts.status,
+                variantStatus: schema.catalogVariants.status,
             })
             .from(schema.catalogVariants)
+            .innerJoin(schema.catalogProducts, eq(schema.catalogProducts.id, schema.catalogVariants.productId))
             .leftJoin(
                 schema.catalogVariantOffers,
                 and(eq(schema.catalogVariantOffers.variantId, schema.catalogVariants.id), eq(schema.catalogVariantOffers.destinationCountry, country)),
@@ -173,7 +200,11 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
         return rows.map((row) => ({
             catalogVariantId: row.catalogVariantId,
             supplierVariantId: row.supplierVariantId,
-            offer: row.available === null || row.updatedAt === null ? null : { available: row.available, catalogPriceCents: row.catalogPriceCents, updatedAt: row.updatedAt },
+            // A paused or retired product, or a retired variant, never sells, whatever its last offer says.
+            offer:
+                row.available === null || row.updatedAt === null
+                    ? null
+                    : { available: row.available && row.productStatus === 'active' && row.variantStatus === 'active', catalogPriceCents: row.catalogPriceCents, updatedAt: row.updatedAt },
         }));
     }
 }

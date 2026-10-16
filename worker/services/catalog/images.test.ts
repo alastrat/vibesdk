@@ -45,4 +45,12 @@ describe('catalog images', () => {
 		expect(await createImageCopier(bucket, imageFetch('text/html').fakeFetch).copy('cp_1', 'https://cf.example/page.jpg')).toBeNull();
 		expect(await createImageCopier(bucket, imageFetch('image/jpeg', 6 * 1024 * 1024).fakeFetch).copy('cp_1', 'https://cf.example/huge.jpg')).toBeNull();
 	});
+
+	it('gives up on an image it cannot fetch or read, without failing the refresh', async () => {
+		const { bucket } = fakeBucket();
+		const unreachable: typeof fetch = async () => Promise.reject(new TypeError('fetch failed'));
+		expect(await createImageCopier(bucket, unreachable).copy('cp_1', 'https://cf.example/a.jpg')).toBeNull();
+		expect(await createImageCopier(bucket, imageFetch('image/jpeg').fakeFetch).copy('cp_1', 'not a url')).toBeNull();
+		expect(await createImageCopier(bucket, imageFetch('image/svg+xml').fakeFetch).copy('cp_1', 'https://cf.example/a.svg')).toBeNull();
+	});
 });

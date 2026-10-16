@@ -7,6 +7,7 @@ import { CATALOG_DESTINATIONS, catalogPriceCents, type CatalogOfferUnavailableRe
 import { catalogText } from './catalog-text';
 import type { CatalogRefreshStore, ClaimedProduct, RefreshedOffer, RefreshedProduct, RefreshedVariant } from './catalog-store';
 import type { CjClient } from './cj/client';
+import { classifyCjError } from './cj/errors';
 import type { CjFreightOption, CjInventory, CjProduct, CjVariant } from './cj/types';
 import { CATALOG_MAX_DELIVERY_DAYS, CATALOG_MAX_IMAGES, CATALOG_MIN_STOCK, CATALOG_REFRESH_BATCH, CJ_POINTS_RESERVE } from './config';
 import { usdToCents } from './money';
@@ -36,7 +37,9 @@ function deliveryDays(aging: string | null): { min: number | null; max: number |
 /** Options that arrive within `maxDays`, cheapest first, then quickest. */
 export function chooseFreight(options: readonly CjFreightOption[], maxDays: number): ChosenFreight | null {
 	const candidates = options.flatMap((option) => {
-		const shippingCents = usdToCents(option.totalPostageFee ?? option.logisticPrice ?? '');
+		// The larger of the two: a total of 0 beside a positive price is never read as free shipping.
+		const prices = [option.totalPostageFee, option.logisticPrice].flatMap((value) => (value === null ? [] : [usdToCents(value)])).filter((cents): cents is number => cents !== null);
+		const shippingCents = prices.length > 0 ? Math.max(...prices) : null;
 		const days = deliveryDays(option.logisticAging);
 		if (shippingCents === null || days.max === null || days.max > maxDays) return [];
 		return [{ logisticName: option.logisticName, shippingCents, daysMin: days.min, daysMax: days.max }];
@@ -84,7 +87,8 @@ async function refreshOne(deps: RefreshDeps, claimed: ClaimedProduct): Promise<R
 	const variants: RefreshedVariant[] = [];
 	for (const variant of product.variants) {
 		const supplierCostCents = usdToCents(variant.variantSellPrice);
-		if (supplierCostCents === null) continue;
+		// An unreadable or zero cost is never sold: it is a supplier data error, not a free item.
+		if (supplierCostCents === null || supplierCostCents === 0) continue;
 		variants.push({
 			supplierVariantId: variant.vid,
 			sku: variant.variantSku,
@@ -159,7 +163,8 @@ export async function refreshCatalogBatch(deps: RefreshDeps, limit: number = CAT
 			refreshed += 1;
 		} catch (error) {
 			failed += 1;
-			await deps.store.recordRefreshError(product.id, error instanceof Error ? error.message : String(error), new Date(deps.now()));
+			const message = error instanceof Error ? error.message : String(error);
+			await deps.store.recordRefreshError(product.id, message, new Date(deps.now()), classifyCjError(error) === 'item-unavailable');
 		}
 	}
 	return { refreshed, failed, stoppedForPoints: false };

@@ -42,4 +42,45 @@ describe('CatalogProductService', () => {
 		const claim = statements.find((statement) => statement.sql.toLowerCase().startsWith('update "catalog_products"'));
 		expect(claim?.sql.toLowerCase()).toContain('returning');
 	});
+
+	it('keeps every statement under 100 parameters for a long curated list, and retires products that left it', async () => {
+		const { d1, batches } = recordingD1((sql) => (sql.toLowerCase().startsWith('select') ? [['cp_old', 'p_old']] : []));
+		const entries = Array.from({ length: 120 }, (_, index) => ({ supplierProductId: `p_${index}`, category: 'Home' }));
+		await new CatalogProductService({ DB: d1 } as unknown as Env).ensureCurated(entries, new Date(1_800_000_000_000));
+
+		expect(Math.max(...batches[0].map((entry) => entry.params.length))).toBeLessThanOrEqual(100);
+		const retire = batches[0].find((entry) => entry.sql.toLowerCase().startsWith('update "catalog_products"'));
+		expect(retire?.params).toContain('cp_old');
+	});
+
+	it('never overwrites a curated category, or a title the list leaves out', async () => {
+		const { d1, batches } = recordingD1();
+		const service = new CatalogProductService({ DB: d1 } as unknown as Env);
+		await service.ensureCurated([{ supplierProductId: 'p1', category: 'Home' }], new Date(1_800_000_000_000));
+		const upsert = batches[0].find((entry) => entry.sql.toLowerCase().startsWith('insert into "catalog_products"'));
+		expect(upsert?.sql.toLowerCase().split('do update set')[1]).not.toContain('"title"');
+
+		await service.saveRefresh(REFRESHED);
+		const update = batches[1].find((entry) => entry.sql.toLowerCase().startsWith('update "catalog_products"'));
+		expect(update?.sql.toLowerCase()).not.toContain('"category"');
+	});
+
+	it('sells only active variants of active products', async () => {
+		const updatedAt = Math.floor(1_800_000_000_000 / 1000);
+		const { d1 } = recordingD1([
+			['cv_1', 'v1', 1, 2028, updatedAt, 'paused', 'active'],
+			['cv_2', 'v2', 1, 2028, updatedAt, 'active', 'retired'],
+			['cv_3', 'v3', 1, 2028, updatedAt, 'active', 'active'],
+		]);
+		const lookups = await new CatalogProductService({ DB: d1 } as unknown as Env).lookupOffers(['cv_1', 'cv_2', 'cv_3'], 'US');
+		expect(lookups.map((lookup) => lookup.offer?.available)).toEqual([false, false, true]);
+	});
+
+	it('pushes a failing product back in the queue, and stops selling one the supplier removed', async () => {
+		const { d1, batches } = recordingD1();
+		await new CatalogProductService({ DB: d1 } as unknown as Env).recordRefreshError('cp_1', 'Product removed', new Date(1_800_000_000_000), true);
+		const statements = batches[0].map((entry) => entry.sql.toLowerCase());
+		expect(statements[0]).toContain('"details_refreshed_at" = ?');
+		expect(statements[1]).toContain('update "catalog_variant_offers"');
+	});
 });
