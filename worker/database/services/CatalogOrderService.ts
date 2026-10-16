@@ -137,4 +137,15 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
             .all();
         return rows.map((row) => row.orderId);
     }
+
+    /** The Checkout session and catalog variant of one catalog item, for recording its refund on the store order. */
+    async locateItem(itemId: string): Promise<{ checkoutSessionId: string; catalogVariantId: string } | null> {
+        const row = await this.database
+            .select({ checkoutSessionId: schema.catalogOrders.stripeCheckoutSessionId, catalogVariantId: schema.catalogOrderItems.catalogVariantId })
+            .from(schema.catalogOrderItems)
+            .innerJoin(schema.catalogOrders, eq(schema.catalogOrders.id, schema.catalogOrderItems.orderId))
+            .where(eq(schema.catalogOrderItems.id, itemId))
+            .get();
+        return row ?? null;
+    }
 }

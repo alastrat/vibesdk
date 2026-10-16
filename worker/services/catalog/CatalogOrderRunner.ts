@@ -6,7 +6,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { CATALOG_DESTINATIONS } from '../../../shared/types/catalog';
 import { createLogger } from '../../logger';
-import { CatalogOrderService } from '../../database';
+import { CatalogOrderService, StoreRefundService } from '../../database';
 import { isProd } from '../../utils/envs';
 import { stripeFromEnv } from '../payments/config';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
@@ -35,8 +35,11 @@ function runnerDeps(env: Env): RunnerDeps {
 		store: new CatalogOrderService(env),
 		adapters: { cjdropshipping: adapter },
 		stripe: stripeFromEnv(env),
-		// Wired to the store order's refunds in the next task.
-		recordRefund: async () => undefined,
+		recordRefund: async (entry) => {
+			const located = await new CatalogOrderService(env).locateItem(entry.catalogItemId);
+			if (!located) return;
+			await new StoreRefundService(env).recordForCatalogItem({ checkoutSessionId: located.checkoutSessionId, catalogVariantId: located.catalogVariantId, refundId: entry.refundId, amountCents: entry.amountCents, now: new Date() });
+		},
 		supplierUpdates: async (supplierOrderId) => {
 			const order = client ? await client.getOrderDetail(supplierOrderId) : null;
 			return order ? cjOrderToUpdates(order) : [];

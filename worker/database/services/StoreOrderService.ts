@@ -1,6 +1,6 @@
 /** D1 reads and writes for store orders and their items. */
 
-import { and, desc, eq, inArray, max } from 'drizzle-orm';
+import { and, desc, eq, inArray, max, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { NewStoreOrder, NewStoreOrderItem, StoreOrderView } from '../../services/store-payments/store';
@@ -77,6 +77,21 @@ export class StoreOrderService extends BaseService {
     async findByPaymentIntent(paymentIntentId: string): Promise<StoreOrderView | null> {
         const [order] = await this.ordersWhere(eq(schema.storeOrders.stripePaymentIntentId, paymentIntentId), 1);
         return order ?? null;
+    }
+
+    /** Sets the order's refund total and payment status from its recorded refunds; a dispute status is kept. */
+    async applyRefunds(orderId: string, now: Date): Promise<void> {
+        const refunded = sql`(SELECT COALESCE(SUM(${schema.storeRefunds.amountCents}), 0) FROM ${schema.storeRefunds} WHERE ${schema.storeRefunds.orderId} = ${orderId})`;
+        await this.database
+            .update(schema.storeOrders)
+            .set({
+                refundedCents: refunded,
+                paymentStatus: sql`CASE WHEN ${schema.storeOrders.paymentStatus} IN ('disputed', 'dispute_lost') THEN ${schema.storeOrders.paymentStatus} WHEN ${refunded} >= ${schema.storeOrders.totalCents} THEN 'refunded' WHEN ${refunded} > 0 THEN 'partially_refunded' ELSE ${schema.storeOrders.paymentStatus} END`,
+                revision: sql`${schema.storeOrders.revision} + 1`,
+                updatedAt: now,
+            })
+            .where(eq(schema.storeOrders.id, orderId))
+            .run();
     }
 
     async feeAdjusted(orderId: string): Promise<boolean> {
