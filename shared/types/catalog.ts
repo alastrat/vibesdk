@@ -108,3 +108,16 @@ export function checkCart(cart: CheckoutCart): CartCheck {
 	if (fee >= totalCents) return { ok: false, problem: 'fee-exceeds-total' };
 	return { ok: true, totalCents, applicationFeeCents: fee };
 }
+
+/** Where catalog items ship, each from one origin warehouse country, so an order's lines share one origin. */
+export const CATALOG_DESTINATIONS: Readonly<Record<string, { name: string; origin: string }>> = {
+	US: { name: 'United States', origin: 'US' },
+};
+
+export const CATALOG_PRODUCT_STATUSES = ['active', 'paused', 'retired'] as const;
+export type CatalogProductStatus = (typeof CATALOG_PRODUCT_STATUSES)[number];
+export const CATALOG_VARIANT_STATUSES = ['active', 'retired'] as const;
+export type CatalogVariantStatus = (typeof CATALOG_VARIANT_STATUSES)[number];
+export const CATALOG_OFFER_UNAVAILABLE_REASONS = ['out-of-stock', 'no-shipping', 'paused', 'retired'] as const;
+export type CatalogOfferUnavailableReason = (typeof CATALOG_OFFER_UNAVAILABLE_REASONS)[number];
+
