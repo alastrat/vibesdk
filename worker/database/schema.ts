@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 // Relative on purpose: drizzle-kit loads this file without the `shared` alias.
 import {
     TEMPLATE_CATEGORIES,
@@ -9,6 +9,7 @@ import {
     USER_ROLES,
 } from '../../shared/types/templates';
 import { CATALOG_ITEM_STATUSES, CATALOG_ORDER_STATUSES, CATALOG_SUPPLIERS } from '../../shared/types/catalog';
+import { STORE_CHECKOUT_STATUSES, STORE_FULFILLMENT_STATUSES, STORE_LINE_KINDS, STORE_MODES, STORE_PAYMENT_STATUSES } from '../../shared/types/store-payments';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -405,6 +406,92 @@ export const catalogOrderItems = sqliteTable('catalog_order_items', {
 }, (table) => ({
     orderIdx: index('catalog_order_items_order_idx').on(table.orderId),
     supplierOrderIdx: index('catalog_order_items_supplier_order_idx').on(table.supplierOrderId),
+}));
+
+/**
+ * Store checkouts - a cart Estori priced and sent to Stripe. Financial records: no foreign key to apps, so they
+ * outlive a deleted app.
+ */
+export const storeCheckouts = sqliteTable('store_checkouts', {
+    id: text('id').primaryKey(),
+    mode: text('mode', { enum: STORE_MODES }).notNull(),
+    appId: text('app_id').notNull(),
+    storeVersionId: text('store_version_id'),
+    commitHash: text('commit_hash').notNull(),
+    sellerUserId: text('seller_user_id').notNull(),
+    sellerStripeAccountId: text('seller_stripe_account_id'),
+    shipToCountry: text('ship_to_country').notNull(),
+    // The PricedCart as JSON: what the shopper pays is fixed here, never re-read from the store.
+    pricedCart: text('priced_cart').notNull(),
+    subtotalCents: integer('subtotal_cents').notNull(),
+    shippingCents: integer('shipping_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    applicationFeeCents: integer('application_fee_cents').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    status: text('status', { enum: STORE_CHECKOUT_STATUSES }).notNull().default('creating'),
+    successPath: text('success_path').notNull(),
+    cancelPath: text('cancel_path').notNull(),
+    note: text('note'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    sessionIdx: uniqueIndex('store_checkouts_session_unique_idx').on(table.stripeCheckoutSessionId),
+    appIdx: index('store_checkouts_app_idx').on(table.appId),
+}));
+
+/** Store orders - one per paid checkout, numbered per store and mode. */
+export const storeOrders = sqliteTable('store_orders', {
+    id: text('id').primaryKey(),
+    mode: text('mode', { enum: STORE_MODES }).notNull(),
+    appId: text('app_id').notNull(),
+    orderNumber: integer('order_number').notNull(),
+    checkoutId: text('checkout_id').notNull(),
+    sellerUserId: text('seller_user_id').notNull(),
+    sellerStripeAccountId: text('seller_stripe_account_id'),
+    storeVersionId: text('store_version_id'),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    stripePaymentIntentId: text('stripe_payment_intent_id'),
+    paymentStatus: text('payment_status', { enum: STORE_PAYMENT_STATUSES }).notNull().default('paid'),
+    fulfillmentStatus: text('fulfillment_status', { enum: STORE_FULFILLMENT_STATUSES }).notNull().default('unfulfilled'),
+    trackingNumber: text('tracking_number'),
+    carrier: text('carrier'),
+    subtotalCents: integer('subtotal_cents').notNull(),
+    shippingCents: integer('shipping_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    applicationFeeCents: integer('application_fee_cents').notNull(),
+    refundedCents: integer('refunded_cents').notNull().default(0),
+    currency: text('currency').notNull().default('usd'),
+    customerEmail: text('customer_email'),
+    customerName: text('customer_name'),
+    // The shopper's address as JSON, for the seller to ship own products.
+    shippingAddress: text('shipping_address'),
+    note: text('note'),
+    needsAttention: text('needs_attention'),
+    revision: integer('revision').notNull().default(1),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    checkoutIdx: uniqueIndex('store_orders_checkout_unique_idx').on(table.checkoutId),
+    sessionIdx: uniqueIndex('store_orders_session_unique_idx').on(table.stripeCheckoutSessionId),
+    numberIdx: uniqueIndex('store_orders_number_unique_idx').on(table.appId, table.mode, table.orderNumber),
+    paymentIntentIdx: index('store_orders_payment_intent_idx').on(table.stripePaymentIntentId),
+    sellerIdx: index('store_orders_seller_idx').on(table.sellerUserId),
+}));
+
+/** Store order items - the priced lines, as the shopper paid for them. */
+export const storeOrderItems = sqliteTable('store_order_items', {
+    orderId: text('order_id').notNull().references(() => storeOrders.id, { onDelete: 'cascade' }),
+    lineNo: integer('line_no').notNull(),
+    kind: text('kind', { enum: STORE_LINE_KINDS }).notNull(),
+    productId: text('product_id').notNull(),
+    variantId: text('variant_id').notNull(),
+    name: text('name').notNull(),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    catalogVariantId: text('catalog_variant_id'),
+    lockedCatalogPriceCents: integer('locked_catalog_price_cents'),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.orderId, table.lineNo] }),
 }));
 
 /**
