@@ -38,6 +38,8 @@ export interface RunnerState {
 	riskChecked?: boolean;
 	/** While held: when an unreviewed hold refunds the catalog items. */
 	riskHoldUntil?: number | null;
+	/** Failed risk checks or hold refunds in a row; at the placement limit the order goes to an admin. */
+	riskFailures?: number;
 }
 
 export interface RunnerDeps {
@@ -78,7 +80,7 @@ export function releaseRiskHold(state: RunnerState, nowMs: number): RunnerState 
  */
 export function retryRunnerState(state: RunnerState, nowMs: number): RunnerState {
 	const placement = state.placement === 'risk-hold' ? 'risk-hold' : 'due';
-	return { ...state, placement, nextPlacementAt: nowMs, refundFailures: 0, nextRefundAt: nowMs, nextSyncAt: state.nextSyncAt ?? nowMs };
+	return { ...state, placement, nextPlacementAt: nowMs, refundFailures: 0, riskFailures: 0, nextRefundAt: nowMs, nextSyncAt: state.nextSyncAt ?? nowMs };
 }
 
 async function place(state: RunnerState, deps: RunnerDeps, nowMs: number): Promise<RunnerState> {
@@ -88,7 +90,12 @@ async function place(state: RunnerState, deps: RunnerDeps, nowMs: number): Promi
 	if (!current.riskChecked) {
 		// Once, before Estori pays a supplier: a payment Radar scores as risky waits for an admin.
 		const order = await deps.store.getOrder(current.orderId);
-		const risk = order ? await deps.paymentRisk(order.paymentIntentId) : 'unknown';
+		let risk: Awaited<ReturnType<RunnerDeps['paymentRisk']>> = 'unknown';
+		try {
+			if (order) risk = await deps.paymentRisk(order.paymentIntentId);
+		} catch (error) {
+			return riskStepFailed(current, deps, nowMs, { kind: 'needs-attention', message: `Reading the payment's risk failed: ${errorText(error)}` });
+		}
 		if (order && (risk === 'elevated' || risk === 'highest')) {
 			await deps.store.updateOrder(order.id, { status: 'risk-hold', placementAttempts: order.placementAttempts, lastError: `The payment's risk is ${risk}` });
 			await deps.alert({ kind: 'risk-hold', orderId: current.orderId, message: `The payment's risk is ${risk}. Release the order within 24 hours, or its catalog items are refunded.` });
@@ -111,6 +118,19 @@ async function place(state: RunnerState, deps: RunnerDeps, nowMs: number): Promi
 	}
 }
 
+/**
+ * A risk check or hold refund failed: try again later, waiting longer each time, and after the placement limit hand the
+ * order to an admin and schedule nothing more. An admin retry then checks the payment's risk again.
+ */
+async function riskStepFailed(state: RunnerState, deps: RunnerDeps, nowMs: number, failure: { kind: 'needs-attention' | 'refund-failed'; message: string }): Promise<RunnerState> {
+	const riskFailures = (state.riskFailures ?? 0) + 1;
+	if (riskFailures < MAX_PLACEMENT_ATTEMPTS) return { ...state, riskFailures, nextPlacementAt: nowMs + nextRetryDelayMs(riskFailures) };
+	const order = await deps.store.getOrder(state.orderId);
+	if (order) await deps.store.updateOrder(order.id, { status: 'needs-attention', placementAttempts: order.placementAttempts, lastError: failure.message });
+	await deps.alert({ kind: failure.kind, orderId: state.orderId, message: failure.message });
+	return { ...state, placement: 'needs-attention', riskChecked: false, riskHoldUntil: null, riskFailures };
+}
+
 /** When the hold's time is up, i.e. no admin released it: refund what is still pending and tell the seller. */
 async function expireRiskHold(state: RunnerState, deps: RunnerDeps, nowMs: number): Promise<RunnerState> {
 	// A failed expiry pushes nextPlacementAt back, so it waits instead of trying again every minute.
@@ -121,7 +141,11 @@ async function expireRiskHold(state: RunnerState, deps: RunnerDeps, nowMs: numbe
 	if (order && pending.length > 0) {
 		const refundDeps = refundDepsOf(deps);
 		if (!refundDeps) return { ...state, nextPlacementAt: nowMs + STRIPE_MISSING_RETRY_MS };
-		await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: pending, reason: 'risk-declined' });
+		try {
+			await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: pending, reason: 'risk-declined' });
+		} catch (error) {
+			return riskStepFailed(state, deps, nowMs, { kind: 'refund-failed', message: `Refunding a risk-held order failed: ${errorText(error)}` });
+		}
 		await deps.notifySeller({ sellerUserId: order.sellerUserId, kind: 'items-refunded', orderId: order.id, itemCount: pending.length, reason: 'risk' });
 	}
 	if (order) await deps.store.updateOrder(order.id, { status: 'placement-done', placementAttempts: order.placementAttempts, lastError: 'Not released within 24 hours' });

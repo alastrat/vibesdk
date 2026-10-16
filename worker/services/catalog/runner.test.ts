@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RISK_HOLD_MS, RUNNER_SYNC_INTERVAL_MS, initialRunnerState, releaseRiskHold, retryRunnerState, runnerStep, sweepUnstartedOrders, type RunnerDeps } from './runner';
+import { RISK_HOLD_MS, RUNNER_SYNC_INTERVAL_MS, initialRunnerState, releaseRiskHold, retryRunnerState, runnerStep, sweepUnstartedOrders, type RunnerDeps, type RunnerState } from './runner';
 import { memoryCatalogStore } from './test-support';
 import type { PlaceOrderResult, SupplierAdapter, SupplierUpdate } from './supplier';
 import type { StripeClient } from '../payments/stripe-client';
@@ -236,14 +236,40 @@ describe('runnerStep', () => {
 		expect(checks).toBe(1);
 	});
 
-	it('backs off a risk hold whose refund fails, instead of trying again every minute', async () => {
+	it('backs off a risk hold whose refund fails, waiting longer after each failure', async () => {
 		const store = await storeWithOrder();
 		const { runnerDeps } = deps(store, [], [], 0, 'elevated');
 		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
 		runnerDeps.stripe = { ...runnerDeps.stripe!, createRefund: async () => Promise.reject(new Error('Stripe is unavailable')) };
 		const failed = await runnerStep(held.state, runnerDeps, NOW + RISK_HOLD_MS);
 		expect(failed.state.placement).toBe('risk-hold');
-		expect(failed.nextAlarmAt).toBeGreaterThanOrEqual(NOW + RISK_HOLD_MS + 5 * 60 * 1000);
+		expect(failed.nextAlarmAt).toBe(NOW + RISK_HOLD_MS + 60 * 1000);
+	});
+
+	it('gives a risk hold whose refund keeps failing to an admin after the last attempt, and schedules nothing more', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps, alerts } = deps(store, [], [], 0, 'elevated');
+		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		runnerDeps.stripe = { ...runnerDeps.stripe!, createRefund: async () => Promise.reject(new Error('This charge was already refunded')) };
+		let step = { state: held.state, nextAlarmAt: held.nextAlarmAt };
+		for (let attempt = 0; attempt < 10 && step.nextAlarmAt !== null; attempt += 1) step = await runnerStep(step.state, runnerDeps, step.nextAlarmAt);
+		expect(step.state.placement).toBe('needs-attention');
+		expect(step.state.riskFailures).toBe(6);
+		expect(step.nextAlarmAt).toBeNull();
+		expect(alerts).toContain('refund-failed');
+		expect(store.orders.get('co_1')?.status).toBe('needs-attention');
+	});
+
+	it('gives an order whose risk check keeps failing to an admin, and a retry checks again', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps, alerts } = deps(store, []);
+		runnerDeps.paymentRisk = async () => Promise.reject(new Error('No such payment_intent'));
+		let step: { state: RunnerState; nextAlarmAt: number | null } = { state: initialRunnerState('co_1', NOW), nextAlarmAt: NOW };
+		for (let attempt = 0; attempt < 10 && step.nextAlarmAt !== null; attempt += 1) step = await runnerStep(step.state, runnerDeps, step.nextAlarmAt);
+		expect(step.state).toMatchObject({ placement: 'needs-attention', riskChecked: false, riskFailures: 6 });
+		expect(step.nextAlarmAt).toBeNull();
+		expect(alerts).toContain('needs-attention');
+		expect(retryRunnerState(step.state, NOW).riskFailures).toBe(0);
 	});
 
 	it('places again items a won dispute released after placement finished, but keeps a risk hold for an admin', () => {
