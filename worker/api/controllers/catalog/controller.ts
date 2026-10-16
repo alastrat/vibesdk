@@ -92,9 +92,11 @@ export class CatalogController extends BaseController {
             if (!client || !order) return CatalogController.createErrorResponse('Order not found', 404);
             const supplierOrderIds = [...new Set(order.items.flatMap((item) => (item.supplierOrderId ? [item.supplierOrderId] : [])))];
             for (const supplierOrderId of supplierOrderIds) {
+                // CJ's sandbox finds an order only by its SD order code.
+                const code = (await client.getOrderDetail(supplierOrderId))?.cjOrderCode ?? supplierOrderId;
                 for (const move of sandboxMoves(action)) {
-                    if (move.kind === 'status') await client.sandboxUpdateStatus(supplierOrderId, move.status);
-                    else await client.sandboxUpdateTrackNumber(supplierOrderId, `SBX${Date.now()}`);
+                    if (move.kind === 'status') await client.sandboxUpdateStatus(code, move.status);
+                    else await client.sandboxUpdateTrackNumber(code, `SBX${Date.now()}`);
                 }
             }
             await CatalogController.runner(env, orderId).signal();
