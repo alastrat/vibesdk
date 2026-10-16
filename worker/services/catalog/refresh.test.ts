@@ -150,6 +150,10 @@ describe('chooseFreight', () => {
 });
 
 describe('catalogText', () => {
+	it("drops a supplier's brand, model and wholesale terms", () => {
+		expect(catalogText('<p>Self-filling bowl.</p><p>Brand name: ZZAH</p><p>Model: ZZAH-XQ02</p><p>MOQ: 2 pieces</p><p>OEM &amp; ODM welcome</p><p>Place of origin: Guangdong, China</p>')).toBe('Self-filling bowl.');
+	});
+
 	it('keeps plain text and drops lines naming a supplier', () => {
 		expect(catalogText('<p>Soft&nbsp;cotton &amp; wool.</p><br/><p>Sold on AliExpress too.</p>')).toBe('Soft cotton & wool.');
 		expect(catalogText(null)).toBe('');

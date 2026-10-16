@@ -22,5 +22,7 @@ describe('the Catalog page', () => {
 		for (const label of ['Your cost', 'Lowest price', 'Suggested price', 'Start a store with this']) expect(page).toContain(label);
 		for (const name of SUPPLIER_NAMES) expect(page.toLowerCase()).not.toContain(name);
 		expect(page.toLowerCase()).not.toContain('sku');
+		// An in-app start, not an outside link: the build starts without the confirmation screen.
+		expect(page).toContain('navigate(startPath(product), { state: { fromPrompt: true } })');
 	});
 });

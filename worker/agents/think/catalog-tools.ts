@@ -16,8 +16,9 @@ export interface CatalogToolDeps {
 const HOW_TO_ADD = [
 	'To sell a catalog product, add it to estori-store.json like any product, and on each variant set catalogVariantId to the',
 	"variant's catalogVariantId and priceCents to the seller's retail price: at least minimumRetailPriceCents, by default",
-	'suggestedRetailPriceCents. Use the imageUrls as the product image. Catalog products ship to the US only. Never write a',
-	"catalog price, a supplier name or a SKU anywhere in the store.",
+	'suggestedRetailPriceCents. Use the first of the imageUrls as the product image. Catalog products ship to the US only.',
+	"Write your own product names, descriptions and variant names in the store's voice: never copy a brand, a model",
+	'number or wholesale terms, and never write a catalog price, a supplier name or a SKU anywhere in the store.',
 ].join(' ');
 
 export function createCatalogTools(deps: CatalogToolDeps): { search_catalog: Tool; get_catalog_product: Tool } {

@@ -212,7 +212,13 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
     /** Active products (one, or a search), with their variants and offers. Lists are capped at 50 products. */
     async catalogRows(input: { query: string | null; productId: string | null; limit: number }): Promise<CatalogRows[]> {
         const limit = Math.min(Math.max(input.limit, 1), 50);
-        const term = input.query?.trim() ? `%${input.query.trim().replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null;
+        // Every word must appear in the title or the category, in any order; wildcards in a word are text.
+        const terms = (input.query ?? '')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 5)
+            .map((word) => `%${word.replace(/[\\%_]/g, (character) => `\\${character}`)}%`);
         const products = await this.database
             .select({
                 id: schema.catalogProducts.id,
@@ -227,12 +233,12 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
                 and(
                     eq(schema.catalogProducts.status, 'active'),
                     input.productId ? eq(schema.catalogProducts.id, input.productId) : undefined,
-                    term
-                        ? or(
-                              sql`${schema.catalogProducts.title} like ${term} escape '\\'`,
-                              sql`${schema.catalogProducts.category} like ${term} escape '\\'`,
-                          )
-                        : undefined,
+                    ...terms.map((term) =>
+                        or(
+                            sql`${schema.catalogProducts.title} like ${term} escape '\\'`,
+                            sql`${schema.catalogProducts.category} like ${term} escape '\\'`,
+                        ),
+                    ),
                 ),
             )
             .orderBy(asc(schema.catalogProducts.title))

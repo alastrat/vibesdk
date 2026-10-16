@@ -101,6 +101,8 @@ Estori's catalog has products a store can sell without holding stock: Estori shi
    `catalogVariantId`, a `minimumRetailPriceCents` and a `suggestedRetailPriceCents`.
 2. Add the product to `estori-store.json`. On each variant, set `catalogVariantId`, and set `priceCents` to the seller's
    price: at least `minimumRetailPriceCents`, by default `suggestedRetailPriceCents`.
-3. Use the catalog's `imageUrls` as the product `image`.
-4. Catalog products ship to the US only: keep `"US"` in `shipping.countries`.
-5. Never write a catalog price, a supplier name or a SKU anywhere in the store.
+3. Use the first of the catalog's `imageUrls` as the product `image` (one address, not a list).
+4. Write your own product names, descriptions and variant names in the store's voice. Never copy a brand, a model
+   number or wholesale terms from the catalog.
+5. Catalog products ship to the US only: keep `"US"` in `shipping.countries`.
+6. Never write a catalog price, a supplier name or a SKU anywhere in the store.

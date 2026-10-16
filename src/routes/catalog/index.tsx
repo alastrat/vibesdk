@@ -69,7 +69,7 @@ function ProductCard({ product }: { product: CatalogProductView }) {
 							</table>
 						</div>
 						<div className="flex flex-wrap items-center gap-3">
-							<Button variant="primary" disabled={!sellable} onClick={() => navigate(startPath(product))}>
+							<Button variant="primary" disabled={!sellable} onClick={() => navigate(startPath(product), { state: { fromPrompt: true } })}>
 								Start a store with this
 							</Button>
 							<p className="text-xs text-kumo-subtle">Ships to the US. Your cost includes delivery.</p>

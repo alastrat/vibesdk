@@ -40,6 +40,18 @@ describe('the catalog tools', () => {
 		expect(JSON.parse(await run(tools.get_catalog_product, { productId: 'cp_x' }))).toEqual({ error: 'No catalog product cp_x. Use search_catalog to find one.' });
 	});
 
+	it('refuse malformed input before searching', () => {
+		const schema = (tools.get_catalog_product as unknown as { inputSchema: { safeParse(value: unknown): { success: boolean } } }).inputSchema;
+		expect(schema.safeParse({ productId: '' }).success).toBe(false);
+		expect(schema.safeParse({}).success).toBe(false);
+	});
+
+	it('tell the model to use one image and write its own copy', () => {
+		const description = `${tools.search_catalog.description}`;
+		expect(description).toContain('first of the imageUrls');
+		expect(description).toContain('Write your own product names, descriptions and variant names');
+	});
+
 	it('tell the model how to add a product to a store', () => {
 		const description = `${tools.search_catalog.description} ${tools.get_catalog_product.description}`;
 		for (const phrase of ['estori-store.json', 'catalogVariantId', 'minimumRetailPriceCents']) expect(description).toContain(phrase);

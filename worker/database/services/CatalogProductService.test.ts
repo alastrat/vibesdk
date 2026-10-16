@@ -96,4 +96,12 @@ describe('CatalogProductService.catalogRows', () => {
 		expect(search?.params).toContain('%50\\%\\_off%');
 		expect(Math.max(...statements.map((statement) => statement.params.length))).toBeLessThanOrEqual(100);
 	});
+
+	it('matches every word of a search, in any order', async () => {
+		const { d1, statements } = recordingD1();
+		await new CatalogProductService({ DB: d1 } as unknown as Env).catalogRows({ query: 'dog collar', productId: null, limit: 10 });
+		const search = statements.find((statement) => statement.sql.includes('from "catalog_products"'));
+		expect(search?.params).toEqual(expect.arrayContaining(['%dog%', '%collar%']));
+		expect(search?.params).not.toContain('%dog collar%');
+	});
 });

@@ -5,9 +5,12 @@ import { CATALOG_MAX_DESCRIPTION } from './config';
 
 const ENTITIES: Readonly<Record<string, string>> = { '&nbsp;': ' ', '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" };
 
+/** Supplier specifics a store must not repeat: someone else's brand and model, and wholesale terms. */
+const SUPPLIER_DETAILS = /\b(brand( name)?|model|moq|oem|odm|place of origin|wholesale|factory)\b/i;
+
 function namesSupplier(line: string): boolean {
 	const lower = line.toLowerCase();
-	return SUPPLIER_NAMES.some((name) => lower.includes(name)) || /\bcj\b/i.test(line);
+	return SUPPLIER_NAMES.some((name) => lower.includes(name)) || /\bcj\b/i.test(line) || SUPPLIER_DETAILS.test(line);
 }
 
 export function catalogText(html: string | null): string {
