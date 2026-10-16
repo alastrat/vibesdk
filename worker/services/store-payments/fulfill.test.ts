@@ -49,6 +49,7 @@ const CHECKOUT: StoreCheckoutRecord = {
 	successPath: '/thanks',
 	cancelPath: '/cart',
 	note: null,
+	weightedCents: 0,
 	createdAt: new Date(0),
 	expiresAt: new Date(0),
 };

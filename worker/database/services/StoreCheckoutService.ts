@@ -1,12 +1,29 @@
 /** D1 reads and writes for store checkouts. */
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
-import type { PricedCart } from '../../../shared/types/store-payments';
+import type { PricedCart, StoreMode } from '../../../shared/types/store-payments';
 import type { StoreCheckoutRecord } from '../../services/store-payments/store';
 
 export class StoreCheckoutService extends BaseService {
+    /** The weight of the seller's checkouts in this mode since `since`: paid ones, and ones a shopper may still pay. */
+    async weeklyUsage(sellerUserId: string, mode: StoreMode, since: Date): Promise<number> {
+        const row = await this.database
+            .select({ used: sql<number>`COALESCE(sum(${schema.storeCheckouts.weightedCents}), 0)` })
+            .from(schema.storeCheckouts)
+            .where(
+                and(
+                    eq(schema.storeCheckouts.sellerUserId, sellerUserId),
+                    eq(schema.storeCheckouts.mode, mode),
+                    inArray(schema.storeCheckouts.status, ['creating', 'open', 'completed']),
+                    gte(schema.storeCheckouts.createdAt, since),
+                ),
+            )
+            .get();
+        return row?.used ?? 0;
+    }
+
     async create(checkout: StoreCheckoutRecord): Promise<void> {
         await this.database.insert(schema.storeCheckouts).values({ ...checkout, pricedCart: JSON.stringify(checkout.pricedCart) });
     }

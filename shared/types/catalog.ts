@@ -4,7 +4,7 @@ export const CATALOG_SUPPLIERS = ['cjdropshipping'] as const;
 export type CatalogSupplier = (typeof CATALOG_SUPPLIERS)[number];
 
 /** A catalog order waits for placement, is done (each item placed or rejected), or needs the owner. */
-export const CATALOG_ORDER_STATUSES = ['awaiting-placement', 'placement-done', 'needs-attention'] as const;
+export const CATALOG_ORDER_STATUSES = ['awaiting-placement', 'placement-done', 'needs-attention', 'risk-hold'] as const;
 export type CatalogOrderStatus = (typeof CATALOG_ORDER_STATUSES)[number];
 
 /** `withheld`: never placed, because a dispute already returned the payment; neither placed nor refunded. */

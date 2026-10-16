@@ -5,6 +5,7 @@ import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { isMissingAccountError, type SellerFlags } from '../../services/payments/stripe-client';
 import type { PayoutInterval } from '../../../shared/types/store-payments';
+import type { SellerLevel } from '../../../shared/types/seller-levels';
 
 export class StripeConnectService extends BaseService {
     async getByUser(userId: string): Promise<schema.StripeConnectAccount | null> {
@@ -69,5 +70,9 @@ export class StripeConnectService extends BaseService {
                 );
             return null;
         }
+    }
+
+    async saveLevel(userId: string, level: SellerLevel, payoutDelayDays: number): Promise<void> {
+        await this.database.update(schema.stripeConnectAccounts).set({ sellerLevel: level, payoutDelayDays, updatedAt: new Date() }).where(eq(schema.stripeConnectAccounts.userId, userId));
     }
 }

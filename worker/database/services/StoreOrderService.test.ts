@@ -89,3 +89,21 @@ describe('StoreOrderService.applyRefunds', () => {
 		expect(update?.sql.toLowerCase()).toContain('"stripe_refund_id" is not null');
 	});
 });
+
+describe('StoreOrderService.sellerRecord', () => {
+	it("reads the seller's first sale, completed orders and 90-day disputes in one mode", async () => {
+		const rows = (sql: string): unknown[][] => {
+			const lower = sql.toLowerCase();
+			if (lower.includes('min(')) return [[1_790_000_000]];
+			if (lower.includes('store_disputes')) return [[3, 1]];
+			if (lower.includes('not exists')) return [[12]];
+			return [[150]];
+		};
+		const { d1, statements } = recordingD1(rows);
+		const record = await new StoreOrderService({ DB: d1 } as unknown as Env).sellerRecord('u1', 'live', 1_800_000_000_000);
+		expect(record).toEqual({ firstSaleAt: new Date(1_790_000_000_000), completedOrders: 12, ordersLast90Days: 150, disputesLast90Days: 3, lostDisputesLast90Days: 1 });
+		// An inquiry takes no money and isn't a chargeback, so it doesn't count toward the dispute rate.
+		const disputes = statements.find((entry) => entry.sql.toLowerCase().includes('store_disputes'));
+		expect(disputes?.sql.toLowerCase()).toContain("not like 'warning_%'");
+	});
+});

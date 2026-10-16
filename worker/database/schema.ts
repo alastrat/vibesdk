@@ -27,6 +27,7 @@ import {
     STORE_PAYMENT_STATUSES,
     STORE_REFUND_INITIATORS,
 } from '../../shared/types/store-payments';
+import { SELLER_LEVELS } from '../../shared/types/seller-levels';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -379,6 +380,9 @@ export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
     payoutInterval: text('payout_interval', { enum: PAYOUT_INTERVALS }).notNull().default('weekly'),
     /** A weekday for weekly payouts, or a day of the month (as text) for monthly ones. */
     payoutAnchor: text('payout_anchor').notNull().default('monday'),
+    sellerLevel: text('seller_level', { enum: SELLER_LEVELS }).notNull().default('new'),
+    /** The payout delay last set on Stripe; null until Estori first sets it. */
+    payoutDelayDays: integer('payout_delay_days'),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 });
@@ -458,6 +462,8 @@ export const storeCheckouts = sqliteTable('store_checkouts', {
     successPath: text('success_path').notNull(),
     cancelPath: text('cancel_path').notNull(),
     note: text('note'),
+    /** What this checkout counts toward the seller's weekly cap: own lines twice, the rest once. */
+    weightedCents: integer('weighted_cents').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({

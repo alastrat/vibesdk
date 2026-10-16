@@ -101,6 +101,7 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 		successPath: safeReturnPath(request.successPath, '/'),
 		cancelPath,
 		note: request.note ?? null,
+		weightedCents: 0,
 		createdAt: new Date(nowMs),
 		expiresAt: new Date(nowMs + CHECKOUT_TTL_MS),
 	});

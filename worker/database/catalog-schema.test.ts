@@ -17,7 +17,7 @@ describe('catalog order schema', () => {
 
 	it('starts orders awaiting placement and items pending, in dollars', () => {
 		expect(schema.catalogOrders.status.default).toBe('awaiting-placement');
-		expect(schema.catalogOrders.status.enumValues).toEqual(['awaiting-placement', 'placement-done', 'needs-attention']);
+		expect(schema.catalogOrders.status.enumValues).toEqual(['awaiting-placement', 'placement-done', 'needs-attention', 'risk-hold']);
 		expect(schema.catalogOrders.currency.default).toBe('usd');
 		expect(schema.catalogOrderItems.status.default).toBe('pending');
 		expect(schema.catalogOrderItems.supplier.enumValues).toEqual(['cjdropshipping']);

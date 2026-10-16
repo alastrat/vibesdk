@@ -1,11 +1,12 @@
 /** D1 reads and writes for store orders and their items. */
 
-import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, lte, max, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { NewStoreOrder, NewStoreOrderItem, StoreOrderView } from '../../services/store-payments/store';
 import type { ShippingAddress } from '../../services/catalog/supplier';
-import type { StorePaymentStatus } from '../../../shared/types/store-payments';
+import type { StoreMode, StorePaymentStatus } from '../../../shared/types/store-payments';
+import type { SellerRecord } from '../../../shared/types/seller-levels';
 
 const NUMBERING_ATTEMPTS = 3;
 
@@ -181,5 +182,48 @@ export class StoreOrderService extends BaseService {
                 items: lines,
             };
         });
+    }
+
+    /** The seller's record in one mode, for their level: first sale, completed orders, and 90 days of orders and chargebacks. */
+    async sellerRecord(sellerUserId: string, mode: StoreMode, nowMs: number): Promise<SellerRecord> {
+        const orders = schema.storeOrders;
+        const mine = and(eq(orders.sellerUserId, sellerUserId), eq(orders.mode, mode));
+        const ninetyDaysAgo = new Date(nowMs - 90 * 24 * 60 * 60 * 1000);
+        const fourteenDaysAgo = new Date(nowMs - 14 * 24 * 60 * 60 * 1000);
+        const first = await this.database.select({ at: sql<number | null>`min(${orders.createdAt})` }).from(orders).where(mine).get();
+        const recent = await this.database.select({ count: sql<number>`count(*)` }).from(orders).where(and(mine, gte(orders.createdAt, ninetyDaysAgo))).get();
+        // Inquiries take no money and aren't chargebacks, so they don't count.
+        const disputes = await this.database
+            .select({ total: sql<number>`count(*)`, lost: sql<number>`COALESCE(sum(case when ${schema.storeDisputes.status} = 'lost' then 1 else 0 end), 0)` })
+            .from(schema.storeDisputes)
+            .innerJoin(orders, eq(orders.id, schema.storeDisputes.orderId))
+            .where(and(mine, gte(schema.storeDisputes.createdAt, ninetyDaysAgo), sql`${schema.storeDisputes.status} NOT LIKE 'warning_%'`))
+            .get();
+        // Paid, at least 14 days old, and every catalog item delivered; a refund or dispute changes the payment status.
+        const completed = await this.database
+            .select({ count: sql<number>`count(*)` })
+            .from(orders)
+            .where(
+                and(
+                    mine,
+                    eq(orders.paymentStatus, 'paid'),
+                    lte(orders.createdAt, fourteenDaysAgo),
+                    sql`not exists (select 1 from ${schema.catalogOrders} co join ${schema.catalogOrderItems} ci on ci.order_id = co.id where co.stripe_checkout_session_id = ${orders.stripeCheckoutSessionId} and ci.status != 'delivered')`,
+                ),
+            )
+            .get();
+        return {
+            firstSaleAt: first?.at ? new Date(first.at * 1000) : null,
+            completedOrders: completed?.count ?? 0,
+            ordersLast90Days: recent?.count ?? 0,
+            disputesLast90Days: disputes?.total ?? 0,
+            lostDisputesLast90Days: disputes?.lost ?? 0,
+        };
+    }
+
+    /** Sellers with a store order since this time, for the daily level check. */
+    async activeSellerIds(since: Date): Promise<string[]> {
+        const rows = await this.database.selectDistinct({ id: schema.storeOrders.sellerUserId }).from(schema.storeOrders).where(gte(schema.storeOrders.createdAt, since)).limit(1000).all();
+        return rows.map((row) => row.id);
     }
 }

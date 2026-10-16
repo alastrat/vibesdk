@@ -28,6 +28,8 @@ export interface StoreCheckoutRecord {
 	successPath: string;
 	cancelPath: string;
 	note: string | null;
+	/** What this checkout counts toward the seller's weekly cap. */
+	weightedCents: number;
 	createdAt: Date;
 	expiresAt: Date;
 }
