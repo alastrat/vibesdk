@@ -93,6 +93,8 @@ import type{
 	SitePublishingData,
 	StripeConnectStatusData,
 	StoreOrdersData,
+	StoreRefundRequest,
+	StoreRefundResponse,
 	CatalogProductsData,
 	StripeLinkData,
 	TemplateCategory,
@@ -647,6 +649,11 @@ class ApiClient {
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
 		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
+	}
+
+	/** Refund lines of a store order; the seller's Stripe balance pays it. */
+	async refundStoreOrder(appId: string, orderId: string, request: StoreRefundRequest): Promise<ApiResponse<StoreRefundResponse>> {
+		return this.request<StoreRefundResponse>(`/api/stores/${encodeURIComponent(appId)}/orders/${encodeURIComponent(orderId)}/refunds`, { method: 'POST', body: request });
 	}
 
 	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {

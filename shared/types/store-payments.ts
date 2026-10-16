@@ -195,3 +195,13 @@ export interface StoreOrderSummary {
 export interface StoreOrdersData {
 	orders: StoreOrderSummary[];
 }
+
+export interface StoreRefundRequest {
+	lineNos: number[];
+	/** Made once per refund attempt by the client, so a retried request refunds once. */
+	requestId: string;
+}
+
+export interface StoreRefundResponse {
+	refundedCents: number;
+}

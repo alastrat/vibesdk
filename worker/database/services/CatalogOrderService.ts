@@ -43,6 +43,15 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
     }
 
     async getOrder(orderId: string): Promise<CatalogOrderRow | null> {
+        return this.orderWhere(eq(schema.catalogOrders.id, orderId));
+    }
+
+    /** The catalog part of a store order, found by its Checkout session. */
+    async getOrderBySession(checkoutSessionId: string): Promise<CatalogOrderRow | null> {
+        return this.orderWhere(eq(schema.catalogOrders.stripeCheckoutSessionId, checkoutSessionId));
+    }
+
+    private async orderWhere(condition: ReturnType<typeof eq>): Promise<CatalogOrderRow | null> {
         const order = await this.database
             .select({
                 id: schema.catalogOrders.id,
@@ -52,7 +61,7 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
                 shippingAddress: schema.catalogOrders.shippingAddress,
             })
             .from(schema.catalogOrders)
-            .where(eq(schema.catalogOrders.id, orderId))
+            .where(condition)
             .get();
         if (!order) return null;
         const items = await this.database
@@ -72,7 +81,7 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
                 sellerReversalDueCents: schema.catalogOrderItems.sellerReversalDueCents,
             })
             .from(schema.catalogOrderItems)
-            .where(eq(schema.catalogOrderItems.orderId, orderId))
+            .where(eq(schema.catalogOrderItems.orderId, order.id))
             .all();
         const shippingAddress: ShippingAddress = JSON.parse(order.shippingAddress);
         return { ...order, shippingAddress, items };

@@ -14,4 +14,9 @@ describe('store routes', () => {
 		expect(routes.find((line) => line.includes("'/api/stores/:id/orders'"))).toContain('setAuthLevel(AuthConfig.ownerOnly)');
 		expect(source('/worker/api/routes/index.ts')).toContain('setupStoreRoutes(app)');
 	});
+
+	it("lets only the store's owner refund its orders", () => {
+		const routes = source('/worker/api/routes/storeRoutes.ts');
+		expect(routes).toContain("app.post('/api/stores/:id/orders/:orderId/refunds', setAuthLevel(AuthConfig.ownerOnly)");
+	});
 });
