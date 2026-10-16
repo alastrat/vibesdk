@@ -1,7 +1,7 @@
 /** The seller's payout frequency choice, and the schedule Stripe expects for it. */
 
-import { PAYOUT_INTERVALS, type PayoutInterval } from '../../../../shared/types/store-payments';
-import type { PayoutSchedule, Weekday } from '../../../services/payments/stripe-client';
+import { PAYOUT_INTERVALS, type PayoutInterval } from '../../../shared/types/store-payments';
+import type { PayoutSchedule, Weekday } from './stripe-client';
 
 const WEEKDAYS: readonly Weekday[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
 

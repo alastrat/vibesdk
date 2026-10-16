@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parsePayoutRequest, scheduleOf } from './payout-request';
+import { parsePayoutRequest, scheduleOf } from './payout-schedule';
 
 describe('parsePayoutRequest', () => {
 	it('accepts daily, weekly on a weekday, and monthly on a day from 1 to 28', () => {

@@ -10,7 +10,8 @@ import { sellerSetupStep } from '../../../../shared/types/seller-setup';
 import { PAYOUT_INTERVALS, type PayoutInterval } from '../../../../shared/types/store-payments';
 import { estimatedMonthlyPayoutCostCents } from '../../../services/payments/seller-costs';
 import { getUserConfigurableSettings } from '../../../config';
-import { parsePayoutRequest, scheduleOf } from './payout-request';
+import { limitsFor } from '../../../../shared/types/seller-levels';
+import { parsePayoutRequest, scheduleOf } from '../../../services/payments/payout-schedule';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
 
@@ -87,7 +88,11 @@ export class StripeConnectController extends BaseController {
                 await accounts.create({ userId: user.id, stripeAccountId: created.id, flags: accountFlags(created) });
                 accountId = created.id;
                 try {
-                    await stripe.updatePayoutSchedule(created.id, { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: null });
+                    // New sellers start at the New level's payout delay.
+                    const settings = (await getUserConfigurableSettings(env, user.id)).sellerLimits;
+                    const delay = limitsFor('new', settings).payoutDelayDays;
+                    await stripe.updatePayoutSchedule(created.id, { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: delay });
+                    await accounts.saveLevel(user.id, 'new', delay);
                 } catch (error) {
                     this.logger.warn('Could not set the default payout schedule', error);
                 }

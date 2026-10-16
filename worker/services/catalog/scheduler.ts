@@ -1,7 +1,7 @@
 /** Scheduled catalog work. The refresh runs every 15 minutes in production; admins can run it now. */
 
 import { createLogger } from '../../logger';
-import { CatalogOrderService, CatalogProductService } from '../../database';
+import { CatalogOrderService, CatalogProductService, StoreOrderService } from '../../database';
 import { cjClientFromEnv } from './cj/client';
 import { CURATED_PRODUCTS } from './curated';
 import { createImageCopier } from './images';
@@ -9,6 +9,10 @@ import { refreshCatalogBatch } from './refresh';
 import { sweepUnstartedOrders } from './runner';
 import { CATALOG_HEALTH_CRON, runCatalogHealth } from './health';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
+import { syncSellerLevelFromEnv } from '../payments/seller-level-sync';
+
+/** Sellers with a store order this recent get their level checked daily, since completed orders and disputes age. */
+const LEVEL_CHECK_WINDOW_MS = 120 * 24 * 60 * 60 * 1000;
 
 const logger = createLogger('CatalogSchedule');
 
@@ -48,6 +52,8 @@ export async function runCatalogSchedule(cron: string, env: Env): Promise<void> 
 			Date.now(),
 		);
 		if (raised > 0) logger.warn('Catalog health check raised alerts', { raised });
+		const sellers = await new StoreOrderService(env).activeSellerIds(new Date(Date.now() - LEVEL_CHECK_WINDOW_MS));
+		for (const sellerUserId of sellers) await syncSellerLevelFromEnv(env, sellerUserId);
 	}
 }
 

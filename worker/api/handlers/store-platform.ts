@@ -7,7 +7,7 @@ import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefus
 import { createLogger } from '../../logger';
 import { SellerTermsService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
 import { AppService } from '../../database/services/AppService';
-import { stripeFromEnv } from '../../services/payments/config';
+import { stripeFromEnv, stripeModeOf } from '../../services/payments/config';
 import { accountFlags, sellerReadiness, type StripeClient } from '../../services/payments/stripe-client';
 import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/seller-setup';
 import { lockCatalogPricesFor } from '../../services/store-payments/catalog-locks';
@@ -87,12 +87,6 @@ function json(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
-function stripeMode(env: Env): 'test' | 'live' | null {
-	const key = env.STRIPE_SECRET_KEY;
-	if (!key) return null;
-	return key.startsWith('sk_test_') || key.startsWith('rk_test_') ? 'test' : 'live';
-}
-
 /** The owner's own preview takes test payments; any other viewer sees a demo. */
 async function previewAccess(env: Env, target: StorePlatformTarget): Promise<'owner' | 'public'> {
 	if (target.previewUserId === PUBLIC_PREVIEW_SUBJECT) return 'public';
@@ -131,7 +125,7 @@ async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Re
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	if (!parsed?.ok) return json({ error: 'This store has no valid estori-store.json' }, 404);
 	const access = await previewAccess(env, target);
-	const seller = access === 'owner' && stripeMode(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
+	const seller = access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
 	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null));
 }
 
@@ -183,7 +177,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 		},
 		{
 			access: await previewAccess(env, target),
-			stripeMode: stripeMode(env),
+			stripeMode: stripeModeOf(env),
 			appId: target.appId,
 			sellerUserId: target.previewUserId,
 			body,
