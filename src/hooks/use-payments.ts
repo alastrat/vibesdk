@@ -18,6 +18,16 @@ export function useStripeConnectStatus(enabled: boolean) {
 	});
 }
 
+/** The seller's level, store limits and this week's use. */
+export function useSellerLimits() {
+	const { user } = useAuth();
+	return useQuery({
+		queryKey: [...queryKeys.account.payments.status(user?.id), 'limits'],
+		queryFn: () => unwrap(apiClient.getSellerLimits(), 'Failed to load your store limits'),
+		enabled: !!user,
+	});
+}
+
 /** Records the seller's agreement to the selling terms; the answer is their refreshed status. */
 export function useAcceptSellerTerms() {
 	const queryClient = useQueryClient();

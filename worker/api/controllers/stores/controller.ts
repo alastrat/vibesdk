@@ -3,8 +3,11 @@
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { ApiResponse, ControllerResponse } from '../types';
-import { CatalogOrderService, StoreOrderService } from '../../../database';
-import { PAYMENTS_NOT_CONFIGURED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
+import { CatalogOrderService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../../database';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, stripeFromEnv, stripeModeOf } from '../../../services/payments/config';
+import { getUserConfigurableSettings } from '../../../config';
+import { limitsView } from './limits-view';
+import type { SellerLimitsData } from '../../../../shared/types/seller-levels';
 import { refundStoreLines } from '../../../services/store-payments/refund-lines';
 import { storeRefundDeps } from '../../../services/store-payments/wiring';
 import { parseStoreRefundRequest, shortBalanceMessage } from './refund-request';
@@ -37,6 +40,30 @@ function summaryOf(order: StoreOrderView, catalogItems: CatalogItemProgress[]): 
 }
 
 export class StoreOrdersController extends BaseController {
+    /** The signed-in seller's level, store limits and this week's use. */
+    static async limits(
+        _request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<SellerLimitsData>>> {
+        try {
+            const userId = context.user!.id;
+            const mode = stripeModeOf(env) === 'live' ? 'live' : 'test';
+            const nowMs = Date.now();
+            const [record, settings, stored, weeklySalesUsedCents] = await Promise.all([
+                new StoreOrderService(env).sellerRecord(userId, mode, nowMs),
+                getUserConfigurableSettings(env, userId),
+                new StripeConnectService(env).getByUser(userId),
+                new StoreCheckoutService(env).weeklyUsage(userId, mode, new Date(nowMs - 7 * 24 * 60 * 60 * 1000)),
+            ]);
+            return this.createSuccessResponse<SellerLimitsData>(limitsView({ record, settings: settings.sellerLimits, storedLevel: stored?.sellerLevel ?? 'new', weeklySalesUsedCents, nowMs }));
+        } catch (error) {
+            this.logger.error('Failed to load store limits', error);
+            return this.createErrorResponse<SellerLimitsData>('Failed to load your store limits', 500);
+        }
+    }
+
     static async list(
         _request: Request,
         env: Env,

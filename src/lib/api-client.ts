@@ -92,6 +92,7 @@ import type{
 	SitePageData,
 	SitePublishingData,
 	StripeConnectStatusData,
+	SellerLimitsData,
 	StoreOrdersData,
 	StoreRefundRequest,
 	StoreRefundResponse,
@@ -649,6 +650,10 @@ class ApiClient {
 	}
 
 	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
+	async getSellerLimits(): Promise<ApiResponse<SellerLimitsData>> {
+		return this.request<SellerLimitsData>('/api/stores/limits');
+	}
+
 	async acceptSellerTerms(version: string): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/terms', { method: 'POST', body: { version } });
 	}

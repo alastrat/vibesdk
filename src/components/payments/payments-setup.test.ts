@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/src/components/payments/PayoutsCard.tsx', '/src/components/payments/PaymentsSetupPrompt.tsx', '/src/components/payments/PayoutFrequency.tsx', '/src/hooks/use-payments.ts', '/src/routes/home.tsx'],
+	['/src/components/payments/PayoutsCard.tsx', '/src/components/payments/PaymentsSetupPrompt.tsx', '/src/components/payments/PayoutFrequency.tsx', '/src/components/payments/SellerLimits.tsx', '/src/hooks/use-payments.ts', '/src/routes/home.tsx'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -55,5 +55,11 @@ describe('payments setup', () => {
 		for (const label of ['Daily', 'Weekly', 'Monthly', 'a month in Stripe fees']) expect(frequency).toContain(label);
 		expect(frequency).toContain('payoutCostEstimates');
 		expect(source('/src/components/payments/PayoutsCard.tsx')).toContain('<PayoutFrequency');
+	});
+
+	it("shows the seller's level, their two limits with this week's use, and the way up", () => {
+		const limits = source('/src/components/payments/SellerLimits.tsx');
+		for (const text of ['Largest order', 'Sales this week', 'Payouts wait', 'completed orders', 'useSellerLimits(']) expect(limits).toContain(text);
+		expect(source('/src/components/payments/PayoutsCard.tsx')).toContain('<SellerLimits />');
 	});
 });
