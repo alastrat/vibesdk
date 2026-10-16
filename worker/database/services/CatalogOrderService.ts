@@ -68,6 +68,7 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
                 trackingNumber: schema.catalogOrderItems.trackingNumber,
                 carrier: schema.catalogOrderItems.carrier,
                 supplierRefunded: schema.catalogOrderItems.supplierRefunded,
+                sellerReversalDueCents: schema.catalogOrderItems.sellerReversalDueCents,
             })
             .from(schema.catalogOrderItems)
             .where(eq(schema.catalogOrderItems.orderId, orderId))

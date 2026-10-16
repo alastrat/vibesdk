@@ -41,6 +41,8 @@ export interface CatalogOrderItemRow {
 	trackingNumber: string | null;
 	carrier: string | null;
 	supplierRefunded: boolean;
+	/** Set when the shopper's refund went through: the seller's share still to reverse. */
+	sellerReversalDueCents: number;
 }
 
 export interface CatalogOrderRow {
@@ -59,6 +61,7 @@ export interface ItemPatch {
 	trackingNumber?: string;
 	carrier?: string;
 	supplierRefunded?: boolean;
+	sellerReversalDueCents?: number;
 }
 
 export interface CatalogOrderStore {

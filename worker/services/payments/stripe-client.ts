@@ -61,10 +61,16 @@ export interface StripeCheckoutSession {
 	payment_intent: string | null;
 }
 
+export interface StripeTransferSummary {
+	id: string;
+	amount: number;
+	amount_reversed: number;
+}
+
 export interface StripePaymentIntent {
 	id: string;
 	/** Expanded on request: the charge, with the transfer that paid the seller on a destination charge. */
-	latest_charge: { id: string; transfer: string | null } | string | null;
+	latest_charge: { id: string; transfer: StripeTransferSummary | string | null } | string | null;
 }
 
 export interface StripeRefund {
@@ -218,7 +224,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
 		retrievePaymentIntent: (paymentIntentId) =>
-			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge'] })}`),
+			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge.transfer'] })}`),
 		// Catalog refunds carry stable idempotency keys, so a retried refund is never paid twice.
 		createRefund: (input) =>
 			request<StripeRefund>(

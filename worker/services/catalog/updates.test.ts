@@ -15,6 +15,7 @@ const ITEM: CatalogOrderItemRow = {
 	trackingNumber: null,
 	carrier: null,
 	supplierRefunded: false,
+	sellerReversalDueCents: 0,
 };
 
 describe('applySupplierUpdate', () => {

@@ -17,7 +17,7 @@ export function memoryCatalogStore(): CatalogOrderStore & { orders: Map<string, 
 				placementAttempts: 0,
 				shippingAddress: order.shippingAddress,
 				lastError: null,
-				items: order.items.map((item) => ({ ...item, status: 'pending', supplierOrderId: null, trackingNumber: null, carrier: null, supplierRefunded: false })),
+				items: order.items.map((item) => ({ ...item, status: 'pending', supplierOrderId: null, trackingNumber: null, carrier: null, supplierRefunded: false, sellerReversalDueCents: 0 })),
 			});
 			return true;
 		},

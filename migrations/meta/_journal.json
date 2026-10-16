@@ -120,6 +120,13 @@
       "when": 1792125590973,
       "tag": "0016_catalog_orders",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792128135131,
+      "tag": "0017_catalog_refund_progress",
+      "breakpoints": true
     }
   ]
 }

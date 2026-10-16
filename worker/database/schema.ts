@@ -399,6 +399,8 @@ export const catalogOrderItems = sqliteTable('catalog_order_items', {
     trackingNumber: text('tracking_number'),
     carrier: text('carrier'),
     supplierRefunded: integer('supplier_refunded', { mode: 'boolean' }).notNull().default(false),
+    // The seller's share of a refunded item still to take back from their transfer; 0 once reversed.
+    sellerReversalDueCents: integer('seller_reversal_due_cents').notNull().default(0),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
     orderIdx: index('catalog_order_items_order_idx').on(table.orderId),

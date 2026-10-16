@@ -185,12 +185,13 @@ describe('refunds for catalog items', () => {
 	}
 
 	it("reads the payment's charge and its transfer to the seller", async () => {
-		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: { id: 'ch_1', transfer: 'tr_1' } });
+		const transfer = { id: 'tr_1', amount: 5109, amount_reversed: 0 };
+		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: { id: 'ch_1', transfer } });
 		const intent = await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');
 
-		expect(intent.latest_charge).toEqual({ id: 'ch_1', transfer: 'tr_1' });
+		expect(intent.latest_charge).toEqual({ id: 'ch_1', transfer });
 		expect(calls[0].init.method).toBe('GET');
-		expect(decodeURIComponent(calls[0].url)).toBe('https://api.stripe.com/v1/payment_intents/pi_1?expand[0]=latest_charge');
+		expect(decodeURIComponent(calls[0].url)).toBe('https://api.stripe.com/v1/payment_intents/pi_1?expand[0]=latest_charge.transfer');
 	});
 
 	it('refunds part of a payment once per idempotency key', async () => {
