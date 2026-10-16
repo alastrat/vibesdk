@@ -92,7 +92,7 @@ describe('placeCatalogOrder', () => {
 		]);
 		const deps = { store, adapters: { cjdropshipping: adapter } };
 
-		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'retry', delayMs: 60_000 });
+		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'retry', delayMs: 60_000, rejectedItemIds: [] });
 		expect(store.orders.get('co_1')).toMatchObject({ status: 'awaiting-placement', placementAttempts: 1, lastError: 'Timed out' });
 		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'done', rejectedItemIds: [] });
 		expect(calls.map((call) => call.orderReference)).toEqual(['co_1', 'co_1']);
@@ -105,8 +105,32 @@ describe('placeCatalogOrder', () => {
 		const deps = { store, adapters: { cjdropshipping: adapter } };
 
 		for (let attempt = 1; attempt < MAX_PLACEMENT_ATTEMPTS; attempt += 1) expect((await placeCatalogOrder(deps, 'co_1')).kind).toBe('retry');
-		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'needs-attention', reason: 'Supplier down' });
+		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'needs-attention', reason: 'Supplier down', rejectedItemIds: [] });
 		expect(store.orders.get('co_1')?.status).toBe('needs-attention');
+	});
+
+	it('reports items rejected in an attempt that ends in a retry, until they are refunded', async () => {
+		const store = await storeWithOrder();
+		const { adapter } = scriptedAdapter([
+			{ ok: false, kind: 'rejected', reason: 'Out of stock', rejectedVariantIds: ['cj_cap'] },
+			{ ok: false, kind: 'retryable', reason: 'Timed out' },
+			{ ok: true, supplierOrderId: 'cj_13' },
+		]);
+		const deps = { store, adapters: { cjdropshipping: adapter } };
+
+		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'retry', delayMs: 60_000, rejectedItemIds: ['ci_cap'] });
+		expect(await placeCatalogOrder(deps, 'co_1')).toEqual({ kind: 'done', rejectedItemIds: ['ci_cap'] });
+	});
+
+	it('settles an order whose items were all handled before a crash, reporting its rejections', async () => {
+		const store = await storeWithOrder();
+		await store.patchItems([
+			{ itemId: 'ci_mug', status: 'placed', supplierOrderId: 'cj_14' },
+			{ itemId: 'ci_cap', status: 'rejected' },
+		]);
+
+		expect(await placeCatalogOrder({ store, adapters: { cjdropshipping: scriptedAdapter([]).adapter } }, 'co_1')).toEqual({ kind: 'done', rejectedItemIds: ['ci_cap'] });
+		expect(store.orders.get('co_1')?.status).toBe('placement-done');
 	});
 
 	it('does nothing for an order with nothing left to place, or no order at all', async () => {

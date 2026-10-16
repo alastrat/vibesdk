@@ -17,10 +17,11 @@ export function nextRetryDelayMs(failedAttempts: number): number {
 	return RETRY_DELAYS_MS[index];
 }
 
+/** `rejectedItemIds` lists every item rejected and not yet refunded, whatever attempt rejected it, so none is left unrefunded. */
 export type PlacementOutcome =
 	| { kind: 'done'; rejectedItemIds: readonly string[] }
-	| { kind: 'retry'; delayMs: number }
-	| { kind: 'needs-attention'; reason: string }
+	| { kind: 'retry'; delayMs: number; rejectedItemIds: readonly string[] }
+	| { kind: 'needs-attention'; reason: string; rejectedItemIds: readonly string[] }
 	| { kind: 'not-found' };
 
 export interface PlacementDeps {
@@ -62,10 +63,16 @@ async function placeWithSupplier(
 export async function placeCatalogOrder(deps: PlacementDeps, orderId: string): Promise<PlacementOutcome> {
 	const order = await deps.store.getOrder(orderId);
 	if (!order) return { kind: 'not-found' };
+	const rejectedItemIds = order.items.filter((item) => item.status === 'rejected').map((item) => item.id);
 	const pending = order.items.filter((item) => item.status === 'pending');
-	if (pending.length === 0) return { kind: 'done', rejectedItemIds: [] };
+	if (pending.length === 0) {
+		// Every item was handled, possibly by an attempt that stopped before settling the order.
+		if (order.status === 'awaiting-placement') {
+			await deps.store.updateOrder(order.id, { status: 'placement-done', placementAttempts: order.placementAttempts, lastError: null });
+		}
+		return { kind: 'done', rejectedItemIds };
+	}
 
-	const rejectedItemIds: string[] = [];
 	let retryReason: string | null = null;
 	for (const supplier of CATALOG_SUPPLIERS) {
 		const lines = pending.filter((item) => item.supplier === supplier);
@@ -82,8 +89,8 @@ export async function placeCatalogOrder(deps: PlacementDeps, orderId: string): P
 	}
 	if (placementAttempts >= MAX_PLACEMENT_ATTEMPTS) {
 		await deps.store.updateOrder(order.id, { status: 'needs-attention', placementAttempts, lastError: retryReason });
-		return { kind: 'needs-attention', reason: retryReason };
+		return { kind: 'needs-attention', reason: retryReason, rejectedItemIds };
 	}
 	await deps.store.updateOrder(order.id, { status: 'awaiting-placement', placementAttempts, lastError: retryReason });
-	return { kind: 'retry', delayMs: nextRetryDelayMs(placementAttempts) };
+	return { kind: 'retry', delayMs: nextRetryDelayMs(placementAttempts), rejectedItemIds };
 }
