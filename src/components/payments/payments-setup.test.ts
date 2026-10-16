@@ -37,4 +37,16 @@ describe('payments setup', () => {
 		expect(prompt).toContain('status.data.connected');
 		expect(source('/src/routes/home.tsx')).toContain('<PaymentsSetupPrompt />');
 	});
+
+	it('sends a seller to Stripe after agreeing only when Stripe still needs something', () => {
+		const card = source('/src/components/payments/PayoutsCard.tsx');
+		expect(card).toContain('if (status.setupStep !== null) onboarding.start();');
+		expect(card).not.toContain('onSuccess: () => onboarding.start()');
+	});
+
+	it('keeps the Stripe dashboard for a seller whose details are in, whatever the store setup still needs', () => {
+		const card = source('/src/components/payments/PayoutsCard.tsx');
+		expect(card).toContain('const canOpenDashboard = data.connected && data.detailsSubmitted;');
+		expect(card).toContain('{canOpenDashboard && (');
+	});
 });

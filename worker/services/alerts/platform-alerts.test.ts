@@ -52,4 +52,24 @@ describe('sendPlatformAlert', () => {
 		expect(PLATFORM_ALERT_EMAILS).toEqual(['alastrat@pluriza.com']);
 		expect(PLATFORM_ALERT_EMAILS).not.toBe(PLATFORM_ADMIN_EMAILS);
 	});
+
+	it('lets a daily job alert again the next day, even when it runs a little earlier, and not twice the same day', async () => {
+		let now = 0;
+		const markers = new Map<string, number>();
+		const sent: OutgoingEmail[] = [];
+		const deps: PlatformAlertDeps = {
+			throttle: {
+				get: async (key) => ((markers.get(key) ?? 0) > now ? '1' : null),
+				put: async (key, _value, options) => void markers.set(key, now + options.expirationTtl * 1000),
+			},
+			sender: { send: async (email) => void sent.push(email) },
+			recipients: ['ops@example.test'],
+			log: () => undefined,
+		};
+		expect(await sendPlatformAlert(deps, ALERT)).toBe('sent');
+		now += 24 * 60 * 60 * 1000 - 60_000;
+		expect(await sendPlatformAlert(deps, ALERT)).toBe('sent');
+		now += 60 * 60 * 1000;
+		expect(await sendPlatformAlert(deps, ALERT)).toBe('throttled');
+	});
 });

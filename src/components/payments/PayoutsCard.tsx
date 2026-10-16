@@ -37,6 +37,10 @@ export function PayoutsCard() {
 	}
 	const step = data.setupStep;
 	const verifying = step === 'finish-stripe' && data.connected && data.detailsSubmitted;
+	// The dashboard holds paid-site payouts too, so it stays open whatever the store setup still needs.
+	const canOpenDashboard = data.connected && data.detailsSubmitted;
+	// Everything at Stripe is in place: agreeing to the selling terms is the only step left.
+	const stripeDone = data.detailsSubmitted && data.cardPaymentsActive && data.transfersActive && data.payoutsEnabled;
 
 	return (
 		<div className="grid gap-3 rounded-lg px-3 py-3 ring ring-kumo-hairline">
@@ -47,14 +51,19 @@ export function PayoutsCard() {
 				</span>
 				{verifying && <span className="text-sm text-kumo-subtle">Stripe is verifying your details.</span>}
 			</div>
-			{step === null ? (
+			{canOpenDashboard && (
 				<div className="flex flex-wrap items-center gap-2">
-					<Badge variant="success">Ready to take payments</Badge>
+					{step === null ? (
+						<Badge variant="success">Ready to take payments</Badge>
+					) : (
+						data.transfersActive && <Badge variant="info">Paid-site payouts active</Badge>
+					)}
 					<Button size="sm" variant="secondary" loading={dashboard.isPending} onClick={openDashboard}>
 						Open Stripe dashboard
 					</Button>
 				</div>
-			) : data.setupStep === 'accept-terms' ? (
+			)}
+			{data.setupStep === 'accept-terms' ? (
 				<div className="grid gap-2">
 					<span className="text-sm text-kumo-default">{SELLER_SETUP_MESSAGES[data.setupStep]}</span>
 					<label className="flex items-start gap-2 text-sm text-kumo-default">
@@ -75,22 +84,26 @@ export function PayoutsCard() {
 							loading={acceptTerms.isPending || onboarding.isPending}
 							onClick={() =>
 								acceptTerms.mutate(SELLER_TERMS_VERSION, {
-									onSuccess: () => onboarding.start(),
+									onSuccess: (status) => {
+										if (status.setupStep !== null) onboarding.start();
+									},
 									onError: (error) => toast.error(error.message),
 								})
 							}
 						>
-							Agree and continue to Stripe
+							{stripeDone ? 'Agree' : 'Agree and continue to Stripe'}
 						</Button>
 					</div>
 				</div>
 			) : (
-				<div className="flex flex-wrap items-center gap-2">
-					<Badge variant={verifying ? 'info' : 'warning'}>{verifying ? 'Waiting for Stripe' : SELLER_SETUP_MESSAGES[step]}</Badge>
-					<Button size="sm" variant="primary" loading={onboarding.isPending} onClick={onboarding.start}>
-						{data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
-					</Button>
-				</div>
+				step !== null && (
+					<div className="flex flex-wrap items-center gap-2">
+						<Badge variant={verifying ? 'info' : 'warning'}>{verifying ? 'Waiting for Stripe' : SELLER_SETUP_MESSAGES[step]}</Badge>
+						<Button size="sm" variant="primary" loading={onboarding.isPending} onClick={onboarding.start}>
+							{data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
+						</Button>
+					</div>
+				)
 			)}
 		</div>
 	);

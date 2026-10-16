@@ -51,7 +51,8 @@ describe('legal documents', () => {
 	it('adds selling in your own store as section 10, in the version sellers agree to', () => {
 		const terms = LEGAL_DOCUMENTS.terms;
 		expect(terms.version).toBe('2026-10-16');
-		expect(SELLER_TERMS_VERSION).toBe(terms.version);
+		// The selling terms change only when section 10 changes, never newer than the Terms that hold them.
+		expect(SELLER_TERMS_VERSION <= terms.version).toBe(true);
 		expect(terms.body).toContain('## 10. Selling in your own store');
 		expect(terms.body).toContain('## 21. Contact');
 		for (const promise of [
@@ -76,5 +77,24 @@ describe('legal documents', () => {
 		for (const slug of LEGAL_SLUGS) {
 			for (const name of SUPPLIER_NAMES) expect(LEGAL_DOCUMENTS[slug].body.toLowerCase()).not.toContain(name);
 		}
+	});
+
+	it('keeps section 10 and Our property among the sections that survive termination', () => {
+		const body = LEGAL_DOCUMENTS.terms.body;
+		expect(body.match(/## (\d+)\. Our property/)?.[1]).toBe('12');
+		expect(body.split('\n').find((line) => line.includes('survive termination'))).toBe(
+			'Sections 4 (the license for copies already made), 5, 6, 8, 9, 10, 12 and 15 to 19 survive termination.',
+		);
+	});
+
+	it("binds store sellers to Stripe's agreement in section 8 too", () => {
+		expect(LEGAL_DOCUMENTS.terms.body).toContain("Section 8's paragraph on the Stripe Services Agreement applies to you as a store seller too.");
+	});
+
+	it("tells shoppers their phone number is shared, and that store owners see their orders", () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain('We receive the name, email, phone number (when given) and shipping address');
+		expect(privacy).toContain("A paid site's seller sees that a sale happened; its buyers' details aren't shown to them.");
+		expect(privacy).not.toContain("buyers' details aren't shown to sellers");
 	});
 });

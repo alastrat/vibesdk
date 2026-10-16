@@ -30,6 +30,14 @@ describe('the store checkout skill', () => {
 		expect(SKILL).toContain('setupPath');
 	});
 
+	it('keeps the payments-setup check apart from the test-and-live section', () => {
+		const setup = SKILL.indexOf('Before promising checkout');
+		const testAndLive = SKILL.indexOf('Test and live');
+		expect(setup).toBeGreaterThan(-1);
+		expect(setup).toBeLessThan(testAndLive);
+		expect(SKILL.slice(testAndLive)).toContain("Stripe's test cards");
+	});
+
 	it('keeps payments on the platform', () => {
 		for (const rule of ['/__estori/store.js', 'Estori.checkout(', 'Estori.order(', 'Never collect card details', 'catalogVariantId']) expect(SKILL).toContain(rule);
 		expect(APP_FILE_STRUCTURE).toContain('store-checkout');

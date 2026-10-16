@@ -8,7 +8,8 @@ import type { EmailSender } from '../email/types';
 /** Who receives alerts; apart from the admin list, so an admin email change doesn't move them. */
 export const PLATFORM_ALERT_EMAILS: readonly string[] = ['alastrat@pluriza.com'];
 
-export const ALERT_THROTTLE_SECONDS = 24 * 60 * 60;
+/** Under a day, so a daily job that runs a little earlier than yesterday still alerts again. */
+export const ALERT_THROTTLE_SECONDS = 20 * 60 * 60;
 
 export const PLATFORM_ALERT_KINDS = [
 	'needs-attention',

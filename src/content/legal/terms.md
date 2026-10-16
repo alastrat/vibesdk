@@ -72,7 +72,7 @@ If we refund a purchase under our Refund Policy, or a buyer's card issuer revers
 
 ## 10. Selling in your own store
 
-This section applies when a store you build on Estori takes payments from shoppers. Sections 7 to 9 cover paid sites.
+This section applies when a store you build on Estori takes payments from shoppers. Sections 7 to 9 cover paid sites. Section 8's paragraph on the Stripe Services Agreement applies to you as a store seller too.
 
 **You are the seller.** You are the merchant of record for your store's sales. You sell to your shoppers under your store's name, and you're responsible for your products, prices and store policies, for delivering orders and for answering your shoppers. We provide the software, take payments for you through Stripe and, for products you sell from the Estori catalog, buy and ship them for you.
 
@@ -123,7 +123,7 @@ You can stop using the Service at any time and ask us to delete your account at 
 
 We may suspend or terminate your account, remove content, or limit features if you break these Terms, if we must by law, or if your use creates risk or harm for us, other users or third parties. We'll try to give notice when we reasonably can. We terminate the accounts of repeat copyright infringers under our [Copyright Policy](/copyright).
 
-Sections 4 (the license for copies already made), 5, 6, 8, 9, 11 and 14 to 18 survive termination.
+Sections 4 (the license for copies already made), 5, 6, 8, 9, 10, 12 and 15 to 19 survive termination.
 
 ## 15. Disclaimers
 

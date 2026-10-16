@@ -282,13 +282,23 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
         }));
     }
 
-    /** How many products sell, and when any product last refreshed from the supplier. */
+    /**
+     * How many products sell, and when an offer last refreshed. A failed refresh stamps the product but leaves its offers,
+     * so the offers' time is the one that stops selling after 72 hours.
+     */
     async refreshHealth(): Promise<{ activeProducts: number; lastRefreshAt: Date | null }> {
-        const row = await this.database
-            .select({ active: count(), last: max(schema.catalogProducts.detailsRefreshedAt) })
+        const products = await this.database
+            .select({ active: count() })
             .from(schema.catalogProducts)
             .where(eq(schema.catalogProducts.status, 'active'))
             .get();
-        return { activeProducts: row?.active ?? 0, lastRefreshAt: row?.last ?? null };
+        const offers = await this.database
+            .select({ last: max(schema.catalogVariantOffers.updatedAt) })
+            .from(schema.catalogVariantOffers)
+            .innerJoin(schema.catalogVariants, eq(schema.catalogVariants.id, schema.catalogVariantOffers.variantId))
+            .innerJoin(schema.catalogProducts, eq(schema.catalogProducts.id, schema.catalogVariants.productId))
+            .where(eq(schema.catalogProducts.status, 'active'))
+            .get();
+        return { activeProducts: products?.active ?? 0, lastRefreshAt: offers?.last ?? null };
     }
 }

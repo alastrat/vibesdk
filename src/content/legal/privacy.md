@@ -47,7 +47,7 @@ We share personal data only as described here.
 - **Fulfillment partners**: when a store sells products from the Estori catalog, the shopper's name, shipping address, email and phone number go to the partner that ships the order.
 - **GitHub**: only if you choose to export a site to GitHub.
 
-**Other users and the public.** Public sites, their screenshots, product pages, your display name and avatar, and public stats are visible to everyone. A seller sees that a sale happened; buyers' details aren't shown to sellers.
+**Other users and the public.** Public sites, their screenshots, product pages, your display name and avatar, and public stats are visible to everyone. A paid site's seller sees that a sale happened; its buyers' details aren't shown to them. A store's owner sees the orders their store takes, with each shopper's name, email, phone number (when given) and shipping address.
 
 **Legal and safety reasons.** When required by law, or to protect the rights, safety and property of users, the public or Globalink.
 
@@ -102,7 +102,7 @@ The Service is for people 18 and older. We don't knowingly collect personal data
 
 When people visit a store you build, the store may collect their information, for example orders or contact forms. We store and process that information on your behalf to run your store. You're responsible for telling your visitors how your store uses their data and for any privacy notice your store needs.
 
-Shoppers who pay at a store give their name, email, shipping address and card details to Stripe at checkout. We receive the name, email and shipping address to record the order, deliver catalog products and show the order to the store's owner, who sells to them.
+Shoppers who pay at a store give their name, email, shipping address and card details to Stripe at checkout. We receive the name, email, phone number (when given) and shipping address to record the order, deliver catalog products and show the order to the store's owner, who sells to them.
 
 ## 11. Changes to this Policy
 

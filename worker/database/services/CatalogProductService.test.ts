@@ -105,3 +105,15 @@ describe('CatalogProductService.catalogRows', () => {
 		expect(search?.params).not.toContain('%dog collar%');
 	});
 });
+
+describe('CatalogProductService.refreshHealth', () => {
+	it('dates the last refresh by when offers last refreshed, since a failed refresh stamps the product but not its offers', async () => {
+		const rows = (sql: string): unknown[][] => (sql.toLowerCase().includes('max(') ? [[1_790_000_000]] : [[6]]);
+		const { d1, statements } = recordingD1(rows);
+		const health = await new CatalogProductService({ DB: d1 } as unknown as Env).refreshHealth();
+		expect(health).toEqual({ activeProducts: 6, lastRefreshAt: new Date(1_790_000_000_000) });
+		const last = statements.find((entry) => entry.sql.toLowerCase().includes('max('));
+		expect(last?.sql).toContain('max("catalog_variant_offers"."updated_at")');
+		expect(last?.sql).not.toContain('details_refreshed_at');
+	});
+});

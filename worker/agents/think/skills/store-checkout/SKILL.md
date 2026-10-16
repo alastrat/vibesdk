@@ -88,18 +88,18 @@ async function showConfirmation() {
 - Never send prices, fees or accounts to `Estori.checkout`: it accepts only variant ids, quantities, the country, return
   paths and a note.
 
-## 5. Test and live
-
-## Before promising checkout
+## 5. Before promising checkout
 
 Call `get_payments_setup` once when the user asks for checkout or payments. When `ready` is false, finish building the
 store as usual, then tell the user in one sentence what's left, using `nextStep`, and that they finish it in Estori at
 `setupPath`. Never ask for their Stripe or bank details yourself.
 
+## 6. Test and live
+
 In the preview, the store's owner pays with Stripe's test cards (4242 4242 4242 4242, any future date, any CVC). Anyone
 else viewing the preview sees "This is a demo".
 
-## 6. Catalog products
+## 7. Catalog products
 
 Estori's catalog has products a store can sell without holding stock: Estori ships each order to the shopper.
 

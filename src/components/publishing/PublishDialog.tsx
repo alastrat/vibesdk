@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import { Button, Loader } from '@cloudflare/kumo';
+import { Button, LinkButton, Loader } from '@cloudflare/kumo';
 import {
 	Dialog,
 	DialogContent,
@@ -16,6 +16,7 @@ import { PAYMENTS_NOT_CONFIGURED_MESSAGE, savedListingPrice } from '@/lib/paid-l
 import {
 	formatTemplatePrice,
 	PLATFORM_FEE_LABEL,
+	SELLER_SETUP_PATH,
 	TEMPLATE_CATEGORIES,
 	TEMPLATE_CATEGORY_LABELS,
 	TEMPLATE_PRICE_OPTIONS_CENTS,
@@ -192,14 +193,21 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 			{paid && payouts.data?.configured && !payouts.data.transfersActive && (
 				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
 					<span className="text-sm text-kumo-default">Connect Stripe to sell this site</span>
-					<Button
-						size="sm"
-						variant="secondary"
-						loading={onboarding.isPending}
-						onClick={onboarding.start}
-					>
-						{payouts.data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
-					</Button>
+					{/* Stripe onboarding starts only after the selling terms, which live with the payments setup. */}
+					{payouts.data.setupStep === 'accept-terms' ? (
+						<LinkButton size="sm" variant="secondary" href={SELLER_SETUP_PATH}>
+							Set up payments
+						</LinkButton>
+					) : (
+						<Button
+							size="sm"
+							variant="secondary"
+							loading={onboarding.isPending}
+							onClick={onboarding.start}
+						>
+							{payouts.data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
+						</Button>
+					)}
 				</div>
 			)}
 			<PageCopyFields

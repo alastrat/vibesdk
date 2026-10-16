@@ -114,6 +114,12 @@ describe('getting paid', () => {
 		}
 	});
 
+	it('sends a paid-site seller who still has to accept the selling terms to payments setup, not to Stripe', () => {
+		const dialog = sellerSource('/src/components/publishing/PublishDialog.tsx');
+		expect(dialog).toContain("payouts.data.setupStep === 'accept-terms'");
+		expect(dialog).toContain('href={SELLER_SETUP_PATH}');
+	});
+
 	it('asks for Stripe before a paid publish and states the fee', () => {
 		const dialog = sellerSource('/src/components/publishing/PublishDialog.tsx');
 		expect(dialog).toContain('Connect Stripe to sell this site');
