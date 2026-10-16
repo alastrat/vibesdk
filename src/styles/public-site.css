@@ -140,6 +140,9 @@
 
 .public-site {
 	color-scheme: light;
+	/* A standard scrollbar property turns off the app's custom ::-webkit-scrollbar here: the system's own scrollbar floats
+	   over the page on a Mac, instead of a permanent 8px track that stops every page short of the window's edge. */
+	scrollbar-width: thin;
 	font-family: var(--font-public);
 	font-variation-settings: 'opsz' 14;
 	background-color: #ffffff;

@@ -215,4 +215,12 @@ describe('public chrome', () => {
 		expect(source(LAYOUT)).not.toContain("behavior: 'smooth'");
 		expect(source(TOP)).not.toContain("behavior: 'smooth'");
 	});
+
+	it("uses the system's own scrollbar, so pages reach the window's edge instead of stopping at a custom 8px track", () => {
+		// A standard scrollbar property switches off the app's ::-webkit-scrollbar styling for the public site, so a Mac
+		// floats its scrollbar over the page, and the light color scheme keeps it light when the app is dark.
+		const site = publicCss.slice(publicCss.indexOf('.public-site {'), publicCss.indexOf('}', publicCss.indexOf('.public-site {')));
+		expect(site).toContain('color-scheme: light;');
+		expect(site).toContain('scrollbar-width: thin;');
+	});
 });
