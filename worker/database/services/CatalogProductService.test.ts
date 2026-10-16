@@ -84,3 +84,16 @@ describe('CatalogProductService', () => {
 		expect(statements[1]).toContain('update "catalog_variant_offers"');
 	});
 });
+
+describe('CatalogProductService.catalogRows', () => {
+	it('reads active products, treating wildcards in the search as text, within D1 limits', async () => {
+		const { d1, statements } = recordingD1((sql) => (sql.includes('from "catalog_products"') ? [['cp_1', 'Feeder', 'Feeds.', 'Pet supplies', '["catalog/cp_1/a.jpg"]', 'active']] : []));
+		const rows = await new CatalogProductService({ DB: d1 } as unknown as Env).catalogRows({ query: '50%_off', productId: null, limit: 50 });
+
+		expect(rows.map((row) => row.product.id)).toEqual(['cp_1']);
+		const search = statements.find((statement) => statement.sql.includes('from "catalog_products"'));
+		expect(search?.sql.toLowerCase()).toContain("escape '\\'");
+		expect(search?.params).toContain('%50\\%\\_off%');
+		expect(Math.max(...statements.map((statement) => statement.params.length))).toBeLessThanOrEqual(100);
+	});
+});

@@ -121,3 +121,35 @@ export type CatalogVariantStatus = (typeof CATALOG_VARIANT_STATUSES)[number];
 export const CATALOG_OFFER_UNAVAILABLE_REASONS = ['out-of-stock', 'no-shipping', 'paused', 'retired'] as const;
 export type CatalogOfferUnavailableReason = (typeof CATALOG_OFFER_UNAVAILABLE_REASONS)[number];
 
+export interface CatalogVariantView {
+	catalogVariantId: string;
+	name: string;
+	options: Record<string, string>;
+	imageUrl: string | null;
+	available: boolean;
+	deliveryDays: { min: number | null; max: number | null } | null;
+	/** What one unit costs the seller, US delivery included; null when it can't be sold now. */
+	catalogPriceCents: number | null;
+	minimumRetailPriceCents: number | null;
+	suggestedRetailPriceCents: number | null;
+}
+
+export interface CatalogProductView {
+	productId: string;
+	title: string;
+	description: string;
+	category: string;
+	imageUrls: string[];
+	/** Destinations where at least one variant can be sold now. */
+	shipsTo: string[];
+	variants: CatalogVariantView[];
+}
+
+export interface CatalogProductsData {
+	products: CatalogProductView[];
+}
+
+/** Twice the catalog price, ending in 99 cents, and never below the minimum retail price. */
+export function suggestedRetailPriceCents(catalogPrice: number): number {
+	return Math.max(Math.ceil((catalogPrice * 2) / 100) * 100 - 1, minimumRetailPriceCents(catalogPrice));
+}

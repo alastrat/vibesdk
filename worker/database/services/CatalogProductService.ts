@@ -6,6 +6,7 @@ import { BaseService } from './BaseService';
 import { generateId } from '../../utils/idGenerator';
 import { CATALOG_DETAILS_MAX_AGE_MS, CATALOG_REFRESH_CLAIM_MS } from '../../services/catalog/config';
 import type { CatalogRefreshStore, ClaimedProduct, CuratedProduct, OfferLookup, RefreshedProduct } from '../../services/catalog/catalog-store';
+import type { CatalogRows } from '../../services/catalog/catalog-view';
 
 function imageKeysOf(images: string): string[] {
     const parsed: unknown = JSON.parse(images);
@@ -205,6 +206,73 @@ export class CatalogProductService extends BaseService implements CatalogRefresh
                 row.available === null || row.updatedAt === null
                     ? null
                     : { available: row.available && row.productStatus === 'active' && row.variantStatus === 'active', catalogPriceCents: row.catalogPriceCents, updatedAt: row.updatedAt },
+        }));
+    }
+
+    /** Active products (one, or a search), with their variants and offers. Lists are capped at 50 products. */
+    async catalogRows(input: { query: string | null; productId: string | null; limit: number }): Promise<CatalogRows[]> {
+        const limit = Math.min(Math.max(input.limit, 1), 50);
+        const term = input.query?.trim() ? `%${input.query.trim().replace(/[\\%_]/g, (character) => `\\${character}`)}%` : null;
+        const products = await this.database
+            .select({
+                id: schema.catalogProducts.id,
+                title: schema.catalogProducts.title,
+                description: schema.catalogProducts.description,
+                category: schema.catalogProducts.category,
+                images: schema.catalogProducts.images,
+                status: schema.catalogProducts.status,
+            })
+            .from(schema.catalogProducts)
+            .where(
+                and(
+                    eq(schema.catalogProducts.status, 'active'),
+                    input.productId ? eq(schema.catalogProducts.id, input.productId) : undefined,
+                    term
+                        ? or(
+                              sql`${schema.catalogProducts.title} like ${term} escape '\\'`,
+                              sql`${schema.catalogProducts.category} like ${term} escape '\\'`,
+                          )
+                        : undefined,
+                ),
+            )
+            .orderBy(asc(schema.catalogProducts.title))
+            .limit(limit)
+            .all();
+        if (products.length === 0) return [];
+        const productIds = products.map((product) => product.id);
+        const variants = await this.database
+            .select({
+                productId: schema.catalogVariants.productId,
+                id: schema.catalogVariants.id,
+                name: schema.catalogVariants.name,
+                options: schema.catalogVariants.options,
+                imageKey: schema.catalogVariants.imageKey,
+                status: schema.catalogVariants.status,
+            })
+            .from(schema.catalogVariants)
+            .where(inArray(schema.catalogVariants.productId, productIds))
+            .all();
+        // Joined on the product ids, so the statement binds at most 50 of them whatever the variant count.
+        const offers = await this.database
+            .select({
+                variantId: schema.catalogVariantOffers.variantId,
+                destinationCountry: schema.catalogVariantOffers.destinationCountry,
+                available: schema.catalogVariantOffers.available,
+                catalogPriceCents: schema.catalogVariantOffers.catalogPriceCents,
+                deliveryDaysMin: schema.catalogVariantOffers.deliveryDaysMin,
+                deliveryDaysMax: schema.catalogVariantOffers.deliveryDaysMax,
+                updatedAt: schema.catalogVariantOffers.updatedAt,
+            })
+            .from(schema.catalogVariantOffers)
+            .innerJoin(schema.catalogVariants, eq(schema.catalogVariants.id, schema.catalogVariantOffers.variantId))
+            .where(inArray(schema.catalogVariants.productId, productIds))
+            .all();
+        return products.map(({ images, ...product }) => ({
+            product: { ...product, images: imageKeysOf(images) },
+            variants: variants
+                .filter((variant) => variant.productId === product.id)
+                .map(({ productId: _productId, options, ...variant }) => ({ ...variant, options: JSON.parse(options) as Record<string, string> })),
+            offers: offers.filter((offer) => variants.some((variant) => variant.productId === product.id && variant.id === offer.variantId)),
         }));
     }
 }
