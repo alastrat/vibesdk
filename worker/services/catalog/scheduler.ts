@@ -1,7 +1,7 @@
 /** Scheduled catalog work. The refresh runs every 15 minutes in production; admins can run it now. */
 
 import { createLogger } from '../../logger';
-import { CatalogOrderService, CatalogProductService, StoreOrderService } from '../../database';
+import { CatalogOrderService, CatalogProductService, SellerChargeService, StoreOrderService } from '../../database';
 import { cjClientFromEnv } from './cj/client';
 import { CURATED_PRODUCTS } from './curated';
 import { createImageCopier } from './images';
@@ -48,7 +48,12 @@ export async function runCatalogSchedule(cron: string, env: Env): Promise<void> 
 		const products = new CatalogProductService(env);
 		const orders = new CatalogOrderService(env);
 		const raised = await runCatalogHealth(
-			{ refreshHealth: () => products.refreshHealth(), lateItems: (status, before) => orders.lateItems(status, before), alert: platformAlertsFromEnv(env) },
+			{
+				refreshHealth: () => products.refreshHealth(),
+				lateItems: (status, before) => orders.lateItems(status, before),
+				alert: platformAlertsFromEnv(env),
+				unpaidCharges: (before) => new SellerChargeService(env).unpaidSince(before),
+			},
 			Date.now(),
 		);
 		if (raised > 0) logger.warn('Catalog health check raised alerts', { raised });

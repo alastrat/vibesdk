@@ -23,6 +23,17 @@ export class SellerChargeService extends BaseService {
 		return rows.length > 0 ? 'added' : 'exists';
 	}
 
+	/** Per seller, what is still owed on charges added before this time; for the daily unpaid-charge alert. */
+	async unpaidSince(before: Date): Promise<Array<{ sellerUserId: string; owedCents: number }>> {
+		return this.database
+			.select({ sellerUserId: schema.sellerCharges.sellerUserId, owedCents: sql<number>`sum(${schema.sellerCharges.amountCents} - ${schema.sellerCharges.collectedCents})` })
+			.from(schema.sellerCharges)
+			.where(and(lt(schema.sellerCharges.createdAt, before), lt(schema.sellerCharges.collectedCents, schema.sellerCharges.amountCents)))
+			.groupBy(schema.sellerCharges.sellerUserId)
+			.limit(100)
+			.all();
+	}
+
 	async open(sellerUserId: string): Promise<OpenSellerCharge[]> {
 		return this.database
 			.select({ id: schema.sellerCharges.id, amountCents: schema.sellerCharges.amountCents, collectedCents: schema.sellerCharges.collectedCents })

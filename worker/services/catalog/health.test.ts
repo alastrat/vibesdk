@@ -15,6 +15,7 @@ function fakeDeps(overrides: Partial<CatalogHealthDeps> = {}) {
 			return [];
 		},
 		alert: async (alert) => void alerts.push(alert),
+		unpaidCharges: async () => [],
 		...overrides,
 	};
 	return { deps, alerts, asked };
@@ -53,5 +54,18 @@ describe('runCatalogHealth', () => {
 			['not-shipped', 'co_2'],
 			['not-delivered', 'co_3'],
 		]);
+	});
+
+	it('alerts once per seller whose charges are unpaid after 60 days', async () => {
+		const asked: number[] = [];
+		const { deps, alerts } = fakeDeps({
+			unpaidCharges: async (before) => {
+				asked.push(before.getTime());
+				return [{ sellerUserId: 'u1', owedCents: 1500 }];
+			},
+		});
+		await runCatalogHealth(deps, NOW);
+		expect(asked).toEqual([NOW - 60 * DAY]);
+		expect(alerts.filter((alert) => alert.kind === 'seller-charge-unpaid').map((alert) => [alert.subject, alert.message])).toEqual([['u1', 'The seller has owed $15.00 for more than 60 days.']]);
 	});
 });
