@@ -80,3 +80,12 @@ describe('StoreOrderService.recordOrder', () => {
 		expect(attempts).toBe(2);
 	});
 });
+
+describe('StoreOrderService.applyRefunds', () => {
+	it('counts only refunds Stripe made, never a line claimed but not yet refunded', async () => {
+		const { d1, statements } = recordingD1([]);
+		await new StoreOrderService({ DB: d1 } as unknown as Env).applyRefunds('ord_1', new Date(0));
+		const update = statements.find((entry) => entry.sql.toLowerCase().startsWith('update "store_orders"'));
+		expect(update?.sql.toLowerCase()).toContain('"stripe_refund_id" is not null');
+	});
+});

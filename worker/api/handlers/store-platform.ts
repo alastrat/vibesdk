@@ -16,7 +16,7 @@ import { recordStoreOrder } from '../../services/store-payments/fulfill';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
 import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader, receiptOf, signReceipt, verifyReceipt } from '../../services/store-payments/receipts';
 import { STORE_SCRIPT } from '../../services/store-payments/store-script';
-import { recordStoreOrderDeps } from '../../services/store-payments/wiring';
+import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
 
 const logger = createLogger('StorePlatform');
@@ -184,7 +184,7 @@ async function serveReturn(request: Request, env: Env, target: StorePlatformTarg
 	try {
 		const session = await stripe.retrieveCheckoutSession(sessionId);
 		if (session.metadata?.storeAppId !== target.appId) return Response.redirect(home, 303);
-		const recorded = await recordStoreOrder(recordStoreOrderDeps(env), session);
+		const recorded = await recordStoreOrder(returnPageRecordDeps(env), session);
 		if (recorded.result === 'not-ours') return Response.redirect(home, 303);
 		successPath = recorded.checkout.successPath;
 		if (recorded.result === 'not-paid') return processing(successPath);

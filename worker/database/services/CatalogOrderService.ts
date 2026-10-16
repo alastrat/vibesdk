@@ -148,9 +148,9 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
     }
 
     /** The Checkout session and catalog variant of one catalog item, for recording its refund on the store order. */
-    async locateItem(itemId: string): Promise<{ checkoutSessionId: string; catalogVariantId: string } | null> {
+    async locateItem(itemId: string): Promise<{ checkoutSessionId: string; catalogVariantId: string; sellerUserId: string } | null> {
         const row = await this.database
-            .select({ checkoutSessionId: schema.catalogOrders.stripeCheckoutSessionId, catalogVariantId: schema.catalogOrderItems.catalogVariantId })
+            .select({ checkoutSessionId: schema.catalogOrders.stripeCheckoutSessionId, catalogVariantId: schema.catalogOrderItems.catalogVariantId, sellerUserId: schema.catalogOrders.sellerUserId })
             .from(schema.catalogOrderItems)
             .innerJoin(schema.catalogOrders, eq(schema.catalogOrders.id, schema.catalogOrderItems.orderId))
             .where(eq(schema.catalogOrderItems.id, itemId))

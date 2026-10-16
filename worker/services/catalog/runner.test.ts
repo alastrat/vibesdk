@@ -29,15 +29,16 @@ async function storeWithOrder() {
 	return store;
 }
 
-function deps(store: Awaited<ReturnType<typeof storeWithOrder>>, results: PlaceOrderResult[], updates: SupplierUpdate[][] = []) {
+function deps(store: Awaited<ReturnType<typeof storeWithOrder>>, results: PlaceOrderResult[], updates: SupplierUpdate[][] = [], reversedCents = 0) {
 	const refunds: number[] = [];
+	const shortfalls: Array<{ catalogItemId: string; amountCents: number }> = [];
 	const alerts: string[] = [];
 	const adapter: SupplierAdapter = {
 		supplier: 'cjdropshipping',
 		placeOrder: async () => results.shift() ?? { ok: false, kind: 'retryable', reason: 'No scripted result' },
 	};
 	const stripe: Pick<StripeClient, 'retrievePaymentIntent' | 'createRefund' | 'createTransferReversal'> = {
-		retrievePaymentIntent: async (id) => ({ id, latest_charge: { id: 'ch_1', transfer: { id: 'tr_1', amount: 5109, amount_reversed: 0 } } }),
+		retrievePaymentIntent: async (id) => ({ id, latest_charge: { id: 'ch_1', transfer: { id: 'tr_1', amount: 5109, amount_reversed: reversedCents } } }),
 		createRefund: async (input) => {
 			refunds.push(input.amountCents);
 			return { id: 're_1', amount: input.amountCents, status: 'succeeded' };
@@ -51,8 +52,9 @@ function deps(store: Awaited<ReturnType<typeof storeWithOrder>>, results: PlaceO
 		supplierUpdates: async () => updates.shift() ?? [],
 		alert: async (alert) => void alerts.push(alert.kind),
 		recordRefund: async () => undefined,
+		addShortfall: async (shortfall) => void shortfalls.push(shortfall),
 	};
-	return { runnerDeps, refunds, alerts };
+	return { runnerDeps, refunds, alerts, shortfalls };
 }
 
 describe('runnerStep', () => {
@@ -104,6 +106,14 @@ describe('runnerStep', () => {
 		step = await runnerStep(step.state, runnerDeps, NOW + 2 * RUNNER_SYNC_INTERVAL_MS);
 		expect(store.orders.get('co_1')?.items.map((item) => item.status)).toEqual(['delivered', 'delivered']);
 		expect(step.nextAlarmAt).toBeNull();
+	});
+
+	it("charges the seller what the sale's transfer can no longer cover when a rejected item is refunded", async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps, shortfalls } = deps(store, [{ ok: false, kind: 'rejected', reason: 'Out of stock', rejectedVariantIds: ['cj_cap'] }], [], 5109 - 1000);
+
+		await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		expect(shortfalls).toEqual([{ catalogItemId: 'ci_cap', amountCents: 1800 }]);
 	});
 
 	it('refunds items the supplier cancels after payment', async () => {

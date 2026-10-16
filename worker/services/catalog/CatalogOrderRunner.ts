@@ -6,13 +6,14 @@
 import { DurableObject } from 'cloudflare:workers';
 import { CATALOG_DESTINATIONS } from '../../../shared/types/catalog';
 import { createLogger } from '../../logger';
-import { CatalogOrderService, StoreRefundService } from '../../database';
+import { CatalogOrderService } from '../../database';
 import { isProd } from '../../utils/envs';
 import { stripeFromEnv } from '../payments/config';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 import { CJDropshippingAdapter } from './cj/adapter';
 import { cjClientFromEnv } from './cj/client';
 import { cjOrderToUpdates } from './cj/updates';
+import { catalogRefundRecords } from './refund-records';
 import { initialRunnerState, runnerStep, type RunnerDeps, type RunnerState } from './runner';
 
 const logger = createLogger('CatalogOrderRunner');
@@ -35,11 +36,7 @@ function runnerDeps(env: Env): RunnerDeps {
 		store: new CatalogOrderService(env),
 		adapters: { cjdropshipping: adapter },
 		stripe: stripeFromEnv(env),
-		recordRefund: async (entry) => {
-			const located = await new CatalogOrderService(env).locateItem(entry.catalogItemId);
-			if (!located) return;
-			await new StoreRefundService(env).recordForCatalogItem({ checkoutSessionId: located.checkoutSessionId, catalogVariantId: located.catalogVariantId, refundId: entry.refundId, amountCents: entry.amountCents, now: new Date() });
-		},
+		...catalogRefundRecords(env, null),
 		supplierUpdates: async (supplierOrderId) => {
 			const order = client ? await client.getOrderDetail(supplierOrderId) : null;
 			return order ? cjOrderToUpdates(order) : [];

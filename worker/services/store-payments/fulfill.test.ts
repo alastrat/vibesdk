@@ -168,12 +168,13 @@ describe('recordStoreOrder', () => {
 		expect(again.settled).toEqual(['ord_ab12']);
 	});
 
-	it('keeps the recorded order when settling fails, for the next delivery to retry', async () => {
-		const { deps } = fakeDeps();
+	it('fails the delivery when settling fails, so Stripe delivers it again, and keeps the recorded order', async () => {
+		const { deps, orders } = fakeDeps();
 		deps.settleSale = async () => {
 			throw new Error('Stripe is unavailable');
 		};
-		expect((await recordStoreOrder(deps, PAID)).result).toBe('recorded');
+		await expect(recordStoreOrder(deps, PAID)).rejects.toThrow('Stripe is unavailable');
+		expect(orders).toHaveLength(1);
 	});
 
 	it('reads the address where earlier Stripe API versions put it', async () => {

@@ -100,7 +100,7 @@ export class StoreOrderService extends BaseService {
 
     /** Sets the order's refund total and payment status from its recorded refunds; a dispute status is kept. */
     async applyRefunds(orderId: string, now: Date): Promise<void> {
-        const refunded = sql`(SELECT COALESCE(SUM(${schema.storeRefunds.amountCents}), 0) FROM ${schema.storeRefunds} WHERE ${schema.storeRefunds.orderId} = ${orderId})`;
+        const refunded = sql`(SELECT COALESCE(SUM(${schema.storeRefunds.amountCents}), 0) FROM ${schema.storeRefunds} WHERE ${schema.storeRefunds.orderId} = ${orderId} AND ${schema.storeRefunds.stripeRefundId} IS NOT NULL)`;
         await this.database
             .update(schema.storeOrders)
             .set({

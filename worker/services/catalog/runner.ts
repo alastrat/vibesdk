@@ -39,6 +39,7 @@ export interface RunnerDeps {
 	stripe: RefundItemsDeps['stripe'] | null;
 	/** Records each shopper refund on the store order. */
 	recordRefund: RefundItemsDeps['recordRefund'];
+	addShortfall: RefundItemsDeps['addShortfall'];
 	supplierUpdates(supplierOrderId: string): Promise<readonly SupplierUpdate[]>;
 	alert(alert: { kind: PlatformAlertKind; orderId: string; message: string }): Promise<void>;
 }
@@ -87,6 +88,7 @@ function refundDepsOf(deps: RunnerDeps): RefundItemsDeps | null {
 		store: deps.store,
 		stripe: deps.stripe,
 		recordRefund: deps.recordRefund,
+		addShortfall: deps.addShortfall,
 		sellerBalance: async () => {
 			throw new Error('Runner refunds never start from the seller');
 		},

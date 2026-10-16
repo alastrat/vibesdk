@@ -15,7 +15,7 @@ export interface RecordStoreOrderDeps {
 	recordOrder(order: NewStoreOrder): Promise<'recorded' | 'already-recorded'>;
 	/** Idempotent per Checkout session, so a redelivery after a crash still hands the lines over. */
 	handOffCatalogLines(paid: PaidCatalogCheckout): Promise<void>;
-	/** Takes back any card fee above what was collected, and the seller's open charges. Safe to repeat. */
+	/** Takes back any card fee above what was collected, and the seller's open charges. Safe to repeat; throws to be retried. */
 	settleSale(orderId: string): Promise<void>;
 	now(): Date;
 }
@@ -109,10 +109,7 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 			shippingAddress: address,
 		});
 	}
-	try {
-		await deps.settleSale(orderId);
-	} catch {
-		// The order stays recorded; a webhook redelivery or the return page settles it again.
-	}
+	// The order stays recorded if settling fails; the error fails the webhook delivery, so Stripe delivers it again.
+	await deps.settleSale(orderId);
 	return { result, orderId, checkout };
 }

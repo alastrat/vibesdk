@@ -3,10 +3,10 @@
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { ApiResponse, ControllerResponse } from '../types';
-import { CatalogOrderService, StoreOrderService, StoreRefundService } from '../../../database';
+import { CatalogOrderService, StoreOrderService } from '../../../database';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
-import { refundCatalogItems, SellerBalanceShortError } from '../../../services/catalog/refund-items';
 import { refundStoreLines } from '../../../services/store-payments/refund-lines';
+import { storeRefundDeps } from '../../../services/store-payments/wiring';
 import { parseStoreRefundRequest, shortBalanceMessage } from './refund-request';
 import type { StoreOrdersData, StoreOrderSummary, StoreRefundResponse } from '../../../../shared/types/store-payments';
 import type { StoreOrderView } from '../../../services/store-payments/store';
@@ -76,49 +76,13 @@ export class StoreOrdersController extends BaseController {
             const order = await orders.getOrder(orderId);
             if (!order || order.appId !== appId) return this.createErrorResponse<StoreRefundResponse>('Order not found', 404);
             const sellerAccountId = order.sellerStripeAccountId;
-            const checkoutSessionId = order.stripeCheckoutSessionId;
             if (!sellerAccountId) return this.createErrorResponse<StoreRefundResponse>('This order has no seller account to refund from', 400);
 
-            const refunds = new StoreRefundService(env);
-            const catalog = new CatalogOrderService(env);
-            const sellerBalance = () => stripe.retrieveBalance(sellerAccountId);
-            const now = () => new Date();
-            const result = await refundStoreLines(
-                {
-                    stripe,
-                    sellerBalance,
-                    refundedLines: (id) => refunds.refundedLines(id),
-                    recordRefund: (entry) => refunds.record(entry),
-                    applyRefunds: (id) => orders.applyRefunds(id, now()),
-                    now,
-                    refundCatalogLines: async (lineNos) => {
-                        const catalogOrder = checkoutSessionId ? await catalog.getOrderBySession(checkoutSessionId) : null;
-                        if (!catalogOrder || !checkoutSessionId) return { ok: false, reason: 'nothing_to_refund' };
-                        const variants = new Set(order.items.filter((item) => lineNos.includes(item.lineNo)).map((item) => item.catalogVariantId));
-                        const itemIds = catalogOrder.items.filter((item) => variants.has(item.catalogVariantId)).map((item) => item.id);
-                        try {
-                            const totals = await refundCatalogItems(
-                                {
-                                    store: catalog,
-                                    stripe,
-                                    sellerBalance,
-                                    recordRefund: async (entry) => {
-                                        const item = catalogOrder.items.find((candidate) => candidate.id === entry.catalogItemId);
-                                        if (!item) return;
-                                        await refunds.recordForCatalogItem({ checkoutSessionId, catalogVariantId: item.catalogVariantId, refundId: entry.refundId, amountCents: entry.amountCents, now: now() });
-                                    },
-                                },
-                                { orderId: catalogOrder.id, itemIds, reason: 'seller-refund' },
-                            );
-                            return { ok: true, refundedCents: totals.shopperCents };
-                        } catch (error) {
-                            if (error instanceof SellerBalanceShortError) return { ok: false, reason: 'seller_balance_short', shortCents: error.shortCents };
-                            throw error;
-                        }
-                    },
-                },
-                { order, lineNos: refundRequest.lineNos, requestId: refundRequest.requestId },
-            );
+            const result = await refundStoreLines(storeRefundDeps(env, stripe, { order, sellerAccountId, requestId: refundRequest.requestId }), {
+                order,
+                lineNos: refundRequest.lineNos,
+                requestId: refundRequest.requestId,
+            });
             if (result.ok) return this.createSuccessResponse<StoreRefundResponse>({ refundedCents: result.refundedCents });
             if (result.reason === 'seller_balance_short') return this.createErrorResponse<StoreRefundResponse>(shortBalanceMessage(result.shortCents), 409);
             return this.createErrorResponse<StoreRefundResponse>('These lines were already refunded', 400);

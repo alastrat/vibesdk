@@ -1,14 +1,22 @@
 /** D1 and Stripe wiring for recording store orders, shared by the webhook and the return page. */
 
-import { CatalogOrderService, SellerChargeService, StoreCheckoutService, StoreDisputeService, StoreOrderService } from '../../database';
+import { CatalogOrderService, SellerChargeService, StoreCheckoutService, StoreDisputeService, StoreOrderService, StoreRefundService } from '../../database';
 import { generateId } from '../../utils/idGenerator';
 import { recordPaidCatalogOrder } from '../catalog/record';
+import { catalogRefundRecords } from '../catalog/refund-records';
+import { catalogRefundSellerCents, refundCatalogItems, type RefundItemsDeps } from '../catalog/refund-items';
 import { restartCatalogPlacement, scheduleCatalogPlacement } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
+import type { StripeClient } from '../payments/stripe-client';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
 import { settleSale } from './settle';
 import type { DisputeDeps } from './disputes';
+import type { RefundLinesDeps } from './refund-lines';
+import type { StoreOrderView } from './store';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('StorePaymentsWiring');
 
 export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 	const checkouts = new StoreCheckoutService(env);
@@ -42,6 +50,21 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 			);
 		},
 		now: () => new Date(),
+	};
+}
+
+/** The shopper's return page records the order too, but the webhook always follows and settles the sale, so here a settling failure is only logged. */
+export function returnPageRecordDeps(env: Env): RecordStoreOrderDeps {
+	const deps = recordStoreOrderDeps(env);
+	return {
+		...deps,
+		settleSale: async (orderId) => {
+			try {
+				await deps.settleSale(orderId);
+			} catch (error) {
+				logger.warn('Store sale not settled on the return page; the webhook settles it', { orderId, error });
+			}
+		},
 	};
 }
 
@@ -91,5 +114,46 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 		},
 		alert: platformAlertsFromEnv(env),
 		now: () => new Date(),
+	};
+}
+
+/** A seller's refund of store order lines: D1 and Stripe wiring, with catalog lines handed to the catalog refund. */
+export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: StoreOrderView; sellerAccountId: string; requestId: string }): RefundLinesDeps {
+	const { order } = input;
+	const orders = new StoreOrderService(env);
+	const refunds = new StoreRefundService(env);
+	const catalog = new CatalogOrderService(env);
+	const sellerBalance = () => stripe.retrieveBalance(input.sellerAccountId);
+	const catalogDeps: RefundItemsDeps = { store: catalog, stripe, sellerBalance, ...catalogRefundRecords(env, input.requestId) };
+	/** The catalog order's items sold on these lines; null when the order has no catalog order. */
+	const catalogItems = async (lineNos: readonly number[]): Promise<{ orderId: string; itemIds: string[] } | null> => {
+		const catalogOrder = order.stripeCheckoutSessionId ? await catalog.getOrderBySession(order.stripeCheckoutSessionId) : null;
+		if (!catalogOrder) return null;
+		const variants = new Set(order.items.filter((item) => lineNos.includes(item.lineNo)).map((item) => item.catalogVariantId));
+		return { orderId: catalogOrder.id, itemIds: catalogOrder.items.filter((item) => variants.has(item.catalogVariantId)).map((item) => item.id) };
+	};
+	const now = () => new Date();
+	return {
+		stripe,
+		sellerBalance,
+		refundRows: (orderId) => refunds.refundRows(orderId),
+		catalogSellerCents: async (lineNos) => {
+			const items = await catalogItems(lineNos);
+			return items ? catalogRefundSellerCents(catalogDeps, { ...items, reason: 'seller-refund' }) : 0;
+		},
+		refundCatalogLines: async (lineNos) => {
+			const items = await catalogItems(lineNos);
+			if (!items) return { refundedCents: 0 };
+			const totals = await refundCatalogItems(catalogDeps, { ...items, reason: 'seller-refund', balanceChecked: true });
+			return { refundedCents: totals.shopperCents };
+		},
+		claimRefund: (claim) => refunds.claimRefund(claim),
+		completeRefund: (done) => refunds.completeRefund(done),
+		completeReversal: (done) => refunds.completeReversal(done),
+		addShortfall: async (shortfall) => {
+			await new SellerChargeService(env).add({ sellerUserId: order.sellerUserId, kind: 'refund-shortfall', sourceId: `refund-${shortfall.orderId}-${shortfall.lineNo}`, amountCents: shortfall.amountCents, now: now() });
+		},
+		applyRefunds: (orderId) => orders.applyRefunds(orderId, now()),
+		now,
 	};
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SellerBalanceShortError, refundCatalogItems, type RefundItemsDeps } from './refund-items';
+import { SellerBalanceShortError, catalogRefundSellerCents, refundCatalogItems, type RefundItemsDeps } from './refund-items';
 import { memoryCatalogStore } from './test-support';
 import type { StripeClient } from '../payments/stripe-client';
 
@@ -31,10 +31,10 @@ async function storeWithOrder() {
 }
 
 /** Stripe as it behaves here: one refund or reversal per key, and no reversal beyond what is left of the transfer. */
-function fakeStripe(options: { transfer?: boolean; failReversals?: number } = {}) {
+function fakeStripe(options: { transfer?: boolean; failReversals?: number; reversed?: number } = {}) {
 	const refunds: Array<{ amountCents: number; idempotencyKey: string }> = [];
 	const reversals: Array<{ amountCents: number; idempotencyKey: string }> = [];
-	let reversed = 0;
+	let reversed = options.reversed ?? 0;
 	let failuresLeft = options.failReversals ?? 0;
 	const stripe: Pick<StripeClient, 'retrievePaymentIntent' | 'createRefund' | 'createTransferReversal'> = {
 		retrievePaymentIntent: async (id) => ({
@@ -62,13 +62,15 @@ function fakeStripe(options: { transfer?: boolean; failReversals?: number } = {}
 
 function depsOf(store: RefundItemsDeps['store'], stripe: RefundItemsDeps['stripe'], balance = { availableCents: 100_000, pendingCents: 0 }) {
 	const recorded: Array<{ catalogItemId: string; refundId: string; amountCents: number }> = [];
+	const shortfalls: Array<{ catalogItemId: string; amountCents: number }> = [];
 	const deps: RefundItemsDeps = {
 		store,
 		stripe,
 		sellerBalance: async () => balance,
 		recordRefund: async (entry) => void recorded.push({ catalogItemId: entry.catalogItemId, refundId: entry.refundId, amountCents: entry.amountCents }),
+		addShortfall: async (shortfall) => void shortfalls.push(shortfall),
 	};
-	return { deps, recorded };
+	return { deps, recorded, shortfalls };
 }
 
 function itemOf(store: Awaited<ReturnType<typeof storeWithOrder>>, itemId: string) {
@@ -197,5 +199,53 @@ describe('refundCatalogItems', () => {
 			'The payment has no transfer to the seller',
 		);
 		expect(refunds).toHaveLength(0);
+	});
+
+	it("charges the seller the share the transfer can no longer cover, instead of Estori paying it", async () => {
+		const store = await storeWithOrder();
+		const { stripe, reversals } = fakeStripe({ reversed: 9000 - 1000 });
+		const { deps, shortfalls } = depsOf(store, stripe);
+		await refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		expect(reversals.map((reversal) => reversal.amountCents)).toEqual([1000]);
+		expect(shortfalls).toEqual([{ catalogItemId: 'ci_cap', amountCents: 1800 }]);
+	});
+
+	it('marks the item refunded before recording it, so a failed record never refunds it again', async () => {
+		const store = await storeWithOrder();
+		const { stripe, refunds } = fakeStripe();
+		const { deps } = depsOf(store, stripe);
+		deps.recordRefund = async () => {
+			throw new Error('D1 is unavailable');
+		};
+		await expect(refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' })).rejects.toThrow('D1 is unavailable');
+		expect(itemOf(store, 'ci_cap')?.status).toBe('refunded');
+		deps.recordRefund = async () => undefined;
+		await refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		expect(refunds).toHaveLength(1);
+	});
+
+	it('records the shortfall before marking the item refunded, so a failed record is taken on the retry', async () => {
+		const store = await storeWithOrder();
+		const { stripe, refunds } = fakeStripe({ reversed: 9000 - 1000 });
+		const { deps, shortfalls } = depsOf(store, stripe);
+		const addShortfall = deps.addShortfall;
+		deps.addShortfall = async () => {
+			throw new Error('D1 is unavailable');
+		};
+		await expect(refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' })).rejects.toThrow('D1 is unavailable');
+		deps.addShortfall = addShortfall;
+		await refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		expect(shortfalls).toEqual([{ catalogItemId: 'ci_cap', amountCents: 1800 }]);
+		// The retry reuses the item's key, so Stripe answers it with the same refund.
+		expect(new Set(refunds.map((refund) => refund.idempotencyKey))).toEqual(new Set(['catalog-refund-ci_cap']));
+	});
+
+	it("plans what a seller refund would take back without moving money, so a mixed refund checks the balance once", async () => {
+		const store = await storeWithOrder();
+		const { stripe, refunds, reversals } = fakeStripe();
+		const { deps } = depsOf(store, stripe);
+		expect(await catalogRefundSellerCents(deps, { orderId: 'co_1', itemIds: ['ci_mug', 'ci_cap'], reason: 'seller-refund' })).toBe(9000);
+		expect(refunds).toHaveLength(0);
+		expect(reversals).toHaveLength(0);
 	});
 });
