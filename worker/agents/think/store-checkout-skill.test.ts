@@ -16,6 +16,11 @@ describe('the store checkout skill', () => {
 		expect(parseStoreManifest(example).ok).toBe(true);
 	});
 
+	it('keeps every other skill whole', () => {
+		expect(APP_FILE_STRUCTURE).toMatch(/^---\nname: cloudflare-bundler-apps\ndescription: .+\n---/);
+		expect(APP_FILE_STRUCTURE.split('\n').length).toBeGreaterThan(400);
+	});
+
 	it('keeps payments on the platform', () => {
 		for (const rule of ['/__estori/store.js', 'Estori.checkout(', 'Estori.order(', 'Never collect card details', 'catalogVariantId']) expect(SKILL).toContain(rule);
 		expect(APP_FILE_STRUCTURE).toContain('store-checkout');
