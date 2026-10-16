@@ -173,3 +173,55 @@ describe('createStripeClient', () => {
 		await expect(client.retrieveAccount('acct_missing')).rejects.toBeInstanceOf(StripeApiError);
 	});
 });
+
+describe('refunds for catalog items', () => {
+	function recordingFetch(response: unknown) {
+		const calls: Array<{ url: string; init: RequestInit }> = [];
+		const fakeFetch: typeof fetch = async (input, init) => {
+			calls.push({ url: String(input), init: init ?? {} });
+			return new Response(JSON.stringify(response), { status: 200 });
+		};
+		return { calls, fakeFetch };
+	}
+
+	it("reads the payment's charge and its transfer to the seller", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: { id: 'ch_1', transfer: 'tr_1' } });
+		const intent = await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');
+
+		expect(intent.latest_charge).toEqual({ id: 'ch_1', transfer: 'tr_1' });
+		expect(calls[0].init.method).toBe('GET');
+		expect(decodeURIComponent(calls[0].url)).toBe('https://api.stripe.com/v1/payment_intents/pi_1?expand[0]=latest_charge');
+	});
+
+	it('refunds part of a payment once per idempotency key', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 're_1', amount: 5000, status: 'succeeded' });
+		await createStripeClient('sk_test_fake', fakeFetch).createRefund({
+			paymentIntentId: 'pi_1',
+			amountCents: 5000,
+			idempotencyKey: 'catalog-refund-co_1-ci_cap',
+			metadata: { catalogOrderId: 'co_1' },
+		});
+
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/refunds');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('catalog-refund-co_1-ci_cap');
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(body).toContain('payment_intent=pi_1');
+		expect(body).toContain('amount=5000');
+		expect(body).toContain('metadata[catalogOrderId]=co_1');
+	});
+
+	it("takes the seller's share back from their transfer", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'trr_1', amount: 2600 });
+		await createStripeClient('sk_test_fake', fakeFetch).createTransferReversal({
+			transferId: 'tr_1',
+			amountCents: 2600,
+			idempotencyKey: 'catalog-reversal-co_1-ci_cap',
+			metadata: { catalogOrderId: 'co_1' },
+		});
+
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/transfers/tr_1/reversals');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('catalog-reversal-co_1-ci_cap');
+		expect(decodeURIComponent(String(calls[0].init.body))).toContain('amount=2600');
+	});
+});
+

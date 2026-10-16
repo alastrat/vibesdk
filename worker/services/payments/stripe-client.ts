@@ -61,6 +61,23 @@ export interface StripeCheckoutSession {
 	payment_intent: string | null;
 }
 
+export interface StripePaymentIntent {
+	id: string;
+	/** Expanded on request: the charge, with the transfer that paid the seller on a destination charge. */
+	latest_charge: { id: string; transfer: string | null } | string | null;
+}
+
+export interface StripeRefund {
+	id: string;
+	amount: number;
+	status: string;
+}
+
+export interface StripeTransferReversal {
+	id: string;
+	amount: number;
+}
+
 export interface CheckoutSessionInput {
 	productName: string;
 	priceCents: number;
@@ -88,6 +105,9 @@ export interface StripeClient {
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
 	retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>;
+	retrievePaymentIntent(paymentIntentId: string): Promise<StripePaymentIntent>;
+	createRefund(input: { paymentIntentId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeRefund>;
+	createTransferReversal(input: { transferId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeTransferReversal>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -197,5 +217,22 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 			}),
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
+		retrievePaymentIntent: (paymentIntentId) =>
+			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge'] })}`),
+		// Catalog refunds carry stable idempotency keys, so a retried refund is never paid twice.
+		createRefund: (input) =>
+			request<StripeRefund>(
+				'POST',
+				'/refunds',
+				{ payment_intent: input.paymentIntentId, amount: input.amountCents, metadata: input.metadata },
+				input.idempotencyKey,
+			),
+		createTransferReversal: (input) =>
+			request<StripeTransferReversal>(
+				'POST',
+				`/transfers/${encodeURIComponent(input.transferId)}/reversals`,
+				{ amount: input.amountCents, metadata: input.metadata },
+				input.idempotencyKey,
+			),
 	};
 }
