@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 import { useAuth } from '@/contexts/auth-context';
+import type { PayoutInterval } from '@/api-types';
 
 export function useStripeConnectStatus(enabled: boolean) {
 	const { user } = useAuth();
@@ -23,6 +24,16 @@ export function useAcceptSellerTerms() {
 	const { user } = useAuth();
 	return useMutation({
 		mutationFn: (version: string) => unwrap(apiClient.acceptSellerTerms(version), 'Failed to record your agreement'),
+		onSuccess: (status) => queryClient.setQueryData(queryKeys.account.payments.status(user?.id), status),
+	});
+}
+
+/** Sets how often the seller is paid; the answer is their refreshed status. */
+export function useSetPayoutSchedule() {
+	const queryClient = useQueryClient();
+	const { user } = useAuth();
+	return useMutation({
+		mutationFn: (choice: { interval: PayoutInterval; anchor: string }) => unwrap(apiClient.setPayoutSchedule(choice), 'Failed to change how often you are paid'),
 		onSuccess: (status) => queryClient.setQueryData(queryKeys.account.payments.status(user?.id), status),
 	});
 }

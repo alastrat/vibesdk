@@ -65,8 +65,8 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 		expect(status).toContain('accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId))');
 		const missing = status.indexOf('if (!account)');
 		expect(missing).toBeGreaterThan(status.indexOf('accounts.forgetIfMissing('));
-		expect(status.indexOf('statusOf(null, termsAccepted)', missing)).toBeGreaterThan(missing);
-		expect(status.indexOf('statusOf(null, termsAccepted)', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
+		expect(status.indexOf('statusOf(null, termsAccepted, payouts)', missing)).toBeGreaterThan(missing);
+		expect(status.indexOf('statusOf(null, termsAccepted, payouts)', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
 	});
 
 	it('is replaced by one fresh Express account when onboarding', () => {

@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { isMissingAccountError, type SellerFlags } from '../../services/payments/stripe-client';
+import type { PayoutInterval } from '../../../shared/types/store-payments';
 
 export class StripeConnectService extends BaseService {
     async getByUser(userId: string): Promise<schema.StripeConnectAccount | null> {
@@ -29,6 +30,13 @@ export class StripeConnectService extends BaseService {
         await this.database
             .insert(schema.stripeConnectAccounts)
             .values({ userId: input.userId, stripeAccountId: input.stripeAccountId, ...input.flags, createdAt: now, updatedAt: now });
+    }
+
+    async setPayoutSchedule(userId: string, interval: PayoutInterval, anchor: string): Promise<void> {
+        await this.database
+            .update(schema.stripeConnectAccounts)
+            .set({ payoutInterval: interval, payoutAnchor: anchor, updatedAt: new Date() })
+            .where(eq(schema.stripeConnectAccounts.userId, userId));
     }
 
     async updateFlags(stripeAccountId: string, flags: SellerFlags): Promise<void> {

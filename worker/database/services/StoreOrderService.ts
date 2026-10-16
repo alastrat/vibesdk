@@ -1,6 +1,6 @@
 /** D1 reads and writes for store orders and their items. */
 
-import { and, desc, eq, inArray, max, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, max, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { NewStoreOrder, NewStoreOrderItem, StoreOrderView } from '../../services/store-payments/store';
@@ -78,6 +78,16 @@ export class StoreOrderService extends BaseService {
     async findByPaymentIntent(paymentIntentId: string): Promise<StoreOrderView | null> {
         const [order] = await this.ordersWhere(eq(schema.storeOrders.stripePaymentIntentId, paymentIntentId), 1);
         return order ?? null;
+    }
+
+    /** The seller's share of their paid sales since this time: what their payouts carry. */
+    async salesVolumeSince(sellerUserId: string, since: Date): Promise<number> {
+        const row = await this.database
+            .select({ volume: sql<number>`COALESCE(SUM(${schema.storeOrders.totalCents} - ${schema.storeOrders.applicationFeeCents} - ${schema.storeOrders.refundedCents}), 0)` })
+            .from(schema.storeOrders)
+            .where(and(eq(schema.storeOrders.sellerUserId, sellerUserId), gte(schema.storeOrders.createdAt, since)))
+            .get();
+        return row?.volume ?? 0;
     }
 
     async setPaymentStatus(orderId: string, status: StorePaymentStatus, now: Date): Promise<void> {

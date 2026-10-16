@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, Loader } from '@cloudflare/kumo';
 import { Checkbox } from '@/components/ui/checkbox';
+import { PayoutFrequency } from './PayoutFrequency';
 import { useAcceptSellerTerms, useStripeConnectStatus, useStripeDashboardLink, useStripeOnboardingRedirect } from '@/hooks/use-payments';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE } from '@/lib/paid-listing-display';
 import { PLATFORM_FEE_LABEL, SELLER_SETUP_MESSAGES, SELLER_TERMS_VERSION } from '@/api-types';
@@ -63,6 +64,7 @@ export function PayoutsCard() {
 					</Button>
 				</div>
 			)}
+			{step === null && <PayoutFrequency status={data} />}
 			{data.setupStep === 'accept-terms' ? (
 				<div className="grid gap-2">
 					<span className="text-sm text-kumo-default">{SELLER_SETUP_MESSAGES[data.setupStep]}</span>

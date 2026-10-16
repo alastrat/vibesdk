@@ -4,9 +4,12 @@ import { BaseController } from '../baseController';
 import type { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
-import { SellerTermsService, StripeConnectService } from '../../../database';
+import { SellerTermsService, StoreOrderService, StripeConnectService } from '../../../database';
 import { StripeApiError, accountFlags, sellerReadiness, type SellerFlags } from '../../../services/payments/stripe-client';
 import { sellerSetupStep } from '../../../../shared/types/seller-setup';
+import { PAYOUT_INTERVALS, type PayoutInterval } from '../../../../shared/types/store-payments';
+import { estimatedMonthlyPayoutCostCents } from '../../../services/payments/seller-costs';
+import { parsePayoutRequest, scheduleOf } from './payout-request';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
 
@@ -14,8 +17,19 @@ const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';
 
 const ACCEPT_TERMS_FIRST_MESSAGE = 'Accept the selling terms first';
 
-/** The status for a seller with these flags (null: no Connect account) and selling-terms agreement. */
-function statusOf(flags: SellerFlags | null, termsAccepted: boolean): StripeConnectStatusData {
+type PayoutStatus = Pick<StripeConnectStatusData, 'payoutInterval' | 'payoutAnchor' | 'payoutCostEstimates'>;
+
+const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** How often the seller is paid, weekly on Monday until they choose, and what each choice costs at their last month's sales. */
+async function payoutStatusOf(env: Env, userId: string, stored: { payoutInterval: PayoutInterval; payoutAnchor: string } | null): Promise<PayoutStatus> {
+    const volume = await new StoreOrderService(env).salesVolumeSince(userId, new Date(Date.now() - MONTH_MS));
+    const payoutCostEstimates = Object.fromEntries(PAYOUT_INTERVALS.map((interval) => [interval, estimatedMonthlyPayoutCostCents(volume, interval)])) as Record<PayoutInterval, number>;
+    return { payoutInterval: stored?.payoutInterval ?? 'weekly', payoutAnchor: stored?.payoutAnchor ?? 'monday', payoutCostEstimates };
+}
+
+/** The status for a seller with these flags (null: no Connect account), selling-terms agreement and payout choice. */
+function statusOf(flags: SellerFlags | null, termsAccepted: boolean, payouts: PayoutStatus): StripeConnectStatusData {
     const readiness = sellerReadiness(flags, termsAccepted);
     return {
         configured: true,
@@ -26,6 +40,7 @@ function statusOf(flags: SellerFlags | null, termsAccepted: boolean): StripeConn
         cardPaymentsActive: readiness.cardPaymentsActive,
         sellerTermsAccepted: termsAccepted,
         setupStep: sellerSetupStep(readiness),
+        ...payouts,
     };
 }
 
@@ -65,6 +80,11 @@ export class StripeConnectController extends BaseController {
             try {
                 await accounts.create({ userId: user.id, stripeAccountId: created.id, flags: accountFlags(created) });
                 accountId = created.id;
+                try {
+                    await stripe.updatePayoutSchedule(created.id, { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: null });
+                } catch (error) {
+                    this.logger.warn('Could not set the default payout schedule', error);
+                }
             } catch (error) {
                 // A concurrent request stored the account first; use that one.
                 accountId = (await accounts.getByUser(user.id))?.stripeAccountId;
@@ -89,10 +109,11 @@ export class StripeConnectController extends BaseController {
     private static async loadStatus(env: Env, userId: string): Promise<StripeConnectStatusData> {
         const termsAccepted = await new SellerTermsService(env).hasAccepted(userId);
         const stripe = stripeFromEnv(env);
-        if (!stripe) return { ...statusOf(null, termsAccepted), configured: false };
         const accounts = new StripeConnectService(env);
         const stored = await accounts.getByUser(userId);
-        if (!stored) return statusOf(null, termsAccepted);
+        const payouts = await payoutStatusOf(env, userId, stored);
+        if (!stripe) return { ...statusOf(null, termsAccepted, payouts), configured: false };
+        if (!stored) return statusOf(null, termsAccepted, payouts);
         let flags: SellerFlags = {
             detailsSubmitted: stored.detailsSubmitted,
             chargesEnabled: stored.chargesEnabled,
@@ -102,13 +123,13 @@ export class StripeConnectController extends BaseController {
         };
         try {
             const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
-            if (!account) return statusOf(null, termsAccepted);
+            if (!account) return statusOf(null, termsAccepted, payouts);
             flags = accountFlags(account);
             await accounts.updateFlags(stored.stripeAccountId, flags);
         } catch (error) {
             this.logger.warn('Could not refresh the Stripe account; using stored flags', error);
         }
-        return statusOf(flags, termsAccepted);
+        return statusOf(flags, termsAccepted, payouts);
     }
 
     static async getStatus(
@@ -143,6 +164,32 @@ export class StripeConnectController extends BaseController {
         } catch (error) {
             this.logger.error('Error recording the selling-terms agreement', error);
             return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to record your agreement', 500);
+        }
+    }
+
+    /** The seller picks daily, weekly or monthly payouts; Stripe's per-payout cost is theirs. */
+    static async setPayoutSchedule(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<StripeConnectStatusData>>> {
+        try {
+            const body = await StripeConnectController.parseJsonBody<unknown>(request);
+            const choice = body.success ? parsePayoutRequest(body.data) : null;
+            if (!choice) return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Choose daily, weekly on a weekday, or monthly on a day from 1 to 28', 400);
+            const stripe = stripeFromEnv(env);
+            if (!stripe) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
+            const accounts = new StripeConnectService(env);
+            const stored = await accounts.getByUser(context.user!.id);
+            if (!stored) return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Connect Stripe first', 400);
+            await stripe.updatePayoutSchedule(stored.stripeAccountId, scheduleOf(choice));
+            await accounts.setPayoutSchedule(context.user!.id, choice.interval, choice.anchor);
+            return StripeConnectController.createSuccessResponse(await StripeConnectController.loadStatus(env, context.user!.id));
+        } catch (error) {
+            if (error instanceof StripeApiError) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
+            this.logger.error('Error setting the payout schedule', error);
+            return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to change how often you are paid', 500);
         }
     }
 

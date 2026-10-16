@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/src/components/payments/PayoutsCard.tsx', '/src/components/payments/PaymentsSetupPrompt.tsx', '/src/hooks/use-payments.ts', '/src/routes/home.tsx'],
+	['/src/components/payments/PayoutsCard.tsx', '/src/components/payments/PaymentsSetupPrompt.tsx', '/src/components/payments/PayoutFrequency.tsx', '/src/hooks/use-payments.ts', '/src/routes/home.tsx'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -48,5 +48,12 @@ describe('payments setup', () => {
 		const card = source('/src/components/payments/PayoutsCard.tsx');
 		expect(card).toContain('const canOpenDashboard = data.connected && data.detailsSubmitted;');
 		expect(card).toContain('{canOpenDashboard && (');
+	});
+
+	it('lets the seller pick how often they are paid, with the cost of each choice', () => {
+		const frequency = source('/src/components/payments/PayoutFrequency.tsx');
+		for (const label of ['Daily', 'Weekly', 'Monthly', 'a month in Stripe fees']) expect(frequency).toContain(label);
+		expect(frequency).toContain('payoutCostEstimates');
+		expect(source('/src/components/payments/PayoutsCard.tsx')).toContain('<PayoutFrequency');
 	});
 });

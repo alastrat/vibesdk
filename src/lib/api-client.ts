@@ -95,6 +95,7 @@ import type{
 	StoreOrdersData,
 	StoreRefundRequest,
 	StoreRefundResponse,
+	PayoutInterval,
 	CatalogProductsData,
 	StripeLinkData,
 	TemplateCategory,
@@ -640,6 +641,11 @@ class ApiClient {
 
 	async getStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
+	}
+
+	/** How often the seller is paid; returns their refreshed status. */
+	async setPayoutSchedule(choice: { interval: PayoutInterval; anchor: string }): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/payouts', { method: 'PUT', body: choice });
 	}
 
 	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
