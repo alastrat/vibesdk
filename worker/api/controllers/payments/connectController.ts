@@ -71,8 +71,12 @@ export class StripeConnectController extends BaseController {
                 });
             const stored = await accounts.getByUser(user.id);
             if (stored) {
-                // A stored account Stripe no longer has is deleted, and onboarding starts over with a fresh one below.
-                const link = await accounts.forgetIfMissing(stored, linkFor);
+                // A stored account Stripe no longer has is deleted, and onboarding starts over with a fresh one below. One made
+                // before store payments asked only for transfers, so card payments are requested before its link.
+                const link = await accounts.forgetIfMissing(stored, async (accountId) => {
+                    await stripe.requestCardPayments(accountId);
+                    return linkFor(accountId);
+                });
                 if (link) return StripeConnectController.createSuccessResponse<StripeLinkData>({ url: link.url });
             }
             let accountId: string | undefined;

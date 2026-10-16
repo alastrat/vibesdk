@@ -161,6 +161,8 @@ export interface SellerFlags {
 export interface StripeClient {
 	createExpressAccount(input: { email?: string; userId: string; nowMs: number }): Promise<StripeAccount>;
 	retrieveAccount(accountId: string): Promise<StripeAccount>;
+	/** Accounts made before store payments asked only for transfers; the next onboarding link collects what card payments need. */
+	requestCardPayments(accountId: string): Promise<StripeAccount>;
 	createAccountLink(input: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<StripeAccountLink>;
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
@@ -264,6 +266,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				`connect-account-${userId}-${Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS)}`,
 			),
 		retrieveAccount: (accountId) => request<StripeAccount>('GET', `/accounts/${encodeURIComponent(accountId)}`),
+		requestCardPayments: (accountId) =>
+			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, { capabilities: { card_payments: { requested: true } } }),
 		createAccountLink: ({ accountId, refreshUrl, returnUrl }) =>
 			request<StripeAccountLink>('POST', '/account_links', {
 				account: accountId,

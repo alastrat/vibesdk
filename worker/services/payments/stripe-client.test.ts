@@ -339,6 +339,14 @@ describe('connected-account calls', () => {
 		expect(body).not.toContain('monthly_anchor');
 	});
 
+	it('asks Stripe for card payments on an existing account', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'acct_1', details_submitted: true, charges_enabled: true, payouts_enabled: true });
+		await createStripeClient('sk_test_fake', fakeFetch).requestCardPayments('acct_1');
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts/acct_1');
+		expect(calls[0].init.method).toBe('POST');
+		expect(decodeURIComponent(String(calls[0].init.body))).toBe('capabilities[card_payments][requested]=true');
+	});
+
 	it('expands the charge fee with the transfer', async () => {
 		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: null });
 		await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');

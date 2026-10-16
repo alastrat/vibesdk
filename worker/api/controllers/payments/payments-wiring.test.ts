@@ -71,10 +71,18 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 
 	it('is replaced by one fresh Express account when onboarding', () => {
 		const onboarding = method('startOnboarding', 'getStatus');
-		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, linkFor)');
+		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, async (accountId) => {');
 		expect(forget).toBeGreaterThan(-1);
 		expect(onboarding.match(/createExpressAccount\(/g)).toHaveLength(1);
 		expect(onboarding.indexOf('createExpressAccount(')).toBeGreaterThan(forget);
+	});
+
+	it('asks for card payments on a stored account before linking it, so sellers from before store payments can finish setup', () => {
+		const onboarding = method('startOnboarding', 'getStatus');
+		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, async (accountId) => {');
+		const request = onboarding.indexOf('await stripe.requestCardPayments(accountId);', forget);
+		expect(request).toBeGreaterThan(forget);
+		expect(onboarding.indexOf('return linkFor(accountId);', forget)).toBeGreaterThan(request);
 	});
 
 	it('sends the seller back to onboarding instead of opening the dashboard', () => {
