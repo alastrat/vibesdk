@@ -220,7 +220,7 @@ describe('refunds for catalog items', () => {
 
 		expect(intent.latest_charge).toEqual({ id: 'ch_1', transfer });
 		expect(calls[0].init.method).toBe('GET');
-		expect(decodeURIComponent(calls[0].url)).toBe('https://api.stripe.com/v1/payment_intents/pi_1?expand[0]=latest_charge.transfer');
+		expect(decodeURIComponent(calls[0].url)).toBe('https://api.stripe.com/v1/payment_intents/pi_1?expand[0]=latest_charge.transfer&expand[1]=latest_charge.balance_transaction');
 	});
 
 	it('refunds part of a payment once per idempotency key', async () => {
@@ -303,5 +303,47 @@ describe('store checkout sessions', () => {
 		const { calls, fakeFetch } = recordingFetch({ id: 'cs_2', url: null });
 		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({ ...INPUT, shippingCents: 0 });
 		expect(decodeURIComponent(String(calls[0].init.body))).toContain('shipping_options[0][shipping_rate_data][display_name]=Free shipping');
+	});
+});
+
+describe('connected-account calls', () => {
+	it('reads the seller balance as the seller, in USD only', async () => {
+		const { calls, fakeFetch } = recordingFetch({
+			available: [{ amount: 1500, currency: 'usd' }, { amount: 900, currency: 'eur' }],
+			pending: [{ amount: 2500, currency: 'usd' }],
+		});
+		expect(await createStripeClient('sk_test_fake', fakeFetch).retrieveBalance('acct_1')).toEqual({ availableCents: 1500, pendingCents: 2500 });
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/balance');
+		expect(new Headers(calls[0].init.headers).get('Stripe-Account')).toBe('acct_1');
+	});
+
+	it('transfers to a seller with a stable key', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'tr_9', amount: 4099 });
+		await createStripeClient('sk_test_fake', fakeFetch).createTransfer({ destination: 'acct_1', amountCents: 4099, idempotencyKey: 'dispute-return-dp_1', metadata: { disputeId: 'dp_1' } });
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/transfers');
+		expect(body).toContain('destination=acct_1');
+		expect(body).toContain('amount=4099');
+		expect(body).toContain('currency=usd');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('dispute-return-dp_1');
+	});
+
+	it('sets the payout schedule and lets Stripe debit the bank for a negative balance', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'acct_1', details_submitted: true, charges_enabled: true, payouts_enabled: true });
+		await createStripeClient('sk_test_fake', fakeFetch).updatePayoutSchedule('acct_1', { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: 10 });
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts/acct_1');
+		for (const part of ['settings[payouts][schedule][interval]=weekly', 'settings[payouts][schedule][weekly_anchor]=monday', 'settings[payouts][schedule][delay_days]=10', 'settings[payouts][debit_negative_balances]=true']) {
+			expect(body).toContain(part);
+		}
+		expect(body).not.toContain('monthly_anchor');
+	});
+
+	it('expands the charge fee with the transfer', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: null });
+		await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');
+		const url = decodeURIComponent(calls[0].url);
+		expect(url).toContain('expand[0]=latest_charge.transfer');
+		expect(url).toContain('expand[1]=latest_charge.balance_transaction');
 	});
 });

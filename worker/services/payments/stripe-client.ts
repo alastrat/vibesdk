@@ -90,8 +90,11 @@ export interface StripeTransferSummary {
 
 export interface StripePaymentIntent {
 	id: string;
-	/** Expanded on request: the charge, with the transfer that paid the seller on a destination charge. */
-	latest_charge: { id: string; transfer: StripeTransferSummary | string | null } | string | null;
+	/** Expanded on request: the charge, with the transfer that paid the seller and the balance transaction Stripe's fee is on. */
+	latest_charge:
+		| { id: string; transfer: StripeTransferSummary | string | null; balance_transaction?: { id: string; fee: number } | string | null }
+		| string
+		| null;
 }
 
 export interface StripeRefund {
@@ -132,6 +135,21 @@ export interface StoreCheckoutSessionInput {
 	nowMs: number;
 }
 
+export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
+
+export interface PayoutSchedule {
+	interval: 'daily' | 'weekly' | 'monthly';
+	weeklyAnchor: Weekday | null;
+	monthlyAnchor: number | null;
+	/** Days a sale waits before payout; null leaves Stripe's current value. */
+	delayDays: number | null;
+}
+
+interface StripeBalance {
+	available: Array<{ amount: number; currency: string }>;
+	pending: Array<{ amount: number; currency: string }>;
+}
+
 export interface SellerFlags {
 	detailsSubmitted: boolean;
 	chargesEnabled: boolean;
@@ -151,6 +169,9 @@ export interface StripeClient {
 	retrievePaymentIntent(paymentIntentId: string): Promise<StripePaymentIntent>;
 	createRefund(input: { paymentIntentId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeRefund>;
 	createTransferReversal(input: { transferId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeTransferReversal>;
+	retrieveBalance(accountId: string): Promise<{ availableCents: number; pendingCents: number }>;
+	createTransfer(input: { destination: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<{ id: string; amount: number }>;
+	updatePayoutSchedule(accountId: string, schedule: PayoutSchedule): Promise<StripeAccount>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -204,6 +225,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		path: string,
 		params?: Record<string, FormValue>,
 		idempotencyKey?: string,
+		stripeAccount?: string,
 	): Promise<T> {
 		const body = params ? encodeForm(params) : undefined;
 		const headers: Record<string, string> = {
@@ -211,6 +233,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 			'Content-Type': 'application/x-www-form-urlencoded',
 		};
 		if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+		// Calls made as a connected account, such as reading a seller's balance.
+		if (stripeAccount) headers['Stripe-Account'] = stripeAccount;
 		const response = await fetchImpl(`${STRIPE_API}${path}`, {
 			method,
 			headers,
@@ -310,7 +334,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
 		retrievePaymentIntent: (paymentIntentId) =>
-			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge.transfer'] })}`),
+			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge.transfer', 'latest_charge.balance_transaction'] })}`),
 		// Catalog refunds carry stable idempotency keys, so a retried refund is never paid twice.
 		createRefund: (input) =>
 			request<StripeRefund>(
@@ -326,5 +350,27 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				{ amount: input.amountCents, metadata: input.metadata },
 				input.idempotencyKey,
 			),
+		retrieveBalance: async (accountId) => {
+			const balance = await request<StripeBalance>('GET', '/balance', undefined, undefined, accountId);
+			const usd = (entries: StripeBalance['available']) => entries.filter((entry) => entry.currency === 'usd').reduce((sum, entry) => sum + entry.amount, 0);
+			return { availableCents: usd(balance.available), pendingCents: usd(balance.pending) };
+		},
+		createTransfer: (input) =>
+			request<{ id: string; amount: number }>('POST', '/transfers', { destination: input.destination, amount: input.amountCents, currency: 'usd', metadata: input.metadata }, input.idempotencyKey),
+		// The platform owns these accounts' losses, so it sets their payout timing and lets Stripe debit their bank when negative.
+		updatePayoutSchedule: (accountId, schedule) =>
+			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, {
+				settings: {
+					payouts: {
+						schedule: {
+							interval: schedule.interval,
+							weekly_anchor: schedule.interval === 'weekly' ? schedule.weeklyAnchor : undefined,
+							monthly_anchor: schedule.interval === 'monthly' ? schedule.monthlyAnchor : undefined,
+							delay_days: schedule.delayDays ?? undefined,
+						},
+						debit_negative_balances: true,
+					},
+				},
+			}),
 	};
 }
