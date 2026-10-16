@@ -33,6 +33,8 @@ export const SELLER_CHARGE_KINDS = ['dispute-fee', 'dispute-shortfall', 'payout-
 export type SellerChargeKind = (typeof SELLER_CHARGE_KINDS)[number];
 export const DISPUTE_REVERSAL_STATES = ['none', 'planned', 'done', 'refused'] as const;
 export type DisputeReversalState = (typeof DISPUTE_REVERSAL_STATES)[number];
+/** Stripe's final dispute statuses: decided for either side, or an inquiry that closed without a chargeback. */
+export const DISPUTE_CLOSED_STATUSES: readonly string[] = ['won', 'lost', 'warning_closed'];
 export const PAYOUT_INTERVALS = ['daily', 'weekly', 'monthly'] as const;
 export type PayoutInterval = (typeof PAYOUT_INTERVALS)[number];
 

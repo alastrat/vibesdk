@@ -23,5 +23,6 @@ describe('seller levels schema', () => {
 		expect(allMigrationSql).toContain('ALTER TABLE `stripe_connect_accounts` ADD `seller_level` text');
 		expect(allMigrationSql).toContain('ALTER TABLE `stripe_connect_accounts` ADD `payout_delay_days` integer');
 		expect(allMigrationSql).toContain('ALTER TABLE `store_checkouts` ADD `weighted_cents` integer');
+		expect(allMigrationSql).toContain('ALTER TABLE `store_disputes` ADD `closed_at` integer');
 	});
 });

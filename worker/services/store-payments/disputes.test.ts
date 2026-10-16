@@ -50,6 +50,7 @@ function world(input: { reversed?: number; known?: boolean; reversal?: 'ok' | 'r
 		setOrderStatus: async (status) => void events.push(`order ${status}`),
 		recomputeOrderStatus: async () => void events.push('order recomputed'),
 		alert: async (alert) => void events.push(`alert ${alert.kind}`),
+		recheckSellerLevel: async (sellerUserId) => void events.push(`level check ${sellerUserId} after ${stored?.status ?? 'nothing'} saved`),
 		now: () => new Date(0),
 	};
 	return { deps, moves, events, charges, collect: (key: string, cents: number) => {
@@ -148,7 +149,7 @@ describe('handleDisputeClosed', () => {
 		expect(await handleDisputeClosed(w.deps, { ...DISPUTE, status: 'lost', balance_transactions: [{ fee: 1500 }, { fee: 1500 }] })).toBe('lost');
 		expect(w.charges.get('dispute-fee:dp_1')?.amountCents).toBe(3000);
 		expect(w.moves).toEqual(['transfer 2028 dispute-withheld-dp_1']);
-		expect(w.events).toEqual(['order dispute_lost', 'alert dispute-closed']);
+		expect(w.events).toEqual(['order dispute_lost', 'level check u1 after lost saved', 'alert dispute-closed']);
 	});
 
 	it('closes an inquiry that never became a chargeback as owing nothing', async () => {
@@ -158,5 +159,17 @@ describe('handleDisputeClosed', () => {
 		expect(await handleDisputeClosed(w.deps, { ...DISPUTE, status: 'warning_closed', balance_transactions: [] })).toBe('inquiry-closed');
 		expect(w.moves).toEqual([]);
 		expect(w.events).toEqual(['order recomputed', 'alert dispute-closed']);
+	});
+
+	it("re-checks the seller's level once the loss is saved, so the check counts it, and not after a win", async () => {
+		const lost = world();
+		await handleDisputeOpened(lost.deps, DISPUTE);
+		await handleDisputeClosed(lost.deps, { ...DISPUTE, status: 'lost' });
+		expect(lost.events.filter((event) => event.startsWith('level check'))).toEqual(['level check u1 after lost saved']);
+
+		const won = world();
+		await handleDisputeOpened(won.deps, DISPUTE);
+		await handleDisputeClosed(won.deps, { ...DISPUTE, status: 'won' });
+		expect(won.events.filter((event) => event.startsWith('level check'))).toEqual([]);
 	});
 });

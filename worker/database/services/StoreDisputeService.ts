@@ -3,7 +3,7 @@
 import { eq, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
-import type { DisputeReversalState } from '../../../shared/types/store-payments';
+import { DISPUTE_CLOSED_STATUSES, type DisputeReversalState } from '../../../shared/types/store-payments';
 import type { StoredDispute } from '../../services/store-payments/disputes';
 
 export class StoreDisputeService extends BaseService {
@@ -26,7 +26,7 @@ export class StoreDisputeService extends BaseService {
 	async save(row: { id: string; orderId: string; amountCents: number; reason: string; status: string; reversalState: DisputeReversalState; reversalId: string | null; reversedCents: number; feeCents: number; returnedCents: number; now: Date }): Promise<void> {
 		await this.database
 			.insert(schema.storeDisputes)
-			.values({ id: row.id, orderId: row.orderId, amountCents: row.amountCents, reason: row.reason, status: row.status, reversalState: row.reversalState, reversalId: row.reversalId, reversedCents: row.reversedCents, feeCents: row.feeCents, returnedCents: row.returnedCents, createdAt: row.now, updatedAt: row.now })
+			.values({ id: row.id, orderId: row.orderId, amountCents: row.amountCents, reason: row.reason, status: row.status, reversalState: row.reversalState, reversalId: row.reversalId, reversedCents: row.reversedCents, feeCents: row.feeCents, returnedCents: row.returnedCents, createdAt: row.now, closedAt: DISPUTE_CLOSED_STATUSES.includes(row.status) ? row.now : null, updatedAt: row.now })
 			.onConflictDoUpdate({
 				target: schema.storeDisputes.id,
 				set: {
@@ -36,6 +36,8 @@ export class StoreDisputeService extends BaseService {
 					reversedCents: row.reversedCents,
 					feeCents: row.feeCents,
 					returnedCents: row.returnedCents,
+					// The first close time stays, whatever is redelivered later.
+					closedAt: sql`COALESCE(${schema.storeDisputes.closedAt}, excluded.closed_at)`,
 					updatedAt: row.now,
 				},
 			})

@@ -10,7 +10,7 @@
 
 import { StripeApiError, type StripeClient } from '../payments/stripe-client';
 import type { PlatformAlert } from '../alerts/platform-alerts';
-import type { DisputeReversalState, SellerChargeKind, StorePaymentStatus } from '../../../shared/types/store-payments';
+import { DISPUTE_CLOSED_STATUSES, type DisputeReversalState, type SellerChargeKind, type StorePaymentStatus } from '../../../shared/types/store-payments';
 
 export interface StripeDispute {
 	id: string;
@@ -54,10 +54,11 @@ export interface DisputeDeps {
 	/** Sets the order back to paid, or to its refund status when refunds were made. */
 	recomputeOrderStatus(): Promise<void>;
 	alert(alert: PlatformAlert): Promise<void>;
+	/** Re-checks the seller's level; called once a lost dispute is saved, so the check counts the loss. */
+	recheckSellerLevel(sellerUserId: string): Promise<void>;
 	now(): Date;
 }
 
-const CLOSED_STATUSES = ['won', 'lost', 'warning_closed'];
 
 const feeOf = (dispute: StripeDispute): number => Math.max(dispute.balance_transactions.reduce((sum, entry) => sum + entry.fee, 0), 0);
 const isInquiry = (status: string): boolean => status.startsWith('warning_');
@@ -127,7 +128,7 @@ export async function handleDisputeClosed(deps: DisputeDeps, dispute: StripeDisp
 	if (!order || !stored) return 'not-ours';
 	const outcome = dispute.status === 'won' ? 'won' : dispute.status === 'warning_closed' ? 'inquiry-closed' : 'lost';
 	// Already closed: a late redelivery never pays anyone twice, whatever Stripe kept of its idempotency keys.
-	if (CLOSED_STATUSES.includes(stored.status)) return outcome;
+	if (DISPUTE_CLOSED_STATUSES.includes(stored.status)) return outcome;
 	const now = deps.now();
 	const feeCents = feeOf(dispute);
 	const charge = (kind: SellerChargeKind, amountCents: number) => deps.setCharge({ sellerUserId: order.sellerUserId, kind, sourceId: dispute.id, amountCents, now });
@@ -158,6 +159,7 @@ export async function handleDisputeClosed(deps: DisputeDeps, dispute: StripeDisp
 		message = 'The dispute was lost; the seller pays the amount and the fee.';
 	}
 	await deps.saveDispute({ id: dispute.id, orderId: order.id, amountCents: dispute.amount, reason: dispute.reason, status: dispute.status, reversalState: stored.reversalState, reversalId: null, reversedCents: stored.reversedCents, feeCents, returnedCents: stored.returnedCents + returnedCents, now });
+	if (outcome === 'lost') await deps.recheckSellerLevel(order.sellerUserId);
 	await deps.alert({ kind: 'dispute-closed', subject: order.id, message });
 	return outcome;
 }

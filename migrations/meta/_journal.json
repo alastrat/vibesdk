@@ -169,6 +169,13 @@
       "when": 1792191144145,
       "tag": "0023_seller_levels",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1792193950418,
+      "tag": "0024_dispute_closed_at",
+      "breakpoints": true
     }
   ]
 }

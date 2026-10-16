@@ -561,6 +561,8 @@ export const storeDisputes = sqliteTable('store_disputes', {
     feeCents: integer('fee_cents').notNull().default(0),
     returnedCents: integer('returned_cents').notNull().default(0),
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    /** When Stripe decided the dispute or closed the inquiry; a loss counts toward the seller's level from then. */
+    closedAt: integer('closed_at', { mode: 'timestamp' }),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 });
 

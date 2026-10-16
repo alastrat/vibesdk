@@ -105,5 +105,7 @@ describe('StoreOrderService.sellerRecord', () => {
 		// An inquiry takes no money and isn't a chargeback, so it doesn't count toward the dispute rate.
 		const disputes = statements.find((entry) => entry.sql.toLowerCase().includes('store_disputes'));
 		expect(disputes?.sql.toLowerCase()).toContain("not like 'warning_%'");
+		// A loss counts from the day it was lost: chargebacks often take 60 to 75 days to decide.
+		expect(disputes?.sql.toLowerCase()).toContain('"store_disputes"."closed_at" >=');
 	});
 });

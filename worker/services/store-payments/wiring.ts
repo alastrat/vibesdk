@@ -85,14 +85,12 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 	const disputes = new StoreDisputeService(env);
 	const charges = new SellerChargeService(env);
 	let orderId: string | null = null;
-	let sellerUserId: string | null = null;
 	return {
 		findOrder: async (paymentIntentId) => {
 			const order = await orders.findByPaymentIntent(paymentIntentId);
 			// Without the seller's account there is nothing to take back or return; such an order isn't a store sale.
 			if (!order?.sellerStripeAccountId) return null;
 			orderId = order.id;
-			sellerUserId = order.sellerUserId;
 			return { id: order.id, sellerUserId: order.sellerUserId, sellerStripeAccountId: order.sellerStripeAccountId, checkoutSessionId: order.stripeCheckoutSessionId };
 		},
 		stripe,
@@ -110,8 +108,6 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 		withheldCatalogCents: (checkoutSessionId) => new CatalogOrderService(env).withheldCatalogCents(checkoutSessionId),
 		setOrderStatus: async (status) => {
 			if (orderId) await orders.setPaymentStatus(orderId, status, new Date());
-			// A lost dispute can take a seller down a level.
-			if (status === 'dispute_lost' && sellerUserId) await syncSellerLevelFromEnv(env, sellerUserId);
 		},
 		recomputeOrderStatus: async () => {
 			if (!orderId) return;
@@ -119,6 +115,8 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 			await orders.applyRefunds(orderId, new Date());
 		},
 		alert: platformAlertsFromEnv(env),
+		// A lost dispute can take a seller down a level.
+		recheckSellerLevel: (sellerUserId) => syncSellerLevelFromEnv(env, sellerUserId),
 		now: () => new Date(),
 	};
 }

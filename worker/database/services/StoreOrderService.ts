@@ -192,12 +192,16 @@ export class StoreOrderService extends BaseService {
         const fourteenDaysAgo = new Date(nowMs - 14 * 24 * 60 * 60 * 1000);
         const first = await this.database.select({ at: sql<number | null>`min(${orders.createdAt})` }).from(orders).where(mine).get();
         const recent = await this.database.select({ count: sql<number>`count(*)` }).from(orders).where(and(mine, gte(orders.createdAt, ninetyDaysAgo))).get();
+        // Chargebacks opened in the window, for the rate; losses decided in it, since a dispute can take months to decide.
         // Inquiries take no money and aren't chargebacks, so they don't count.
         const disputes = await this.database
-            .select({ total: sql<number>`count(*)`, lost: sql<number>`COALESCE(sum(case when ${schema.storeDisputes.status} = 'lost' then 1 else 0 end), 0)` })
+            .select({
+                total: sql<number>`COALESCE(sum(case when ${gte(schema.storeDisputes.createdAt, ninetyDaysAgo)} then 1 else 0 end), 0)`,
+                lost: sql<number>`COALESCE(sum(case when ${and(eq(schema.storeDisputes.status, 'lost'), gte(schema.storeDisputes.closedAt, ninetyDaysAgo))} then 1 else 0 end), 0)`,
+            })
             .from(schema.storeDisputes)
             .innerJoin(orders, eq(orders.id, schema.storeDisputes.orderId))
-            .where(and(mine, gte(schema.storeDisputes.createdAt, ninetyDaysAgo), sql`${schema.storeDisputes.status} NOT LIKE 'warning_%'`))
+            .where(and(mine, sql`${schema.storeDisputes.status} NOT LIKE 'warning_%'`))
             .get();
         // Paid, at least 14 days old, and every catalog item delivered; a refund or dispute changes the payment status.
         const completed = await this.database
