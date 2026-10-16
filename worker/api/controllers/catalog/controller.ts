@@ -79,6 +79,13 @@ export class CatalogController extends BaseController {
         return CatalogController.createSuccessResponse({ retried: true });
     }
 
+    /** Places a catalog order held for a risky payment, after an admin reviewed it. */
+    static async releaseOrder(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ released: boolean }>>> {
+        const orderId = context.pathParams.id;
+        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        return CatalogController.createSuccessResponse({ released: await CatalogController.runner(env, orderId).release() });
+    }
+
     /** Moves a sandbox supplier order along, for local runs. Refused for live orders. */
     static async sandboxMove(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ moved: string[] }>>> {
         try {

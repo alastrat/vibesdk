@@ -12,5 +12,6 @@ export function setupCatalogRoutes(app: Hono<AppEnv>): void {
     app.get('/api/admin/catalog/orders/:id/runner', setAuthLevel(AuthConfig.admin), adaptController(CatalogController, CatalogController.runnerSnapshot));
     app.post('/api/admin/catalog/orders/:id/sync', setAuthLevel(AuthConfig.admin), adaptController(CatalogController, CatalogController.syncNow));
     app.post('/api/admin/catalog/orders/:id/retry', setAuthLevel(AuthConfig.admin), adaptController(CatalogController, CatalogController.retryOrder));
+    app.post('/api/admin/catalog/orders/:id/release', setAuthLevel(AuthConfig.admin), adaptController(CatalogController, CatalogController.releaseOrder));
     app.post('/api/admin/catalog/orders/:id/sandbox', setAuthLevel(AuthConfig.admin), adaptController(CatalogController, CatalogController.sandboxMove));
 }

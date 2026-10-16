@@ -55,6 +55,7 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
         const order = await this.database
             .select({
                 id: schema.catalogOrders.id,
+                sellerUserId: schema.catalogOrders.sellerUserId,
                 status: schema.catalogOrders.status,
                 paymentIntentId: schema.catalogOrders.stripePaymentIntentId,
                 placementAttempts: schema.catalogOrders.placementAttempts,

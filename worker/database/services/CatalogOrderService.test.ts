@@ -80,13 +80,14 @@ describe('CatalogOrderService', () => {
 	});
 
 	it('reads an order with its items and parses the address', async () => {
-		const orderRow = ['co_1', 'awaiting-placement', 'pi_1', 0, JSON.stringify(ORDER.shippingAddress)];
+		const orderRow = ['co_1', 'u1', 'awaiting-placement', 'pi_1', 0, JSON.stringify(ORDER.shippingAddress)];
 		const itemRow = ['ci_1', 'cv_mug', 'cjdropshipping', 'cj_mug', 2, 2500, 1200, 'pending', null, null, null, 0, 0];
 		const { d1 } = recordingD1((sql) => (sql.includes('from "catalog_order_items"') ? [itemRow] : [orderRow]));
 		const order = await new CatalogOrderService({ DB: d1 } as unknown as Env).getOrder('co_1');
 
 		expect(order).toEqual({
 			id: 'co_1',
+			sellerUserId: 'u1',
 			status: 'awaiting-placement',
 			paymentIntentId: 'pi_1',
 			placementAttempts: 0,

@@ -10,6 +10,7 @@ import type { CatalogOrderItemRow, CatalogOrderStore } from './store';
 import type { SupplierUpdate } from './supplier';
 import { applySupplierUpdate } from './updates';
 import type { PlatformAlertKind } from '../alerts/platform-alerts';
+import type { SellerNotice } from '../alerts/seller-notices';
 
 export const RUNNER_SYNC_INTERVAL_MS = 30 * 60 * 1000;
 export const RUNNER_SYNC_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
@@ -21,16 +22,22 @@ const STEP_ERROR_BACKOFF_MS = 5 * 60 * 1000;
 const STRIPE_MISSING_RETRY_MS = 60 * 60 * 1000;
 /** Paid orders whose runner never started (a lost hand-off) are swept after this long. */
 export const UNSTARTED_ORDER_AGE_MS = 15 * 60 * 1000;
+/** How long a payment Radar scores as risky waits for an admin before its catalog items are refunded. */
+export const RISK_HOLD_MS = 24 * 60 * 60 * 1000;
 
 export interface RunnerState {
 	orderId: string;
-	placement: 'due' | 'done' | 'needs-attention';
+	placement: 'due' | 'done' | 'needs-attention' | 'risk-hold';
 	nextPlacementAt: number;
 	refundFailures: number;
 	nextRefundAt: number;
 	/** When to read the supplier next; null when nothing is in transit. */
 	nextSyncAt: number | null;
 	startedAt: number;
+	/** The payment's risk was read; states saved before risk checks lack it and read as unchecked. */
+	riskChecked?: boolean;
+	/** While held: when an unreviewed hold refunds the catalog items. */
+	riskHoldUntil?: number | null;
 }
 
 export interface RunnerDeps {
@@ -42,6 +49,9 @@ export interface RunnerDeps {
 	addShortfall: RefundItemsDeps['addShortfall'];
 	supplierUpdates(supplierOrderId: string): Promise<readonly SupplierUpdate[]>;
 	alert(alert: { kind: PlatformAlertKind; orderId: string; message: string }): Promise<void>;
+	/** Radar's risk level for the payment; 'unknown' when Stripe gave none. */
+	paymentRisk(paymentIntentId: string): Promise<'normal' | 'elevated' | 'highest' | 'unknown'>;
+	notifySeller(notice: SellerNotice): Promise<void>;
 }
 
 export function initialRunnerState(orderId: string, nowMs: number): RunnerState {
@@ -56,21 +66,66 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
+/** An admin cleared a held order: place it now. */
+export function releaseRiskHold(state: RunnerState, nowMs: number): RunnerState {
+	if (state.placement !== 'risk-hold') return state;
+	return { ...state, placement: 'due', riskChecked: true, riskHoldUntil: null, nextPlacementAt: nowMs };
+}
+
+/**
+ * An admin retry, or placement restarted after a won dispute released held items: placement and refunds run again now.
+ * A finished placement runs again too, since released items are pending; a risk hold waits for an admin's release.
+ */
+export function retryRunnerState(state: RunnerState, nowMs: number): RunnerState {
+	const placement = state.placement === 'risk-hold' ? 'risk-hold' : 'due';
+	return { ...state, placement, nextPlacementAt: nowMs, refundFailures: 0, nextRefundAt: nowMs, nextSyncAt: state.nextSyncAt ?? nowMs };
+}
+
 async function place(state: RunnerState, deps: RunnerDeps, nowMs: number): Promise<RunnerState> {
+	if (state.placement === 'risk-hold') return expireRiskHold(state, deps, nowMs);
 	if (state.placement !== 'due' || nowMs < state.nextPlacementAt) return state;
-	const outcome = await placeCatalogOrder({ store: deps.store, adapters: deps.adapters }, state.orderId);
+	let current = state;
+	if (!current.riskChecked) {
+		// Once, before Estori pays a supplier: a payment Radar scores as risky waits for an admin.
+		const order = await deps.store.getOrder(current.orderId);
+		const risk = order ? await deps.paymentRisk(order.paymentIntentId) : 'unknown';
+		if (order && (risk === 'elevated' || risk === 'highest')) {
+			await deps.store.updateOrder(order.id, { status: 'risk-hold', placementAttempts: order.placementAttempts, lastError: `The payment's risk is ${risk}` });
+			await deps.alert({ kind: 'risk-hold', orderId: current.orderId, message: `The payment's risk is ${risk}. Release the order within 24 hours, or its catalog items are refunded.` });
+			return { ...current, placement: 'risk-hold', riskChecked: true, riskHoldUntil: nowMs + RISK_HOLD_MS };
+		}
+		current = { ...current, riskChecked: true };
+	}
+	const outcome = await placeCatalogOrder({ store: deps.store, adapters: deps.adapters }, current.orderId);
 	switch (outcome.kind) {
 		case 'retry':
-			return { ...state, nextPlacementAt: nowMs + outcome.delayMs };
+			return { ...current, nextPlacementAt: nowMs + outcome.delayMs };
 		case 'done':
-			return { ...state, placement: 'done', nextSyncAt: nowMs + RUNNER_SYNC_INTERVAL_MS };
+			return { ...current, placement: 'done', nextSyncAt: nowMs + RUNNER_SYNC_INTERVAL_MS };
 		case 'needs-attention':
-			await deps.alert({ kind: 'needs-attention', orderId: state.orderId, message: outcome.reason });
-			return { ...state, placement: 'needs-attention', nextSyncAt: nowMs + RUNNER_SYNC_INTERVAL_MS };
+			await deps.alert({ kind: 'needs-attention', orderId: current.orderId, message: outcome.reason });
+			return { ...current, placement: 'needs-attention', nextSyncAt: nowMs + RUNNER_SYNC_INTERVAL_MS };
 		case 'not-found':
-			await deps.alert({ kind: 'needs-attention', orderId: state.orderId, message: 'The catalog order does not exist' });
-			return { ...state, placement: 'done', nextSyncAt: null };
+			await deps.alert({ kind: 'needs-attention', orderId: current.orderId, message: 'The catalog order does not exist' });
+			return { ...current, placement: 'done', nextSyncAt: null };
 	}
+}
+
+/** When the hold's time is up, i.e. no admin released it: refund what is still pending and tell the seller. */
+async function expireRiskHold(state: RunnerState, deps: RunnerDeps, nowMs: number): Promise<RunnerState> {
+	// A failed expiry pushes nextPlacementAt back, so it waits instead of trying again every minute.
+	if (nowMs < Math.max(state.riskHoldUntil ?? 0, state.nextPlacementAt)) return state;
+	const order = await deps.store.getOrder(state.orderId);
+	// A dispute may already have withheld the items, and then there is nothing to refund here.
+	const pending = order?.items.filter((item) => item.status === 'pending').map((item) => item.id) ?? [];
+	if (order && pending.length > 0) {
+		const refundDeps = refundDepsOf(deps);
+		if (!refundDeps) return { ...state, nextPlacementAt: nowMs + STRIPE_MISSING_RETRY_MS };
+		await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: pending, reason: 'risk-declined' });
+		await deps.notifySeller({ sellerUserId: order.sellerUserId, kind: 'items-refunded', orderId: order.id, itemCount: pending.length, reason: 'risk' });
+	}
+	if (order) await deps.store.updateOrder(order.id, { status: 'placement-done', placementAttempts: order.placementAttempts, lastError: 'Not released within 24 hours' });
+	return { ...state, placement: 'done', riskHoldUntil: null, nextSyncAt: null };
 }
 
 /** Items still owed money back: rejected items not yet refunded, and refunded items whose seller share isn't reversed yet. */
@@ -109,7 +164,10 @@ async function refund(state: RunnerState, deps: RunnerDeps, nowMs: number): Prom
 	try {
 		const refundDeps = refundDepsOf(deps);
 		if (!refundDeps) return { ...state, nextRefundAt: nowMs + STRIPE_MISSING_RETRY_MS };
-		await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: rejected.map((item) => item.id), reason: 'supplier-rejected' });
+		const totals = await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: rejected.map((item) => item.id), reason: 'supplier-rejected' });
+		if (totals.refundedItemIds.length > 0) {
+			await deps.notifySeller({ sellerUserId: order.sellerUserId, kind: 'items-refunded', orderId: order.id, itemCount: totals.refundedItemIds.length, reason: 'supplier' });
+		}
 		return { ...state, refundFailures: 0, nextRefundAt: nowMs };
 	} catch (error) {
 		const refundFailures = state.refundFailures + 1;
@@ -174,7 +232,12 @@ export async function runnerStep(state: RunnerState, deps: RunnerDeps, nowMs: nu
 		// The store is unreachable: check again on the next alarm.
 		refundDue = true;
 	}
-	const times = [next.placement === 'due' ? next.nextPlacementAt : null, refundDue ? next.nextRefundAt : null, next.nextSyncAt].filter((time): time is number => time !== null);
+	const times = [
+		next.placement === 'due' ? next.nextPlacementAt : null,
+		next.placement === 'risk-hold' ? Math.max(next.riskHoldUntil ?? 0, next.nextPlacementAt) : null,
+		refundDue ? next.nextRefundAt : null,
+		next.nextSyncAt,
+	].filter((time): time is number => time !== null);
 	return { state: next, nextAlarmAt: times.length > 0 ? Math.max(Math.min(...times), nowMs + MIN_ALARM_GAP_MS) : null };
 }
 

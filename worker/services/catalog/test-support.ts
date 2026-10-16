@@ -12,6 +12,7 @@ export function memoryCatalogStore(): CatalogOrderStore & { orders: Map<string, 
 			sessions.add(order.checkoutSessionId);
 			orders.set(order.id, {
 				id: order.id,
+				sellerUserId: order.sellerUserId,
 				status: 'awaiting-placement',
 				paymentIntentId: order.paymentIntentId,
 				placementAttempts: 0,

@@ -92,7 +92,13 @@ export interface StripePaymentIntent {
 	id: string;
 	/** Expanded on request: the charge, with the transfer that paid the seller and the balance transaction Stripe's fee is on. */
 	latest_charge:
-		| { id: string; transfer: StripeTransferSummary | string | null; balance_transaction?: { id: string; fee: number } | string | null }
+		| {
+				id: string;
+				transfer: StripeTransferSummary | string | null;
+				balance_transaction?: { id: string; fee: number } | string | null;
+				/** Radar's screening of the payment. */
+				outcome?: { risk_level?: string } | null;
+		  }
 		| string
 		| null;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUNNER_SYNC_INTERVAL_MS, initialRunnerState, runnerStep, sweepUnstartedOrders, type RunnerDeps } from './runner';
+import { RISK_HOLD_MS, RUNNER_SYNC_INTERVAL_MS, initialRunnerState, releaseRiskHold, retryRunnerState, runnerStep, sweepUnstartedOrders, type RunnerDeps } from './runner';
 import { memoryCatalogStore } from './test-support';
 import type { PlaceOrderResult, SupplierAdapter, SupplierUpdate } from './supplier';
 import type { StripeClient } from '../payments/stripe-client';
@@ -29,8 +29,15 @@ async function storeWithOrder() {
 	return store;
 }
 
-function deps(store: Awaited<ReturnType<typeof storeWithOrder>>, results: PlaceOrderResult[], updates: SupplierUpdate[][] = [], reversedCents = 0) {
+function deps(
+	store: Awaited<ReturnType<typeof storeWithOrder>>,
+	results: PlaceOrderResult[],
+	updates: SupplierUpdate[][] = [],
+	reversedCents = 0,
+	risk: 'normal' | 'elevated' | 'highest' | 'unknown' = 'normal',
+) {
 	const refunds: number[] = [];
+	const notices: string[] = [];
 	const shortfalls: Array<{ catalogItemId: string; amountCents: number }> = [];
 	const alerts: string[] = [];
 	const adapter: SupplierAdapter = {
@@ -53,8 +60,10 @@ function deps(store: Awaited<ReturnType<typeof storeWithOrder>>, results: PlaceO
 		alert: async (alert) => void alerts.push(alert.kind),
 		recordRefund: async () => undefined,
 		addShortfall: async (shortfall) => void shortfalls.push(shortfall),
+		paymentRisk: async () => risk,
+		notifySeller: async (notice) => void notices.push(notice.kind),
 	};
-	return { runnerDeps, refunds, alerts, shortfalls };
+	return { runnerDeps, refunds, alerts, shortfalls, notices };
 }
 
 describe('runnerStep', () => {
@@ -170,6 +179,78 @@ describe('runnerStep', () => {
 		expect(reversals).toEqual([2800]);
 		expect(store.orders.get('co_1')?.items.find((item) => item.id === 'ci_cap')?.sellerReversalDueCents).toBe(0);
 		expect(step.state.placement).toBe('done');
+	});
+	it('holds an elevated-risk order before buying, and places it once an admin releases it', async () => {
+		const store = await storeWithOrder();
+		let placed = 0;
+		const { runnerDeps, alerts } = deps(store, [{ ok: true, supplierOrderId: 'cj_1' }], [], 0, 'elevated');
+		const original = runnerDeps.adapters.cjdropshipping.placeOrder;
+		runnerDeps.adapters.cjdropshipping.placeOrder = async (input) => {
+			placed += 1;
+			return original(input);
+		};
+
+		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		expect(held.state).toMatchObject({ placement: 'risk-hold', riskChecked: true, riskHoldUntil: NOW + RISK_HOLD_MS });
+		expect(held.nextAlarmAt).toBe(NOW + RISK_HOLD_MS);
+		expect(placed).toBe(0);
+		expect(alerts).toContain('risk-hold');
+		expect(store.orders.get('co_1')?.status).toBe('risk-hold');
+
+		const released = await runnerStep(releaseRiskHold(held.state, NOW + 1000), runnerDeps, NOW + 1000);
+		expect(placed).toBe(1);
+		expect(released.state.placement).toBe('done');
+	});
+
+	it("refunds an unreviewed risky order's catalog items after 24 hours and tells the seller", async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps, refunds, notices } = deps(store, [], [], 0, 'elevated');
+		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		const after = await runnerStep(held.state, runnerDeps, NOW + RISK_HOLD_MS);
+		expect(refunds.sort()).toEqual([4000, 5000]);
+		expect(after.state.placement).toBe('done');
+		expect(notices).toEqual(['items-refunded']);
+		expect(store.orders.get('co_1')?.items.every((item) => item.status === 'refunded')).toBe(true);
+	});
+
+	it('finds nothing to refund when a dispute already withheld the items', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps, refunds } = deps(store, [], [], 0, 'elevated');
+		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		await store.patchItems([{ itemId: 'ci_mug', status: 'withheld' }, { itemId: 'ci_cap', status: 'withheld' }]);
+		await runnerStep(held.state, runnerDeps, NOW + RISK_HOLD_MS);
+		expect(refunds).toEqual([]);
+	});
+
+	it('checks the payment once, including for a runner state saved before risk checks existed', async () => {
+		const store = await storeWithOrder();
+		let checks = 0;
+		const { runnerDeps } = deps(store, [{ ok: true, supplierOrderId: 'cj_1' }]);
+		runnerDeps.paymentRisk = async () => {
+			checks += 1;
+			return 'normal';
+		};
+		const { riskChecked: _unused, ...legacy } = { ...initialRunnerState('co_1', NOW), riskChecked: undefined };
+		const first = await runnerStep(legacy, runnerDeps, NOW);
+		await runnerStep(first.state, runnerDeps, NOW + RUNNER_SYNC_INTERVAL_MS);
+		expect(checks).toBe(1);
+	});
+
+	it('backs off a risk hold whose refund fails, instead of trying again every minute', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps } = deps(store, [], [], 0, 'elevated');
+		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		runnerDeps.stripe = { ...runnerDeps.stripe!, createRefund: async () => Promise.reject(new Error('Stripe is unavailable')) };
+		const failed = await runnerStep(held.state, runnerDeps, NOW + RISK_HOLD_MS);
+		expect(failed.state.placement).toBe('risk-hold');
+		expect(failed.nextAlarmAt).toBeGreaterThanOrEqual(NOW + RISK_HOLD_MS + 5 * 60 * 1000);
+	});
+
+	it('places again items a won dispute released after placement finished, but keeps a risk hold for an admin', () => {
+		const done = { ...initialRunnerState('co_1', NOW), placement: 'done' as const, riskChecked: true };
+		expect(retryRunnerState(done, NOW + 1000)).toMatchObject({ placement: 'due', nextPlacementAt: NOW + 1000, riskChecked: true });
+		const held = { ...done, placement: 'risk-hold' as const, riskHoldUntil: NOW + RISK_HOLD_MS };
+		expect(retryRunnerState(held, NOW + 1000).placement).toBe('risk-hold');
 	});
 });
 

@@ -47,6 +47,7 @@ export interface CatalogOrderItemRow {
 
 export interface CatalogOrderRow {
 	id: string;
+	sellerUserId: string;
 	status: CatalogOrderStatus;
 	paymentIntentId: string;
 	placementAttempts: number;

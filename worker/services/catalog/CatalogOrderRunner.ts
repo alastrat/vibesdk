@@ -14,7 +14,8 @@ import { CJDropshippingAdapter } from './cj/adapter';
 import { cjClientFromEnv } from './cj/client';
 import { cjOrderToUpdates } from './cj/updates';
 import { catalogRefundRecords } from './refund-records';
-import { initialRunnerState, runnerStep, type RunnerDeps, type RunnerState } from './runner';
+import { initialRunnerState, releaseRiskHold, retryRunnerState, runnerStep, type RunnerDeps, type RunnerState } from './runner';
+import { sellerNoticesFromEnv } from '../alerts/seller-notices';
 
 const logger = createLogger('CatalogOrderRunner');
 const STATE_KEY = 'state';
@@ -42,6 +43,14 @@ function runnerDeps(env: Env): RunnerDeps {
 			return order ? cjOrderToUpdates(order) : [];
 		},
 		alert,
+		paymentRisk: async (paymentIntentId) => {
+			const stripe = stripeFromEnv(env);
+			if (!stripe) return 'unknown';
+			const charge = (await stripe.retrievePaymentIntent(paymentIntentId)).latest_charge;
+			const level = typeof charge === 'object' && charge !== null ? charge.outcome?.risk_level : undefined;
+			return level === 'normal' || level === 'elevated' || level === 'highest' ? level : 'unknown';
+		},
+		notifySeller: sellerNoticesFromEnv(env),
 	};
 }
 
@@ -73,9 +82,19 @@ export class CatalogOrderRunner extends DurableObject<Env> {
 			return;
 		}
 		const now = Date.now();
-		const placement = state.placement === 'needs-attention' ? 'due' : state.placement;
-		await this.ctx.storage.put(STATE_KEY, { ...state, placement, nextPlacementAt: now, refundFailures: 0, nextRefundAt: now, nextSyncAt: state.nextSyncAt ?? now });
+		await this.ctx.storage.put(STATE_KEY, retryRunnerState(state, now));
 		await this.ctx.storage.setAlarm(now);
+	}
+
+	/** Admin: place a risk-held order now. */
+	async release(): Promise<boolean> {
+		const state = await this.state();
+		if (!state || state.placement !== 'risk-hold') return false;
+		const now = Date.now();
+		await this.ctx.storage.put(STATE_KEY, releaseRiskHold(state, now));
+		await new CatalogOrderService(this.env).updateOrder(state.orderId, { status: 'awaiting-placement', placementAttempts: 0, lastError: null });
+		await this.ctx.storage.setAlarm(now);
+		return true;
 	}
 
 	async snapshot(): Promise<RunnerState | null> {
