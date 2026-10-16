@@ -46,3 +46,44 @@ export interface CjFreightOption {
 	totalPostageFee: number | string | null;
 	logisticPrice: number | string | null;
 }
+
+export interface CjShippingFields {
+	shippingCustomerName: string;
+	shippingAddress: string;
+	shippingAddress2?: string;
+	shippingCity: string;
+	shippingProvince: string;
+	shippingZip: string;
+	shippingCountryCode: string;
+	shippingCountry: string;
+	shippingPhone?: string;
+}
+
+export interface CjCreateOrderRequest extends CjShippingFields {
+	orderNumber: string;
+	logisticName: string;
+	fromCountryCode: string;
+	/** 3 creates the order without paying it. */
+	payType: 3;
+	isSandbox: 0 | 1;
+	products: Array<{ vid: string; quantity: number }>;
+}
+
+export interface CjCreatedOrder {
+	orderId: string;
+	shipmentOrderId: string | null;
+	orderStatus: string | null;
+	interceptOrderReasons: Array<{ code: number; message: string }> | null;
+}
+
+export interface CjOrderDetail {
+	orderId: string;
+	orderNum: string | null;
+	/** CREATED, IN_CART, UNPAID, UNSHIPPED, SHIPPED, DELIVERED or CANCELLED. */
+	orderStatus: string;
+	trackNumber: string | null;
+	trackingProvider: string | null;
+	logisticName: string | null;
+	orderAmount: number | string | null;
+	productList: Array<{ vid: string; quantity: number }> | null;
+}

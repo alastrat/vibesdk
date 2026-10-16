@@ -3,7 +3,7 @@
 import { CJ_API_BASE, CJ_MIN_CALL_INTERVAL_MS, CJ_REQUEST_TIMEOUT_MS, CJ_THROTTLED_WAIT_MS } from '../config';
 import { CjApiError, classifyCjError } from './errors';
 import { CjSession, type CjTokenRecord } from './session';
-import type { CjFreightOption, CjFreightRequest, CjInventory, CjProduct } from './types';
+import type { CjCreatedOrder, CjCreateOrderRequest, CjFreightOption, CjFreightRequest, CjInventory, CjOrderDetail, CjProduct } from './types';
 
 interface CjEnvelope<T> {
 	code: number;
@@ -19,6 +19,15 @@ export interface CjClient {
 	freightCalculate(input: CjFreightRequest): Promise<CjFreightOption[]>;
 	/** The points CJ last reported left today, or null before any call. */
 	pointsRemaining(): number | null;
+	createOrder(input: CjCreateOrderRequest): Promise<CjCreatedOrder>;
+	/** Null when CJ has no order with this id or number. */
+	getOrderDetail(orderIdOrNumber: string): Promise<CjOrderDetail | null>;
+	/** Sandbox orders only: pays without touching the balance. */
+	simulatePay(orderId: string): Promise<void>;
+	/** Live orders only: pays from Estori's CJ balance. */
+	payBalance(shipmentOrderId: string): Promise<void>;
+	sandboxUpdateStatus(orderId: string, targetStatus: 400 | 500 | 600 | 700): Promise<void>;
+	sandboxUpdateTrackNumber(orderId: string, trackNumber: string): Promise<void>;
 }
 
 export interface CjClientDeps {
@@ -102,6 +111,28 @@ export function createCjClient(deps: CjClientDeps): CjClient {
 		inventoryByPid: (pid) => request<CjInventory>('product/stock/getInventoryByPid', { method: 'GET', query: { pid } }),
 		freightCalculate: (input) => request<CjFreightOption[]>('logistic/freightCalculate', { method: 'POST', body: input }),
 		pointsRemaining: () => points,
+		createOrder: (input) => request<CjCreatedOrder>('shopping/order/createOrderV2', { method: 'POST', body: input }),
+		getOrderDetail: async (orderIdOrNumber) => {
+			try {
+				return await request<CjOrderDetail | null>('shopping/order/getOrderDetail', { method: 'GET', query: { orderId: orderIdOrNumber } });
+			} catch (error) {
+				// CJ answers an unknown order with an error whose message says so.
+				if (error instanceof CjApiError && /not (be )?found|not exist/i.test(error.message)) return null;
+				throw error;
+			}
+		},
+		simulatePay: async (orderId) => {
+			await request<boolean>('shopping/sandbox/simulatePay', { method: 'POST', body: { orderId } });
+		},
+		payBalance: async (shipmentOrderId) => {
+			await request<unknown>('shopping/pay/payBalanceV2', { method: 'POST', body: { shipmentOrderId } });
+		},
+		sandboxUpdateStatus: async (orderId, targetStatus) => {
+			await request<boolean>('shopping/sandbox/updateStatus', { method: 'POST', body: { orderId, targetStatus } });
+		},
+		sandboxUpdateTrackNumber: async (orderId, trackNumber) => {
+			await request<boolean>('shopping/sandbox/updateTrackNumber', { method: 'POST', body: { orderId, trackNumber } });
+		},
 	};
 }
 
