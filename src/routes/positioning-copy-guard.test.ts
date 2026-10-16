@@ -37,6 +37,11 @@ describe('positioning copy rules', () => {
 		for (const name of [...COMPETITORS, ...AI_ASSISTANT_NAMES]) expect(lower, name).not.toContain(name);
 	});
 
+	it("never promises the seller's name on parcels: suppliers ship in plain packaging, with no supplier branding", () => {
+		expect(all).not.toMatch(/under your store.s name/i);
+		expect(pages['/src/content/positioning.ts']).toContain('in plain packaging, with no supplier branding');
+	});
+
 	it('names no supplier, since the catalog has none signed yet', () => {
 		const lower = all.toLowerCase();
 		for (const name of SUPPLIER_NAMES) expect(lower, name).not.toContain(name);

@@ -51,7 +51,7 @@ export const CATALOG_FULFILLMENT_COPY: SolutionCopy = {
 	steps: [
 		'Apply to the catalog when it opens.',
 		'Add products and set your prices, and Estori writes the product pages.',
-		"Customers order, and suppliers ship to them under your store's name.",
+		'Customers order, and suppliers ship to them in plain packaging.',
 	],
 	faq: [
 		{ question: 'Is the catalog available now?', answer: "Not yet, it's coming soon. You can build your store now and add products when the catalog opens." },

@@ -86,7 +86,7 @@ export const AGENT_READY_CARDS: readonly CardCopy[] = [
 export const CATALOG_CARDS: readonly CardCopy[] = [
 	{ title: 'Vetted suppliers', body: 'Every supplier is reviewed for product quality and shipping times before joining.' },
 	{ title: 'Added in a few clicks', body: 'Pick products and they arrive in your store with photos, descriptions and prices you can adjust.' },
-	{ title: 'The supplier ships', body: "Orders go to the supplier, who ships to your customer under your store's name." },
+	{ title: 'The supplier ships', body: 'Orders go to the supplier, who ships to your customer in plain packaging, with no supplier branding.' },
 	{ title: 'You keep the margin', body: "You set your price, and the difference over the supplier's cost is yours." },
 ];
 
