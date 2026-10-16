@@ -1,5 +1,7 @@
 /** API types for Stripe Connect onboarding. */
 
+import type { SellerSetupStep } from '../../../../shared/types/seller-setup';
+
 export interface StripeConnectStatusData {
     /** This deployment has Stripe keys. */
     configured: boolean;
@@ -9,6 +11,11 @@ export interface StripeConnectStatusData {
     payoutsEnabled: boolean;
     /** Stripe can transfer sale proceeds to this seller; required to sell. */
     transfersActive: boolean;
+    /** Stripe lets the seller be the merchant of record; store checkout requires it. */
+    cardPaymentsActive: boolean;
+    sellerTermsAccepted: boolean;
+    /** The next step before the seller's stores take payments; null when they're ready. */
+    setupStep: SellerSetupStep | null;
 }
 
 export interface StripeLinkData {

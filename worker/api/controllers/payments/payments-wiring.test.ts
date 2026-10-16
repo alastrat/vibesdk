@@ -18,6 +18,14 @@ function source(path: string): string {
 }
 
 describe('payments routes', () => {
+	it('takes the selling-terms agreement before Stripe, and reports the next setup step', () => {
+		const routes = source('/worker/api/routes/paymentsRoutes.ts');
+		expect(routes).toContain("app.post('/api/stripe/connect/terms', setAuthLevel(AuthConfig.authenticated)");
+		const controller = source('/worker/api/controllers/payments/connectController.ts');
+		expect(controller).toContain('Accept the selling terms first');
+		expect(controller).toContain('setupStep: sellerSetupStep(readiness)');
+	});
+
 	it('keeps seller onboarding behind sign-in and the webhook public', () => {
 		const routes = source('/worker/api/routes/paymentsRoutes.ts').split('\n');
 		for (const path of ["'/api/stripe/connect/onboarding'", "'/api/stripe/connect/status'", "'/api/stripe/connect/dashboard'"]) {
@@ -44,12 +52,14 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 		controller.slice(controller.indexOf(`static async ${name}(`), next ? controller.indexOf(`static async ${next}(`) : undefined);
 
 	it('reads as not connected in the status, not as the stale stored flags', () => {
-		const status = method('getStatus', 'dashboardLink');
+		// getStatus and acceptSellerTerms both answer through loadStatus.
+		expect(method('getStatus', 'acceptSellerTerms')).toContain('StripeConnectController.loadStatus(env, context.user!.id)');
+		const status = method('loadStatus', 'getStatus');
 		expect(status).toContain('accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId))');
 		const missing = status.indexOf('if (!account)');
 		expect(missing).toBeGreaterThan(status.indexOf('accounts.forgetIfMissing('));
-		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeGreaterThan(missing);
-		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
+		expect(status.indexOf('statusOf(null, termsAccepted)', missing)).toBeGreaterThan(missing);
+		expect(status.indexOf('statusOf(null, termsAccepted)', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
 	});
 
 	it('is replaced by one fresh Express account when onboarding', () => {

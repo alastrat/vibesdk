@@ -4,19 +4,30 @@ import { BaseController } from '../baseController';
 import type { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { createLogger } from '../../../logger';
-import { StripeConnectService } from '../../../database';
-import { StripeApiError, accountFlags } from '../../../services/payments/stripe-client';
+import { SellerTermsService, StripeConnectService } from '../../../database';
+import { StripeApiError, accountFlags, sellerReadiness, type SellerFlags } from '../../../services/payments/stripe-client';
+import { sellerSetupStep } from '../../../../shared/types/seller-setup';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
 
 const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';
 
-const NOT_CONNECTED: Omit<StripeConnectStatusData, 'configured'> = {
-    connected: false,
-    detailsSubmitted: false,
-    payoutsEnabled: false,
-    transfersActive: false,
-};
+const ACCEPT_TERMS_FIRST_MESSAGE = 'Accept the selling terms first';
+
+/** The status for a seller with these flags (null: no Connect account) and selling-terms agreement. */
+function statusOf(flags: SellerFlags | null, termsAccepted: boolean): StripeConnectStatusData {
+    const readiness = sellerReadiness(flags, termsAccepted);
+    return {
+        configured: true,
+        connected: readiness.connected,
+        detailsSubmitted: readiness.detailsSubmitted,
+        payoutsEnabled: readiness.payoutsEnabled,
+        transfersActive: readiness.transfersActive,
+        cardPaymentsActive: readiness.cardPaymentsActive,
+        sellerTermsAccepted: termsAccepted,
+        setupStep: sellerSetupStep(readiness),
+    };
+}
 
 export class StripeConnectController extends BaseController {
     static logger = createLogger('StripeConnectController');
@@ -32,6 +43,9 @@ export class StripeConnectController extends BaseController {
             const stripe = stripeFromEnv(env);
             if (!stripe) return StripeConnectController.createErrorResponse<StripeLinkData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
             const user = context.user!;
+            if (!(await new SellerTermsService(env).hasAccepted(user.id))) {
+                return StripeConnectController.createErrorResponse<StripeLinkData>(ACCEPT_TERMS_FIRST_MESSAGE, 400);
+            }
             const accounts = new StripeConnectService(env);
             const origin = new URL(request.url).origin;
             const linkFor = (accountId: string) =>
@@ -69,9 +83,34 @@ export class StripeConnectController extends BaseController {
     }
 
     /**
-     * The seller's payout readiness, refreshed from Stripe; falls back to the stored flags if Stripe fails,
+     * The seller's payments readiness, refreshed from Stripe; falls back to the stored flags if Stripe fails,
      * and reads as not connected when Stripe no longer has the account.
      */
+    private static async loadStatus(env: Env, userId: string): Promise<StripeConnectStatusData> {
+        const termsAccepted = await new SellerTermsService(env).hasAccepted(userId);
+        const stripe = stripeFromEnv(env);
+        if (!stripe) return { ...statusOf(null, termsAccepted), configured: false };
+        const accounts = new StripeConnectService(env);
+        const stored = await accounts.getByUser(userId);
+        if (!stored) return statusOf(null, termsAccepted);
+        let flags: SellerFlags = {
+            detailsSubmitted: stored.detailsSubmitted,
+            chargesEnabled: stored.chargesEnabled,
+            payoutsEnabled: stored.payoutsEnabled,
+            transfersActive: stored.transfersActive,
+            cardPaymentsActive: stored.cardPaymentsActive,
+        };
+        try {
+            const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
+            if (!account) return statusOf(null, termsAccepted);
+            flags = accountFlags(account);
+            await accounts.updateFlags(stored.stripeAccountId, flags);
+        } catch (error) {
+            this.logger.warn('Could not refresh the Stripe account; using stored flags', error);
+        }
+        return statusOf(flags, termsAccepted);
+    }
+
     static async getStatus(
         _request: Request,
         env: Env,
@@ -79,42 +118,31 @@ export class StripeConnectController extends BaseController {
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<StripeConnectStatusData>>> {
         try {
-            const stripe = stripeFromEnv(env);
-            if (!stripe) {
-                return StripeConnectController.createSuccessResponse<StripeConnectStatusData>({ configured: false, ...NOT_CONNECTED });
-            }
-            const accounts = new StripeConnectService(env);
-            const stored = await accounts.getByUser(context.user!.id);
-            if (!stored) {
-                return StripeConnectController.createSuccessResponse<StripeConnectStatusData>({ configured: true, ...NOT_CONNECTED });
-            }
-            let flags = {
-                detailsSubmitted: stored.detailsSubmitted,
-                chargesEnabled: stored.chargesEnabled,
-                payoutsEnabled: stored.payoutsEnabled,
-                transfersActive: stored.transfersActive,
-                cardPaymentsActive: stored.cardPaymentsActive,
-            };
-            try {
-                const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
-                if (!account) {
-                    return StripeConnectController.createSuccessResponse<StripeConnectStatusData>({ configured: true, ...NOT_CONNECTED });
-                }
-                flags = accountFlags(account);
-                await accounts.updateFlags(stored.stripeAccountId, flags);
-            } catch (error) {
-                this.logger.warn('Could not refresh the Stripe account; using stored flags', error);
-            }
-            return StripeConnectController.createSuccessResponse<StripeConnectStatusData>({
-                configured: true,
-                connected: true,
-                detailsSubmitted: flags.detailsSubmitted,
-                payoutsEnabled: flags.payoutsEnabled,
-                transfersActive: flags.transfersActive,
-            });
+            return StripeConnectController.createSuccessResponse(await StripeConnectController.loadStatus(env, context.user!.id));
         } catch (error) {
             this.logger.error('Error loading Stripe status', error);
             return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to load your Stripe status', 500);
+        }
+    }
+
+    /** Record the seller's agreement to the current selling terms, then return their status. */
+    static async acceptSellerTerms(
+        request: Request,
+        env: Env,
+        _ctx: ExecutionContext,
+        context: RouteContext,
+    ): Promise<ControllerResponse<ApiResponse<StripeConnectStatusData>>> {
+        try {
+            const body = await StripeConnectController.parseJsonBody<{ version?: unknown }>(request);
+            if (!body.success) return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Send the terms version you agreed to', 400);
+            const accepted = await new SellerTermsService(env).accept(context.user!.id, body.data?.version, new Date());
+            if (!accepted) {
+                return StripeConnectController.createErrorResponse<StripeConnectStatusData>('The selling terms were updated; reload the page to agree to the latest version', 400);
+            }
+            return StripeConnectController.createSuccessResponse(await StripeConnectController.loadStatus(env, context.user!.id));
+        } catch (error) {
+            this.logger.error('Error recording the selling-terms agreement', error);
+            return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to record your agreement', 500);
         }
     }
 

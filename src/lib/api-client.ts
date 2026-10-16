@@ -640,6 +640,11 @@ class ApiClient {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
 	}
 
+	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
+	async acceptSellerTerms(version: string): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/terms', { method: 'POST', body: { version } });
+	}
+
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
 		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
 	}
