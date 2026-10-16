@@ -148,6 +148,13 @@
       "when": 1792184243834,
       "tag": "0020_seller_setup",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792187031249,
+      "tag": "0021_seller_money_rules",
+      "breakpoints": true
     }
   ]
 }

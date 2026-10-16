@@ -16,7 +16,16 @@ import {
     CATALOG_SUPPLIERS,
     CATALOG_VARIANT_STATUSES,
 } from '../../shared/types/catalog';
-import { STORE_CHECKOUT_STATUSES, STORE_FULFILLMENT_STATUSES, STORE_LINE_KINDS, STORE_MODES, STORE_PAYMENT_STATUSES } from '../../shared/types/store-payments';
+import {
+    PAYOUT_INTERVALS,
+    SELLER_CHARGE_KINDS,
+    STORE_CHECKOUT_STATUSES,
+    STORE_FULFILLMENT_STATUSES,
+    STORE_LINE_KINDS,
+    STORE_MODES,
+    STORE_PAYMENT_STATUSES,
+    STORE_REFUND_INITIATORS,
+} from '../../shared/types/store-payments';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -365,6 +374,10 @@ export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
     transfersActive: integer('transfers_active', { mode: 'boolean' }).notNull().default(false),
     /** The seller can be the merchant of record (on_behalf_of); store checkout requires it. */
     cardPaymentsActive: integer('card_payments_active', { mode: 'boolean' }).notNull().default(false),
+    /** How often the seller is paid; they choose, and pay Stripe's per-payout cost. */
+    payoutInterval: text('payout_interval', { enum: PAYOUT_INTERVALS }).notNull().default('weekly'),
+    /** A weekday for weekly payouts, or a day of the month (as text) for monthly ones. */
+    payoutAnchor: text('payout_anchor').notNull().default('monday'),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 });
@@ -505,6 +518,69 @@ export const storeOrderItems = sqliteTable('store_order_items', {
 }, (table) => ({
     pk: primaryKey({ columns: [table.orderId, table.lineNo] }),
 }));
+
+/** Every refund of a store order line, by whoever started it; Stripe's refund id is the key. */
+export const storeRefunds = sqliteTable('store_refunds', {
+    id: text('id').primaryKey(),
+    orderId: text('order_id').notNull().references(() => storeOrders.id),
+    lineNo: integer('line_no').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    requestId: text('request_id').notNull(),
+    initiatedBy: text('initiated_by', { enum: STORE_REFUND_INITIATORS }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    requestLineUnique: uniqueIndex('store_refunds_request_line_unique_idx').on(table.requestId, table.lineNo),
+    orderIdx: index('store_refunds_order_idx').on(table.orderId),
+}));
+
+/** A shopper's dispute of a store order, and what Estori took back from the seller for it. */
+export const storeDisputes = sqliteTable('store_disputes', {
+    id: text('id').primaryKey(),
+    orderId: text('order_id').notNull().references(() => storeOrders.id),
+    amountCents: integer('amount_cents').notNull(),
+    reason: text('reason').notNull(),
+    status: text('status').notNull(),
+    reversalId: text('reversal_id'),
+    reversedCents: integer('reversed_cents').notNull().default(0),
+    feeCents: integer('fee_cents').notNull().default(0),
+    returnedCents: integer('returned_cents').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/** What a seller owes Estori outside one sale; taken from their next sales. */
+export const sellerCharges = sqliteTable('seller_charges', {
+    id: text('id').primaryKey(),
+    sellerUserId: text('seller_user_id').notNull().references(() => users.id),
+    kind: text('kind', { enum: SELLER_CHARGE_KINDS }).notNull(),
+    sourceId: text('source_id').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    collectedCents: integer('collected_cents').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    kindSourceUnique: uniqueIndex('seller_charges_kind_source_unique_idx').on(table.kind, table.sourceId),
+    openIdx: index('seller_charges_seller_idx').on(table.sellerUserId, table.createdAt),
+}));
+
+export const sellerChargeCollections = sqliteTable('seller_charge_collections', {
+    chargeId: text('charge_id').notNull().references(() => sellerCharges.id),
+    orderId: text('order_id').notNull().references(() => storeOrders.id),
+    reversalId: text('reversal_id').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    chargeOrderUnique: uniqueIndex('seller_charge_collections_unique_idx').on(table.chargeId, table.orderId),
+}));
+
+/** The card fee Stripe charged above what the sale collected, taken back from the seller once per order. */
+export const storeFeeAdjustments = sqliteTable('store_fee_adjustments', {
+    orderId: text('order_id').primaryKey().references(() => storeOrders.id),
+    collectedCents: integer('collected_cents').notNull(),
+    actualFeeCents: integer('actual_fee_cents').notNull(),
+    reversalId: text('reversal_id'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
 
 /** Catalog products - the curated supplier products Estori sells, refreshed from the supplier. */
 export const catalogProducts = sqliteTable('catalog_products', {

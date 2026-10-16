@@ -7,7 +7,8 @@ export type CatalogSupplier = (typeof CATALOG_SUPPLIERS)[number];
 export const CATALOG_ORDER_STATUSES = ['awaiting-placement', 'placement-done', 'needs-attention'] as const;
 export type CatalogOrderStatus = (typeof CATALOG_ORDER_STATUSES)[number];
 
-export const CATALOG_ITEM_STATUSES = ['pending', 'placed', 'rejected', 'shipped', 'delivered', 'refunded'] as const;
+/** `withheld`: never placed, because a dispute already returned the payment; neither placed nor refunded. */
+export const CATALOG_ITEM_STATUSES = ['pending', 'placed', 'rejected', 'shipped', 'delivered', 'refunded', 'withheld'] as const;
 export type CatalogItemStatus = (typeof CATALOG_ITEM_STATUSES)[number];
 
 /** Estori's margin, a percentage of supplier cost plus shipping. Provisional: the owner confirms it before launch. */

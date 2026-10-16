@@ -26,6 +26,12 @@ export const STORE_FULFILLMENT_STATUSES = ['unfulfilled', 'fulfilled'] as const;
 export type StoreFulfillmentStatus = (typeof STORE_FULFILLMENT_STATUSES)[number];
 export const STORE_LINE_KINDS = ['own', 'catalog'] as const;
 export type StoreLineKind = (typeof STORE_LINE_KINDS)[number];
+export const STORE_REFUND_INITIATORS = ['seller', 'estori'] as const;
+export type StoreRefundInitiator = (typeof STORE_REFUND_INITIATORS)[number];
+export const SELLER_CHARGE_KINDS = ['dispute-fee', 'dispute-shortfall', 'payout-fee', 'active-account-fee'] as const;
+export type SellerChargeKind = (typeof SELLER_CHARGE_KINDS)[number];
+export const PAYOUT_INTERVALS = ['daily', 'weekly', 'monthly'] as const;
+export type PayoutInterval = (typeof PAYOUT_INTERVALS)[number];
 
 export interface StoreManifestVariant {
 	id: string;
