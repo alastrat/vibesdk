@@ -128,6 +128,8 @@ export interface StoreCheckoutSessionInput {
 	successUrl: string;
 	cancelUrl: string;
 	nowMs: number;
+	/** The seller is the merchant of record (on_behalf_of); Stripe allows it only once their card payments are active. */
+	sellerIsMerchant: boolean;
 }
 
 export interface SellerFlags {
@@ -279,7 +281,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					payment_method_types: ['card'],
 					payment_intent_data: {
 						application_fee_amount: input.applicationFeeCents,
-						on_behalf_of: input.sellerStripeAccountId,
+						on_behalf_of: input.sellerIsMerchant ? input.sellerStripeAccountId : undefined,
 						transfer_data: { destination: input.sellerStripeAccountId },
 						metadata: input.metadata,
 					},

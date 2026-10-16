@@ -32,7 +32,7 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 	const failed: string[] = [];
 	const deps: StartCheckoutDeps = {
 		loadManifest: async () => ({ commitHash: 'c0ffee', text: JSON.stringify(MANIFEST) }),
-		sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: true }),
+		sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: true, cardPaymentsActive: true }),
 		lockCatalogPrices: async (ids, country) => {
 			locked.push({ ids, country });
 			const lock: CatalogLock = { ok: true, catalogVariantId: 'cv_lamp', supplier: 'cjdropshipping', supplierVariantId: 'cj_vid_lamp', lockedCatalogPriceCents: 1200 };
@@ -96,7 +96,7 @@ describe('startStoreCheckout', () => {
 			[{ stripeMode: 'live' }, {}, 'payments_unavailable'],
 			[{ stripeMode: null }, {}, 'payments_unavailable'],
 			[{}, { sellerAccount: async () => null }, 'payments_unavailable'],
-			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: false }) }, 'payments_unavailable'],
+			[{}, { sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: false, cardPaymentsActive: false }) }, 'payments_unavailable'],
 			[{}, { loadManifest: async () => null }, 'payments_unavailable'],
 			[{}, { loadManifest: async () => ({ commitHash: 'c0ffee', text: '{' }) }, 'payments_unavailable'],
 		];
@@ -121,6 +121,16 @@ describe('startStoreCheckout', () => {
 		expect(response).toEqual({ ok: false, reason: 'invalid_request', message: "Your cart couldn't be read. Refresh the page and try again." });
 		expect(manifestReads).toBe(0);
 		expect(sessions).toHaveLength(0);
+	});
+
+	it("makes the seller the merchant only when their account takes card payments", async () => {
+		const merchant = fakeDeps();
+		await startStoreCheckout(merchant.deps, INPUT);
+		expect(merchant.sessions[0].sellerIsMerchant).toBe(true);
+
+		const transfersOnly = fakeDeps({ sellerAccount: async () => ({ stripeAccountId: 'acct_1', paymentsEnabled: true, cardPaymentsActive: false }) });
+		expect(await startStoreCheckout(transfersOnly.deps, INPUT)).toMatchObject({ ok: true });
+		expect(transfersOnly.sessions[0].sellerIsMerchant).toBe(false);
 	});
 
 	it('marks the checkout failed when Stripe refuses the session', async () => {

@@ -100,20 +100,32 @@ async function loadManifest(env: Env, target: StorePlatformTarget): Promise<{ co
 	return deployed?.manifest ? { commitHash: deployed.commitHash, text: deployed.manifest } : null;
 }
 
-async function sellerAccount(env: Env, userId: string, stripe: StripeClient | null): Promise<{ stripeAccountId: string; paymentsEnabled: boolean } | null> {
+/**
+ * The seller's account for a checkout: payments need charges and transfers; the seller is the merchant of record only
+ * once their card payments capability is active. Stored flags this fresh skip the Stripe call; a checkout always reads
+ * the capability from Stripe, which stores don't keep.
+ */
+async function sellerAccount(
+	env: Env,
+	userId: string,
+	stripe: StripeClient | null,
+): Promise<{ stripeAccountId: string; paymentsEnabled: boolean; cardPaymentsActive: boolean } | null> {
 	const accounts = new StripeConnectService(env);
 	const stored = await accounts.getByUser(userId);
 	if (!stored) return null;
-	let flags = { chargesEnabled: stored.chargesEnabled, transfersActive: stored.transfersActive };
-	// A row with no update time reads as stale.
-	if (stripe && Date.now() - (stored.updatedAt?.getTime() ?? 0) > SELLER_FLAGS_MAX_AGE_MS) {
-		const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
-		if (!account) return null;
-		const fresh = accountFlags(account);
-		await accounts.updateFlags(stored.stripeAccountId, fresh);
-		flags = fresh;
+	if (!stripe) {
+		return { stripeAccountId: stored.stripeAccountId, paymentsEnabled: stored.chargesEnabled && stored.transfersActive, cardPaymentsActive: false };
 	}
-	return { stripeAccountId: stored.stripeAccountId, paymentsEnabled: flags.chargesEnabled && flags.transfersActive };
+	const account = await accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId));
+	if (!account) return null;
+	const fresh = accountFlags(account);
+	// A row with no update time, or one older than the freshness window, is rewritten with what Stripe says now.
+	if (Date.now() - (stored.updatedAt?.getTime() ?? 0) > SELLER_FLAGS_MAX_AGE_MS) await accounts.updateFlags(stored.stripeAccountId, fresh);
+	return {
+		stripeAccountId: stored.stripeAccountId,
+		paymentsEnabled: fresh.chargesEnabled && fresh.transfersActive,
+		cardPaymentsActive: account.capabilities?.card_payments === 'active',
+	};
 }
 
 async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Response> {
