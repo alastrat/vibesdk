@@ -14,6 +14,8 @@ export { AppService } from './services/AppService';
 export { TemplateService } from './services/TemplateService';
 export { StripeConnectService } from './services/StripeConnectService';
 export { CatalogOrderService } from './services/CatalogOrderService';
+export { StoreCheckoutService } from './services/StoreCheckoutService';
+export { StoreOrderService } from './services/StoreOrderService';
 export { SitePageService } from './services/SitePageService';
 export { EarlyAccessService } from './services/EarlyAccessService';
 export { ContactService } from './services/ContactService';
