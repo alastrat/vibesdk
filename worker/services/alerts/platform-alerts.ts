@@ -25,6 +25,11 @@ export const PLATFORM_ALERT_KINDS = [
 	'not-delivered',
 	'dispute-opened',
 	'dispute-closed',
+	'risk-hold',
+	'seller-limit-reached',
+	'seller-level-changed',
+	'seller-level-sync-failed',
+	'seller-charge-unpaid',
 ] as const;
 export type PlatformAlertKind = (typeof PLATFORM_ALERT_KINDS)[number];
 
@@ -42,6 +47,11 @@ const ALERT_LABELS: Readonly<Record<PlatformAlertKind, string>> = {
 	'not-delivered': "An order hasn't been delivered",
 	'dispute-opened': 'A shopper disputed a payment',
 	'dispute-closed': 'A dispute was decided',
+	'risk-hold': 'A payment looks risky',
+	'seller-limit-reached': 'A store reached its weekly limit',
+	'seller-level-changed': "A seller's level changed",
+	'seller-level-sync-failed': "A seller's payout delay couldn't be set",
+	'seller-charge-unpaid': 'A seller owes Estori',
 };
 
 export interface PlatformAlert {

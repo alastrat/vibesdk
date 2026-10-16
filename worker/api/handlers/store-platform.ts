@@ -18,6 +18,10 @@ import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader,
 import { STORE_SCRIPT } from '../../services/store-payments/store-script';
 import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
+import { getUserConfigurableSettings } from '../../config';
+import { limitsFor, type SellerLevelLimits } from '../../../shared/types/seller-levels';
+import { platformAlertsFromEnv } from '../../services/alerts/platform-alerts';
+import { sellerNoticesFromEnv } from '../../services/alerts/seller-notices';
 
 const logger = createLogger('StorePlatform');
 
@@ -25,6 +29,7 @@ const PREVIEW_PATH = /^(\/space\/[^/]+\/preview\/[^/]+)(\/.*)?$/;
 const MAX_BODY_BYTES = 16 * 1024;
 /** Stored seller flags this old are refreshed from Stripe before a checkout. */
 const SELLER_FLAGS_MAX_AGE_MS = 10 * 60 * 1000;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const REFUSAL_STATUS: Readonly<Record<StoreCheckoutRefusal, number>> = {
 	payments_unavailable: 409,
 	demo_only: 403,
@@ -34,6 +39,8 @@ const REFUSAL_STATUS: Readonly<Record<StoreCheckoutRefusal, number>> = {
 	ships_to_unsupported: 409,
 	below_minimum_price: 409,
 	cart_limits: 400,
+	order_over_limit: 409,
+	store_paused: 409,
 	stripe_failed: 502,
 };
 
@@ -128,6 +135,13 @@ async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Re
 	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null));
 }
 
+/** The seller's limits: an admin's pin wins over the stored level, which Estori keeps current. */
+async function sellerLimitsOf(env: Env, sellerUserId: string): Promise<SellerLevelLimits> {
+	const settings = (await getUserConfigurableSettings(env, sellerUserId)).sellerLimits;
+	const level = settings.pinnedLevel ?? (await new StripeConnectService(env).getByUser(sellerUserId))?.sellerLevel ?? 'new';
+	return limitsFor(level, settings);
+}
+
 async function serveCheckout(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const url = new URL(request.url);
 	const sameOrigin = request.headers.get('Origin') === url.origin;
@@ -156,6 +170,14 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			},
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
+			sellerLimits: () => sellerLimitsOf(env, target.previewUserId),
+			// Previews take test-mode payments only; live stores will count their own mode.
+			weeklyUsage: () => checkouts.weeklyUsage(target.previewUserId, 'test', new Date(Date.now() - WEEK_MS)),
+			limitReached: async () => {
+				const { weeklySalesCents } = await sellerLimitsOf(env, target.previewUserId);
+				await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: target.previewUserId, message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
+				await sellerNoticesFromEnv(env)({ sellerUserId: target.previewUserId, kind: 'limit-reached', weeklySalesCents });
+			},
 			newCheckoutId: () => `chk_${crypto.randomUUID().replace(/-/g, '')}`,
 			nowMs: () => Date.now(),
 		},

@@ -18,6 +18,7 @@ import { priceCart, requestedCatalogVariantIds, type CatalogLock } from './prici
 import { parseCheckoutRequest, safeReturnPath } from './request';
 import type { StoreCheckoutRecord } from './store';
 import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/seller-setup';
+import { weightedCartCents } from '../../../shared/types/seller-levels';
 
 /** As long as template sales' sessions. */
 const CHECKOUT_TTL_MS = 35 * 60 * 1000;
@@ -32,6 +33,12 @@ export interface StartCheckoutDeps {
 	createSession(input: StoreCheckoutSessionInput): Promise<{ id: string; url: string | null }>;
 	attachSession(checkoutId: string, sessionId: string): Promise<void>;
 	markFailed(checkoutId: string): Promise<void>;
+	/** The seller's largest order and weekly sales cap, from their level and any admin override. */
+	sellerLimits(): Promise<{ largestOrderCents: number; weeklySalesCents: number }>;
+	/** The weight of the seller's checkouts in the last 7 days that are paid or may still be. */
+	weeklyUsage(): Promise<number>;
+	/** Tells Estori and the seller that the store reached its weekly cap. */
+	limitReached(): Promise<void>;
 	newCheckoutId(): string;
 	nowMs(): number;
 }
@@ -79,6 +86,15 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	});
 	if (!priced.ok) return refusal(priced.reason);
 
+	const limits = await deps.sellerLimits();
+	if (priced.cart.totalCents > limits.largestOrderCents) return refusal('order_over_limit');
+	// Saved as creating before Stripe is called, so the next checkout's usage counts this one.
+	const weightedCents = weightedCartCents(priced.cart);
+	if ((await deps.weeklyUsage()) + weightedCents > limits.weeklySalesCents) {
+		await deps.limitReached();
+		return refusal('store_paused');
+	}
+
 	const { cart } = priced;
 	const checkoutId = deps.newCheckoutId();
 	const nowMs = deps.nowMs();
@@ -101,7 +117,7 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 		successPath: safeReturnPath(request.successPath, '/'),
 		cancelPath,
 		note: request.note ?? null,
-		weightedCents: 0,
+		weightedCents,
 		createdAt: new Date(nowMs),
 		expiresAt: new Date(nowMs + CHECKOUT_TTL_MS),
 	});

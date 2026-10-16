@@ -33,6 +33,7 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 	const locked: Array<{ ids: readonly string[]; country: string }> = [];
 	const attached: string[] = [];
 	const failed: string[] = [];
+	const limits: string[] = [];
 	const deps: StartCheckoutDeps = {
 		loadManifest: async () => ({ commitHash: 'c0ffee', text: JSON.stringify(MANIFEST) }),
 		sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: READY }),
@@ -56,9 +57,14 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 		},
 		newCheckoutId: () => 'chk_1',
 		nowMs: () => 1_800_000_000_000,
+		sellerLimits: async () => ({ largestOrderCents: 15_000, weeklySalesCents: 50_000 }),
+		weeklyUsage: async () => 0,
+		limitReached: async () => {
+			limits.push('reached');
+		},
 		...overrides,
 	};
-	return { deps, saved, sessions, locked, attached, failed };
+	return { deps, saved, sessions, locked, attached, failed, limits };
 }
 
 describe('startStoreCheckout', () => {
@@ -154,5 +160,28 @@ describe('startStoreCheckout', () => {
 		const { deps, sessions } = fakeDeps();
 		await startStoreCheckout(deps, { ...INPUT, body: { ...(INPUT.body as object), cancelPath: '//evil.example' } });
 		expect(sessions[0].cancelUrl).toBe('https://preview.test/space/app_1/preview/main/');
+	});
+
+	it("refuses an order larger than the seller's largest, without saving it", async () => {
+		const { deps, saved, sessions } = fakeDeps({ sellerLimits: async () => ({ largestOrderCents: 4599, weeklySalesCents: 50_000 }) });
+		expect(await startStoreCheckout(deps, INPUT)).toEqual({ ok: false, reason: 'order_over_limit', message: "This store can't take an order this large yet." });
+		expect(saved).toHaveLength(0);
+		expect(sessions).toHaveLength(0);
+	});
+
+	it('pauses the store when this order would pass the weekly cap, and says so once to the seller', async () => {
+		// The cart is two own mugs at $20 plus $6 shipping: $46.00, weighted $86.00.
+		const { deps, limits } = fakeDeps({ weeklyUsage: async () => 50_000 - 8599 });
+		expect(await startStoreCheckout(deps, INPUT)).toEqual({ ok: false, reason: 'store_paused', message: "This store isn't taking new orders right now. Try again later." });
+		expect(limits).toEqual(['reached']);
+
+		const fits = fakeDeps({ weeklyUsage: async () => 50_000 - 8600 });
+		expect(await startStoreCheckout(fits.deps, INPUT)).toMatchObject({ ok: true });
+	});
+
+	it("saves the checkout's weight, so the next checkout counts it", async () => {
+		const { deps, saved } = fakeDeps();
+		await startStoreCheckout(deps, INPUT);
+		expect(saved[0].weightedCents).toBe(8600);
 	});
 });

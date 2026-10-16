@@ -133,3 +133,26 @@ export function platformAlertEmail(to: string, alert: PlatformAlert, label: stri
 		footer: 'Each alert repeats at most once a day for the same order or product.',
 	});
 }
+
+/** To a seller whose store reached its weekly sales cap. */
+export function sellerLimitReachedEmail(to: string, weeklySalesCents: number): OutgoingEmail {
+	return renderEmail({
+		to,
+		subject: 'Your store reached its weekly sales limit',
+		heading: 'Your store paused new orders',
+		body: `Your store reached its limit of $${(weeklySalesCents / 100).toFixed(2)} in sales over 7 days, so it isn't taking new orders until the oldest sales leave that window. Limits grow as your store builds a record of delivered orders.`,
+		footer: 'You can see your limits under Profile, Paid listings, Get paid with Stripe.',
+	});
+}
+
+/** To a seller whose order had items Estori refunded to the shopper. */
+export function sellerItemsRefundedEmail(to: string, itemCount: number, reason: 'supplier' | 'risk'): OutgoingEmail {
+	const why = reason === 'supplier' ? 'they could not be shipped' : 'the payment looked risky and could not be confirmed in time';
+	return renderEmail({
+		to,
+		subject: 'We refunded items from an order in your store',
+		heading: 'Items refunded',
+		body: `We refunded ${itemCount} item${itemCount === 1 ? '' : 's'} from an order in your store because ${why}. Your share of those items was taken back, and the shopper got their money for them.`,
+		footer: 'The order shows each item as refunded.',
+	});
+}

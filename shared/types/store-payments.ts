@@ -87,6 +87,8 @@ export type StoreCheckoutRefusal =
 	| 'ships_to_unsupported'
 	| 'below_minimum_price'
 	| 'cart_limits'
+	| 'order_over_limit'
+	| 'store_paused'
 	| 'stripe_failed';
 
 export type StoreCheckoutResponse = { ok: true; checkoutUrl: string } | { ok: false; reason: StoreCheckoutRefusal; message: string };
@@ -101,6 +103,8 @@ export const STORE_CHECKOUT_MESSAGES: Readonly<Record<StoreCheckoutRefusal, stri
 	ships_to_unsupported: "This store doesn't ship to that country.",
 	below_minimum_price: "An item in your cart can't be sold at its current price.",
 	cart_limits: "Your cart is more than one order can hold.",
+	order_over_limit: "This store can't take an order this large yet.",
+	store_paused: "This store isn't taking new orders right now. Try again later.",
 	stripe_failed: "Checkout couldn't start. Try again in a moment.",
 };
 
