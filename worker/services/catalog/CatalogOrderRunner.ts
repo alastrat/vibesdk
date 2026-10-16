@@ -16,6 +16,7 @@ import { initialRunnerState, runnerStep, type RunnerDeps, type RunnerState } fro
 
 const logger = createLogger('CatalogOrderRunner');
 const STATE_KEY = 'state';
+const ALARM_RETRY_MS = 5 * 60 * 1000;
 
 /** Live supplier orders need production and an explicit switch; everything else is a sandbox order. */
 export function catalogSupplierMode(env: Env): 'live' | 'sandbox' {
@@ -62,10 +63,13 @@ export class CatalogOrderRunner extends DurableObject<Env> {
 		await this.ctx.storage.setAlarm(Date.now());
 	}
 
-	/** Admin: one more placement or refund attempt now. */
-	async retry(): Promise<void> {
+	/** Admin: one more placement or refund attempt now; starts a runner whose hand-off from checkout was lost. */
+	async retry(orderId: string): Promise<void> {
 		const state = await this.state();
-		if (!state) return;
+		if (!state) {
+			await this.start(orderId);
+			return;
+		}
 		const now = Date.now();
 		const placement = state.placement === 'needs-attention' ? 'due' : state.placement;
 		await this.ctx.storage.put(STATE_KEY, { ...state, placement, nextPlacementAt: now, refundFailures: 0, nextRefundAt: now, nextSyncAt: state.nextSyncAt ?? now });
@@ -76,11 +80,17 @@ export class CatalogOrderRunner extends DurableObject<Env> {
 		return this.state();
 	}
 
+	/** A failed alarm keeps the stored state and tries again later: every step is safe to repeat. */
 	async alarm(): Promise<void> {
 		const state = await this.state();
 		if (!state) return;
-		const result = await runnerStep(state, runnerDeps(this.env), Date.now());
-		await this.ctx.storage.put(STATE_KEY, result.state);
-		if (result.nextAlarmAt !== null) await this.ctx.storage.setAlarm(result.nextAlarmAt);
+		try {
+			const result = await runnerStep(state, runnerDeps(this.env), Date.now());
+			await this.ctx.storage.put(STATE_KEY, result.state);
+			if (result.nextAlarmAt !== null) await this.ctx.storage.setAlarm(result.nextAlarmAt);
+		} catch (error) {
+			logger.error('Catalog order runner alarm failed; trying again later', { orderId: state.orderId, error });
+			await this.ctx.storage.setAlarm(Date.now() + ALARM_RETRY_MS);
+		}
 	}
 }

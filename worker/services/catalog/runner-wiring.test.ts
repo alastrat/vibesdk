@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { catalogSupplierMode } from './CatalogOrderRunner';
 
-const sources = import.meta.glob<string>(['/worker/index.ts', '/worker/services/store-payments/wiring.ts', '/wrangler.jsonc', '/wrangler.estori.jsonc'], {
+const sources = import.meta.glob<string>(['/worker/index.ts', '/worker/services/store-payments/wiring.ts', '/wrangler.jsonc', '/wrangler.estori.jsonc', '/worker/services/catalog/CatalogOrderRunner.ts', '/worker/services/catalog/scheduler.ts'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -31,5 +31,13 @@ describe('the catalog order runner wiring', () => {
 			expect(text).toContain('"crons": ["*/15 * * * *", "5 * * * *", "35 6 * * *"]');
 		}
 		expect(source('/worker/services/store-payments/wiring.ts')).toContain('scheduleCatalogPlacement(env, recorded.orderId)');
+	});
+
+	it('keeps a failed alarm\'s state and tries again, and sweeps orders whose runner never started', () => {
+		const runner = source('/worker/services/catalog/CatalogOrderRunner.ts');
+		const alarm = runner.slice(runner.indexOf('async alarm()'));
+		expect(alarm.indexOf('catch (error)')).toBeGreaterThan(-1);
+		expect(alarm.indexOf('setAlarm(Date.now() + ALARM_RETRY_MS)')).toBeGreaterThan(alarm.indexOf('catch (error)'));
+		expect(source('/worker/services/catalog/scheduler.ts')).toContain('cron === CATALOG_SWEEP_CRON');
 	});
 });

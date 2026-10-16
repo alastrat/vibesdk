@@ -75,7 +75,7 @@ export class CatalogController extends BaseController {
     static async retryOrder(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ retried: true }>>> {
         const orderId = context.pathParams.id;
         if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
-        await CatalogController.runner(env, orderId).retry();
+        await CatalogController.runner(env, orderId).retry(orderId);
         return CatalogController.createSuccessResponse({ retried: true });
     }
 

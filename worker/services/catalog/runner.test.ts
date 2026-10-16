@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RUNNER_SYNC_INTERVAL_MS, initialRunnerState, runnerStep, type RunnerDeps } from './runner';
+import { RUNNER_SYNC_INTERVAL_MS, initialRunnerState, runnerStep, sweepUnstartedOrders, type RunnerDeps } from './runner';
 import { memoryCatalogStore } from './test-support';
 import type { PlaceOrderResult, SupplierAdapter, SupplierUpdate } from './supplier';
 import type { StripeClient } from '../payments/stripe-client';
@@ -126,5 +126,46 @@ describe('runnerStep', () => {
 		expect(step.state.refundFailures).toBe(6);
 		expect(store.orders.get('co_1')?.status).toBe('needs-attention');
 		expect(alerts).toContain('refund-failed');
+	});
+
+	it('backs a failing step off instead of retrying it every second', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }]);
+		runnerDeps.supplierUpdates = async () => Promise.reject(new Error('Supplier unreachable'));
+
+		const placed = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		const failed = await runnerStep(placed.state, runnerDeps, NOW + RUNNER_SYNC_INTERVAL_MS);
+		expect(failed.nextAlarmAt).toBeGreaterThanOrEqual(NOW + RUNNER_SYNC_INTERVAL_MS + 60_000);
+	});
+
+	it('waits instead of looping when Stripe is not configured for a refund', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps } = deps(store, [{ ok: false, kind: 'rejected', reason: 'Gone', rejectedVariantIds: [] }]);
+		runnerDeps.stripe = null;
+
+		const step = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		expect(step.nextAlarmAt).toBeGreaterThanOrEqual(NOW + 60_000);
+	});
+
+	it("takes back a seller's share still owed after the shopper was refunded", async () => {
+		const store = await storeWithOrder();
+		const reversals: number[] = [];
+		const { runnerDeps } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }]);
+		runnerDeps.stripe = { ...runnerDeps.stripe!, createTransferReversal: async (input) => (reversals.push(input.amountCents), { id: 'trr_1', amount: input.amountCents }) };
+		await store.patchItems([{ itemId: 'ci_cap', status: 'refunded', sellerReversalDueCents: 2800 }]);
+
+		const step = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		expect(reversals).toEqual([2800]);
+		expect(store.orders.get('co_1')?.items.find((item) => item.id === 'ci_cap')?.sellerReversalDueCents).toBe(0);
+		expect(step.state.placement).toBe('done');
+	});
+});
+
+describe('sweepUnstartedOrders', () => {
+	it('starts every paid catalog order whose hand-off was lost', async () => {
+		const started: string[] = [];
+		const count = await sweepUnstartedOrders({ unstartedOrderIds: async () => ['co_1', 'co_2'], start: async (orderId) => void started.push(orderId) }, NOW);
+		expect(count).toBe(2);
+		expect(started).toEqual(['co_1', 'co_2']);
 	});
 });

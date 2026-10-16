@@ -1,11 +1,12 @@
 /** Scheduled catalog work. The refresh runs every 15 minutes in production; admins can run it now. */
 
 import { createLogger } from '../../logger';
-import { CatalogProductService } from '../../database';
+import { CatalogOrderService, CatalogProductService } from '../../database';
 import { cjClientFromEnv } from './cj/client';
 import { CURATED_PRODUCTS } from './curated';
 import { createImageCopier } from './images';
 import { refreshCatalogBatch } from './refresh';
+import { sweepUnstartedOrders } from './runner';
 
 const logger = createLogger('CatalogSchedule');
 
@@ -25,8 +26,18 @@ export async function runCatalogRefresh(env: Env): Promise<{ refreshed: number; 
 	return result;
 }
 
+/** Hourly: the lost hand-off sweep. */
+export const CATALOG_SWEEP_CRON = '5 * * * *';
+
 export async function runCatalogSchedule(cron: string, env: Env): Promise<void> {
 	if (cron === CATALOG_REFRESH_CRON) await runCatalogRefresh(env);
+	if (cron === CATALOG_SWEEP_CRON) {
+		const started = await sweepUnstartedOrders(
+			{ unstartedOrderIds: (before) => new CatalogOrderService(env).unstartedOrderIds(before), start: (orderId) => scheduleCatalogPlacement(env, orderId) },
+			Date.now(),
+		);
+		if (started > 0) logger.warn('Started catalog orders whose hand-off was lost', { started });
+	}
 }
 
 /** Starts the order's runner. A failure is logged, not thrown: the paid order is recorded either way. */

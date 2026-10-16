@@ -1,6 +1,6 @@
 /** D1 reads and writes for catalog orders and their items. */
 
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, lt } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { CatalogOrderRow, CatalogOrderStore, ItemPatch, NewCatalogOrder } from '../../services/catalog/store';
@@ -114,5 +114,16 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
             .all();
         for (const { sessionId, ...item } of rows) progress.set(sessionId, [...(progress.get(sessionId) ?? []), item]);
         return progress;
+    }
+
+    /** Paid orders still awaiting their first placement attempt, created before `before`: their hand-off was lost. */
+    async unstartedOrderIds(before: Date): Promise<string[]> {
+        const rows = await this.database
+            .select({ id: schema.catalogOrders.id })
+            .from(schema.catalogOrders)
+            .where(and(eq(schema.catalogOrders.status, 'awaiting-placement'), eq(schema.catalogOrders.placementAttempts, 0), lt(schema.catalogOrders.createdAt, before)))
+            .limit(100)
+            .all();
+        return rows.map((row) => row.id);
     }
 }
