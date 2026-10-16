@@ -13,6 +13,7 @@ import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
 import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount, isStripePayout } from '../../../services/payments/fulfill';
 import { chargesForPayout } from '../../../services/payments/seller-costs';
+import { getGlobalConfigurableSettings } from '../../../config';
 
 const logger = createLogger('StripeWebhook');
 
@@ -88,7 +89,8 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
         // Not one of Estori's sellers, or deleted since: nothing to charge.
         if (!seller) return;
         const charges = new SellerChargeService(env);
-        for (const charge of chargesForPayout({ stripeAccountId: event.account, payoutId: object.id, amountCents: object.amount, arrivalDate: new Date(object.arrival_date * 1000) })) {
+        const costs = (await getGlobalConfigurableSettings(env)).sellerLimits.costs;
+        for (const charge of chargesForPayout({ stripeAccountId: event.account, payoutId: object.id, amountCents: object.amount, arrivalDate: new Date(object.arrival_date * 1000) }, costs)) {
             await charges.add({ sellerUserId: seller.userId, ...charge, now: new Date() });
         }
         return;

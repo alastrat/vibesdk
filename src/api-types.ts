@@ -285,6 +285,8 @@ export {
 } from '../shared/types/legal.js';
 export type { SellerReadiness, SellerSetupStep } from '../shared/types/seller-setup.js';
 export { SELLER_SETUP_MESSAGES, SELLER_SETUP_PATH, SELLER_TERMS_VERSION, sellerSetupStep } from '../shared/types/seller-setup.js';
+export type { SellerLevel, SellerLimitsData } from '../shared/types/seller-levels.js';
+export { DEFAULT_SELLER_LIMITS } from '../shared/types/seller-levels.js';
 export {
 	CONFIRM_LINK_INVALID_MESSAGE,
 	FORGOT_PASSWORD_MESSAGE,

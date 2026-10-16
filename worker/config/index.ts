@@ -1,5 +1,6 @@
 import { ConfigurableSecuritySettings, getConfigurableSecurityDefaults } from "./security";
 import { createLogger } from "../logger";
+import { DEFAULT_SELLER_LIMITS, type SellerLimitsSettings } from "../../shared/types/seller-levels";
 
 const logger = createLogger('GlobalConfigurableSettings');
 
@@ -86,6 +87,7 @@ export interface GlobalMessagingSettings {
 export interface GlobalConfigurableSettings {
     security: ConfigurableSecuritySettings;
     globalMessaging: GlobalMessagingSettings;
+    sellerLimits: SellerLimitsSettings;
 }
 
 type StoredConfig = DeepPartial<GlobalConfigurableSettings>;
@@ -102,7 +104,8 @@ export async function getGlobalConfigurableSettings(env: Env): Promise<GlobalCon
         globalMessaging: {
             globalUserMessage: "",
             changeLogs: ""
-        }
+        },
+        sellerLimits: DEFAULT_SELLER_LIMITS,
     };
     
     try {

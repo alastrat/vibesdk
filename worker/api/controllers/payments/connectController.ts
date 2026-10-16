@@ -9,6 +9,7 @@ import { StripeApiError, accountFlags, sellerReadiness, type SellerFlags } from 
 import { sellerSetupStep } from '../../../../shared/types/seller-setup';
 import { PAYOUT_INTERVALS, type PayoutInterval } from '../../../../shared/types/store-payments';
 import { estimatedMonthlyPayoutCostCents } from '../../../services/payments/seller-costs';
+import { getUserConfigurableSettings } from '../../../config';
 import { parsePayoutRequest, scheduleOf } from './payout-request';
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
@@ -24,7 +25,8 @@ const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 /** How often the seller is paid, weekly on Monday until they choose, and what each choice costs at their last month's sales. */
 async function payoutStatusOf(env: Env, userId: string, stored: { payoutInterval: PayoutInterval; payoutAnchor: string } | null): Promise<PayoutStatus> {
     const volume = await new StoreOrderService(env).salesVolumeSince(userId, new Date(Date.now() - MONTH_MS));
-    const payoutCostEstimates = Object.fromEntries(PAYOUT_INTERVALS.map((interval) => [interval, estimatedMonthlyPayoutCostCents(volume, interval)])) as Record<PayoutInterval, number>;
+    const costs = (await getUserConfigurableSettings(env, userId)).sellerLimits.costs;
+    const payoutCostEstimates = Object.fromEntries(PAYOUT_INTERVALS.map((interval) => [interval, estimatedMonthlyPayoutCostCents(volume, interval, costs)])) as Record<PayoutInterval, number>;
     return { payoutInterval: stored?.payoutInterval ?? 'weekly', payoutAnchor: stored?.payoutAnchor ?? 'monday', payoutCostEstimates };
 }
 
