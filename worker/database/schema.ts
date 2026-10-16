@@ -8,6 +8,7 @@ import {
     TEMPLATE_VERSION_STATUSES,
     USER_ROLES,
 } from '../../shared/types/templates';
+import { CATALOG_ITEM_STATUSES, CATALOG_ORDER_STATUSES, CATALOG_SUPPLIERS } from '../../shared/types/catalog';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -354,6 +355,55 @@ export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * Catalog orders - the catalog part of a paid store checkout. Estori buys these items from suppliers with the
+ * application fee it took from the payment; one order per Checkout session.
+ */
+export const catalogOrders = sqliteTable('catalog_orders', {
+    id: text('id').primaryKey(),
+    sellerUserId: text('seller_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    storeAppId: text('store_app_id').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id').notNull(),
+    stripePaymentIntentId: text('stripe_payment_intent_id').notNull(),
+    status: text('status', { enum: CATALOG_ORDER_STATUSES }).notNull().default('awaiting-placement'),
+    totalCents: integer('total_cents').notNull(),
+    catalogTotalCents: integer('catalog_total_cents').notNull(),
+    applicationFeeCents: integer('application_fee_cents').notNull(),
+    currency: text('currency').notNull().default('usd'),
+    destinationCountry: text('destination_country').notNull(),
+    // The shopper's address as JSON: supplier orders are placed after the webhook answers.
+    shippingAddress: text('shipping_address').notNull(),
+    placementAttempts: integer('placement_attempts').notNull().default(0),
+    lastError: text('last_error'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    checkoutSessionIdx: uniqueIndex('catalog_orders_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),
+    sellerIdx: index('catalog_orders_seller_idx').on(table.sellerUserId),
+    statusIdx: index('catalog_orders_status_idx').on(table.status),
+}));
+
+/** Catalog order items - one per catalog line, with the price locked at checkout and the supplier's progress. */
+export const catalogOrderItems = sqliteTable('catalog_order_items', {
+    id: text('id').primaryKey(),
+    orderId: text('order_id').notNull().references(() => catalogOrders.id, { onDelete: 'cascade' }),
+    catalogVariantId: text('catalog_variant_id').notNull(),
+    supplier: text('supplier', { enum: CATALOG_SUPPLIERS }).notNull(),
+    supplierVariantId: text('supplier_variant_id').notNull(),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    catalogPriceCents: integer('catalog_price_cents').notNull(),
+    status: text('status', { enum: CATALOG_ITEM_STATUSES }).notNull().default('pending'),
+    supplierOrderId: text('supplier_order_id'),
+    trackingNumber: text('tracking_number'),
+    carrier: text('carrier'),
+    supplierRefunded: integer('supplier_refunded', { mode: 'boolean' }).notNull().default(false),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    orderIdx: index('catalog_order_items_order_idx').on(table.orderId),
+    supplierOrderIdx: index('catalog_order_items_supplier_order_idx').on(table.supplierOrderId),
+}));
 
 /**
  * Favorites table - Track user favorite apps
