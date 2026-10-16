@@ -17,6 +17,7 @@
 - Processing cover is Stripe's standard US rate: `CATALOG_PROCESSING_PERCENT = 2.9`, `CATALOG_PROCESSING_FIXED_CENTS = 30`.
 - Stripe requires the application fee to be below the payment.
 - Estori never holds sellers' money; there is no wallet. AI credits are untouched.
+- Cart field names follow the shopper checkout spec (`docs/superpowers/specs/2026-10-15-shopper-checkout-design.md`): catalog lines carry `lockedCatalogPriceCents`, and the cart carries `shipToCountry`. Checkout may ship first and create `shared/types/catalog.ts` with the processing constants and `applicationFeeCents` for own-product carts; if the file exists, Task 1 extends it instead of creating it, keeping what checkout added.
 - The supplier contract in `worker/services/catalog/supplier.ts` is fixed: a background agent is designing the CJdropshipping adapter against exactly these shapes.
 - `shared/types/catalog.ts` imports nothing: drizzle-kit loads the schema without path aliases.
 - No `any`. Follow the file's existing indentation (tabs in `shared/` and `worker/services/`, four spaces in `worker/database/`).
@@ -98,13 +99,13 @@ const MUG: CatalogCartLine = {
 	catalogVariantId: 'cv_mug',
 	supplier: 'cjdropshipping',
 	supplierVariantId: 'cj_mug_white',
-	catalogPriceCents: 1200,
+	lockedCatalogPriceCents: 1200,
 	unitPriceCents: 2500,
 	quantity: 2,
 };
 
 function cart(lines: CheckoutCart['lines'], shippingCents = 0): CheckoutCart {
-	return { lines, shippingCents, destinationCountry: 'US' };
+	return { lines, shippingCents, shipToCountry: 'US' };
 }
 
 describe('catalog prices', () => {
@@ -212,8 +213,8 @@ export interface CatalogCartLine extends CartLineBase {
 	catalogVariantId: string;
 	supplier: CatalogSupplier;
 	supplierVariantId: string;
-	/** Locked when checkout starts, for the cart's destination country. */
-	catalogPriceCents: number;
+	/** Locked when checkout starts, for the cart's ship-to country. */
+	lockedCatalogPriceCents: number;
 }
 
 export interface ByoCartLine extends CartLineBase {
@@ -228,7 +229,7 @@ export interface CheckoutCart {
 	/** What the shopper pays the store for shipping. */
 	shippingCents: number;
 	/** ISO 3166-1 alpha-2; the catalog prices are locked for it. */
-	destinationCountry: string;
+	shipToCountry: string;
 }
 
 export type CartProblem = 'empty' | 'invalid-amount' | 'below-minimum-price' | 'fee-exceeds-total';
@@ -257,7 +258,7 @@ export function cartTotalCents(cart: CheckoutCart): number {
 }
 
 export function catalogTotalCents(cart: CheckoutCart): number {
-	return cart.lines.reduce((sum, line) => (line.kind === 'catalog' ? sum + line.catalogPriceCents * line.quantity : sum), 0);
+	return cart.lines.reduce((sum, line) => (line.kind === 'catalog' ? sum + line.lockedCatalogPriceCents * line.quantity : sum), 0);
 }
 
 /** Estori's share of a store payment: catalog prices, the bring-your-own fee once, and processing on the whole payment. */
@@ -273,10 +274,10 @@ function isCount(value: number): boolean {
 /** Whether a cart can be paid: valid amounts, catalog prices at or above their minimum, and a fee below the total. */
 export function checkCart(cart: CheckoutCart): CartCheck {
 	if (cart.lines.length === 0) return { ok: false, problem: 'empty' };
-	const amounts = [cart.shippingCents, ...cart.lines.flatMap((line) => [line.unitPriceCents, ...(line.kind === 'catalog' ? [line.catalogPriceCents] : [])])];
+	const amounts = [cart.shippingCents, ...cart.lines.flatMap((line) => [line.unitPriceCents, ...(line.kind === 'catalog' ? [line.lockedCatalogPriceCents] : [])])];
 	const invalid = !amounts.every(isCount) || cart.lines.some((line) => !Number.isInteger(line.quantity) || line.quantity < 1);
 	if (invalid) return { ok: false, problem: 'invalid-amount' };
-	if (cart.lines.some((line) => line.kind === 'catalog' && line.unitPriceCents < minimumRetailPriceCents(line.catalogPriceCents))) {
+	if (cart.lines.some((line) => line.kind === 'catalog' && line.unitPriceCents < minimumRetailPriceCents(line.lockedCatalogPriceCents))) {
 		return { ok: false, problem: 'below-minimum-price' };
 	}
 	const totalCents = cartTotalCents(cart);
@@ -995,10 +996,10 @@ const PAID: PaidCatalogCheckout = {
 	storeAppId: 'app_1',
 	shippingAddress: ADDRESS,
 	cart: {
-		destinationCountry: 'US',
+		shipToCountry: 'US',
 		shippingCents: 500,
 		lines: [
-			{ kind: 'catalog', catalogVariantId: 'cv_mug', supplier: 'cjdropshipping', supplierVariantId: 'cj_mug', catalogPriceCents: 1200, unitPriceCents: 2500, quantity: 2 },
+			{ kind: 'catalog', catalogVariantId: 'cv_mug', supplier: 'cjdropshipping', supplierVariantId: 'cj_mug', lockedCatalogPriceCents: 1200, unitPriceCents: 2500, quantity: 2 },
 			{ kind: 'own', unitPriceCents: 1500, quantity: 1 },
 		],
 	},
@@ -1085,7 +1086,7 @@ export async function recordPaidCatalogOrder(deps: RecordDeps, paid: PaidCatalog
 		totalCents: cartTotalCents(paid.cart),
 		catalogTotalCents: catalogTotalCents(paid.cart),
 		applicationFeeCents: applicationFeeCents(paid.cart),
-		destinationCountry: paid.cart.destinationCountry,
+		destinationCountry: paid.cart.shipToCountry,
 		shippingAddress: paid.shippingAddress,
 		items: catalogLines.map((line) => ({
 			id: deps.newId(),
@@ -1094,7 +1095,7 @@ export async function recordPaidCatalogOrder(deps: RecordDeps, paid: PaidCatalog
 			supplierVariantId: line.supplierVariantId,
 			quantity: line.quantity,
 			unitPriceCents: line.unitPriceCents,
-			catalogPriceCents: line.catalogPriceCents,
+			catalogPriceCents: line.lockedCatalogPriceCents,
 		})),
 		createdAt: deps.now(),
 	});
@@ -1835,3 +1836,4 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **Calling `recordPaidCatalogOrder` from Stripe's webhook and putting `checkCart`'s fee on the Checkout session:** the shopper checkout spec (`2026-10-15-shopper-checkout-design.md`), which defines how a paid session carries its cart and address.
 - **The seller's saved card for extra costs (`catalog_billing`, a setup-mode Checkout and off-session charges):** after the first two exist, since nothing can incur an extra cost until orders are placed. Ruling: deferred, at no cost to the pieces above.
 - **Chargebacks:** Stripe's dispute events arrive in the webhook the checkout spec wires; recovery reuses Task 8's transfer reversal.
+- **Linking to store orders:** the checkout spec adds `store_orders`, and asks that `catalog_orders` reference `store_orders.id`. Both share the Checkout session id, which this plan already stores uniquely, so a later migration adds `store_order_id` once `store_orders` exists.
