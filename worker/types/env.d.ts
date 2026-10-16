@@ -30,5 +30,8 @@ declare namespace Cloudflare {
 		SANDBOX_SERVICE_URL: string;
 		SENTRY_DSN: string;
 		SERPAPI_KEY: string;
+
+		// The catalog supplier's API key; without it catalog prices read as unavailable.
+		CJDROPSHIPPING_API_KEY?: string;
 	}
 }
