@@ -20,7 +20,7 @@ export interface SupplierAlert {
 }
 
 export interface CjAdapterDeps {
-	client: Pick<CjClient, 'getOrderDetail' | 'freightCalculate' | 'createOrder' | 'simulatePay' | 'payBalance'>;
+	client: Pick<CjClient, 'getOrderDetail' | 'freightCalculate' | 'createOrder' | 'confirmOrder' | 'simulatePay' | 'payBalance'>;
 	destinations: Readonly<Record<string, { name: string; origin: string }>>;
 	mode: 'live' | 'sandbox';
 	alert(alert: SupplierAlert): Promise<void>;
@@ -28,6 +28,8 @@ export interface CjAdapterDeps {
 
 const PAID_STATUSES = ['UNSHIPPED', 'SHIPPED', 'DELIVERED'];
 const UNPAID_STATUSES = ['CREATED', 'IN_CART', 'UNPAID'];
+/** Orders CJ created without payment: they are confirmed, which makes them UNPAID, before paying. */
+const UNCONFIRMED_STATUSES = ['CREATED', 'IN_CART'];
 
 function linesMatch(order: CjOrderDetail, lines: readonly SupplierOrderLine[]): boolean {
 	const canonical = (pairs: Array<[string, number]>) => pairs.map(([vid, quantity]) => `${vid}:${quantity}`).sort().join(',');
@@ -93,6 +95,7 @@ export class CJDropshippingAdapter implements SupplierAdapter {
 			await this.deps.alert({ kind: 'lines-mismatch', reference: input.orderReference, message: `Supplier order ${orderNumber} lists other lines; it was not paid` });
 			return { ok: false, kind: 'retryable', reason: 'The supplier order lists other lines' };
 		}
+		if (!order || UNCONFIRMED_STATUSES.includes(order.orderStatus)) await this.deps.client.confirmOrder(orderId);
 		if (this.deps.mode === 'sandbox') await this.deps.client.simulatePay(orderId);
 		else await this.deps.client.payBalance(shipmentOrderId ?? orderId);
 		const confirmed = await this.deps.client.getOrderDetail(orderId);

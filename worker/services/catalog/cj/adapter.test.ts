@@ -16,6 +16,7 @@ function fakeClient(script: { existing?: CjOrderDetail | null; afterPay?: CjOrde
 	const created: CjCreateOrderRequest[] = [];
 	const paid: string[] = [];
 	const balancePaid: string[] = [];
+	const confirmed: string[] = [];
 	let reads = 0;
 	const client: CjAdapterDeps['client'] = {
 		getOrderDetail: async () => {
@@ -31,11 +32,14 @@ function fakeClient(script: { existing?: CjOrderDetail | null; afterPay?: CjOrde
 		simulatePay: async (orderId) => {
 			paid.push(orderId);
 		},
+		confirmOrder: async (orderId) => {
+			confirmed.push(orderId);
+		},
 		payBalance: async (shipmentOrderId) => {
 			balancePaid.push(shipmentOrderId);
 		},
 	};
-	return { client, created, paid, balancePaid };
+	return { client, created, paid, balancePaid, confirmed };
 }
 
 function adapterWith(client: CjAdapterDeps['client'], mode: 'live' | 'sandbox' = 'sandbox') {
@@ -62,6 +66,19 @@ describe('CJDropshippingAdapter', () => {
 		expect(JSON.stringify(created[0])).not.toContain('ada@example.com');
 		expect(paid).toEqual(['cj_1']);
 		expect(balancePaid).toEqual([]);
+	});
+
+	it('confirms an order CJ created before paying it, as its sandbox requires', async () => {
+		const fresh = fakeClient({ afterPay: detail('UNSHIPPED') });
+		const reads: string[] = [];
+		const client = { ...fresh.client, getOrderDetail: async (id: string) => (reads.push(id), reads.length === 1 ? null : reads.length === 2 ? detail('CREATED') : detail('UNSHIPPED')) };
+		expect(await adapterWith(client).adapter.placeOrder({ orderReference: REFERENCE, lines: LINES, address: ADDRESS })).toEqual({ ok: true, supplierOrderId: 'cj_1' });
+		expect(fresh.confirmed).toEqual(['cj_1']);
+		expect(fresh.paid).toEqual(['cj_1']);
+
+		const leftCreated = fakeClient({ existing: detail('CREATED') });
+		await adapterWith(leftCreated.client).adapter.placeOrder({ orderReference: REFERENCE, lines: LINES, address: ADDRESS });
+		expect(leftCreated.confirmed).toEqual(['cj_1']);
 	});
 
 	it('returns the paid order a timed-out attempt left behind, without creating another', async () => {

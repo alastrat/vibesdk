@@ -22,6 +22,8 @@ export interface CjClient {
 	createOrder(input: CjCreateOrderRequest): Promise<CjCreatedOrder>;
 	/** Null when CJ has no order with this id or number. */
 	getOrderDetail(orderIdOrNumber: string): Promise<CjOrderDetail | null>;
+	/** Moves an order created without payment (CREATED) to UNPAID, ready to pay. */
+	confirmOrder(orderId: string): Promise<void>;
 	/** Sandbox orders only: pays without touching the balance. */
 	simulatePay(orderId: string): Promise<void>;
 	/** Live orders only: pays from Estori's CJ balance. */
@@ -38,7 +40,7 @@ export interface CjClientDeps {
 	minIntervalMs?: number;
 }
 
-type CjRequest = { method: 'GET'; query: Record<string, string> } | { method: 'POST'; body: unknown };
+type CjRequest = { method: 'GET'; query: Record<string, string> } | { method: 'POST' | 'PATCH'; body: unknown };
 
 /** Success is HTTP 200 with code 200; CJ's message must not be used to judge it. */
 async function readEnvelope<T>(response: Response): Promise<CjEnvelope<T>> {
@@ -81,7 +83,7 @@ export function createCjClient(deps: CjClientDeps): CjClient {
 		const response = await fetchImpl(url, {
 			method: request.method,
 			headers: { 'Content-Type': 'application/json', 'CJ-Access-Token': accessToken },
-			body: request.method === 'POST' ? JSON.stringify(request.body) : undefined,
+			body: request.method === 'GET' ? undefined : JSON.stringify(request.body),
 			signal: AbortSignal.timeout(CJ_REQUEST_TIMEOUT_MS),
 		});
 		const envelope = await readEnvelope<T>(response);
@@ -120,6 +122,9 @@ export function createCjClient(deps: CjClientDeps): CjClient {
 				if (error instanceof CjApiError && /not (be )?found|not exist/i.test(error.message)) return null;
 				throw error;
 			}
+		},
+		confirmOrder: async (orderId) => {
+			await request<string>('shopping/order/confirmOrder', { method: 'PATCH', body: { orderId } });
 		},
 		simulatePay: async (orderId) => {
 			await request<boolean>('shopping/sandbox/simulatePay', { method: 'POST', body: { orderId } });
