@@ -1,6 +1,6 @@
-/** Who pays for a refunded catalog item. Stripe keeps its processing fee on refunds, so Estori absorbs that part. */
+/** Who pays for a refunded catalog item. Stripe keeps its processing fee on refunds; Estori's application fee already collected it. */
 
-export type RefundReason = 'supplier-rejected' | 'seller-refund';
+export type RefundReason = 'supplier-rejected' | 'seller-refund' | 'risk-declined';
 
 export interface ItemRefundSplit {
 	/** Refunded to the shopper. */
@@ -20,6 +20,7 @@ export function itemRefundSplit(input: { reason: RefundReason; retailCents: numb
 	if (!Number.isInteger(retailCents) || !Number.isInteger(catalogCents) || catalogCents < 0 || retailCents < catalogCents) {
 		throw new RangeError('A refund needs whole cents, with the catalog price at or below the retail price');
 	}
-	const estoriCents = input.reason === 'supplier-rejected' || input.supplierRefunded ? catalogCents : 0;
+	const estoriReturnsCatalogPrice = input.reason === 'supplier-rejected' || input.reason === 'risk-declined' || input.supplierRefunded;
+	const estoriCents = estoriReturnsCatalogPrice ? catalogCents : 0;
 	return { shopperCents: retailCents, sellerCents: retailCents - estoriCents, estoriCents };
 }

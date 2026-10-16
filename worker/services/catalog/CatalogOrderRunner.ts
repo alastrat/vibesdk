@@ -35,6 +35,8 @@ function runnerDeps(env: Env): RunnerDeps {
 		store: new CatalogOrderService(env),
 		adapters: { cjdropshipping: adapter },
 		stripe: stripeFromEnv(env),
+		// Wired to the store order's refunds in the next task.
+		recordRefund: async () => undefined,
 		supplierUpdates: async (supplierOrderId) => {
 			const order = client ? await client.getOrderDetail(supplierOrderId) : null;
 			return order ? cjOrderToUpdates(order) : [];

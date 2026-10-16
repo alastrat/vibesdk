@@ -37,6 +37,8 @@ export interface RunnerDeps {
 	store: CatalogOrderStore;
 	adapters: PlacementDeps['adapters'];
 	stripe: RefundItemsDeps['stripe'] | null;
+	/** Records each shopper refund on the store order. */
+	recordRefund: RefundItemsDeps['recordRefund'];
 	supplierUpdates(supplierOrderId: string): Promise<readonly SupplierUpdate[]>;
 	alert(alert: { kind: PlatformAlertKind; orderId: string; message: string }): Promise<void>;
 }
@@ -78,6 +80,19 @@ function refundsDue(items: readonly CatalogOrderItemRow[]): { rejected: CatalogO
 	};
 }
 
+/** The refund deps the runner's refunds use; null without Stripe. The runner never refunds for the seller, so it never reads their balance. */
+function refundDepsOf(deps: RunnerDeps): RefundItemsDeps | null {
+	if (!deps.stripe) return null;
+	return {
+		store: deps.store,
+		stripe: deps.stripe,
+		recordRefund: deps.recordRefund,
+		sellerBalance: async () => {
+			throw new Error('Runner refunds never start from the seller');
+		},
+	};
+}
+
 /** Rejected items are refunded from the store's state, so none is missed whichever attempt rejected it. */
 async function refund(state: RunnerState, deps: RunnerDeps, nowMs: number): Promise<RunnerState> {
 	if (nowMs < state.nextRefundAt || state.refundFailures >= MAX_PLACEMENT_ATTEMPTS) return state;
@@ -90,7 +105,9 @@ async function refund(state: RunnerState, deps: RunnerDeps, nowMs: number): Prom
 		return { ...state, nextRefundAt: nowMs + STRIPE_MISSING_RETRY_MS };
 	}
 	try {
-		await refundCatalogItems({ store: deps.store, stripe: deps.stripe }, { orderId: order.id, itemIds: rejected.map((item) => item.id), reason: 'supplier-rejected' });
+		const refundDeps = refundDepsOf(deps);
+		if (!refundDeps) return { ...state, nextRefundAt: nowMs + STRIPE_MISSING_RETRY_MS };
+		await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: rejected.map((item) => item.id), reason: 'supplier-rejected' });
 		return { ...state, refundFailures: 0, nextRefundAt: nowMs };
 	} catch (error) {
 		const refundFailures = state.refundFailures + 1;

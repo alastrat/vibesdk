@@ -36,4 +36,8 @@ describe('itemRefundSplit', () => {
 		expect(() => itemRefundSplit({ reason: 'seller-refund', retailCents: 1000, catalogCents: 1200, supplierRefunded: true })).toThrow(RangeError);
 		expect(() => itemRefundSplit({ reason: 'seller-refund', retailCents: -1, catalogCents: 0, supplierRefunded: false })).toThrow(RangeError);
 	});
+
+	it('returns the catalog price for a risk decline, as for a supplier rejection', () => {
+		expect(itemRefundSplit({ reason: 'risk-declined', retailCents: 4000, catalogCents: 1200, supplierRefunded: false })).toEqual({ shopperCents: 4000, sellerCents: 2800, estoriCents: 1200 });
+	});
 });

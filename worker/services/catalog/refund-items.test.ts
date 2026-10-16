@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { RefundExceedsTransferError, refundCatalogItems } from './refund-items';
+import { SellerBalanceShortError, refundCatalogItems, type RefundItemsDeps } from './refund-items';
 import { memoryCatalogStore } from './test-support';
 import type { StripeClient } from '../payments/stripe-client';
 
 const ADDRESS = { name: 'Ada', line1: '1 Main St', line2: null, city: 'Austin', region: 'TX', postalCode: '78701', countryCode: 'US', phone: null, email: null };
 
-/** A $90 payment with a $38.91 application fee: Stripe transferred $51.09 to the seller. */
-const TRANSFERRED_CENTS = 9000 - 3891;
+/** A $90 payment: with an application fee, Stripe transfers the whole charge and takes the fee back separately. */
+const TRANSFERRED_CENTS = 9000;
 
 async function storeWithOrder() {
 	const store = memoryCatalogStore();
@@ -60,6 +60,17 @@ function fakeStripe(options: { transfer?: boolean; failReversals?: number } = {}
 	return { stripe, refunds, reversals };
 }
 
+function depsOf(store: RefundItemsDeps['store'], stripe: RefundItemsDeps['stripe'], balance = { availableCents: 100_000, pendingCents: 0 }) {
+	const recorded: Array<{ catalogItemId: string; refundId: string; amountCents: number }> = [];
+	const deps: RefundItemsDeps = {
+		store,
+		stripe,
+		sellerBalance: async () => balance,
+		recordRefund: async (entry) => void recorded.push({ catalogItemId: entry.catalogItemId, refundId: entry.refundId, amountCents: entry.amountCents }),
+	};
+	return { deps, recorded };
+}
+
 function itemOf(store: Awaited<ReturnType<typeof storeWithOrder>>, itemId: string) {
 	return store.orders.get('co_1')?.items.find((item) => item.id === itemId);
 }
@@ -69,7 +80,7 @@ describe('refundCatalogItems', () => {
 		const store = await storeWithOrder();
 		const { stripe, refunds, reversals } = fakeStripe();
 
-		const totals = await refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		const totals = await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
 		expect(totals).toEqual({ refundedItemIds: ['ci_cap'], shopperCents: 4000, sellerCents: 2800, estoriCents: 1200 });
 		expect(refunds).toEqual([{ amountCents: 4000, idempotencyKey: 'catalog-refund-ci_cap' }]);
 		expect(reversals).toEqual([{ amountCents: 2800, idempotencyKey: 'catalog-reversal-ci_cap' }]);
@@ -80,39 +91,61 @@ describe('refundCatalogItems', () => {
 		const store = await storeWithOrder();
 		const { stripe, reversals } = fakeStripe();
 
-		const totals = await refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_mug'], reason: 'seller-refund' });
+		const totals = await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_mug'], reason: 'seller-refund' });
 		expect(totals).toMatchObject({ shopperCents: 5000, sellerCents: 5000, estoriCents: 0 });
 		expect(reversals[0].amountCents).toBe(5000);
 	});
 
-	it("takes back no more than is left of the seller's transfer when every item is rejected; Estori pays the rest", async () => {
+	it("takes back the seller's share of every rejected item, and Estori returns the catalog prices", async () => {
 		const store = await storeWithOrder();
 		const { stripe, refunds, reversals } = fakeStripe();
 
-		const totals = await refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_mug', 'ci_cap'], reason: 'supplier-rejected' });
+		const totals = await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_mug', 'ci_cap'], reason: 'supplier-rejected' });
 		expect(refunds.map((refund) => refund.amountCents)).toEqual([4000, 5000]);
-		expect(reversals.map((reversal) => reversal.amountCents)).toEqual([2800, TRANSFERRED_CENTS - 2800]);
-		expect(totals).toEqual({ refundedItemIds: ['ci_cap', 'ci_mug'], shopperCents: 9000, sellerCents: TRANSFERRED_CENTS, estoriCents: 9000 - TRANSFERRED_CENTS });
+		expect(reversals.map((reversal) => reversal.amountCents)).toEqual([2800, 2600]);
+		expect(totals).toEqual({ refundedItemIds: ['ci_cap', 'ci_mug'], shopperCents: 9000, sellerCents: 5400, estoriCents: 3600 });
 	});
 
-	it('refuses a seller refund larger than what the seller received, before any money moves', async () => {
+	it("refunds a seller's refund when their Stripe balance covers it exactly, and refuses one cent short before any money moves", async () => {
 		const store = await storeWithOrder();
 		const { stripe, refunds, reversals } = fakeStripe();
 
-		await expect(refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_mug', 'ci_cap'], reason: 'seller-refund' })).rejects.toBeInstanceOf(
-			RefundExceedsTransferError,
-		);
+		const short = depsOf(store, stripe, { availableCents: 4000, pendingCents: 999 });
+		const error = await refundCatalogItems(short.deps, { orderId: 'co_1', itemIds: ['ci_mug'], reason: 'seller-refund' }).catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(SellerBalanceShortError);
+		expect((error as SellerBalanceShortError).shortCents).toBe(1);
 		expect(refunds).toHaveLength(0);
 		expect(reversals).toHaveLength(0);
-		expect(itemOf(store, 'ci_mug')?.status).toBe('pending');
+
+		const exact = depsOf(store, stripe, { availableCents: 4000, pendingCents: 1000 });
+		expect(await refundCatalogItems(exact.deps, { orderId: 'co_1', itemIds: ['ci_mug'], reason: 'seller-refund' })).toMatchObject({ shopperCents: 5000, sellerCents: 5000 });
+	});
+
+	it("doesn't ask for the seller's balance when Estori owes the refund", async () => {
+		const store = await storeWithOrder();
+		const { stripe } = fakeStripe();
+		const { deps } = depsOf(store, stripe);
+		deps.sellerBalance = async () => {
+			throw new Error('The balance was asked for');
+		};
+		await refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		await refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_mug'], reason: 'risk-declined' });
+	});
+
+	it('records each refund for the store order', async () => {
+		const store = await storeWithOrder();
+		const { stripe } = fakeStripe();
+		const { deps, recorded } = depsOf(store, stripe);
+		await refundCatalogItems(deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		expect(recorded).toEqual([{ catalogItemId: 'ci_cap', refundId: 're_1', amountCents: 4000 }]);
 	});
 
 	it('skips items already refunded, so a retry refunds nobody twice', async () => {
 		const store = await storeWithOrder();
 		const { stripe, refunds } = fakeStripe();
 
-		await refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
-		const again = await refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
+		const again = await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' });
 		expect(again).toEqual({ refundedItemIds: [], shopperCents: 0, sellerCents: 0, estoriCents: 0 });
 		expect(refunds).toHaveLength(1);
 	});
@@ -121,14 +154,14 @@ describe('refundCatalogItems', () => {
 		const store = await storeWithOrder();
 		const { stripe, refunds, reversals } = fakeStripe({ failReversals: 1 });
 
-		await expect(refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' })).rejects.toThrow('Stripe is unavailable');
+		await expect(refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' })).rejects.toThrow('Stripe is unavailable');
 		expect(itemOf(store, 'ci_cap')).toMatchObject({ status: 'refunded', sellerReversalDueCents: 2800 });
 
-		await refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_mug', 'ci_cap'], reason: 'supplier-rejected' });
+		await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_mug', 'ci_cap'], reason: 'supplier-rejected' });
 		expect(refunds.map((refund) => refund.idempotencyKey)).toEqual(['catalog-refund-ci_cap', 'catalog-refund-ci_mug']);
 		expect(reversals.map((reversal) => [reversal.idempotencyKey, reversal.amountCents])).toEqual([
 			['catalog-reversal-ci_cap', 2800],
-			['catalog-reversal-ci_mug', TRANSFERRED_CENTS - 2800],
+			['catalog-reversal-ci_mug', 2600],
 		]);
 		expect(itemOf(store, 'ci_cap')?.sellerReversalDueCents).toBe(0);
 	});
@@ -152,7 +185,7 @@ describe('refundCatalogItems', () => {
 		});
 		const { stripe, refunds } = fakeStripe();
 
-		await refundCatalogItems({ store, stripe }, { orderId: 'co_big', itemIds: ids.slice(0, 1), reason: 'supplier-rejected' });
+		await refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_big', itemIds: ids.slice(0, 1), reason: 'supplier-rejected' });
 		expect(refunds[0].idempotencyKey).toBe(`catalog-refund-${ids[0]}`);
 	});
 
@@ -160,7 +193,7 @@ describe('refundCatalogItems', () => {
 		const store = await storeWithOrder();
 		const { stripe, refunds } = fakeStripe({ transfer: false });
 
-		await expect(refundCatalogItems({ store, stripe }, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' })).rejects.toThrow(
+		await expect(refundCatalogItems(depsOf(store, stripe).deps, { orderId: 'co_1', itemIds: ['ci_cap'], reason: 'supplier-rejected' })).rejects.toThrow(
 			'The payment has no transfer to the seller',
 		);
 		expect(refunds).toHaveLength(0);

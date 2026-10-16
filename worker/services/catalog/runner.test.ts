@@ -50,6 +50,7 @@ function deps(store: Awaited<ReturnType<typeof storeWithOrder>>, results: PlaceO
 		stripe,
 		supplierUpdates: async () => updates.shift() ?? [],
 		alert: async (alert) => void alerts.push(alert.kind),
+		recordRefund: async () => undefined,
 	};
 	return { runnerDeps, refunds, alerts };
 }
