@@ -35,6 +35,8 @@ declare namespace Cloudflare {
 		CJDROPSHIPPING_API_KEY?: string;
 		// Live supplier orders need ENVIRONMENT prod and this set to "true"; anything else places sandbox orders.
 		CATALOG_SUPPLIER_LIVE?: string;
+		// Signing secret of the Connect webhook endpoint: events on sellers' accounts, such as payout.paid.
+		STRIPE_CONNECT_WEBHOOK_SECRET?: string;
 		CATALOG_ORDER_RUNNER: DurableObjectNamespace<import('../services/catalog/CatalogOrderRunner').CatalogOrderRunner>;
 	}
 }

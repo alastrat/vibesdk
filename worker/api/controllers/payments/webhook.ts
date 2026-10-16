@@ -5,13 +5,14 @@
  */
 
 import { createLogger } from '../../../logger';
-import { StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
+import { SellerChargeService, StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
 import { STORE_ORDER_KIND } from '../../../../shared/types/store-payments';
 import { disputeDepsFromEnv, recordStoreSession } from '../../../services/store-payments/wiring';
 import { handleDisputeClosed, handleDisputeOpened, isStripeDispute } from '../../../services/store-payments/disputes';
 import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
-import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount } from '../../../services/payments/fulfill';
+import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount, isStripePayout } from '../../../services/payments/fulfill';
+import { chargesForPayout } from '../../../services/payments/seller-costs';
 
 const logger = createLogger('StripeWebhook');
 
@@ -23,7 +24,11 @@ export async function handleStripeWebhook(request: Request, env: Env): Promise<R
         return new Response('Payments are not configured', { status: 400 });
     }
     const payload = await request.text();
-    const valid = await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), secret, Math.floor(Date.now() / 1000));
+    // Platform events and Connect events (sellers' accounts) come from two endpoints, each with its own secret.
+    const secrets = [secret, env.STRIPE_CONNECT_WEBHOOK_SECRET].filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const now = Math.floor(Date.now() / 1000);
+    let valid = false;
+    for (const candidate of secrets) valid = valid || (await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), candidate, now));
     if (!valid) return new Response('Invalid signature', { status: 400 });
     const event = parseStripeEvent(payload);
     if (!event) return new Response('Malformed event', { status: 400 });
@@ -75,6 +80,16 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
         const deps = disputeDepsFromEnv(env, object);
         const result = event.type === 'charge.dispute.created' ? await handleDisputeOpened(deps, object) : await handleDisputeClosed(deps, object);
         logger.info('Dispute handled', { id: object.id, type: event.type, result });
+        return;
+    }
+    if (event.type === 'payout.paid' && event.account && isStripePayout(object)) {
+        const seller = await new StripeConnectService(env).getByAccountId(event.account);
+        // Not one of Estori's sellers, or deleted since: nothing to charge.
+        if (!seller) return;
+        const charges = new SellerChargeService(env);
+        for (const charge of chargesForPayout({ stripeAccountId: event.account, payoutId: object.id, amountCents: object.amount, arrivalDate: new Date(object.arrival_date * 1000) })) {
+            await charges.add({ sellerUserId: seller.userId, ...charge, now: new Date() });
+        }
         return;
     }
     if (event.type === 'account.updated' && isStripeAccount(object)) {

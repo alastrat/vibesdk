@@ -3,6 +3,8 @@
 export interface StripeEvent {
 	id: string;
 	type: string;
+	/** The connected account a Connect event came from; absent for the platform's own events. */
+	account?: string;
 	data: { object: unknown };
 }
 
@@ -52,9 +54,9 @@ export function parseStripeEvent(payload: string): StripeEvent | null {
 		return null;
 	}
 	if (typeof parsed !== 'object' || parsed === null) return null;
-	const event = parsed as { id?: unknown; type?: unknown; data?: { object?: unknown } };
+	const event = parsed as { id?: unknown; type?: unknown; account?: unknown; data?: { object?: unknown } };
 	if (typeof event.id !== 'string' || typeof event.type !== 'string' || typeof event.data !== 'object' || event.data === null) {
 		return null;
 	}
-	return { id: event.id, type: event.type, data: { object: event.data.object } };
+	return { id: event.id, type: event.type, account: typeof event.account === 'string' ? event.account : undefined, data: { object: event.data.object } };
 }

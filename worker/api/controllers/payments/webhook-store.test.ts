@@ -4,9 +4,9 @@ import { recordingD1 } from '../../../database/test-support/recording-d1';
 
 const SECRET = 'whsec_store_test';
 
-async function signatureFor(payload: string): Promise<string> {
+async function signatureFor(payload: string, secret = SECRET): Promise<string> {
 	const timestamp = Math.floor(Date.now() / 1000);
-	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 	const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`));
 	return `t=${timestamp},v1=${Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
@@ -32,5 +32,17 @@ describe('store sessions in the Stripe webhook', () => {
 		expect(String(fetchSpy.mock.calls[0][0])).toBe('https://api.stripe.com/v1/checkout/sessions/cs_store');
 		expect(statements.some((statement) => statement.sql.includes('"store_checkouts"'))).toBe(true);
 		expect(statements.some((statement) => statement.sql.includes('template'))).toBe(false);
+	});
+
+	it('accepts a Connect event signed with the Connect secret, and charges nothing for an account it does not know', async () => {
+		const connectSecret = 'whsec_connect_test';
+		const payload = JSON.stringify({ id: 'evt_9', type: 'payout.paid', account: 'acct_unknown', data: { object: { id: 'po_1', amount: 100_000, arrival_date: 1_800_000_000 } } });
+		const { d1, statements } = recordingD1();
+		const env = { DB: d1, STRIPE_WEBHOOK_SECRET: SECRET, STRIPE_CONNECT_WEBHOOK_SECRET: connectSecret, STRIPE_SECRET_KEY: 'sk_test_fake' } as unknown as Env;
+		const request = (signature: string) => new Request('https://estori.test/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': signature }, body: payload });
+
+		expect((await handleStripeWebhook(request(await signatureFor(payload, connectSecret)), env)).status).toBe(200);
+		expect(statements.some((entry) => entry.sql.toLowerCase().startsWith('insert into "seller_charges"'))).toBe(false);
+		expect((await handleStripeWebhook(request(await signatureFor(payload, 'whsec_other')), env)).status).toBe(400);
 	});
 });

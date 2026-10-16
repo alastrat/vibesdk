@@ -59,6 +59,11 @@ export function isCheckoutSession(value: unknown): value is StripeCheckoutSessio
 	return isRecord(value) && typeof value.id === 'string' && typeof value.payment_status === 'string';
 }
 
+/** A paid-out payout on a seller's account, from a Connect event. */
+export function isStripePayout(value: unknown): value is { id: string; amount: number; arrival_date: number } {
+	return isRecord(value) && typeof value.id === 'string' && value.id.startsWith('po_') && typeof value.amount === 'number' && typeof value.arrival_date === 'number';
+}
+
 export function isStripeAccount(value: unknown): value is StripeAccount {
 	return (
 		isRecord(value) &&
