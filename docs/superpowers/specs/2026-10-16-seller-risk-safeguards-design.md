@@ -20,6 +20,9 @@ disputes, and limits how much a new or dishonest seller can cost Estori before a
 5. CJ is polled every 30 minutes. CJ webhooks wait.
 6. Alert emails ship before the live supplier switch is set. They go to alastrat@pluriza.com for now, through their own
    list, so a later admin email change doesn't move them.
+7. Payments setup is a step after registration, not part of sign-up. A store takes payments only once that setup is
+   complete, including a verified bank account.
+8. Sellers explicitly accept the selling terms when they set up payments, and the legal pages are updated.
 
 ## 2. Stripe facts this design relies on
 
@@ -44,17 +47,56 @@ All of these were checked against Stripe's docs on 2026-10-16.
 - **Radar.** Radar scores every charge on the platform account. `latest_charge.outcome.risk_level` is `normal`,
   `elevated` or `highest`, and Radar blocks `highest` by default.
 
-## 3. Card payments required at checkout
+## 3. Payments setup required before a store takes payments
 
-- **Merchant of record.** `startStoreCheckout` refuses with `payments_unavailable` when the seller's
-  `card_payments` capability isn't `active`. The shopper sees "This store can't take payments right now." The session
-  always sets `on_behalf_of`. The `sellerIsMerchant` fallback, and the E2E ruling that added it, are removed.
-- **Stored capability.** `stripe_connect_accounts` gains `card_payments_active`. It is set by `accountFlags` and
-  `account.updated`, like `transfers_active`. Checkout keeps reading the account live from Stripe, so a stale row can't
-  let a payment through.
-- **What the seller sees.** The Payouts card shows "Finish your Stripe setup to take store payments" with the existing
-  onboarding link when transfers are active but card payments aren't. Template sales are unaffected: they still settle on
-  Estori, as the Terms say.
+### The setup step
+
+- **When.** Payments setup is an onboarding step after registration. Sign-up stays as it is.
+- **Where it's offered.** The seller is offered the step:
+  - on the first visit after sign-up;
+  - when they first ask the agent for a store with checkout;
+  - and from the Payouts card.
+- **Skipping it.** They can skip it until they want to sell.
+- **The step itself:**
+  1. Read the selling terms (section 9) and tick to accept them. Estori records `seller_terms_version` and
+     `seller_terms_accepted_at` on the user.
+  2. Continue to Stripe's hosted onboarding. Stripe collects identity, the business details and the bank account for
+     payouts. Stripe also asks for its own Connected Account Agreement there.
+  3. Come back to Estori, which shows what Stripe still needs, if anything.
+
+### What "complete" means
+
+A store takes payments only when all of these hold. Checkout reads the account live from Stripe, so a stale row can't let
+a payment through.
+
+- the seller accepted the current selling terms;
+- `details_submitted` is true;
+- the `card_payments` capability is `active`, so Estori is never the merchant of record;
+- `payouts_enabled` is true, which needs a verified bank account. Stripe recovers a negative balance by debiting that
+  account. Without one, the recovery in sections 5 and 6 has nothing to fall back on.
+
+When any of these fails, the rest of the section applies.
+- **Shopper:** `startStoreCheckout` refuses with `payments_unavailable`, and the shopper sees "This store can't take
+  payments right now."
+- **Session:** a checkout that passes always sets `on_behalf_of`. The `sellerIsMerchant` fallback, and the E2E ruling
+  that added it, are removed.
+- **Stored flags:** `stripe_connect_accounts` gains `card_payments_active`, set by `accountFlags` and `account.updated`
+  like `transfers_active`.
+- **Seller:** the Payouts card and the agent's store-checkout skill name the first missing item:
+  - "Accept the selling terms";
+  - "Finish your Stripe setup";
+  - "Add and verify a bank account".
+- **Template sales** are unaffected. They still settle on Estori, as the Terms say.
+
+### Card fees above the domestic rate
+
+The processing part of Estori's fee is 2.9% + 30¢, Stripe's US domestic card rate. Stripe charges 1.5% more for
+international cards, and 1% more when currency is converted. So Estori would pay that difference on such sales.
+
+- **The fix:** after a store order is recorded, Estori reads the charge's actual Stripe fee from its balance transaction.
+- **When the fee is higher:** if it is more than the processing Estori collected, the difference is reversed from that
+  sale's transfer at once, keyed `fee-difference-<orderId>`.
+- **Who pays:** the seller pays the real card cost, and shoppers abroad can still buy.
 
 ## 4. Seller levels and limits
 
@@ -95,8 +137,8 @@ All of these were checked against Stripe's docs on 2026-10-16.
 
 How the weekly sales are weighted:
 - Catalog lines and shipping count once.
-- The seller's own product lines count double. Estori has tracking to defend catalog sales, and nothing for the seller's
-  own deliveries.
+- The seller's own product lines count double. A catalog line carries a tracking number Estori records for the order,
+  and an own-product line carries none until the seller adds one.
 - Open checkouts count because two shoppers paying at once would otherwise both pass the cap.
 
 When `store_paused` first happens in a 24-hour window, the seller gets an email naming their cap and how to raise it, and
@@ -177,9 +219,14 @@ owner-only.
 
 ### Express Dashboard refunds stay off
 
-A refund made in the seller's Express Dashboard skips the balance check and the catalog split. Checkout owner decision 7
-had them on. This spec turns them off: refunds go through Estori only. Turning them off is a Connect settings change the
-owner makes in the Stripe Dashboard, listed in section 11.
+A refund made in the seller's Express Dashboard skips the balance check and the catalog split.
+
+- **How Stripe controls it.** Stripe allows these refunds only when the platform enables "Issue refunds" and "Manage
+  disputes" for the Express Dashboard, so they are off unless switched on.
+  [Express Dashboard payments](https://docs.stripe.com/connect/express-dashboard/payments)
+- **Decision.** Checkout owner decision 7 planned to switch them on. This spec keeps them off: refunds go through Estori
+  only.
+- **Owner action.** Section 11 asks the owner to confirm both options are unticked.
 
 ## 6. Disputes
 
@@ -242,10 +289,20 @@ the 24-hour KV throttle), with three changes:
 
 Local dev uses the dev log sender, as today.
 
-## 9. Seller terms
+## 9. Seller terms and legal pages
 
-- **New section.** `src/content/legal/terms.md` gains a "Selling in your own store" section, and `TERMS_VERSION` moves,
-  so sellers accept the new terms before their next checkout is allowed. It says:
+### How the terms are accepted
+
+There are two acceptances:
+- **The general Terms.** These are already accepted explicitly at sign-up (`acceptedTermsVersion`). When
+  `TERMS_VERSION` moves, the existing re-acceptance prompt asks again at the next sign-in.
+- **The selling terms.** These are a separate, explicit acceptance in the payments setup step (section 3), stored as
+  `seller_terms_version` and `seller_terms_accepted_at`. Moving `SELLER_TERMS_VERSION` makes sellers accept again before
+  their store takes another payment. The seller sees a prompt, and the shopper sees `payments_unavailable`.
+
+### What the legal pages say
+
+- **New section.** `src/content/legal/terms.md` gains a "Selling in your own store" section. It says:
   - the seller is the merchant of record for their store's sales, and needs Stripe card payments to sell;
   - the seller pays refunds they make in full, including the product cost and card fees;
   - for disputes, the seller pays the amount and Stripe's dispute fee;
@@ -254,6 +311,11 @@ Local dev uses the dev log sender, as today.
   - payouts are delayed by the seller's level, and stores have order and weekly limits that grow with a good record;
   - Estori may hold an order its payment checks flag, and refund it if it isn't cleared.
 - **Section 8.** It keeps saying Globalink is the merchant of record for paid sites (templates) only.
+- **Privacy policy.** `privacy.md` adds shoppers as people whose data Estori handles. Store checkouts collect the name,
+  email and shipping address, and share them with Stripe and with fulfillment partners to deliver orders. Suppliers are
+  never named, following the public-site copy rule.
+- **Refund policy.** `refunds.md` says it covers purchases from Estori only. Purchases from a store follow that store's
+  own refund policy.
 - **Legal review.** The section is written plainly and marked for review. There is no lawyer yet, and the owner should
   have it reviewed before live payments.
 
@@ -261,6 +323,8 @@ Local dev uses the dev log sender, as today.
 
 - `stripe_connect_accounts`: `card_payments_active` (boolean, default false), `seller_level` (text, default `new`),
   `payout_delay_days` (integer, nullable).
+- `users`: `seller_terms_version` (text, nullable), `seller_terms_accepted_at` (timestamp, nullable).
+- `store_fee_adjustments`: `order_id` (primary key), `collected_cents`, `actual_fee_cents`, `reversal_id`, `created_at`.
 - `store_refunds`: `id` (Stripe refund id), `order_id`, `line_no`, `amount_cents`, `request_id`, `initiated_by`,
   `created_at`. Unique on (`request_id`, `line_no`).
 - `store_disputes`: `id` (Stripe dispute id), `order_id`, `amount_cents`, `reason`, `status`,
@@ -273,8 +337,8 @@ Local dev uses the dev log sender, as today.
 
 ## 11. Owner actions
 
-- **In the Stripe Dashboard (Connect settings, Express Dashboard):** turn off refunds from the Express Dashboard, in test
-  and live.
+- **In the Stripe Dashboard (Connect settings, Express Dashboard):** confirm "Issue refunds" and "Manage disputes" are
+  unticked, in test and live. They are off unless someone turned them on.
 - **To test checkout locally:** finish card payments on the local test seller in Stripe test mode, using Stripe's test
   identity values, or onboard a fresh test seller. Claude doesn't enter identity numbers.
 - **Before live payments:** have the new Terms section reviewed.
@@ -292,15 +356,21 @@ Local dev uses the dev log sender, as today.
 - the webhook routing for the dispute events;
 - the payout-delay sync, called only on a change;
 - the alert throttle and recipients;
-- the Terms version bump blocking checkout until acceptance.
+- the setup checks: terms not accepted, details missing, card payments inactive, payouts not enabled; each one refuses
+  checkout and names the right next step;
+- the selling-terms version bump blocking checkout until acceptance;
+- the fee difference: reversed only when Stripe's fee exceeds what was collected, and only once.
 
 **Local E2E (Stripe test mode):**
-1. Checkout is refused for the transfers-only seller, and works once card payments are active.
-2. A $151 order is refused for a New seller.
-3. The weekly cap pauses the store.
-4. A seller refund is refused when the balance is short, and goes through when it isn't.
-5. Card `4000000000000259` (disputed) reverses the sale, records the fee, and the next sale collects it.
-6. Card `4000000000009235` (elevated risk) holds the catalog order, and a release places it in the CJ sandbox.
+1. Checkout is refused for the transfers-only seller, and works once setup is complete. Completing setup means the selling
+   terms, card payments and a verified bank account.
+2. A sale paid with an international test card (`4000000760000002`, Brazil) reverses the fee difference from the
+   seller's transfer.
+3. A $151 order is refused for a New seller.
+4. The weekly cap pauses the store.
+5. A seller refund is refused when the balance is short, and goes through when it isn't.
+6. Card `4000000000000259` (disputed) reverses the sale, records the fee, and the next sale collects it.
+7. Card `4000000000009235` (elevated risk) holds the catalog order, and a release places it in the CJ sandbox.
 
 ## 13. Not in this spec
 
