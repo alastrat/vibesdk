@@ -17,6 +17,16 @@ export function useStripeConnectStatus(enabled: boolean) {
 	});
 }
 
+/** Records the seller's agreement to the selling terms; the answer is their refreshed status. */
+export function useAcceptSellerTerms() {
+	const queryClient = useQueryClient();
+	const { user } = useAuth();
+	return useMutation({
+		mutationFn: (version: string) => unwrap(apiClient.acceptSellerTerms(version), 'Failed to record your agreement'),
+		onSuccess: (status) => queryClient.setQueryData(queryKeys.account.payments.status(user?.id), status),
+	});
+}
+
 /** Starts or resumes Stripe-hosted onboarding; the caller sends the browser to the returned URL. */
 export function useStartStripeOnboarding() {
 	return useMutation({
