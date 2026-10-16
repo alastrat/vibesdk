@@ -72,6 +72,7 @@ const PAID: StripeCheckoutSession = {
 function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 	const orders: NewStoreOrder[] = [];
 	const handedOff: PaidCatalogCheckout[] = [];
+	const settled: string[] = [];
 	const deps: RecordStoreOrderDeps = {
 		getCheckout: async (id) => (id === CHECKOUT.id ? CHECKOUT : null),
 		recordOrder: async (order) => {
@@ -81,9 +82,12 @@ function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 		handOffCatalogLines: async (paid) => {
 			handedOff.push(paid);
 		},
+		settleSale: async (orderId) => {
+			settled.push(orderId);
+		},
 		now: () => new Date(5),
 	};
-	return { deps, orders, handedOff };
+	return { deps, orders, handedOff, settled };
 }
 
 describe('recordStoreOrder', () => {
@@ -152,6 +156,24 @@ describe('recordStoreOrder', () => {
 		const { deps, handedOff } = fakeDeps('already-recorded');
 		expect((await recordStoreOrder(deps, PAID)).result).toBe('already-recorded');
 		expect(handedOff).toHaveLength(1);
+	});
+
+	it('settles the sale after recording it, and again on a repeated delivery', async () => {
+		const first = fakeDeps();
+		await recordStoreOrder(first.deps, PAID);
+		expect(first.settled).toEqual(['ord_ab12']);
+
+		const again = fakeDeps('already-recorded');
+		await recordStoreOrder(again.deps, PAID);
+		expect(again.settled).toEqual(['ord_ab12']);
+	});
+
+	it('keeps the recorded order when settling fails, for the next delivery to retry', async () => {
+		const { deps } = fakeDeps();
+		deps.settleSale = async () => {
+			throw new Error('Stripe is unavailable');
+		};
+		expect((await recordStoreOrder(deps, PAID)).result).toBe('recorded');
 	});
 
 	it('reads the address where earlier Stripe API versions put it', async () => {

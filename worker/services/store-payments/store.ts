@@ -86,6 +86,11 @@ export interface StoreOrderView {
 	note: string | null;
 	needsAttention: string | null;
 	stripeCheckoutSessionId: string | null;
+	stripePaymentIntentId: string | null;
+	sellerUserId: string;
+	/** Nullable in the table; every order recorded from a checkout has one. */
+	sellerStripeAccountId: string | null;
+	refundedCents: number;
 	createdAt: Date;
 	items: NewStoreOrderItem[];
 }

@@ -15,6 +15,8 @@ export interface RecordStoreOrderDeps {
 	recordOrder(order: NewStoreOrder): Promise<'recorded' | 'already-recorded'>;
 	/** Idempotent per Checkout session, so a redelivery after a crash still hands the lines over. */
 	handOffCatalogLines(paid: PaidCatalogCheckout): Promise<void>;
+	/** Takes back any card fee above what was collected, and the seller's open charges. Safe to repeat. */
+	settleSale(orderId: string): Promise<void>;
 	now(): Date;
 }
 
@@ -106,6 +108,11 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 			cart: toCheckoutCart(checkout.pricedCart),
 			shippingAddress: address,
 		});
+	}
+	try {
+		await deps.settleSale(orderId);
+	} catch {
+		// The order stays recorded; a webhook redelivery or the return page settles it again.
 	}
 	return { result, orderId, checkout };
 }

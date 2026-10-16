@@ -74,6 +74,28 @@ export class StoreOrderService extends BaseService {
         return this.ordersWhere(eq(schema.storeOrders.appId, appId), limit);
     }
 
+    async findByPaymentIntent(paymentIntentId: string): Promise<StoreOrderView | null> {
+        const [order] = await this.ordersWhere(eq(schema.storeOrders.stripePaymentIntentId, paymentIntentId), 1);
+        return order ?? null;
+    }
+
+    async feeAdjusted(orderId: string): Promise<boolean> {
+        const row = await this.database
+            .select({ orderId: schema.storeFeeAdjustments.orderId })
+            .from(schema.storeFeeAdjustments)
+            .where(eq(schema.storeFeeAdjustments.orderId, orderId))
+            .get();
+        return row !== undefined;
+    }
+
+    async recordFeeAdjustment(input: { orderId: string; collectedCents: number; actualFeeCents: number; reversalId: string | null; now: Date }): Promise<void> {
+        await this.database
+            .insert(schema.storeFeeAdjustments)
+            .values({ orderId: input.orderId, collectedCents: input.collectedCents, actualFeeCents: input.actualFeeCents, reversalId: input.reversalId, createdAt: input.now })
+            .onConflictDoNothing()
+            .run();
+    }
+
     private async ordersWhere(condition: ReturnType<typeof eq>, limit: number): Promise<StoreOrderView[]> {
         const orders = await this.database
             .select()
@@ -112,6 +134,10 @@ export class StoreOrderService extends BaseService {
                 note: order.note,
                 needsAttention: order.needsAttention,
                 stripeCheckoutSessionId: order.stripeCheckoutSessionId,
+                stripePaymentIntentId: order.stripePaymentIntentId,
+                sellerUserId: order.sellerUserId,
+                sellerStripeAccountId: order.sellerStripeAccountId,
+                refundedCents: order.refundedCents,
                 createdAt: order.createdAt,
                 items: lines,
             };

@@ -1,11 +1,12 @@
 /** D1 and Stripe wiring for recording store orders, shared by the webhook and the return page. */
 
-import { CatalogOrderService, StoreCheckoutService, StoreOrderService } from '../../database';
+import { CatalogOrderService, SellerChargeService, StoreCheckoutService, StoreOrderService } from '../../database';
 import { generateId } from '../../utils/idGenerator';
 import { recordPaidCatalogOrder } from '../catalog/record';
 import { scheduleCatalogPlacement } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
+import { settleSale } from './settle';
 
 export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 	const checkouts = new StoreCheckoutService(env);
@@ -16,6 +17,23 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 		handOffCatalogLines: async (paid) => {
 			const recorded = await recordPaidCatalogOrder({ store: new CatalogOrderService(env), newId: generateId, now: () => new Date() }, paid);
 			if (recorded.result === 'recorded' && recorded.orderId) await scheduleCatalogPlacement(env, recorded.orderId);
+		},
+		settleSale: async (orderId) => {
+			const stripe = stripeFromEnv(env);
+			const order = await orders.getOrder(orderId);
+			if (!stripe || !order?.stripePaymentIntentId) return;
+			const charges = new SellerChargeService(env);
+			await settleSale(
+				{
+					stripe,
+					feeAdjusted: (id) => orders.feeAdjusted(id),
+					recordFeeAdjustment: (adjustment) => orders.recordFeeAdjustment(adjustment),
+					openCharges: (sellerUserId) => charges.open(sellerUserId),
+					recordCollection: (collection) => charges.recordCollection(collection),
+					now: () => new Date(),
+				},
+				{ id: order.id, sellerUserId: order.sellerUserId, paymentIntentId: order.stripePaymentIntentId, totalCents: order.totalCents, applicationFeeCents: order.applicationFeeCents },
+			);
 		},
 		now: () => new Date(),
 	};
