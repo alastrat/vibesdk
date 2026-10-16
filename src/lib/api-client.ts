@@ -93,6 +93,7 @@ import type{
 	SitePublishingData,
 	StripeConnectStatusData,
 	StoreOrdersData,
+	CatalogProductsData,
 	StripeLinkData,
 	TemplateCategory,
 	AuthUser,
@@ -641,6 +642,11 @@ class ApiClient {
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
 		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
+	}
+
+	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {
+		const search = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+		return this.request<CatalogProductsData>(`/api/catalog/products${search}`);
 	}
 
 	async getStripeDashboardLink(): Promise<ApiResponse<StripeLinkData>> {

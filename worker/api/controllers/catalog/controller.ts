@@ -7,7 +7,10 @@ import { runCatalogRefresh } from '../../../services/catalog/scheduler';
 import { catalogSupplierMode } from '../../../services/catalog/CatalogOrderRunner';
 import { cjClientFromEnv } from '../../../services/catalog/cj/client';
 import { sandboxMoves } from '../../../services/catalog/sandbox';
-import { CatalogOrderService } from '../../../database';
+import { CatalogOrderService, CatalogProductService } from '../../../database';
+import { catalogProductView } from '../../../services/catalog/catalog-view';
+import { catalogImagePath } from '../../../services/catalog/images';
+import type { CatalogProductsData } from '../../../../shared/types/catalog';
 
 const PRODUCT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const FILE = /^[0-9a-f]{16}\.(jpg|jpeg|png|webp)$/;
@@ -98,6 +101,18 @@ export class CatalogController extends BaseController {
             return CatalogController.createSuccessResponse({ moved: supplierOrderIds });
         } catch (error) {
             return CatalogController.handleError(error, 'move a sandbox order') as ControllerResponse<ApiResponse<{ moved: string[] }>>;
+        }
+    }
+
+    static async listProducts(request: Request, env: Env, _ctx: ExecutionContext, _context: RouteContext): Promise<ControllerResponse<ApiResponse<CatalogProductsData>>> {
+        try {
+            const query = new URL(request.url).searchParams.get('q');
+            const rows = await new CatalogProductService(env).catalogRows({ query, productId: null, limit: 50 });
+            const now = Date.now();
+            const products = rows.flatMap((row) => catalogProductView(row, catalogImagePath, now) ?? []);
+            return CatalogController.createSuccessResponse<CatalogProductsData>({ products });
+        } catch (error) {
+            return CatalogController.handleError(error, 'list catalog products') as ControllerResponse<ApiResponse<CatalogProductsData>>;
         }
     }
 }

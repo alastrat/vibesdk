@@ -6,6 +6,7 @@ import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
 import AppsPage from './routes/apps';
+import CatalogPage from './routes/catalog';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover';
 import SitePage from './routes/discover/site';
@@ -75,6 +76,14 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<AppsPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'catalog',
+						element: (
+							<ProtectedRoute>
+								<CatalogPage />
 							</ProtectedRoute>
 						),
 					},

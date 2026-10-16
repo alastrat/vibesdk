@@ -22,4 +22,9 @@ describe('catalog routes', () => {
 			expect(routes.split('\n').find((line) => line.includes(path))).toContain('setAuthLevel(AuthConfig.admin)');
 		}
 	});
+
+	it('shows the catalog to signed-in sellers', () => {
+		const routes = source('/worker/api/routes/catalogRoutes.ts').split('\n');
+		expect(routes.find((line) => line.includes("'/api/catalog/products'"))).toContain('setAuthLevel(AuthConfig.authenticated)');
+	});
 });
