@@ -368,6 +368,12 @@ There are two acceptances:
   unticked, in test and live. They are off unless someone turned them on.
 - **To test checkout locally:** finish card payments on the local test seller in Stripe test mode, using Stripe's test
   identity values, or onboard a fresh test seller. Claude doesn't enter identity numbers.
+- **Webhook endpoints (Stripe Dashboard, Developers, Webhooks), in test and live:** the platform endpoint at
+  `/api/stripe/webhook` adds `charge.dispute.created`, `charge.dispute.funds_withdrawn` and `charge.dispute.closed` to
+  its checkout events. A second endpoint, at the same URL but listening to events on connected accounts, subscribes to
+  `payout.paid` and `account.updated`; its signing secret goes in `STRIPE_CONNECT_WEBHOOK_SECRET`, set with the deploy
+  that ships this (setting a secret deploys the Worker). Without it, sellers' payout fees and account changes go
+  unseen. Locally, `stripe listen` needs `--forward-connect-to` beside `--forward-to` for the same URL.
 - **Before live payments:** have the new Terms section reviewed.
 
 ## 12. Testing
