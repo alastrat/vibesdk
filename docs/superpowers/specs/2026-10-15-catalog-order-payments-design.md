@@ -65,8 +65,8 @@ applicationFee = catalogTotal + processingFee
 - `CATALOG_PROCESSING_PERCENT` and `CATALOG_PROCESSING_FIXED_CENTS` are Stripe's standard US card rate (2.9% and 30¢).
   Estori absorbs the difference when Stripe charges more (international cards, currency conversion).
 - A cart of only the seller's own products has `catalogTotal = 0`; the fee is the processing fee alone.
-- BYO (premium) catalog items count `c_i` as Estori's per-order fee only, since the seller's supplier account pays the
-  supplier. The per-order fee is one constant, `BYO_ORDER_FEE_CENTS`.
+- An order with BYO (premium) items adds Estori's per-order fee once, `BYO_ORDER_FEE_CENTS`, instead of catalog
+  prices, since the seller's supplier account pays the supplier.
 - `applicationFeeCents(cart)` is a pure function in `shared/`, used by checkout and covered by tests.
 
 ## Order lifecycle
@@ -89,10 +89,13 @@ the owner.
 
 ## When things go wrong
 
-- **Supplier rejects or can't fill items:** Estori refunds the shopper for those items with `reverse_transfer` and
-  `refund_application_fee`, so the seller's share and Estori's fee both come back. The seller is notified.
-- **Seller refunds a shopper:** the seller's share is reversed. Estori returns its fee for an item only when the supplier
-  refunds Estori (damaged, wrong or missing items); otherwise the seller bears the cost, as in any shop.
+- **Supplier rejects or can't fill items:** Estori refunds the shopper the items' retail price and takes the seller's
+  share back with a transfer reversal (`retail - catalog price`); Estori keeps nothing of those items. The seller is
+  notified. Exact per-item amounts come from a refund plus an explicit reversal, because Stripe's `reverse_transfer` and
+  `refund_application_fee` flags split a partial refund in proportion to the whole payment.
+- **Seller refunds a shopper:** the refund is reversed from the seller's transfer in full. Estori returns the catalog
+  price (so the reversal is `retail - catalog price`) only when the supplier refunded Estori (damaged, wrong or missing
+  items); otherwise the seller bears the cost, as in any shop. Stripe keeps its processing fee on refunds; Estori absorbs it.
 - **Chargebacks:** on destination charges Estori's platform balance is debited first. Estori recovers the amount by
   reversing the seller's transfer, and files a claim with the supplier for items that never arrived.
 - **Extra costs** (a reshipment, a shipping surcharge from the supplier): one off-session payment on the card the seller
