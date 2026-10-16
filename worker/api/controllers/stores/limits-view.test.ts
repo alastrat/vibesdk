@@ -7,7 +7,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 describe('limitsView', () => {
 	it("shows a new seller's limits, this week's use, and what's left to reach Established", () => {
-		const view = limitsView({ record: { firstSaleAt: new Date(NOW - 12 * DAY), completedOrders: 4, ordersLast90Days: 6, disputesLast90Days: 0, lostDisputesLast90Days: 0 }, settings: DEFAULT_SELLER_LIMITS, storedLevel: 'new', weeklySalesUsedCents: 12_000, nowMs: NOW });
+		const view = limitsView({ record: { firstSaleAt: new Date(NOW - 12 * DAY), completedOrders: 4, ordersLast90Days: 6, disputesLast90Days: 0, lostDisputesLast90Days: 0 }, settings: DEFAULT_SELLER_LIMITS, storedLevel: 'new', storedPayoutDelayDays: 10, weeklySalesUsedCents: 12_000, nowMs: NOW });
 		expect(view).toEqual({
 			level: 'new',
 			largestOrderCents: 15_000,
@@ -20,7 +20,13 @@ describe('limitsView', () => {
 
 	it('has no next level for an established seller, or for a pinned one', () => {
 		const record = { firstSaleAt: new Date(NOW - 90 * DAY), completedOrders: 40, ordersLast90Days: 40, disputesLast90Days: 0, lostDisputesLast90Days: 0 };
-		expect(limitsView({ record, settings: DEFAULT_SELLER_LIMITS, storedLevel: 'established', weeklySalesUsedCents: 0, nowMs: NOW }).nextLevel).toBeNull();
-		expect(limitsView({ record: { ...record, completedOrders: 0 }, settings: { ...DEFAULT_SELLER_LIMITS, pinnedLevel: 'new' }, storedLevel: 'new', weeklySalesUsedCents: 0, nowMs: NOW }).nextLevel).toBeNull();
+		expect(limitsView({ record, settings: DEFAULT_SELLER_LIMITS, storedLevel: 'established', storedPayoutDelayDays: 5, weeklySalesUsedCents: 0, nowMs: NOW }).nextLevel).toBeNull();
+		expect(limitsView({ record: { ...record, completedOrders: 0 }, settings: { ...DEFAULT_SELLER_LIMITS, pinnedLevel: 'new' }, storedLevel: 'new', storedPayoutDelayDays: 10, weeklySalesUsedCents: 0, nowMs: NOW }).nextLevel).toBeNull();
+	});
+
+	it('shows the payout delay Stripe applies, which lags the level when Stripe refused a change, and the level\'s before the first sync', () => {
+		const record = { firstSaleAt: new Date(NOW - 12 * DAY), completedOrders: 4, ordersLast90Days: 6, disputesLast90Days: 0, lostDisputesLast90Days: 0 };
+		expect(limitsView({ record, settings: { ...DEFAULT_SELLER_LIMITS, overrides: { ...DEFAULT_SELLER_LIMITS.overrides, payoutDelayDays: 3 } }, storedLevel: 'new', storedPayoutDelayDays: 10, weeklySalesUsedCents: 0, nowMs: NOW }).payoutDelayDays).toBe(10);
+		expect(limitsView({ record, settings: DEFAULT_SELLER_LIMITS, storedLevel: 'new', storedPayoutDelayDays: null, weeklySalesUsedCents: 0, nowMs: NOW }).payoutDelayDays).toBe(10);
 	});
 });

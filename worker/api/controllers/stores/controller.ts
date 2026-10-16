@@ -57,7 +57,7 @@ export class StoreOrdersController extends BaseController {
                 new StripeConnectService(env).getByUser(userId),
                 new StoreCheckoutService(env).weeklyUsage(userId, mode, new Date(nowMs - 7 * 24 * 60 * 60 * 1000)),
             ]);
-            return this.createSuccessResponse<SellerLimitsData>(limitsView({ record, settings, storedLevel: stored?.sellerLevel ?? 'new', weeklySalesUsedCents, nowMs }));
+            return this.createSuccessResponse<SellerLimitsData>(limitsView({ record, settings, storedLevel: stored?.sellerLevel ?? 'new', storedPayoutDelayDays: stored?.payoutDelayDays ?? null, weeklySalesUsedCents, nowMs }));
         } catch (error) {
             this.logger.error('Failed to load store limits', error);
             return this.createErrorResponse<SellerLimitsData>('Failed to load your store limits', 500);

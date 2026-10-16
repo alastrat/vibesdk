@@ -18,8 +18,9 @@ export function SellerLimits() {
 			</div>
 			<span>Largest order: {dollars(data.largestOrderCents)}</span>
 			<span>
-				Sales this week: {dollars(data.weeklySalesUsedCents)} of {dollars(data.weeklySalesCents)}
+				Weekly limit used: {dollars(data.weeklySalesUsedCents)} of {dollars(data.weeklySalesCents)}
 			</span>
+			<span className="text-kumo-subtle">Your own products count twice toward this limit; catalog products and shipping count once.</span>
 			<span>Payouts wait {data.payoutDelayDays} business days after each sale.</span>
 			{data.nextLevel && (
 				<span className="text-kumo-subtle">

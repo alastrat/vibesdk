@@ -649,11 +649,12 @@ class ApiClient {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/payouts', { method: 'PUT', body: choice });
 	}
 
-	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
+	/** The seller's level, store limits and this week's use. */
 	async getSellerLimits(): Promise<ApiResponse<SellerLimitsData>> {
 		return this.request<SellerLimitsData>('/api/stores/limits');
 	}
 
+	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
 	async acceptSellerTerms(version: string): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/terms', { method: 'POST', body: { version } });
 	}

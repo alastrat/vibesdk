@@ -59,7 +59,10 @@ describe('payments setup', () => {
 
 	it("shows the seller's level, their two limits with this week's use, and the way up", () => {
 		const limits = source('/src/components/payments/SellerLimits.tsx');
-		for (const text of ['Largest order', 'Sales this week', 'Payouts wait', 'completed orders', 'useSellerLimits(']) expect(limits).toContain(text);
+		for (const text of ['Largest order', 'Weekly limit used', 'Payouts wait', 'completed orders', 'useSellerLimits(']) expect(limits).toContain(text);
+		// The limit counts own products twice, so the card says so rather than calling the weighted total sales.
+		expect(limits).toContain('Your own products count twice');
+		expect(limits).not.toContain('Sales this week');
 		expect(source('/src/components/payments/PayoutsCard.tsx')).toContain('<SellerLimits />');
 	});
 });
