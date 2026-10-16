@@ -8,7 +8,14 @@ import {
     TEMPLATE_VERSION_STATUSES,
     USER_ROLES,
 } from '../../shared/types/templates';
-import { CATALOG_ITEM_STATUSES, CATALOG_ORDER_STATUSES, CATALOG_SUPPLIERS } from '../../shared/types/catalog';
+import {
+    CATALOG_ITEM_STATUSES,
+    CATALOG_OFFER_UNAVAILABLE_REASONS,
+    CATALOG_ORDER_STATUSES,
+    CATALOG_PRODUCT_STATUSES,
+    CATALOG_SUPPLIERS,
+    CATALOG_VARIANT_STATUSES,
+} from '../../shared/types/catalog';
 import { STORE_CHECKOUT_STATUSES, STORE_FULFILLMENT_STATUSES, STORE_LINE_KINDS, STORE_MODES, STORE_PAYMENT_STATUSES } from '../../shared/types/store-payments';
 
 // Schema enum arrays derived from config types  
@@ -492,6 +499,66 @@ export const storeOrderItems = sqliteTable('store_order_items', {
     lockedCatalogPriceCents: integer('locked_catalog_price_cents'),
 }, (table) => ({
     pk: primaryKey({ columns: [table.orderId, table.lineNo] }),
+}));
+
+/** Catalog products - the curated supplier products Estori sells, refreshed from the supplier. */
+export const catalogProducts = sqliteTable('catalog_products', {
+    id: text('id').primaryKey(),
+    supplier: text('supplier', { enum: CATALOG_SUPPLIERS }).notNull(),
+    supplierProductId: text('supplier_product_id').notNull(),
+    status: text('status', { enum: CATALOG_PRODUCT_STATUSES }).notNull().default('active'),
+    category: text('category').notNull(),
+    title: text('title'),
+    description: text('description'),
+    // JSON arrays and objects: R2 keys of the copied images, and the supplier's English properties.
+    images: text('images').notNull().default('[]'),
+    attributes: text('attributes').notNull().default('{}'),
+    detailsRefreshedAt: integer('details_refreshed_at', { mode: 'timestamp' }),
+    refreshClaimedUntil: integer('refresh_claimed_until', { mode: 'timestamp' }),
+    lastRefreshError: text('last_refresh_error'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    supplierIdx: uniqueIndex('catalog_products_supplier_unique_idx').on(table.supplier, table.supplierProductId),
+    statusIdx: index('catalog_products_status_idx').on(table.status),
+}));
+
+/** Catalog variants - one per supplier variant; the id is the catalogVariantId stores and carts carry. */
+export const catalogVariants = sqliteTable('catalog_variants', {
+    id: text('id').primaryKey(),
+    productId: text('product_id').notNull().references(() => catalogProducts.id, { onDelete: 'cascade' }),
+    supplierVariantId: text('supplier_variant_id').notNull(),
+    sku: text('sku'),
+    name: text('name').notNull(),
+    options: text('options').notNull().default('{}'),
+    imageKey: text('image_key'),
+    weightGrams: integer('weight_grams').notNull(),
+    supplierCostCents: integer('supplier_cost_cents').notNull(),
+    // JSON { countryCode: quantity } of the supplier's stock by warehouse country.
+    stock: text('stock').notNull().default('{}'),
+    status: text('status', { enum: CATALOG_VARIANT_STATUSES }).notNull().default('active'),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    supplierVariantIdx: uniqueIndex('catalog_variants_supplier_variant_unique_idx').on(table.supplierVariantId),
+    productIdx: index('catalog_variants_product_idx').on(table.productId),
+}));
+
+/** Catalog variant offers - a variant's price and availability for one destination country. */
+export const catalogVariantOffers = sqliteTable('catalog_variant_offers', {
+    variantId: text('variant_id').notNull().references(() => catalogVariants.id, { onDelete: 'cascade' }),
+    destinationCountry: text('destination_country').notNull(),
+    originCountry: text('origin_country').notNull(),
+    logisticName: text('logistic_name'),
+    deliveryDaysMin: integer('delivery_days_min'),
+    deliveryDaysMax: integer('delivery_days_max'),
+    supplierCostCents: integer('supplier_cost_cents').notNull(),
+    shippingCents: integer('shipping_cents'),
+    catalogPriceCents: integer('catalog_price_cents'),
+    available: integer('available', { mode: 'boolean' }).notNull(),
+    unavailableReason: text('unavailable_reason', { enum: CATALOG_OFFER_UNAVAILABLE_REASONS }),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.variantId, table.destinationCountry] }),
 }));
 
 /**
