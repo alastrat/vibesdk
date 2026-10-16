@@ -1,6 +1,6 @@
 /** Store payments: a store's price list (`estori-store.json`), the checkout request and answer, and the priced cart. Amounts are US cents. */
 
-import type { CatalogSupplier } from './catalog';
+import type { CatalogItemStatus, CatalogSupplier } from './catalog';
 
 export const STORE_MANIFEST_FILE = 'estori-store.json';
 /** Every path under it on a store's address belongs to the platform. */
@@ -155,4 +155,37 @@ export interface StoreReceipt {
 	shipCity: string | null;
 	shipCountry: string | null;
 	customerEmail: string | null;
+}
+
+/** A catalog item's progress, as the seller sees it on an order. */
+export interface CatalogItemProgress {
+	catalogVariantId: string;
+	quantity: number;
+	status: CatalogItemStatus;
+	trackingNumber: string | null;
+	carrier: string | null;
+}
+
+export interface StoreOrderSummary {
+	id: string;
+	orderNumber: number;
+	mode: StoreMode;
+	paymentStatus: StorePaymentStatus;
+	fulfillmentStatus: StoreFulfillmentStatus;
+	subtotalCents: number;
+	shippingCents: number;
+	totalCents: number;
+	/** Estori's application fee: processing, plus the catalog price of catalog items. */
+	applicationFeeCents: number;
+	customerName: string | null;
+	customerEmail: string | null;
+	shipTo: { name: string; line1: string; line2: string | null; city: string; region: string | null; postalCode: string; countryCode: string } | null;
+	needsAttention: string | null;
+	createdAt: string;
+	items: { name: string; kind: StoreLineKind; quantity: number; unitPriceCents: number }[];
+	catalogItems: CatalogItemProgress[];
+}
+
+export interface StoreOrdersData {
+	orders: StoreOrderSummary[];
 }

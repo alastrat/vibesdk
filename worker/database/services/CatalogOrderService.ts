@@ -1,11 +1,12 @@
 /** D1 reads and writes for catalog orders and their items. */
 
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { CatalogOrderRow, CatalogOrderStore, ItemPatch, NewCatalogOrder } from '../../services/catalog/store';
 import type { ShippingAddress } from '../../services/catalog/supplier';
 import type { CatalogOrderStatus } from '../../../shared/types/catalog';
+import type { CatalogItemProgress } from '../../../shared/types/store-payments';
 
 function isUniqueViolation(error: unknown): boolean {
     return error instanceof Error && error.message.includes('UNIQUE constraint failed');
@@ -92,5 +93,26 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
             .update(schema.catalogOrders)
             .set({ ...update, updatedAt: new Date() })
             .where(eq(schema.catalogOrders.id, orderId));
+    }
+
+    /** Catalog items of each paid Checkout session, for the seller's order list. */
+    async progressForSessions(sessionIds: readonly string[]): Promise<Map<string, CatalogItemProgress[]>> {
+        const progress = new Map<string, CatalogItemProgress[]>();
+        if (sessionIds.length === 0) return progress;
+        const rows = await this.database
+            .select({
+                sessionId: schema.catalogOrders.stripeCheckoutSessionId,
+                catalogVariantId: schema.catalogOrderItems.catalogVariantId,
+                quantity: schema.catalogOrderItems.quantity,
+                status: schema.catalogOrderItems.status,
+                trackingNumber: schema.catalogOrderItems.trackingNumber,
+                carrier: schema.catalogOrderItems.carrier,
+            })
+            .from(schema.catalogOrderItems)
+            .innerJoin(schema.catalogOrders, eq(schema.catalogOrderItems.orderId, schema.catalogOrders.id))
+            .where(inArray(schema.catalogOrders.stripeCheckoutSessionId, [...sessionIds]))
+            .all();
+        for (const { sessionId, ...item } of rows) progress.set(sessionId, [...(progress.get(sessionId) ?? []), item]);
+        return progress;
     }
 }

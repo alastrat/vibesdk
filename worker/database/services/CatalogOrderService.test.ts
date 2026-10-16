@@ -111,3 +111,20 @@ describe('CatalogOrderService', () => {
 		});
 	});
 });
+
+describe('CatalogOrderService.progressForSessions', () => {
+	it("groups each paid session's catalog items with their status and tracking", async () => {
+		const { d1 } = recordingD1([
+			['cs_1', 'cv_mug', 2, 'shipped', '9400111899223197428490', 'USPS'],
+			['cs_1', 'cv_cap', 1, 'placed', null, null],
+		]);
+		const orders = new CatalogOrderService({ DB: d1 } as unknown as Env);
+		const progress = await orders.progressForSessions(['cs_1']);
+		expect(progress.get('cs_1')).toEqual([
+			{ catalogVariantId: 'cv_mug', quantity: 2, status: 'shipped', trackingNumber: '9400111899223197428490', carrier: 'USPS' },
+			{ catalogVariantId: 'cv_cap', quantity: 1, status: 'placed', trackingNumber: null, carrier: null },
+		]);
+		expect((await orders.progressForSessions([])).size).toBe(0);
+	});
+});
+

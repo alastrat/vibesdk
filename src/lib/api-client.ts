@@ -92,6 +92,7 @@ import type{
 	SitePageData,
 	SitePublishingData,
 	StripeConnectStatusData,
+	StoreOrdersData,
 	StripeLinkData,
 	TemplateCategory,
 	AuthUser,
@@ -636,6 +637,10 @@ class ApiClient {
 
 	async getStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
+	}
+
+	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
+		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
 	}
 
 	async getStripeDashboardLink(): Promise<ApiResponse<StripeLinkData>> {

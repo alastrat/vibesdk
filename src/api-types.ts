@@ -228,6 +228,7 @@ export type {
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
+export type { StoreOrdersData, StoreOrderSummary, CatalogItemProgress } from '../shared/types/store-payments';
 
 export type {
 	AdminSalesData,
