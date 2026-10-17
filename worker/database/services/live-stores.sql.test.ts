@@ -45,6 +45,9 @@ describe('live stores on real SQL', () => {
 		expect(await stores.addDomain({ appId: 'app_tea', hostname: 'shop.northwindtea.com', provider: 'cloudflare', providerId: 'ch_1', records, now: NOW })).toBe('added');
 		expect(await stores.addDomain({ appId: 'app_home', hostname: 'shop.northwindtea.com', provider: 'cloudflare', providerId: 'ch_2', records, now: NOW })).toBe('hostname-taken');
 		expect(await stores.addDomain({ appId: 'app_tea', hostname: 'www.northwindtea.com', provider: 'cloudflare', providerId: 'ch_3', records, now: NOW })).toBe('store-has-domain');
+		// Whoever holds a hostname, in any state, so a stale claim can be weighed before it's replaced.
+		expect(await stores.domainByHostname('shop.northwindtea.com')).toMatchObject({ appId: 'app_tea', status: 'pending', providerId: 'ch_1' });
+		expect(await stores.domainByHostname('www.northwindtea.com')).toBeNull();
 		// Pending domains don't route yet.
 		expect(await stores.storeForHostname('shop.northwindtea.com')).toBeNull();
 		expect((await stores.pendingDomains()).map((domain) => domain.hostname)).toEqual(['shop.northwindtea.com']);

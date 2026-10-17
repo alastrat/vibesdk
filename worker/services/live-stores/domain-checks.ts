@@ -6,11 +6,14 @@ import type { CustomHostnameProvider } from './domains';
 
 /** A domain still waiting for DNS this long is failed, so it stops being checked. */
 export const DOMAIN_SETUP_DAYS = 7;
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** Another store may take over a claim still waiting for DNS after this long, so a mistyped claim can't hold a real owner's domain. */
+export const DOMAIN_CLAIM_HOLD_HOURS = 24;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 export interface DomainFlowDeps {
 	provider: CustomHostnameProvider | null;
-	stores: Pick<LiveStoreService, 'domainOfApp' | 'addDomain' | 'updateDomain' | 'removeDomain' | 'pendingDomains'>;
+	stores: Pick<LiveStoreService, 'domainOfApp' | 'domainByHostname' | 'addDomain' | 'updateDomain' | 'removeDomain' | 'pendingDomains'>;
 	/** Estori's own domains, which a seller can't connect. */
 	own: { storesDomain: string | null; estoriDomains: readonly string[] };
 	now(): Date;
@@ -20,6 +23,8 @@ export type DomainResult = { ok: true; domain: StoreDomainRow } | { ok: false; m
 
 const NOT_SET_UP = "Custom domains aren't set up yet.";
 const FULL_DOMAIN = 'Enter a full domain, such as shop.yourstore.com.';
+const TAKEN = 'That domain is connected to another store.';
+const TRY_AGAIN = "This domain couldn't be added. Try again.";
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
@@ -32,6 +37,17 @@ export async function addStoreDomain(deps: DomainFlowDeps, appId: string, input:
 	const problem = customHostnameProblem(hostname, deps.own);
 	if (problem) return { ok: false, message: problem };
 	if (await deps.stores.domainOfApp(appId)) return { ok: false, message: 'This store already has a domain. Remove it to connect another.' };
+	const now = deps.now();
+	const holder = await deps.stores.domainByHostname(hostname);
+	if (holder) {
+		if (!claimReplaceable(holder, now)) return { ok: false, message: TAKEN };
+		try {
+			await deps.provider.remove(holder.hostname, holder.providerId);
+		} catch {
+			return { ok: false, message: TRY_AGAIN };
+		}
+		await deps.stores.removeDomain(holder.appId);
+	}
 
 	let created: Awaited<ReturnType<CustomHostnameProvider['create']>>;
 	try {
@@ -39,16 +55,28 @@ export async function addStoreDomain(deps: DomainFlowDeps, appId: string, input:
 	} catch (error) {
 		return { ok: false, message: `This domain couldn't be added: ${errorText(error)}` };
 	}
-	const now = deps.now();
-	const added = await deps.stores.addDomain({ appId, hostname, provider: deps.provider.name, providerId: created.providerId, records: created.records, now });
-	if (added !== 'added') {
-		// Another store has it, or this store just got one: the provider's copy goes, so nothing is left behind.
-		await deps.provider.remove(hostname, created.providerId).catch(() => undefined);
-		return { ok: false, message: added === 'hostname-taken' ? 'That domain is connected to another store.' : 'This store already has a domain. Remove it to connect another.' };
+	const provider = deps.provider;
+	// Whatever goes wrong from here, the provider's copy goes, so nothing is left behind to block the next try.
+	const removeCreated = () => provider.remove(hostname, created.providerId).catch(() => undefined);
+	try {
+		const added = await deps.stores.addDomain({ appId, hostname, provider: provider.name, providerId: created.providerId, records: created.records, now });
+		if (added !== 'added') {
+			await removeCreated();
+			return { ok: false, message: added === 'hostname-taken' ? TAKEN : 'This store already has a domain. Remove it to connect another.' };
+		}
+		await deps.stores.updateDomain(hostname, { status: created.status, records: created.records, lastError: created.error, checkedAt: now, verifiedAt: created.status === 'active' ? now : null });
+	} catch {
+		await removeCreated();
+		return { ok: false, message: TRY_AGAIN };
 	}
-	await deps.stores.updateDomain(hostname, { status: created.status, records: created.records, lastError: created.error, checkedAt: now, verifiedAt: created.status === 'active' ? now : null });
 	const domain = await deps.stores.domainOfApp(appId);
-	return domain ? { ok: true, domain } : { ok: false, message: "This domain couldn't be added. Try again." };
+	return domain ? { ok: true, domain } : { ok: false, message: TRY_AGAIN };
+}
+
+/** A claim that failed, or has waited for DNS longer than the hold, may be replaced; a connected one never is. */
+function claimReplaceable(claim: StoreDomainRow, now: Date): boolean {
+	if (claim.status === 'failed') return true;
+	return claim.status === 'pending' && now.getTime() - claim.createdAt.getTime() > DOMAIN_CLAIM_HOLD_HOURS * HOUR_MS;
 }
 
 async function check(deps: DomainFlowDeps & { provider: CustomHostnameProvider }, row: StoreDomainRow): Promise<void> {
@@ -95,6 +123,11 @@ export async function removeStoreDomain(deps: DomainFlowDeps, appId: string): Pr
 	}
 	await deps.stores.removeDomain(appId);
 	return { ok: true };
+}
+
+/** A deleted store's domain goes at the provider too; if the provider can't answer, it's replaced when someone connects it again. */
+export async function releaseDeletedStoreDomain(provider: CustomHostnameProvider | null, domain: StoreDomainRow): Promise<void> {
+	await provider?.remove(domain.hostname, domain.providerId).catch(() => undefined);
 }
 
 /** Checks every domain still waiting for DNS; one that fails to answer never stops the others. */

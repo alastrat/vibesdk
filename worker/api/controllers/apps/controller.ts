@@ -1,4 +1,7 @@
 import { AppService } from '../../../database/services/AppService';
+import { LiveStoreService } from '../../../database/services/LiveStoreService';
+import { releaseDeletedStoreDomain } from '../../../services/live-stores/domain-checks';
+import { domainFlowDepsFromEnv } from '../../../services/live-stores/wiring';
 import type { AppSortOption, SortOrder, TimePeriod } from '../../../database/types';
 import { formatRelativeTime } from '../../../utils/timeFormatter';
 import { BaseController } from '../baseController';
@@ -219,6 +222,8 @@ export class AppController extends BaseController {
             }
         
             const appService = new AppService(env);
+            // Read before the delete removes it; it's let go only once the owner's delete succeeded.
+            const storeDomain = await new LiveStoreService(env).domainOfApp(appId);
             const result = await appService.deleteApp(appId, user.id);
 
             if (!result.success) {
@@ -226,6 +231,7 @@ export class AppController extends BaseController {
                                  result.error?.includes('only delete your own apps') ? 403 : 500;
                 return AppController.createErrorResponse<AppDeleteData>(result.error || 'Failed to delete app', statusCode);
             }
+            if (storeDomain) await releaseDeletedStoreDomain(domainFlowDepsFromEnv(env).provider, storeDomain);
 
             const responseData: AppDeleteData = {
                 success: true,

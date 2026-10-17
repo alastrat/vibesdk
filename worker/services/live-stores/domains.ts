@@ -31,11 +31,14 @@ interface CloudflareHostname {
 	ssl?: { status?: string; validation_records?: Array<{ txt_name?: string; txt_value?: string }>; validation_errors?: Array<{ message?: string }> };
 }
 
-interface CloudflareAnswer {
+interface CloudflareAnswer<T> {
 	success: boolean;
 	errors?: Array<{ code?: number; message?: string }>;
-	result?: CloudflareHostname;
+	result?: T;
 }
+
+/** Cloudflare's code for a hostname already on the zone. */
+const DUPLICATE_HOSTNAME = 1406;
 
 /** Statuses after which a hostname won't become active without the seller starting over. */
 const FAILED_HOSTNAME = ['blocked', 'moved', 'deleted', 'pending_deletion', 'test_blocked', 'test_failed'];
@@ -44,6 +47,7 @@ export class CustomHostnameApiError extends Error {
 	constructor(
 		message: string,
 		readonly status: number,
+		readonly code: number | null = null,
 	) {
 		super(message);
 		this.name = 'CustomHostnameApiError';
@@ -54,18 +58,21 @@ export function cloudflareSaasProvider(config: { zoneId: string; apiToken: strin
 	const fetcher: Fetcher = config.fetcher ?? ((input, init) => fetch(input, init));
 	const base = `https://api.cloudflare.com/client/v4/zones/${encodeURIComponent(config.zoneId)}/custom_hostnames`;
 
-	async function call(method: string, path: string, body?: unknown): Promise<CloudflareHostname | null> {
+	async function call<T = CloudflareHostname>(method: string, path: string, body?: unknown): Promise<T | null> {
 		const response = await fetcher(`${base}${path}`, {
 			method,
 			headers: { Authorization: `Bearer ${config.apiToken}`, 'Content-Type': 'application/json' },
 			...(body === undefined ? {} : { body: JSON.stringify(body) }),
 		});
-		const answer = (await response.json().catch(() => ({ success: false }))) as CloudflareAnswer;
+		const answer = (await response.json().catch(() => ({ success: false }))) as CloudflareAnswer<T>;
 		if (!response.ok || !answer.success) {
-			throw new CustomHostnameApiError(answer.errors?.[0]?.message ?? `Cloudflare answered ${response.status}`, response.status);
+			const error = answer.errors?.[0];
+			throw new CustomHostnameApiError(error?.message ?? `Cloudflare answered ${response.status}`, response.status, error?.code ?? null);
 		}
 		return answer.result ?? null;
 	}
+
+	const createBody = (hostname: string) => ({ hostname, ssl: { method: 'txt', type: 'dv', settings: { min_tls_version: '1.2' } } });
 
 	function stateOf(hostname: CloudflareHostname): DomainState {
 		const records: StoreDomainRecord[] = [{ type: 'CNAME', name: hostname.hostname, value: config.cnameTarget, purpose: 'routing' }];
@@ -84,8 +91,20 @@ export function cloudflareSaasProvider(config: { zoneId: string; apiToken: strin
 
 	return {
 		name: 'cloudflare',
+		/**
+		 * Estori asks only for a hostname no store holds, so one already on the zone is a leftover, such as a deleted
+		 * store's: it's replaced, and the seller proves ownership again with new records.
+		 */
 		async create(hostname) {
-			const created = await call('POST', '', { hostname, ssl: { method: 'txt', type: 'dv', settings: { min_tls_version: '1.2' } } });
+			let created: CloudflareHostname | null;
+			try {
+				created = await call('POST', '', createBody(hostname));
+			} catch (error) {
+				if (!(error instanceof CustomHostnameApiError) || error.code !== DUPLICATE_HOSTNAME) throw error;
+				const leftovers = (await call<CloudflareHostname[]>('GET', `?hostname=${encodeURIComponent(hostname)}`)) ?? [];
+				for (const leftover of leftovers.filter((found) => found.hostname === hostname)) await call('DELETE', `/${encodeURIComponent(leftover.id)}`);
+				created = await call('POST', '', createBody(hostname));
+			}
 			if (!created) throw new CustomHostnameApiError('Cloudflare returned no custom hostname', 502);
 			return { providerId: created.id, ...stateOf(created) };
 		},

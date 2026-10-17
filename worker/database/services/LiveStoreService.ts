@@ -120,6 +120,12 @@ export class LiveStoreService extends BaseService {
         return row ? { ...row, records: recordsOf(row.records) } : null;
     }
 
+    /** The claim on a hostname, in any state. */
+    async domainByHostname(hostname: string): Promise<StoreDomainRow | null> {
+        const row = await this.database.select().from(schema.storeDomains).where(eq(schema.storeDomains.hostname, hostname)).get();
+        return row ? { ...row, records: recordsOf(row.records) } : null;
+    }
+
     async addDomain(input: {
         appId: string;
         hostname: string;

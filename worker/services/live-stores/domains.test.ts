@@ -69,11 +69,27 @@ describe('the Cloudflare for SaaS provider', () => {
 
 	it("throws Cloudflare's message when it refuses a request, and treats a hostname already gone as removed", async () => {
 		const { provider } = cloudflare([
-			{ status: 409, body: { success: false, errors: [{ code: 1406, message: 'Duplicate custom hostname found.' }] } },
+			{ status: 400, body: { success: false, errors: [{ code: 1411, message: 'Invalid custom hostname.' }] } },
 			{ status: 404, body: { success: false, errors: [{ code: 1436, message: 'Custom hostname not found' }] } },
 		]);
-		await expect(provider.create('shop.northwindtea.com')).rejects.toThrow('Duplicate custom hostname found.');
+		await expect(provider.create('shop.northwindtea.com')).rejects.toThrow('Invalid custom hostname.');
 		await expect(provider.remove('shop.northwindtea.com', 'ch_gone')).resolves.toBeUndefined();
+	});
+
+	it('replaces a hostname left on the zone from before, such as a deleted store\'s, so the domain can be connected again', async () => {
+		const { provider, calls } = cloudflare([
+			{ status: 409, body: { success: false, errors: [{ code: 1406, message: 'Duplicate custom hostname found.' }] } },
+			{ body: { success: true, result: [{ id: 'ch_old', hostname: 'shop.northwindtea.com', status: 'active' }] } },
+			{ body: { success: true, result: { id: 'ch_old' } } },
+			{ body: PENDING },
+		]);
+		expect(await provider.create('shop.northwindtea.com')).toMatchObject({ providerId: 'ch_1', status: 'pending' });
+		expect(calls.map((call) => `${call.method} ${call.url.replace(`https://api.cloudflare.com/client/v4/zones/${ZONE}/custom_hostnames`, '')}`)).toEqual([
+			'POST ',
+			'GET ?hostname=shop.northwindtea.com',
+			'DELETE /ch_old',
+			'POST ',
+		]);
 	});
 });
 

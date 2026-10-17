@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addStoreDomain, checkStoreDomain, removeStoreDomain, sweepPendingDomains, DOMAIN_SETUP_DAYS, type DomainFlowDeps } from './domain-checks';
+import { addStoreDomain, checkStoreDomain, releaseDeletedStoreDomain, removeStoreDomain, sweepPendingDomains, DOMAIN_CLAIM_HOLD_HOURS, DOMAIN_SETUP_DAYS, type DomainFlowDeps } from './domain-checks';
 import type { CustomHostnameProvider, DomainState } from './domains';
 import type { StoreDomainRow } from '../../database/services/LiveStoreService';
 
 const DAY = 24 * 60 * 60 * 1000;
 const RECORDS = [{ type: 'CNAME' as const, name: 'shop.northwindtea.com', value: 'stores.estori.shop', purpose: 'routing' as const }];
 
-function world(options: { checks?: DomainState[]; createFails?: boolean; removeFails?: boolean; takenBy?: Record<string, string> } = {}) {
+function world(options: { checks?: DomainState[]; createFails?: boolean; removeFails?: boolean; saveFails?: boolean; takenBy?: Record<string, string> } = {}) {
 	const rows = new Map<string, StoreDomainRow>();
 	const removedAtProvider: string[] = [];
 	let now = new Date(1_800_000_000_000);
@@ -28,7 +28,9 @@ function world(options: { checks?: DomainState[]; createFails?: boolean; removeF
 		now: () => now,
 		stores: {
 			domainOfApp: async (appId) => [...rows.values()].find((row) => row.appId === appId) ?? null,
+			domainByHostname: async (hostname) => rows.get(hostname) ?? null,
 			addDomain: async (input) => {
+				if (options.saveFails) throw new Error('D1_ERROR: database is locked');
 				if (options.takenBy?.[input.hostname] || rows.has(input.hostname)) return 'hostname-taken';
 				if ([...rows.values()].some((row) => row.appId === input.appId)) return 'store-has-domain';
 				rows.set(input.hostname, { hostname: input.hostname, appId: input.appId, status: 'pending', provider: input.provider, providerId: input.providerId, records: input.records, lastError: null, createdAt: input.now, checkedAt: null, verifiedAt: null });
@@ -71,6 +73,35 @@ describe('adding a domain', () => {
 	});
 });
 
+describe('a domain another store claimed', () => {
+	it(`can be taken over once that claim failed, or waited for DNS over ${DOMAIN_CLAIM_HOLD_HOURS} hours, removing it at the provider first`, async () => {
+		const { deps, rows, removedAtProvider, advance } = world();
+		await addStoreDomain(deps, 'app_squatter', 'shop.northwindtea.com');
+		expect(await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com')).toEqual({ ok: false, message: 'That domain is connected to another store.' });
+		advance(DOMAIN_CLAIM_HOLD_HOURS * 60 * 60 * 1000 + 1);
+		expect(await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com')).toMatchObject({ ok: true, domain: { appId: 'app_tea', status: 'pending' } });
+		expect(removedAtProvider).toEqual(['shop.northwindtea.com']);
+		expect([...rows.values()].map((row) => row.appId)).toEqual(['app_tea']);
+
+		rows.set('www.northwindtea.com', { ...rows.get('shop.northwindtea.com')!, hostname: 'www.northwindtea.com', appId: 'app_failed', status: 'failed', createdAt: new Date(1_800_000_000_000 + DOMAIN_CLAIM_HOLD_HOURS * 3600 * 1000) });
+		expect(await addStoreDomain(deps, 'app_lumen', 'www.northwindtea.com')).toMatchObject({ ok: true, domain: { appId: 'app_lumen' } });
+	});
+
+	it('is never taken from a store whose domain is connected', async () => {
+		const { deps, advance } = world({ checks: [{ status: 'active', records: RECORDS, error: null }] });
+		await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com');
+		await checkStoreDomain(deps, 'app_tea');
+		advance(30 * DAY);
+		expect(await addStoreDomain(deps, 'app_other', 'shop.northwindtea.com')).toEqual({ ok: false, message: 'That domain is connected to another store.' });
+	});
+
+	it("removes the provider's copy when saving the domain here fails, so retrying isn't blocked", async () => {
+		const { deps, removedAtProvider } = world({ saveFails: true });
+		expect(await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com')).toEqual({ ok: false, message: "This domain couldn't be added. Try again." });
+		expect(removedAtProvider).toEqual(['shop.northwindtea.com']);
+	});
+});
+
 describe('checking a domain', () => {
 	it('connects it once the provider says it is active, noting when', async () => {
 		const { deps } = world({ checks: [{ status: 'pending', records: RECORDS, error: null }, { status: 'active', records: RECORDS, error: null }] });
@@ -106,5 +137,17 @@ describe('removing a domain', () => {
 		expect(await removeStoreDomain(deps, 'app_tea')).toEqual({ ok: true });
 		expect(removedAtProvider).toEqual(['shop.northwindtea.com']);
 		expect(rows.size).toBe(0);
+	});
+});
+
+describe('a deleted store', () => {
+	it("lets its domain go at the provider, and a provider that can't answer leaves it to be replaced later", async () => {
+		const { deps, rows, removedAtProvider } = world();
+		await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com');
+		const domain = rows.get('shop.northwindtea.com')!;
+		await releaseDeletedStoreDomain(deps.provider, domain);
+		expect(removedAtProvider).toEqual(['shop.northwindtea.com']);
+		await expect(releaseDeletedStoreDomain(world({ removeFails: true }).deps.provider, domain)).resolves.toBeUndefined();
+		await expect(releaseDeletedStoreDomain(null, domain)).resolves.toBeUndefined();
 	});
 });
