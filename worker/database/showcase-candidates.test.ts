@@ -17,4 +17,14 @@ describe('AppService.listAppsMissingShowcase', () => {
 		expect(select).toContain('order by random()');
 		expect(select).toContain('limit ?');
 	});
+
+	it('picks from the stores Discover would list, by the same conditions, in both the batch and its count', async () => {
+		const { d1, statements } = recordingD1((sql) => (sql.toLowerCase().includes('count(') ? [[0]] : []));
+		await new AppService({ DB: d1 } as unknown as Env).listAppsMissingShowcase(2);
+		const [select, count] = ['select "id"', 'count('].map((part) => statements.map((statement) => statement.sql.toLowerCase().replace(/\s+/g, ' ')).find((sql) => sql.includes(part)) ?? '');
+		for (const sql of [select, count]) {
+			expect(sql).toContain('("apps"."status" = ? or "apps"."status" = ?)');
+			expect(sql).toContain('"apps"."removed_from_discover_at" is null');
+		}
+	});
 });

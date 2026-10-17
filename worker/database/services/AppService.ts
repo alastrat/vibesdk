@@ -346,9 +346,11 @@ export class AppService extends BaseService {
 
     /** Deployed public stores still in Discover that have no showcase image yet, in random order so stores that keep failing can't hold every batch. */
     async listAppsMissingShowcase(limit: number): Promise<{ ids: string[]; remaining: number }> {
+        // The same stores the Discover listing shows, so no capture is spent on one it would never list.
         const missing = and(
             eq(schema.apps.visibility, 'public'),
-            isNull(schema.apps.removedFromDiscoverAt),
+            or(eq(schema.apps.status, 'completed'), eq(schema.apps.status, 'generating')),
+            ...discoverConditions(undefined),
             isNotNull(schema.apps.lastDeployedAt),
             isNull(schema.apps.showcaseScreenshotUrl),
         );
