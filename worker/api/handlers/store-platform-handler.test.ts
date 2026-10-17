@@ -39,6 +39,20 @@ describe('handleStorePlatform', () => {
 		expect(response.headers.get('Content-Type')).toContain('text/javascript');
 	});
 
+	it("serves Estori's checkout page on the store's address, with its own security policy and a fresh nonce each time", async () => {
+		const env = testEnv({ STRIPE_PUBLISHABLE_KEY: 'pk_test_123', CUSTOM_DOMAIN: 'build.estori.test' }).env;
+		const target = { ...TARGET, platformPath: '/__estori/pay' };
+		const first = await handleStorePlatform(new Request(`${BASE}/__estori/pay?success=%2Fthanks`), env, target, CTX);
+		expect(first.status).toBe(200);
+		expect(first.headers.get('Content-Type')).toContain('text/html');
+		const policy = first.headers.get('Content-Security-Policy') ?? '';
+		expect(policy).toContain("frame-ancestors 'self' https://build.estori.test");
+		const html = await first.text();
+		expect(html).toContain('"publishableKey":"pk_test_123"');
+		const second = await handleStorePlatform(new Request(`${BASE}/__estori/pay`), env, target, CTX);
+		expect(second.headers.get('Content-Security-Policy')).not.toBe(policy);
+	});
+
 	it('refuses checkouts from another origin, of another type or too large, before reading anything', async () => {
 		const { env, statements } = testEnv();
 		expect((await handleStorePlatform(checkoutRequest({ origin: 'https://evil.example' }), env, TARGET, CTX)).status).toBe(400);

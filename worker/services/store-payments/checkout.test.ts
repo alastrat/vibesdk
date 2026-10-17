@@ -62,7 +62,6 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 		weeklyUsage: async () => 0,
 		replaceCheckout: async (checkoutId) => {
 			replaced.push(checkoutId);
-			return checkoutId === 'chk_old' ? 'replaced' : 'not-replaceable';
 		},
 		limitReached: async (weeklySalesCents) => {
 			limits.push(`reached ${weeklySalesCents}`);
@@ -213,7 +212,7 @@ describe('startStoreCheckout', () => {
 		expect(failed).toEqual(['chk_1']);
 	});
 
-	it('replaces the checkout the cart was edited from, before the weekly cap counts it, and refuses one it may not replace', async () => {
+	it('replaces the checkout the cart was edited from, before the weekly cap counts it, and starts anew when that one is no longer open', async () => {
 		const order: string[] = [];
 		const { deps, replaced } = fakeDeps({ weeklyUsage: async () => (order.push('usage'), 0) });
 		const replace = deps.replaceCheckout;
@@ -222,9 +221,11 @@ describe('startStoreCheckout', () => {
 		expect(replaced).toEqual(['chk_old']);
 		expect(order).toEqual(['replace', 'usage']);
 
+		// The page reloaded after a payment, or the checkout expired: the new checkout starts as if nothing was named.
 		const other = fakeDeps();
-		expect(await startStoreCheckout(other.deps, { ...INPUT, body: { ...(INPUT.body as object), replaces: 'chk_someone_else' } })).toMatchObject({ ok: false, reason: 'invalid_request' });
-		expect(other.saved).toHaveLength(0);
+		expect(await startStoreCheckout(other.deps, { ...INPUT, body: { ...(INPUT.body as object), replaces: 'chk_paid' } })).toMatchObject({ ok: true });
+		expect(other.replaced).toEqual(['chk_paid']);
+		expect(other.saved).toHaveLength(1);
 	});
 });
 

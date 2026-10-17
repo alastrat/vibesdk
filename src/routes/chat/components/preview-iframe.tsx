@@ -338,6 +338,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
 			return (
 				<iframe
                     sandbox={EDITOR_PREVIEW_IFRAME_SANDBOX}
+                    allow="payment"
 					ref={ref}
 					src={loadState.loadedSrc}
 					className={className}
@@ -365,6 +366,7 @@ export const PreviewIframe = forwardRef<HTMLIFrameElement, PreviewIframeProps>(
                     {loadState.status === 'postload' && loadState.loadedSrc && (
                         <iframe
                             sandbox={EDITOR_PREVIEW_IFRAME_SANDBOX}
+                            allow="payment"
                             ref={ref}
                             src={loadState.loadedSrc}
                             className="absolute inset-0 opacity-0 pointer-events-none"

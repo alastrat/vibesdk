@@ -43,9 +43,9 @@ export interface StartCheckoutDeps {
 	weeklyUsage(mode: StoreMode): Promise<number>;
 	/**
 	 * Expires a checkout of this store that is still starting or open, and its Stripe session, so it stops counting toward
-	 * the weekly cap; 'not-replaceable' for any other checkout.
+	 * the weekly cap. Any other checkout is left as it is.
 	 */
-	replaceCheckout(checkoutId: string): Promise<'replaced' | 'not-replaceable'>;
+	replaceCheckout(checkoutId: string): Promise<void>;
 	/** Tells Estori and the seller that the store reached this weekly cap; may finish after the shopper is answered. */
 	limitReached(weeklySalesCents: number): Promise<void>;
 	newCheckoutId(): string;
@@ -77,8 +77,8 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	if (input.stripeMode !== 'test') return refusal('payments_unavailable');
 	const request = parseCheckoutRequest(input.body);
 	if (!request) return refusal('invalid_request');
-	// The cart was edited on Estori's checkout page: the earlier checkout goes first, so the cap counts only this one.
-	if (request.replaces && (await deps.replaceCheckout(request.replaces)) === 'not-replaceable') return refusal('invalid_request');
+	// The cart was edited, or the page reloaded: the earlier checkout goes first, so the cap counts only this one.
+	if (request.replaces) await deps.replaceCheckout(request.replaces);
 
 	const seller = await deps.sellerAccount();
 	// The seller must be able to be the merchant of record, with a bank account Stripe can recover from.

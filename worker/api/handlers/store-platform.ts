@@ -16,6 +16,8 @@ import { recordStoreOrder } from '../../services/store-payments/fulfill';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
 import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader, receiptOf, signReceipt, verifyReceipt } from '../../services/store-payments/receipts';
 import { STORE_SCRIPT } from '../../services/store-payments/store-script';
+import { payPageHeaders, renderPayPage } from '../../services/store-payments/pay-page';
+import { getProtocolForHost } from '../../utils/urls';
 import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
 import { getSellerLimitsSettings } from '../../config';
@@ -129,6 +131,19 @@ async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Re
 	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null));
 }
 
+/** Estori's checkout page: the store's brand and products from its file, and a fresh nonce for the page's own script. */
+async function servePayPage(env: Env, target: StorePlatformTarget): Promise<Response> {
+	const file = await loadManifest(env, target);
+	const parsed = file ? parseStoreManifest(file.text) : null;
+	const access = await previewAccess(env, target);
+	const seller = parsed?.ok && access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
+	const info = parsed?.ok ? storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null) : null;
+	const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
+	const appOrigin = env.CUSTOM_DOMAIN ? `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}` : null;
+	const html = renderPayPage({ basePath: target.basePath, publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, info, nonce });
+	return new Response(html, { headers: payPageHeaders(nonce, appOrigin) });
+}
+
 /** The seller's limits: an admin's pin wins over the stored level, which Estori keeps current. */
 async function sellerLimitsOf(env: Env, sellerUserId: string): Promise<SellerLevelLimits> {
 	const settings = await getSellerLimitsSettings(env, sellerUserId);
@@ -165,9 +180,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			},
 			replaceCheckout: async (checkoutId) => {
 				const replaced = await checkouts.replaceOpen(checkoutId, target.appId);
-				if (!replaced) return 'not-replaceable';
-				if (replaced.sessionId && stripe) await stripe.expireCheckoutSession(replaced.sessionId);
-				return 'replaced';
+				if (replaced?.sessionId && stripe) await stripe.expireCheckoutSession(replaced.sessionId);
 			},
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
@@ -251,6 +264,7 @@ export async function handleStorePlatform(request: Request, env: Env, target: St
 			return new Response(STORE_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
 		}
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(env, target);
+		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/pay`) return await servePayPage(env, target);
 		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target, ctx);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/return`) return await serveReturn(request, env, target);
 		const receipt = path.match(/^\/__estori\/orders\/(ord_[a-z0-9]{1,64})$/);
