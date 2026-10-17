@@ -53,7 +53,7 @@ export async function runCatalogSchedule(cron: string, env: Env): Promise<void> 
 			const raised = await runCatalogHealth(
 				{
 					refreshHealth: () => products.refreshHealth(),
-					lateItems: (status, before) => orders.lateItems(status, before),
+					lateItems: (status, before, since) => orders.lateItems(status, before, since),
 					alert: platformAlertsFromEnv(env),
 					unpaidCharges: (before) => new SellerChargeService(env).unpaidSince(before),
 				},

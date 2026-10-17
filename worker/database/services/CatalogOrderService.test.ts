@@ -127,5 +127,14 @@ describe('CatalogOrderService.progressForSessions', () => {
 		]);
 		expect((await orders.progressForSessions([])).size).toBe(0);
 	});
+
+	it('finds late items only within their alert window, so a stuck item stops repeating after it', async () => {
+		const { d1, statements } = recordingD1();
+		await new CatalogOrderService({ DB: d1 } as unknown as Env).lateItems('placed', new Date(1_800_000_000_000), new Date(1_797_000_000_000));
+		const select = statements[0];
+		expect(select.sql).toContain('"catalog_order_items"."updated_at" < ?');
+		expect(select.sql).toContain('"catalog_order_items"."updated_at" > ?');
+		expect(select.params).toEqual(expect.arrayContaining([1_800_000_000, 1_797_000_000]));
+	});
 });
 
