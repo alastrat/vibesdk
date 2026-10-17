@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from '@/lib/capabilities';
-import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { COMPLETED_ORDER_MIN_AGE_DAYS, DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { OWN_PRODUCTS_WEIGHTING } from '@/lib/plans';
 import { stripeFeesText } from '@/components/payments/payout-costs';
 import { CATALOG_FULFILLMENT_COPY, COMMUNITIES_COPY, EMAIL_MARKETING_COPY, PAYMENTS_COPY, SEARCH_OPTIMIZATION_COPY, SUBSCRIPTIONS_COPY, WEB_ANALYTICS_COPY } from './solution-pages';
 
@@ -76,11 +77,22 @@ describe('solution and platform pages', () => {
 		expect(PAYMENTS_COPY.more).toEqual({ to: '/pricing#compare-title', label: 'Payments in each plan' });
 	});
 
-	it('says how a seller moves up a level, from the rules the level check uses', () => {
-		const { daysSinceFirstSale, completedOrders } = DEFAULT_SELLER_LIMITS.graduation;
+	it('says how a seller moves up a level, with every rule the level check uses', () => {
+		const { daysSinceFirstSale, completedOrders, maxDisputeRatePercent } = DEFAULT_SELLER_LIMITS.graduation;
 		const answer = PAYMENTS_COPY.faq.find((item) => item.question === 'How do my limits grow?')?.answer ?? '';
 		expect(answer).toContain(`${daysSinceFirstSale} days`);
 		expect(answer).toContain(`${completedOrders} completed orders`);
-		expect(answer).toContain('no lost disputes');
+		expect(answer).toContain(`fewer than ${maxDisputeRatePercent}% of orders disputed`);
+		expect(answer).toContain('no lost disputes in the last 90 days');
+		expect(answer).toContain(`at least ${COMPLETED_ORDER_MIN_AGE_DAYS} days old`);
+	});
+
+	it('says every plan takes payments, with the same limits', () => {
+		expect(PAYMENTS_COPY.faq.find((item) => item.question === 'Do my limits depend on my plan?')?.answer).toBe('No. Your seller level sets them, the same on every plan.');
+	});
+
+	it('says own products count twice toward the weekly limit, as checkout counts them', () => {
+		const answer = PAYMENTS_COPY.faq.find((item) => item.question === 'Why does my store have limits?')?.answer ?? '';
+		expect(answer).toContain(OWN_PRODUCTS_WEIGHTING);
 	});
 });

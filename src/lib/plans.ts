@@ -63,11 +63,15 @@ export interface ComparisonSection {
 	/** The capability whose status tag the section shows; null for plain sections. */
 	capability: CapabilityId | null;
 	rows: readonly ComparisonRow[];
+	/** Comes to every plan, Basic included, when it launches; until then its status tag says it isn't here yet. */
+	everyPlan?: boolean;
 }
 
 const ALL: Record<PlanId, PlanCell> = { basic: true, premium: true, enterprise: true };
 const PAID: Record<PlanId, PlanCell> = { basic: false, premium: true, enterprise: true };
 const ENTERPRISE: Record<PlanId, PlanCell> = { basic: false, premium: false, enterprise: true };
+/** The plans with the supplier catalog; its fee row follows them. */
+const CATALOG_PLANS: Record<PlanId, PlanCell> = PAID;
 
 /** A seller level's limits as the public site states them, from the settings checkout enforces. */
 export interface SellerLevelLimitsCopy {
@@ -89,14 +93,22 @@ export const SELLER_LEVEL_LIMITS: readonly SellerLevelLimitsCopy[] = [
 	},
 ];
 
-/** The same value on every plan that takes payments: seller levels set the limits, not plans. */
-function payingPlans(value: PlanCell): Record<PlanId, PlanCell> {
-	return { basic: false, premium: value, enterprise: value };
+/** How checkout weighs a cart toward the weekly limit: Estori can't prove the delivery of the seller's own products. */
+export const OWN_PRODUCTS_WEIGHTING = 'Your own products count twice toward the weekly limit; catalog products and shipping count once.';
+
+/** The same value on every plan: seller levels set the payment limits, not plans. */
+function onEveryPlan(value: PlanCell): Record<PlanId, PlanCell> {
+	return { basic: value, premium: value, enterprise: value };
+}
+
+/** A value on the plans that have the catalog, and a dash on the others. */
+function onCatalogPlans(value: PlanCell): Record<PlanId, PlanCell> {
+	return { basic: CATALOG_PLANS.basic && value, premium: CATALOG_PLANS.premium && value, enterprise: CATALOG_PLANS.enterprise && value };
 }
 
 /** A section titled with the capability's registry name, so renaming a capability reaches pricing. */
-function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRow[]): ComparisonSection {
-	return { title: CAPABILITIES[capability].name, capability, rows };
+function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRow[], options: { everyPlan?: boolean } = {}): ComparisonSection {
+	return { title: CAPABILITIES[capability].name, capability, rows, ...options };
 }
 
 /** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PREMIUM_TIERS. */
@@ -117,18 +129,20 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 		{ label: 'Product picks and a smart cart', cells: PAID },
 		{ label: 'Bundles, after-checkout offers and smart search', cells: PAID },
 	]),
-	capabilitySection('product-catalog', [{ label: 'Curated supplier catalog', cells: PAID }]),
+	capabilitySection('product-catalog', [{ label: 'Curated supplier catalog', cells: CATALOG_PLANS }]),
 	capabilitySection('payments', [
-		{ label: "Checkout on your store's own address", cells: PAID },
-		{ label: "Estori's fee on your own products", cells: payingPlans('Card processing') },
-		{ label: "Estori's fee on catalog products", cells: payingPlans('Card processing and the catalog price') },
-		{ label: 'Payouts', cells: payingPlans('Daily, weekly or monthly') },
-		{ label: 'Largest order, by seller level', cells: payingPlans(`${formatUsd(NEW_SELLER.largestOrderCents)} new, ${formatUsd(ESTABLISHED_SELLER.largestOrderCents)} established`) },
-		{ label: 'Weekly sales, by seller level', cells: payingPlans(`${formatUsd(NEW_SELLER.weeklySalesCents)} new, ${formatUsd(ESTABLISHED_SELLER.weeklySalesCents)} established`) },
-		{ label: 'Payout wait, by seller level', cells: payingPlans(`${NEW_SELLER.payoutDelayDays} business days new, ${ESTABLISHED_SELLER.payoutDelayDays} established`) },
-		{ label: 'Refunds and disputes', cells: payingPlans('Paid by the seller') },
+		{ label: "Checkout on your store's own address", cells: ALL },
+		{ label: "Estori's fee on your own products", cells: onEveryPlan('Card processing') },
+		{ label: "Estori's fee on catalog products", cells: onCatalogPlans('Card processing and the catalog price') },
+		{ label: 'Payouts', cells: onEveryPlan('Daily, weekly or monthly') },
+		{ label: 'Largest order, by seller level', cells: onEveryPlan(`${formatUsd(NEW_SELLER.largestOrderCents)} new, ${formatUsd(ESTABLISHED_SELLER.largestOrderCents)} established`) },
+		{ label: 'Weekly sales, by seller level', cells: onEveryPlan(`${formatUsd(NEW_SELLER.weeklySalesCents)} new, ${formatUsd(ESTABLISHED_SELLER.weeklySalesCents)} established`) },
+		{ label: 'Own products in weekly sales', cells: onEveryPlan('Count twice') },
+		{ label: 'Payout wait, by seller level', cells: onEveryPlan(`${NEW_SELLER.payoutDelayDays} business days new, ${ESTABLISHED_SELLER.payoutDelayDays} established`) },
+		{ label: 'Refunds and disputes', cells: onEveryPlan('Paid by the seller') },
+		// Checking the delivery of orders sellers ship themselves is a Premium feature.
 		{ label: 'Delivery checks on orders you ship', cells: PAID },
-	]),
+	], { everyPlan: true }),
 	capabilitySection('digital-products', [{ label: 'Sell digital products and run a community', cells: PAID }]),
 	{
 		title: 'Support and billing',

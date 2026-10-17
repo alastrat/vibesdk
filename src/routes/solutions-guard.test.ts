@@ -61,6 +61,7 @@ describe('solution pages', () => {
 		const payments = source('/src/routes/platform/payments.tsx');
 		expect(payments).toContain('<SolutionCopyPage head={PAYMENTS_PAGE} copy={PAYMENTS_COPY}>');
 		expect(payments).toContain('SELLER_LEVEL_LIMITS.map');
+		expect(payments).toContain('OWN_PRODUCTS_WEIGHTING');
 		const template = source('/src/components/public-site/SolutionCopyPage.tsx');
 		expect(template).toContain('{children}');
 		for (const part of [

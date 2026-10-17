@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { settleOnTransfer, settleSale, type SettleSaleDeps, type SettleOrder } from './settle';
+import { SETTLE_SWEEP_AGE_MS, SETTLE_SWEEP_WINDOW_MS, settleOnTransfer, settleSale, sweepUnsettledSales, type SettleSaleDeps, type SettleOrder } from './settle';
 import { StripeApiError } from '../payments/stripe-client';
 
 const ORDER: SettleOrder = { id: 'ord_1', sellerUserId: 'u1', paymentIntentId: 'pi_1', totalCents: 4099, applicationFeeCents: 2177 };
@@ -145,3 +145,25 @@ describe('settleOnTransfer', () => {
 		expect(settled).toEqual([]);
 	});
 });
+
+describe('sweepUnsettledSales', () => {
+	it("settles the recent sales no event settled, so a missed transfer event never leaves a seller's fees uncollected", async () => {
+		const asked: Array<{ after: number; before: number }> = [];
+		const settled: string[] = [];
+		const result = await sweepUnsettledSales(
+			{
+				unsettledOrderIds: async (after, before) => (asked.push({ after: after.getTime(), before: before.getTime() }), ['ord_1', 'ord_broken', 'ord_2']),
+				settleSale: async (orderId) => {
+					if (orderId === 'ord_broken') throw new Error('Stripe is down');
+					settled.push(orderId);
+				},
+			},
+			1_800_000_000_000,
+		);
+		expect(result).toEqual({ settled: 2, failed: 1 });
+		expect(settled).toEqual(['ord_1', 'ord_2']);
+		// Old enough that its transfer exists, recent enough to still be settled.
+		expect(asked).toEqual([{ after: 1_800_000_000_000 - SETTLE_SWEEP_WINDOW_MS, before: 1_800_000_000_000 - SETTLE_SWEEP_AGE_MS }]);
+	});
+});
+

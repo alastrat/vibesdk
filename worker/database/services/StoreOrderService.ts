@@ -1,12 +1,12 @@
 /** D1 reads and writes for store orders and their items. */
 
-import { and, desc, eq, gte, inArray, lte, max, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, inArray, isNull, lte, max, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { NewStoreOrder, NewStoreOrderItem, StoreOrderView } from '../../services/store-payments/store';
 import type { ShippingAddress } from '../../services/catalog/supplier';
 import type { StoreMode, StorePaymentStatus } from '../../../shared/types/store-payments';
-import type { SellerRecord } from '../../../shared/types/seller-levels';
+import { COMPLETED_ORDER_MIN_AGE_DAYS, type SellerRecord } from '../../../shared/types/seller-levels';
 
 const NUMBERING_ATTEMPTS = 3;
 
@@ -197,7 +197,7 @@ export class StoreOrderService extends BaseService {
         const orders = schema.storeOrders;
         const mine = and(eq(orders.sellerUserId, sellerUserId), eq(orders.mode, mode));
         const ninetyDaysAgo = new Date(nowMs - 90 * 24 * 60 * 60 * 1000);
-        const fourteenDaysAgo = new Date(nowMs - 14 * 24 * 60 * 60 * 1000);
+        const fourteenDaysAgo = new Date(nowMs - COMPLETED_ORDER_MIN_AGE_DAYS * 24 * 60 * 60 * 1000);
         const first = await this.database.select({ at: sql<number | null>`min(${orders.createdAt})` }).from(orders).where(mine).get();
         const recent = await this.database.select({ count: sql<number>`count(*)` }).from(orders).where(and(mine, gte(orders.createdAt, ninetyDaysAgo))).get();
         // Chargebacks opened in the window, for the rate; losses decided in it, since a dispute can take months to decide.
@@ -211,7 +211,7 @@ export class StoreOrderService extends BaseService {
             .innerJoin(orders, eq(orders.id, schema.storeDisputes.orderId))
             .where(and(mine, sql`${schema.storeDisputes.status} NOT LIKE 'warning_%'`))
             .get();
-        // Paid, at least 14 days old, never disputed (a won dispute returns the order to paid), and every catalog item delivered.
+        // Paid, at least COMPLETED_ORDER_MIN_AGE_DAYS old, never disputed (a won dispute returns the order to paid), and every catalog item delivered.
         const completed = await this.database
             .select({ count: sql<number>`count(*)` })
             .from(orders)
@@ -235,6 +235,20 @@ export class StoreOrderService extends BaseService {
     }
 
     /** Sellers with a store order since this time, for the daily level check. */
+    /** Orders recorded in the window that were never settled, oldest first, for the settle sweep. */
+    async unsettledOrderIds(after: Date, before: Date): Promise<string[]> {
+        const orders = schema.storeOrders;
+        const rows = await this.database
+            .select({ id: orders.id })
+            .from(orders)
+            .leftJoin(schema.storeFeeAdjustments, eq(schema.storeFeeAdjustments.orderId, orders.id))
+            .where(and(gte(orders.createdAt, after), lte(orders.createdAt, before), isNull(schema.storeFeeAdjustments.orderId)))
+            .orderBy(orders.createdAt)
+            .limit(50)
+            .all();
+        return rows.map((row) => row.id);
+    }
+
     async activeSellerIds(since: Date): Promise<string[]> {
         const rows = await this.database.selectDistinct({ id: schema.storeOrders.sellerUserId }).from(schema.storeOrders).where(gte(schema.storeOrders.createdAt, since)).limit(1000).all();
         return rows.map((row) => row.id);

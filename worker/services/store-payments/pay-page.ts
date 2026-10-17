@@ -291,8 +291,14 @@ export const PAY_PAGE_SCRIPT = `(function () {
   // Stripe puts the address on the session only at payment, so the page keeps what the address field last held.
   var typedAddress = null;
   var starting = false;
+  var confirming = false;
   var again = false;
   var timer = null;
+
+  // Pay only on a session priced for the cart on screen, and never while one is being replaced or paid.
+  function holdPay() {
+    $('pay').disabled = !checkout || starting || confirming || timer !== null;
+  }
 
   function shipTo() {
     var chosen = cart.shipTo();
@@ -444,7 +450,8 @@ export const PAY_PAGE_SCRIPT = `(function () {
   }
 
   function start() {
-    if (starting) { again = true; return; }
+    // A start asked for while a card is being confirmed waits for its answer, so the session being paid stays.
+    if (starting || confirming) { again = true; return; }
     if (cart.count() === 0) { showEmpty(); return; }
     starting = true;
     setBusy(true);
@@ -484,7 +491,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
       .then(function () {
         starting = false;
         setBusy(false);
-        $('pay').disabled = !checkout;
+        holdPay();
         if (again) { again = false; start(); }
       });
   }
@@ -494,13 +501,19 @@ export const PAY_PAGE_SCRIPT = `(function () {
     renderLines(null);
     if (cart.count() === 0) { showEmpty(); return; }
     clearTimeout(timer);
-    timer = setTimeout(start, 400);
+    timer = setTimeout(function () {
+      timer = null;
+      start();
+    }, 400);
+    $('pay').textContent = 'Pay';
+    holdPay();
   });
 
   $('pay').onclick = function () {
-    if (!checkout) return;
+    if (!checkout || starting || confirming || timer !== null) return;
     var current = checkout;
-    $('pay').disabled = true;
+    confirming = true;
+    holdPay();
     hideNotice();
     sendEmail(true).then(function (sent) {
       if (!sent) return null;
@@ -515,7 +528,9 @@ export const PAY_PAGE_SCRIPT = `(function () {
       if (window.console) window.console.error('Estori checkout: the payment could not be confirmed', error);
       showNotice("The payment didn't go through. Check your details and try again.");
     }).then(function () {
-      $('pay').disabled = !checkout;
+      confirming = false;
+      holdPay();
+      if (again) { again = false; start(); }
     });
   };
 

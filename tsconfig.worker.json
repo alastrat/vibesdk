@@ -16,6 +16,8 @@
 		"./src/api-types.ts",
 		"./src/brand/page-title.ts",
 		"./src/lib/capabilities.ts",
+		"./src/lib/plans.ts",
+		"./src/components/payments/payout-costs.ts",
 		"./src/routes/copy-rules.ts",
 		"./src/lib/legal-document.ts",
 		"./src/lib/page-head.ts",

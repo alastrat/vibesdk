@@ -1,5 +1,6 @@
 import { Badge } from '@cloudflare/kumo';
 import { useSellerLimits } from '@/hooks/use-payments';
+import { OWN_PRODUCTS_WEIGHTING } from '@/lib/plans';
 
 function dollars(cents: number): string {
 	return `$${(cents / 100).toFixed(2)}`;
@@ -20,7 +21,7 @@ export function SellerLimits() {
 			<span>
 				Weekly limit used: {dollars(data.weeklySalesUsedCents)} of {dollars(data.weeklySalesCents)}
 			</span>
-			<span className="text-kumo-subtle">Your own products count twice toward this limit; catalog products and shipping count once.</span>
+			<span className="text-kumo-subtle">{OWN_PRODUCTS_WEIGHTING}</span>
 			<span>Payouts wait {data.payoutDelayDays} business days after each sale.</span>
 			{data.nextLevel && (
 				<span className="text-kumo-subtle">

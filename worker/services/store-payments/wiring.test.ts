@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { recordingD1 } from '../../database/test-support/recording-d1';
-import { returnPageRecordDeps, storeRefundDeps } from './wiring';
+import { returnPageRecordDeps, runStorePaymentsSchedule, storeRefundDeps } from './wiring';
+import { CATALOG_REFRESH_CRON, CATALOG_SWEEP_CRON } from '../catalog/scheduler';
 import type { StripeClient } from '../payments/stripe-client';
 import type { StoreOrderView } from './store';
 
@@ -38,3 +39,15 @@ describe('returnPageRecordDeps', () => {
 		await expect(deps.settleSale('ord_1')).resolves.toBeUndefined();
 	});
 });
+
+describe('runStorePaymentsSchedule', () => {
+	it('looks for unsettled store sales on the hourly sweep, and on no other schedule', async () => {
+		const { d1, statements } = recordingD1();
+		const env = { DB: d1, STRIPE_SECRET_KEY: 'sk_test_sweep' } as unknown as Env;
+		await runStorePaymentsSchedule(CATALOG_REFRESH_CRON, env);
+		expect(statements).toEqual([]);
+		await runStorePaymentsSchedule(CATALOG_SWEEP_CRON, env);
+		expect(statements.some((entry) => entry.sql.includes('"store_orders"') && entry.sql.includes('"store_fee_adjustments"'))).toBe(true);
+	});
+});
+

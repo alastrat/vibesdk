@@ -3,7 +3,7 @@ import { CardSection } from '@/components/public-site/solution-page';
 import type { CardCopy } from '@/content/positioning';
 import { PAYMENTS_PAGE } from '@/content/public-pages';
 import { LEVEL_UP_RULE, PAYMENTS_COPY } from '@/content/solution-pages';
-import { SELLER_LEVEL_LIMITS } from '@/lib/plans';
+import { OWN_PRODUCTS_WEIGHTING, SELLER_LEVEL_LIMITS } from '@/lib/plans';
 
 const LEVEL_CARDS: readonly CardCopy[] = [
 	...SELLER_LEVEL_LIMITS.map((level) => ({
@@ -20,7 +20,7 @@ export default function PaymentsPage() {
 				eyebrow="Limits"
 				tag={PAYMENTS_COPY.capability}
 				title="Limits that grow with your store"
-				lead="Every store starts with lower limits and a longer wait before payouts, which protects shoppers while a store builds its record. Your seller level sets them, not your plan."
+				lead={`Every store starts with lower limits and a longer wait before payouts, which protects shoppers while a store builds its record. Your seller level sets them, not your plan. ${OWN_PRODUCTS_WEIGHTING}`}
 				cards={LEVEL_CARDS}
 			/>
 		</SolutionCopyPage>

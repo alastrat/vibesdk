@@ -116,6 +116,10 @@ authorized the same way: the preview's cookie or token.
   - A replaced checkout that belongs to the same store and is still `creating` or `open` is expired, before the new
     checkout's weekly-cap check, so it doesn't count twice. Any other checkout named, such as one already paid before
     a reload, is left as it is, and the new checkout starts as usual.
+- **Settling a sale:** with Elements sessions, Stripe creates the seller's transfer a few seconds after the session
+  completes, so nothing can be taken back when the order is recorded. The sale settles on `charge.updated`, once the
+  charge has its transfer: the card fee difference and the seller's open charges come off that transfer. An hourly
+  sweep settles any sale of the last 7 days still unsettled after 10 minutes, so no single webhook event is required.
 - **The template checkout** is unchanged: hosted Stripe Checkout inside Estori's own app.
 
 ## 6. The brand block in `estori-store.json`
@@ -203,6 +207,8 @@ authorized the same way: the preview's cookie or token.
 ## 9. Owner actions
 
 - Set `STRIPE_PUBLISHABLE_KEY` (test, then live) in the Worker's settings. It's public, so it can be a plain variable.
+- Add `charge.updated` to the platform webhook endpoint's events, in test and live. Sales settle on it within seconds;
+  without it they settle at the next hourly sweep.
 - When live stores get their own domains, register each domain with Stripe for Apple Pay and Google Pay.
 
 ## 10. Not in this spec

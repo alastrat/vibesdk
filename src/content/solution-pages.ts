@@ -1,5 +1,6 @@
-import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { COMPLETED_ORDER_MIN_AGE_DAYS, DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
 import { stripeFeesText } from '@/components/payments/payout-costs';
+import { OWN_PRODUCTS_WEIGHTING } from '@/lib/plans';
 import type { CapabilityId } from '@/lib/capabilities';
 import { COMING_SOON_ANSWER, PAYMENTS_ANSWER, type CardCopy, type TextFaqItem } from './positioning';
 
@@ -68,10 +69,13 @@ export const CATALOG_FULFILLMENT_COPY: SolutionCopy = {
 	more: { to: '/solutions/resellers', label: 'Estori for dropshippers and resellers' },
 };
 
-const { daysSinceFirstSale, completedOrders } = DEFAULT_SELLER_LIMITS.graduation;
+const { daysSinceFirstSale, completedOrders, maxDisputeRatePercent } = DEFAULT_SELLER_LIMITS.graduation;
 
 /** What makes a new seller an established one, as the level check decides it. */
-export const LEVEL_UP_RULE = `${daysSinceFirstSale} days since your first sale, ${completedOrders} completed orders and no lost disputes in the last 90 days`;
+export const LEVEL_UP_RULE = `${daysSinceFirstSale} days since your first sale, ${completedOrders} completed orders, fewer than ${maxDisputeRatePercent}% of orders disputed and no lost disputes in the last 90 days`;
+
+/** What the level check counts as a completed order. */
+export const COMPLETED_ORDER_RULE = `A completed order is paid, at least ${COMPLETED_ORDER_MIN_AGE_DAYS} days old, never disputed, and every catalog item in it was delivered.`;
 
 export const PAYMENTS_COPY: SolutionCopy = {
 	capability: 'payments',
@@ -118,13 +122,13 @@ export const PAYMENTS_COPY: SolutionCopy = {
 		},
 		{
 			question: 'Why does my store have limits?',
-			answer: 'Every store has a largest order, a weekly sales limit and a wait before payouts, set by its seller level. A store that reaches a limit stops taking new orders until the limit allows them again.',
+			answer: `Every store has a largest order, a weekly sales limit and a wait before payouts, set by its seller level. ${OWN_PRODUCTS_WEIGHTING} A store that reaches a limit stops taking new orders until the limit allows them again.`,
 		},
 		{
 			question: 'How do my limits grow?',
-			answer: `New sellers start with lower limits and a longer wait. After ${LEVEL_UP_RULE}, you become an established seller, with higher limits and faster payouts.`,
+			answer: `New sellers start with lower limits and a longer wait. After ${LEVEL_UP_RULE}, you become an established seller, with higher limits and faster payouts. ${COMPLETED_ORDER_RULE}`,
 		},
-		{ question: 'Do my limits depend on my plan?', answer: 'No. Your seller level sets them, the same on every plan that takes payments.' },
+		{ question: 'Do my limits depend on my plan?', answer: 'No. Your seller level sets them, the same on every plan.' },
 		{
 			question: 'Why would an order be held?',
 			answer: "When Estori's payment checks flag an order as risky, it's held before Estori buys its catalog products. If it can't be cleared within 24 hours, the shopper is refunded for those products.",

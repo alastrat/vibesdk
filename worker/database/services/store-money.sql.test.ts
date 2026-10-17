@@ -51,6 +51,19 @@ describe('claims on real SQL', () => {
 		expect(await orders.getOrder('ord_1')).toMatchObject({ refundedCents: 5000, paymentStatus: 'refunded' });
 	});
 
+	it('finds the sales in a window that were never settled, leaving out settled ones and those outside it', async () => {
+		const orders = new StoreOrderService(envWith(db));
+		const hour = 60 * 60 * 1000;
+		await insertStoreOrder(db, { id: 'ord_fresh', sellerUserId: 'u1', orderNumber: 10, totalCents: 1000, createdAt: new Date(NOW.getTime() - 2 * hour) });
+		await insertStoreOrder(db, { id: 'ord_settled', sellerUserId: 'u1', orderNumber: 11, totalCents: 1000, createdAt: new Date(NOW.getTime() - 2 * hour) });
+		await insertStoreOrder(db, { id: 'ord_ancient', sellerUserId: 'u1', orderNumber: 12, totalCents: 1000, createdAt: new Date(NOW.getTime() - 30 * 24 * hour) });
+		await orders.planFeeAdjustment({ orderId: 'ord_settled', collectedCents: 59, actualFeeCents: 59, differenceCents: 0, now: NOW });
+		const ids = await orders.unsettledOrderIds(new Date(NOW.getTime() - 7 * 24 * hour), new Date(NOW.getTime() - hour));
+		expect(ids).toContain('ord_fresh');
+		expect(ids).not.toContain('ord_settled');
+		expect(ids).not.toContain('ord_ancient');
+	});
+
 	it("sums the week's paid, open and starting checkouts in one mode toward the cap", async () => {
 		const week = new Date(NOW.getTime() - 7 * 24 * 60 * 60 * 1000);
 		for (const [id, status, weightedCents, daysAgo, mode] of [

@@ -24,6 +24,9 @@ export interface SellerLimitsSettings {
 /** Stripe's charges for each seller account, passed to the seller. */
 export type SellerAccountCosts = SellerLimitsSettings['costs'];
 
+/** An order counts as completed this many days after it was paid, if it was never disputed and its catalog items arrived. */
+export const COMPLETED_ORDER_MIN_AGE_DAYS = 14;
+
 export const DEFAULT_SELLER_LIMITS: SellerLimitsSettings = {
 	levels: {
 		new: { largestOrderCents: 15_000, weeklySalesCents: 50_000, payoutDelayDays: 10 },

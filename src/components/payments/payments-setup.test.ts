@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { OWN_PRODUCTS_WEIGHTING } from '@/lib/plans';
 
 const sources = import.meta.glob<string>(
 	['/src/components/payments/PayoutsCard.tsx', '/src/components/payments/PaymentsSetupPrompt.tsx', '/src/components/payments/PayoutFrequency.tsx', '/src/components/payments/SellerLimits.tsx', '/src/hooks/use-payments.ts', '/src/routes/home.tsx'],
@@ -61,7 +62,8 @@ describe('payments setup', () => {
 		const limits = source('/src/components/payments/SellerLimits.tsx');
 		for (const text of ['Largest order', 'Weekly limit used', 'Payouts wait', 'completed orders', 'useSellerLimits(']) expect(limits).toContain(text);
 		// The limit counts own products twice, so the card says so rather than calling the weighted total sales.
-		expect(limits).toContain('Your own products count twice');
+		expect(limits).toContain('{OWN_PRODUCTS_WEIGHTING}');
+		expect(OWN_PRODUCTS_WEIGHTING).toContain('Your own products count twice');
 		expect(limits).not.toContain('Sales this week');
 		expect(source('/src/components/payments/PayoutsCard.tsx')).toContain('<SellerLimits />');
 	});

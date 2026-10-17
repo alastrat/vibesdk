@@ -65,6 +65,7 @@ function element(id = ''): FakeElement {
  * session whose email was set while Stripe's own email field is mounted.
  */
 function fakeStripe() {
+	const held: { answer: ((result: { type: string; error?: { message: string } }) => void) | null; hold: boolean } = { answer: null, hold: false };
 	const mounted: string[] = [];
 	const emails: string[] = [];
 	const confirmed: string[] = [];
@@ -106,6 +107,7 @@ function fakeStripe() {
 						confirm: async () => {
 							if (contactField && emailSet) throw new Error('IntegrationError: confirm() while the Contact Details Element is mounted after updateEmail()');
 							confirmed.push(clientSecret);
+							if (held.hold) return new Promise((resolve) => (held.answer = resolve));
 							return { type: 'success' };
 						},
 					},
@@ -113,7 +115,7 @@ function fakeStripe() {
 			};
 		},
 	});
-	return { Stripe, mounted, emails, confirmed, shippingOptions, instances };
+	return { Stripe, mounted, emails, confirmed, shippingOptions, instances, held };
 }
 
 /** Opens the checkout page in a fake browser tab whose storage survives a reload, answering checkouts in turn. */
@@ -264,5 +266,48 @@ describe("Estori's checkout page script", () => {
 		page.elements.get('pay')?.onclick?.();
 		await settle();
 		expect(page.stripe.confirmed).toEqual([]);
+	});
+
+	it('holds Pay from the moment the cart changes until the new cart is priced, so the old session is never paid', async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_first'), started('chk_second')]);
+		await settle();
+		typeEmail(page, 'shopper@example.com');
+		await settle();
+		page.cart.setQuantity('kenya-250', 2);
+		expect(page.elements.get('pay')?.disabled).toBe(true);
+		page.elements.get('pay')?.onclick?.();
+		await settle();
+		expect(page.stripe.confirmed).toEqual([]);
+
+		vi.advanceTimersByTime(400);
+		await settle();
+		expect(page.elements.get('pay')?.disabled).toBe(false);
+		page.elements.get('pay')?.onclick?.();
+		await settle();
+		expect(page.stripe.confirmed).toEqual(['cs_secret_chk_second']);
+	});
+
+	it('prices a cart changed during a payment only once that payment has answered', async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_first'), started('chk_second')]);
+		page.stripe.held.hold = true;
+		await settle();
+		typeEmail(page, 'shopper@example.com');
+		await settle();
+		page.elements.get('pay')?.onclick?.();
+		await settle();
+		expect(page.stripe.confirmed).toEqual(['cs_secret_chk_first']);
+
+		// Another tab changes the cart while the card is being confirmed: the session being paid stays.
+		page.cart.setQuantity('kenya-250', 2);
+		vi.advanceTimersByTime(400);
+		await settle();
+		expect(page.posted).toHaveLength(1);
+
+		page.stripe.held.answer?.({ type: 'error', error: { message: 'Your card was declined.' } });
+		await settle();
+		expect(page.posted).toHaveLength(2);
+		expect(page.posted[1]).toMatchObject({ items: [{ variantId: 'kenya-250', quantity: 2 }], replaces: 'chk_first' });
 	});
 });

@@ -138,3 +138,28 @@ export async function settleOnTransfer(
 	return 'settled';
 }
 
+/** A sale this old without a settlement missed its transfer event; Stripe makes the transfer within seconds. */
+export const SETTLE_SWEEP_AGE_MS = 10 * 60 * 1000;
+/** How far back the sweep looks. */
+export const SETTLE_SWEEP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Settles recent store sales that no event settled, so fee differences and seller charges never wait on one webhook. */
+export async function sweepUnsettledSales(
+	deps: { unsettledOrderIds(after: Date, before: Date): Promise<string[]>; settleSale(orderId: string): Promise<void> },
+	nowMs: number,
+): Promise<{ settled: number; failed: number }> {
+	const ids = await deps.unsettledOrderIds(new Date(nowMs - SETTLE_SWEEP_WINDOW_MS), new Date(nowMs - SETTLE_SWEEP_AGE_MS));
+	let settled = 0;
+	let failed = 0;
+	for (const orderId of ids) {
+		try {
+			await deps.settleSale(orderId);
+			settled += 1;
+		} catch {
+			// One sale Stripe can't settle now never stops the others; the next sweep tries it again.
+			failed += 1;
+		}
+	}
+	return { settled, failed };
+}
+

@@ -5,11 +5,11 @@ import { generateId } from '../../utils/idGenerator';
 import { recordPaidCatalogOrder } from '../catalog/record';
 import { catalogRefundRecords } from '../catalog/refund-records';
 import { catalogRefundSellerCents, refundCatalogItems, type RefundItemsDeps } from '../catalog/refund-items';
-import { restartCatalogPlacement, scheduleCatalogPlacement } from '../catalog/scheduler';
+import { CATALOG_SWEEP_CRON, restartCatalogPlacement, scheduleCatalogPlacement } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
 import type { StripeClient } from '../payments/stripe-client';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
-import { settleSale } from './settle';
+import { settleSale, sweepUnsettledSales } from './settle';
 import type { DisputeDeps } from './disputes';
 import type { RefundLinesDeps } from './refund-lines';
 import type { StoreOrderView } from './store';
@@ -69,6 +69,20 @@ export function returnPageRecordDeps(env: Env): RecordStoreOrderDeps {
 			}
 		},
 	};
+}
+
+/** Scheduled store payments work: hourly, the sales no transfer event settled. */
+export async function runStorePaymentsSchedule(cron: string, env: Env): Promise<void> {
+	if (cron !== CATALOG_SWEEP_CRON) return;
+	try {
+		const result = await sweepUnsettledSales(
+			{ unsettledOrderIds: (after, before) => new StoreOrderService(env).unsettledOrderIds(after, before), settleSale: recordStoreOrderDeps(env).settleSale },
+			Date.now(),
+		);
+		if (result.settled + result.failed > 0) logger.warn('Settled store sales that no transfer event settled', result);
+	} catch (error) {
+		logger.error('Store sale settle sweep failed', { error });
+	}
 }
 
 /** Settles a store sale when Stripe adds the seller's transfer to its charge. */

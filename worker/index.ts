@@ -18,6 +18,7 @@ import { getAgentStub } from './agents';
 import { servePublicSite } from './services/public-site/serve';
 import { AppService } from './database/services/AppService';
 import { runCatalogSchedule } from './services/catalog/scheduler';
+import { runStorePaymentsSchedule } from './services/store-payments/wiring';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -347,6 +348,7 @@ const worker = {
 	},
 	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
 		ctx.waitUntil(runCatalogSchedule(controller.cron, env));
+		ctx.waitUntil(runStorePaymentsSchedule(controller.cron, env));
 	},
 } satisfies ExportedHandler<Env>;
 
