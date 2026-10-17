@@ -180,6 +180,8 @@ export interface StripeClient {
 	retrieveBalance(accountId: string): Promise<{ availableCents: number; pendingCents: number }>;
 	createTransfer(input: { destination: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<{ id: string; amount: number }>;
 	updatePayoutSchedule(accountId: string, schedule: PayoutSchedule): Promise<StripeAccount>;
+	/** Only the payout delay, so payout days the seller chose stay as they are. */
+	updatePayoutDelay(accountId: string, delayDays: number): Promise<StripeAccount>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -368,6 +370,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		createTransfer: (input) =>
 			request<{ id: string; amount: number }>('POST', '/transfers', { destination: input.destination, amount: input.amountCents, currency: 'usd', metadata: input.metadata }, input.idempotencyKey),
 		// The platform owns these accounts' losses, so it sets their payout timing and lets Stripe debit their bank when negative.
+		updatePayoutDelay: (accountId, delayDays) =>
+			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, { settings: { payouts: { schedule: { delay_days: delayDays } } } }),
 		updatePayoutSchedule: (accountId, schedule) =>
 			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, {
 				settings: {

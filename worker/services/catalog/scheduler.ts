@@ -1,7 +1,7 @@
 /** Scheduled catalog work. The refresh runs every 15 minutes in production; admins can run it now. */
 
 import { createLogger } from '../../logger';
-import { CatalogOrderService, CatalogProductService, SellerChargeService, StoreOrderService } from '../../database';
+import { CatalogOrderService, CatalogProductService, SellerChargeService, StoreOrderService, StripeConnectService } from '../../database';
 import { cjClientFromEnv } from './cj/client';
 import { CURATED_PRODUCTS } from './curated';
 import { createImageCopier } from './images';
@@ -9,9 +9,10 @@ import { refreshCatalogBatch } from './refresh';
 import { sweepUnstartedOrders } from './runner';
 import { CATALOG_HEALTH_CRON, runCatalogHealth } from './health';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
-import { syncSellerLevelFromEnv } from '../payments/seller-level-sync';
+import { syncSellerLevelFromEnv, syncSellerLevels } from '../payments/seller-level-sync';
 
-/** Sellers with a store order this recent get their level checked daily, since completed orders and disputes age. */
+/** Sellers with a store order this recent get their level checked daily, since completed orders and disputes age; so do
+ * accounts whose payout delay was never set. */
 const LEVEL_CHECK_WINDOW_MS = 120 * 24 * 60 * 60 * 1000;
 
 const logger = createLogger('CatalogSchedule');
@@ -47,18 +48,33 @@ export async function runCatalogSchedule(cron: string, env: Env): Promise<void> 
 	if (cron === CATALOG_HEALTH_CRON) {
 		const products = new CatalogProductService(env);
 		const orders = new CatalogOrderService(env);
-		const raised = await runCatalogHealth(
-			{
-				refreshHealth: () => products.refreshHealth(),
-				lateItems: (status, before) => orders.lateItems(status, before),
-				alert: platformAlertsFromEnv(env),
-				unpaidCharges: (before) => new SellerChargeService(env).unpaidSince(before),
-			},
-			Date.now(),
-		);
-		if (raised > 0) logger.warn('Catalog health check raised alerts', { raised });
-		const sellers = await new StoreOrderService(env).activeSellerIds(new Date(Date.now() - LEVEL_CHECK_WINDOW_MS));
-		for (const sellerUserId of sellers) await syncSellerLevelFromEnv(env, sellerUserId);
+		// Each check runs on its own, so one failing never skips the other.
+		try {
+			const raised = await runCatalogHealth(
+				{
+					refreshHealth: () => products.refreshHealth(),
+					lateItems: (status, before) => orders.lateItems(status, before),
+					alert: platformAlertsFromEnv(env),
+					unpaidCharges: (before) => new SellerChargeService(env).unpaidSince(before),
+				},
+				Date.now(),
+			);
+			if (raised > 0) logger.warn('Catalog health check raised alerts', { raised });
+		} catch (error) {
+			logger.error('Catalog health check failed', { error });
+		}
+		try {
+			const checked = await syncSellerLevels({
+				sellerIds: async () => [
+					...(await new StoreOrderService(env).activeSellerIds(new Date(Date.now() - LEVEL_CHECK_WINDOW_MS))),
+					...(await new StripeConnectService(env).unsyncedSellerIds()),
+				],
+				sync: (sellerUserId) => syncSellerLevelFromEnv(env, sellerUserId),
+			});
+			logger.info('Seller levels checked', { checked });
+		} catch (error) {
+			logger.error('Seller level check failed', { error });
+		}
 	}
 }
 

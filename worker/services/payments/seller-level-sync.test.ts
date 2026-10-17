@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { syncSellerLevel, type LevelSyncDeps } from './seller-level-sync';
+import { syncSellerLevel, syncSellerLevels, type LevelSyncDeps } from './seller-level-sync';
 import { DEFAULT_SELLER_LIMITS, type SellerRecord } from '../../../shared/types/seller-levels';
 
 const NOW = 1_800_000_000_000;
@@ -17,6 +17,10 @@ function fakeDeps(input: { record: SellerRecord; stored?: { level: 'new' | 'esta
 			if (input.stripeFails) throw new Error('Account restricted');
 			calls.push(`stripe ${accountId} ${schedule.interval} ${schedule.weeklyAnchor} ${schedule.delayDays}`);
 		},
+		updateDelay: async (accountId, delayDays) => {
+			if (input.stripeFails) throw new Error('Account restricted');
+			calls.push(`stripe-delay ${accountId} ${delayDays}`);
+		},
 		saveLevel: async (level, delay) => void calls.push(`save ${level} ${delay}`),
 		alert: async (alert) => void calls.push(`alert ${alert.kind}`),
 	};
@@ -30,13 +34,13 @@ describe('syncSellerLevel', () => {
 		expect(calls).toEqual([]);
 	});
 
-	it("moves a seller up: Stripe's delay first, keeping their payout day, then the stored level, then an alert", async () => {
+	it("moves a seller up: only Stripe's delay changes, so a payout day the seller just changed is never undone; then the stored level, then an alert", async () => {
 		const { deps, calls } = fakeDeps({ record: ESTABLISHED, stored: { level: 'new', payoutDelayDays: 10 } });
 		expect(await syncSellerLevel(deps, 'u1', NOW)).toBe('changed');
-		expect(calls).toEqual(['stripe acct_1 weekly monday 5', 'save established 5', 'alert seller-level-changed']);
+		expect(calls).toEqual(['stripe-delay acct_1 5', 'save established 5', 'alert seller-level-changed']);
 	});
 
-	it("sets the delay on a seller's first sync without calling it a level change", async () => {
+	it("sets the whole schedule the seller sees on their first sync, without calling it a level change", async () => {
 		const { deps, calls } = fakeDeps({ record: NEW, stored: { level: 'new', payoutDelayDays: null } });
 		expect(await syncSellerLevel(deps, 'u1', NOW)).toBe('changed');
 		expect(calls).toEqual(['stripe acct_1 weekly monday 10', 'save new 10']);
@@ -51,5 +55,28 @@ describe('syncSellerLevel', () => {
 	it('skips a seller with no Stripe account', async () => {
 		const { deps } = fakeDeps({ record: NEW, stored: null });
 		expect(await syncSellerLevel(deps, 'u1', NOW)).toBe('no-account');
+	});
+});
+
+describe('syncSellerLevels', () => {
+	it('checks every seller once, a few at a time, and one failure never stops the rest', async () => {
+		let running = 0;
+		let most = 0;
+		const done: string[] = [];
+		const ids = Array.from({ length: 12 }, (_, index) => `u${index}`);
+		const checked = await syncSellerLevels({
+			sellerIds: async () => [...ids, 'u0'],
+			sync: async (sellerUserId) => {
+				running += 1;
+				most = Math.max(most, running);
+				await new Promise((resolve) => setTimeout(resolve, 1));
+				running -= 1;
+				if (sellerUserId === 'u3') throw new Error('D1 is unavailable');
+				done.push(sellerUserId);
+			},
+		});
+		expect(checked).toBe(12);
+		expect(done.sort()).toEqual(ids.filter((id) => id !== 'u3').sort());
+		expect(most).toBeLessThanOrEqual(5);
 	});
 });

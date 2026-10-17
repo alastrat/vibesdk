@@ -88,11 +88,12 @@ export class StripeConnectController extends BaseController {
                 await accounts.create({ userId: user.id, stripeAccountId: created.id, flags: accountFlags(created) });
                 accountId = created.id;
                 try {
-                    // New sellers start at the New level's payout delay.
+                    // New sellers start at the New level's payout delay, or at a level an admin pinned beforehand.
                     const settings = await getSellerLimitsSettings(env, user.id);
-                    const delay = limitsFor('new', settings).payoutDelayDays;
+                    const level = settings.pinnedLevel ?? 'new';
+                    const delay = limitsFor(level, settings).payoutDelayDays;
                     await stripe.updatePayoutSchedule(created.id, { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: delay });
-                    await accounts.saveLevel(user.id, 'new', delay);
+                    await accounts.saveLevel(user.id, level, delay);
                 } catch (error) {
                     this.logger.warn('Could not set the default payout schedule', error);
                 }

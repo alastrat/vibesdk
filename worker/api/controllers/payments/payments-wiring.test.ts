@@ -85,6 +85,13 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 		expect(onboarding.indexOf('return linkFor(accountId);', forget)).toBeGreaterThan(request);
 	});
 
+	it("starts a new account at an admin's pinned level and its delay, or New", () => {
+		const onboarding = method('startOnboarding', 'getStatus');
+		expect(onboarding).toContain("const level = settings.pinnedLevel ?? 'new';");
+		expect(onboarding).toContain('limitsFor(level, settings).payoutDelayDays');
+		expect(onboarding).toContain('accounts.saveLevel(user.id, level, delay)');
+	});
+
 	it('sends the seller back to onboarding instead of opening the dashboard', () => {
 		const dashboard = method('dashboardLink');
 		const forget = dashboard.indexOf('accounts.forgetIfMissing(stored, (accountId) => stripe.createLoginLink(accountId))');

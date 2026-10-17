@@ -46,7 +46,8 @@ export function sellerLevelOf(record: SellerRecord, settings: SellerLimitsSettin
 	if (settings.pinnedLevel) return settings.pinnedLevel;
 	const rules = settings.graduation;
 	const oldEnough = record.firstSaleAt !== null && nowMs - record.firstSaleAt.getTime() >= rules.daysSinceFirstSale * DAY_MS;
-	const disputeRate = record.ordersLast90Days === 0 ? 0 : (record.disputesLast90Days / record.ordersLast90Days) * 100;
+	// Chargebacks on older orders with no recent ones are over any rate.
+	const disputeRate = record.ordersLast90Days === 0 ? (record.disputesLast90Days > 0 ? Number.POSITIVE_INFINITY : 0) : (record.disputesLast90Days / record.ordersLast90Days) * 100;
 	const established = oldEnough && record.completedOrders >= rules.completedOrders && record.lostDisputesLast90Days === 0 && disputeRate < rules.maxDisputeRatePercent;
 	return established ? 'established' : 'new';
 }

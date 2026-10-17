@@ -17,6 +17,8 @@ describe('sellerLevelOf', () => {
 			{ ...GOOD, completedOrders: 9 },
 			{ ...GOOD, disputesLast90Days: 2 },
 			{ ...GOOD, lostDisputesLast90Days: 1 },
+			// No orders in the window but chargebacks still arriving on older ones.
+			{ ...GOOD, ordersLast90Days: 0, disputesLast90Days: 1 },
 		]) {
 			expect(sellerLevelOf(record, DEFAULT_SELLER_LIMITS, NOW)).toBe('new');
 		}

@@ -347,6 +347,13 @@ describe('connected-account calls', () => {
 		expect(decodeURIComponent(String(calls[0].init.body))).toBe('capabilities[card_payments][requested]=true');
 	});
 
+	it("changes only the payout delay, leaving the seller's chosen payout days alone", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'acct_1', details_submitted: true, charges_enabled: true, payouts_enabled: true });
+		await createStripeClient('sk_test_fake', fakeFetch).updatePayoutDelay('acct_1', 5);
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts/acct_1');
+		expect(decodeURIComponent(String(calls[0].init.body))).toBe('settings[payouts][schedule][delay_days]=5');
+	});
+
 	it('expands the charge fee with the transfer', async () => {
 		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: null });
 		await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');
