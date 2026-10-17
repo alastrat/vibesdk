@@ -132,6 +132,27 @@ export interface StoreCheckoutSummary {
 	totalCents: number;
 }
 
+export interface StoreCartItem {
+	variantId: string;
+	quantity: number;
+}
+
+/** `Estori.cart` in `/__estori/store.js`: the one cart a store and Estori's checkout page share, per store. */
+export interface StoreCartApi {
+	items(): StoreCartItem[];
+	add(variantId: string, quantity?: number): void;
+	/** 0 removes the line. */
+	setQuantity(variantId: string, quantity: number): void;
+	remove(variantId: string): void;
+	clear(): void;
+	/** Units in all lines. */
+	count(): number;
+	shipTo(): string | null;
+	setShipTo(country: string): void;
+	/** Called after every change, here or in another tab; returns a function that stops listening. */
+	onChange(listener: (items: StoreCartItem[]) => void): () => void;
+}
+
 /** A started checkout: the session's client secret for Stripe's payment form, and the order as Estori priced it. */
 export type StoreCheckoutResponse =
 	| { ok: true; checkoutId: string; clientSecret: string; summary: StoreCheckoutSummary }
