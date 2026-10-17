@@ -38,4 +38,12 @@ describe('the Go live panel', () => {
 		expect(hooks).toContain('queryClient.setQueryData(queryKeys.liveStore(appId), view)');
 		for (const call of ['getLiveStore(', 'publishLiveStore(', 'takeLiveStoreOffline(', 'addStoreDomain(', 'checkStoreDomain(', 'removeStoreDomain(']) expect(hooks, call).toContain(call);
 	});
+
+	it('asks before taking the store offline or removing its domain, and shows a domain as serving only while the store is live', () => {
+		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
+		expect(dialog).toContain("from '@/components/ui/alert-dialog'");
+		for (const copy of ['Take your store offline?', 'Remove this domain?']) expect(dialog, copy).toContain(copy);
+		expect(dialog).toContain('connectedDomainNote(storeStatus)');
+	});
 });
+
