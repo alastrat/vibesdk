@@ -13,6 +13,7 @@ import {
 	useTakeLiveStoreOffline,
 } from '@/hooks/use-live-store';
 import { SLUG_MAX_LENGTH, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
+import { publishAction } from './publish-action';
 
 interface GoLiveDialogProps {
 	appId: string;
@@ -71,7 +72,7 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 		return <p className="text-sm text-kumo-subtle">Store addresses aren't set up yet. You can keep building your store in the preview.</p>;
 	}
 	const problem = slugProblem(slug);
-	const publishLabel = view.status === 'live' && view.slug === slug ? 'Publish changes' : 'Publish';
+	const action = publishAction(view, slug);
 	const onPublish = () =>
 		publish.mutate(slug, {
 			onSuccess: (next) => toast.success(next.url ? `Your store is live at ${next.url}` : 'Your store is live'),
@@ -106,8 +107,8 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 					<p className="text-sm text-kumo-danger">This store's checkout isn't connected to payments: its store file has no products.</p>
 				)}
 				<div className="flex flex-wrap gap-2">
-					<Button variant="primary" size="sm" onClick={onPublish} disabled={problem !== null || publish.isPending} loading={publish.isPending}>
-						{publishLabel}
+					<Button variant="primary" size="sm" onClick={onPublish} disabled={problem !== null || action.disabled || publish.isPending} loading={publish.isPending}>
+						{action.label}
 					</Button>
 					{view.status === 'live' && view.url && (
 						<LinkButton size="sm" variant="secondary" href={view.url} target="_blank" rel="noopener noreferrer">

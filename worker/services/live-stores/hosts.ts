@@ -23,8 +23,10 @@ export interface StoreHostLookup {
 
 export type StoreHost = { kind: 'subdomain' | 'custom'; store: LiveStoreTarget };
 
-/** How long a host's answer is reused, so a store page doesn't read D1 on every request. */
+/** How long a live store's answer is reused, so a store page doesn't read D1 on every request. */
 export const STORE_HOST_CACHE_MS = 30_000;
+/** A missing or offline store is asked again sooner, so a store that's just published or reopened is seen quickly. */
+export const STORE_HOST_CLOSED_CACHE_MS = 5_000;
 const CACHE_MAX_ENTRIES = 1_000;
 
 /** Hosts are compared by name; local development spells its domain with a port, such as `localhost:8100`. */
@@ -66,7 +68,8 @@ export function createStoreHostResolver(nowMs: () => number = Date.now) {
 		if (cached && cached.expiresAt > nowMs()) return cached.host;
 		const store = slug ? await lookup.storeForSlug(slug) : await lookup.storeForHostname(hostname);
 		const host: StoreHost | null = store ? { kind: slug ? 'subdomain' : 'custom', store } : null;
-		cache.set(hostname, { host, expiresAt: nowMs() + STORE_HOST_CACHE_MS });
+		const ttl = host?.store.status === 'live' ? STORE_HOST_CACHE_MS : STORE_HOST_CLOSED_CACHE_MS;
+		cache.set(hostname, { host, expiresAt: nowMs() + ttl });
 		if (cache.size > CACHE_MAX_ENTRIES) {
 			const oldest = cache.keys().next().value;
 			if (oldest !== undefined) cache.delete(oldest);

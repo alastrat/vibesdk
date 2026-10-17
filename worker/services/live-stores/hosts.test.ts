@@ -43,16 +43,30 @@ describe('resolving a store from its host', () => {
 		expect(asked).toEqual(['slug:northwind-tea', 'host:shop.northwindtea.localhost']);
 	});
 
-	it('answers repeat requests from a 30-second cache, misses included, then asks again', async () => {
+	it("keeps a live store's answer 30 seconds, then asks again", async () => {
 		const { resolve, asked, advance } = resolverWith({ slugs: { 'northwind-tea': TEA } });
 		await resolve('northwind-tea.estori.shop', PROD);
+		advance(29_000);
 		await resolve('northwind-tea.estori.shop', PROD);
-		await resolve('nobody.estori.shop', PROD);
-		await resolve('nobody.estori.shop', PROD);
-		expect(asked).toEqual(['slug:northwind-tea', 'slug:nobody']);
-		advance(30_001);
+		expect(asked).toEqual(['slug:northwind-tea']);
+		advance(1_001);
 		await resolve('northwind-tea.estori.shop', PROD);
-		expect(asked).toEqual(['slug:northwind-tea', 'slug:nobody', 'slug:northwind-tea']);
+		expect(asked).toEqual(['slug:northwind-tea', 'slug:northwind-tea']);
+	});
+
+	it('keeps a missing or offline store only 5 seconds, so a store that opens is seen quickly', async () => {
+		const closed: LiveStoreTarget = { ...TEA, slug: 'lumen-home', status: 'offline' };
+		const { resolve, asked, advance } = resolverWith({ slugs: { 'lumen-home': closed } });
+		await resolve('nobody.estori.shop', PROD);
+		await resolve('lumen-home.estori.shop', PROD);
+		advance(4_000);
+		await resolve('nobody.estori.shop', PROD);
+		await resolve('lumen-home.estori.shop', PROD);
+		expect(asked).toEqual(['slug:nobody', 'slug:lumen-home']);
+		advance(1_001);
+		await resolve('nobody.estori.shop', PROD);
+		await resolve('lumen-home.estori.shop', PROD);
+		expect(asked).toEqual(['slug:nobody', 'slug:lumen-home', 'slug:nobody', 'slug:lumen-home']);
 	});
 
 	it('has no stores without a stores domain', async () => {

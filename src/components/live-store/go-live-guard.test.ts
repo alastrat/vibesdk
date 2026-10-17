@@ -18,7 +18,7 @@ describe('the Go live panel', () => {
 
 	it('edits the address with its rule, publishes the preview, takes the store offline and opens it', () => {
 		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
-		for (const part of ['slugProblem(', 'usePublishLiveStore(', 'useTakeLiveStoreOffline(', "'Publish changes'", "'Publish'", 'Take offline', 'Open store', 'view.storesDomain']) {
+		for (const part of ['slugProblem(', 'usePublishLiveStore(', 'useTakeLiveStoreOffline(', 'publishAction(view, slug)', 'action.disabled', 'Take offline', 'Open store', 'view.storesDomain']) {
 			expect(dialog, part).toContain(part);
 		}
 		// What a seller must know before shoppers pay: unpublished edits, and a checkout that isn't connected.
