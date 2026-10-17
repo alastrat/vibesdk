@@ -95,8 +95,8 @@ describe('StoreOrderService.sellerRecord', () => {
 		const rows = (sql: string): unknown[][] => {
 			const lower = sql.toLowerCase();
 			if (lower.includes('min(')) return [[1_790_000_000]];
-			if (lower.includes('store_disputes')) return [[3, 1]];
 			if (lower.includes('not exists')) return [[12]];
+			if (lower.includes('store_disputes')) return [[3, 1]];
 			return [[150]];
 		};
 		const { d1, statements } = recordingD1(rows);

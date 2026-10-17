@@ -203,7 +203,7 @@ export class StoreOrderService extends BaseService {
             .innerJoin(orders, eq(orders.id, schema.storeDisputes.orderId))
             .where(and(mine, sql`${schema.storeDisputes.status} NOT LIKE 'warning_%'`))
             .get();
-        // Paid, at least 14 days old, and every catalog item delivered; a refund or dispute changes the payment status.
+        // Paid, at least 14 days old, never disputed (a won dispute returns the order to paid), and every catalog item delivered.
         const completed = await this.database
             .select({ count: sql<number>`count(*)` })
             .from(orders)
@@ -213,6 +213,7 @@ export class StoreOrderService extends BaseService {
                     eq(orders.paymentStatus, 'paid'),
                     lte(orders.createdAt, fourteenDaysAgo),
                     sql`not exists (select 1 from ${schema.catalogOrders} co join ${schema.catalogOrderItems} ci on ci.order_id = co.id where co.stripe_checkout_session_id = ${orders.stripeCheckoutSessionId} and ci.status != 'delivered')`,
+                    sql`not exists (select 1 from ${schema.storeDisputes} d where d.order_id = ${orders.id} and d.status NOT LIKE 'warning_%')`,
                 ),
             )
             .get();

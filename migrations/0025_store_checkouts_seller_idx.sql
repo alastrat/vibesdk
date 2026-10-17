@@ -1,0 +1,1 @@
+CREATE INDEX `store_checkouts_seller_idx` ON `store_checkouts` (`seller_user_id`,`mode`,`created_at`);

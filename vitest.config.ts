@@ -1,9 +1,12 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { defineWorkersConfig, readD1Migrations } from '@cloudflare/vitest-pool-workers/config';
 import { fileURLToPath } from 'node:url';
 
 const runIntegrationTests = process.env.VIBESDK_RUN_INTEGRATION_TESTS === '1';
 
-export default defineWorkersConfig({
+export default defineWorkersConfig(async () => {
+  // Tests that run real SQL apply these to TEST_DB (worker/database/test-support/real-d1.ts).
+  const migrations = await readD1Migrations(fileURLToPath(new URL('./migrations', import.meta.url)));
+  return {
   resolve: {
     alias: {
       'bun:test': 'vitest',
@@ -36,6 +39,7 @@ export default defineWorkersConfig({
         miniflare: {
           compatibilityDate: '2024-12-12',
           compatibilityFlags: ['nodejs_compat'],
+          bindings: { TEST_MIGRATIONS: migrations },
         },
       },
     },
@@ -52,4 +56,5 @@ export default defineWorkersConfig({
       ...(runIntegrationTests ? [] : ['**/sdk/test/integration/**']),
     ],
   },
+};
 });

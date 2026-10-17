@@ -469,6 +469,7 @@ export const storeCheckouts = sqliteTable('store_checkouts', {
 }, (table) => ({
     sessionIdx: uniqueIndex('store_checkouts_session_unique_idx').on(table.stripeCheckoutSessionId),
     appIdx: index('store_checkouts_app_idx').on(table.appId),
+    sellerIdx: index('store_checkouts_seller_idx').on(table.sellerUserId, table.mode, table.createdAt),
 }));
 
 /** Store orders - one per paid checkout, numbered per store and mode. */

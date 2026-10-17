@@ -24,5 +24,7 @@ describe('seller levels schema', () => {
 		expect(allMigrationSql).toContain('ALTER TABLE `stripe_connect_accounts` ADD `payout_delay_days` integer');
 		expect(allMigrationSql).toContain('ALTER TABLE `store_checkouts` ADD `weighted_cents` integer');
 		expect(allMigrationSql).toContain('ALTER TABLE `store_disputes` ADD `closed_at` integer');
+		// The weekly cap reads a seller's checkouts on every checkout and limits view.
+		expect(allMigrationSql).toContain('CREATE INDEX `store_checkouts_seller_idx` ON `store_checkouts` (`seller_user_id`,`mode`,`created_at`)');
 	});
 });
