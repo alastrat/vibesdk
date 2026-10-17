@@ -61,7 +61,7 @@ export function payPageHeaders(nonce: string, appOrigin: string | null): Record<
 		"font-src 'self' https://fonts.gstatic.com",
 		"img-src 'self' https: data:",
 		`frame-src ${stripe} https://hooks.stripe.com https://checkout.stripe.com`,
-		"connect-src 'self' https://api.stripe.com https://merchant-ui-api.stripe.com https://maps.googleapis.com https://*.stripe.com https://*.stripe.network",
+		"connect-src 'self' https://api.stripe.com https://merchant-ui-api.stripe.com https://maps.googleapis.com https://fonts.googleapis.com https://*.stripe.com https://*.stripe.network",
 		`frame-ancestors 'self'${appOrigin ? ` ${appOrigin}` : ''}`,
 		"base-uri 'none'",
 		"form-action 'self'",

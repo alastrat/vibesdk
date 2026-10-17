@@ -73,6 +73,8 @@ describe('payPageHeaders', () => {
 		expect(policy).toContain("script-src 'self' 'nonce-n0nce' https://js.stripe.com");
 		expect(policy).toContain('frame-src https://js.stripe.com');
 		expect(policy).toContain("connect-src 'self' https://api.stripe.com");
+		// Stripe.js fetches the brand font's stylesheet for its fields.
+		expect(policy).toMatch(/connect-src [^;]*https:\/\/fonts\.googleapis\.com/);
 		expect(policy).toContain("frame-ancestors 'self' https://build.estori.app");
 		expect(policy).not.toContain("'unsafe-inline' https://js.stripe.com");
 		expect(headers['Cache-Control']).toBe('no-store');

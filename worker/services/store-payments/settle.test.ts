@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { settleSale, type SettleSaleDeps, type SettleOrder } from './settle';
+import { settleOnTransfer, settleSale, type SettleSaleDeps, type SettleOrder } from './settle';
 import { StripeApiError } from '../payments/stripe-client';
 
 const ORDER: SettleOrder = { id: 'ord_1', sellerUserId: 'u1', paymentIntentId: 'pi_1', totalCents: 4099, applicationFeeCents: 2177 };
@@ -117,5 +117,31 @@ describe('settleSale', () => {
 		w.deps.stripe.retrievePaymentIntent = async (id) => ({ id, latest_charge: null });
 		expect(await settleSale(w.deps, ORDER)).toEqual({ feeDifferenceCents: 0, collectedCents: 0 });
 		expect(w.reversals).toEqual([]);
+	});
+});
+
+describe('settleOnTransfer', () => {
+	function deps(orders: Record<string, string>) {
+		const settled: string[] = [];
+		return {
+			settled,
+			deps: {
+				orderIdForPaymentIntent: async (paymentIntentId: string) => orders[paymentIntentId] ?? null,
+				settleSale: async (orderId: string) => void settled.push(orderId),
+			},
+		};
+	}
+
+	it("settles a store sale once Stripe adds the seller's transfer to its charge, seconds after the order was recorded", async () => {
+		const { deps: settleDeps, settled } = deps({ pi_1: 'ord_1' });
+		expect(await settleOnTransfer(settleDeps, { id: 'ch_1', object: 'charge', payment_intent: 'pi_1', transfer: 'tr_1' })).toBe('settled');
+		expect(settled).toEqual(['ord_1']);
+	});
+
+	it('waits for the transfer, and leaves charges that are no store sale alone', async () => {
+		const { deps: settleDeps, settled } = deps({ pi_1: 'ord_1' });
+		expect(await settleOnTransfer(settleDeps, { id: 'ch_1', object: 'charge', payment_intent: 'pi_1', transfer: null })).toBe('no-transfer');
+		expect(await settleOnTransfer(settleDeps, { id: 'ch_2', object: 'charge', payment_intent: 'pi_template', transfer: 'tr_2' })).toBe('not-a-store-sale');
+		expect(settled).toEqual([]);
 	});
 });

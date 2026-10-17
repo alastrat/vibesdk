@@ -108,3 +108,33 @@ export async function settleSale(deps: SettleSaleDeps, order: SettleOrder): Prom
 	}
 	return { feeDifferenceCents, collectedCents };
 }
+
+/** The parts of a Stripe charge that say whether the seller's transfer exists yet. */
+export interface StripeChargeTransfer {
+	id: string;
+	object: 'charge';
+	payment_intent: string | null;
+	transfer: string | null;
+}
+
+export function isStripeChargeTransfer(value: unknown): value is StripeChargeTransfer {
+	if (typeof value !== 'object' || value === null) return false;
+	const charge = value as Record<string, unknown>;
+	return charge.object === 'charge' && typeof charge.id === 'string';
+}
+
+/**
+ * Stripe creates a store sale's transfer a few seconds after the payment, so the order is usually recorded before there
+ * is anything to take back from. The sale settles again when its charge gains the transfer; settling is safe to repeat.
+ */
+export async function settleOnTransfer(
+	deps: { orderIdForPaymentIntent(paymentIntentId: string): Promise<string | null>; settleSale(orderId: string): Promise<void> },
+	charge: StripeChargeTransfer,
+): Promise<'settled' | 'no-transfer' | 'not-a-store-sale'> {
+	if (typeof charge.transfer !== 'string' || typeof charge.payment_intent !== 'string') return 'no-transfer';
+	const orderId = await deps.orderIdForPaymentIntent(charge.payment_intent);
+	if (!orderId) return 'not-a-store-sale';
+	await deps.settleSale(orderId);
+	return 'settled';
+}
+

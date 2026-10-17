@@ -1,13 +1,15 @@
 /**
  * Stripe webhook: verifies the signature, then records paid Checkout
- * sessions, handles disputes of store payments and refreshes sellers' payout flags. Public and exempt from CSRF;
+ * sessions, settles store sales once their transfer exists, handles disputes of store payments and refreshes sellers'
+ * payout flags. Public and exempt from CSRF;
  * the signature is the authentication.
  */
 
 import { createLogger } from '../../../logger';
 import { SellerChargeService, StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
 import { STORE_ORDER_KIND } from '../../../../shared/types/store-payments';
-import { disputeDepsFromEnv, recordStoreSession } from '../../../services/store-payments/wiring';
+import { disputeDepsFromEnv, recordStoreSession, settleOnTransferDeps } from '../../../services/store-payments/wiring';
+import { isStripeChargeTransfer, settleOnTransfer } from '../../../services/store-payments/settle';
 import { handleDisputeClosed, handleDisputeOpened, isStripeDispute } from '../../../services/store-payments/disputes';
 import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
@@ -78,6 +80,12 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
             return;
         }
         logger.info('Checkout session handled', { id: object.id, result });
+        return;
+    }
+    // A store sale's transfer arrives seconds after the order is recorded; the sale settles then.
+    if (event.type === 'charge.updated' && isStripeChargeTransfer(object)) {
+        const result = await settleOnTransfer(settleOnTransferDeps(env), object);
+        if (result === 'settled') logger.info('Store sale settled after its transfer', { id: object.id });
         return;
     }
     if (event.type === 'checkout.session.expired' && isCheckoutSession(object) && object.metadata?.kind === STORE_ORDER_KIND && object.metadata.checkoutId) {

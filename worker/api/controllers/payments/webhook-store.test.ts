@@ -61,4 +61,17 @@ describe('store sessions in the Stripe webhook', () => {
 		expect(statements).toEqual([]);
 		expect(fetchSpy).not.toHaveBeenCalled();
 	});
+
+	it("settles a store sale when its charge gains the seller's transfer, looking the order up by its payment", async () => {
+		const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+		const { d1, statements } = recordingD1();
+		const env = { DB: d1, STRIPE_WEBHOOK_SECRET: SECRET, STRIPE_SECRET_KEY: 'sk_test_fake' } as unknown as Env;
+		const payload = JSON.stringify({ id: 'evt_t1', type: 'charge.updated', data: { object: { id: 'ch_77', object: 'charge', payment_intent: 'pi_77', transfer: 'tr_77' } } });
+		const response = await handleStripeWebhook(new Request('https://estori.test/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': await signatureFor(payload) }, body: payload }), env);
+		expect(response.status).toBe(200);
+		expect(statements.some((entry) => entry.sql.includes('"store_orders"') && entry.params.includes('pi_77'))).toBe(true);
+		// No store order has that payment, so nothing is asked of Stripe.
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
 });
+

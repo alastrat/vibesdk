@@ -71,6 +71,14 @@ export function returnPageRecordDeps(env: Env): RecordStoreOrderDeps {
 	};
 }
 
+/** Settles a store sale when Stripe adds the seller's transfer to its charge. */
+export function settleOnTransferDeps(env: Env): { orderIdForPaymentIntent(paymentIntentId: string): Promise<string | null>; settleSale(orderId: string): Promise<void> } {
+	return {
+		orderIdForPaymentIntent: async (paymentIntentId) => (await new StoreOrderService(env).findByPaymentIntent(paymentIntentId))?.id ?? null,
+		settleSale: recordStoreOrderDeps(env).settleSale,
+	};
+}
+
 /** Records from the session as Stripe's API returns it, never from an event payload. */
 export async function recordStoreSession(env: Env, sessionId: string): Promise<RecordStoreOrderResult> {
 	const stripe = stripeFromEnv(env);
