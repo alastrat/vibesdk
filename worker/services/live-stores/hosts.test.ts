@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStoreHostResolver, type StoreHostConfig } from './hosts';
+import { createStoreHostResolver, storeHostConfig, type StoreHostConfig } from './hosts';
 import type { LiveStoreTarget } from '../../database/services/LiveStoreService';
 
 const TEA: LiveStoreTarget = { appId: 'app_tea', slug: 'northwind-tea', status: 'live', sellerUserId: 'seller_1' };
@@ -75,3 +75,20 @@ describe('resolving a store from its host', () => {
 		expect(asked).toEqual([]);
 	});
 });
+
+describe('the stores domain setting', () => {
+	const prod = (STORES_DOMAIN: string) => ({ STORES_DOMAIN, CUSTOM_DOMAIN: 'estori.app', CUSTOM_PREVIEW_DOMAIN: 'preview.estori.app', ENVIRONMENT: 'prod' }) as unknown as Env;
+
+	it('turns stores off when the stores domain is, sits under or contains an Estori domain, since stores would share its cookies', () => {
+		for (const value of ['estori.app', 'stores.estori.app', 'app', 'preview.estori.app', 'shops.preview.estori.app']) {
+			expect(storeHostConfig(prod(value)).storesDomain, value).toBeNull();
+		}
+		expect(storeHostConfig(prod('estori.shop')).storesDomain).toBe('estori.shop');
+	});
+
+	it('keeps the local stores domain under localhost in development', () => {
+		const dev = { STORES_DOMAIN: 'stores.localhost', CUSTOM_DOMAIN: 'localhost:8100', ENVIRONMENT: 'dev' } as unknown as Env;
+		expect(storeHostConfig(dev).storesDomain).toBe('stores.localhost');
+	});
+});
+
