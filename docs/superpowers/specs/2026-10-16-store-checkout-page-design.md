@@ -33,8 +33,9 @@ This spec replaces both:
 2. The store's Checkout button calls `Estori.checkout()`. The browser goes to `{store}/__estori/pay`, on the same
    address. No new tab is needed, even inside the editor preview.
 3. The checkout page shows the store's logo and name at the top, and "Continue shopping" back to the store.
-4. **Left column:** contact (email), shipping address, and payment, each a Stripe Element styled with the store's brand.
-   A Pay button shows the total.
+4. **Left column:** contact (email), shipping address, and payment, styled with the store's brand. Shipping and payment
+   are Stripe Elements. The email is the page's own field, sent to the session, because Stripe's email field can't be
+   prefilled after a cart edit. A Pay button shows the total.
 5. **Right column:** the order summary. Each line has its image, name, variant, a quantity stepper and Remove. Below
    them are the ship-to country, subtotal, shipping and total. On a phone, the summary comes first and collapses.
 6. Editing the summary changes the shared cart. The page re-prices the order with Estori's pricing and starts a new
@@ -87,12 +88,14 @@ authorized the same way: the preview's cookie or token.
   - `frame-ancestors 'self'`.
 - **Starting checkout:** the page posts the cart to `POST /__estori/checkout`, as today. The answer now carries the
   session's `clientSecret`, the checkout id, and the priced summary (lines, subtotal, shipping, total).
-- **Editing the cart:** after an edit, the page waits 400 ms for more edits, then posts again with `replaces` set to the
-  current checkout id.
+- **Editing the cart or reloading:** after an edit, the page waits 400 ms for more edits, then posts again with `replaces`
+  set to the current checkout id. The page keeps that id for the browser tab, so a reload replaces the open checkout
+  too, instead of holding a second one against the weekly cap.
   - The server expires that checkout's Stripe session, if it's still open, and marks the checkout expired, so it no
     longer counts toward the weekly cap.
-  - The page then starts Stripe's form again with the new client secret, and puts back the email and shipping address
-    the shopper had typed.
+  - The page then starts Stripe's form again with the new client secret, on a new Stripe.js instance, and puts back the
+    email and shipping address the shopper had typed. The address comes back as a saved address with a Change link.
+    The card has to be typed again.
 - **Paying:** the page confirms through Stripe's checkout actions. Stripe redirects to `return_url`, which is
   `{store}/__estori/return?session_id={CHECKOUT_SESSION_ID}`, the same path as today.
 - **Empty cart:** the page shows "Your cart is empty" and a link back to the store. It starts no session.
@@ -110,9 +113,9 @@ authorized the same way: the preview's cookie or token.
 - **`expireCheckoutSession(sessionId)`** is new. An already-expired or completed session counts as done.
 - **`startStoreCheckout`** answers `{ ok: true, checkoutId, clientSecret, summary }`.
   - A request may name the checkout it `replaces`.
-  - A replaced checkout must belong to the same store and still be `creating` or `open`. Then it is expired, before the
-    new checkout's weekly-cap check, so the replaced checkout doesn't count twice. A request naming any other checkout
-    is refused as `invalid_request`.
+  - A replaced checkout that belongs to the same store and is still `creating` or `open` is expired, before the new
+    checkout's weekly-cap check, so it doesn't count twice. Any other checkout named, such as one already paid before
+    a reload, is left as it is, and the new checkout starts as usual.
 - **The template checkout** is unchanged: hosted Stripe Checkout inside Estori's own app.
 
 ## 6. The brand block in `estori-store.json`
