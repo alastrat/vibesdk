@@ -24,6 +24,7 @@
 		"tui": "tsx --tsconfig tsconfig.app.json cli/tui.tsx",
 		"cf-typegen": "wrangler types --include-runtime false",
 		"test": "bun scripts/test-shards.ts",
+		"bundle:check": "wrangler deploy --dry-run --config wrangler.estori.jsonc --outdir .wrangler/bundle-check",
 		"test:integration": "VIBESDK_RUN_INTEGRATION_TESTS=1 vitest run sdk/test/integration/integration.test.ts",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",

@@ -9,6 +9,7 @@ export default tseslint.config(
 	{
 		ignores: [
 			'dist',
+			'.wrangler',
 			'wrangler-configuration.d.ts',
 			'test-diff-formatters/**',
 			'cf-git/**',
