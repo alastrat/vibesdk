@@ -50,3 +50,7 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      # Production deploys bundle the Worker with Wrangler, not Vite; this catches imports only Vite can resolve.
+      - name: Bundle the production Worker
+        run: bun run bundle:check
