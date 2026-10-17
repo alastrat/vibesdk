@@ -330,7 +330,11 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 							},
 						},
 					],
+					// US dollars by card or a card wallet only: no prices in the shopper's local currency, and no Link, which
+					// would also offer bank payments.
 					payment_method_types: ['card'],
+					adaptive_pricing: { enabled: false },
+					wallet_options: { link: { display: 'never' } },
 					payment_intent_data: {
 						application_fee_amount: input.applicationFeeCents,
 						on_behalf_of: input.sellerStripeAccountId,

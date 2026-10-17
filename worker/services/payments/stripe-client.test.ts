@@ -299,6 +299,14 @@ describe('store checkout sessions', () => {
 		}
 	});
 
+	it("charges in US dollars only, by card or a card wallet, with no local-currency prices and no Link bank payments", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession(INPUT);
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(body).toContain('adaptive_pricing[enabled]=false');
+		expect(body).toContain('wallet_options[link][display]=never');
+	});
+
 	it('labels free shipping', async () => {
 		const { calls, fakeFetch } = recordingFetch({ id: 'cs_2', url: null });
 		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({ ...INPUT, shippingCents: 0 });
