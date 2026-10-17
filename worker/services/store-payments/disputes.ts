@@ -22,10 +22,11 @@ export interface StripeDispute {
 	balance_transactions: Array<{ fee: number }>;
 }
 
+/** Stripe's dispute ids start dp_ or, on newer accounts, du_; the object type is what identifies one. */
 export function isStripeDispute(object: unknown): object is StripeDispute {
 	if (typeof object !== 'object' || object === null) return false;
-	const candidate = object as Partial<StripeDispute>;
-	return typeof candidate.id === 'string' && candidate.id.startsWith('dp_') && typeof candidate.amount === 'number' && Array.isArray(candidate.balance_transactions);
+	const candidate = object as Partial<StripeDispute> & { object?: unknown };
+	return candidate.object === 'dispute' && typeof candidate.id === 'string' && typeof candidate.amount === 'number' && Array.isArray(candidate.balance_transactions);
 }
 
 export interface StoredDispute {
@@ -37,6 +38,8 @@ export interface StoredDispute {
 }
 
 export interface DisputeDeps {
+	/** Records the store order of a paid checkout whose own event hasn't arrived yet; does nothing for other payments. */
+	recordMissingOrder(paymentIntentId: string): Promise<void>;
 	findOrder(paymentIntentId: string): Promise<{ id: string; sellerUserId: string; sellerStripeAccountId: string; checkoutSessionId: string | null } | null>;
 	stripe: Pick<StripeClient, 'retrievePaymentIntent' | 'createTransferReversal' | 'createTransfer'>;
 	storedDispute(disputeId: string): Promise<StoredDispute | null>;
@@ -76,9 +79,17 @@ function transferOf(intent: Awaited<ReturnType<StripeClient['retrievePaymentInte
 	return { id: charge.transfer.id, reversibleCents: charge.transfer.amount - charge.transfer.amount_reversed };
 }
 
+/** The disputed store order, recorded first when the dispute arrived before the checkout's own event. */
+async function orderOf(deps: DisputeDeps, paymentIntentId: string): ReturnType<DisputeDeps['findOrder']> {
+	const order = await deps.findOrder(paymentIntentId);
+	if (order) return order;
+	await deps.recordMissingOrder(paymentIntentId);
+	return deps.findOrder(paymentIntentId);
+}
+
 export async function handleDisputeOpened(deps: DisputeDeps, dispute: StripeDispute): Promise<'recorded' | 'not-ours'> {
 	if (!dispute.payment_intent) return 'not-ours';
-	const order = await deps.findOrder(dispute.payment_intent);
+	const order = await orderOf(deps, dispute.payment_intent);
 	if (!order) return 'not-ours';
 	const now = deps.now();
 	const stored = await deps.storedDispute(dispute.id);
@@ -129,7 +140,7 @@ export async function handleDisputeOpened(deps: DisputeDeps, dispute: StripeDisp
 
 export async function handleDisputeClosed(deps: DisputeDeps, dispute: StripeDispute): Promise<'won' | 'lost' | 'inquiry-closed' | 'not-ours'> {
 	if (!dispute.payment_intent) return 'not-ours';
-	const order = await deps.findOrder(dispute.payment_intent);
+	const order = await orderOf(deps, dispute.payment_intent);
 	if (!order) return 'not-ours';
 	let stored = await deps.storedDispute(dispute.id);
 	if (!stored) {

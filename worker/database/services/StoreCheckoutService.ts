@@ -47,6 +47,12 @@ export class StoreCheckoutService extends BaseService {
             .where(and(eq(schema.storeCheckouts.id, checkoutId), eq(schema.storeCheckouts.status, 'open')));
     }
 
+    /** The Checkout session a checkout was paid through, once Stripe made one. */
+    async sessionIdOf(checkoutId: string): Promise<string | null> {
+        const row = await this.database.select({ sessionId: schema.storeCheckouts.stripeCheckoutSessionId }).from(schema.storeCheckouts).where(eq(schema.storeCheckouts.id, checkoutId)).get();
+        return row?.sessionId ?? null;
+    }
+
     async get(checkoutId: string): Promise<StoreCheckoutRecord | null> {
         const row = await this.database.select().from(schema.storeCheckouts).where(eq(schema.storeCheckouts.id, checkoutId)).get();
         if (!row) return null;

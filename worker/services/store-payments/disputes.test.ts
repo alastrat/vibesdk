@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { handleDisputeClosed, handleDisputeOpened, type DisputeDeps, type StoredDispute, type StripeDispute } from './disputes';
+import { handleDisputeClosed, handleDisputeOpened, isStripeDispute, type DisputeDeps, type StoredDispute, type StripeDispute } from './disputes';
 import { StripeApiError } from '../payments/stripe-client';
 import type { PlatformAlert } from '../alerts/platform-alerts';
 
 const DISPUTE: StripeDispute = { id: 'dp_1', amount: 6599, charge: 'ch_1', payment_intent: 'pi_1', reason: 'fraudulent', status: 'needs_response', balance_transactions: [{ fee: 1500 }] };
 
 /** A small D1 and Stripe in memory: the stored dispute, the seller's charges, and every money move. */
-function world(input: { reversed?: number; known?: boolean; reversal?: 'ok' | 'refused' | 'conflict'; withheldCents?: number } = {}) {
+function world(input: { reversed?: number; known?: boolean; reversal?: 'ok' | 'refused' | 'conflict'; withheldCents?: number; orderRecorded?: boolean } = {}) {
+	let orderRecorded = input.orderRecorded ?? true;
 	const moves: string[] = [];
 	const alerts: PlatformAlert[] = [];
 	const events: string[] = [];
@@ -14,7 +15,13 @@ function world(input: { reversed?: number; known?: boolean; reversal?: 'ok' | 'r
 	const charges = new Map<string, { amountCents: number; collectedCents: number }>();
 	let reversedOnTransfer = input.reversed ?? 0;
 	const deps: DisputeDeps = {
-		findOrder: async () => (input.known === false ? null : { id: 'ord_1', sellerUserId: 'u1', sellerStripeAccountId: 'acct_1', checkoutSessionId: 'cs_1' }),
+		findOrder: async () => (input.known === false || !orderRecorded ? null : { id: 'ord_1', sellerUserId: 'u1', sellerStripeAccountId: 'acct_1', checkoutSessionId: 'cs_1' }),
+		// Records only a store checkout's order; any other payment has none to record.
+		recordMissingOrder: async () => {
+			if (input.known === false) return;
+			events.push('order recorded from its session');
+			orderRecorded = true;
+		},
 		stripe: {
 			retrievePaymentIntent: async (id) => ({ id, latest_charge: { id: 'ch_1', transfer: { id: 'tr_1', amount: 6599, amount_reversed: reversedOnTransfer } } }),
 			createTransferReversal: async (reversal) => {
@@ -201,5 +208,20 @@ describe('handleDisputeClosed', () => {
 		const w = world();
 		await handleDisputeOpened(w.deps, DISPUTE);
 		expect(w.alerts.find((alert) => alert.kind === 'dispute-opened')?.details).toEqual([['Tracking', 'USPS SBX1792154117585']]);
+	});
+
+	it("handles a dispute that arrives before its checkout's own event, by recording the order from its session first", async () => {
+		const w = world({ orderRecorded: false });
+		expect(await handleDisputeOpened(w.deps, DISPUTE)).toBe('recorded');
+		expect(w.events[0]).toBe('order recorded from its session');
+		expect(w.moves).toEqual(['reversal 6599 dispute-reversal-dp_1']);
+	});
+});
+
+describe('isStripeDispute', () => {
+	it('accepts every Stripe dispute, whatever its id prefix (newer disputes start du_)', () => {
+		const event = { id: 'du_1URMYvD9cw9RksbPd7oDIzvz', object: 'dispute', amount: 6599, charge: 'ch_1', payment_intent: 'pi_1', reason: 'fraudulent', status: 'needs_response', balance_transactions: [{ fee: 1500 }] };
+		expect(isStripeDispute(event)).toBe(true);
+		expect(isStripeDispute({ ...event, object: 'charge' })).toBe(false);
 	});
 });

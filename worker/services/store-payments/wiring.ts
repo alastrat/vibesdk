@@ -15,6 +15,7 @@ import type { RefundLinesDeps } from './refund-lines';
 import type { StoreOrderView } from './store';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 import { createLogger } from '../../logger';
+import { STORE_ORDER_KIND } from '../../../shared/types/store-payments';
 import { syncSellerLevelFromEnv } from '../payments/seller-level-sync';
 
 const logger = createLogger('StorePaymentsWiring');
@@ -86,6 +87,13 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 	const charges = new SellerChargeService(env);
 	let orderId: string | null = null;
 	return {
+		recordMissingOrder: async (paymentIntentId) => {
+			// Stripe can send a dispute before the checkout's own event; the payment says which store checkout it paid.
+			const metadata = (await stripe.retrievePaymentIntent(paymentIntentId)).metadata;
+			if (metadata?.kind !== STORE_ORDER_KIND || !metadata.checkoutId) return;
+			const sessionId = await new StoreCheckoutService(env).sessionIdOf(metadata.checkoutId);
+			if (sessionId) await recordStoreSession(env, sessionId);
+		},
 		findOrder: async (paymentIntentId) => {
 			const order = await orders.findByPaymentIntent(paymentIntentId);
 			// Without the seller's account there is nothing to take back or return; such an order isn't a store sale.

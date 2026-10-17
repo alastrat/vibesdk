@@ -51,7 +51,7 @@ describe('store sessions in the Stripe webhook', () => {
 		const { d1, statements } = recordingD1();
 		const env = { DB: d1, STRIPE_WEBHOOK_SECRET: SECRET, STRIPE_SECRET_KEY: 'sk_test_fake' } as unknown as Env;
 		for (const event of [
-			{ id: 'evt_c1', type: 'charge.dispute.created', account: 'acct_seller', data: { object: { id: 'dp_1', amount: 1000, charge: 'ch_1', payment_intent: 'pi_1', reason: 'fraudulent', status: 'needs_response', balance_transactions: [] } } },
+			{ id: 'evt_c1', type: 'charge.dispute.created', account: 'acct_seller', data: { object: { id: 'dp_1', object: 'dispute', amount: 1000, charge: 'ch_1', payment_intent: 'pi_1', reason: 'fraudulent', status: 'needs_response', balance_transactions: [] } } },
 			{ id: 'evt_c2', type: 'checkout.session.completed', account: 'acct_seller', data: { object: { id: 'cs_1', payment_status: 'paid', metadata: { kind: 'store_order', checkoutId: 'chk_1' } } } },
 		]) {
 			const payload = JSON.stringify(event);

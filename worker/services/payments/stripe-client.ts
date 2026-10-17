@@ -90,6 +90,8 @@ export interface StripeTransferSummary {
 
 export interface StripePaymentIntent {
 	id: string;
+	/** What the Checkout session put on it; a store payment carries its kind and checkout id. */
+	metadata?: Record<string, string> | null;
 	/** Expanded on request: the charge, with the transfer that paid the seller and the balance transaction Stripe's fee is on. */
 	latest_charge:
 		| {
