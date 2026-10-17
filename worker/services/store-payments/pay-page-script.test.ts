@@ -255,6 +255,18 @@ describe("Estori's checkout page script", () => {
 		expect(page.elements.get('email-error')).toMatchObject({ hidden: false, textContent: 'Your email address is invalid.' });
 	});
 
+	it("opens and folds the phone order summary, whose button carries the order's total", async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_first')]);
+		await settle();
+		expect(page.elements.get('summary-toggle-total')?.textContent).toBe('$20.00');
+		// The page starts folded, with "Show order summary" in its markup.
+		page.elements.get('summary-toggle')?.onclick?.();
+		expect(page.elements.get('summary-toggle-label')?.textContent).toBe('Hide order summary');
+		page.elements.get('summary-toggle')?.onclick?.();
+		expect(page.elements.get('summary-toggle-label')?.textContent).toBe('Show order summary');
+	});
+
 	it('shows the checkout again when items are added to an empty cart from another tab', async () => {
 		const tab = { local: new Map<string, string>(), session: new Map<string, string>() };
 		const page = openPage(tab, [started('chk_first')]);

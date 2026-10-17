@@ -57,6 +57,14 @@ describe('renderPayPage', () => {
 		expect(PAY_PAGE_SCRIPT).not.toContain("params.get('cancel')");
 	});
 
+	it('folds the order summary on phones behind a button that shows the total, and keeps it open on wider screens', () => {
+		const html = page();
+		expect(html).toContain('<button class="summary-toggle" id="summary-toggle" type="button" aria-expanded="false" aria-controls="summary-body">');
+		const phone = html.slice(html.indexOf('@media (max-width: 860px)'));
+		expect(phone.slice(0, phone.indexOf('}\n}'))).toContain('.summary:not(.open) .summary-body { display: none; }');
+		expect(html).toContain('.summary-toggle { display: none;');
+	});
+
 	it('keeps store text from closing its script or adding markup', () => {
 		const html = page({ info: { ...INFO, brand: { ...INFO.brand!, name: 'Evil </script><script>alert(1)</script>' }, products: [{ ...INFO.products[0], name: '</script><img src=x onerror=alert(1)>' }] } });
 		expect(html).not.toContain('</script><script>alert(1)');
