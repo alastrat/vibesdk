@@ -87,6 +87,16 @@ export class StoreCheckoutService extends BaseService {
         return holdsOf(rows);
     }
 
+    /** This store's checkout while it's starting or open, with its Stripe session once it has one; null for any other. */
+    async openSessionOf(checkoutId: string, appId: string): Promise<{ sessionId: string | null } | null> {
+        const row = await this.database
+            .select({ sessionId: schema.storeCheckouts.stripeCheckoutSessionId })
+            .from(schema.storeCheckouts)
+            .where(and(eq(schema.storeCheckouts.id, checkoutId), eq(schema.storeCheckouts.appId, appId), inArray(schema.storeCheckouts.status, ['creating', 'open'])))
+            .get();
+        return row ? { sessionId: row.sessionId } : null;
+    }
+
     /**
      * Expires a checkout of this store that is still starting or open, for a replacement after a cart edit; null for any
      * other. The answer names its Stripe session, which the caller expires too.

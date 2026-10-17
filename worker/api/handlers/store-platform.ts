@@ -28,6 +28,7 @@ import { sellerNoticesFromEnv } from '../../services/alerts/seller-notices';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from '../../../shared/types/errors';
 import { releaseOldestHolds } from '../../services/store-payments/holds';
+import { replaceCheckout } from '../../services/store-payments/replace';
 import { LiveStoreService } from '../../database/services/LiveStoreService';
 import { plainPage } from './plain-page';
 
@@ -224,10 +225,20 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 				const session = await stripe.createStoreCheckoutSession(input);
 				return { id: session.id, clientSecret: session.client_secret ?? null };
 			},
-			replaceCheckout: async (checkoutId) => {
-				const replaced = await checkouts.replaceOpen(checkoutId, target.appId);
-				if (replaced?.sessionId && stripe) await stripe.expireCheckoutSession(replaced.sessionId);
-			},
+			replaceCheckout: (checkoutId) =>
+				replaceCheckout(
+					{
+						openSession: (id) => checkouts.openSessionOf(id, target.appId),
+						expireSession: async (sessionId) => {
+							if (!stripe) throw new Error('Stripe is not configured');
+							await stripe.expireCheckoutSession(sessionId);
+						},
+						markReplaced: async (id) => {
+							await checkouts.replaceOpen(id, target.appId);
+						},
+					},
+					checkoutId,
+				),
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
 			sellerLimits: () => sellerLimitsOf(env, sellerIdOf(target)),

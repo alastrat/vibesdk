@@ -123,6 +123,18 @@ describe('claims on real SQL', () => {
 		expect((await checkouts.openCheckoutsOfApp('app_1')).map((hold) => hold.id).sort()).toEqual(['chk_a', 'chk_b']);
 	});
 
+	it("reads this store's starting or open checkout and its session, and nothing for another store or a paid one", async () => {
+		const checkouts = new StoreCheckoutService(envWith(db));
+		await insertCheckout(db, { id: 'chk_open', sellerUserId: 'u1', status: 'open', weightedCents: 100, createdAt: NOW });
+		await db.prepare("UPDATE store_checkouts SET stripe_checkout_session_id = 'cs_open' WHERE id = 'chk_open'").run();
+		await insertCheckout(db, { id: 'chk_starting', sellerUserId: 'u1', status: 'creating', weightedCents: 100, createdAt: NOW });
+		await insertCheckout(db, { id: 'chk_paid', sellerUserId: 'u1', status: 'completed', weightedCents: 100, createdAt: NOW });
+		expect(await checkouts.openSessionOf('chk_open', 'app_1')).toEqual({ sessionId: 'cs_open' });
+		expect(await checkouts.openSessionOf('chk_starting', 'app_1')).toEqual({ sessionId: null });
+		expect(await checkouts.openSessionOf('chk_open', 'app_other')).toBeNull();
+		expect(await checkouts.openSessionOf('chk_paid', 'app_1')).toBeNull();
+	});
+
 	it("expires only this store's starting or open checkout for a replacement, and returns its session", async () => {
 		const checkouts = new StoreCheckoutService(envWith(db));
 		await insertCheckout(db, { id: 'chk_open', sellerUserId: 'u1', status: 'open', weightedCents: 4599, createdAt: NOW });
