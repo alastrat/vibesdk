@@ -138,10 +138,15 @@ export async function sweepPendingDomains(deps: DomainFlowDeps): Promise<{ check
 	let connected = 0;
 	let failed = 0;
 	for (const row of pending) {
-		await check({ ...deps, provider }, row);
-		const after = await deps.stores.domainOfApp(row.appId);
-		if (after?.status === 'active') connected += 1;
-		if (after?.status === 'failed') failed += 1;
+		try {
+			await check({ ...deps, provider }, row);
+			const after = await deps.stores.domainOfApp(row.appId);
+			if (after?.status === 'active') connected += 1;
+			if (after?.status === 'failed') failed += 1;
+		} catch {
+			// This domain is checked again next hour; the rest of the run goes on.
+			failed += 1;
+		}
 	}
 	return { checked: pending.length, connected, failed };
 }

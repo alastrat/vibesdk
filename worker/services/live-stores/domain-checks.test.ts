@@ -6,7 +6,7 @@ import type { StoreDomainRow } from '../../database/services/LiveStoreService';
 const DAY = 24 * 60 * 60 * 1000;
 const RECORDS = [{ type: 'CNAME' as const, name: 'shop.northwindtea.com', value: 'stores.estori.shop', purpose: 'routing' as const }];
 
-function world(options: { checks?: DomainState[]; createFails?: boolean; removeFails?: boolean; saveFails?: boolean; takenBy?: Record<string, string> } = {}) {
+function world(options: { checks?: DomainState[]; createFails?: boolean; removeFails?: boolean; saveFails?: boolean; takenBy?: Record<string, string>; updateFailsFor?: string } = {}) {
 	const rows = new Map<string, StoreDomainRow>();
 	const removedAtProvider: string[] = [];
 	let now = new Date(1_800_000_000_000);
@@ -37,6 +37,7 @@ function world(options: { checks?: DomainState[]; createFails?: boolean; removeF
 				return 'added';
 			},
 			updateDomain: async (hostname, update) => {
+				if (options.updateFailsFor === hostname) throw new Error('D1_ERROR: database is locked');
 				const row = rows.get(hostname);
 				if (row) rows.set(hostname, { ...row, ...update, verifiedAt: update.verifiedAt === undefined ? row.verifiedAt : update.verifiedAt });
 			},
@@ -115,6 +116,14 @@ describe('checking a domain', () => {
 		await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com');
 		advance(DOMAIN_SETUP_DAYS * DAY + 1);
 		expect(await checkStoreDomain(deps, 'app_tea')).toMatchObject({ ok: true, domain: { status: 'failed', lastError: "The DNS records weren't added within 7 days. Remove the domain and add it again." } });
+	});
+
+	it('keeps sweeping the other domains when one fails to save, and counts it failed for this run', async () => {
+		const { deps, rows } = world({ checks: [{ status: 'active', records: RECORDS, error: null }, { status: 'active', records: RECORDS, error: null }], updateFailsFor: 'shop.northwindtea.com' });
+		await addStoreDomain({ ...deps, stores: { ...deps.stores, updateDomain: async () => undefined } }, 'app_tea', 'shop.northwindtea.com');
+		await addStoreDomain(deps, 'app_lumen', 'shop.lumenhome.com');
+		expect(await sweepPendingDomains(deps)).toEqual({ checked: 2, connected: 1, failed: 1 });
+		expect(rows.get('shop.lumenhome.com')?.status).toBe('active');
 	});
 
 	it('sweeps every pending domain, connecting the ones that are ready', async () => {
