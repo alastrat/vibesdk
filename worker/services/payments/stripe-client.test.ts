@@ -133,6 +133,8 @@ describe('createStripeClient', () => {
 		const body = decodeURIComponent(String(calls[0].init.body));
 		expect(body).toContain('payment_intent_data[application_fee_amount]=263');
 		expect(body).toContain('payment_intent_data[transfer_data][destination]=acct_1');
+		// US dollars by card or a card wallet only, as the fee assumes Stripe's card rate.
+		for (const part of ['payment_method_types[0]=card', 'adaptive_pricing[enabled]=false', 'wallet_options[link][display]=never']) expect(body).toContain(part);
 		expect(body).toContain('line_items[0][price_data][unit_amount]=2900');
 		expect(body).toContain('client_reference_id=u1');
 		// 35 minutes after the pinned time, in Unix seconds; Stripe's minimum is 30.

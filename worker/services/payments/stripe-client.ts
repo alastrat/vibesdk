@@ -15,6 +15,16 @@ const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
 
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 
+/**
+ * Every Checkout session charges in US dollars by card or a card wallet (Apple Pay, Google Pay): no prices in the
+ * shopper's local currency, and no Link, which would also offer bank payments. Estori's fees assume Stripe's card rate.
+ */
+const USD_CARD_CHECKOUT: Record<string, FormValue> = {
+	payment_method_types: ['card'],
+	adaptive_pricing: { enabled: false },
+	wallet_options: { link: { display: 'never' } },
+};
+
 export class StripeApiError extends Error {
 	constructor(
 		message: string,
@@ -296,6 +306,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 						price_data: { currency: 'usd', unit_amount: input.priceCents, product_data: { name: input.productName } },
 					},
 				],
+				...USD_CARD_CHECKOUT,
 				payment_intent_data: {
 					application_fee_amount: input.feeCents,
 					transfer_data: { destination: input.destinationAccountId },
@@ -330,11 +341,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 							},
 						},
 					],
-					// US dollars by card or a card wallet only: no prices in the shopper's local currency, and no Link, which
-					// would also offer bank payments.
-					payment_method_types: ['card'],
-					adaptive_pricing: { enabled: false },
-					wallet_options: { link: { display: 'never' } },
+					...USD_CARD_CHECKOUT,
 					payment_intent_data: {
 						application_fee_amount: input.applicationFeeCents,
 						on_behalf_of: input.sellerStripeAccountId,
