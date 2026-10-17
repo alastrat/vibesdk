@@ -12,7 +12,11 @@ import type { StripeClient, StripePaymentIntent } from '../payments/stripe-clien
 import type { StoreRefundInitiator } from '../../../shared/types/store-payments';
 import type { StoreOrderView } from './store';
 
-export type RefundLinesResult = { ok: true; refundedCents: number } | { ok: false; reason: 'seller_balance_short'; shortCents: number } | { ok: false; reason: 'nothing_to_refund' };
+export type RefundLinesResult =
+	| { ok: true; refundedCents: number }
+	| { ok: false; reason: 'seller_balance_short'; shortCents: number }
+	| { ok: false; reason: 'unknown_lines'; lineNos: number[] }
+	| { ok: false; reason: 'nothing_to_refund' };
 
 /** A line's refund as claimed and carried out so far. */
 export interface StoreRefundRow {
@@ -55,6 +59,8 @@ export async function refundStoreLines(deps: RefundLinesDeps, input: { order: St
 	const { order } = input;
 	const paymentIntentId = order.stripePaymentIntentId;
 	if (!paymentIntentId) return { ok: false, reason: 'nothing_to_refund' };
+	const unknown = input.lineNos.filter((lineNo) => !order.items.some((item) => item.lineNo === lineNo));
+	if (unknown.length > 0) return { ok: false, reason: 'unknown_lines', lineNos: unknown };
 	const rows = await deps.refundRows(order.id);
 	const requested = order.items.filter((item) => input.lineNos.includes(item.lineNo));
 	const catalogNew = requested.filter((item) => item.kind === 'catalog' && !rows.has(item.lineNo)).map((item) => item.lineNo);

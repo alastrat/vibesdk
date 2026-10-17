@@ -112,6 +112,7 @@ export class StoreOrdersController extends BaseController {
             });
             if (result.ok) return this.createSuccessResponse<StoreRefundResponse>({ refundedCents: result.refundedCents });
             if (result.reason === 'seller_balance_short') return this.createErrorResponse<StoreRefundResponse>(shortBalanceMessage(result.shortCents), 409);
+            if (result.reason === 'unknown_lines') return this.createErrorResponse<StoreRefundResponse>(`This order has no line ${result.lineNos.join(', ')}`, 400);
             return this.createErrorResponse<StoreRefundResponse>('These lines were already refunded', 400);
         } catch (error) {
             return this.handleError(error, 'refund a store order') as ControllerResponse<ApiResponse<StoreRefundResponse>>;

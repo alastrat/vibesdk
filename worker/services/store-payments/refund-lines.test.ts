@@ -131,4 +131,10 @@ describe('refundStoreLines', () => {
 		expect(await refundStoreLines(deps, { order: ORDER, lineNos: [2], requestId: 'rq_2' })).toEqual({ ok: false, reason: 'nothing_to_refund' });
 		expect(calls).toEqual([]);
 	});
+
+	it("names line numbers that aren't on the order, before any money moves", async () => {
+		const { deps, calls } = world();
+		expect(await refundStoreLines(deps, { order: ORDER, lineNos: [2, 9], requestId: 'rq_1' })).toEqual({ ok: false, reason: 'unknown_lines', lineNos: [9] });
+		expect(calls).toEqual([]);
+	});
 });

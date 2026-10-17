@@ -133,10 +133,10 @@ export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: 
 	const catalog = new CatalogOrderService(env);
 	const sellerBalance = () => stripe.retrieveBalance(input.sellerAccountId);
 	const catalogDeps: RefundItemsDeps = { store: catalog, stripe, sellerBalance, ...catalogRefundRecords(env, input.requestId) };
-	/** The catalog order's items sold on these lines; null when the order has no catalog order. */
-	const catalogItems = async (lineNos: readonly number[]): Promise<{ orderId: string; itemIds: string[] } | null> => {
+	/** The catalog order's items sold on these lines. A paid order's catalog lines always have one, so a missing one is a fault. */
+	const catalogItems = async (lineNos: readonly number[]): Promise<{ orderId: string; itemIds: string[] }> => {
 		const catalogOrder = order.stripeCheckoutSessionId ? await catalog.getOrderBySession(order.stripeCheckoutSessionId) : null;
-		if (!catalogOrder) return null;
+		if (!catalogOrder) throw new Error(`Store order ${order.id} has catalog lines but no catalog order`);
 		const variants = new Set(order.items.filter((item) => lineNos.includes(item.lineNo)).map((item) => item.catalogVariantId));
 		return { orderId: catalogOrder.id, itemIds: catalogOrder.items.filter((item) => variants.has(item.catalogVariantId)).map((item) => item.id) };
 	};
@@ -145,13 +145,9 @@ export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: 
 		stripe,
 		sellerBalance,
 		refundRows: (orderId) => refunds.refundRows(orderId),
-		catalogSellerCents: async (lineNos) => {
-			const items = await catalogItems(lineNos);
-			return items ? catalogRefundSellerCents(catalogDeps, { ...items, reason: 'seller-refund' }) : 0;
-		},
+		catalogSellerCents: async (lineNos) => catalogRefundSellerCents(catalogDeps, { ...(await catalogItems(lineNos)), reason: 'seller-refund' }),
 		refundCatalogLines: async (lineNos) => {
 			const items = await catalogItems(lineNos);
-			if (!items) return { refundedCents: 0 };
 			const totals = await refundCatalogItems(catalogDeps, { ...items, reason: 'seller-refund', balanceChecked: true });
 			return { refundedCents: totals.shopperCents };
 		},

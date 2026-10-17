@@ -16,6 +16,16 @@ describe('storeRefundDeps', () => {
 	});
 });
 
+describe('storeRefundDeps catalog lines', () => {
+	it('fails rather than report catalog lines refunded when their catalog order is missing', async () => {
+		const { d1 } = recordingD1();
+		const order = { ...ORDER, items: [{ lineNo: 1, kind: 'catalog', catalogVariantId: 'cv_1' }] } as unknown as StoreOrderView;
+		const deps = storeRefundDeps({ DB: d1 } as unknown as Env, {} as StripeClient, { order, sellerAccountId: 'acct_1', requestId: 'rq_1' });
+		await expect(deps.catalogSellerCents([1])).rejects.toThrow('has catalog lines but no catalog order');
+		await expect(deps.refundCatalogLines([1])).rejects.toThrow('has catalog lines but no catalog order');
+	});
+});
+
 describe('returnPageRecordDeps', () => {
 	it("never fails the shopper's return when settling fails, since the webhook settles the sale", async () => {
 		const failing = {
