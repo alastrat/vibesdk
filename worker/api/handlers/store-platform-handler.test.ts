@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleStorePlatform, type StorePlatformTarget } from './store-platform';
 import { recordingD1 } from '../../database/test-support/recording-d1';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
+import { RateLimitService } from '../../services/rate-limit/rateLimits';
+import { RateLimitType } from '../../services/rate-limit/config';
+import { RateLimitExceededError } from '../../../shared/types/errors';
 
 const BASE = 'https://preview.test/space/app_1/preview/main';
 /** The request's execution context; work handed to waitUntil is dropped in these tests. */
@@ -74,6 +77,26 @@ describe('handleStorePlatform', () => {
 		const response = await handleStorePlatform(request, testEnv({ STRIPE_SECRET_KEY: 'sk_test_live_store' }).env, live, CTX);
 		// The test seller has no payments set up here, so it stops there, and not at "This is a demo".
 		expect(await response.json()).toMatchObject({ ok: false, reason: 'payments_unavailable' });
+	});
+
+	it("limits how many checkouts one shopper starts on a live store, and leaves the owner's preview alone", async () => {
+		const limited = vi
+			.spyOn(RateLimitService, 'enforceStoreCheckoutRateLimit')
+			.mockRejectedValue(new RateLimitExceededError('Store checkout limit reached', RateLimitType.STORE_CHECKOUT));
+		const live = { ...TARGET, branch: 'live', basePath: '', viewer: { kind: 'live' as const, sellerUserId: 'seller_1' } };
+		const request = new Request('https://northwind-tea.estori.shop/__estori/checkout', {
+			method: 'POST',
+			headers: { Origin: 'https://northwind-tea.estori.shop', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ items: [{ variantId: 'trail-mug-blue', quantity: 1 }], shipTo: 'US' }),
+		});
+		const response = await handleStorePlatform(request, testEnv({ STRIPE_SECRET_KEY: 'sk_test_live_store' }).env, live, CTX);
+		expect(response.status).toBe(429);
+		expect(await response.json()).toMatchObject({ ok: false, reason: 'too_many_checkouts' });
+		expect(limited).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.any(Request), 'app_1');
+
+		limited.mockClear();
+		await handleStorePlatform(checkoutRequest(), testEnv().env, TARGET, CTX);
+		expect(limited).not.toHaveBeenCalled();
 	});
 
 	it('refuses checkouts from another origin, of another type or too large, before reading anything', async () => {

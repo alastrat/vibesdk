@@ -41,6 +41,8 @@ export interface StartCheckoutDeps {
 	sellerLimits(): Promise<{ largestOrderCents: number; weeklySalesCents: number }>;
 	/** The weight of the seller's checkouts in this mode in the last 7 days that are paid or may still be. */
 	weeklyUsage(mode: StoreMode): Promise<number>;
+	/** Releases the seller's oldest unpaid checkouts in this mode until this much of the cap is free; answers what it freed. */
+	releaseHolds(mode: StoreMode, cents: number): Promise<number>;
 	/**
 	 * Expires a checkout of this store that is still starting or open, and its Stripe session, so it stops counting toward
 	 * the weekly cap. Any other checkout is left as it is.
@@ -114,7 +116,9 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	if (priced.cart.totalCents > limits.largestOrderCents) return refusal('order_over_limit');
 	// Saved as creating before Stripe is called, so the next checkout's usage counts this one.
 	const weightedCents = weightedCartCents(priced.cart);
-	if ((await deps.weeklyUsage(priced.cart.mode)) + weightedCents > limits.weeklySalesCents) {
+	const used = await deps.weeklyUsage(priced.cart.mode);
+	const short = used + weightedCents - limits.weeklySalesCents;
+	if (short > 0 && (await deps.releaseHolds(priced.cart.mode, short)) < short) {
 		await deps.limitReached(limits.weeklySalesCents);
 		return refusal('store_paused');
 	}

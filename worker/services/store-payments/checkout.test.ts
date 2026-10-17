@@ -61,6 +61,7 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 		nowMs: () => 1_800_000_000_000,
 		sellerLimits: async () => ({ largestOrderCents: 15_000, weeklySalesCents: 50_000 }),
 		weeklyUsage: async () => 0,
+		releaseHolds: async () => 0,
 		replaceCheckout: async (checkoutId) => {
 			replaced.push(checkoutId);
 		},
@@ -214,6 +215,20 @@ describe('startStoreCheckout', () => {
 
 		const fits = fakeDeps({ weeklyUsage: async () => 50_000 - 8600 });
 		expect(await startStoreCheckout(fits.deps, INPUT)).toMatchObject({ ok: true });
+	});
+
+	it("makes room by releasing the oldest checkouts nobody paid for, so unpaid checkouts can't pause the store", async () => {
+		const released: Array<{ mode: string; cents: number }> = [];
+		const { deps, limits } = fakeDeps({ weeklyUsage: async () => 50_000, releaseHolds: async (mode, cents) => (released.push({ mode, cents }), cents) });
+		expect(await startStoreCheckout(deps, INPUT)).toMatchObject({ ok: true });
+		expect(released).toEqual([{ mode: 'test', cents: 8600 }]);
+		expect(limits).toEqual([]);
+	});
+
+	it('still pauses the store when the unpaid checkouts it could release leave too little room', async () => {
+		const { deps, limits } = fakeDeps({ weeklyUsage: async () => 50_000, releaseHolds: async () => 8599 });
+		expect(await startStoreCheckout(deps, INPUT)).toMatchObject({ ok: false, reason: 'store_paused' });
+		expect(limits).toEqual(['reached 50000']);
 	});
 
 	it("saves the checkout's weight, so the next checkout counts it", async () => {

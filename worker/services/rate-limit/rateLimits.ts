@@ -406,6 +406,22 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Per-shopper cap on checkouts started on one live store, keyed by the store and the shopper's network address.
+	 * Throws RateLimitExceededError when the limit is exceeded.
+	 */
+	static async enforceStoreCheckoutRateLimit(env: Env, config: RateLimitSettings, request: Request, appId: string): Promise<void> {
+		const limitConfig = config[RateLimitType.STORE_CHECKOUT];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const key = this.buildRateLimitKey(RateLimitType.STORE_CHECKOUT, `store:${appId}:${await this.getRequestIdentifier(request)}`);
+		const result = await this.enforce(env, key, config, RateLimitType.STORE_CHECKOUT);
+		if (!result.success) {
+			throw new RateLimitExceededError('Store checkout limit reached', RateLimitType.STORE_CHECKOUT, limitConfig.limit, limitConfig.period);
+		}
+	}
+
+	/**
 	 * Per-address cap on contact-sales confirmations, so the public form can't be used to fill someone else's inbox.
 	 * Keyed by a hash of the address. Throws RateLimitExceededError when the limit is exceeded.
 	 */

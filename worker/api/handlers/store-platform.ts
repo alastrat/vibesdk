@@ -21,10 +21,13 @@ import { payPageHeaders, renderPayPage } from '../../services/store-payments/pay
 import { getProtocolForHost } from '../../utils/urls';
 import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
-import { getSellerLimitsSettings } from '../../config';
+import { getGlobalConfigurableSettings, getSellerLimitsSettings } from '../../config';
 import { limitsFor, type SellerLevelLimits } from '../../../shared/types/seller-levels';
 import { platformAlertsFromEnv } from '../../services/alerts/platform-alerts';
 import { sellerNoticesFromEnv } from '../../services/alerts/seller-notices';
+import { RateLimitService } from '../../services/rate-limit/rateLimits';
+import { RateLimitExceededError } from '../../../shared/types/errors';
+import { releaseOldestHolds } from '../../services/store-payments/holds';
 
 const logger = createLogger('StorePlatform');
 
@@ -44,6 +47,7 @@ const REFUSAL_STATUS: Readonly<Record<StoreCheckoutRefusal, number>> = {
 	cart_limits: 400,
 	order_over_limit: 409,
 	store_paused: 409,
+	too_many_checkouts: 429,
 	stripe_failed: 502,
 };
 
@@ -196,8 +200,11 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 		return json(refusal('invalid_request'), 400);
 	}
 
+	if (target.viewer.kind === 'live' && (await liveCheckoutLimited(env, request, target.appId))) return json(refusal('too_many_checkouts'), 429);
+
 	const stripe = stripeFromEnv(env);
 	const checkouts = new StoreCheckoutService(env);
+	const weekAgo = () => new Date(Date.now() - WEEK_MS);
 	const response = await startStoreCheckout(
 		{
 			loadManifest: () => loadManifest(env, target),
@@ -216,7 +223,19 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
 			sellerLimits: () => sellerLimitsOf(env, sellerIdOf(target)),
-			weeklyUsage: (mode) => checkouts.weeklyUsage(sellerIdOf(target), mode, new Date(Date.now() - WEEK_MS)),
+			weeklyUsage: (mode) => checkouts.weeklyUsage(sellerIdOf(target), mode, weekAgo()),
+			releaseHolds: (mode, cents) =>
+				releaseOldestHolds(
+					{
+						holds: () => checkouts.openHolds(sellerIdOf(target), mode, weekAgo()),
+						expireSession: async (sessionId) => {
+							if (!stripe) throw new Error('Stripe is not configured');
+							await stripe.expireCheckoutSession(sessionId);
+						},
+						markExpired: (checkoutId) => checkouts.expire(checkoutId),
+					},
+					cents,
+				),
 			// The shopper is answered at once; the alert and the seller's email go out after.
 			limitReached: async (weeklySalesCents) => {
 				ctx.waitUntil(
@@ -241,6 +260,19 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 	);
 	if (!response.ok) logger.info('Store checkout refused', { appId: target.appId, reason: response.reason });
 	return json(response, response.ok ? 200 : REFUSAL_STATUS[response.reason]);
+}
+
+/** True when this shopper started too many checkouts on this live store; an unexpected limiter error lets them through. */
+async function liveCheckoutLimited(env: Env, request: Request, appId: string): Promise<boolean> {
+	try {
+		const config = await getGlobalConfigurableSettings(env);
+		await RateLimitService.enforceStoreCheckoutRateLimit(env, config.security.rateLimit, request, appId);
+		return false;
+	} catch (error) {
+		if (error instanceof RateLimitExceededError) return true;
+		logger.error('Store checkout limit could not be checked', error);
+		return false;
+	}
 }
 
 /** A shopper who just paid always lands back on the store; the webhook records the order if this page couldn't. */
