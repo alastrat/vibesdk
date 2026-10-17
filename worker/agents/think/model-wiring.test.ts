@@ -52,6 +52,14 @@ describe('think model wiring', () => {
 		expect(behavior.match(/await this\.reportTurnError\(/g) ?? []).toHaveLength(2);
 	});
 
+	it('logs every failed turn, and reads the fallback flag from the typed environment', () => {
+		const behavior = source('/worker/agents/core/behaviors/think.ts');
+		const report = behavior.slice(behavior.indexOf('private async reportTurnError('), behavior.indexOf('/** Feeds a chunk to the build'));
+		expect(report.indexOf("this.logger.warn('A build turn failed', { error })")).toBeGreaterThan(-1);
+		expect(report).toContain('this.env.ENABLE_THINK_MODEL_FALLBACK');
+		expect(report).not.toContain('as unknown as');
+	});
+
 	it('stops draining queued inputs after a failed turn', () => {
 		const behavior = source('/worker/agents/core/behaviors/think.ts');
 		const build = behavior.slice(behavior.indexOf('async build()'), behavior.indexOf('private async runPrompt('));
