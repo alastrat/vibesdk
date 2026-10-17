@@ -62,9 +62,13 @@ export function createModelTransport(options: ModelTransportOptions): typeof fet
 			onProviderStatus?.(null);
 			return attempt.response;
 		}
-		const detail = await providerMessage(attempt.response.clone(), detailTimeoutMs);
-		onProviderStatus?.({ modelId, reason, status: attempt.response.status, ...(detail ? { detail } : {}) });
-		return attempt.response;
+		const { status } = attempt.response;
+		const message = await providerMessage(attempt.response.clone(), detailTimeoutMs);
+		onProviderStatus?.({ modelId, reason, status, ...(message.detail ? { detail: message.detail } : {}) });
+		if (message.finished) return attempt.response;
+		// Its error body never finished, so the caller gets one it can read; reading the stalled one would hang the turn.
+		attempt.response.body?.cancel().catch(() => undefined);
+		return Response.json({ error: { message: `The model provider answered ${status} and did not finish its error` } }, { status });
 	};
 }
 
@@ -119,7 +123,7 @@ function modelOf(body: string): string | undefined {
  * The `error.message` a provider sent (Google wraps it in an array), shortened for display. The request's own timer
  * has ended by now, so a body that never finishes is given up on after `timeoutMs`.
  */
-async function providerMessage(response: Response, timeoutMs: number): Promise<string | undefined> {
+async function providerMessage(response: Response, timeoutMs: number): Promise<{ detail?: string; finished: boolean }> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const gaveUp = new Promise<typeof GAVE_UP>((resolve) => {
 		timer = setTimeout(() => resolve(GAVE_UP), timeoutMs);
@@ -127,14 +131,14 @@ async function providerMessage(response: Response, timeoutMs: number): Promise<s
 	let parsed: unknown;
 	try {
 		const read = await Promise.race([response.json(), gaveUp]);
-		if (read === GAVE_UP) return undefined;
+		if (read === GAVE_UP) return { finished: false };
 		parsed = read;
 	} catch {
-		return undefined;
+		return { finished: true };
 	} finally {
 		clearTimeout(timer);
 	}
 	const root: unknown = Array.isArray(parsed) ? parsed[0] : parsed;
 	const message = (root as { error?: { message?: unknown } } | undefined)?.error?.message;
-	return typeof message === 'string' ? message.slice(0, 300) : undefined;
+	return typeof message === 'string' ? { detail: message.slice(0, 300), finished: true } : { finished: true };
 }
