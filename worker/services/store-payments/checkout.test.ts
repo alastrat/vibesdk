@@ -82,8 +82,7 @@ describe('startStoreCheckout', () => {
 			applicationFeeCents: 163,
 			sellerStripeAccountId: 'acct_1',
 			metadata: { kind: 'store_order', checkoutId: 'chk_1', storeAppId: 'app_1' },
-			successUrl: 'https://preview.test/space/app_1/preview/main/__estori/return?session_id={CHECKOUT_SESSION_ID}',
-			cancelUrl: 'https://preview.test/space/app_1/preview/main/cart',
+			returnUrl: 'https://preview.test/space/app_1/preview/main/__estori/return?session_id={CHECKOUT_SESSION_ID}',
 		});
 		expect(attached).toEqual(['cs_1']);
 	});
@@ -157,9 +156,9 @@ describe('startStoreCheckout', () => {
 	});
 
 	it('keeps unsafe return paths on the store', async () => {
-		const { deps, sessions } = fakeDeps();
+		const { deps, saved } = fakeDeps();
 		await startStoreCheckout(deps, { ...INPUT, body: { ...(INPUT.body as object), cancelPath: '//evil.example' } });
-		expect(sessions[0].cancelUrl).toBe('https://preview.test/space/app_1/preview/main/');
+		expect(saved[0].cancelPath).toBe('/');
 	});
 
 	it("refuses an order larger than the seller's largest, without saving it", async () => {

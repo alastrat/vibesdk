@@ -12,6 +12,9 @@ const IDEMPOTENCY_BUCKET_MS = 600_000;
 
 /** A Checkout session closes 35 minutes after it opens, so a buyer can't pay long after the listing changed. Stripe's minimum is 30. */
 const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
+/** Every request names its API version, so a new account default can't change what Stripe returns; Stripe.js on the
+ * store checkout page loads the same version. */
+export const STRIPE_API_VERSION = '2026-03-25.dahlia';
 
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 
@@ -78,6 +81,8 @@ export interface StripeShippingDetails {
 export interface StripeCheckoutSession {
 	id: string;
 	url: string | null;
+	/** Elements sessions: what Stripe.js on Estori's checkout page starts the payment form with. */
+	client_secret?: string | null;
 	payment_status: 'paid' | 'unpaid' | 'no_payment_required';
 	status: 'open' | 'complete' | 'expired' | null;
 	client_reference_id: string | null;
@@ -148,8 +153,8 @@ export interface StoreCheckoutSessionInput {
 	applicationFeeCents: number;
 	sellerStripeAccountId: string;
 	metadata: Record<string, string>;
-	successUrl: string;
-	cancelUrl: string;
+	/** Where Stripe sends the shopper after paying on Estori's checkout page. */
+	returnUrl: string;
 	nowMs: number;
 }
 
@@ -186,6 +191,8 @@ export interface StripeClient {
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
 	createStoreCheckoutSession(input: StoreCheckoutSessionInput): Promise<StripeCheckoutSession>;
 	retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>;
+	/** Closes an open session so it can't be paid; one already expired or completed counts as done. */
+	expireCheckoutSession(sessionId: string): Promise<void>;
 	retrievePaymentIntent(paymentIntentId: string): Promise<StripePaymentIntent>;
 	createRefund(input: { paymentIntentId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeRefund>;
 	createTransferReversal(input: { transferId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeTransferReversal>;
@@ -253,6 +260,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${secretKey}`,
 			'Content-Type': 'application/x-www-form-urlencoded',
+			'Stripe-Version': STRIPE_API_VERSION,
 		};
 		if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
 		// Calls made as a connected account, such as reading a seller's balance.
@@ -350,12 +358,22 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					},
 					metadata: input.metadata,
 					client_reference_id: input.checkoutId,
-					success_url: input.successUrl,
-					cancel_url: input.cancelUrl,
+					// Paid on Estori's own checkout page with Stripe Elements, so there is no hosted page to come back from.
+					ui_mode: 'elements',
+					return_url: input.returnUrl,
 					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
 				},
 				`store-checkout-${input.checkoutId}`,
 			),
+		expireCheckoutSession: async (sessionId) => {
+			try {
+				await request<StripeCheckoutSession>('POST', `/checkout/sessions/${encodeURIComponent(sessionId)}/expire`);
+			} catch (error) {
+				// Stripe refuses to expire a session that isn't open: it was already expired or paid.
+				if (error instanceof StripeApiError && error.status === 400) return;
+				throw error;
+			}
+		},
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
 		retrievePaymentIntent: (paymentIntentId) =>

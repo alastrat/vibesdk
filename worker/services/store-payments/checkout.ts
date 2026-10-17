@@ -133,8 +133,7 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 			applicationFeeCents: priced.applicationFeeCents,
 			sellerStripeAccountId: seller.stripeAccountId,
 			metadata: { kind: STORE_ORDER_KIND, checkoutId, storeAppId: input.appId },
-			successUrl: `${input.storeBaseUrl}${STORE_PLATFORM_PREFIX}/return?session_id={CHECKOUT_SESSION_ID}`,
-			cancelUrl: `${input.storeBaseUrl}${cancelPath}`,
+			returnUrl: `${input.storeBaseUrl}${STORE_PLATFORM_PREFIX}/return?session_id={CHECKOUT_SESSION_ID}`,
 			nowMs,
 		});
 	} catch {

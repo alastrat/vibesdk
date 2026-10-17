@@ -266,8 +266,7 @@ describe('store checkout sessions', () => {
 		applicationFeeCents: 163,
 		sellerStripeAccountId: 'acct_1',
 		metadata: { kind: 'store_order', checkoutId: 'chk_1', storeAppId: 'app_1' },
-		successUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
-		cancelUrl: 'https://store.test/cart',
+		returnUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
 		nowMs: 1_800_000_000_000,
 	};
 
@@ -294,7 +293,8 @@ describe('store checkout sessions', () => {
 			'payment_intent_data[metadata][checkoutId]=chk_1',
 			'metadata[kind]=store_order',
 			'client_reference_id=chk_1',
-			'success_url=https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+			'ui_mode=elements',
+			'return_url=https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
 			`expires_at=${1_800_000_000 + 35 * 60}`,
 		]) {
 			expect(body).toContain(part);
@@ -370,5 +370,42 @@ describe('connected-account calls', () => {
 		const url = decodeURIComponent(calls[0].url);
 		expect(url).toContain('expand[0]=latest_charge.transfer');
 		expect(url).toContain('expand[1]=latest_charge.balance_transaction');
+	});
+});
+
+describe('Elements sessions', () => {
+	it("pins Stripe's API version on every request, so a new account default can't change responses", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: null, client_secret: 'cs_1_secret' });
+		await createStripeClient('sk_test_fake', fakeFetch).retrieveCheckoutSession('cs_1');
+		expect(new Headers(calls[0].init.headers).get('Stripe-Version')).toBe('2026-03-25.dahlia');
+	});
+
+	it('creates the store session for Elements on Estori\'s own page: a return address, and no hosted-page addresses', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: null, client_secret: 'cs_1_secret' });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({
+			checkoutId: 'chk_1',
+			lines: [{ name: 'Trail Mug, Blue', quantity: 1, unitPriceCents: 2000 }],
+			shippingCents: 0,
+			shipToCountry: 'US',
+			applicationFeeCents: 88,
+			sellerStripeAccountId: 'acct_1',
+			metadata: { kind: 'store_order' },
+			returnUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+			nowMs: 1_800_000_000_000,
+		});
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(body).toContain('ui_mode=elements');
+		expect(body).toContain('return_url=https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}');
+		expect(body).not.toContain('success_url');
+		expect(body).not.toContain('cancel_url');
+	});
+
+	it('expires a session, and takes one already expired or completed as done', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', status: 'expired' });
+		await createStripeClient('sk_test_fake', fakeFetch).expireCheckoutSession('cs_1');
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions/cs_1/expire');
+		expect(calls[0].init.method).toBe('POST');
+		const refused: typeof fetch = async () => new Response(JSON.stringify({ error: { message: 'Only Checkout Sessions with a status in [\"open\"] can be expired.', type: 'invalid_request_error' } }), { status: 400 });
+		await expect(createStripeClient('sk_test_fake', refused).expireCheckoutSession('cs_1')).resolves.toBeUndefined();
 	});
 });
