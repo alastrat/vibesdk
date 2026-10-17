@@ -22,8 +22,12 @@ export interface ModelTransportOptions {
 	prepareBody?: (body: string) => Promise<string> | string;
 	/** Called after every answered request: the failure, or null when the provider responded normally. */
 	onProviderStatus?: (failure: ProviderFailure | null) => void;
+	/** How long to wait for a failing provider's error message before recording the failure without it. */
+	detailTimeoutMs?: number;
 	fetchImpl?: typeof fetch;
 }
+
+const DETAIL_TIMEOUT_MS = 2_000;
 
 export function classifyProviderStatus(status: number): ProviderFailureReason | null {
 	if (status === 429) return 'rate_limited';
@@ -33,7 +37,7 @@ export function classifyProviderStatus(status: number): ProviderFailureReason | 
 }
 
 export function createModelTransport(options: ModelTransportOptions): typeof fetch {
-	const { timeoutMs, prepareBody, onProviderStatus } = options;
+	const { timeoutMs, prepareBody, onProviderStatus, detailTimeoutMs = DETAIL_TIMEOUT_MS } = options;
 	const fetchImpl: typeof fetch = options.fetchImpl ?? ((input, init) => fetch(input, init));
 
 	return async (input, init) => {
@@ -58,13 +62,15 @@ export function createModelTransport(options: ModelTransportOptions): typeof fet
 			onProviderStatus?.(null);
 			return attempt.response;
 		}
-		const detail = await providerMessage(attempt.response.clone());
+		const detail = await providerMessage(attempt.response.clone(), detailTimeoutMs);
 		onProviderStatus?.({ modelId, reason, status: attempt.response.status, ...(detail ? { detail } : {}) });
 		return attempt.response;
 	};
 }
 
 type Attempt = { kind: 'response'; response: Response } | { kind: 'timeout' };
+
+const GAVE_UP: unique symbol = Symbol('gave up');
 
 /**
  * Runs the request, aborting it if no response headers arrive in time.
@@ -109,13 +115,24 @@ function modelOf(body: string): string | undefined {
 	}
 }
 
-/** The `error.message` a provider sent (Google wraps it in an array), shortened for display. */
-async function providerMessage(response: Response): Promise<string | undefined> {
+/**
+ * The `error.message` a provider sent (Google wraps it in an array), shortened for display. The request's own timer
+ * has ended by now, so a body that never finishes is given up on after `timeoutMs`.
+ */
+async function providerMessage(response: Response, timeoutMs: number): Promise<string | undefined> {
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const gaveUp = new Promise<typeof GAVE_UP>((resolve) => {
+		timer = setTimeout(() => resolve(GAVE_UP), timeoutMs);
+	});
 	let parsed: unknown;
 	try {
-		parsed = await response.json();
+		const read = await Promise.race([response.json(), gaveUp]);
+		if (read === GAVE_UP) return undefined;
+		parsed = read;
 	} catch {
 		return undefined;
+	} finally {
+		clearTimeout(timer);
 	}
 	const root: unknown = Array.isArray(parsed) ? parsed[0] : parsed;
 	const message = (root as { error?: { message?: unknown } } | undefined)?.error?.message;
