@@ -31,7 +31,7 @@ export function storeHostConfig(env: Env): StoreHostConfig {
 	return {
 		storesDomain: env.STORES_DOMAIN?.trim().toLowerCase() || null,
 		customDomain: (env.CUSTOM_DOMAIN ?? '').toLowerCase(),
-		previewDomain: getPreviewDomain(env).toLowerCase(),
+		previewDomain: (getPreviewDomain(env) ?? '').toLowerCase(),
 		dev: env.ENVIRONMENT === 'dev' || env.ENVIRONMENT === 'local',
 	};
 }
