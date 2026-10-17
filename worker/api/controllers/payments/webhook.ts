@@ -42,8 +42,15 @@ export async function handleStripeWebhook(request: Request, env: Env): Promise<R
     return Response.json({ received: true });
 }
 
+/** The only events Estori handles from sellers' own accounts; their own checkouts and disputes aren't Estori's sales. */
+const CONNECT_EVENT_TYPES: readonly string[] = ['payout.paid', 'account.updated'];
+
 async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> {
     const object = event.data.object;
+    if (event.account && !CONNECT_EVENT_TYPES.includes(event.type)) {
+        logger.info('Connect event ignored', { id: event.id, type: event.type });
+        return;
+    }
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
         if (!isCheckoutSession(object)) return;
         if (object.metadata?.kind === STORE_ORDER_KIND) {

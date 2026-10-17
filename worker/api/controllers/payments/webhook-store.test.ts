@@ -45,4 +45,20 @@ describe('store sessions in the Stripe webhook', () => {
 		expect(statements.some((entry) => entry.sql.toLowerCase().startsWith('insert into "seller_charges"'))).toBe(false);
 		expect((await handleStripeWebhook(request(await signatureFor(payload, 'whsec_other')), env)).status).toBe(400);
 	});
+
+	it("ignores a seller account's own checkout and dispute events, which aren't Estori's sales", async () => {
+		const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({}), { status: 200 }));
+		const { d1, statements } = recordingD1();
+		const env = { DB: d1, STRIPE_WEBHOOK_SECRET: SECRET, STRIPE_SECRET_KEY: 'sk_test_fake' } as unknown as Env;
+		for (const event of [
+			{ id: 'evt_c1', type: 'charge.dispute.created', account: 'acct_seller', data: { object: { id: 'dp_1', amount: 1000, charge: 'ch_1', payment_intent: 'pi_1', reason: 'fraudulent', status: 'needs_response', balance_transactions: [] } } },
+			{ id: 'evt_c2', type: 'checkout.session.completed', account: 'acct_seller', data: { object: { id: 'cs_1', payment_status: 'paid', metadata: { kind: 'store_order', checkoutId: 'chk_1' } } } },
+		]) {
+			const payload = JSON.stringify(event);
+			const response = await handleStripeWebhook(new Request('https://estori.test/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': await signatureFor(payload) }, body: payload }), env);
+			expect(response.status).toBe(200);
+		}
+		expect(statements).toEqual([]);
+		expect(fetchSpy).not.toHaveBeenCalled();
+	});
 });
