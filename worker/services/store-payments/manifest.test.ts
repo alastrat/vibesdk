@@ -77,4 +77,36 @@ describe('parseStoreManifest', () => {
 	it('refuses text that is not JSON', () => {
 		expect(parseStoreManifest('{')).toEqual({ ok: false, errors: ['estori-store.json: not valid JSON'] });
 	});
+
+	describe('brand', () => {
+		const BRAND = { name: 'Ember Roasters', logo: '/images/logo.svg', colors: { background: '#1a1210', text: '#f5ede6', accent: '#f59a46' }, font: 'Fraunces', corners: 'pill' };
+
+		it("reads the store's brand, filling the surface from the background and the accent's text color by contrast", () => {
+			const result = parse({ ...VALID, brand: BRAND });
+			expect(result.ok && result.manifest.brand).toEqual({ ...BRAND, colors: { ...BRAND.colors, surface: '#1a1210', accentText: '#000000' } });
+			const dark = parse({ ...VALID, brand: { ...BRAND, colors: { ...BRAND.colors, accent: '#1f3a5f' } } });
+			expect(dark.ok && dark.manifest.brand?.colors.accentText).toBe('#ffffff');
+		});
+
+		it('keeps a file without a brand valid, with rounded corners when a brand leaves them out', () => {
+			expect(parse(VALID)).toEqual({ ok: true, manifest: VALID });
+			const { corners: _unused, ...withoutCorners } = BRAND;
+			const result = parse({ ...VALID, brand: withoutCorners });
+			expect(result.ok && result.manifest.brand?.corners).toBe('rounded');
+		});
+
+		it('refuses colors, fonts, corners and fields it cannot use, naming each path', () => {
+			const errors = errorsOf({ ...VALID, brand: { ...BRAND, colors: { ...BRAND.colors, accent: 'orange', glow: '#ffffff' }, font: 'Fraunces;}', corners: 'round', tagline: 'x' } });
+			expect(errors).toEqual(
+				expect.arrayContaining([
+					'brand.colors.accent: a #rrggbb color',
+					'brand.colors.glow: unknown field',
+					'brand.font: a font family name: letters, digits and spaces, up to 40',
+					'brand.corners: one of square, rounded, pill',
+					'brand.tagline: unknown field',
+				]),
+			);
+			expect(errorsOf({ ...VALID, brand: { colors: BRAND.colors } })).toContain('brand.name: 1 to 80 characters');
+		});
+	});
 });

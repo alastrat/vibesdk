@@ -65,11 +65,27 @@ export interface StoreShipping {
 	freeOverCents?: number;
 }
 
+export const STORE_BRAND_CORNERS = ['square', 'rounded', 'pill'] as const;
+export type StoreBrandCorners = (typeof STORE_BRAND_CORNERS)[number];
+
+/** How the store looks, for Estori's checkout page and Stripe's payment fields. Colors are #rrggbb. */
+export interface StoreBrand {
+	name: string;
+	/** A path on the store, or an absolute address. */
+	logo?: string;
+	colors: { background: string; surface: string; text: string; accent: string; accentText: string };
+	/** A Google Fonts family name. */
+	font?: string;
+	corners: StoreBrandCorners;
+}
+
 export interface StoreManifest {
 	version: 1;
 	currency: 'usd';
 	shipping: StoreShipping;
 	products: StoreManifestProduct[];
+	/** Optional: a store without it gets a neutral checkout page. */
+	brand?: StoreBrand;
 }
 
 export interface StoreCheckoutRequest {
@@ -154,6 +170,8 @@ export interface StoreInfo {
 	currency: 'usd';
 	shipping: StoreShipping;
 	products: StoreManifestProduct[];
+	/** For the store's pages and Estori's checkout page; null when the store declared none. */
+	brand: StoreBrand | null;
 }
 
 /** `Estori.order(id)`: the shopper's receipt. Never the street address or phone. */

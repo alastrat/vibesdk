@@ -61,7 +61,7 @@ export function refusal(reason: StoreCheckoutRefusal): StoreCheckoutResponse {
 }
 
 export function storeInfoOf(manifest: StoreManifest, paymentsAvailable: boolean): StoreInfo {
-	return { mode: 'test', paymentsAvailable, currency: manifest.currency, shipping: manifest.shipping, products: manifest.products };
+	return { mode: 'test', paymentsAvailable, currency: manifest.currency, shipping: manifest.shipping, products: manifest.products, brand: manifest.brand ?? null };
 }
 
 export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCheckoutInput): Promise<StoreCheckoutResponse> {

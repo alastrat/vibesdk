@@ -1,9 +1,11 @@
 /** Reads and validates a store's `estori-store.json`. Every error names its JSON path. Pure. */
 
 import {
+	STORE_BRAND_CORNERS,
 	STORE_MANIFEST_FILE,
 	STORE_PRICE_MAX_CENTS,
 	STORE_PRICE_MIN_CENTS,
+	type StoreBrand,
 	type StoreManifest,
 	type StoreManifestProduct,
 	type StoreManifestVariant,
@@ -21,6 +23,9 @@ const MAX_DESCRIPTION = 5000;
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const CATALOG_VARIANT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const COUNTRY = /^[A-Z]{2}$/;
+const COLOR = /^#[0-9a-fA-F]{6}$/;
+const FONT = /^[A-Za-z0-9 ]{1,40}$/;
+const MAX_BRAND_NAME = 80;
 
 type JsonObject = Record<string, unknown>;
 
@@ -134,6 +139,62 @@ function readProduct(check: Checker, value: unknown, path: string, seen: Set<str
 	};
 }
 
+/** WCAG relative luminance of a #rrggbb color. */
+function luminance(color: string): number {
+	const [r, g, b] = [1, 3, 5].map((start) => {
+		const channel = parseInt(color.slice(start, start + 2), 16) / 255;
+		return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+	});
+	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** Black or white, whichever has more contrast on this color. */
+function readableOn(color: string): string {
+	const light = luminance(color);
+	return (light + 0.05) / 0.05 >= 1.05 / (light + 0.05) ? '#000000' : '#ffffff';
+}
+
+function readBrand(check: Checker, value: unknown): StoreBrand | null {
+	if (!isObject(value)) {
+		check.fail('brand', 'an object with name and colors');
+		return null;
+	}
+	check.onlyKeys(value, ['name', 'logo', 'colors', 'font', 'corners'], 'brand');
+	const before = check.errors.length;
+	if (!isText(value.name, MAX_BRAND_NAME)) check.fail('brand.name', `1 to ${MAX_BRAND_NAME} characters`);
+	if (value.logo !== undefined && !isImage(value.logo)) check.fail('brand.logo', 'a path on the store or an https address');
+	if (value.font !== undefined && !(typeof value.font === 'string' && FONT.test(value.font))) check.fail('brand.font', 'a font family name: letters, digits and spaces, up to 40');
+	if (value.corners !== undefined && !(STORE_BRAND_CORNERS as readonly unknown[]).includes(value.corners)) check.fail('brand.corners', `one of ${STORE_BRAND_CORNERS.join(', ')}`);
+	const colors = value.colors;
+	if (!isObject(colors)) {
+		check.fail('brand.colors', 'an object with background, text and accent');
+		return null;
+	}
+	check.onlyKeys(colors, ['background', 'surface', 'text', 'accent', 'accentText'], 'brand.colors');
+	for (const key of ['background', 'text', 'accent'] as const) {
+		if (!(typeof colors[key] === 'string' && COLOR.test(colors[key] as string))) check.fail(`brand.colors.${key}`, 'a #rrggbb color');
+	}
+	for (const key of ['surface', 'accentText'] as const) {
+		if (colors[key] !== undefined && !(typeof colors[key] === 'string' && COLOR.test(colors[key] as string))) check.fail(`brand.colors.${key}`, 'a #rrggbb color');
+	}
+	if (check.errors.length > before) return null;
+	const background = (colors.background as string).toLowerCase();
+	const accent = (colors.accent as string).toLowerCase();
+	return {
+		name: (value.name as string).trim(),
+		...(value.logo !== undefined ? { logo: value.logo as string } : {}),
+		colors: {
+			background,
+			surface: typeof colors.surface === 'string' ? colors.surface.toLowerCase() : background,
+			text: (colors.text as string).toLowerCase(),
+			accent,
+			accentText: typeof colors.accentText === 'string' ? colors.accentText.toLowerCase() : readableOn(accent),
+		},
+		...(value.font !== undefined ? { font: value.font as string } : {}),
+		corners: (value.corners as StoreBrand['corners'] | undefined) ?? 'rounded',
+	};
+}
+
 export function parseStoreManifest(text: string): ManifestResult {
 	if (new TextEncoder().encode(text).byteLength > MAX_BYTES) return { ok: false, errors: [`${STORE_MANIFEST_FILE}: at most 256 KB`] };
 	let value: unknown;
@@ -144,7 +205,7 @@ export function parseStoreManifest(text: string): ManifestResult {
 	}
 	const check = new Checker();
 	if (!isObject(value)) return { ok: false, errors: [`${STORE_MANIFEST_FILE}: an object with version, currency, shipping and products`] };
-	check.onlyKeys(value, ['version', 'currency', 'shipping', 'products'], '');
+	check.onlyKeys(value, ['version', 'currency', 'shipping', 'products', 'brand'], '');
 	if (value.version !== 1) check.fail('version', 'must be 1');
 	if (value.currency !== 'usd') check.fail('currency', 'must be "usd"');
 	const shipping = readShipping(check, value.shipping);
@@ -162,6 +223,7 @@ export function parseStoreManifest(text: string): ManifestResult {
 		});
 		if (seen.size > MAX_VARIANTS) check.fail('products', `at most ${MAX_VARIANTS} variants in all`);
 	}
+	const brand = value.brand === undefined ? undefined : readBrand(check, value.brand);
 	if (check.errors.length > 0 || !shipping) return { ok: false, errors: check.errors };
-	return { ok: true, manifest: { version: 1, currency: 'usd', shipping, products: read } };
+	return { ok: true, manifest: { version: 1, currency: 'usd', shipping, products: read, ...(brand ? { brand } : {}) } };
 }

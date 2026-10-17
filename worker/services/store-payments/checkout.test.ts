@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { StoreManifest } from '../../../shared/types/store-payments';
 import type { StoreCheckoutSessionInput } from '../payments/stripe-client';
-import { startStoreCheckout, type StartCheckoutDeps, type StartCheckoutInput } from './checkout';
+import { startStoreCheckout, storeInfoOf, type StartCheckoutDeps, type StartCheckoutInput } from './checkout';
 import type { CatalogLock } from './pricing';
 import type { StoreCheckoutRecord } from './store';
 import type { SellerReadiness } from '../../../shared/types/seller-setup';
@@ -189,5 +189,13 @@ describe('startStoreCheckout', () => {
 		const { deps } = fakeDeps({ weeklyUsage: async (mode) => (modes.push(mode), 0) });
 		await startStoreCheckout(deps, INPUT);
 		expect(modes).toEqual(['test']);
+	});
+});
+
+describe('storeInfoOf', () => {
+	it("gives the store's brand to its pages and to Estori's checkout page, or none", () => {
+		const brand = { name: 'Ember', colors: { background: '#000000', surface: '#000000', text: '#ffffff', accent: '#ff8800', accentText: '#000000' }, corners: 'rounded' as const };
+		expect(storeInfoOf({ ...MANIFEST, brand }, true).brand).toEqual(brand);
+		expect(storeInfoOf(MANIFEST, true).brand).toBeNull();
 	});
 });
