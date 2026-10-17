@@ -4,7 +4,11 @@ import { type Git, type GitLogEntry, type GitStatusEntry } from "@cloudflare/she
 import type { Env } from "../env"
 import {
   buildBranchDeployment,
+  DEPLOYMENTS_TABLE_SQL,
   handleDeployCommand,
+  LIVE_BRANCH,
+  LIVE_PATH_PREFIX,
+  publishLiveDeployment,
   type BranchDeploymentBundle,
   type DeployContext,
 } from "./deploy-engine"
@@ -130,18 +134,7 @@ export class SpaceDO extends DurableObject<Env> {
     // Table needed by the deploy engine. (Git objects/refs live in the
     // Workspace FS under `.git/`, managed by isomorphic-git — the old `refs`
     // and `git_internal` tables from the retired smart-HTTP server are gone.)
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS deployments (
-        branch TEXT PRIMARY KEY,
-        commit_hash TEXT NOT NULL,
-        main_module TEXT NOT NULL,
-        modules TEXT NOT NULL,
-        assets TEXT NOT NULL DEFAULT '{}',
-        asset_config TEXT NOT NULL DEFAULT '{}',
-        store_manifest TEXT,
-        deployed_at INTEGER NOT NULL
-      )
-    `)
+    this.ctx.storage.sql.exec(DEPLOYMENTS_TABLE_SQL)
 
     // Migrate existing deployments tables that lack new columns
     try { this.ctx.storage.sql.exec(`ALTER TABLE deployments ADD COLUMN assets TEXT NOT NULL DEFAULT '{}'`) } catch {}
@@ -583,6 +576,15 @@ export class SpaceDO extends DurableObject<Env> {
     return data
   }
 
+  /**
+   * Publishes the previewed build as the live store's version. It copies the deployment of `main` without rebuilding or
+   * checking anything out, so the agent's working tree stays where it is.
+   */
+  async publishLive(): Promise<{ commitHash: string; storeManifest: string | null } | { error: string }> {
+    await this.ensureInit()
+    return publishLiveDeployment(this.ctx.storage.sql, Date.now()) ?? { error: "Deploy the store's preview before publishing it." }
+  }
+
   async getDeploymentBundle(branch: string): Promise<BranchDeploymentBundle> {
     await this.ensureInit()
     await this.materializeAll()
@@ -874,6 +876,15 @@ export class SpaceDO extends DurableObject<Env> {
 
     const url = new URL(request.url)
     const path = url.pathname
+
+    // Live store routes: the platform worker forwards `/__live/<path>` for a store's own address. It's served at the
+    // root, so nothing is rewritten, and from its own Facet, so the live store's data is apart from the preview's.
+    if (path === LIVE_PATH_PREFIX || path.startsWith(`${LIVE_PATH_PREFIX}/`)) {
+      const liveUrl = new URL(path.slice(LIVE_PATH_PREFIX.length) || "/", url.origin)
+      liveUrl.search = url.search
+      const response = await this.servePreview(LIVE_BRANCH, new Request(liveUrl.toString(), request))
+      return stripPreviewSecurityHeaders(response)
+    }
 
     // Preview routes: /space/:name/preview/:branch/*
     const previewMatch = path.match(/\/preview\/([^/]+)(\/.*)?$/)

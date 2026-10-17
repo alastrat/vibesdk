@@ -11,13 +11,14 @@
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
 import { withDurableObjectResetRetry, type SpaceWorkspaceStub } from './space-workspace-ops';
+import { LIVE_BRANCH } from '../../../shared/types/live-stores';
 
 const DESCRIPTION = [
 	'Commit the current working tree and deploy a branch so its preview rebuilds and serves the latest code.',
 	'',
 	'Call this after writing/editing files to make changes visible in the preview. Returns the deploy result as JSON, including the preview path and any build errors — read those errors and fix the code if the build failed, then redeploy.',
 	'',
-	"Defaults to the 'main' branch.",
+	"Defaults to the 'main' branch. The 'live' branch is the seller's published store: never deploy it.",
 ].join('\n');
 
 export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub }): Tool {
@@ -32,6 +33,10 @@ export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub 
 		}),
 		execute: async (args: { branch?: string }) => {
 			const branch = args.branch && args.branch.length > 0 ? args.branch : 'main';
+			// The live store serves what the seller published from Estori; an agent deploy must never replace it.
+			if (branch.toLowerCase() === LIVE_BRANCH) {
+				return JSON.stringify({ branch, error: `Branch "${branch}" is reserved for the live store. Deploy 'main'; the seller publishes it from Estori.` });
+			}
 			try {
 				await withDurableObjectResetRetry(getStub, (stub) =>
 					stub.gitCommit('deploy: snapshot working tree'),

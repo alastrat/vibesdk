@@ -6,6 +6,12 @@ export type LiveStoreStatus = (typeof LIVE_STORE_STATUSES)[number];
 export const STORE_DOMAIN_STATUSES = ['pending', 'active', 'failed'] as const;
 export type StoreDomainStatus = (typeof STORE_DOMAIN_STATUSES)[number];
 
+/** The SpaceDO deployment a live store serves. Mirrors LIVE_BRANCH in space/src/space/deploy-engine.ts. */
+export const LIVE_BRANCH = 'live';
+
+/** The SpaceDO path a live store request is forwarded on. Mirrors LIVE_PATH_PREFIX in space/src/space/deploy-engine.ts. */
+export const SPACE_LIVE_PATH = '/__live';
+
 /** Where a custom domain is connected: Cloudflare for SaaS in production, or the local stand-in in development. */
 export const STORE_DOMAIN_PROVIDERS = ['cloudflare', 'local'] as const;
 export type StoreDomainProvider = (typeof STORE_DOMAIN_PROVIDERS)[number];
