@@ -54,6 +54,8 @@ export interface DisputeDeps {
 	/** Sets the order back to paid, or to its refund status when refunds were made. */
 	recomputeOrderStatus(): Promise<void>;
 	alert(alert: PlatformAlert): Promise<void>;
+	/** The catalog items' tracking, as evidence for answering the dispute. */
+	catalogTracking(checkoutSessionId: string): Promise<Array<{ carrier: string | null; trackingNumber: string }>>;
 	/** Re-checks the seller's level; called once a lost dispute is saved, so the check counts the loss. */
 	recheckSellerLevel(sellerUserId: string): Promise<void>;
 	now(): Date;
@@ -80,6 +82,8 @@ export async function handleDisputeOpened(deps: DisputeDeps, dispute: StripeDisp
 	if (!order) return 'not-ours';
 	const now = deps.now();
 	const stored = await deps.storedDispute(dispute.id);
+	// An opening redelivered after the dispute closed changes nothing.
+	if (stored && DISPUTE_CLOSED_STATUSES.includes(stored.status)) return 'recorded';
 	const base = { id: dispute.id, orderId: order.id, amountCents: dispute.amount, reason: dispute.reason, status: dispute.status, now };
 
 	if (isInquiry(dispute.status)) {
@@ -116,7 +120,9 @@ export async function handleDisputeOpened(deps: DisputeDeps, dispute: StripeDisp
 	await deps.setOrderStatus('disputed');
 	await deps.saveDispute({ ...base, reversalState: state, reversalId, reversedCents, feeCents, returnedCents: stored?.returnedCents ?? 0 });
 	if (!stored || stored.reversalState === 'none') {
-		await deps.alert({ kind: 'dispute-opened', subject: order.id, message: `A shopper disputed ${(dispute.amount / 100).toFixed(2)} USD (${dispute.reason}). Answer it in the Stripe Dashboard.` });
+		const tracking = order.checkoutSessionId ? await deps.catalogTracking(order.checkoutSessionId) : [];
+		const details = tracking.map((item) => ['Tracking', [item.carrier, item.trackingNumber].filter(Boolean).join(' ')] as const);
+		await deps.alert({ kind: 'dispute-opened', subject: order.id, message: `A shopper disputed ${(dispute.amount / 100).toFixed(2)} USD (${dispute.reason}). Answer it in the Stripe Dashboard.`, ...(details.length > 0 ? { details } : {}) });
 	}
 	return 'recorded';
 }
@@ -124,8 +130,14 @@ export async function handleDisputeOpened(deps: DisputeDeps, dispute: StripeDisp
 export async function handleDisputeClosed(deps: DisputeDeps, dispute: StripeDispute): Promise<'won' | 'lost' | 'inquiry-closed' | 'not-ours'> {
 	if (!dispute.payment_intent) return 'not-ours';
 	const order = await deps.findOrder(dispute.payment_intent);
-	const stored = await deps.storedDispute(dispute.id);
-	if (!order || !stored) return 'not-ours';
+	if (!order) return 'not-ours';
+	let stored = await deps.storedDispute(dispute.id);
+	if (!stored) {
+		// The close arrived before its opening: record the opening as Stripe would have sent it, then close it.
+		await handleDisputeOpened(deps, { ...dispute, status: isInquiry(dispute.status) ? 'warning_needs_response' : 'needs_response' });
+		stored = await deps.storedDispute(dispute.id);
+		if (!stored) return 'not-ours';
+	}
 	const outcome = dispute.status === 'won' ? 'won' : dispute.status === 'warning_closed' ? 'inquiry-closed' : 'lost';
 	// Already closed: a late redelivery never pays anyone twice, whatever Stripe kept of its idempotency keys.
 	if (DISPUTE_CLOSED_STATUSES.includes(stored.status)) return outcome;

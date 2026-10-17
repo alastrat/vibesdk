@@ -106,6 +106,10 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 			if (catalogOrderId) await restartCatalogPlacement(env, catalogOrderId);
 		},
 		withheldCatalogCents: (checkoutSessionId) => new CatalogOrderService(env).withheldCatalogCents(checkoutSessionId),
+		catalogTracking: async (checkoutSessionId) => {
+			const items = (await new CatalogOrderService(env).progressForSessions([checkoutSessionId])).get(checkoutSessionId) ?? [];
+			return items.flatMap((item) => (item.trackingNumber ? [{ carrier: item.carrier, trackingNumber: item.trackingNumber }] : []));
+		},
 		setOrderStatus: async (status) => {
 			if (orderId) await orders.setPaymentStatus(orderId, status, new Date());
 		},

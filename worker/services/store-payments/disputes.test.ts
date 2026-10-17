@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { handleDisputeClosed, handleDisputeOpened, type DisputeDeps, type StoredDispute, type StripeDispute } from './disputes';
 import { StripeApiError } from '../payments/stripe-client';
+import type { PlatformAlert } from '../alerts/platform-alerts';
 
 const DISPUTE: StripeDispute = { id: 'dp_1', amount: 6599, charge: 'ch_1', payment_intent: 'pi_1', reason: 'fraudulent', status: 'needs_response', balance_transactions: [{ fee: 1500 }] };
 
 /** A small D1 and Stripe in memory: the stored dispute, the seller's charges, and every money move. */
 function world(input: { reversed?: number; known?: boolean; reversal?: 'ok' | 'refused' | 'conflict'; withheldCents?: number } = {}) {
 	const moves: string[] = [];
+	const alerts: PlatformAlert[] = [];
 	const events: string[] = [];
 	let stored: StoredDispute | null = null;
 	const charges = new Map<string, { amountCents: number; collectedCents: number }>();
@@ -49,11 +51,15 @@ function world(input: { reversed?: number; known?: boolean; reversal?: 'ok' | 'r
 		withheldCatalogCents: async () => input.withheldCents ?? 0,
 		setOrderStatus: async (status) => void events.push(`order ${status}`),
 		recomputeOrderStatus: async () => void events.push('order recomputed'),
-		alert: async (alert) => void events.push(`alert ${alert.kind}`),
+		alert: async (alert) => {
+			alerts.push(alert);
+			events.push(`alert ${alert.kind}`);
+		},
+		catalogTracking: async () => [{ carrier: 'USPS', trackingNumber: 'SBX1792154117585' }],
 		recheckSellerLevel: async (sellerUserId) => void events.push(`level check ${sellerUserId} after ${stored?.status ?? 'nothing'} saved`),
 		now: () => new Date(0),
 	};
-	return { deps, moves, events, charges, collect: (key: string, cents: number) => {
+	return { deps, moves, events, alerts, charges, collect: (key: string, cents: number) => {
 		const charge = charges.get(key);
 		if (charge) charges.set(key, { ...charge, collectedCents: cents });
 	}, stored: () => stored };
@@ -171,5 +177,29 @@ describe('handleDisputeClosed', () => {
 		await handleDisputeOpened(won.deps, DISPUTE);
 		await handleDisputeClosed(won.deps, { ...DISPUTE, status: 'won' });
 		expect(won.events.filter((event) => event.startsWith('level check'))).toEqual([]);
+	});
+
+	it('closes a dispute whose opening never arrived: takes it back first, then settles the close', async () => {
+		const w = world();
+		expect(await handleDisputeClosed(w.deps, { ...DISPUTE, status: 'lost' })).toBe('lost');
+		expect(w.moves).toEqual(['reversal 6599 dispute-reversal-dp_1']);
+		expect(w.events).toContain('order dispute_lost');
+		expect(w.stored()?.status).toBe('lost');
+	});
+
+	it('changes nothing when an opening is redelivered after the dispute closed', async () => {
+		const w = world();
+		await handleDisputeOpened(w.deps, DISPUTE);
+		await handleDisputeClosed(w.deps, { ...DISPUTE, status: 'lost' });
+		const before = { moves: [...w.moves], events: [...w.events] };
+		await handleDisputeOpened(w.deps, DISPUTE);
+		expect(w.stored()?.status).toBe('lost');
+		expect({ moves: w.moves, events: w.events }).toEqual(before);
+	});
+
+	it("puts the catalog items' tracking in the opening alert, as evidence for the answer", async () => {
+		const w = world();
+		await handleDisputeOpened(w.deps, DISPUTE);
+		expect(w.alerts.find((alert) => alert.kind === 'dispute-opened')?.details).toEqual([['Tracking', 'USPS SBX1792154117585']]);
 	});
 });
