@@ -95,7 +95,7 @@ export function PublicTopBar() {
 		<header ref={headerRef} className="sticky top-0 z-40">
 			<AnnouncementBar />
 			<div className="relative border-b border-public-line bg-white">
-				<div className="mx-auto flex h-16 max-w-[1248px] items-center justify-between gap-4 px-4 sm:h-[72px] sm:px-6">
+				<div className="mx-auto flex h-16 max-w-[1296px] items-center justify-between gap-4 px-4 sm:h-[72px] sm:px-6">
 					<div className="flex items-center gap-8">
 						<Link to="/" aria-label={`${BRAND.name} home`} className="flex items-center text-public-brand">
 							<EstoriLogo className="h-7 w-auto" />

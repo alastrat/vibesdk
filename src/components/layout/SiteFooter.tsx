@@ -41,7 +41,7 @@ function FooterColumn({ title, children }: { title: string; children: ReactNode 
 export function SiteFooter() {
 	return (
 		<footer className="bg-public-charcoal text-white">
-			<div className="mx-auto max-w-[1248px] px-4 pt-16 pb-8 sm:px-6">
+			<div className="mx-auto max-w-[1296px] px-4 pt-16 pb-8 sm:px-6">
 				<div className="grid grid-cols-2 gap-10 md:grid-cols-4">
 					{LINK_COLUMNS.map((column) => (
 						<FooterColumn key={column.title} title={column.title}>
