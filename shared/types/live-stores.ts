@@ -106,3 +106,42 @@ export function customHostnameProblem(hostname: string, own: { storesDomain: str
 	if (estori.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) return ESTORI_DOMAIN;
 	return null;
 }
+
+/** A store's own domain, as its owner sees it. */
+export interface StoreDomainView {
+	hostname: string;
+	url: string;
+	status: StoreDomainStatus;
+	records: StoreDomainRecord[];
+	lastError: string | null;
+	checkedAt: string | null;
+	verifiedAt: string | null;
+}
+
+/** A store's live address and published version, for its owner's Go live panel. */
+export interface LiveStoreView {
+	/** False until Estori sets a stores domain. */
+	available: boolean;
+	storesDomain: string | null;
+	status: 'unpublished' | LiveStoreStatus;
+	slug: string | null;
+	suggestedSlug: string;
+	url: string | null;
+	publishedAt: string | null;
+	/** The preview has a version the live store doesn't serve yet. */
+	hasChanges: boolean;
+	/** The published store file has products, so its checkout takes payments. */
+	checkoutConnected: boolean;
+	domain: StoreDomainView | null;
+	/** False until Estori sets up a way to connect sellers' domains. */
+	domainsAvailable: boolean;
+}
+
+export interface PublishLiveStoreRequest {
+	slug: string;
+}
+
+export interface AddStoreDomainRequest {
+	hostname: string;
+}
+

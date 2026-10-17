@@ -27,11 +27,16 @@ export type StoreHost = { kind: 'subdomain' | 'custom'; store: LiveStoreTarget }
 export const STORE_HOST_CACHE_MS = 30_000;
 const CACHE_MAX_ENTRIES = 1_000;
 
+/** Hosts are compared by name; local development spells its domain with a port, such as `localhost:8100`. */
+function withoutPort(domain: string | undefined): string {
+	return (domain ?? '').toLowerCase().replace(/:\d+$/, '');
+}
+
 export function storeHostConfig(env: Env): StoreHostConfig {
 	return {
 		storesDomain: env.STORES_DOMAIN?.trim().toLowerCase() || null,
-		customDomain: (env.CUSTOM_DOMAIN ?? '').toLowerCase(),
-		previewDomain: (getPreviewDomain(env) ?? '').toLowerCase(),
+		customDomain: withoutPort(env.CUSTOM_DOMAIN),
+		previewDomain: withoutPort(getPreviewDomain(env)),
 		dev: env.ENVIRONMENT === 'dev' || env.ENVIRONMENT === 'local',
 	};
 }
