@@ -26,8 +26,10 @@ describe('claims on real SQL', () => {
 		const charges = new SellerChargeService(envWith(db));
 		await charges.add({ sellerUserId: 'u1', kind: 'dispute-fee', sourceId: 'dp_1', amountCents: 1500, now: NOW });
 		const [charge] = await charges.open('u1');
-		expect(await charges.claimCollection({ chargeId: charge.id, orderId: 'ord_2', amountCents: 1500, now: NOW })).toBe(true);
-		expect(await charges.claimCollection({ chargeId: charge.id, orderId: 'ord_3', amountCents: 1500, now: NOW })).toBe(false);
+		expect(await charges.claimCollection({ chargeId: charge.id, orderId: 'ord_2', amountCents: 1500, now: NOW })).toBe(1500);
+		expect(await charges.claimCollection({ chargeId: charge.id, orderId: 'ord_3', amountCents: 1500, now: NOW })).toBeNull();
+		// A second claim by the same sale, with another amount, answers what was stored first.
+		expect(await charges.claimCollection({ chargeId: charge.id, orderId: 'ord_2', amountCents: 900, now: NOW })).toBe(1500);
 		expect(await charges.open('u1')).toEqual([]);
 		await charges.releaseClaim({ chargeId: charge.id, orderId: 'ord_2' });
 		expect(await charges.open('u1')).toEqual([{ id: charge.id, amountCents: 1500, collectedCents: 0 }]);

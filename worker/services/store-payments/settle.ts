@@ -28,7 +28,8 @@ export interface SettleSaleDeps {
 	/** This order's claims, finished or not. */
 	claims(orderId: string): Promise<Array<{ chargeId: string; amountCents: number; reversalId: string | null }>>;
 	/** Claims an amount of a charge for this order only while that much is still owed; true when the claim is this order's. */
-	claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<boolean>;
+	/** The amount this sale holds of the charge, as stored, or null when another sale claimed what was owed. */
+	claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<number | null>;
 	completeCollection(done: { chargeId: string; orderId: string; reversalId: string }): Promise<void>;
 	releaseClaim(release: { chargeId: string; orderId: string }): Promise<void>;
 	now(): Date;
@@ -91,11 +92,13 @@ export async function settleSale(deps: SettleSaleDeps, order: SettleOrder): Prom
 		if (claimed.has(open.id)) continue;
 		const amount = Math.min(open.amountCents - open.collectedCents, sellerShare);
 		if (amount <= 0) continue;
-		// Another sale collecting the same charge at the same time loses this claim and moves on.
-		if (!(await deps.claimCollection({ chargeId: open.id, orderId: order.id, amountCents: amount, now: deps.now() }))) continue;
+		// Another sale collecting the same charge at the same time loses this claim and moves on. Another run of this sale
+		// may have claimed first with a different amount: the stored amount is the one reversed, under the same key.
+		const claimedCents = await deps.claimCollection({ chargeId: open.id, orderId: order.id, amountCents: amount, now: deps.now() });
+		if (claimedCents === null) continue;
 		let reversalId: string;
 		try {
-			reversalId = await reverse(amount, `seller-charge-${open.id}-${order.id}`, { sellerChargeId: open.id });
+			reversalId = await reverse(claimedCents, `seller-charge-${open.id}-${order.id}`, { sellerChargeId: open.id });
 		} catch (error) {
 			if (!isRefusal(error)) throw error;
 			// Stripe won't take it from this sale: give the claim back for a later sale, and stop collecting here.
@@ -103,8 +106,8 @@ export async function settleSale(deps: SettleSaleDeps, order: SettleOrder): Prom
 			break;
 		}
 		await deps.completeCollection({ chargeId: open.id, orderId: order.id, reversalId });
-		sellerShare -= amount;
-		collectedCents += amount;
+		sellerShare -= claimedCents;
+		collectedCents += claimedCents;
 	}
 	return { feeDifferenceCents, collectedCents };
 }
