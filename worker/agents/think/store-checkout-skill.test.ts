@@ -59,6 +59,14 @@ describe('the store checkout skill', () => {
 		expect(SKILL.slice(testAndLive)).toContain("Stripe's test cards");
 	});
 
+	it('tells the agent that shoppers pay on the live store the owner publishes, and that its edits wait for the next publish', () => {
+		const testAndLive = SKILL.slice(SKILL.indexOf('Test and live'), SKILL.indexOf('## 7.')).replace(/\s+/g, ' ');
+		expect(testAndLive).toContain('Go live');
+		expect(testAndLive).toContain('any shopper can pay');
+		expect(testAndLive).toContain('Publish changes');
+		expect(testAndLive).toContain("You can't publish");
+	});
+
 	it('keeps payments on the platform', () => {
 		for (const rule of ['/__estori/store.js', 'Estori.checkout(', 'Estori.order(', 'card details', 'catalogVariantId']) expect(SKILL).toContain(rule);
 		expect(APP_FILE_STRUCTURE).toContain('store-checkout');
