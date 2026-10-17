@@ -12,23 +12,24 @@ import { estimatedMonthlyPayoutCostCents } from '../../../services/payments/sell
 import { getSellerLimitsSettings } from '../../../config';
 import { limitsFor } from '../../../../shared/types/seller-levels';
 import { parsePayoutRequest, scheduleOf } from '../../../services/payments/payout-schedule';
-import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
+import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv, stripeModeOf } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
 
 const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';
 
 const ACCEPT_TERMS_FIRST_MESSAGE = 'Accept the selling terms first';
 
-type PayoutStatus = Pick<StripeConnectStatusData, 'payoutInterval' | 'payoutAnchor' | 'payoutCostEstimates'>;
+type PayoutStatus = Pick<StripeConnectStatusData, 'payoutInterval' | 'payoutAnchor' | 'payoutCostEstimates' | 'accountCosts'>;
 
 const MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** How often the seller is paid, weekly on Monday until they choose, and what each choice costs at their last month's sales. */
 async function payoutStatusOf(env: Env, userId: string, stored: { payoutInterval: PayoutInterval; payoutAnchor: string } | null): Promise<PayoutStatus> {
-    const volume = await new StoreOrderService(env).salesVolumeSince(userId, new Date(Date.now() - MONTH_MS));
+    const mode = stripeModeOf(env) === 'live' ? 'live' : 'test';
+    const volume = await new StoreOrderService(env).salesVolumeSince(userId, mode, new Date(Date.now() - MONTH_MS));
     const costs = (await getSellerLimitsSettings(env, userId)).costs;
     const payoutCostEstimates = Object.fromEntries(PAYOUT_INTERVALS.map((interval) => [interval, estimatedMonthlyPayoutCostCents(volume, interval, costs)])) as Record<PayoutInterval, number>;
-    return { payoutInterval: stored?.payoutInterval ?? 'weekly', payoutAnchor: stored?.payoutAnchor ?? 'monday', payoutCostEstimates };
+    return { payoutInterval: stored?.payoutInterval ?? 'weekly', payoutAnchor: stored?.payoutAnchor ?? 'monday', payoutCostEstimates, accountCosts: costs };
 }
 
 /** The status for a seller with these flags (null: no Connect account), selling-terms agreement and payout choice. */

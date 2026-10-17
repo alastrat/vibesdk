@@ -2,6 +2,7 @@
 
 import type { SellerSetupStep } from '../../../../shared/types/seller-setup';
 import type { PayoutInterval } from '../../../../shared/types/store-payments';
+import type { SellerAccountCosts } from '../../../../shared/types/seller-levels';
 
 export interface StripeConnectStatusData {
     /** This deployment has Stripe keys. */
@@ -22,6 +23,8 @@ export interface StripeConnectStatusData {
     payoutAnchor: string;
     /** Stripe's account and payout fees a month for each frequency, at the seller's last 30 days of sales; cents. */
     payoutCostEstimates: Record<PayoutInterval, number>;
+    /** Stripe's rates behind those estimates, for a seller with no sales yet. */
+    accountCosts: SellerAccountCosts;
 }
 
 export interface StripeLinkData {

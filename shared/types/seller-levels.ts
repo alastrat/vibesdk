@@ -21,6 +21,9 @@ export interface SellerLimitsSettings {
 	overrides: { largestOrderCents: number | null; weeklySalesCents: number | null; payoutDelayDays: number | null };
 }
 
+/** Stripe's charges for each seller account, passed to the seller. */
+export type SellerAccountCosts = SellerLimitsSettings['costs'];
+
 export const DEFAULT_SELLER_LIMITS: SellerLimitsSettings = {
 	levels: {
 		new: { largestOrderCents: 15_000, weeklySalesCents: 50_000, payoutDelayDays: 10 },

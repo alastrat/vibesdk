@@ -65,4 +65,13 @@ describe('claims on real SQL', () => {
 		}
 		expect(await new StoreCheckoutService(envWith(db)).weeklyUsage('u1', 'test', week)).toBe(8600 + 4599 + 1000);
 	});
+
+	it("estimates payout volume from this mode's paid sales only, net of refunds", async () => {
+		const day = 24 * 60 * 60 * 1000;
+		await insertStoreOrder(db, { id: 'ord_part', sellerUserId: 'u1', orderNumber: 10, totalCents: 4000, paymentStatus: 'partially_refunded', refundedCents: 1000, createdAt: NOW });
+		await insertStoreOrder(db, { id: 'ord_disputed', sellerUserId: 'u1', orderNumber: 11, totalCents: 9000, paymentStatus: 'disputed', createdAt: NOW });
+		await insertStoreOrder(db, { id: 'ord_live', sellerUserId: 'u1', mode: 'live', orderNumber: 1, totalCents: 9000, createdAt: NOW });
+		// ord_1 to ord_3 are paid test orders of 5000, 3000 and 3000 with no fee.
+		expect(await new StoreOrderService(envWith(db)).salesVolumeSince('u1', 'test', new Date(NOW.getTime() - 30 * day))).toBe(5000 + 3000 + 3000 + 3000);
+	});
 });

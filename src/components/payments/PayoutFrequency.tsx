@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import type { PayoutInterval, StripeConnectStatusData } from '@/api-types';
 import { useSetPayoutSchedule } from '@/hooks/use-payments';
+import { stripeFeesText } from './payout-costs';
 
 const LABELS: Readonly<Record<PayoutInterval, string>> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as const;
@@ -17,7 +18,7 @@ export function PayoutFrequency({ status }: { status: StripeConnectStatusData })
 	const estimate = (interval: PayoutInterval) =>
 		status.payoutCostEstimates[interval] > 0
 			? `about ${dollars(status.payoutCostEstimates[interval])} a month in Stripe fees`
-			: "$2.00 a month in Stripe fees, plus 0.25% and 25¢ per payout, once you're paid";
+			: stripeFeesText(status.accountCosts);
 
 	return (
 		<fieldset className="grid gap-2" disabled={setSchedule.isPending}>

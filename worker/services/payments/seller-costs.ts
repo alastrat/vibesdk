@@ -1,9 +1,7 @@
 /** What Stripe charges Estori for each seller account, passed to the seller (spec section 4). */
 
 import type { PayoutInterval } from '../../../shared/types/store-payments';
-import type { SellerLimitsSettings } from '../../../shared/types/seller-levels';
-
-type SellerAccountCosts = SellerLimitsSettings['costs'];
+import type { SellerAccountCosts } from '../../../shared/types/seller-levels';
 const PAYOUTS_PER_MONTH: Readonly<Record<PayoutInterval, number>> = { daily: 22, weekly: 4, monthly: 1 };
 
 export function payoutFeeCents(amountCents: number, costs: SellerAccountCosts): number {

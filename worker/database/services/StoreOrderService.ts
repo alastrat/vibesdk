@@ -82,11 +82,19 @@ export class StoreOrderService extends BaseService {
     }
 
     /** The seller's share of their paid sales since this time: what their payouts carry. */
-    async salesVolumeSince(sellerUserId: string, since: Date): Promise<number> {
+    /** What the seller's paid sales in this mode since `since` paid them, net of Estori's fee and refunds; disputed sales pay nothing. */
+    async salesVolumeSince(sellerUserId: string, mode: StoreMode, since: Date): Promise<number> {
         const row = await this.database
             .select({ volume: sql<number>`COALESCE(SUM(${schema.storeOrders.totalCents} - ${schema.storeOrders.applicationFeeCents} - ${schema.storeOrders.refundedCents}), 0)` })
             .from(schema.storeOrders)
-            .where(and(eq(schema.storeOrders.sellerUserId, sellerUserId), gte(schema.storeOrders.createdAt, since)))
+            .where(
+                and(
+                    eq(schema.storeOrders.sellerUserId, sellerUserId),
+                    eq(schema.storeOrders.mode, mode),
+                    inArray(schema.storeOrders.paymentStatus, ['paid', 'partially_refunded']),
+                    gte(schema.storeOrders.createdAt, since),
+                ),
+            )
             .get();
         return row?.volume ?? 0;
     }
