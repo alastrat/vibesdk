@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAY_PAGE_SCRIPT, renderPayPage } from './pay-page';
 import { STORE_SCRIPT } from './store-script';
-import type { StoreCheckoutResponse, StoreInfo } from '../../../shared/types/store-payments';
+import { STORE_CHECKOUT_MESSAGES, type StoreCheckoutResponse, type StoreInfo } from '../../../shared/types/store-payments';
 
 const BASE = '/space/app_1/preview/main';
 
@@ -65,6 +65,8 @@ function element(id = ''): FakeElement {
  * session whose email was set while Stripe's own email field is mounted.
  */
 function fakeStripe() {
+	// Set by a test: Stripe can no longer load the session's actions, as once a session has expired.
+	const control = { loadFails: false };
 	const held: { answer: ((result: { type: string; error?: { message: string } }) => void) | null; hold: boolean } = { answer: null, hold: false };
 	const mounted: string[] = [];
 	const emails: string[] = [];
@@ -95,7 +97,7 @@ function fakeStripe() {
 					return addressField();
 				},
 				createPaymentElement: field,
-				loadActions: async () => ({
+				loadActions: async () => (control.loadFails ? { type: 'error', error: { message: 'This Checkout Session is no longer active.' } } : {
 					type: 'success',
 					actions: {
 						updateEmail: async (email: string) => {
@@ -115,7 +117,7 @@ function fakeStripe() {
 			};
 		},
 	});
-	return { Stripe, mounted, emails, confirmed, shippingOptions, instances, held };
+	return { Stripe, mounted, emails, confirmed, shippingOptions, instances, held, control };
 }
 
 /** Opens the checkout page in a fake browser tab whose storage survives a reload, answering checkouts in turn. */
@@ -197,7 +199,7 @@ describe("Estori's checkout page script", () => {
 		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
 		openPage(tab, [started('chk_first')]);
 		await settle();
-		openPage(tab, [{ ok: false, reason: 'limit_reached', message: "This store isn't taking new orders right now. Try again later." }]);
+		openPage(tab, [{ ok: false, reason: 'store_paused', message: STORE_CHECKOUT_MESSAGES.store_paused }]);
 		await settle();
 		const next = openPage(tab, [started('chk_third')]);
 		await settle();
@@ -253,15 +255,42 @@ describe("Estori's checkout page script", () => {
 		expect(page.elements.get('email-error')).toMatchObject({ hidden: false, textContent: 'Your email address is invalid.' });
 	});
 
+	it('shows the checkout again when items are added to an empty cart from another tab', async () => {
+		const tab = { local: new Map<string, string>(), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_first')]);
+		await settle();
+		expect(page.elements.get('checkout')?.hidden).toBe(true);
+		expect(page.elements.get('empty')?.hidden).toBe(false);
+		page.cart.add('kenya-250');
+		vi.advanceTimersByTime(400);
+		await settle();
+		expect(page.elements.get('checkout')?.hidden).toBe(false);
+		expect(page.elements.get('empty')?.hidden).toBe(true);
+		expect(page.stripe.mounted).toEqual(['cs_secret_chk_first']);
+	});
+
+	it("tells the shopper to refresh, instead of doing nothing, when Stripe can't load the checkout to pay", async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_first')]);
+		await settle();
+		typeEmail(page, 'shopper@example.com');
+		await settle();
+		page.stripe.control.loadFails = true;
+		page.elements.get('pay')?.onclick?.();
+		await settle();
+		expect(page.stripe.confirmed).toEqual([]);
+		expect(page.elements.get('notice')).toMatchObject({ hidden: false, textContent: "This checkout can't continue. Refresh the page and try again." });
+	});
+
 	it('offers nothing to pay once an edited cart is refused, since the earlier session was already expired', async () => {
 		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
-		const page = openPage(tab, [started('chk_first'), { ok: false, reason: 'order_limit', message: 'This order is over the largest order this store can take.' }]);
+		const page = openPage(tab, [started('chk_first'), { ok: false, reason: 'order_over_limit', message: STORE_CHECKOUT_MESSAGES.order_over_limit }]);
 		await settle();
 		typeEmail(page, 'shopper@example.com');
 		page.cart.setQuantity('kenya-250', 9);
 		vi.advanceTimersByTime(400);
 		await settle();
-		expect(page.elements.get('notice')).toMatchObject({ hidden: false, textContent: 'This order is over the largest order this store can take.' });
+		expect(page.elements.get('notice')).toMatchObject({ hidden: false, textContent: STORE_CHECKOUT_MESSAGES.order_over_limit });
 		expect(page.elements.get('pay')?.disabled).toBe(true);
 		page.elements.get('pay')?.onclick?.();
 		await settle();

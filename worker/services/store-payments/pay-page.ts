@@ -454,6 +454,9 @@ export const PAY_PAGE_SCRIPT = `(function () {
     // A start asked for while a card is being confirmed waits for its answer, so the session being paid stays.
     if (starting || confirming) { again = true; return; }
     if (cart.count() === 0) { showEmpty(); return; }
+    // Items added in another tab after the cart was empty bring the checkout back.
+    $('checkout').hidden = false;
+    $('empty').hidden = true;
     starting = true;
     setBusy(true);
     hideNotice();
@@ -517,7 +520,11 @@ export const PAY_PAGE_SCRIPT = `(function () {
     holdPay();
     hideNotice();
     sendEmail(true).then(function (sent) {
-      if (!sent) return null;
+      if (!sent) {
+        // An email Stripe refused is explained under its field; anything else means the session can't be paid.
+        if ($('email-error').hidden) showNotice("This checkout can't continue. Refresh the page and try again.");
+        return null;
+      }
       return current.loadActions().then(function (loaded) {
         if (loaded.type !== 'success') throw new Error('Checkout is not ready');
         return loaded.actions.confirm();
