@@ -88,6 +88,41 @@ describe('claims on real SQL', () => {
 		expect(await new StoreOrderService(envWith(db)).salesVolumeSince('u1', 'test', new Date(NOW.getTime() - 30 * day))).toBe(5000 + 3000 + 3000 + 3000);
 	});
 
+	it("lists the seller's open checkouts in this mode this week, oldest first, and expires each only once", async () => {
+		const checkouts = new StoreCheckoutService(envWith(db));
+		const minute = 60 * 1000;
+		const rows: Array<[string, string, 'test' | 'live', number]> = [
+			['chk_new', 'open', 'test', 1],
+			['chk_old', 'open', 'test', 20],
+			['chk_paid', 'completed', 'test', 30],
+			['chk_starting', 'creating', 'test', 2],
+			['chk_live', 'open', 'live', 25],
+			['chk_lastweek', 'open', 'test', 8 * 24 * 60],
+		];
+		for (const [id, status, mode, minutesAgo] of rows) {
+			await insertCheckout(db, { id, sellerUserId: 'u1', status, mode, weightedCents: 1000, createdAt: new Date(NOW.getTime() - minutesAgo * minute) });
+			await db.prepare('UPDATE store_checkouts SET stripe_checkout_session_id = ? WHERE id = ?').bind(`cs_${id}`, id).run();
+		}
+		const week = new Date(NOW.getTime() - 7 * 24 * 60 * minute);
+		expect(await checkouts.openHolds('u1', 'test', week)).toEqual([
+			{ id: 'chk_old', sessionId: 'cs_chk_old', weightedCents: 1000 },
+			{ id: 'chk_new', sessionId: 'cs_chk_new', weightedCents: 1000 },
+		]);
+		expect(await checkouts.expire('chk_old')).toBe(true);
+		expect(await checkouts.expire('chk_old')).toBe(false);
+		expect(await checkouts.expire('chk_paid')).toBe(false);
+	});
+
+	it("lists every open checkout of one store, in any mode, to expire when it's taken offline", async () => {
+		const checkouts = new StoreCheckoutService(envWith(db));
+		for (const [id, status, mode] of [['chk_a', 'open', 'test'], ['chk_b', 'open', 'live'], ['chk_done', 'completed', 'test'], ['chk_other', 'open', 'test']] as const) {
+			await insertCheckout(db, { id, sellerUserId: 'u1', status, mode, weightedCents: 500, createdAt: NOW });
+			await db.prepare('UPDATE store_checkouts SET stripe_checkout_session_id = ? WHERE id = ?').bind(`cs_${id}`, id).run();
+		}
+		await db.prepare("UPDATE store_checkouts SET app_id = 'app_2' WHERE id = 'chk_other'").run();
+		expect((await checkouts.openCheckoutsOfApp('app_1')).map((hold) => hold.id).sort()).toEqual(['chk_a', 'chk_b']);
+	});
+
 	it("expires only this store's starting or open checkout for a replacement, and returns its session", async () => {
 		const checkouts = new StoreCheckoutService(envWith(db));
 		await insertCheckout(db, { id: 'chk_open', sellerUserId: 'u1', status: 'open', weightedCents: 4599, createdAt: NOW });

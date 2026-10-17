@@ -41,6 +41,8 @@ export interface StartCheckoutDeps {
 	sellerLimits(): Promise<{ largestOrderCents: number; weeklySalesCents: number }>;
 	/** The weight of the seller's checkouts in this mode in the last 7 days that are paid or may still be. */
 	weeklyUsage(mode: StoreMode): Promise<number>;
+	/** Releases the seller's oldest unpaid checkouts in this mode until this much of the cap is free; answers what it freed. */
+	releaseHolds(mode: StoreMode, cents: number): Promise<number>;
 	/**
 	 * Expires a checkout of this store that is still starting or open, and its Stripe session, so it stops counting toward
 	 * the weekly cap. Any other checkout is left as it is.
@@ -53,10 +55,12 @@ export interface StartCheckoutDeps {
 }
 
 export interface StartCheckoutInput {
-	/** The owner's own preview, or one shown to anyone else. */
-	access: 'owner' | 'public';
+	/** The owner's own preview, a preview shown to anyone else, or a live store's shopper. */
+	access: 'owner' | 'public' | 'live';
 	/** From the platform's Stripe key; null when Stripe isn't configured. */
 	stripeMode: 'test' | 'live' | null;
+	/** Live stores take real payments only once Estori turns them on (`LIVE_STORE_PAYMENTS`). */
+	livePayments: boolean;
 	appId: string;
 	sellerUserId: string;
 	body: unknown;
@@ -64,17 +68,28 @@ export interface StartCheckoutInput {
 	storeBaseUrl: string;
 }
 
+/**
+ * The mode a checkout takes: test payments wherever the key is a test key, and real ones only on a live store once Estori
+ * turns them on. Previews never take real payments. Null when this store can't take payments in the key's mode.
+ */
+export function checkoutModeOf(input: Pick<StartCheckoutInput, 'access' | 'stripeMode' | 'livePayments'>): StoreMode | null {
+	if (input.access === 'public' || !input.stripeMode) return null;
+	if (input.stripeMode === 'test') return 'test';
+	return input.access === 'live' && input.livePayments ? 'live' : null;
+}
+
 export function refusal(reason: StoreCheckoutRefusal): StoreCheckoutResponse {
 	return { ok: false, reason, message: STORE_CHECKOUT_MESSAGES[reason] };
 }
 
-export function storeInfoOf(manifest: StoreManifest, paymentsAvailable: boolean): StoreInfo {
-	return { mode: 'test', paymentsAvailable, currency: manifest.currency, shipping: manifest.shipping, products: manifest.products, brand: manifest.brand ?? null };
+export function storeInfoOf(manifest: StoreManifest, paymentsAvailable: boolean, mode: StoreMode): StoreInfo {
+	return { mode, paymentsAvailable, currency: manifest.currency, shipping: manifest.shipping, products: manifest.products, brand: manifest.brand ?? null };
 }
 
 export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCheckoutInput): Promise<StoreCheckoutResponse> {
-	if (input.access !== 'owner') return refusal('demo_only');
-	if (input.stripeMode !== 'test') return refusal('payments_unavailable');
+	if (input.access === 'public') return refusal('demo_only');
+	const mode = checkoutModeOf(input);
+	if (!mode) return refusal('payments_unavailable');
 	const request = parseCheckoutRequest(input.body);
 	if (!request) return refusal('invalid_request');
 	// The cart was edited, or the page reloaded: the earlier checkout goes first, so the cap counts only this one.
@@ -93,7 +108,7 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 		manifest: parsed.manifest,
 		request,
 		catalogLocks: new Map(locks.map((lock) => [lock.catalogVariantId, lock])),
-		context: { mode: 'test', storeAppId: input.appId, storeVersionId: null, commitHash: file.commitHash, sellerStripeAccountId: seller.stripeAccountId },
+		context: { mode, storeAppId: input.appId, storeVersionId: null, commitHash: file.commitHash, sellerStripeAccountId: seller.stripeAccountId },
 	});
 	if (!priced.ok) return refusal(priced.reason);
 
@@ -101,7 +116,9 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	if (priced.cart.totalCents > limits.largestOrderCents) return refusal('order_over_limit');
 	// Saved as creating before Stripe is called, so the next checkout's usage counts this one.
 	const weightedCents = weightedCartCents(priced.cart);
-	if ((await deps.weeklyUsage(priced.cart.mode)) + weightedCents > limits.weeklySalesCents) {
+	const used = await deps.weeklyUsage(priced.cart.mode);
+	const short = used + weightedCents - limits.weeklySalesCents;
+	if (short > 0 && (await deps.releaseHolds(priced.cart.mode, short)) < short) {
 		await deps.limitReached(limits.weeklySalesCents);
 		return refusal('store_paused');
 	}

@@ -20,6 +20,15 @@ describe('safeReturnPath', () => {
 	});
 });
 
+describe('safeReturnPath and control characters', () => {
+	it('falls back for a path with any control character, and keeps one with a space', () => {
+		for (const character of ['\u0000', '\t', '\n', '\u001f', '\u007f']) {
+			expect(safeReturnPath(`/thanks${character}/x`, '/'), JSON.stringify(character)).toBe('/');
+		}
+		expect(safeReturnPath('/thank you', '/')).toBe('/thank%20you');
+	});
+});
+
 describe('parseCheckoutRequest', () => {
 	const VALID = { items: [{ variantId: 'trail-mug-blue', quantity: 2 }], shipTo: 'us', successPath: '/thanks', cancelPath: '/cart', note: 'Gift' };
 

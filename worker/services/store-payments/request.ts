@@ -8,8 +8,16 @@ const ITEM_KEYS = ['variantId', 'quantity'];
 const MAX_PATH = 200;
 const MAX_NOTE = 500;
 const MAX_VARIANT_ID = 64;
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/;
 const RESOLVE_BASE = 'https://store.invalid';
+
+/** C0 control characters and DEL, which no return path may carry. */
+function hasControlCharacter(value: string): boolean {
+	for (let index = 0; index < value.length; index++) {
+		const code = value.charCodeAt(index);
+		if (code <= 0x1f || code === 0x7f) return true;
+	}
+	return false;
+}
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -25,7 +33,7 @@ function hasOnly(value: Record<string, unknown>, keys: readonly string[]): boole
  */
 export function safeReturnPath(value: unknown, fallback: string): string {
 	if (typeof value !== 'string' || value.length > MAX_PATH) return fallback;
-	if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\') || CONTROL_CHARACTER.test(value)) return fallback;
+	if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\') || hasControlCharacter(value)) return fallback;
 	const url = new URL(value, RESOLVE_BASE);
 	return url.origin === RESOLVE_BASE ? `${url.pathname}${url.search}` : fallback;
 }

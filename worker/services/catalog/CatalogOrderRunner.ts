@@ -5,8 +5,9 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { CATALOG_DESTINATIONS } from '../../../shared/types/catalog';
+import type { StoreMode } from '../../../shared/types/store-payments';
 import { createLogger } from '../../logger';
-import { CatalogOrderService } from '../../database';
+import { CatalogOrderService, StoreOrderService } from '../../database';
 import { isProd } from '../../utils/envs';
 import { stripeFromEnv } from '../payments/config';
 import { platformAlertsFromEnv } from '../alerts/platform-alerts';
@@ -21,17 +22,27 @@ const logger = createLogger('CatalogOrderRunner');
 const STATE_KEY = 'state';
 const ALARM_RETRY_MS = 5 * 60 * 1000;
 
-/** Live supplier orders need production and an explicit switch; everything else is a sandbox order. */
-export function catalogSupplierMode(env: Env): 'live' | 'sandbox' {
-	return isProd(env) && env.CATALOG_SUPPLIER_LIVE === 'true' ? 'live' : 'sandbox';
+/**
+ * Live supplier orders need production, an explicit switch, and a sale paid in live mode; everything else is a sandbox
+ * order, so a test payment never buys anything real.
+ */
+export function catalogSupplierMode(env: Env, paymentMode: StoreMode | null): 'live' | 'sandbox' {
+	return paymentMode === 'live' && isProd(env) && env.CATALOG_SUPPLIER_LIVE === 'true' ? 'live' : 'sandbox';
 }
 
-function runnerDeps(env: Env): RunnerDeps {
+/** The mode the store sale behind this catalog order was paid in; null when either can't be found. */
+export async function paymentModeOf(env: Env, orderId: string): Promise<StoreMode | null> {
+	const order = await new CatalogOrderService(env).getOrder(orderId);
+	if (!order) return null;
+	return (await new StoreOrderService(env).findByPaymentIntent(order.paymentIntentId))?.mode ?? null;
+}
+
+function runnerDeps(env: Env, paymentMode: StoreMode | null): RunnerDeps {
 	const client = cjClientFromEnv(env);
 	const sendAlert = platformAlertsFromEnv(env);
 	const alert: RunnerDeps['alert'] = (event) => sendAlert({ kind: event.kind, subject: event.orderId, message: event.message });
 	const adapter = client
-		? new CJDropshippingAdapter({ client, destinations: CATALOG_DESTINATIONS, mode: catalogSupplierMode(env), alert: (event) => alert({ kind: event.kind, orderId: event.reference, message: event.message }) })
+		? new CJDropshippingAdapter({ client, destinations: CATALOG_DESTINATIONS, mode: catalogSupplierMode(env, paymentMode), alert: (event) => alert({ kind: event.kind, orderId: event.reference, message: event.message }) })
 		: { supplier: 'cjdropshipping' as const, placeOrder: async () => ({ ok: false as const, kind: 'retryable' as const, reason: 'The catalog supplier is not configured' }) };
 	return {
 		store: new CatalogOrderService(env),
@@ -109,7 +120,7 @@ export class CatalogOrderRunner extends DurableObject<Env> {
 		const state = await this.state();
 		if (!state) return;
 		try {
-			const result = await runnerStep(state, runnerDeps(this.env), Date.now());
+			const result = await runnerStep(state, runnerDeps(this.env, await paymentModeOf(this.env, state.orderId)), Date.now());
 			await this.ctx.storage.put(STATE_KEY, result.state);
 			if (result.nextAlarmAt !== null) await this.ctx.storage.setAlarm(result.nextAlarmAt);
 		} catch (error) {

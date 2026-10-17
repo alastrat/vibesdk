@@ -133,7 +133,7 @@ async function serveAuthorizedPreview(
 ): Promise<Response> {
 	const platform = matchStorePlatformPath(new URL(request.url).pathname);
 	if (platform) {
-		return handleStorePlatform(request, env, { appId: spaceName, branch, ...platform, previewUserId: claims.userId }, ctx);
+		return handleStorePlatform(request, env, { appId: spaceName, branch, ...platform, viewer: { kind: 'preview', userId: claims.userId } }, ctx);
 	}
 	return forwardToSpacePreview(request, env, spaceName);
 }

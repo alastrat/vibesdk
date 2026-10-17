@@ -28,6 +28,7 @@ import {
     STORE_REFUND_INITIATORS,
 } from '../../shared/types/store-payments';
 import { SELLER_LEVELS } from '../../shared/types/seller-levels';
+import { LIVE_STORE_STATUSES, STORE_DOMAIN_PROVIDERS, STORE_DOMAIN_STATUSES } from '../../shared/types/live-stores';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -1156,3 +1157,35 @@ export type TemplatePurchase = typeof templatePurchases.$inferSelect;
 export type NewTemplatePurchase = typeof templatePurchases.$inferInsert;
 export type SitePage = typeof sitePages.$inferSelect;
 export type StripeConnectAccount = typeof stripeConnectAccounts.$inferSelect;
+
+/** A store's live address under the stores domain, and the published version it serves (live stores spec). */
+export const liveStores = sqliteTable('live_stores', {
+    appId: text('app_id').primaryKey().references(() => apps.id, { onDelete: 'cascade' }),
+    slug: text('slug').notNull(),
+    status: text('status', { enum: LIVE_STORE_STATUSES }).notNull().default('live'),
+    publishedCommit: text('published_commit').notNull(),
+    publishedAt: integer('published_at', { mode: 'timestamp' }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    slugUnique: uniqueIndex('live_stores_slug_unique_idx').on(table.slug),
+}));
+
+/** The seller's own domain for a store: one per store, served once the hostname provider says it's active. */
+export const storeDomains = sqliteTable('store_domains', {
+    hostname: text('hostname').primaryKey(),
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    status: text('status', { enum: STORE_DOMAIN_STATUSES }).notNull().default('pending'),
+    provider: text('provider', { enum: STORE_DOMAIN_PROVIDERS }).notNull(),
+    providerId: text('provider_id'),
+    /** JSON `StoreDomainRecord[]`: what the seller adds at their DNS provider. */
+    records: text('records').notNull().default('[]'),
+    lastError: text('last_error'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    checkedAt: integer('checked_at', { mode: 'timestamp' }),
+    verifiedAt: integer('verified_at', { mode: 'timestamp' }),
+}, (table) => ({
+    appUnique: uniqueIndex('store_domains_app_unique_idx').on(table.appId),
+    statusIdx: index('store_domains_status_idx').on(table.status),
+}));
+

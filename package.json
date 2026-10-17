@@ -23,7 +23,7 @@
 		"cli": "tsx --tsconfig tsconfig.app.json cli/index.ts",
 		"tui": "tsx --tsconfig tsconfig.app.json cli/tui.tsx",
 		"cf-typegen": "wrangler types --include-runtime false",
-		"test": "vitest run",
+		"test": "bun scripts/test-shards.ts",
 		"test:integration": "VIBESDK_RUN_INTEGRATION_TESTS=1 vitest run sdk/test/integration/integration.test.ts",
 		"test:watch": "vitest",
 		"test:coverage": "vitest run --coverage",

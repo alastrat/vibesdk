@@ -3,7 +3,7 @@
  * Stripe and receipts. They are answered here, before SpaceDO, so generated code never handles payments.
  */
 
-import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal } from '../../../shared/types/store-payments';
+import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal, type StoreMode } from '../../../shared/types/store-payments';
 import { createLogger } from '../../logger';
 import { SellerTermsService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
 import { AppService } from '../../database/services/AppService';
@@ -11,7 +11,8 @@ import { stripeFromEnv, stripeModeOf } from '../../services/payments/config';
 import { accountFlags, sellerReadiness, type StripeClient } from '../../services/payments/stripe-client';
 import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/seller-setup';
 import { lockCatalogPricesFor } from '../../services/store-payments/catalog-locks';
-import { refusal, startStoreCheckout, storeInfoOf } from '../../services/store-payments/checkout';
+import { checkoutModeOf, refusal, startStoreCheckout, storeInfoOf } from '../../services/store-payments/checkout';
+import { safeReturnPath } from '../../services/store-payments/request';
 import { recordStoreOrder } from '../../services/store-payments/fulfill';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
 import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader, receiptOf, signReceipt, verifyReceipt } from '../../services/store-payments/receipts';
@@ -20,10 +21,15 @@ import { payPageHeaders, renderPayPage } from '../../services/store-payments/pay
 import { getProtocolForHost } from '../../utils/urls';
 import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
-import { getSellerLimitsSettings } from '../../config';
+import { getGlobalConfigurableSettings, getSellerLimitsSettings } from '../../config';
 import { limitsFor, type SellerLevelLimits } from '../../../shared/types/seller-levels';
 import { platformAlertsFromEnv } from '../../services/alerts/platform-alerts';
 import { sellerNoticesFromEnv } from '../../services/alerts/seller-notices';
+import { RateLimitService } from '../../services/rate-limit/rateLimits';
+import { RateLimitExceededError } from '../../../shared/types/errors';
+import { releaseOldestHolds } from '../../services/store-payments/holds';
+import { LiveStoreService } from '../../database/services/LiveStoreService';
+import { plainPage } from './plain-page';
 
 const logger = createLogger('StorePlatform');
 
@@ -43,6 +49,7 @@ const REFUSAL_STATUS: Readonly<Record<StoreCheckoutRefusal, number>> = {
 	cart_limits: 400,
 	order_over_limit: 409,
 	store_paused: 409,
+	too_many_checkouts: 429,
 	stripe_failed: 502,
 };
 
@@ -53,8 +60,18 @@ export interface StorePlatformTarget {
 	basePath: string;
 	/** Decoded and lower-cased, starting with `/__estori`. */
 	platformPath: string;
-	/** The preview token's subject: the owner's user id, or the public subject. */
-	previewUserId: string;
+	/** Who is looking: a preview's token subject (the owner's user id, or the public subject), or a live store's shopper. */
+	viewer: StoreViewer;
+	/** A live store taken offline: a shopper who already paid gets Estori's own pages, since the store's are closed. */
+	closed?: boolean;
+}
+
+/** A preview is seen by its token's subject; a live store by any shopper, and its sales are its owner's. */
+export type StoreViewer = { kind: 'preview'; userId: string } | { kind: 'live'; sellerUserId: string };
+
+/** Whose sales the store's are: the app's owner on a live store, the preview token's subject on a preview. */
+function sellerIdOf(target: StorePlatformTarget): string {
+	return target.viewer.kind === 'live' ? target.viewer.sellerUserId : target.viewer.userId;
 }
 
 interface StoreManifestStub extends DurableObjectStub {
@@ -77,22 +94,32 @@ function normalizedPath(path: string): string {
 	return current.toLowerCase();
 }
 
+function isPlatformPath(path: string): boolean {
+	return path === STORE_PLATFORM_PREFIX || path.startsWith(`${STORE_PLATFORM_PREFIX}/`);
+}
+
 export function matchStorePlatformPath(pathname: string): { basePath: string; platformPath: string } | null {
 	const match = pathname.match(PREVIEW_PATH);
 	if (!match) return null;
 	const rest = normalizedPath(match[2] ?? '/');
-	if (rest !== STORE_PLATFORM_PREFIX && !rest.startsWith(`${STORE_PLATFORM_PREFIX}/`)) return null;
-	return { basePath: match[1], platformPath: rest };
+	return isPlatformPath(rest) ? { basePath: match[1], platformPath: rest } : null;
+}
+
+/** On a live store's own address, Estori's paths sit at the root. */
+export function matchLivePlatformPath(pathname: string): { basePath: string; platformPath: string } | null {
+	const rest = normalizedPath(pathname);
+	return isPlatformPath(rest) ? { basePath: '', platformPath: rest } : null;
 }
 
 function json(body: unknown, status = 200): Response {
 	return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
-/** The owner's own preview takes test payments; any other viewer sees a demo. */
-async function previewAccess(env: Env, target: StorePlatformTarget): Promise<'owner' | 'public'> {
-	if (target.previewUserId === PUBLIC_PREVIEW_SUBJECT) return 'public';
-	const ownership = await new AppService(env).checkAppOwnership(target.appId, target.previewUserId);
+/** Any shopper may pay on a live store; on a preview only its owner, in test mode; anyone else sees a demo. */
+async function storeAccess(env: Env, target: StorePlatformTarget): Promise<'owner' | 'public' | 'live'> {
+	if (target.viewer.kind === 'live') return 'live';
+	if (target.viewer.userId === PUBLIC_PREVIEW_SUBJECT) return 'public';
+	const ownership = await new AppService(env).checkAppOwnership(target.appId, target.viewer.userId);
 	return ownership.isOwner ? 'owner' : 'public';
 }
 
@@ -122,25 +149,37 @@ async function sellerAccount(env: Env, userId: string, stripe: StripeClient | nu
 	return { stripeAccountId: stored.stripeAccountId, readiness: sellerReadiness(fresh, termsAccepted) };
 }
 
+/** The mode this viewer's checkout would take, or null when this store can't take payments for them. */
+async function checkoutModeFor(env: Env, target: StorePlatformTarget): Promise<{ access: 'owner' | 'public' | 'live'; mode: StoreMode | null }> {
+	const access = await storeAccess(env, target);
+	return { access, mode: checkoutModeOf({ access, stripeMode: stripeModeOf(env), livePayments: livePaymentsOn(env) }) };
+}
+
+function livePaymentsOn(env: Env): boolean {
+	return env.LIVE_STORE_PAYMENTS === 'on';
+}
+
 async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Response> {
 	const file = await loadManifest(env, target);
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	if (!parsed?.ok) return json({ error: 'This store has no valid estori-store.json' }, 404);
-	const access = await previewAccess(env, target);
-	const seller = access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
-	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null));
+	const { mode } = await checkoutModeFor(env, target);
+	const seller = mode ? await sellerAccount(env, sellerIdOf(target), null) : null;
+	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test'));
 }
 
 /** Estori's checkout page: the store's brand and products from its file, and a fresh nonce for the page's own script. */
-async function servePayPage(env: Env, target: StorePlatformTarget): Promise<Response> {
+async function servePayPage(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const file = await loadManifest(env, target);
 	const parsed = file ? parseStoreManifest(file.text) : null;
-	const access = await previewAccess(env, target);
-	const seller = parsed?.ok && access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
-	const info = parsed?.ok ? storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null) : null;
+	const { mode } = await checkoutModeFor(env, target);
+	const seller = parsed?.ok && mode ? await sellerAccount(env, sellerIdOf(target), null) : null;
+	const info = parsed?.ok ? storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test') : null;
+	const query = new URL(request.url).searchParams;
+	const returnPaths = { successPath: safeReturnPath(query.get('success'), '/'), cancelPath: safeReturnPath(query.get('cancel'), '/') };
 	const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 	const appOrigin = env.CUSTOM_DOMAIN ? `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}` : null;
-	const html = renderPayPage({ basePath: target.basePath, publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, info, nonce });
+	const html = renderPayPage({ basePath: target.basePath, publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, info, nonce, returnPaths });
 	return new Response(html, { headers: payPageHeaders(nonce, appOrigin) });
 }
 
@@ -165,12 +204,19 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 		return json(refusal('invalid_request'), 400);
 	}
 
+	if (target.viewer.kind === 'live') {
+		if (await liveCheckoutLimited(env, request, target.appId)) return json(refusal('too_many_checkouts'), 429);
+		// The address cache can trail a Take offline by seconds; a new checkout reads the store's status itself.
+		if ((await new LiveStoreService(env).getByApp(target.appId))?.status !== 'live') return json(refusal('store_paused'), 409);
+	}
+
 	const stripe = stripeFromEnv(env);
 	const checkouts = new StoreCheckoutService(env);
+	const weekAgo = () => new Date(Date.now() - WEEK_MS);
 	const response = await startStoreCheckout(
 		{
 			loadManifest: () => loadManifest(env, target),
-			sellerAccount: () => sellerAccount(env, target.previewUserId, stripe),
+			sellerAccount: () => sellerAccount(env, sellerIdOf(target), stripe),
 			lockCatalogPrices: (ids, country) => lockCatalogPricesFor(env, ids, country),
 			saveCheckout: (checkout) => checkouts.create(checkout),
 			createSession: async (input) => {
@@ -184,14 +230,26 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			},
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
-			sellerLimits: () => sellerLimitsOf(env, target.previewUserId),
-			weeklyUsage: (mode) => checkouts.weeklyUsage(target.previewUserId, mode, new Date(Date.now() - WEEK_MS)),
+			sellerLimits: () => sellerLimitsOf(env, sellerIdOf(target)),
+			weeklyUsage: (mode) => checkouts.weeklyUsage(sellerIdOf(target), mode, weekAgo()),
+			releaseHolds: (mode, cents) =>
+				releaseOldestHolds(
+					{
+						holds: () => checkouts.openHolds(sellerIdOf(target), mode, weekAgo()),
+						expireSession: async (sessionId) => {
+							if (!stripe) throw new Error('Stripe is not configured');
+							await stripe.expireCheckoutSession(sessionId);
+						},
+						markExpired: (checkoutId) => checkouts.expire(checkoutId),
+					},
+					cents,
+				),
 			// The shopper is answered at once; the alert and the seller's email go out after.
 			limitReached: async (weeklySalesCents) => {
 				ctx.waitUntil(
 					(async () => {
-						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: target.previewUserId, message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
-						await sellerNoticesFromEnv(env)({ sellerUserId: target.previewUserId, kind: 'limit-reached', weeklySalesCents });
+						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: sellerIdOf(target), message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
+						await sellerNoticesFromEnv(env)({ sellerUserId: sellerIdOf(target), kind: 'limit-reached', weeklySalesCents });
 					})(),
 				);
 			},
@@ -199,10 +257,11 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			nowMs: () => Date.now(),
 		},
 		{
-			access: await previewAccess(env, target),
+			access: await storeAccess(env, target),
 			stripeMode: stripeModeOf(env),
+			livePayments: livePaymentsOn(env),
 			appId: target.appId,
-			sellerUserId: target.previewUserId,
+			sellerUserId: sellerIdOf(target),
 			body,
 			storeBaseUrl: `${url.origin}${target.basePath}`,
 		},
@@ -211,11 +270,27 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 	return json(response, response.ok ? 200 : REFUSAL_STATUS[response.reason]);
 }
 
+/** True when this shopper started too many checkouts on this live store; an unexpected limiter error lets them through. */
+async function liveCheckoutLimited(env: Env, request: Request, appId: string): Promise<boolean> {
+	try {
+		const config = await getGlobalConfigurableSettings(env);
+		await RateLimitService.enforceStoreCheckoutRateLimit(env, config.security.rateLimit, request, appId);
+		return false;
+	} catch (error) {
+		if (error instanceof RateLimitExceededError) return true;
+		logger.error('Store checkout limit could not be checked', error);
+		return false;
+	}
+}
+
 /** A shopper who just paid always lands back on the store; the webhook records the order if this page couldn't. */
 async function serveReturn(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const url = new URL(request.url);
 	const home = `${url.origin}${target.basePath}/`;
-	const processing = (path: string): Response => Response.redirect(`${url.origin}${target.basePath}${path}${path.includes('?') ? '&' : '?'}status=processing`, 303);
+	const processing = (path: string): Response =>
+		target.closed
+			? plainPage(200, 'Your payment is being confirmed', "This store's pages aren't open right now. If your payment goes through, the store has your order.")
+			: Response.redirect(`${url.origin}${target.basePath}${path}${path.includes('?') ? '&' : '?'}status=processing`, 303);
 	const sessionId = url.searchParams.get('session_id');
 	const stripe = stripeFromEnv(env);
 	if (!sessionId || !stripe) return Response.redirect(home, 303);
@@ -240,11 +315,15 @@ async function withReceipt(request: Request, env: Env, target: StorePlatformTarg
 	const join = successUrl.includes('?') ? '&' : '?';
 	const claims = addReceiptOrder(await verifyReceipt(env, readReceiptCookie(request)), target.appId, orderId);
 	const token = await signReceipt(env, claims);
+	const cookie = receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:');
+	if (target.closed) {
+		return plainPage(200, 'Thank you for your order', "Your payment went through and the store has your order. Its pages aren't open right now.", { 'Set-Cookie': cookie });
+	}
 	return new Response(null, {
 		status: 303,
 		headers: {
 			Location: `${successUrl}${join}order=${encodeURIComponent(orderId)}`,
-			'Set-Cookie': receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:'),
+			'Set-Cookie': cookie,
 		},
 	});
 }
@@ -264,7 +343,7 @@ export async function handleStorePlatform(request: Request, env: Env, target: St
 			return new Response(STORE_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
 		}
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(env, target);
-		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/pay`) return await servePayPage(env, target);
+		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/pay`) return await servePayPage(request, env, target);
 		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target, ctx);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/return`) return await serveReturn(request, env, target);
 		const receipt = path.match(/^\/__estori\/orders\/(ord_[a-z0-9]{1,64})$/);

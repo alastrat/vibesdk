@@ -2,6 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleStorePlatform, type StorePlatformTarget } from './store-platform';
 import { recordingD1 } from '../../database/test-support/recording-d1';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
+import { RateLimitService } from '../../services/rate-limit/rateLimits';
+import { RateLimitType } from '../../services/rate-limit/config';
+import { RateLimitExceededError } from '../../../shared/types/errors';
 
 const BASE = 'https://preview.test/space/app_1/preview/main';
 /** The request's execution context; work handed to waitUntil is dropped in these tests. */
@@ -12,12 +15,18 @@ const TARGET: StorePlatformTarget = {
 	branch: 'main',
 	basePath: '/space/app_1/preview/main',
 	platformPath: '/__estori/checkout',
-	previewUserId: PUBLIC_PREVIEW_SUBJECT,
+	viewer: { kind: 'preview', userId: PUBLIC_PREVIEW_SUBJECT },
 };
 
 function testEnv(overrides: Record<string, unknown> = {}) {
 	const { d1, statements } = recordingD1();
 	return { env: { DB: d1, JWT_SECRET: 'store-platform-test-secret-0123456789ab', ...overrides } as unknown as Env, statements };
+}
+
+/** A live store's environment whose D1 answers the store's own record with this status. */
+function liveStoreEnv(status: 'live' | 'offline'): Env {
+	const { d1 } = recordingD1((sql) => (sql.includes('from "live_stores"') ? [['app_1', 'northwind-tea', status, 'c0ffee', 1_800_000_000, 1_800_000_000, 1_800_000_000]] : []));
+	return { DB: d1, JWT_SECRET: 'store-platform-test-secret-0123456789ab', STRIPE_SECRET_KEY: 'sk_test_live_store' } as unknown as Env;
 }
 
 function checkoutRequest(init: { origin?: string; contentType?: string; body?: string } = {}): Request {
@@ -51,6 +60,68 @@ describe('handleStorePlatform', () => {
 		expect(html).toContain('"publishableKey":"pk_test_123"');
 		const second = await handleStorePlatform(new Request(`${BASE}/__estori/pay`), env, target, CTX);
 		expect(second.headers.get('Content-Security-Policy')).not.toBe(policy);
+	});
+
+	it("checks the checkout page's return paths on the server, so a crafted link can't send the shopper off the store", async () => {
+		const env = testEnv({ STRIPE_PUBLISHABLE_KEY: 'pk_test_123' }).env;
+		const target = { ...TARGET, platformPath: '/__estori/pay' };
+		const config = async (query: string) => {
+			const html = await (await handleStorePlatform(new Request(`${BASE}/__estori/pay${query}`), env, target, CTX)).text();
+			return JSON.parse(html.match(/<script type="application\/json" id="estori-pay-config">([\s\S]*?)<\/script>/)?.[1] ?? '{}');
+		};
+		expect(await config('?success=%2Fthanks&cancel=%2Fcart')).toMatchObject({ successPath: '/thanks', cancelPath: '/cart' });
+		expect(await config('?success=%2F%2Fevil.example&cancel=%2F%09%2Fevil.example')).toMatchObject({ successPath: '/', cancelPath: '/' });
+	});
+
+	it("lets a live store's shopper past the demo refusal, since the store is open to anyone", async () => {
+		const live = { ...TARGET, branch: 'live', basePath: '', viewer: { kind: 'live' as const, sellerUserId: 'seller_1' } };
+		const request = new Request('https://northwind-tea.estori.shop/__estori/checkout', {
+			method: 'POST',
+			headers: { Origin: 'https://northwind-tea.estori.shop', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ items: [{ variantId: 'trail-mug-blue', quantity: 1 }], shipTo: 'US' }),
+		});
+		const response = await handleStorePlatform(request, liveStoreEnv('live'), live, CTX);
+		// The test seller has no payments set up here, so it stops there, and not at "This is a demo".
+		expect(await response.json()).toMatchObject({ ok: false, reason: 'payments_unavailable' });
+	});
+
+	it('refuses a new checkout on a live store taken offline moments ago, before the address cache catches up', async () => {
+		const live = { ...TARGET, branch: 'live', basePath: '', viewer: { kind: 'live' as const, sellerUserId: 'seller_1' } };
+		const request = new Request('https://northwind-tea.estori.shop/__estori/checkout', {
+			method: 'POST',
+			headers: { Origin: 'https://northwind-tea.estori.shop', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ items: [{ variantId: 'trail-mug-blue', quantity: 1 }], shipTo: 'US' }),
+		});
+		const response = await handleStorePlatform(request, liveStoreEnv('offline'), live, CTX);
+		expect(await response.json()).toMatchObject({ ok: false, reason: 'store_paused' });
+	});
+
+	it("gives a shopper returning from Stripe to a closed store Estori's own page, not the closed store", async () => {
+		vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Stripe is unreachable'));
+		const closed = { ...TARGET, branch: 'live', basePath: '', platformPath: '/__estori/return', viewer: { kind: 'live' as const, sellerUserId: 'seller_1' }, closed: true };
+		const response = await handleStorePlatform(new Request('https://northwind-tea.estori.shop/__estori/return?session_id=cs_1'), testEnv({ STRIPE_SECRET_KEY: 'sk_test_fake' }).env, closed, CTX);
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain('Your payment is being confirmed');
+	});
+
+	it("limits how many checkouts one shopper starts on a live store, and leaves the owner's preview alone", async () => {
+		const limited = vi
+			.spyOn(RateLimitService, 'enforceStoreCheckoutRateLimit')
+			.mockRejectedValue(new RateLimitExceededError('Store checkout limit reached', RateLimitType.STORE_CHECKOUT));
+		const live = { ...TARGET, branch: 'live', basePath: '', viewer: { kind: 'live' as const, sellerUserId: 'seller_1' } };
+		const request = new Request('https://northwind-tea.estori.shop/__estori/checkout', {
+			method: 'POST',
+			headers: { Origin: 'https://northwind-tea.estori.shop', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ items: [{ variantId: 'trail-mug-blue', quantity: 1 }], shipTo: 'US' }),
+		});
+		const response = await handleStorePlatform(request, liveStoreEnv('live'), live, CTX);
+		expect(response.status).toBe(429);
+		expect(await response.json()).toMatchObject({ ok: false, reason: 'too_many_checkouts' });
+		expect(limited).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.any(Request), 'app_1');
+
+		limited.mockClear();
+		await handleStorePlatform(checkoutRequest(), testEnv().env, TARGET, CTX);
+		expect(limited).not.toHaveBeenCalled();
 	});
 
 	it('refuses checkouts from another origin, of another type or too large, before reading anything', async () => {

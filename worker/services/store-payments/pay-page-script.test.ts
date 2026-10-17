@@ -121,7 +121,7 @@ function fakeStripe() {
 /** Opens the checkout page in a fake browser tab whose storage survives a reload, answering checkouts in turn. */
 function openPage(tab: { local: Map<string, string>; session: Map<string, string> }, answers: StoreCheckoutResponse[]) {
 	const elements = new Map<string, FakeElement>();
-	const html = renderPayPage({ basePath: BASE, publishableKey: 'pk_test_123', info: INFO, nonce: 'n' });
+	const html = renderPayPage({ basePath: BASE, publishableKey: 'pk_test_123', info: INFO, nonce: 'n', returnPaths: { successPath: '/thanks', cancelPath: '/' } });
 	const config = html.match(/<script type="application\/json" id="estori-pay-config">([\s\S]*?)<\/script>/)?.[1] ?? '';
 	const document = {
 		currentScript: { src: `https://preview.test${BASE}/__estori/store.js` },

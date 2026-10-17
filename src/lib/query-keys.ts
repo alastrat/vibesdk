@@ -10,6 +10,8 @@ export type PaginatedAppsListFilters = {
 };
 
 export const queryKeys = {
+	/** A store's live address, published version and own domain, for its owner. */
+	liveStore: (appId: string) => ['live-store', appId] as const,
 	auth: {
 		all: ['auth'] as const,
 		session: () => [...queryKeys.auth.all, 'session'] as const,

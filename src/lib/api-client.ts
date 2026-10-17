@@ -96,6 +96,9 @@ import type{
 	StoreOrdersData,
 	StoreRefundRequest,
 	StoreRefundResponse,
+	LiveStoreView,
+	PublishLiveStoreRequest,
+	AddStoreDomainRequest,
 	PayoutInterval,
 	CatalogProductsData,
 	StripeLinkData,
@@ -666,6 +669,32 @@ class ApiClient {
 	/** Refund lines of a store order; the seller's Stripe balance pays it. */
 	async refundStoreOrder(appId: string, orderId: string, request: StoreRefundRequest): Promise<ApiResponse<StoreRefundResponse>> {
 		return this.request<StoreRefundResponse>(`/api/stores/${encodeURIComponent(appId)}/orders/${encodeURIComponent(orderId)}/refunds`, { method: 'POST', body: request });
+	}
+
+	/** The store's live address, published version and own domain. */
+	async getLiveStore(appId: string): Promise<ApiResponse<LiveStoreView>> {
+		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live`);
+	}
+
+	/** Publishes the previewed version at the store's address. */
+	async publishLiveStore(appId: string, request: PublishLiveStoreRequest): Promise<ApiResponse<LiveStoreView>> {
+		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/publish`, { method: 'POST', body: request });
+	}
+
+	async takeLiveStoreOffline(appId: string): Promise<ApiResponse<LiveStoreView>> {
+		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/offline`, { method: 'POST' });
+	}
+
+	async addStoreDomain(appId: string, request: AddStoreDomainRequest): Promise<ApiResponse<LiveStoreView>> {
+		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/domain`, { method: 'POST', body: request });
+	}
+
+	async checkStoreDomain(appId: string): Promise<ApiResponse<LiveStoreView>> {
+		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/domain/check`, { method: 'POST' });
+	}
+
+	async removeStoreDomain(appId: string): Promise<ApiResponse<LiveStoreView>> {
+		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/domain`, { method: 'DELETE' });
 	}
 
 	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {

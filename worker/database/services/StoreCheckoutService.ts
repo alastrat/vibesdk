@@ -1,10 +1,16 @@
 /** D1 reads and writes for store checkouts. */
 
-import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { PricedCart, StoreMode } from '../../../shared/types/store-payments';
 import type { StoreCheckoutRecord } from '../../services/store-payments/store';
+import type { Hold } from '../../services/store-payments/holds';
+
+/** Open checkouts always have a Stripe session; one without is left out, as there's nothing at Stripe to expire. */
+function holdsOf(rows: ReadonlyArray<{ id: string; sessionId: string | null; weightedCents: number }>): Hold[] {
+    return rows.flatMap((row) => (row.sessionId ? [{ id: row.id, sessionId: row.sessionId, weightedCents: row.weightedCents }] : []));
+}
 
 export class StoreCheckoutService extends BaseService {
     /** The weight of the seller's checkouts in this mode since `since`: paid ones, and ones a shopper may still pay. */
@@ -39,12 +45,46 @@ export class StoreCheckoutService extends BaseService {
         await this.database.update(schema.storeCheckouts).set({ status: 'failed' }).where(eq(schema.storeCheckouts.id, checkoutId));
     }
 
-    /** Only an open checkout expires; a completed one keeps its status when Stripe's expiry event arrives late. */
-    async expire(checkoutId: string): Promise<void> {
-        await this.database
+    /**
+     * Only an open checkout expires; a completed one keeps its status when Stripe's expiry event arrives late. False when
+     * the checkout wasn't open.
+     */
+    async expire(checkoutId: string): Promise<boolean> {
+        const rows = await this.database
             .update(schema.storeCheckouts)
             .set({ status: 'expired' })
-            .where(and(eq(schema.storeCheckouts.id, checkoutId), eq(schema.storeCheckouts.status, 'open')));
+            .where(and(eq(schema.storeCheckouts.id, checkoutId), eq(schema.storeCheckouts.status, 'open')))
+            .returning({ id: schema.storeCheckouts.id });
+        return rows.length > 0;
+    }
+
+    /** Every open checkout of this store, in any mode: the ones a shopper could still pay when it's taken offline. */
+    async openCheckoutsOfApp(appId: string): Promise<Hold[]> {
+        const rows = await this.database
+            .select({ id: schema.storeCheckouts.id, sessionId: schema.storeCheckouts.stripeCheckoutSessionId, weightedCents: schema.storeCheckouts.weightedCents })
+            .from(schema.storeCheckouts)
+            .where(and(eq(schema.storeCheckouts.appId, appId), eq(schema.storeCheckouts.status, 'open')))
+            .orderBy(asc(schema.storeCheckouts.createdAt))
+            .all();
+        return holdsOf(rows);
+    }
+
+    /** The seller's open checkouts in this mode since `since`, oldest first: the unpaid ones holding room under the cap. */
+    async openHolds(sellerUserId: string, mode: StoreMode, since: Date): Promise<Hold[]> {
+        const rows = await this.database
+            .select({ id: schema.storeCheckouts.id, sessionId: schema.storeCheckouts.stripeCheckoutSessionId, weightedCents: schema.storeCheckouts.weightedCents })
+            .from(schema.storeCheckouts)
+            .where(
+                and(
+                    eq(schema.storeCheckouts.sellerUserId, sellerUserId),
+                    eq(schema.storeCheckouts.mode, mode),
+                    eq(schema.storeCheckouts.status, 'open'),
+                    gte(schema.storeCheckouts.createdAt, since),
+                ),
+            )
+            .orderBy(asc(schema.storeCheckouts.createdAt))
+            .all();
+        return holdsOf(rows);
     }
 
     /**

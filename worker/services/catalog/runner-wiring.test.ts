@@ -15,10 +15,18 @@ function source(path: string): string {
 
 describe('the catalog order runner wiring', () => {
 	it('places sandbox orders unless production says live in so many words', () => {
-		expect(catalogSupplierMode({ ENVIRONMENT: 'dev' } as unknown as Env)).toBe('sandbox');
-		expect(catalogSupplierMode({ ENVIRONMENT: 'dev', CATALOG_SUPPLIER_LIVE: 'true' } as unknown as Env)).toBe('sandbox');
-		expect(catalogSupplierMode({ ENVIRONMENT: 'prod' } as unknown as Env)).toBe('sandbox');
-		expect(catalogSupplierMode({ ENVIRONMENT: 'prod', CATALOG_SUPPLIER_LIVE: 'true' } as unknown as Env)).toBe('live');
+		expect(catalogSupplierMode({ ENVIRONMENT: 'dev' } as unknown as Env, 'live')).toBe('sandbox');
+		expect(catalogSupplierMode({ ENVIRONMENT: 'dev', CATALOG_SUPPLIER_LIVE: 'true' } as unknown as Env, 'live')).toBe('sandbox');
+		expect(catalogSupplierMode({ ENVIRONMENT: 'prod' } as unknown as Env, 'live')).toBe('sandbox');
+		expect(catalogSupplierMode({ ENVIRONMENT: 'prod', CATALOG_SUPPLIER_LIVE: 'true' } as unknown as Env, 'live')).toBe('live');
+	});
+
+	it('places a sandbox order for any sale paid in test mode, or one whose payment it cannot find, even in live production', () => {
+		const live = { ENVIRONMENT: 'prod', CATALOG_SUPPLIER_LIVE: 'true' } as unknown as Env;
+		expect(catalogSupplierMode(live, 'test')).toBe('sandbox');
+		expect(catalogSupplierMode(live, null)).toBe('sandbox');
+		const runner = source('/worker/services/catalog/CatalogOrderRunner.ts');
+		expect(runner.slice(runner.indexOf('async alarm()'))).toContain('runnerDeps(this.env, await paymentModeOf(this.env, state.orderId))');
 	});
 
 	it('exports the runner, binds it in both configs, and starts it from the checkout hand-off', () => {

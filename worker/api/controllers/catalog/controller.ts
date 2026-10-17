@@ -4,7 +4,7 @@ import { BaseController } from '../baseController';
 import type { RouteContext } from '../../types/route-context';
 import type { ApiResponse, ControllerResponse } from '../types';
 import { runCatalogRefresh } from '../../../services/catalog/scheduler';
-import { catalogSupplierMode } from '../../../services/catalog/CatalogOrderRunner';
+import { catalogSupplierMode, paymentModeOf } from '../../../services/catalog/CatalogOrderRunner';
 import { cjClientFromEnv } from '../../../services/catalog/cj/client';
 import { sandboxMoves } from '../../../services/catalog/sandbox';
 import { CatalogOrderService, CatalogProductService } from '../../../database';
@@ -93,7 +93,7 @@ export class CatalogController extends BaseController {
             const body = (await request.json().catch(() => null)) as { action?: unknown } | null;
             const action = body?.action === 'ship' || body?.action === 'deliver' ? body.action : null;
             if (!orderId || !action) return CatalogController.createErrorResponse('Send { action: "ship" | "deliver" }', 400);
-            if (catalogSupplierMode(env) !== 'sandbox') return CatalogController.createErrorResponse('Only sandbox orders can be moved', 409);
+            if (catalogSupplierMode(env, await paymentModeOf(env, orderId)) !== 'sandbox') return CatalogController.createErrorResponse('Only sandbox orders can be moved', 409);
             const client = cjClientFromEnv(env);
             const order = await new CatalogOrderService(env).getOrder(orderId);
             if (!client || !order) return CatalogController.createErrorResponse('Order not found', 404);
