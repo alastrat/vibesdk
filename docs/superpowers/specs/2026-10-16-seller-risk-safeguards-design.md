@@ -34,6 +34,14 @@ All of these were checked against Stripe's docs on 2026-10-16.
   [Destination charges](https://docs.stripe.com/connect/destination-charges)
 - **Who Stripe debits.** For destination charges, with or without `on_behalf_of`, Stripe debits the platform for
   refunds, dispute amounts and dispute fees. The platform recovers them with transfer reversals.
+- **Reversals while funds are pending.** A transfer reversal doesn't need the seller's available balance. It nets
+  against the pending payment it reverses. This was verified in test mode on 2026-10-16:
+  - the seller had $0.00 available and $154.21 pending;
+  - a seller refund of order 3's $40.99 line made reversal `trr_1URLAmD9...` of $40.99 on an `on_behalf_of` charge;
+  - it appeared on the seller's account as a pending `payment_refund` with the payment's own release date;
+  - pending fell to $113.22, and available stayed at $0.00.
+
+  So the balance check in section 5 counts `available` plus `pending`, and settling right after a sale can reverse.
 - **Negative balances.** If a seller's balance goes negative, Stripe first tries to debit their bank account, when
   `debit_negative_balances` is on. For indirect charges the platform is responsible for what Stripe can't recover, and
   Stripe may hold a reserve on the platform account for it.
