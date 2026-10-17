@@ -10,6 +10,9 @@ import { storeHostConfig } from '../../../services/live-stores/hosts';
 import { devPortOf, liveStoreView } from '../../../services/live-stores/view';
 import { addStoreDomain, checkStoreDomain, removeStoreDomain } from '../../../services/live-stores/domain-checks';
 import { domainFlowDepsFromEnv } from '../../../services/live-stores/wiring';
+import { takeStoreOffline } from '../../../services/live-stores/take-offline';
+import { StoreCheckoutService } from '../../../database/services/StoreCheckoutService';
+import { stripeFromEnv } from '../../../services/payments/config';
 
 interface LiveSpaceStub {
     publishLive(): Promise<{ commitHash: string; storeManifest: string | null } | { error: string }>;
@@ -85,7 +88,17 @@ export class LiveStoreController extends BaseController {
         const appId = context.pathParams.id;
         if (!appId) return this.createErrorResponse<LiveStoreView>('Store not found', 404);
         try {
-            await new LiveStoreService(env).setOffline(appId, new Date());
+            const stripe = stripeFromEnv(env);
+            const checkouts = new StoreCheckoutService(env);
+            await takeStoreOffline({
+                setOffline: () => new LiveStoreService(env).setOffline(appId, new Date()),
+                openCheckouts: () => checkouts.openCheckoutsOfApp(appId),
+                expireSession: async (sessionId) => {
+                    if (!stripe) throw new Error('Stripe is not configured');
+                    await stripe.expireCheckoutSession(sessionId);
+                },
+                markExpired: (checkoutId) => checkouts.expire(checkoutId),
+            });
             return this.createSuccessResponse(await viewOf(env, appId));
         } catch (error) {
             return this.handleError(error, 'take the store offline') as ControllerResponse<ApiResponse<LiveStoreView>>;

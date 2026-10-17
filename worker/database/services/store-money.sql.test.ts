@@ -113,6 +113,16 @@ describe('claims on real SQL', () => {
 		expect(await checkouts.expire('chk_paid')).toBe(false);
 	});
 
+	it("lists every open checkout of one store, in any mode, to expire when it's taken offline", async () => {
+		const checkouts = new StoreCheckoutService(envWith(db));
+		for (const [id, status, mode] of [['chk_a', 'open', 'test'], ['chk_b', 'open', 'live'], ['chk_done', 'completed', 'test'], ['chk_other', 'open', 'test']] as const) {
+			await insertCheckout(db, { id, sellerUserId: 'u1', status, mode, weightedCents: 500, createdAt: NOW });
+			await db.prepare('UPDATE store_checkouts SET stripe_checkout_session_id = ? WHERE id = ?').bind(`cs_${id}`, id).run();
+		}
+		await db.prepare("UPDATE store_checkouts SET app_id = 'app_2' WHERE id = 'chk_other'").run();
+		expect((await checkouts.openCheckoutsOfApp('app_1')).map((hold) => hold.id).sort()).toEqual(['chk_a', 'chk_b']);
+	});
+
 	it("expires only this store's starting or open checkout for a replacement, and returns its session", async () => {
 		const checkouts = new StoreCheckoutService(envWith(db));
 		await insertCheckout(db, { id: 'chk_open', sellerUserId: 'u1', status: 'open', weightedCents: 4599, createdAt: NOW });

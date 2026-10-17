@@ -7,6 +7,11 @@ import type { PricedCart, StoreMode } from '../../../shared/types/store-payments
 import type { StoreCheckoutRecord } from '../../services/store-payments/store';
 import type { Hold } from '../../services/store-payments/holds';
 
+/** Open checkouts always have a Stripe session; one without is left out, as there's nothing at Stripe to expire. */
+function holdsOf(rows: ReadonlyArray<{ id: string; sessionId: string | null; weightedCents: number }>): Hold[] {
+    return rows.flatMap((row) => (row.sessionId ? [{ id: row.id, sessionId: row.sessionId, weightedCents: row.weightedCents }] : []));
+}
+
 export class StoreCheckoutService extends BaseService {
     /** The weight of the seller's checkouts in this mode since `since`: paid ones, and ones a shopper may still pay. */
     async weeklyUsage(sellerUserId: string, mode: StoreMode, since: Date): Promise<number> {
@@ -53,6 +58,17 @@ export class StoreCheckoutService extends BaseService {
         return rows.length > 0;
     }
 
+    /** Every open checkout of this store, in any mode: the ones a shopper could still pay when it's taken offline. */
+    async openCheckoutsOfApp(appId: string): Promise<Hold[]> {
+        const rows = await this.database
+            .select({ id: schema.storeCheckouts.id, sessionId: schema.storeCheckouts.stripeCheckoutSessionId, weightedCents: schema.storeCheckouts.weightedCents })
+            .from(schema.storeCheckouts)
+            .where(and(eq(schema.storeCheckouts.appId, appId), eq(schema.storeCheckouts.status, 'open')))
+            .orderBy(asc(schema.storeCheckouts.createdAt))
+            .all();
+        return holdsOf(rows);
+    }
+
     /** The seller's open checkouts in this mode since `since`, oldest first: the unpaid ones holding room under the cap. */
     async openHolds(sellerUserId: string, mode: StoreMode, since: Date): Promise<Hold[]> {
         const rows = await this.database
@@ -68,7 +84,7 @@ export class StoreCheckoutService extends BaseService {
             )
             .orderBy(asc(schema.storeCheckouts.createdAt))
             .all();
-        return rows.flatMap((row) => (row.sessionId ? [{ id: row.id, sessionId: row.sessionId, weightedCents: row.weightedCents }] : []));
+        return holdsOf(rows);
     }
 
     /**

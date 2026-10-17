@@ -28,6 +28,8 @@ import { sellerNoticesFromEnv } from '../../services/alerts/seller-notices';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { RateLimitExceededError } from '../../../shared/types/errors';
 import { releaseOldestHolds } from '../../services/store-payments/holds';
+import { LiveStoreService } from '../../database/services/LiveStoreService';
+import { plainPage } from './plain-page';
 
 const logger = createLogger('StorePlatform');
 
@@ -60,6 +62,8 @@ export interface StorePlatformTarget {
 	platformPath: string;
 	/** Who is looking: a preview's token subject (the owner's user id, or the public subject), or a live store's shopper. */
 	viewer: StoreViewer;
+	/** A live store taken offline: a shopper who already paid gets Estori's own pages, since the store's are closed. */
+	closed?: boolean;
 }
 
 /** A preview is seen by its token's subject; a live store by any shopper, and its sales are its owner's. */
@@ -200,7 +204,11 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 		return json(refusal('invalid_request'), 400);
 	}
 
-	if (target.viewer.kind === 'live' && (await liveCheckoutLimited(env, request, target.appId))) return json(refusal('too_many_checkouts'), 429);
+	if (target.viewer.kind === 'live') {
+		if (await liveCheckoutLimited(env, request, target.appId)) return json(refusal('too_many_checkouts'), 429);
+		// The address cache can trail a Take offline by seconds; a new checkout reads the store's status itself.
+		if ((await new LiveStoreService(env).getByApp(target.appId))?.status !== 'live') return json(refusal('store_paused'), 409);
+	}
 
 	const stripe = stripeFromEnv(env);
 	const checkouts = new StoreCheckoutService(env);
@@ -279,7 +287,10 @@ async function liveCheckoutLimited(env: Env, request: Request, appId: string): P
 async function serveReturn(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const url = new URL(request.url);
 	const home = `${url.origin}${target.basePath}/`;
-	const processing = (path: string): Response => Response.redirect(`${url.origin}${target.basePath}${path}${path.includes('?') ? '&' : '?'}status=processing`, 303);
+	const processing = (path: string): Response =>
+		target.closed
+			? plainPage(200, 'Your payment is being confirmed', "This store's pages aren't open right now. If your payment goes through, the store has your order.")
+			: Response.redirect(`${url.origin}${target.basePath}${path}${path.includes('?') ? '&' : '?'}status=processing`, 303);
 	const sessionId = url.searchParams.get('session_id');
 	const stripe = stripeFromEnv(env);
 	if (!sessionId || !stripe) return Response.redirect(home, 303);
@@ -304,11 +315,15 @@ async function withReceipt(request: Request, env: Env, target: StorePlatformTarg
 	const join = successUrl.includes('?') ? '&' : '?';
 	const claims = addReceiptOrder(await verifyReceipt(env, readReceiptCookie(request)), target.appId, orderId);
 	const token = await signReceipt(env, claims);
+	const cookie = receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:');
+	if (target.closed) {
+		return plainPage(200, 'Thank you for your order', "Your payment went through and the store has your order. Its pages aren't open right now.", { 'Set-Cookie': cookie });
+	}
 	return new Response(null, {
 		status: 303,
 		headers: {
 			Location: `${successUrl}${join}order=${encodeURIComponent(orderId)}`,
-			'Set-Cookie': receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:'),
+			'Set-Cookie': cookie,
 		},
 	});
 }

@@ -46,6 +46,16 @@ describe('a live store request', () => {
 		expect(seen).toEqual([]);
 	});
 
+	it("keeps answering a paid shopper's receipts on a closed store, and nothing else of Estori's", async () => {
+		const { env, seen } = spaces();
+		const closed: StoreHost = { ...LIVE, store: { ...LIVE.store, status: 'offline' } };
+		const receipt = await handleLiveStore(new Request('https://northwind-tea.estori.shop/__estori/orders/ord_abc'), { ...env, JWT_SECRET: 'live-store-test-secret-0123456789abcdef' } as Env, CTX, closed);
+		expect(receipt.headers.get('Content-Type')).toContain('application/json');
+		const checkout = await handleLiveStore(new Request('https://northwind-tea.estori.shop/__estori/store.js'), env, CTX, closed);
+		expect(await checkout.text()).toContain("This store isn't open right now");
+		expect(seen).toEqual([]);
+	});
+
 	it('answers a store that fails to load with a plain unavailable page', async () => {
 		const { env } = spaces(true);
 		const response = await handleLiveStore(new Request('https://northwind-tea.estori.shop/'), env, CTX, LIVE);
