@@ -110,4 +110,15 @@ describe('Estori.order', () => {
 		await Estori.order('ord_unknown');
 		expect(Estori.cart.count()).toBe(1);
 	});
+
+	it("clears the cart only the first time an order's receipt is read, so reopening an old confirmation keeps a new cart", async () => {
+		const { Estori, responses } = browser();
+		responses.set('/space/app_1/preview/main/__estori/orders/ord_1', { orderId: 'ord_1', orderNumber: 3 });
+		Estori.cart.add('mug-blue');
+		await Estori.order('ord_1');
+		expect(Estori.cart.count()).toBe(0);
+		Estori.cart.add('mug-red', 2);
+		await Estori.order('ord_1');
+		expect(Estori.cart.count()).toBe(2);
+	});
 });

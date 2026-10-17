@@ -16,6 +16,9 @@ export const STORE_SCRIPT = `(function () {
   var basePath = new URL(script.src, window.location.href).pathname.replace(/\\/__estori\\/store\\.js$/i, '');
   var base = basePath + '/__estori';
   var CART_KEY = 'estori:cart:' + basePath;
+  // Orders whose receipt already cleared the cart in this browser, newest last.
+  var CLEARED_KEY = 'estori:cleared-orders:' + basePath;
+  var CLEARED_KEEP = 20;
   var MAX_LINES = ${STORE_CART_MAX_LINES};
   var MAX_QUANTITY = ${STORE_LINE_MAX_QUANTITY};
   var listeners = [];
@@ -62,6 +65,19 @@ export const STORE_SCRIPT = `(function () {
         listener(items);
       } catch (error) {}
     });
+  }
+
+  function firstReceipt(orderId) {
+    var cleared = [];
+    try {
+      var saved = JSON.parse(window.localStorage.getItem(CLEARED_KEY) || '[]');
+      if (Array.isArray(saved)) cleared = saved.filter(function (id) { return typeof id === 'string'; });
+    } catch (error) {}
+    if (cleared.indexOf(orderId) !== -1) return false;
+    try {
+      window.localStorage.setItem(CLEARED_KEY, JSON.stringify(cleared.concat(orderId).slice(-CLEARED_KEEP)));
+    } catch (error) {}
+    return true;
   }
 
   function write(saved) {
@@ -160,10 +176,11 @@ export const STORE_SCRIPT = `(function () {
       window.location.assign(base + '/pay' + (search ? '?' + search : ''));
       return Promise.resolve({ ok: true });
     },
-    // A receipt means the order was paid, so the cart it came from is done.
+    // A receipt means the order was paid, so the cart it came from is done: cleared the first time only, so reopening
+    // an old confirmation leaves a cart the shopper has filled since.
     order: function (orderId) {
       return call('/orders/' + encodeURIComponent(orderId)).then(function (receipt) {
-        if (receipt && receipt.orderId === orderId) cart.clear();
+        if (receipt && receipt.orderId === orderId && firstReceipt(orderId)) cart.clear();
         return receipt;
       });
     },
