@@ -272,6 +272,19 @@ describe('runnerStep', () => {
 		expect(retryRunnerState(step.state, NOW).riskFailures).toBe(0);
 	});
 
+	it('gives no risk check on a retry to an order placed before risk checks existed', () => {
+		const { riskChecked: _unused, ...legacy } = { ...initialRunnerState('co_1', NOW), placement: 'done' as const, riskChecked: undefined };
+		expect(retryRunnerState(legacy, NOW).riskChecked).toBe(true);
+		const { riskChecked: _waiting, ...legacyDue } = { ...initialRunnerState('co_1', NOW), riskChecked: undefined };
+		expect(retryRunnerState(legacyDue, NOW).riskChecked).toBeUndefined();
+	});
+
+	it("refuses a release once the hold's time is up, since its expiry may already be refunding", () => {
+		const held = { ...initialRunnerState('co_1', NOW), placement: 'risk-hold' as const, riskChecked: true, riskHoldUntil: NOW + RISK_HOLD_MS };
+		expect(releaseRiskHold(held, NOW + RISK_HOLD_MS - 1).placement).toBe('due');
+		expect(releaseRiskHold(held, NOW + RISK_HOLD_MS)).toBe(held);
+	});
+
 	it('places again items a won dispute released after placement finished, but keeps a risk hold for an admin', () => {
 		const done = { ...initialRunnerState('co_1', NOW), placement: 'done' as const, riskChecked: true };
 		expect(retryRunnerState(done, NOW + 1000)).toMatchObject({ placement: 'due', nextPlacementAt: NOW + 1000, riskChecked: true });

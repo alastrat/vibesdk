@@ -68,9 +68,9 @@ function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-/** An admin cleared a held order: place it now. */
+/** An admin cleared a held order: place it now. Too late once the hold's time is up, since its expiry may be refunding. */
 export function releaseRiskHold(state: RunnerState, nowMs: number): RunnerState {
-	if (state.placement !== 'risk-hold') return state;
+	if (state.placement !== 'risk-hold' || nowMs >= (state.riskHoldUntil ?? 0)) return state;
 	return { ...state, placement: 'due', riskChecked: true, riskHoldUntil: null, nextPlacementAt: nowMs };
 }
 
@@ -80,7 +80,9 @@ export function releaseRiskHold(state: RunnerState, nowMs: number): RunnerState 
  */
 export function retryRunnerState(state: RunnerState, nowMs: number): RunnerState {
 	const placement = state.placement === 'risk-hold' ? 'risk-hold' : 'due';
-	return { ...state, placement, nextPlacementAt: nowMs, refundFailures: 0, riskFailures: 0, nextRefundAt: nowMs, nextSyncAt: state.nextSyncAt ?? nowMs };
+	// An order placed before risk checks existed isn't checked now; one still waiting for placement is, as before.
+	const riskChecked = state.riskChecked ?? (state.placement !== 'due' ? true : undefined);
+	return { ...state, placement, riskChecked, nextPlacementAt: nowMs, refundFailures: 0, riskFailures: 0, nextRefundAt: nowMs, nextSyncAt: state.nextSyncAt ?? nowMs };
 }
 
 async function place(state: RunnerState, deps: RunnerDeps, nowMs: number): Promise<RunnerState> {

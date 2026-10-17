@@ -89,9 +89,12 @@ export class CatalogOrderRunner extends DurableObject<Env> {
 	/** Admin: place a risk-held order now. */
 	async release(): Promise<boolean> {
 		const state = await this.state();
-		if (!state || state.placement !== 'risk-hold') return false;
+		if (!state) return false;
 		const now = Date.now();
-		await this.ctx.storage.put(STATE_KEY, releaseRiskHold(state, now));
+		const released = releaseRiskHold(state, now);
+		// Not held, or the hold's time is up and its expiry decides.
+		if (released === state) return false;
+		await this.ctx.storage.put(STATE_KEY, released);
 		await new CatalogOrderService(this.env).updateOrder(state.orderId, { status: 'awaiting-placement', placementAttempts: 0, lastError: null });
 		await this.ctx.storage.setAlarm(now);
 		return true;
