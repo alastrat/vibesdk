@@ -56,4 +56,9 @@ describe('custom domains', () => {
 		expect(customHostnameProblem('estori.app', OWN)).toBe("That's an Estori address. Enter a domain you own.");
 		expect(customHostnameProblem('x.preview.estori.app', OWN)).toBe("That's an Estori address. Enter a domain you own.");
 	});
+
+	it("asks for a subdomain when given a root domain, which can't point at a store with a CNAME", () => {
+		expect(customHostnameProblem('northwindtea.com', OWN)).toBe('Use a subdomain, such as shop.northwindtea.com. Root domains like northwindtea.com need a different DNS record, which isn\'t supported yet.');
+		expect(customHostnameProblem('www.northwindtea.com', OWN)).toBeNull();
+	});
 });

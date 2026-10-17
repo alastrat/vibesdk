@@ -104,6 +104,8 @@ export function customHostnameProblem(hostname: string, own: { storesDomain: str
 	}
 	const estori = [own.storesDomain, ...own.estoriDomains].filter((domain): domain is string => Boolean(domain)).map((domain) => domain.toLowerCase());
 	if (estori.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`))) return ESTORI_DOMAIN;
+	// A root domain can't hold the CNAME a store needs; only a subdomain of it can.
+	if (labels.length === 2) return `Use a subdomain, such as shop.${hostname}. Root domains like ${hostname} need a different DNS record, which isn't supported yet.`;
 	return null;
 }
 
