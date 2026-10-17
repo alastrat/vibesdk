@@ -29,10 +29,10 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 				<div className="max-w-2xl">
 					<Eyebrow tone="dark">Discover</Eyebrow>
 					<h2 id="showcase-title" className={cn(HEADING_SECTION, 'mt-4 text-balance')}>
-						See what creators are building
+						See what people are building on Estori
 					</h2>
 					<p className={cn(LEAD, 'mt-5 text-white/80')}>
-						Every store here was built on Estori. Open one, see it live on desktop and phone, and make it yours.
+						Open any store to see it live on desktop and phone, then make it yours.
 					</p>
 				</div>
 				{filters.length > 0 && (

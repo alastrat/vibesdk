@@ -69,6 +69,12 @@ import type{
 	DiscoverPricing,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
+	ContactAdminData,
+	ContactReceivedData,
+	ContactRequestBody,
+	EarlyAccessAdminData,
+	EarlyAccessCapability,
+	MyEarlyAccessData,
 	MyPaidListingsData,
 	PageCopyDraftData,
 	PaidVersionActionData,
@@ -78,6 +84,8 @@ import type{
 	RejectVersionRequest,
 	ReviewVersionFileData,
 	ReviewVersionFilesData,
+	ShowcaseChangeData,
+	ShowcaseChangeRequest,
 	ShowcaseRefreshData,
 	SiteCheckoutData,
 	PublicPlanLimits,
@@ -171,6 +179,8 @@ interface PublicAppsParams extends PaginationParams {
 	category?: TemplateCategory;
 	pricing?: DiscoverPricing;
 	reusableOnly?: boolean;
+	/** Only stores an admin showcased on the landing page. */
+	showcasedOnly?: boolean;
 }
 
 /**
@@ -519,6 +529,7 @@ class ApiClient {
 		if (params?.category) queryParams.set('category', params.category);
 		if (params?.pricing && params.pricing !== 'all') queryParams.set('pricing', params.pricing);
 		if (params?.reusableOnly) queryParams.set('reusableOnly', 'true');
+		if (params?.showcasedOnly) queryParams.set('showcasedOnly', 'true');
 		if (params?.boardId) queryParams.set('boardId', params.boardId);
 
 		const endpoint = `/api/apps/public${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
@@ -672,9 +683,37 @@ class ApiClient {
 		return this.request<DiscoverRemovalData>(`/api/admin/apps/${appId}/discover`, { method: 'PUT', body });
 	}
 
+	/** Admins only: show a public Discover store on the landing page, or take it off. */
+	async setShowcased(appId: string, body: ShowcaseChangeRequest): Promise<ApiResponse<ShowcaseChangeData>> {
+		return this.request<ShowcaseChangeData>(`/api/admin/apps/${appId}/showcase`, { method: 'PUT', body });
+	}
+
 	/** Admins only: capture the showcase images Discover stores are still missing, one batch per call. */
 	async refreshShowcaseScreenshots(): Promise<ApiResponse<ShowcaseRefreshData>> {
 		return this.request<ShowcaseRefreshData>('/api/admin/showcase-screenshots/refresh', { method: 'POST' });
+	}
+
+	async getMyEarlyAccess(): Promise<ApiResponse<MyEarlyAccessData>> {
+		return this.request<MyEarlyAccessData>('/api/early-access');
+	}
+
+	async requestEarlyAccess(capability: EarlyAccessCapability): Promise<ApiResponse<MyEarlyAccessData>> {
+		return this.request<MyEarlyAccessData>('/api/early-access', { method: 'POST', body: { capability } });
+	}
+
+	/** Every early-access request; quiet because non-admins get 403. */
+	async getAdminEarlyAccess(): Promise<ApiResponse<EarlyAccessAdminData>> {
+		return this.request<EarlyAccessAdminData>('/api/admin/early-access', {}, true);
+	}
+
+	/** Sends the contact-sales form; anyone can, signed in or not. Quiet: the form shows its own errors. */
+	async submitContact(body: ContactRequestBody): Promise<ApiResponse<ContactReceivedData>> {
+		return this.request<ContactReceivedData>('/api/contact', { method: 'POST', body }, true);
+	}
+
+	/** The latest contact-sales requests; quiet because non-admins get 403. */
+	async getAdminContactRequests(): Promise<ApiResponse<ContactAdminData>> {
+		return this.request<ContactAdminData>('/api/admin/contact-requests', {}, true);
 	}
 
 	/**

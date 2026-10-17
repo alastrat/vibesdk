@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import publicCss from '../../styles/public-site.css?raw';
 
 const sources = import.meta.glob<string>(
 	[
@@ -6,6 +7,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/components/layout/PublicLayout.tsx',
+		'/src/components/layout/NavMenu.tsx',
 		'/src/components/public-site/primitives.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
@@ -16,6 +18,7 @@ const TOP = '/src/components/layout/PublicTopBar.tsx';
 const FOOTER = '/src/components/layout/SiteFooter.tsx';
 const LAYOUT = '/src/components/layout/PublicLayout.tsx';
 const PRIMITIVES = '/src/components/public-site/primitives.tsx';
+const NAV = '/src/components/layout/NavMenu.tsx';
 
 function source(path: string): string {
 	const text = sources[path];
@@ -24,37 +27,140 @@ function source(path: string): string {
 }
 
 describe('public chrome', () => {
-	it('announces Discover with the fee from the code and links to the creators panel', () => {
+	it('announces Discover with the fee from the code, and links to its blog post on the right', () => {
 		const bar = source(ANNOUNCE);
 		expect(bar).toContain('PLATFORM_FEE_LABEL');
 		expect(bar).not.toMatch(/7% \+ \$0\.60/);
-		expect(bar).toContain('to="/#creators"');
 		expect(bar).toContain('bg-public-gold');
-		expect(bar).toContain('truncate');
-		expect(bar).toMatch(/className="hidden shrink-0[^"]*sm:inline/);
 		expect(bar).toMatch(/<span className="truncate">Estori Discover is open/);
-		expect(bar).toContain('className="shrink-0 underline');
+		// Learn more takes the right-hand spot; signing in lives in the top bar.
+		expect(bar).not.toContain('Sign in');
+		expect(bar).toContain('to={blogPostPath(ANNOUNCEMENT_POST)}');
+		expect(bar).toMatch(/className=\{cn\('shrink-0 justify-self-end', UNDERLINE_FILL\)\}/);
+		// Centred on wide screens, with an empty column balancing Learn more; left-aligned where it truncates.
+		expect(bar).toContain('lg:grid-cols-[1fr_minmax(0,auto)_1fr]');
+		expect(bar).toContain('lg:justify-center');
+	});
+
+	it('animates the phone menu: the burger turns into a cross, the sheet fades in and out, and its rows arrive in turn', () => {
+		const top = source(TOP);
+		expect(top).toContain("menuOpen && 'top-[7px] rotate-45'");
+		expect(top).toContain("menuOpen && 'top-[7px] -rotate-45'");
+		// Opening and closing both animate, in CSS, from the dialog's open state.
+		expect(top).toContain('transition-discrete');
+		expect(top).toContain('starting:open:opacity-0');
+		expect(top).toContain('motion-safe:animate-public-menu-item');
+		expect(top).toContain('const ROW_STAGGER_MS = 40;');
+		expect(top).toContain('animationDelay: `${index * ROW_STAGGER_MS}ms`');
+		expect(publicCss).toMatch(/@keyframes public-menu-item \{\s*from \{\s*opacity: 0;/);
+	});
+
+	it('draws link underlines that fill from left to right on hover, and stay still for reduced motion', () => {
+		expect(source(PRIMITIVES)).toContain('export const UNDERLINE_FILL =');
+		expect(source(PRIMITIVES)).toMatch(/UNDERLINE_FILL = `[^`]*hover:animate-public-underline/);
+		expect(publicCss).toMatch(/@keyframes public-underline-fill \{\s*from \{\s*background-size: 0% 1px;/);
+		// The reduced-motion rule turns off every animate-public-* class.
+		expect(publicCss).toContain(".public-site [class*='animate-public-']");
 	});
 
 	it('shows the announcement above a white top bar with the blue build action and a phone menu', () => {
 		const top = source(TOP);
 		expect(top).toContain('<AnnouncementBar />');
-		expect(top).toContain('hidden md:flex');
-		expect(top).toContain('Start building free');
-		expect(top).toContain("pillClass('blue'");
+		expect(top).toContain('hidden lg:flex');
+		expect(top).toContain('<StartBuildingButton className="hidden sm:inline-flex" />');
 		expect(top).toContain('aria-expanded={menuOpen}');
 		expect(top).toContain('aria-controls="public-menu"');
-		expect(top).toContain("to: '/#creators'");
+		expect(top).toContain('<MobileMenuSection id={mobileSection} />');
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
-	it('keeps the bar on one line: links move to the menu below md, and nothing in the bar wraps', () => {
+	it('offers Sign in in the bar on every screen, Talk to sales beside Pricing, and sign-up from Start building free', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<nav aria-label="Main" className="hidden md:flex [^"]*whitespace-nowrap/);
+		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className=\{cn\('text-\[15px\] text-public-charcoal', UNDERLINE_GROW\)\}>\s*Sign in/);
+		expect(top).toContain("const PAGE_LINKS = [\n\t{ to: '/discover', label: 'Discover' },\n\t{ to: '/pricing', label: 'Pricing' },\n] as const;");
+		expect(top).toContain("const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;");
+		// Once in the bar, once at the foot of the phone menu, as on 1Password.
+		expect(top.match(/>\s*Sign in\s*</g)).toHaveLength(2);
+		expect(top.match(/<StartBuildingButton /g)).toHaveLength(2);
+		expect(top).not.toContain('startBuilding');
+	});
+
+	it('keeps the bar on one line: the menus and links move to the menu below lg, and nothing in the bar wraps', () => {
+		const top = source(TOP);
+		expect(top).toMatch(/<nav aria-label="Main" className="hidden lg:flex [^"]*whitespace-nowrap/);
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
-		expect(top).toContain('rounded-full p-2 text-public-charcoal md:hidden');
-		expect(top).toMatch(/id="public-menu"[^>]*md:hidden/);
-		expect(top).toContain("pillClass('blue', 'mt-3 w-full sm:hidden')");
+		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
+		expect(top).toMatch(/<dialog[\s\S]*?id="public-menu"[\s\S]*?className="[^"]*lg:hidden[^"]*"/);
+		expect(top).toContain('<StartBuildingButton className="w-full px-3 text-[15px]" />');
+	});
+
+	it('opens one menu panel at a time, closes it on Escape, a click outside or navigation, and returns focus', () => {
+		const top = source(TOP);
+		expect(top).toContain('aria-expanded={openPanel === menu.id}');
+		expect(top).toContain('aria-controls={`menu-${menu.id}`}');
+		expect(top).toContain("event.key !== 'Escape'");
+		expect(top).toContain('triggerRefs.current[openPanel]?.focus();');
+		expect(top).toContain("document.addEventListener('pointerdown', onPointerDown);");
+		expect(top).toMatch(/setOpenPanel\(null\);\s*\}, \[pathname, hash, key\]\);/);
+	});
+
+	it('puts each open panel right after its trigger, and closes it when keyboard focus leaves both', () => {
+		const top = source(TOP);
+		expect(top).toMatch(/<\/button>\s*\{openPanel === menu\.id && <MenuPanel id=\{menu\.id\} \/>\}/);
+		expect(top).toContain('event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)');
+		expect(source(NAV)).toContain('export function MenuPanel(');
+		expect(source(NAV)).toMatch(/const PANEL = '[^']*whitespace-normal/);
+	});
+
+	it("opens 1Password's menu panels: icon items that turn blue on hover, a photo card and a link bar", () => {
+		const nav = source(NAV);
+		expect(nav).toContain('const NAV_ICONS: Readonly<Record<NavIcon, Icon>> = {');
+		expect(nav).toContain('group-hover:text-public-blue');
+		expect(nav).toContain('function FeatureCard(');
+		expect(nav).toContain("label: 'Compare plans'");
+		expect(nav).toContain('divide-x divide-public-line');
+		expect(nav).toContain('motion-safe:animate-public-menu-in');
+	});
+
+	it('draws menu underlines in from the left, like the announcement link, and keeps the open trigger underlined', () => {
+		const primitives = source(PRIMITIVES);
+		// No line at rest, and no animation for reduced motion; hover draws the full line.
+		expect(primitives).toMatch(/const UNDERLINE_GROW_BASE = `[^`]*bg-\[length:0%_1px\][^`]*motion-reduce:transition-none`;/);
+		expect(primitives).toContain('export const UNDERLINE_GROW = `${UNDERLINE_GROW_BASE} hover:bg-[length:100%_1px]');
+		expect(primitives).toContain('export const GROUP_UNDERLINE_GROW = `${UNDERLINE_GROW_BASE} group-hover:bg-[length:100%_1px]');
+		expect(primitives).toMatch(/export const GROUP_UNDERLINE_FILL = `[^`]*group-hover:animate-public-underline/);
+		const nav = source(NAV);
+		expect(nav).toContain('const HOVER_TEXT = `group-hover:text-public-blue ${GROUP_UNDERLINE_GROW}`;');
+		expect(nav).toMatch(/className=\{cn\('mt-4 inline-block text-\[15px\]', GROUP_UNDERLINE_FILL\)\}>\{feature\.link\.label\}/);
+		expect(nav).not.toContain('group-hover:underline');
+		expect(nav).not.toContain('border-b border-white');
+		const top = source(TOP);
+		expect(top).toMatch(/const NAV_ITEM =\s*'[^']*bg-\[length:0%_2px\][^']*\bhover:bg-\[length:100%_2px\][^']*motion-reduce:transition-none/);
+		// The open menu's trigger is underlined, like a hovered one.
+		expect(top).toContain('aria-expanded:bg-[length:100%_2px]');
+		expect(top).not.toContain('border-b-2');
+		expect(top).not.toContain('hover:underline');
+	});
+
+	it("turns the phone menu into 1Password's full-screen sheet, with a page per menu and the actions at the foot", () => {
+		const top = source(TOP);
+		expect(top).toContain('<dialog');
+		expect(top).toContain('dialog.showModal()');
+		expect(top).toContain('aria-label="Back to menu"');
+		expect(top).toContain('aria-label="Close menu"');
+		expect(top).toContain('setMobileSection(menu.id)');
+		// A modal sheet left open while the window widens would keep the page inert, so it closes past lg.
+		expect(top).toContain("window.matchMedia('(min-width: 1024px)')");
+		expect(source(NAV)).toContain('export function MobileMenuSection(');
+	});
+
+	it('builds the menus from the registry, so a launch removes its tag everywhere', () => {
+		const nav = source(NAV);
+		expect(nav).toContain('PLATFORM_CAPABILITIES.map');
+		expect(nav).toContain('<CapabilityTag');
+		expect(nav).toContain('AUDIENCES.map');
+		expect(nav).toContain('CREATOR_ITEMS.map');
+		expect(nav).not.toContain('<ComingSoon');
 	});
 
 	it('wraps long contact emails instead of scrolling a narrow phone sideways', () => {
@@ -63,7 +169,7 @@ describe('public chrome', () => {
 
 	it('ends every public page with the dark footer: link columns, contacts, wordmark and legal line', () => {
 		const footer = source(FOOTER);
-		for (const text of ['bg-public-charcoal', 'LEGAL_LINKS.map', 'LEGAL_CONTACT', 'legalAddressLine()', 'LEGAL_ENTITY.name', '<EstoriLogo', "to: '/#creators'"]) {
+		for (const text of ['bg-public-charcoal', 'LEGAL_LINKS.map', 'LEGAL_CONTACT', 'legalAddressLine()', 'LEGAL_ENTITY.name', '<EstoriLogo', "to: '/creators/developers'"]) {
 			expect(footer).toContain(text);
 		}
 	});
@@ -106,8 +212,15 @@ describe('public chrome', () => {
 	it('scrolls without animation for people who asked for reduced motion', () => {
 		expect(source(PRIMITIVES)).toContain("window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'");
 		expect(source(LAYOUT)).toContain('behavior: preferredScrollBehavior()');
-		expect(source(TOP)).toContain('behavior: preferredScrollBehavior()');
 		expect(source(LAYOUT)).not.toContain("behavior: 'smooth'");
 		expect(source(TOP)).not.toContain("behavior: 'smooth'");
+	});
+
+	it("uses the system's own scrollbar, so pages reach the window's edge instead of stopping at a custom 8px track", () => {
+		// A standard scrollbar property switches off the app's ::-webkit-scrollbar styling for the public site, so a Mac
+		// floats its scrollbar over the page, and the light color scheme keeps it light when the app is dark.
+		const site = publicCss.slice(publicCss.indexOf('.public-site {'), publicCss.indexOf('}', publicCss.indexOf('.public-site {')));
+		expect(site).toContain('color-scheme: light;');
+		expect(site).toContain('scrollbar-width: thin;');
 	});
 });

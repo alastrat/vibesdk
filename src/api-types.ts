@@ -235,6 +235,8 @@ export type {
 	ConfirmPurchaseRequest,
 	DiscoverRemovalData,
 	DiscoverRemovalRequest,
+	ShowcaseChangeData,
+	ShowcaseChangeRequest,
 	MyPaidListing,
 	MyPaidListingsData,
 	OwnerPaidListing,
@@ -268,6 +270,8 @@ export {
 	formatTemplatePrice,
 	platformFeeCents,
 } from '../shared/types/templates.js';
+export { EARLY_ACCESS_CAPABILITIES, isEarlyAccessCapability } from '../shared/types/early-access.js';
+export type { EarlyAccessCapability } from '../shared/types/early-access.js';
 export {
 	LEGAL_CONTACT,
 	LEGAL_ENTITY,
@@ -426,4 +430,21 @@ export type {
     SitePageData,
     SitePageOffer,
 } from 'worker/api/controllers/sitePage/types';
+
+export type {
+    EarlyAccessAdminData,
+    EarlyAccessAdminRequest,
+    MyEarlyAccessData,
+} from 'worker/api/controllers/earlyAccess/types';
+export type { ContactAdminData, ContactAdminRequest, ContactReceivedData } from 'worker/api/controllers/contact/types';
+export {
+	COMPANY_SIZES,
+	CONTACT_FAILED_MESSAGE,
+	CONTACT_FIELD_LIMITS,
+	CONTACT_TOPICS,
+	contactTopicLabel,
+	isCompanySize,
+	isContactTopic,
+} from '../shared/types/contact.js';
+export type { CompanySize, ContactRequestBody, ContactTopic } from '../shared/types/contact.js';
 export type { PublicPlanLimits } from '../shared/types/plan.js';

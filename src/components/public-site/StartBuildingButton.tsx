@@ -1,0 +1,21 @@
+import type { ReactNode } from 'react';
+import { useAuth } from '@/contexts/auth-context';
+import { PillLink, type PillVariant } from './primitives';
+
+/** "Start building free": the sign-up page for new visitors, and the builder for people already signed in. */
+export function StartBuildingButton({
+	variant = 'blue',
+	className,
+	children = 'Start building free',
+}: {
+	variant?: PillVariant;
+	className?: string;
+	children?: ReactNode;
+}) {
+	const { isAuthenticated } = useAuth();
+	return (
+		<PillLink to={isAuthenticated ? '/' : '/signup'} variant={variant} className={className}>
+			{children}
+		</PillLink>
+	);
+}

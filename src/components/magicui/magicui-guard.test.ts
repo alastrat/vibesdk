@@ -5,8 +5,8 @@ import indexCss from '../../index.css?raw';
 const components = import.meta.glob<string>('/src/components/magicui/*.tsx', { query: '?raw', import: 'default', eager: true });
 const licence = import.meta.glob<string>('/src/components/magicui/LICENSE.md', { query: '?raw', import: 'default', eager: true });
 
-const NAMES = ['marquee', 'border-beam', 'typing-animation', 'animated-list', 'number-ticker', 'animated-beam', 'blur-fade', 'safari', 'iphone'];
-const ANIMATED = ['marquee', 'border-beam', 'typing-animation', 'animated-list', 'number-ticker', 'animated-beam', 'blur-fade'];
+const NAMES = ['marquee', 'border-beam', 'animated-list', 'number-ticker', 'animated-beam', 'blur-fade', 'safari'];
+const ANIMATED = ['marquee', 'border-beam', 'animated-list', 'number-ticker', 'animated-beam', 'blur-fade'];
 
 function component(name: string): string {
 	const text = components[`/src/components/magicui/${name}.tsx`];
@@ -15,8 +15,9 @@ function component(name: string): string {
 }
 
 describe('Magic UI components', () => {
-	it("ships the nine adapted components with Magic UI's MIT licence", () => {
+	it("ships the seven adapted components with Magic UI's MIT licence", () => {
 		for (const name of NAMES) expect(component(name)).toBeTruthy();
+		for (const unused of ['iphone', 'typing-animation']) expect(Object.keys(components)).not.toContain(`/src/components/magicui/${unused}.tsx`);
 		const text = licence['/src/components/magicui/LICENSE.md'];
 		expect(text).toContain('MIT License');
 		expect(text).toContain('Copyright (c) Magic UI');
@@ -66,21 +67,16 @@ describe('Magic UI components', () => {
 		expect(beam).toContain('{!reduceMotion && onScreen && (');
 	});
 
-	it('never adds an "undefined" class to the phone frame', () => {
-		expect(component('iphone')).toContain('${className ?? ""}');
+	it('ignores the app dark mode in the device frame and the ticker', () => {
+		for (const name of ['safari', 'number-ticker']) expect(component(name)).not.toContain('dark:');
 	});
 
-	it('ignores the app dark mode in the device frames and the ticker', () => {
-		for (const name of ['safari', 'iphone', 'number-ticker']) expect(component(name)).not.toContain('dark:');
-	});
-
-	it('defines the marquee and cursor animations, loaded by the app stylesheet', () => {
+	it('defines the marquee animations, loaded by the app stylesheet', () => {
 		// Inline, so the animation resolves var(--duration) on the marquee element rather than on :root.
 		expect(magicCss).toContain('@theme inline {');
 		expect(magicCss).toContain('--animate-marquee: marquee var(--duration) infinite linear;');
 		expect(magicCss).toContain('@keyframes marquee');
-		expect(magicCss).toContain('--animate-blink-cursor: blink-cursor 1.2s step-end infinite;');
-		expect(magicCss).toContain('@keyframes blink-cursor');
+		expect(magicCss).not.toContain('blink-cursor');
 		expect(indexCss).toContain("@import './styles/magicui.css';");
 	});
 });

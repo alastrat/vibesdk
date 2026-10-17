@@ -543,3 +543,11 @@
 .no-scrollbar::-webkit-scrollbar {
 	display: none; /* Chrome, Safari, Opera */
 }
+
+/*
+ * The sign-in window dims the page more than other dialogs. This targets Kumo's styled backdrop (Base UI adds a bare
+ * one, and focus guards, before the window), and changes only its colour so the fade keeps working.
+ */
+[role='presentation'][class]:has(~ .auth-dialog) {
+	background-color: rgb(0 0 0 / 0.6);
+}

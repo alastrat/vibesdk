@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { COMPETITORS } from './copy-rules';
 
 const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src/components/public-site/*.tsx'], {
 	query: '?raw',
@@ -6,7 +7,14 @@ const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src
 	eager: true,
 });
 const otherSources = import.meta.glob<string>(
-	['/src/routes/root-index.tsx', '/src/routes/pricing.tsx', '/src/components/build-box.tsx', '/src/routes/home.tsx', '/src/routes.tsx'],
+	[
+		'/src/routes/root-index.tsx',
+		'/src/routes/pricing.tsx',
+		'/src/components/build-box.tsx',
+		'/src/routes/home.tsx',
+		'/src/routes.tsx',
+		'/src/hooks/use-scroll-grow.ts',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -16,7 +24,6 @@ function source(path: string): string {
 	return text;
 }
 
-const COMPETITORS = ['lovable', 'base44', 'amboras', 'shopify', 'wix', 'squarespace', 'webflow', 'framer', 'bolt.new', 'replit', 'v0.dev', 'durable.co'];
 
 describe('landing page', () => {
 	const landing = Object.values(pageSources).join('\n');
@@ -58,10 +65,47 @@ describe('landing page', () => {
 		expect(hero).toContain('<section className="overflow-x-clip bg-public-charcoal text-white">');
 	});
 
+	it('speaks to brands first, in plain words, and marks what is still to come', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toContain('AI-powered online stores');
+		expect(hero).toContain('Describe your store. Estori builds it in minutes.');
+		expect(hero).toContain('Next: assistants that help you sell more and handle the daily work.');
+		expect(hero).not.toMatch(/agentic|wherever shoppers ask AI/i);
+		expect(source('/src/routes/landing/Features.tsx')).toContain('What your store comes with today');
+		const band = source('/src/routes/landing/SellersBand.tsx');
+		expect(band).toContain('SELLER_STORIES');
+		expect(band).toContain('<SellerArt id={seller.id} />');
+	});
+
 	it('always underlines the Discover link under the build box', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
 		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*Browse stores in Discover/);
 		expect(hero).not.toMatch(/hover:underline">\s*Browse stores in Discover/);
+	});
+
+	it('grows the builder demo to fill the window as the page scrolls', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		expect(hero).toContain('const { refs, sizes } = useScrollGrow();');
+		// The stage pins right under the top bar; the track gives it room to stay pinned while it grows.
+		expect(hero).toMatch(/ref=\{refs\.stage\}\s+className="sticky top-\[var\(--public-header-h\)\] /);
+		expect(hero).toContain('style={sizes ? { height: sizes.track } : undefined}');
+		expect(hero).toContain('style={sizes ? { height: sizes.stage } : undefined}');
+		// At rest the card keeps the hero's width; the panel behind it is what reaches the window's edges.
+		expect(hero).toMatch(/ref=\{refs\.card\}\s+className="relative mx-auto max-w-\[1152px\] /);
+		expect(hero).toMatch(/ref=\{refs\.panel\}\s+aria-hidden/);
+		expect(hero).not.toContain('max-w-[1392px]');
+		expect(hero).toMatch(/ref=\{refs\.frame\}\s+role="img"/);
+		expect(hero).toContain('origin-bottom');
+	});
+
+	it('scrolls the demo smoothly, and keeps it still for reduced motion or a window too short to show it', () => {
+		const hook = source('/src/hooks/use-scroll-grow.ts');
+		expect(hook).toContain('window.matchMedia(REDUCED_MOTION_QUERY)');
+		expect(hook).toContain('canGrow(geometry)');
+		expect(hook).toContain('requestAnimationFrame(apply)');
+		expect(hook).toContain("addEventListener('scroll', schedule, { passive: true })");
+		expect(hook).toContain('new ResizeObserver(measure)');
+		expect(hook).not.toMatch(/framer/);
 	});
 
 	it('reserves the finished step list so the demo never grows while steps arrive', () => {
@@ -80,41 +124,71 @@ describe('landing page', () => {
 		expect(showcase).toContain('aria-pressed={activeFilter === option}');
 		expect(showcase).toContain('to={`/discover/${store.id}`}');
 		expect(showcase).toContain('id="discover"');
+		expect(showcase).toContain('See what people are building on Estori');
+		expect(showcase).not.toMatch(/creators are building/);
+	});
+
+	it('keeps the hero and the showcase on one charcoal band, so no light seam shows between them', () => {
+		const page = source('/src/routes/landing/LandingPage.tsx');
+		expect(page).toMatch(/<div className="bg-public-charcoal">\s*<Hero stores=\{stores\} \/>\s*<StoreShowcase stores=\{stores\} \/>\s*<\/div>/);
+	});
+
+	it('shows the store names right under the build box, above the builder demo, inside the hero', () => {
+		const hero = source('/src/routes/landing/Hero.tsx');
+		const build = hero.indexOf('id="build"');
+		const logos = hero.indexOf('<StoreLogos stores={stores} />');
+		const demo = hero.indexOf('<BuilderDemo />');
+		expect(build).toBeGreaterThan(-1);
+		expect(logos).toBeGreaterThan(build);
+		expect(demo).toBeGreaterThan(logos);
+		expect(source('/src/routes/landing/LandingPage.tsx')).not.toContain('<StoreLogos');
+		// Inside the charcoal hero, the strip has no background or divider of its own.
+		expect(source('/src/routes/landing/StoreLogos.tsx')).not.toMatch(/<section[^>]*(bg-public-charcoal|border-b)/);
 	});
 
 	it('lays the page out in the approved order', () => {
 		const page = source('/src/routes/landing/LandingPage.tsx');
-		const order = ['<Hero />', '<StoreLogos', '<StoreShowcase', '<Features />', '<CreatorsPanel />', '<LivePreview />', '<PricingSummary />', '<PublicFaq />', '<ClosingPanel />'];
+		const order = [
+			'<Hero stores={stores} />',
+			'<StoreShowcase',
+			'<AgenticCommerceSection />',
+			'<AssistantsPanel />',
+			'<PersonalizationSection />',
+			'<Features',
+			'<SellersBand />',
+			'<ClosingPanel />',
+		];
 		const positions = order.map((tag) => page.indexOf(tag));
 		expect(positions.every((position) => position > -1)).toBe(true);
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 	});
 
-	it('states what a seller keeps from the fee code, with the creators anchor the top bar links to', () => {
-		const creators = source('/src/routes/landing/CreatorsPanel.tsx');
-		expect(creators).toContain('sellerKeepsCents(EXAMPLE_SALE_CENTS)');
-		expect(creators).toContain('<AnimatedBeam');
-		expect(creators).toContain('id="creators"');
-		expect(creators).not.toContain('26.37');
-		// AA contrast on the blue panel: no translucent white text, and a darker node fill.
-		expect(creators).not.toMatch(/text-white\/\d+/);
-		expect(creators).toContain('bg-black/15');
-		expect(creators).not.toContain('bg-white/12');
+	it('leaves pricing and the questions to the pricing page', () => {
+		const page = source('/src/routes/landing/LandingPage.tsx');
+		expect(page).not.toContain('<PricingSummary');
+		expect(page).not.toContain('<PublicFaq');
+		expect(source('/src/routes/landing/sections.tsx')).not.toContain('export function PricingSummary');
 	});
 
-	it('uses the 1Password layout: charcoal features, a blue creators panel and a charcoal closing panel', () => {
-		expect(source('/src/routes/landing/Features.tsx')).toContain('bg-public-charcoal');
-		expect(source('/src/routes/landing/CreatorsPanel.tsx')).toContain('bg-public-blue');
+	it('closes on a light blue panel with a laptop on a cloud', () => {
 		const sections = source('/src/routes/landing/sections.tsx');
-		expect(sections.slice(sections.indexOf('export function ClosingPanel'))).toContain('bg-public-charcoal');
+		const closing = sections.slice(sections.indexOf('export function ClosingPanel'));
+		expect(closing).toContain('rounded-[25px] bg-[#dce9fc]');
+		expect(closing).toContain('<CloudLaptop />');
+		expect(closing).toContain('Your next store starts with a sentence.');
+		expect(closing).toContain('<StartBuildingButton variant="blue" />');
+		expect(source('/src/components/public-site/CloudLaptop.tsx')).toMatch(/^\s*<svg aria-hidden /m);
 	});
 
-	it('shows the live preview on bundled desktop and phone images', () => {
-		const preview = source('/src/routes/landing/LivePreview.tsx');
-		expect(preview).toContain("'/marketing/preview-desktop.jpg'");
-		expect(preview).toContain("'/marketing/preview-phone.jpg'");
-		expect(preview).toContain('<Safari');
-		expect(preview).toContain('<Iphone');
+	it('closes with our own words, not a customer review we do not have', () => {
+		const sections = source('/src/routes/landing/sections.tsx');
+		const closing = sections.slice(sections.indexOf('export function ClosingPanel'));
+		expect(closing).not.toMatch(/[\u201c\u201d]|review|<blockquote/i);
+	});
+
+	it('has no live preview section', () => {
+		expect(source('/src/routes/landing/LandingPage.tsx')).not.toContain('LivePreview');
+		expect(Object.keys(pageSources)).not.toContain('/src/routes/landing/LivePreview.tsx');
 	});
 
 	it('lets keyboard users reach every store in the marquees once, in view and with a visible focus ring', () => {
@@ -151,7 +225,7 @@ describe('landing page', () => {
 	});
 
 	it("doesn't promise store payments, and states the seller fee from the code", () => {
-		expect(landing).toContain('<ComingSoon');
+		expect(landing).not.toMatch(/accept payments|take payments today/i);
 		expect(landing).toContain('PLATFORM_FEE_LABEL');
 		expect(landing).not.toMatch(/7% \+ \$0\.60/);
 	});
@@ -167,13 +241,15 @@ describe('landing page', () => {
 		expect(summary).toContain('[&::-webkit-details-marker]:hidden');
 	});
 
-	it('answers the six launch questions', () => {
+	it('answers the launch questions', () => {
 		for (const question of [
 			'Is Estori free?',
+			'What does Coming soon mean?',
 			'Can my store take payments?',
+			'Does Estori take a cut of my store sales?',
 			'Who owns the store I build?',
+			'What does Estori charge for template sales?',
 			'Can I resell a store I bought?',
-			'What does Estori charge sellers?',
 			"What if a store I bought doesn't work?",
 		]) {
 			expect(landing).toContain(question);

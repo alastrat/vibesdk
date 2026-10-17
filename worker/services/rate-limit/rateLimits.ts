@@ -384,6 +384,55 @@ export class RateLimitService {
 	}
 
 	/**
+	 * Per-client cap on contact-sales requests from the public contact page. Throws RateLimitExceededError when
+	 * the limit is exceeded.
+	 */
+	static async enforceContactSalesRateLimit(env: Env, config: RateLimitSettings, request: Request): Promise<void> {
+		const limitConfig = config[RateLimitType.CONTACT_SALES];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const key = this.buildRateLimitKey(RateLimitType.CONTACT_SALES, await this.getRequestIdentifier(request));
+		const result = await this.enforce(env, key, config, RateLimitType.CONTACT_SALES);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Contact limit reached. Maximum ${limitConfig.limit} requests per hour`,
+				RateLimitType.CONTACT_SALES,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again in an hour.'],
+			);
+		}
+	}
+
+	/**
+	 * Per-address cap on contact-sales confirmations, so the public form can't be used to fill someone else's inbox.
+	 * Keyed by a hash of the address. Throws RateLimitExceededError when the limit is exceeded.
+	 */
+	static async enforceContactRecipientRateLimit(env: Env, config: RateLimitSettings, email: string): Promise<void> {
+		const limitConfig = config[RateLimitType.CONTACT_RECIPIENT];
+		if (!limitConfig?.enabled) {
+			return;
+		}
+		const key = this.buildRateLimitKey(RateLimitType.CONTACT_RECIPIENT, await this.recipientIdentifier(email));
+		const result = await this.enforce(env, key, config, RateLimitType.CONTACT_RECIPIENT);
+		if (!result.success) {
+			throw new RateLimitExceededError(
+				`Contact confirmation limit reached for this address. Maximum ${limitConfig.limit} emails per day`,
+				RateLimitType.CONTACT_RECIPIENT,
+				limitConfig.limit,
+				limitConfig.period,
+				['Please try again tomorrow.'],
+			);
+		}
+	}
+
+	/** The limiter identity for an email address: a hash, so the address itself is never stored. */
+	private static async recipientIdentifier(email: string): Promise<string> {
+		return `email:${await sha256Hash(email.trim().toLowerCase())}`;
+	}
+
+	/**
 	 * Per-client (or per-user, when signed in) cap on account emails: reset
 	 * links and confirmation emails. Throws RateLimitExceededError when the
 	 * limit is exceeded.
@@ -426,8 +475,7 @@ export class RateLimitService {
 		if (!limitConfig?.enabled) {
 			return;
 		}
-		const identifier = `email:${await sha256Hash(email.trim().toLowerCase())}`;
-		const key = this.buildRateLimitKey(RateLimitType.AUTH_EMAIL_RECIPIENT, identifier);
+		const key = this.buildRateLimitKey(RateLimitType.AUTH_EMAIL_RECIPIENT, await this.recipientIdentifier(email));
 		const result = await this.enforce(env, key, config, RateLimitType.AUTH_EMAIL_RECIPIENT);
 		if (!result.success) {
 			throw new RateLimitExceededError(

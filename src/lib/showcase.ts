@@ -35,8 +35,8 @@ export type ShowcaseLayout =
 
 /** The logo strip and the showcase each stay hidden below this many stores. */
 export const SHOWCASE_MIN_STORES = 3;
-/** A set this small shows as one still row; a marquee of so few cards would repeat itself. */
-export const SHOWCASE_STATIC_MAX = 3;
+/** Fewer showcased stores than this show as one still row; from here on, two rows move in opposite directions. */
+export const SHOWCASE_MOVING_MIN = 12;
 
 export function toShowcaseStore(app: ShowcaseSource): ShowcaseStore {
 	const priceCents = app.priceCents ?? 0;
@@ -78,6 +78,6 @@ export function filterShowcase(stores: readonly ShowcaseStore[], filter: Showcas
 }
 
 export function showcaseLayout(stores: readonly ShowcaseStore[]): ShowcaseLayout {
-	if (stores.length <= SHOWCASE_STATIC_MAX) return { kind: 'static', row: [...stores] };
+	if (stores.length < SHOWCASE_MOVING_MIN) return { kind: 'static', row: [...stores] };
 	return { kind: 'marquee', rows: [[...stores], [...stores].reverse()] };
 }

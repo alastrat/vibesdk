@@ -11,6 +11,7 @@ import {
 	canReadSource,
 	isPaidCopy,
 	parseDiscoverFilters,
+	parseShowcaseChange,
 	parseDiscoverRemoval,
 	parsePublishRequest,
 	planPublish,
@@ -266,14 +267,14 @@ describe('parseDiscoverFilters', () => {
 	it('defaults to every category, all prices and every site', () => {
 		expect(parseDiscoverFilters(new URLSearchParams())).toEqual({
 			ok: true,
-			value: { category: null, pricing: 'all', reusableOnly: false },
+			value: { category: null, pricing: 'all', reusableOnly: false, showcasedOnly: false },
 		});
 	});
 
-	it('reads category, pricing and the reusable flag', () => {
-		expect(parseDiscoverFilters(new URLSearchParams('category=store&pricing=paid&reusableOnly=true'))).toEqual({
+	it('reads category, pricing, the reusable flag and the showcased flag', () => {
+		expect(parseDiscoverFilters(new URLSearchParams('category=store&pricing=paid&reusableOnly=true&showcasedOnly=true'))).toEqual({
 			ok: true,
-			value: { category: 'store', pricing: 'paid', reusableOnly: true },
+			value: { category: 'store', pricing: 'paid', reusableOnly: true, showcasedOnly: true },
 		});
 	});
 
@@ -283,6 +284,19 @@ describe('parseDiscoverFilters', () => {
 			ok: false,
 			error: 'pricing must be all, free or paid',
 		});
+	});
+});
+
+describe('parseShowcaseChange', () => {
+	it('accepts showing or hiding a store on the landing page', () => {
+		expect(parseShowcaseChange({ showcased: true })).toEqual({ ok: true, value: { showcased: true } });
+		expect(parseShowcaseChange({ showcased: false })).toEqual({ ok: true, value: { showcased: false } });
+	});
+
+	it('rejects anything else', () => {
+		for (const body of [{}, { showcased: 'yes' }, null, 'true']) {
+			expect(parseShowcaseChange(body)).toEqual({ ok: false, error: 'showcased must be true or false' });
+		}
 	});
 });
 

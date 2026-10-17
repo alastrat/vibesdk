@@ -1,17 +1,17 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeExternalLinks from 'rehype-external-links';
-import { pageTitle } from '@/brand';
 import { Eyebrow } from '@/components/public-site/primitives';
+import { PageMeta } from '@/components/public-site/solution-page';
 import { LEGAL_DOCUMENTS, type LegalSlug } from '@/content/legal/legal-documents';
+import { legalPage } from '@/content/public-pages';
 
 /** A legal text in a narrow reading column, like 1Password's Legal Center. */
 export function LegalPage({ slug }: { slug: LegalSlug }) {
 	const document = LEGAL_DOCUMENTS[slug];
 	return (
 		<article className="mx-auto max-w-[720px] px-4 py-16 sm:px-6 sm:py-24">
-			<title>{pageTitle(document.title)}</title>
-			<meta name="description" content={`${document.title} for Estori.`} />
+			<PageMeta {...legalPage(slug)} />
 			<Eyebrow>Legal</Eyebrow>
 			<h1 className="mt-4 text-4xl leading-[1.1] font-light tracking-[-0.02em] text-public-ink sm:text-5xl">{document.title}</h1>
 			<p className="mt-4 text-sm text-public-muted">

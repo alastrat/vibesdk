@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
 	[
-		'/src/components/auth/login-modal.tsx',
+		'/src/components/auth/AuthForm.tsx',
 		'/src/components/auth/TermsGate.tsx',
 		'/src/components/auth/TermsAgreementLabel.tsx',
 		'/src/App.tsx',
@@ -19,7 +19,7 @@ function source(path: string): string {
 
 describe('agreeing to the terms', () => {
 	it('asks for agreement in the sign-up form and sends the current version', () => {
-		const modal = source('/src/components/auth/login-modal.tsx');
+		const modal = source('/src/components/auth/AuthForm.tsx');
 		expect(modal).toContain('<TermsAgreementLabel');
 		expect(modal).toContain('acceptedTermsVersion: TERMS_VERSION');
 		expect(modal).toContain('validationErrors.terms');
@@ -27,7 +27,7 @@ describe('agreeing to the terms', () => {
 	});
 
 	it('takes the missing-agreement message from the shared constant', () => {
-		const modal = source('/src/components/auth/login-modal.tsx');
+		const modal = source('/src/components/auth/AuthForm.tsx');
 		expect(modal).toContain('errors.terms = TERMS_REQUIRED_MESSAGE;');
 		expect(modal).toMatch(/import \{[^}]*TERMS_REQUIRED_MESSAGE[^}]*\} from '@\/api-types'/);
 		expect(modal).not.toContain('Agree to the Terms of Service and Privacy Policy to create an account');
@@ -42,7 +42,7 @@ describe('agreeing to the terms', () => {
 		expect(label).toContain('rel="noopener noreferrer"');
 		expect(source('/src/components/auth/TermsGate.tsx')).toContain('<TermsAgreementLabel');
 		expect(source('/src/components/auth/TermsGate.tsx')).not.toContain("I'm 18 or older");
-		expect(source('/src/components/auth/login-modal.tsx')).not.toContain("I'm 18 or older");
+		expect(source('/src/components/auth/AuthForm.tsx')).not.toContain("I'm 18 or older");
 	});
 
 	it('shows the window only when the server says the current terms were not agreed to', () => {

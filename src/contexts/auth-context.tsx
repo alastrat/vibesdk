@@ -223,6 +223,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		queryKey: queryKeys.auth.providers(),
 		queryFn: fetchAuthProviders,
 		staleTime: 60 * 60_000,
+		// The cached list survives reloads; re-check on each load so a newly enabled provider shows right away.
+		refetchOnMount: 'always',
 	});
 
 	const cachedSession = sessionQuery.data ?? null;

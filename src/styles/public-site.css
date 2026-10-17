@@ -21,18 +21,149 @@
 	--color-public-line: #e5e5e5;
 	--color-public-brand: #11295a;
 	--font-public: 'DM Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+	/* Motion for the public pages' drawn pictures; keyed elements restart them on each story beat. */
+	--animate-public-rise: public-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-public-blink: public-blink 1s step-end infinite;
+	--animate-public-draw: public-draw 700ms cubic-bezier(0.65, 0, 0.35, 1) both;
+	--animate-public-drain: public-drain 4400ms linear both;
+	--animate-public-build: public-build 8s cubic-bezier(0.22, 1, 0.36, 1) infinite both;
+	--animate-public-drift: public-drift 16s ease-in-out infinite alternate;
+	--animate-public-float: public-float 5s ease-in-out infinite alternate;
+	--animate-public-menu-in: public-menu-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-public-underline: public-underline-fill 500ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	--animate-public-menu-item: public-menu-item 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	/* A carousel tab's progress bar; when it ends, the next slide shows. */
+	--animate-public-autoplay: public-autoplay 6s linear;
+
+	@keyframes public-rise {
+		from {
+			opacity: 0;
+			transform: translateY(12px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+	@keyframes public-blink {
+		50% {
+			opacity: 0;
+		}
+	}
+	/* Paths drawn with pathLength="1": from hidden to whole. */
+	@keyframes public-draw {
+		from {
+			stroke-dashoffset: 1;
+		}
+		to {
+			stroke-dashoffset: 0;
+		}
+	}
+	@keyframes public-drain {
+		from {
+			stroke-dashoffset: 0;
+		}
+		to {
+			stroke-dashoffset: 1;
+		}
+	}
+	/* A block of the laptop's store: in early in the loop, out at its end. */
+	@keyframes public-build {
+		0%,
+		6% {
+			opacity: 0;
+			transform: translateY(6px) scale(0.96);
+		}
+		14%,
+		88% {
+			opacity: 1;
+			transform: none;
+		}
+		100% {
+			opacity: 0;
+			transform: none;
+		}
+	}
+	@keyframes public-drift {
+		from {
+			transform: translateX(-14px);
+		}
+		to {
+			transform: translateX(14px);
+		}
+	}
+	@keyframes public-menu-in {
+		from {
+			opacity: 0;
+			transform: translateY(-6px);
+		}
+	}
+	@keyframes public-autoplay {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
+	@keyframes public-underline-fill {
+		from {
+			background-size: 0% 1px;
+		}
+		to {
+			background-size: 100% 1px;
+		}
+	}
+	@keyframes public-menu-item {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+	}
+	@keyframes public-float {
+		from {
+			transform: translateY(0);
+		}
+		to {
+			transform: translateY(-10px);
+		}
+	}
+}
+
+/* Reduced motion: every public animation shows its finished frame. */
+@media (prefers-reduced-motion: reduce) {
+	.public-site [class*='animate-public-'] {
+		animation: none;
+	}
 }
 
 .public-site {
 	color-scheme: light;
+	/* A standard scrollbar property turns off the app's custom ::-webkit-scrollbar here: the system's own scrollbar floats
+	   over the page on a Mac, instead of a permanent 8px track that stops every page short of the window's edge. */
+	scrollbar-width: thin;
 	font-family: var(--font-public);
 	font-variation-settings: 'opsz' 14;
 	background-color: #ffffff;
 	color: var(--color-public-ink);
 	-webkit-font-smoothing: antialiased;
+	/* The sticky top bar without its phone menu: the announcement (44px), the bar (64px, 72px from sm) and its 1px border. */
+	--public-header-h: 109px;
+}
+
+@media (width >= 40rem) {
+	.public-site {
+		--public-header-h: 117px;
+	}
 }
 
 /* App components embedded in a public page, such as the landing build box, keep the app's theme. */
 :root[data-mode='dark'] .public-site .app-theme-scope {
 	color-scheme: dark;
+}
+
+/* Film grain for dark panels: an inline SVG noise tile, so nothing is downloaded. */
+.public-grain {
+	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }

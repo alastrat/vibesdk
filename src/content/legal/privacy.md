@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
 version: 2026-10-13
-updated: October 13, 2026
+updated: October 14, 2026
 ---
 
 This Privacy Policy explains how {{entity.name}} ("Globalink", "we", "us") collects, uses and shares personal data when you use Estori at estori.app (the "Service"). Globalink is the controller of the personal data described here.
@@ -15,6 +15,8 @@ This Privacy Policy explains how {{entity.name}} ("Globalink", "we", "us") colle
 **Your content.** Prompts and chat messages, images you upload, the files of the sites built for you and their history, product page text, comments, screenshots of your sites, and the stars, favorites and likes you give.
 
 **Marketplace information.** Purchases you make or receive, their amounts and dates, and, for sellers, the identifier of your connected Stripe account and whether it can receive payouts. Card numbers and bank details go directly to Stripe. We never receive or store them.
+
+**Early access requests.** Which upcoming programs you asked to join, and when.
 
 **Site views.** When someone views a public site, we store a one-way hash so each viewer is counted once. We don't store the viewer's IP address with it.
 

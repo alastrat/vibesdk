@@ -4,8 +4,11 @@ import { BuildBox } from '@/components/build-box';
 import { AnimatedList } from '@/components/magicui/animated-list';
 import { BorderBeam } from '@/components/magicui/border-beam';
 import { Safari } from '@/components/magicui/safari';
-import { HEADING_HERO, LEAD } from '@/components/public-site/primitives';
+import { Eyebrow, HEADING_HERO, LEAD } from '@/components/public-site/primitives';
+import { useScrollGrow } from '@/hooks/use-scroll-grow';
+import type { ShowcaseStore } from '@/lib/showcase';
 import { cn } from '@/lib/utils';
+import { StoreLogos } from './StoreLogos';
 
 const STORE_PHRASES = ['a specialty coffee store', 'a handmade ceramics shop', 'a streetwear store', 'a plant shop with local delivery', 'a vintage camera store'];
 
@@ -15,15 +18,15 @@ const BUILD_STEPS = ['Catalog with 12 roasts', 'Product pages and filters', 'Car
 /** A store built on Estori, bundled so the hero never depends on what Discover holds. */
 export const HERO_STORE_IMAGE = '/marketing/hero-store.jpg';
 
-export function Hero() {
+export function Hero({ stores }: { stores: readonly ShowcaseStore[] }) {
 	return (
 		<section className="overflow-x-clip bg-public-charcoal text-white">
 			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
 			<div className="mx-auto max-w-[1248px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
-				<h1 className={cn(HEADING_HERO, 'mx-auto max-w-5xl text-balance')}>Build online stores with AI. Sell them as templates.</h1>
+				<Eyebrow tone="dark">AI-powered online stores</Eyebrow>
+				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>Describe your store. Estori builds it in minutes.</h1>
 				<p className={cn(LEAD, 'mx-auto mt-6 max-w-2xl text-pretty text-white/80')}>
-					Describe a store and Estori builds and deploys it: catalog, cart, checkout flow and order records. Publish it to Discover and earn when
-					others start from it.
+					Tell Estori what you sell, and it builds a complete online store with your products, cart and checkout. Next: assistants that help you sell more and handle the daily work.
 				</p>
 				{/* The frame resets the band's white text so the box's own controls stay readable. */}
 				<div
@@ -40,35 +43,53 @@ export function Hero() {
 					</Link>
 				</div>
 			</div>
+			<StoreLogos stores={stores} />
 			<BuilderDemo />
 		</section>
 	);
 }
 
-/** 1Password's product frame, Estori-style: a chat whose build steps arrive one by one beside the store they make. */
+/**
+ * 1Password's product frame, Estori-style: a chat whose build steps arrive one by one beside the store they make.
+ * As the page scrolls, it pins under the top bar and grows until it fills the window.
+ */
 function BuilderDemo() {
+	const { refs, sizes } = useScrollGrow();
 	return (
-		<div className="mt-14 px-3 sm:mt-20 sm:px-6">
+		<div ref={refs.track} className="mt-14 sm:mt-20" style={sizes ? { height: sizes.track } : undefined}>
 			<div
-				role="img"
-				aria-label="Estori building a coffee store from one sentence: the chat on the left, the live store on the right"
-				className="mx-auto max-w-[1392px] overflow-hidden rounded-[25px] bg-[linear-gradient(180deg,#1f3f9a_0%,#2f6fe8_55%,#78a6ff_100%)] px-4 pt-8 sm:px-10 sm:pt-12"
+				ref={refs.stage}
+				className="sticky top-[var(--public-header-h)] overflow-hidden px-3 sm:px-6"
+				style={sizes ? { height: sizes.stage } : undefined}
 			>
-				<div className="mx-auto grid max-w-[1152px] overflow-hidden rounded-t-[14px] bg-white text-left text-[#1e2a3b] shadow-[0_-10px_40px_rgba(0,0,0,0.25)] md:grid-cols-[280px_1fr]">
-					<div className="grid content-start gap-3 border-b border-public-line p-5 text-sm md:border-r md:border-b-0">
-						<p className="rounded-xl bg-[#eef4ff] px-3 py-2.5">{DEMO_PROMPT}</p>
-						{/* Reserves the finished list's height so the demo doesn't grow on phones while steps arrive. */}
-						<AnimatedList delay={900} newestFirst={false} className="min-h-28 items-stretch gap-2">
-							{BUILD_STEPS.map((step) => (
-								<p key={step} className="flex items-center gap-2">
-									<CheckCircleIcon weight="fill" className="size-4 shrink-0 text-[#16a34a]" aria-hidden />
-									{step}
-								</p>
-							))}
-						</AnimatedList>
-					</div>
-					<div className="bg-[#f7f8fa] p-3 sm:p-4">
-						<Safari url="Live preview" imageSrc={HERO_STORE_IMAGE} className="w-full" />
+				{/* The blue behind the card: the scroll sizes it, from the card at rest to the whole stage. */}
+				<div
+					ref={refs.panel}
+					aria-hidden
+					className="absolute top-0 left-1/2 -translate-x-1/2 bg-[linear-gradient(180deg,#1f3f9a_0%,#2f6fe8_55%,#78a6ff_100%)]"
+				/>
+				<div ref={refs.card} className="relative mx-auto max-w-[1152px] px-4 pt-8 sm:px-10 sm:pt-12">
+					<div
+						ref={refs.frame}
+						role="img"
+						aria-label="Estori building a coffee store from one sentence: the chat on the left, the live store on the right"
+						className="grid origin-bottom overflow-hidden rounded-t-[14px] bg-white text-left text-[#1e2a3b] shadow-[0_-10px_40px_rgba(0,0,0,0.25)] md:grid-cols-[280px_1fr]"
+					>
+						<div className="grid content-start gap-3 border-b border-public-line p-5 text-sm md:border-r md:border-b-0">
+							<p className="rounded-xl bg-[#eef4ff] px-3 py-2.5">{DEMO_PROMPT}</p>
+							{/* Reserves the finished list's height so the demo doesn't grow on phones while steps arrive. */}
+							<AnimatedList delay={900} newestFirst={false} className="min-h-28 items-stretch gap-2">
+								{BUILD_STEPS.map((step) => (
+									<p key={step} className="flex items-center gap-2">
+										<CheckCircleIcon weight="fill" className="size-4 shrink-0 text-[#16a34a]" aria-hidden />
+										{step}
+									</p>
+								))}
+							</AnimatedList>
+						</div>
+						<div className="bg-[#f7f8fa] p-3 sm:p-4">
+							<Safari url="Live preview" imageSrc={HERO_STORE_IMAGE} className="w-full" />
+						</div>
 					</div>
 				</div>
 			</div>

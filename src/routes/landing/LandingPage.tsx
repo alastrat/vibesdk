@@ -1,28 +1,29 @@
-import { pageTitle } from '@/brand';
-import { PublicFaq } from '@/components/public-site/PublicFaq';
+import { AssistantsPanel } from '@/components/public-site/AssistantsPanel';
+import { AgenticCommerceSection, PersonalizationSection } from '@/components/public-site/capability-sections';
+import { PageMeta } from '@/components/public-site/solution-page';
+import { HOME_PAGE } from '@/content/public-pages';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
-import { CreatorsPanel } from './CreatorsPanel';
 import { Features } from './Features';
 import { Hero } from './Hero';
-import { LivePreview } from './LivePreview';
-import { StoreLogos } from './StoreLogos';
+import { SellersBand } from './SellersBand';
 import { StoreShowcase } from './StoreShowcase';
-import { ClosingPanel, PricingSummary } from './sections';
+import { ClosingPanel } from './sections';
 
 export function LandingPage() {
 	const stores = useShowcaseStores().data ?? [];
 	return (
 		<>
-			<title>{pageTitle()}</title>
-			<meta name="description" content="Build online stores with AI and sell them as templates in Discover. Free to build." />
-			<Hero />
-			<StoreLogos stores={stores} />
-			<StoreShowcase stores={stores} />
+			<PageMeta {...HOME_PAGE} />
+			{/* One band under both: where the hero ends on a fractional pixel, the page's white would show through as a seam. */}
+			<div className="bg-public-charcoal">
+				<Hero stores={stores} />
+				<StoreShowcase stores={stores} />
+			</div>
+			<AgenticCommerceSection />
+			<AssistantsPanel />
+			<PersonalizationSection />
 			<Features />
-			<CreatorsPanel />
-			<LivePreview />
-			<PricingSummary />
-			<PublicFaq />
+			<SellersBand />
 			<ClosingPanel />
 		</>
 	);

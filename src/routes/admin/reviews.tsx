@@ -14,11 +14,10 @@ import {
 import { useAdminSales } from '@/hooks/use-payments';
 import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
 import { showcaseRefreshMessage } from '@/lib/showcase-refresh-message';
-import { formatTemplatePrice, SecurityError, SecurityErrorType, type PendingReview } from '@/api-types';
-
-function isForbidden(error: unknown): boolean {
-	return error instanceof SecurityError && error.type === SecurityErrorType.FORBIDDEN;
-}
+import { SHOWCASE_MOVING_MIN } from '@/lib/showcase';
+import { useShowcaseStores } from '@/hooks/use-showcase-stores';
+import { formatTemplatePrice, type PendingReview } from '@/api-types';
+import { isForbiddenError } from '@/lib/security-error';
 
 export default function AdminReviewsPage() {
 	const pending = usePendingReviews();
@@ -33,6 +32,14 @@ export default function AdminReviewsPage() {
 						Approve prices for paid sites. A rejection needs a reason the creator will see. To take a site out of
 						Discover, open it and use Remove from Discover.
 					</p>
+					<div className="flex flex-wrap gap-x-5 gap-y-1">
+						<Link to="/admin/early-access" className="w-fit text-sm text-kumo-default underline underline-offset-2">
+							Early access requests
+						</Link>
+						<Link to="/admin/contact-requests" className="w-fit text-sm text-kumo-default underline underline-offset-2">
+							Contact requests
+						</Link>
+					</div>
 				</div>
 				{pending.data ? (
 					<>
@@ -51,7 +58,7 @@ export default function AdminReviewsPage() {
 					<div className="flex justify-center py-16">
 						<Loader />
 					</div>
-				) : isForbidden(pending.error) ? (
+				) : isForbiddenError(pending.error) ? (
 					<Empty title="Admins only" description={pending.error?.message} />
 				) : (
 					<Empty
@@ -70,12 +77,29 @@ export default function AdminReviewsPage() {
 }
 
 /** Captures the tall Discover showcase images that stores are still missing, a batch per click. */
+/** How many stores are showcased, and what the landing page shows for that many. */
+function ShowcasedCount() {
+	const showcased = useShowcaseStores();
+	if (!showcased.data) return null;
+	const count = showcased.data.length;
+	return (
+		<p className="text-sm text-kumo-default">
+			{count === 1 ? '1 store is' : `${count} stores are`} showcased on the landing page.{' '}
+			{count < SHOWCASE_MOVING_MIN
+				? `It shows them as one still row until ${SHOWCASE_MOVING_MIN} are showcased, then as two moving rows.`
+				: 'It shows them as two moving rows.'}{' '}
+			To add or remove a store, open it and use Show on the landing page.
+		</p>
+	);
+}
+
 function ShowcaseImagesSection() {
 	const refresh = useRefreshShowcaseScreenshots();
 	return (
 		<section className="grid gap-3 pt-4">
 			<div className="grid gap-1">
-				<h2 className="text-xl font-semibold text-kumo-strong">Showcase images</h2>
+				<h2 className="text-xl font-semibold text-kumo-strong">Landing page showcase</h2>
+				<ShowcasedCount />
 				<p className="text-sm text-kumo-subtle">
 					The landing page shows a tall image of each Discover store. Stores get one when they're published or redeployed;
 					this captures the ones still missing.

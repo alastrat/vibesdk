@@ -3,6 +3,8 @@ import { setupAppRoutes } from './appRoutes';
 import { setupPublishingRoutes } from './publishingRoutes';
 import { setupSitePageRoutes } from './sitePageRoutes';
 import { setupPaymentsRoutes } from './paymentsRoutes';
+import { setupEarlyAccessRoutes } from './earlyAccessRoutes';
+import { setupContactRoutes } from './contactRoutes';
 import { setupUserRoutes } from './userRoutes';
 import { setupStatsRoutes } from './statsRoutes';
 import { setupAnalyticsRoutes } from './analyticsRoutes';
@@ -61,6 +63,12 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Stripe Connect onboarding and webhook
     setupPaymentsRoutes(app);
+
+    // Early-access requests for upcoming programs
+    setupEarlyAccessRoutes(app);
+
+    // Contact-sales requests
+    setupContactRoutes(app);
 
     // App management routes
     setupAppRoutes(app);

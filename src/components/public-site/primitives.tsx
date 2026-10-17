@@ -13,6 +13,22 @@ export function preferredScrollBehavior(): ScrollBehavior {
 	return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
+/** A 1px line in the text's color, drawn as a background so its width can be animated. */
+const UNDERLINE_LINE = 'bg-[linear-gradient(currentColor,currentColor)] bg-[position:0_100%] bg-no-repeat pb-0.5';
+const UNDERLINE_GROW_BASE = `${UNDERLINE_LINE} bg-[length:0%_1px] transition-[color,background-size] duration-300 ease-out motion-reduce:transition-none`;
+
+/** A 1px underline under the text that draws itself from left to right on hover and keyboard focus. */
+export const UNDERLINE_FILL = `${UNDERLINE_LINE} bg-[length:100%_1px] hover:animate-public-underline focus-visible:animate-public-underline`;
+
+/** UNDERLINE_FILL, redrawn when the surrounding `group` link is hovered or focused. */
+export const GROUP_UNDERLINE_FILL = `${UNDERLINE_LINE} bg-[length:100%_1px] group-hover:animate-public-underline group-focus-visible:animate-public-underline`;
+
+/** No line at rest; hover and keyboard focus draw it in from the left, the way UNDERLINE_FILL redraws. */
+export const UNDERLINE_GROW = `${UNDERLINE_GROW_BASE} hover:bg-[length:100%_1px] focus-visible:bg-[length:100%_1px]`;
+
+/** UNDERLINE_GROW, drawn when the surrounding `group` link is hovered or focused. */
+export const GROUP_UNDERLINE_GROW = `${UNDERLINE_GROW_BASE} group-hover:bg-[length:100%_1px] group-focus-visible:bg-[length:100%_1px]`;
+
 export type PillVariant = 'blue' | 'white' | 'charcoal' | 'outline-on-dark' | 'outline-on-light';
 
 const PILL_BASE =

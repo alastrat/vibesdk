@@ -119,6 +119,15 @@ export const queryKeys = {
 			status: (userId?: string | null) => [...queryKeys.account.payments.all(), 'status', userId ?? 'anonymous'] as const,
 			sales: () => [...queryKeys.account.payments.all(), 'sales'] as const,
 		},
+		/** Early-access requests, the user's own and the admin list: never persisted, like the rest of `account`. */
+		earlyAccess: {
+			all: () => [...queryKeys.account.all, 'early-access'] as const,
+			mine: (userId?: string | null) => [...queryKeys.account.earlyAccess.all(), 'mine', userId ?? 'anonymous'] as const,
+			admin: () => [...queryKeys.account.earlyAccess.all(), 'admin'] as const,
+		},
+		contactRequests: {
+			admin: () => [...queryKeys.account.all, 'contact-requests', 'admin'] as const,
+		},
 		limits: {
 			all: () => [...queryKeys.account.all, 'limits'] as const,
 			usageAll: () =>

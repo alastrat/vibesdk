@@ -4,13 +4,15 @@
  */
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { LoginModal, type AuthMode } from './login-modal';
+import { useNavigate } from 'react-router';
+import type { SignInView } from './AuthForm';
+import { LoginModal } from './login-modal';
 import { useAuth } from '../../contexts/auth-context';
 import { setGlobalAuthModalTrigger } from '../../lib/api-client';
 
 export interface ShowAuthModalOptions {
-  /** The view to open in; sign-in when absent. */
-  initialMode?: AuthMode;
+  /** The view to open in; sign-in when absent. Signing up has its own page. */
+  initialMode?: SignInView;
 }
 
 interface AuthModalContextType {
@@ -38,20 +40,18 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
   const [modalContext, setModalContext] = useState<string | undefined>();
   const [pendingAction, setPendingAction] = useState<(() => void) | undefined>();
   const [intendedUrl, setIntendedUrlState] = useState<string | undefined>();
-  const [initialMode, setInitialMode] = useState<AuthMode>('login');
+  const [initialMode, setInitialMode] = useState<SignInView>('login');
   // The session the window was opened from, when it should stay open for a signed-in visitor.
   const [heldSessionId, setHeldSessionId] = useState<string | null>(null);
   const {
     login,
-    loginWithEmail,
-    register,
-    error,
     clearError,
     isAuthenticated,
     session,
     setIntendedUrl,
     clearIntendedUrl,
   } = useAuth();
+  const navigate = useNavigate();
   const sessionId = session?.sessionId ?? null;
 
   const showAuthModal = useCallback((context?: string, onSuccess?: () => void, intendedUrl?: string, options?: ShowAuthModalOptions) => {
@@ -84,6 +84,12 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
     closeAuthModal();
     clearIntendedUrl();
   }, [closeAuthModal, clearIntendedUrl]);
+
+  // "Create an account" leaves for the sign-up page and keeps the stored destination, so signing up lands there.
+  const goToSignup = useCallback(() => {
+    closeAuthModal();
+    navigate('/signup');
+  }, [closeAuthModal, navigate]);
 
   // Close modal and execute pending action when user becomes authenticated
   useEffect(() => {
@@ -121,12 +127,8 @@ export function AuthModalProvider({ children }: AuthModalProviderProps) {
       <LoginModal
         isOpen={isAuthModalOpen}
         onClose={hideAuthModal}
-        onLogin={login} // Fallback for backward compatibility
         onOAuthLogin={handleLogin}
-        onEmailLogin={loginWithEmail}
-        onRegister={register}
-        error={error}
-        onClearError={clearError}
+        onCreateAccount={goToSignup}
         actionContext={modalContext}
         initialMode={initialMode}
       />

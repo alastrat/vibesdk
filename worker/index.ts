@@ -15,6 +15,7 @@ import {
 	matchSpacePreviewParams,
 } from './api/handlers/space-preview';
 import { getAgentStub } from './agents';
+import { servePublicSite } from './services/public-site/serve';
 import { AppService } from './database/services/AppService';
 import {
 	buildOwnerPreviewCookie,
@@ -304,9 +305,10 @@ const worker = {
 				return app.fetch(request, env, ctx);
 			}
 			
-			// Serve static assets for all other non-API routes from the ASSETS binding.
+			// Serve static assets and the app for all other non-API routes, with the public pages' heads,
+			// the sitemap and robots.txt for crawlers.
 			if (!pathname.startsWith('/api/')) {
-				return env.ASSETS.fetch(request);
+				return servePublicSite(request, env.ASSETS);
 			}
 			// AI Gateway proxy for generated apps
 			if (pathname.startsWith('/api/proxy/openai')) {

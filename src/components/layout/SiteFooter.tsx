@@ -5,8 +5,27 @@ import { LEGAL_CONTACT, LEGAL_ENTITY, legalAddressLine } from '@/api-types';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 
 const LINK_COLUMNS = [
-	{ title: 'Product', links: [{ to: '/', label: 'Start building' }, { to: '/discover', label: 'Discover' }, { to: '/pricing', label: 'Pricing' }] },
-	{ title: 'Creators', links: [{ to: '/#creators', label: 'Sell your stores' }, { to: '/pricing', label: 'Seller fees' }] },
+	{
+		title: 'Solutions',
+		links: [
+			{ to: '/solutions/brands', label: 'Brands' },
+			{ to: '/solutions/resellers', label: 'Resellers' },
+			{ to: '/solutions/digital', label: 'Digital businesses' },
+			{ to: '/industries', label: 'Industries' },
+			{ to: '/agentic-commerce', label: 'AI recommendations' },
+			{ to: '/pricing', label: 'Pricing' },
+			{ to: '/contact', label: 'Contact sales' },
+			{ to: '/blog', label: 'Blog' },
+		],
+	},
+	{
+		title: 'For creators',
+		links: [
+			{ to: '/creators/developers', label: 'Developers' },
+			{ to: '/creators/content', label: 'Content creators' },
+			{ to: '/discover', label: 'Discover' },
+		],
+	},
 ] as const;
 
 function FooterColumn({ title, children }: { title: string; children: ReactNode }) {

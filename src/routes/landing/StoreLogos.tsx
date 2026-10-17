@@ -12,11 +12,11 @@ const WORDMARK_STYLES = [
 	'text-[21px] font-bold uppercase tracking-[0.02em]',
 ] as const;
 
-/** Stores built on Estori, where 1Password shows customer logos: real Discover stores only. */
+/** Stores built on Estori, where 1Password shows customer logos: real Discover stores only. Sits inside the charcoal hero. */
 export function StoreLogos({ stores }: { stores: readonly ShowcaseStore[] }) {
 	if (!shouldShowShowcase(stores.length)) return null;
 	return (
-		<section aria-labelledby="store-logos-title" className="border-b border-white/10 bg-public-charcoal py-12 text-white">
+		<section aria-labelledby="store-logos-title" className="pt-14 sm:pt-16">
 			<h2 id="store-logos-title" className="text-center text-xs uppercase tracking-[0.04em] text-white/60">
 				Stores built on Estori
 			</h2>

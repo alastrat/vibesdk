@@ -5,6 +5,7 @@ import {
 	showcaseFilterLabel,
 	showcaseFilters,
 	showcaseLayout,
+	SHOWCASE_MOVING_MIN,
 	storesWithImages,
 	toShowcaseStore,
 	type ShowcaseSource,
@@ -75,15 +76,17 @@ describe('showcase stores', () => {
 		expect(filterShowcase(mixed, 'all').map((s) => s.id)).toEqual(['a', 'b']);
 	});
 
-	it('shows three stores or fewer as one still row, and more as two rows in opposite order', () => {
-		const three = ['a', 'b', 'c'].map((id) => store({ id }));
-		expect(showcaseLayout(three)).toEqual({ kind: 'static', row: three });
-		const four = ['a', 'b', 'c', 'd'].map((id) => store({ id }));
-		const layout = showcaseLayout(four);
+	it('shows fewer than 12 showcased stores as one still row, and 12 or more as two moving rows in opposite order', () => {
+		const ids = (count: number) => Array.from({ length: count }, (_, index) => `s${index}`);
+		const eleven = ids(11).map((id) => store({ id }));
+		expect(SHOWCASE_MOVING_MIN).toBe(12);
+		expect(showcaseLayout(eleven)).toEqual({ kind: 'static', row: eleven });
+		const twelve = ids(12).map((id) => store({ id }));
+		const layout = showcaseLayout(twelve);
 		expect(layout.kind).toBe('marquee');
 		if (layout.kind === 'marquee') {
-			expect(layout.rows[0].map((s) => s.id)).toEqual(['a', 'b', 'c', 'd']);
-			expect(layout.rows[1].map((s) => s.id)).toEqual(['d', 'c', 'b', 'a']);
+			expect(layout.rows[0].map((s) => s.id)).toEqual(ids(12));
+			expect(layout.rows[1].map((s) => s.id)).toEqual(ids(12).reverse());
 		}
 	});
 });

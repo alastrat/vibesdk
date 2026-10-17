@@ -15,6 +15,7 @@ const sources = import.meta.glob<string>(
 		'/src/lib/auth-validation.ts',
 		'/src/contexts/auth-context.tsx',
 		'/src/components/auth/login-modal.tsx',
+		'/src/components/auth/AuthForm.tsx',
 		'/src/components/auth/AuthModalProvider.tsx',
 		'/src/components/auth/TermsGate.tsx',
 		'/src/routes/auth/ResetPasswordPage.tsx',
@@ -91,14 +92,14 @@ describe('account email pages', () => {
 	});
 
 	it('offers "Forgot password?" in the sign-in view only when the server can send email', () => {
-		const modal = source('/src/components/auth/login-modal.tsx');
+		const modal = source('/src/components/auth/AuthForm.tsx');
 		expect(modal).toContain('Forgot password?');
 		expect(modal).toContain('authProviders?.emailSending');
 		expect(modal).toContain("mode === 'login' && canResetPassword");
 	});
 
 	it('asks for a reset link in the same window and shows the server answer in place of the form', () => {
-		const modal = source('/src/components/auth/login-modal.tsx');
+		const modal = source('/src/components/auth/AuthForm.tsx');
 		expect(modal).toContain("'forgot'");
 		expect(modal).toContain('Reset your password');
 		expect(modal).toContain('Send reset link');
@@ -129,7 +130,7 @@ describe('account email pages', () => {
 
 	it('checks a new password with the same rules as sign-up, defined once', () => {
 		const rules = source('/src/lib/auth-validation.ts');
-		const modal = source('/src/components/auth/login-modal.tsx');
+		const modal = source('/src/components/auth/AuthForm.tsx');
 		const page = source('/src/routes/auth/ResetPasswordPage.tsx');
 		expect(rules).toContain('export function newPasswordErrors');
 		expect(modal).toContain('newPasswordErrors(');
