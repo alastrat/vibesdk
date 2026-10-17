@@ -29,6 +29,8 @@ export interface PayPageInput {
 	info: StoreInfo | null;
 	/** Fresh for each response; marks the page's own inline script for the CSP. */
 	nonce: string;
+	/** Checked on the server with the checkout request's own rule, so the page never builds a link off the store. */
+	returnPaths: { successPath: string; cancelPath: string };
 }
 
 function escapeHtml(text: string): string {
@@ -94,6 +96,8 @@ export function renderPayPage(input: PayPageInput): string {
 		countries: input.info?.shipping.countries ?? [],
 		products,
 		unavailable: STORE_CHECKOUT_MESSAGES.payments_unavailable,
+		successPath: input.returnPaths.successPath,
+		cancelPath: input.returnPaths.cancelPath,
 	};
 	const fontLink = brand.font
 		? `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(brand.font).replace(/%20/g, '+')}:wght@400;500;600;700&amp;display=swap">`
@@ -220,11 +224,8 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 export const PAY_PAGE_SCRIPT = `(function () {
   var config = JSON.parse(document.getElementById('estori-pay-config').textContent);
   var params = new URLSearchParams(window.location.search);
-  function storePath(value) {
-    return typeof value === 'string' && value.charAt(0) === '/' && value.charAt(1) !== '/' && value.indexOf('\\\\') === -1 ? value : '/';
-  }
-  var successPath = storePath(params.get('success'));
-  var cancelPath = storePath(params.get('cancel'));
+  var successPath = config.successPath;
+  var cancelPath = config.cancelPath;
   var note = params.get('note');
   var $ = function (id) { return document.getElementById(id); };
   $('back').href = config.basePath + cancelPath;

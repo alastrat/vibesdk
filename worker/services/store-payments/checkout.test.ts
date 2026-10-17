@@ -19,6 +19,7 @@ const MANIFEST: StoreManifest = {
 const INPUT: StartCheckoutInput = {
 	access: 'owner',
 	stripeMode: 'test',
+	livePayments: false,
 	appId: 'app_1',
 	sellerUserId: 'u1',
 	body: { items: [{ variantId: 'trail-mug-blue', quantity: 2 }], shipTo: 'US', successPath: '/thanks', cancelPath: '/cart' },
@@ -136,6 +137,27 @@ describe('startStoreCheckout', () => {
 		}
 	});
 
+	it('lets any shopper pay on a live store with test keys, recording a test checkout', async () => {
+		const { deps, saved } = fakeDeps();
+		expect(await startStoreCheckout(deps, { ...INPUT, access: 'live' })).toMatchObject({ ok: true });
+		expect(saved[0]).toMatchObject({ mode: 'test', sellerUserId: 'u1' });
+	});
+
+	it('takes real payments only on a live store, and only once Estori turns them on', async () => {
+		const off = fakeDeps();
+		expect(await startStoreCheckout(off.deps, { ...INPUT, access: 'live', stripeMode: 'live' })).toMatchObject({ ok: false, reason: 'payments_unavailable' });
+		expect(off.saved).toHaveLength(0);
+
+		const on = fakeDeps();
+		expect(await startStoreCheckout(on.deps, { ...INPUT, access: 'live', stripeMode: 'live', livePayments: true })).toMatchObject({ ok: true });
+		expect(on.saved[0]).toMatchObject({ mode: 'live' });
+		expect(on.saved[0]?.pricedCart.mode).toBe('live');
+
+		// A preview never takes real payments, even its owner's.
+		const preview = fakeDeps();
+		expect(await startStoreCheckout(preview.deps, { ...INPUT, stripeMode: 'live', livePayments: true })).toMatchObject({ ok: false, reason: 'payments_unavailable' });
+	});
+
 	it('refuses a body that carries an amount, before reading the store', async () => {
 		let manifestReads = 0;
 		const { deps, sessions } = fakeDeps({
@@ -232,7 +254,8 @@ describe('startStoreCheckout', () => {
 describe('storeInfoOf', () => {
 	it("gives the store's brand to its pages and to Estori's checkout page, or none", () => {
 		const brand = { name: 'Ember', colors: { background: '#000000', surface: '#000000', text: '#ffffff', accent: '#ff8800', accentText: '#000000' }, corners: 'rounded' as const };
-		expect(storeInfoOf({ ...MANIFEST, brand }, true).brand).toEqual(brand);
-		expect(storeInfoOf(MANIFEST, true).brand).toBeNull();
+		expect(storeInfoOf({ ...MANIFEST, brand }, true, 'test').brand).toEqual(brand);
+		expect(storeInfoOf(MANIFEST, true, 'test').brand).toBeNull();
+		expect(storeInfoOf(MANIFEST, true, 'live').mode).toBe('live');
 	});
 });

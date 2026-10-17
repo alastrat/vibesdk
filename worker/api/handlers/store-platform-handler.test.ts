@@ -53,6 +53,29 @@ describe('handleStorePlatform', () => {
 		expect(second.headers.get('Content-Security-Policy')).not.toBe(policy);
 	});
 
+	it("checks the checkout page's return paths on the server, so a crafted link can't send the shopper off the store", async () => {
+		const env = testEnv({ STRIPE_PUBLISHABLE_KEY: 'pk_test_123' }).env;
+		const target = { ...TARGET, platformPath: '/__estori/pay' };
+		const config = async (query: string) => {
+			const html = await (await handleStorePlatform(new Request(`${BASE}/__estori/pay${query}`), env, target, CTX)).text();
+			return JSON.parse(html.match(/<script type="application\/json" id="estori-pay-config">([\s\S]*?)<\/script>/)?.[1] ?? '{}');
+		};
+		expect(await config('?success=%2Fthanks&cancel=%2Fcart')).toMatchObject({ successPath: '/thanks', cancelPath: '/cart' });
+		expect(await config('?success=%2F%2Fevil.example&cancel=%2F%09%2Fevil.example')).toMatchObject({ successPath: '/', cancelPath: '/' });
+	});
+
+	it("lets a live store's shopper past the demo refusal, since the store is open to anyone", async () => {
+		const live = { ...TARGET, branch: 'live', basePath: '', viewer: { kind: 'live' as const, sellerUserId: 'seller_1' } };
+		const request = new Request('https://northwind-tea.estori.shop/__estori/checkout', {
+			method: 'POST',
+			headers: { Origin: 'https://northwind-tea.estori.shop', 'Content-Type': 'application/json' },
+			body: JSON.stringify({ items: [{ variantId: 'trail-mug-blue', quantity: 1 }], shipTo: 'US' }),
+		});
+		const response = await handleStorePlatform(request, testEnv({ STRIPE_SECRET_KEY: 'sk_test_live_store' }).env, live, CTX);
+		// The test seller has no payments set up here, so it stops there, and not at "This is a demo".
+		expect(await response.json()).toMatchObject({ ok: false, reason: 'payments_unavailable' });
+	});
+
 	it('refuses checkouts from another origin, of another type or too large, before reading anything', async () => {
 		const { env, statements } = testEnv();
 		expect((await handleStorePlatform(checkoutRequest({ origin: 'https://evil.example' }), env, TARGET, CTX)).status).toBe(400);
