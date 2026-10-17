@@ -5,6 +5,7 @@ import type { ApiResponse, ControllerResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
 import { SELLER_LEVELS, type SellerLevel } from '../../../../shared/types/seller-levels';
 import { syncSellerLevelFromEnv } from '../../../services/payments/seller-level-sync';
+import { UserService } from '../../../database';
 
 export interface SellerLimitsOverride {
 	pinnedLevel?: SellerLevel | null;
@@ -28,7 +29,7 @@ export function parseSellerLimitsOverride(body: unknown): SellerLimitsOverride |
 		if (key === 'pinnedLevel') {
 			if (value !== null && !(SELLER_LEVELS as readonly unknown[]).includes(value)) return null;
 			override.pinnedLevel = value as SellerLevel | null;
-		} else if (key in RANGES) {
+		} else if (Object.hasOwn(RANGES, key)) {
 			const [min, max] = RANGES[key as keyof typeof RANGES];
 			if (value !== null && (!Number.isInteger(value) || (value as number) < min || (value as number) > max)) return null;
 			override[key as keyof typeof RANGES] = value as number | null;
@@ -57,6 +58,7 @@ export class SellerLimitsAdminController extends BaseController {
 		const override = userId && body.success ? parseSellerLimitsOverride(body.data) : null;
 		if (!userId || !override) return SellerLimitsAdminController.createErrorResponse('Send a level to pin (or null) and limits in range', 400);
 		try {
+			if (!(await new UserService(env).findUser({ id: userId }))) return SellerLimitsAdminController.createErrorResponse('No user has this id', 404);
 			const key = `user_config:${userId}`;
 			await env.VibecoderStore.put(key, mergeSellerLimitsOverride(await env.VibecoderStore.get(key), override));
 			// A new pin or delay reaches Stripe now, not at the next sale.
