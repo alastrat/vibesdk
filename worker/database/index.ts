@@ -21,6 +21,7 @@ export { CatalogOrderService } from './services/CatalogOrderService';
 export { CatalogProductService } from './services/CatalogProductService';
 export { StoreCheckoutService } from './services/StoreCheckoutService';
 export { StoreOrderService } from './services/StoreOrderService';
+export { LiveStoreService } from './services/LiveStoreService';
 export { SitePageService } from './services/SitePageService';
 export { EarlyAccessService } from './services/EarlyAccessService';
 export { ContactService } from './services/ContactService';

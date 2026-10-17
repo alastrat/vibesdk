@@ -19,6 +19,11 @@ export async function insertUser(db: D1Database, id: string): Promise<void> {
 	await db.prepare('INSERT INTO users (id, email, display_name, provider, provider_id) VALUES (?, ?, ?, ?, ?)').bind(id, `${id}@example.test`, id, 'email', id).run();
 }
 
+/** An app owned by `userId`, with only the columns a store needs. */
+export async function insertApp(db: D1Database, app: { id: string; userId: string; title?: string }): Promise<void> {
+	await db.prepare('INSERT INTO apps (id, title, original_prompt, user_id) VALUES (?, ?, ?, ?)').bind(app.id, app.title ?? app.id, 'A store', app.userId).run();
+}
+
 /** A store order with only the columns these tests read; one own line of the whole total. */
 export async function insertStoreOrder(
 	db: D1Database,
