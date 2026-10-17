@@ -34,6 +34,7 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 	const attached: string[] = [];
 	const failed: string[] = [];
 	const limits: string[] = [];
+	const replaced: string[] = [];
 	const deps: StartCheckoutDeps = {
 		loadManifest: async () => ({ commitHash: 'c0ffee', text: JSON.stringify(MANIFEST) }),
 		sellerAccount: async () => ({ stripeAccountId: 'acct_1', readiness: READY }),
@@ -47,7 +48,7 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 		},
 		createSession: async (input) => {
 			sessions.push(input);
-			return { id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' };
+			return { id: 'cs_1', clientSecret: 'cs_1_secret' };
 		},
 		attachSession: async (_checkoutId, sessionId) => {
 			attached.push(sessionId);
@@ -59,18 +60,34 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 		nowMs: () => 1_800_000_000_000,
 		sellerLimits: async () => ({ largestOrderCents: 15_000, weeklySalesCents: 50_000 }),
 		weeklyUsage: async () => 0,
+		replaceCheckout: async (checkoutId) => {
+			replaced.push(checkoutId);
+			return checkoutId === 'chk_old' ? 'replaced' : 'not-replaceable';
+		},
 		limitReached: async (weeklySalesCents) => {
 			limits.push(`reached ${weeklySalesCents}`);
 		},
 		...overrides,
 	};
-	return { deps, saved, sessions, locked, attached, failed, limits };
+	return { deps, saved, sessions, locked, attached, failed, limits, replaced };
 }
 
 describe('startStoreCheckout', () => {
 	it("saves the priced checkout, then sends the shopper to Stripe with the seller's account and the fee", async () => {
 		const { deps, saved, sessions, attached } = fakeDeps();
-		expect(await startStoreCheckout(deps, INPUT)).toEqual({ ok: true, checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_1' });
+		expect(await startStoreCheckout(deps, INPUT)).toEqual({
+			ok: true,
+			checkoutId: 'chk_1',
+			clientSecret: 'cs_1_secret',
+			summary: {
+				currency: 'usd',
+				shipTo: 'US',
+				lines: [{ variantId: 'trail-mug-blue', productId: 'trail-mug', name: 'Trail Mug', variantName: 'Blue', quantity: 2, unitPriceCents: 2000, lineTotalCents: 4000 }],
+				subtotalCents: 4000,
+				shippingCents: 600,
+				totalCents: 4600,
+			},
+		});
 
 		expect(saved[0]).toMatchObject({ id: 'chk_1', mode: 'test', appId: 'app_1', commitHash: 'c0ffee', sellerUserId: 'u1', sellerStripeAccountId: 'acct_1', status: 'creating', totalCents: 4600, applicationFeeCents: 163, successPath: '/thanks', cancelPath: '/cart' });
 		expect(saved[0].expiresAt.getTime()).toBe(1_800_000_000_000 + 35 * 60 * 1000);
@@ -189,6 +206,25 @@ describe('startStoreCheckout', () => {
 		const { deps } = fakeDeps({ weeklyUsage: async (mode) => (modes.push(mode), 0) });
 		await startStoreCheckout(deps, INPUT);
 		expect(modes).toEqual(['test']);
+	});
+	it('fails the checkout when Stripe gives no client secret for its payment form', async () => {
+		const { deps, failed } = fakeDeps({ createSession: async () => ({ id: 'cs_1', clientSecret: null }) });
+		expect(await startStoreCheckout(deps, INPUT)).toMatchObject({ ok: false, reason: 'stripe_failed' });
+		expect(failed).toEqual(['chk_1']);
+	});
+
+	it('replaces the checkout the cart was edited from, before the weekly cap counts it, and refuses one it may not replace', async () => {
+		const order: string[] = [];
+		const { deps, replaced } = fakeDeps({ weeklyUsage: async () => (order.push('usage'), 0) });
+		const replace = deps.replaceCheckout;
+		deps.replaceCheckout = async (checkoutId) => (order.push('replace'), replace(checkoutId));
+		expect(await startStoreCheckout(deps, { ...INPUT, body: { ...(INPUT.body as object), replaces: 'chk_old' } })).toMatchObject({ ok: true });
+		expect(replaced).toEqual(['chk_old']);
+		expect(order).toEqual(['replace', 'usage']);
+
+		const other = fakeDeps();
+		expect(await startStoreCheckout(other.deps, { ...INPUT, body: { ...(INPUT.body as object), replaces: 'chk_someone_else' } })).toMatchObject({ ok: false, reason: 'invalid_request' });
+		expect(other.saved).toHaveLength(0);
 	});
 });
 

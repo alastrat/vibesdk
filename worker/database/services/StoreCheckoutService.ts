@@ -47,6 +47,19 @@ export class StoreCheckoutService extends BaseService {
             .where(and(eq(schema.storeCheckouts.id, checkoutId), eq(schema.storeCheckouts.status, 'open')));
     }
 
+    /**
+     * Expires a checkout of this store that is still starting or open, for a replacement after a cart edit; null for any
+     * other. The answer names its Stripe session, which the caller expires too.
+     */
+    async replaceOpen(checkoutId: string, appId: string): Promise<{ sessionId: string | null } | null> {
+        const rows = await this.database
+            .update(schema.storeCheckouts)
+            .set({ status: 'expired' })
+            .where(and(eq(schema.storeCheckouts.id, checkoutId), eq(schema.storeCheckouts.appId, appId), inArray(schema.storeCheckouts.status, ['creating', 'open'])))
+            .returning({ sessionId: schema.storeCheckouts.stripeCheckoutSessionId });
+        return rows[0] ? { sessionId: rows[0].sessionId } : null;
+    }
+
     /** The Checkout session a checkout was paid through, once Stripe made one. */
     async sessionIdOf(checkoutId: string): Promise<string | null> {
         const row = await this.database.select({ sessionId: schema.storeCheckouts.stripeCheckoutSessionId }).from(schema.storeCheckouts).where(eq(schema.storeCheckouts.id, checkoutId)).get();

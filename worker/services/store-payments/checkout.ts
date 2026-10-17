@@ -9,6 +9,8 @@ import {
 	STORE_PLATFORM_PREFIX,
 	type StoreCheckoutRefusal,
 	type StoreCheckoutResponse,
+	type PricedCart,
+	type StoreCheckoutSummary,
 	type StoreInfo,
 	type StoreManifest,
 	type StoreMode,
@@ -31,13 +33,19 @@ export interface StartCheckoutDeps {
 	sellerAccount(): Promise<{ stripeAccountId: string; readiness: SellerReadiness } | null>;
 	lockCatalogPrices(catalogVariantIds: readonly string[], shipToCountry: string): Promise<readonly CatalogLock[]>;
 	saveCheckout(checkout: StoreCheckoutRecord): Promise<void>;
-	createSession(input: StoreCheckoutSessionInput): Promise<{ id: string; url: string | null }>;
+	/** The Elements session; its client secret starts Stripe's payment form on Estori's checkout page. */
+	createSession(input: StoreCheckoutSessionInput): Promise<{ id: string; clientSecret: string | null }>;
 	attachSession(checkoutId: string, sessionId: string): Promise<void>;
 	markFailed(checkoutId: string): Promise<void>;
 	/** The seller's largest order and weekly sales cap, from their level and any admin override. */
 	sellerLimits(): Promise<{ largestOrderCents: number; weeklySalesCents: number }>;
 	/** The weight of the seller's checkouts in this mode in the last 7 days that are paid or may still be. */
 	weeklyUsage(mode: StoreMode): Promise<number>;
+	/**
+	 * Expires a checkout of this store that is still starting or open, and its Stripe session, so it stops counting toward
+	 * the weekly cap; 'not-replaceable' for any other checkout.
+	 */
+	replaceCheckout(checkoutId: string): Promise<'replaced' | 'not-replaceable'>;
 	/** Tells Estori and the seller that the store reached this weekly cap; may finish after the shopper is answered. */
 	limitReached(weeklySalesCents: number): Promise<void>;
 	newCheckoutId(): string;
@@ -69,6 +77,8 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	if (input.stripeMode !== 'test') return refusal('payments_unavailable');
 	const request = parseCheckoutRequest(input.body);
 	if (!request) return refusal('invalid_request');
+	// The cart was edited on Estori's checkout page: the earlier checkout goes first, so the cap counts only this one.
+	if (request.replaces && (await deps.replaceCheckout(request.replaces)) === 'not-replaceable') return refusal('invalid_request');
 
 	const seller = await deps.sellerAccount();
 	// The seller must be able to be the merchant of record, with a bank account Stripe can recover from.
@@ -123,7 +133,7 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 		expiresAt: new Date(nowMs + CHECKOUT_TTL_MS),
 	});
 
-	let session: { id: string; url: string | null };
+	let session: { id: string; clientSecret: string | null };
 	try {
 		session = await deps.createSession({
 			checkoutId,
@@ -140,10 +150,29 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 		await deps.markFailed(checkoutId);
 		return refusal('stripe_failed');
 	}
-	if (!session.url) {
+	if (!session.clientSecret) {
 		await deps.markFailed(checkoutId);
 		return refusal('stripe_failed');
 	}
 	await deps.attachSession(checkoutId, session.id);
-	return { ok: true, checkoutUrl: session.url };
+	return { ok: true, checkoutId, clientSecret: session.clientSecret, summary: summaryOf(parsed.manifest, cart) };
+}
+
+/** The order as Estori priced it, with each line's product and variant names and image from the store's file. */
+function summaryOf(manifest: StoreManifest, cart: PricedCart): StoreCheckoutSummary {
+	const lines = cart.lines.map((line) => {
+		const product = manifest.products.find((candidate) => candidate.id === line.productId);
+		const variant = product?.variants.find((candidate) => candidate.id === line.variantId);
+		return {
+			variantId: line.variantId,
+			productId: line.productId,
+			name: product?.name ?? line.name,
+			variantName: variant?.name ?? '',
+			...(product?.image ? { image: product.image } : {}),
+			quantity: line.quantity,
+			unitPriceCents: line.unitPriceCents,
+			lineTotalCents: line.unitPriceCents * line.quantity,
+		};
+	});
+	return { currency: 'usd', shipTo: cart.shipToCountry, lines, subtotalCents: cart.subtotalCents, shippingCents: cart.shippingCents, totalCents: cart.totalCents };
 }

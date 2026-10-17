@@ -94,6 +94,8 @@ export interface StoreCheckoutRequest {
 	successPath?: string;
 	cancelPath?: string;
 	note?: string;
+	/** The checkout this one replaces after the shopper edited the cart on Estori's checkout page. */
+	replaces?: string;
 }
 
 export type StoreCheckoutRefusal =
@@ -109,7 +111,31 @@ export type StoreCheckoutRefusal =
 	| 'store_paused'
 	| 'stripe_failed';
 
-export type StoreCheckoutResponse = { ok: true; checkoutUrl: string } | { ok: false; reason: StoreCheckoutRefusal; message: string };
+/** One line of the order summary on Estori's checkout page, priced by Estori. */
+export interface StoreCheckoutSummaryLine {
+	variantId: string;
+	productId: string;
+	name: string;
+	variantName: string;
+	image?: string;
+	quantity: number;
+	unitPriceCents: number;
+	lineTotalCents: number;
+}
+
+export interface StoreCheckoutSummary {
+	currency: 'usd';
+	shipTo: string;
+	lines: StoreCheckoutSummaryLine[];
+	subtotalCents: number;
+	shippingCents: number;
+	totalCents: number;
+}
+
+/** A started checkout: the session's client secret for Stripe's payment form, and the order as Estori priced it. */
+export type StoreCheckoutResponse =
+	| { ok: true; checkoutId: string; clientSecret: string; summary: StoreCheckoutSummary }
+	| { ok: false; reason: StoreCheckoutRefusal; message: string };
 
 /** What the shopper reads for each refusal; never the internal reason. */
 export const STORE_CHECKOUT_MESSAGES: Readonly<Record<StoreCheckoutRefusal, string>> = {

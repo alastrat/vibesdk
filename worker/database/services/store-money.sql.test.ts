@@ -74,4 +74,16 @@ describe('claims on real SQL', () => {
 		// ord_1 to ord_3 are paid test orders of 5000, 3000 and 3000 with no fee.
 		expect(await new StoreOrderService(envWith(db)).salesVolumeSince('u1', 'test', new Date(NOW.getTime() - 30 * day))).toBe(5000 + 3000 + 3000 + 3000);
 	});
+
+	it("expires only this store's starting or open checkout for a replacement, and returns its session", async () => {
+		const checkouts = new StoreCheckoutService(envWith(db));
+		await insertCheckout(db, { id: 'chk_open', sellerUserId: 'u1', status: 'open', weightedCents: 4599, createdAt: NOW });
+		await db.prepare("UPDATE store_checkouts SET stripe_checkout_session_id = 'cs_open' WHERE id = 'chk_open'").run();
+		await insertCheckout(db, { id: 'chk_paid', sellerUserId: 'u1', status: 'completed', weightedCents: 4599, createdAt: NOW });
+		expect(await checkouts.replaceOpen('chk_open', 'app_other')).toBeNull();
+		expect(await checkouts.replaceOpen('chk_paid', 'app_1')).toBeNull();
+		expect(await checkouts.replaceOpen('chk_open', 'app_1')).toEqual({ sessionId: 'cs_open' });
+		expect(await checkouts.replaceOpen('chk_open', 'app_1')).toBeNull();
+		expect(await checkouts.weeklyUsage('u1', 'test', new Date(NOW.getTime() - 1000))).toBe(4599);
+	});
 });

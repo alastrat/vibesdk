@@ -2,7 +2,8 @@
 
 import { STORE_CART_MAX_LINES, type StoreCheckoutRequest } from '../../../shared/types/store-payments';
 
-const REQUEST_KEYS = ['items', 'shipTo', 'successPath', 'cancelPath', 'note'];
+const REQUEST_KEYS = ['items', 'shipTo', 'successPath', 'cancelPath', 'note', 'replaces'];
+const CHECKOUT_ID = /^chk_[a-z0-9_]{1,64}$/;
 const ITEM_KEYS = ['variantId', 'quantity'];
 const MAX_PATH = 200;
 const MAX_NOTE = 500;
@@ -32,7 +33,7 @@ export function safeReturnPath(value: unknown, fallback: string): string {
 /** Null for any other shape, including one carrying an amount, price, fee or account: Estori derives those itself. */
 export function parseCheckoutRequest(body: unknown): StoreCheckoutRequest | null {
 	if (!isObject(body) || !hasOnly(body, REQUEST_KEYS)) return null;
-	const { items, shipTo, successPath, cancelPath, note } = body;
+	const { items, shipTo, successPath, cancelPath, note, replaces } = body;
 	if (!Array.isArray(items) || items.length === 0 || items.length > STORE_CART_MAX_LINES) return null;
 	const parsedItems: StoreCheckoutRequest['items'] = [];
 	for (const item of items) {
@@ -46,11 +47,13 @@ export function parseCheckoutRequest(body: unknown): StoreCheckoutRequest | null
 	if (successPath !== undefined && typeof successPath !== 'string') return null;
 	if (cancelPath !== undefined && typeof cancelPath !== 'string') return null;
 	if (note !== undefined && (typeof note !== 'string' || note.length > MAX_NOTE)) return null;
+	if (replaces !== undefined && (typeof replaces !== 'string' || !CHECKOUT_ID.test(replaces))) return null;
 	return {
 		items: parsedItems,
 		shipTo: shipTo.toUpperCase(),
 		...(successPath !== undefined && { successPath }),
 		...(cancelPath !== undefined && { cancelPath }),
 		...(note !== undefined && { note }),
+		...(replaces !== undefined && { replaces }),
 	};
 }

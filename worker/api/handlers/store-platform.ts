@@ -158,9 +158,16 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			sellerAccount: () => sellerAccount(env, target.previewUserId, stripe),
 			lockCatalogPrices: (ids, country) => lockCatalogPricesFor(env, ids, country),
 			saveCheckout: (checkout) => checkouts.create(checkout),
-			createSession: (input) => {
+			createSession: async (input) => {
 				if (!stripe) throw new Error('Stripe is not configured');
-				return stripe.createStoreCheckoutSession(input);
+				const session = await stripe.createStoreCheckoutSession(input);
+				return { id: session.id, clientSecret: session.client_secret ?? null };
+			},
+			replaceCheckout: async (checkoutId) => {
+				const replaced = await checkouts.replaceOpen(checkoutId, target.appId);
+				if (!replaced) return 'not-replaceable';
+				if (replaced.sessionId && stripe) await stripe.expireCheckoutSession(replaced.sessionId);
+				return 'replaced';
 			},
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
