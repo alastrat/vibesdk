@@ -118,6 +118,13 @@ describe('creator pages', () => {
 		expect(source('/src/routes/creators/developers.tsx')).toContain('<TemplateEarnings />');
 	});
 
+	it('lays the earnings flow out in a row of four, with its beams, only from tablet width, where each step has room', () => {
+		const earnings = source('/src/routes/creators/TemplateEarnings.tsx');
+		expect(earnings).toContain('grid-cols-2 gap-6 md:grid-cols-4');
+		expect(earnings).toContain("className: 'hidden md:block'");
+		expect(earnings).not.toContain('sm:grid-cols-4');
+	});
+
 	it('takes early-access requests for the content creator program, including after a sign-in that reloads the page', () => {
 		const content = source('/src/routes/creators/content.tsx');
 		expect(content).toContain('<EarlyAccessButton capability="content-creators"');
