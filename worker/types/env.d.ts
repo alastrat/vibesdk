@@ -35,6 +35,16 @@ declare namespace Cloudflare {
 		CJDROPSHIPPING_API_KEY?: string;
 		// Live supplier orders need ENVIRONMENT prod and this set to "true"; anything else places sandbox orders.
 		CATALOG_SUPPLIER_LIVE?: string;
+		// Live stores: the domain store subdomains sit under (its own registrable domain, on the Public Suffix List).
+		// Live stores are off when it's unset.
+		STORES_DOMAIN?: string;
+		// The name sellers point their custom domain's CNAME at, on the stores zone.
+		STORES_CNAME_TARGET?: string;
+		// The Cloudflare for SaaS zone that holds sellers' custom hostnames, and a token that can edit them.
+		CF_SAAS_ZONE_ID?: string;
+		CF_SAAS_API_TOKEN?: string;
+		// "on" lets live stores take real payments when the Stripe key is live; test keys need nothing.
+		LIVE_STORE_PAYMENTS?: string;
 		// Stripe's publishable key for Stripe.js on Estori's store checkout page; public by design.
 		STRIPE_PUBLISHABLE_KEY?: string;
 		// Signing secret of the Connect webhook endpoint: events on sellers' accounts, such as payout.paid.

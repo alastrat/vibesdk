@@ -19,6 +19,8 @@ import { servePublicSite } from './services/public-site/serve';
 import { AppService } from './database/services/AppService';
 import { runCatalogSchedule } from './services/catalog/scheduler';
 import { runStorePaymentsSchedule } from './services/store-payments/wiring';
+import { resolveStoreHost } from './services/live-stores/hosts';
+import { handleLiveStore } from './api/handlers/live-store';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -272,6 +274,18 @@ const worker = {
 		const isSubdomainRequest =
 			hostname.endsWith(`.${previewDomain}`) ||
 			(hostname.endsWith('.localhost') && hostname !== 'localhost');
+
+		// Live stores: a store's own subdomain, or a seller's connected domain, decided before any other host routing
+		// and never for Estori's own hosts. A lookup failure falls through to the usual routing.
+		if (!isMainDomainRequest && !(separatePreviewDomain && hostname === previewDomain)) {
+			let store = null;
+			try {
+				store = await resolveStoreHost(env, hostname);
+			} catch (error) {
+				logger.error('Live store lookup failed', { hostname, error });
+			}
+			if (store) return handleLiveStore(request, env, ctx, store);
+		}
 
 		if (separatePreviewDomain && hostname === previewDomain) {
 			const params = matchSpacePreviewParams(pathname);

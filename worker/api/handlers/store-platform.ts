@@ -53,8 +53,16 @@ export interface StorePlatformTarget {
 	basePath: string;
 	/** Decoded and lower-cased, starting with `/__estori`. */
 	platformPath: string;
-	/** The preview token's subject: the owner's user id, or the public subject. */
-	previewUserId: string;
+	/** Who is looking: a preview's token subject (the owner's user id, or the public subject), or a live store's shopper. */
+	viewer: StoreViewer;
+}
+
+/** A preview is seen by its token's subject; a live store by any shopper, and its sales are its owner's. */
+export type StoreViewer = { kind: 'preview'; userId: string } | { kind: 'live'; sellerUserId: string };
+
+/** Whose sales the store's are: the app's owner on a live store, the preview token's subject on a preview. */
+function sellerIdOf(target: StorePlatformTarget): string {
+	return target.viewer.kind === 'live' ? target.viewer.sellerUserId : target.viewer.userId;
 }
 
 interface StoreManifestStub extends DurableObjectStub {
@@ -77,12 +85,21 @@ function normalizedPath(path: string): string {
 	return current.toLowerCase();
 }
 
+function isPlatformPath(path: string): boolean {
+	return path === STORE_PLATFORM_PREFIX || path.startsWith(`${STORE_PLATFORM_PREFIX}/`);
+}
+
 export function matchStorePlatformPath(pathname: string): { basePath: string; platformPath: string } | null {
 	const match = pathname.match(PREVIEW_PATH);
 	if (!match) return null;
 	const rest = normalizedPath(match[2] ?? '/');
-	if (rest !== STORE_PLATFORM_PREFIX && !rest.startsWith(`${STORE_PLATFORM_PREFIX}/`)) return null;
-	return { basePath: match[1], platformPath: rest };
+	return isPlatformPath(rest) ? { basePath: match[1], platformPath: rest } : null;
+}
+
+/** On a live store's own address, Estori's paths sit at the root. */
+export function matchLivePlatformPath(pathname: string): { basePath: string; platformPath: string } | null {
+	const rest = normalizedPath(pathname);
+	return isPlatformPath(rest) ? { basePath: '', platformPath: rest } : null;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -91,8 +108,9 @@ function json(body: unknown, status = 200): Response {
 
 /** The owner's own preview takes test payments; any other viewer sees a demo. */
 async function previewAccess(env: Env, target: StorePlatformTarget): Promise<'owner' | 'public'> {
-	if (target.previewUserId === PUBLIC_PREVIEW_SUBJECT) return 'public';
-	const ownership = await new AppService(env).checkAppOwnership(target.appId, target.previewUserId);
+	if (target.viewer.kind === 'live') return 'public';
+	if (target.viewer.userId === PUBLIC_PREVIEW_SUBJECT) return 'public';
+	const ownership = await new AppService(env).checkAppOwnership(target.appId, target.viewer.userId);
 	return ownership.isOwner ? 'owner' : 'public';
 }
 
@@ -127,7 +145,7 @@ async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Re
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	if (!parsed?.ok) return json({ error: 'This store has no valid estori-store.json' }, 404);
 	const access = await previewAccess(env, target);
-	const seller = access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
+	const seller = access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, sellerIdOf(target), null) : null;
 	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null));
 }
 
@@ -136,7 +154,7 @@ async function servePayPage(env: Env, target: StorePlatformTarget): Promise<Resp
 	const file = await loadManifest(env, target);
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	const access = await previewAccess(env, target);
-	const seller = parsed?.ok && access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, target.previewUserId, null) : null;
+	const seller = parsed?.ok && access === 'owner' && stripeModeOf(env) === 'test' ? await sellerAccount(env, sellerIdOf(target), null) : null;
 	const info = parsed?.ok ? storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null) : null;
 	const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 	const appOrigin = env.CUSTOM_DOMAIN ? `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}` : null;
@@ -170,7 +188,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 	const response = await startStoreCheckout(
 		{
 			loadManifest: () => loadManifest(env, target),
-			sellerAccount: () => sellerAccount(env, target.previewUserId, stripe),
+			sellerAccount: () => sellerAccount(env, sellerIdOf(target), stripe),
 			lockCatalogPrices: (ids, country) => lockCatalogPricesFor(env, ids, country),
 			saveCheckout: (checkout) => checkouts.create(checkout),
 			createSession: async (input) => {
@@ -184,14 +202,14 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			},
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
-			sellerLimits: () => sellerLimitsOf(env, target.previewUserId),
-			weeklyUsage: (mode) => checkouts.weeklyUsage(target.previewUserId, mode, new Date(Date.now() - WEEK_MS)),
+			sellerLimits: () => sellerLimitsOf(env, sellerIdOf(target)),
+			weeklyUsage: (mode) => checkouts.weeklyUsage(sellerIdOf(target), mode, new Date(Date.now() - WEEK_MS)),
 			// The shopper is answered at once; the alert and the seller's email go out after.
 			limitReached: async (weeklySalesCents) => {
 				ctx.waitUntil(
 					(async () => {
-						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: target.previewUserId, message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
-						await sellerNoticesFromEnv(env)({ sellerUserId: target.previewUserId, kind: 'limit-reached', weeklySalesCents });
+						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: sellerIdOf(target), message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
+						await sellerNoticesFromEnv(env)({ sellerUserId: sellerIdOf(target), kind: 'limit-reached', weeklySalesCents });
 					})(),
 				);
 			},
@@ -202,7 +220,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			access: await previewAccess(env, target),
 			stripeMode: stripeModeOf(env),
 			appId: target.appId,
-			sellerUserId: target.previewUserId,
+			sellerUserId: sellerIdOf(target),
 			body,
 			storeBaseUrl: `${url.origin}${target.basePath}`,
 		},

@@ -12,7 +12,7 @@ const TARGET: StorePlatformTarget = {
 	branch: 'main',
 	basePath: '/space/app_1/preview/main',
 	platformPath: '/__estori/checkout',
-	previewUserId: PUBLIC_PREVIEW_SUBJECT,
+	viewer: { kind: 'preview', userId: PUBLIC_PREVIEW_SUBJECT },
 };
 
 function testEnv(overrides: Record<string, unknown> = {}) {
