@@ -18,6 +18,14 @@ function source(path: string): string {
 }
 
 describe('payments routes', () => {
+	it('takes the selling-terms agreement before Stripe, and reports the next setup step', () => {
+		const routes = source('/worker/api/routes/paymentsRoutes.ts');
+		expect(routes).toContain("app.post('/api/stripe/connect/terms', setAuthLevel(AuthConfig.authenticated)");
+		const controller = source('/worker/api/controllers/payments/connectController.ts');
+		expect(controller).toContain('Accept the selling terms first');
+		expect(controller).toContain('setupStep: sellerSetupStep(readiness)');
+	});
+
 	it('keeps seller onboarding behind sign-in and the webhook public', () => {
 		const routes = source('/worker/api/routes/paymentsRoutes.ts').split('\n');
 		for (const path of ["'/api/stripe/connect/onboarding'", "'/api/stripe/connect/status'", "'/api/stripe/connect/dashboard'"]) {
@@ -29,6 +37,13 @@ describe('payments routes', () => {
 
 	it('exempts only the webhook from CSRF, because Stripe signs it instead', () => {
 		expect(source('/worker/app.ts')).toContain("pathname === '/api/stripe/webhook'");
+	});
+
+	it('routes disputes on store payments to the dispute handlers', () => {
+		const webhook = source('/worker/api/controllers/payments/webhook.ts');
+		expect(webhook).toContain("event.type === 'charge.dispute.created' || event.type === 'charge.dispute.funds_withdrawn' || event.type === 'charge.dispute.closed'");
+		expect(webhook).toContain('handleDisputeOpened(deps, object)');
+		expect(webhook).toContain('handleDisputeClosed(deps, object)');
 	});
 
 	it('verifies the signature before reading the event', () => {
@@ -44,20 +59,37 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 		controller.slice(controller.indexOf(`static async ${name}(`), next ? controller.indexOf(`static async ${next}(`) : undefined);
 
 	it('reads as not connected in the status, not as the stale stored flags', () => {
-		const status = method('getStatus', 'dashboardLink');
+		// getStatus and acceptSellerTerms both answer through loadStatus.
+		expect(method('getStatus', 'acceptSellerTerms')).toContain('StripeConnectController.loadStatus(env, context.user!.id)');
+		const status = method('loadStatus', 'getStatus');
 		expect(status).toContain('accounts.forgetIfMissing(stored, (accountId) => stripe.retrieveAccount(accountId))');
 		const missing = status.indexOf('if (!account)');
 		expect(missing).toBeGreaterThan(status.indexOf('accounts.forgetIfMissing('));
-		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeGreaterThan(missing);
-		expect(status.indexOf('...NOT_CONNECTED', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
+		expect(status.indexOf('statusOf(null, termsAccepted, payouts)', missing)).toBeGreaterThan(missing);
+		expect(status.indexOf('statusOf(null, termsAccepted, payouts)', missing)).toBeLessThan(status.indexOf('accountFlags(account)'));
 	});
 
 	it('is replaced by one fresh Express account when onboarding', () => {
 		const onboarding = method('startOnboarding', 'getStatus');
-		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, linkFor)');
+		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, async (accountId) => {');
 		expect(forget).toBeGreaterThan(-1);
 		expect(onboarding.match(/createExpressAccount\(/g)).toHaveLength(1);
 		expect(onboarding.indexOf('createExpressAccount(')).toBeGreaterThan(forget);
+	});
+
+	it('asks for card payments on a stored account before linking it, so sellers from before store payments can finish setup', () => {
+		const onboarding = method('startOnboarding', 'getStatus');
+		const forget = onboarding.indexOf('accounts.forgetIfMissing(stored, async (accountId) => {');
+		const request = onboarding.indexOf('await stripe.requestCardPayments(accountId);', forget);
+		expect(request).toBeGreaterThan(forget);
+		expect(onboarding.indexOf('return linkFor(accountId);', forget)).toBeGreaterThan(request);
+	});
+
+	it("starts a new account at an admin's pinned level and its delay, or New", () => {
+		const onboarding = method('startOnboarding', 'getStatus');
+		expect(onboarding).toContain("const level = settings.pinnedLevel ?? 'new';");
+		expect(onboarding).toContain('limitsFor(level, settings).payoutDelayDays');
+		expect(onboarding).toContain('accounts.saveLevel(user.id, level, delay)');
 	});
 
 	it('sends the seller back to onboarding instead of opening the dashboard', () => {

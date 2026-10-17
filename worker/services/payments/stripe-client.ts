@@ -3,6 +3,8 @@
  * no SDK. Covers Connect Express onboarding and Checkout for paid sites.
  */
 
+import type { SellerReadiness } from '../../../shared/types/seller-setup';
+
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 /** Stripe replays a failed request for 24 hours per idempotency key, so keys rotate every 10 minutes. */
@@ -10,8 +12,21 @@ const IDEMPOTENCY_BUCKET_MS = 600_000;
 
 /** A Checkout session closes 35 minutes after it opens, so a buyer can't pay long after the listing changed. Stripe's minimum is 30. */
 const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
+/** Every request names its API version, so a new account default can't change what Stripe returns; Stripe.js on the
+ * store checkout page loads the same version. */
+export const STRIPE_API_VERSION = '2026-03-25.dahlia';
 
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
+
+/**
+ * Every Checkout session charges in US dollars by card or a card wallet (Apple Pay, Google Pay): no prices in the
+ * shopper's local currency, and no Link, which would also offer bank payments. Estori's fees assume Stripe's card rate.
+ */
+const USD_CARD_CHECKOUT: Record<string, FormValue> = {
+	payment_method_types: ['card'],
+	adaptive_pricing: { enabled: false },
+	wallet_options: { link: { display: 'never' } },
+};
 
 export class StripeApiError extends Error {
 	constructor(
@@ -49,9 +64,25 @@ export interface StripeLoginLink {
 	url: string;
 }
 
+export interface StripeAddress {
+	line1: string | null;
+	line2: string | null;
+	city: string | null;
+	state: string | null;
+	postal_code: string | null;
+	country: string | null;
+}
+
+export interface StripeShippingDetails {
+	name: string | null;
+	address: StripeAddress | null;
+}
+
 export interface StripeCheckoutSession {
 	id: string;
 	url: string | null;
+	/** Elements sessions: what Stripe.js on Estori's checkout page starts the payment form with. */
+	client_secret?: string | null;
 	payment_status: 'paid' | 'unpaid' | 'no_payment_required';
 	status: 'open' | 'complete' | 'expired' | null;
 	client_reference_id: string | null;
@@ -59,6 +90,45 @@ export interface StripeCheckoutSession {
 	amount_total: number | null;
 	currency: string | null;
 	payment_intent: string | null;
+	customer_details?: { email: string | null; name: string | null; phone: string | null } | null;
+	/** Where Stripe puts the collected shipping address from API version 2025-03-31. */
+	collected_information?: { shipping_details: StripeShippingDetails | null } | null;
+	/** Where earlier API versions put it. */
+	shipping_details?: StripeShippingDetails | null;
+}
+
+export interface StripeTransferSummary {
+	id: string;
+	amount: number;
+	amount_reversed: number;
+}
+
+export interface StripePaymentIntent {
+	id: string;
+	/** What the Checkout session put on it; a store payment carries its kind and checkout id. */
+	metadata?: Record<string, string> | null;
+	/** Expanded on request: the charge, with the transfer that paid the seller and the balance transaction Stripe's fee is on. */
+	latest_charge:
+		| {
+				id: string;
+				transfer: StripeTransferSummary | string | null;
+				balance_transaction?: { id: string; fee: number } | string | null;
+				/** Radar's screening of the payment. */
+				outcome?: { risk_level?: string } | null;
+		  }
+		| string
+		| null;
+}
+
+export interface StripeRefund {
+	id: string;
+	amount: number;
+	status: string;
+}
+
+export interface StripeTransferReversal {
+	id: string;
+	amount: number;
 }
 
 export interface CheckoutSessionInput {
@@ -74,20 +144,63 @@ export interface CheckoutSessionInput {
 	nowMs: number;
 }
 
+export interface StoreCheckoutSessionInput {
+	checkoutId: string;
+	lines: readonly { name: string; quantity: number; unitPriceCents: number }[];
+	shippingCents: number;
+	/** The one country Checkout may ship to: catalog prices were locked for it. */
+	shipToCountry: string;
+	applicationFeeCents: number;
+	sellerStripeAccountId: string;
+	metadata: Record<string, string>;
+	/** Where Stripe sends the shopper after paying on Estori's checkout page. */
+	returnUrl: string;
+	nowMs: number;
+}
+
+export type Weekday = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday';
+
+export interface PayoutSchedule {
+	interval: 'daily' | 'weekly' | 'monthly';
+	weeklyAnchor: Weekday | null;
+	monthlyAnchor: number | null;
+	/** Days a sale waits before payout; null leaves Stripe's current value. */
+	delayDays: number | null;
+}
+
+interface StripeBalance {
+	available: Array<{ amount: number; currency: string }>;
+	pending: Array<{ amount: number; currency: string }>;
+}
+
 export interface SellerFlags {
 	detailsSubmitted: boolean;
 	chargesEnabled: boolean;
 	payoutsEnabled: boolean;
 	transfersActive: boolean;
+	cardPaymentsActive: boolean;
 }
 
 export interface StripeClient {
 	createExpressAccount(input: { email?: string; userId: string; nowMs: number }): Promise<StripeAccount>;
 	retrieveAccount(accountId: string): Promise<StripeAccount>;
+	/** Accounts made before store payments asked only for transfers; the next onboarding link collects what card payments need. */
+	requestCardPayments(accountId: string): Promise<StripeAccount>;
 	createAccountLink(input: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<StripeAccountLink>;
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
+	createStoreCheckoutSession(input: StoreCheckoutSessionInput): Promise<StripeCheckoutSession>;
 	retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>;
+	/** Closes an open session so it can't be paid; one already expired or completed counts as done. */
+	expireCheckoutSession(sessionId: string): Promise<void>;
+	retrievePaymentIntent(paymentIntentId: string): Promise<StripePaymentIntent>;
+	createRefund(input: { paymentIntentId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeRefund>;
+	createTransferReversal(input: { transferId: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<StripeTransferReversal>;
+	retrieveBalance(accountId: string): Promise<{ availableCents: number; pendingCents: number }>;
+	createTransfer(input: { destination: string; amountCents: number; idempotencyKey: string; metadata: Record<string, string> }): Promise<{ id: string; amount: number }>;
+	updatePayoutSchedule(accountId: string, schedule: PayoutSchedule): Promise<StripeAccount>;
+	/** Only the payout delay, so payout days the seller chose stay as they are. */
+	updatePayoutDelay(accountId: string, delayDays: number): Promise<StripeAccount>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -115,6 +228,19 @@ export function accountFlags(account: StripeAccount): SellerFlags {
 		chargesEnabled: account.charges_enabled,
 		payoutsEnabled: account.payouts_enabled,
 		transfersActive: account.capabilities?.transfers === 'active',
+		cardPaymentsActive: account.capabilities?.card_payments === 'active',
+	};
+}
+
+/** The seller's readiness to take store payments, from their stored or fresh flags; null flags mean no Connect account. */
+export function sellerReadiness(flags: SellerFlags | null, termsAccepted: boolean): SellerReadiness {
+	return {
+		termsAccepted,
+		connected: flags !== null,
+		detailsSubmitted: flags?.detailsSubmitted ?? false,
+		cardPaymentsActive: flags?.cardPaymentsActive ?? false,
+		transfersActive: flags?.transfersActive ?? false,
+		payoutsEnabled: flags?.payoutsEnabled ?? false,
 	};
 }
 
@@ -128,13 +254,17 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		path: string,
 		params?: Record<string, FormValue>,
 		idempotencyKey?: string,
+		stripeAccount?: string,
 	): Promise<T> {
 		const body = params ? encodeForm(params) : undefined;
 		const headers: Record<string, string> = {
 			Authorization: `Bearer ${secretKey}`,
 			'Content-Type': 'application/x-www-form-urlencoded',
+			'Stripe-Version': STRIPE_API_VERSION,
 		};
 		if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+		// Calls made as a connected account, such as reading a seller's balance.
+		if (stripeAccount) headers['Stripe-Account'] = stripeAccount;
 		const response = await fetchImpl(`${STRIPE_API}${path}`, {
 			method,
 			headers,
@@ -164,6 +294,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				`connect-account-${userId}-${Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS)}`,
 			),
 		retrieveAccount: (accountId) => request<StripeAccount>('GET', `/accounts/${encodeURIComponent(accountId)}`),
+		requestCardPayments: (accountId) =>
+			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, { capabilities: { card_payments: { requested: true } } }),
 		createAccountLink: ({ accountId, refreshUrl, returnUrl }) =>
 			request<StripeAccountLink>('POST', '/account_links', {
 				account: accountId,
@@ -182,6 +314,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 						price_data: { currency: 'usd', unit_amount: input.priceCents, product_data: { name: input.productName } },
 					},
 				],
+				...USD_CARD_CHECKOUT,
 				payment_intent_data: {
 					application_fee_amount: input.feeCents,
 					transfer_data: { destination: input.destinationAccountId },
@@ -195,7 +328,94 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				cancel_url: input.cancelUrl,
 				expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
 			}),
+		// The seller is the merchant of record (on_behalf_of); a retried start reuses the session through its key.
+		createStoreCheckoutSession: (input) =>
+			request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'payment',
+					line_items: input.lines.map((line) => ({
+						quantity: line.quantity,
+						price_data: { currency: 'usd', unit_amount: line.unitPriceCents, product_data: { name: line.name } },
+					})),
+					shipping_address_collection: { allowed_countries: [input.shipToCountry] },
+					shipping_options: [
+						{
+							shipping_rate_data: {
+								type: 'fixed_amount',
+								display_name: input.shippingCents === 0 ? 'Free shipping' : 'Shipping',
+								fixed_amount: { amount: input.shippingCents, currency: 'usd' },
+							},
+						},
+					],
+					...USD_CARD_CHECKOUT,
+					payment_intent_data: {
+						application_fee_amount: input.applicationFeeCents,
+						on_behalf_of: input.sellerStripeAccountId,
+						transfer_data: { destination: input.sellerStripeAccountId },
+						metadata: input.metadata,
+					},
+					metadata: input.metadata,
+					client_reference_id: input.checkoutId,
+					// Paid on Estori's own checkout page with Stripe Elements, so there is no hosted page to come back from.
+					ui_mode: 'elements',
+					return_url: input.returnUrl,
+					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
+				},
+				`store-checkout-${input.checkoutId}`,
+			),
+		expireCheckoutSession: async (sessionId) => {
+			try {
+				await request<StripeCheckoutSession>('POST', `/checkout/sessions/${encodeURIComponent(sessionId)}/expire`);
+			} catch (error) {
+				// Stripe refuses to expire a session that isn't open: it was already expired or paid.
+				if (error instanceof StripeApiError && error.status === 400) return;
+				throw error;
+			}
+		},
 		retrieveCheckoutSession: (sessionId) =>
 			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
+		retrievePaymentIntent: (paymentIntentId) =>
+			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge.transfer', 'latest_charge.balance_transaction'] })}`),
+		// Catalog refunds carry stable idempotency keys, so a retried refund is never paid twice.
+		createRefund: (input) =>
+			request<StripeRefund>(
+				'POST',
+				'/refunds',
+				{ payment_intent: input.paymentIntentId, amount: input.amountCents, metadata: input.metadata },
+				input.idempotencyKey,
+			),
+		createTransferReversal: (input) =>
+			request<StripeTransferReversal>(
+				'POST',
+				`/transfers/${encodeURIComponent(input.transferId)}/reversals`,
+				{ amount: input.amountCents, metadata: input.metadata },
+				input.idempotencyKey,
+			),
+		retrieveBalance: async (accountId) => {
+			const balance = await request<StripeBalance>('GET', '/balance', undefined, undefined, accountId);
+			const usd = (entries: StripeBalance['available']) => entries.filter((entry) => entry.currency === 'usd').reduce((sum, entry) => sum + entry.amount, 0);
+			return { availableCents: usd(balance.available), pendingCents: usd(balance.pending) };
+		},
+		createTransfer: (input) =>
+			request<{ id: string; amount: number }>('POST', '/transfers', { destination: input.destination, amount: input.amountCents, currency: 'usd', metadata: input.metadata }, input.idempotencyKey),
+		// The platform owns these accounts' losses, so it sets their payout timing and lets Stripe debit their bank when negative.
+		updatePayoutDelay: (accountId, delayDays) =>
+			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, { settings: { payouts: { schedule: { delay_days: delayDays } } } }),
+		updatePayoutSchedule: (accountId, schedule) =>
+			request<StripeAccount>('POST', `/accounts/${encodeURIComponent(accountId)}`, {
+				settings: {
+					payouts: {
+						schedule: {
+							interval: schedule.interval,
+							weekly_anchor: schedule.interval === 'weekly' ? schedule.weeklyAnchor : undefined,
+							monthly_anchor: schedule.interval === 'monthly' ? schedule.monthlyAnchor : undefined,
+							delay_days: schedule.delayDays ?? undefined,
+						},
+						debit_negative_balances: true,
+					},
+				},
+			}),
 	};
 }

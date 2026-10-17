@@ -92,6 +92,12 @@ import type{
 	SitePageData,
 	SitePublishingData,
 	StripeConnectStatusData,
+	SellerLimitsData,
+	StoreOrdersData,
+	StoreRefundRequest,
+	StoreRefundResponse,
+	PayoutInterval,
+	CatalogProductsData,
 	StripeLinkData,
 	TemplateCategory,
 	AuthUser,
@@ -636,6 +642,35 @@ class ApiClient {
 
 	async getStripeConnectStatus(): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/status');
+	}
+
+	/** How often the seller is paid; returns their refreshed status. */
+	async setPayoutSchedule(choice: { interval: PayoutInterval; anchor: string }): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/payouts', { method: 'PUT', body: choice });
+	}
+
+	/** The seller's level, store limits and this week's use. */
+	async getSellerLimits(): Promise<ApiResponse<SellerLimitsData>> {
+		return this.request<SellerLimitsData>('/api/stores/limits');
+	}
+
+	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
+	async acceptSellerTerms(version: string): Promise<ApiResponse<StripeConnectStatusData>> {
+		return this.request<StripeConnectStatusData>('/api/stripe/connect/terms', { method: 'POST', body: { version } });
+	}
+
+	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
+		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
+	}
+
+	/** Refund lines of a store order; the seller's Stripe balance pays it. */
+	async refundStoreOrder(appId: string, orderId: string, request: StoreRefundRequest): Promise<ApiResponse<StoreRefundResponse>> {
+		return this.request<StoreRefundResponse>(`/api/stores/${encodeURIComponent(appId)}/orders/${encodeURIComponent(orderId)}/refunds`, { method: 'POST', body: request });
+	}
+
+	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {
+		const search = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
+		return this.request<CatalogProductsData>(`/api/catalog/products${search}`);
 	}
 
 	async getStripeDashboardLink(): Promise<ApiResponse<StripeLinkData>> {

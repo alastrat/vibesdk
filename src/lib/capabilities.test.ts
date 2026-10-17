@@ -10,6 +10,7 @@ describe('capability registry', () => {
 			'operations-agents': 'coming-soon',
 			'personalized-shopping': 'coming-soon',
 			'product-catalog': 'coming-soon',
+			payments: 'coming-soon',
 			'digital-products': 'early-access',
 			'developer-templates': 'available',
 			'content-creators': 'early-access',
@@ -42,12 +43,15 @@ describe('capability registry', () => {
 		expect(CAPABILITIES.subscriptions.path).toBe('/solutions/subscriptions');
 		// The catalog now promises fulfillment too, right below the store builder.
 		expect(CAPABILITIES['product-catalog']).toMatchObject({ name: 'Catalog & fulfillment', path: '/platform/catalog-fulfillment' });
+		// Store payments run in test mode on previews; live stores aren't open yet.
+		expect(CAPABILITIES.payments).toMatchObject({ name: 'Payments', path: '/platform/payments', status: 'coming-soon' });
 	});
 
 	it('lists the Platform menu in the approved order', () => {
 		expect(PLATFORM_CAPABILITIES).toEqual([
 			'store-builder',
 			'product-catalog',
+			'payments',
 			'operations-agents',
 			'personalized-shopping',
 			'email-marketing',

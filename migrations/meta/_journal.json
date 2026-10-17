@@ -113,6 +113,76 @@
       "when": 1792046776434,
       "tag": "0015_left_texas_twister",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1792125590973,
+      "tag": "0016_catalog_orders",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1792128135131,
+      "tag": "0017_catalog_refund_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1792128356797,
+      "tag": "0018_store_payments",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1792129591532,
+      "tag": "0019_catalog_data",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1792184243834,
+      "tag": "0020_seller_setup",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1792187031249,
+      "tag": "0021_seller_money_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1792188763676,
+      "tag": "0022_seller_money_progress",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1792191144145,
+      "tag": "0023_seller_levels",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1792193950418,
+      "tag": "0024_dispute_closed_at",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1792196475246,
+      "tag": "0025_store_checkouts_seller_idx",
+      "breakpoints": true
     }
   ]
 }

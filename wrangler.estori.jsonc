@@ -84,7 +84,8 @@
 			{ "class_name": "DORateLimitStore", "name": "DORateLimitStore" },
 			{ "class_name": "UserSecretsStore", "name": "UserSecretsStore" },
 			{ "class_name": "ThinkAgent", "name": "THINK_DO" },
-			{ "class_name": "SpaceDO", "name": "SPACE_DO" }
+			{ "class_name": "SpaceDO", "name": "SPACE_DO" },
+			{ "class_name": "CatalogOrderRunner", "name": "CATALOG_ORDER_RUNNER" }
 		]
 	},
 	"worker_loaders": [
@@ -107,8 +108,12 @@
 		{ "new_sqlite_classes": ["DORateLimitStore"], "tag": "v2" },
 		{ "new_sqlite_classes": ["UserSecretsStore"], "tag": "v3" },
 		{ "new_sqlite_classes": ["SpaceDO"], "tag": "v5" },
-		{ "new_sqlite_classes": ["ThinkAgent"], "tag": "v6" }
+		{ "new_sqlite_classes": ["ThinkAgent"], "tag": "v6" },
+		{ "new_sqlite_classes": ["CatalogOrderRunner"], "tag": "v7" }
 	],
+	"triggers": {
+		"crons": ["*/15 * * * *", "5 * * * *", "35 6 * * *"]
+	},
 	"routes": [
 		{
 			"pattern": "estori.app",

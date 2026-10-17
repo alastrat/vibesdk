@@ -1,14 +1,21 @@
 /**
  * Stripe webhook: verifies the signature, then records paid Checkout
- * sessions and refreshes sellers' payout flags. Public and exempt from CSRF;
+ * sessions, settles store sales once their transfer exists, handles disputes of store payments and refreshes sellers'
+ * payout flags. Public and exempt from CSRF;
  * the signature is the authentication.
  */
 
 import { createLogger } from '../../../logger';
-import { StripeConnectService, TemplateService } from '../../../database';
+import { SellerChargeService, StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
+import { STORE_ORDER_KIND } from '../../../../shared/types/store-payments';
+import { disputeDepsFromEnv, recordStoreSession, settleOnTransferDeps } from '../../../services/store-payments/wiring';
+import { isStripeChargeTransfer, settleOnTransfer } from '../../../services/store-payments/settle';
+import { handleDisputeClosed, handleDisputeOpened, isStripeDispute } from '../../../services/store-payments/disputes';
 import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
-import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount } from '../../../services/payments/fulfill';
+import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount, isStripePayout } from '../../../services/payments/fulfill';
+import { chargesForPayout } from '../../../services/payments/seller-costs';
+import { getGlobalConfigurableSettings } from '../../../config';
 
 const logger = createLogger('StripeWebhook');
 
@@ -20,7 +27,11 @@ export async function handleStripeWebhook(request: Request, env: Env): Promise<R
         return new Response('Payments are not configured', { status: 400 });
     }
     const payload = await request.text();
-    const valid = await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), secret, Math.floor(Date.now() / 1000));
+    // Platform events and Connect events (sellers' accounts) come from two endpoints, each with its own secret.
+    const secrets = [secret, env.STRIPE_CONNECT_WEBHOOK_SECRET].filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const now = Math.floor(Date.now() / 1000);
+    let valid = false;
+    for (const candidate of secrets) valid = valid || (await verifyStripeSignature(payload, request.headers.get('Stripe-Signature'), candidate, now));
     if (!valid) return new Response('Invalid signature', { status: 400 });
     const event = parseStripeEvent(payload);
     if (!event) return new Response('Malformed event', { status: 400 });
@@ -33,10 +44,22 @@ export async function handleStripeWebhook(request: Request, env: Env): Promise<R
     return Response.json({ received: true });
 }
 
+/** The only events Estori handles from sellers' own accounts; their own checkouts and disputes aren't Estori's sales. */
+const CONNECT_EVENT_TYPES: readonly string[] = ['payout.paid', 'account.updated'];
+
 async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> {
     const object = event.data.object;
+    if (event.account && !CONNECT_EVENT_TYPES.includes(event.type)) {
+        logger.info('Connect event ignored', { id: event.id, type: event.type });
+        return;
+    }
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {
         if (!isCheckoutSession(object)) return;
+        if (object.metadata?.kind === STORE_ORDER_KIND) {
+            const stored = await recordStoreSession(env, object.id);
+            logger.info('Store checkout session handled', { id: object.id, result: stored.result });
+            return;
+        }
         const listings = new TemplateService(env);
         const result = await fulfillCheckoutSession(
             {
@@ -57,6 +80,34 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
             return;
         }
         logger.info('Checkout session handled', { id: object.id, result });
+        return;
+    }
+    // A store sale's transfer arrives seconds after the order is recorded; the sale settles then.
+    if (event.type === 'charge.updated' && isStripeChargeTransfer(object)) {
+        const result = await settleOnTransfer(settleOnTransferDeps(env), object);
+        if (result === 'settled') logger.info('Store sale settled after its transfer', { id: object.id });
+        return;
+    }
+    if (event.type === 'checkout.session.expired' && isCheckoutSession(object) && object.metadata?.kind === STORE_ORDER_KIND && object.metadata.checkoutId) {
+        await new StoreCheckoutService(env).expire(object.metadata.checkoutId);
+        return;
+    }
+    // An inquiry escalates to a chargeback with funds_withdrawn, which runs the opening again.
+    if ((event.type === 'charge.dispute.created' || event.type === 'charge.dispute.funds_withdrawn' || event.type === 'charge.dispute.closed') && isStripeDispute(object)) {
+        const deps = disputeDepsFromEnv(env);
+        const result = event.type === 'charge.dispute.closed' ? await handleDisputeClosed(deps, object) : await handleDisputeOpened(deps, object);
+        logger.info('Dispute handled', { id: object.id, type: event.type, result });
+        return;
+    }
+    if (event.type === 'payout.paid' && event.account && isStripePayout(object)) {
+        const seller = await new StripeConnectService(env).getByAccountId(event.account);
+        // Not one of Estori's sellers, or deleted since: nothing to charge.
+        if (!seller) return;
+        const charges = new SellerChargeService(env);
+        const costs = (await getGlobalConfigurableSettings(env)).sellerLimits.costs;
+        for (const charge of chargesForPayout({ stripeAccountId: event.account, payoutId: object.id, amountCents: object.amount, arrivalDate: new Date(object.arrival_date * 1000) }, costs)) {
+            await charges.add({ sellerUserId: seller.userId, ...charge, now: new Date() });
+        }
         return;
     }
     if (event.type === 'account.updated' && isStripeAccount(object)) {

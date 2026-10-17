@@ -483,3 +483,8 @@ document.getElementById("root").textContent += `  ·  visits: ${v.count}`;
 Note `./api/time` (relative) in JS, `/style.css` (root-relative) in HTML. The HTML href is rewritten by the preview; the JS fetch resolves against the document's base URL.
 
 Commit this, call `deploy_space("main")`, and the preview at `/space/<name>/preview/main/` will render the timestamp and an incrementing visit counter persisted in the App DO's SQLite.
+
+## Reserved for the platform
+
+Paths under `/__estori/`, tables named `estori_*` and the `live` branch belong to Estori. Stores that sell anything keep
+products and prices in `estori-store.json` and take payments only as the `store-checkout` skill describes.

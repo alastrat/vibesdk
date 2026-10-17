@@ -4,6 +4,13 @@
 	"main": "worker/index.ts",
 	"compatibility_flags": ["nodejs_compat"],
 	"send_metrics": false,
+	"d1_databases": [
+		{
+			"binding": "TEST_DB",
+			"database_name": "vibesdk-test",
+			"database_id": "00000000-0000-0000-0000-000000000000"
+		}
+	],
 	"durable_objects": {
 		"bindings": [
 			{

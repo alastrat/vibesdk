@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+/** The request's execution context; work handed to waitUntil is dropped in these tests. */
+const CTX = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
+
 // The handler reads the app's current previewVersion via AppService. The test
 // env has no D1 binding, so mock it with a controllable value (bumping it
 // simulates a visibility toggle). This also avoids loading AppService's heavy
@@ -75,7 +78,7 @@ describe('handleSpacePreview', () => {
 			previewVersion: 0,
 		});
 
-		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX);
 		expect(res.status).toBe(200);
 		const setCookie = res.headers.get('Set-Cookie') ?? '';
 		expect(setCookie).toContain(`${SPACE_PREVIEW_COOKIE_NAME}=`);
@@ -93,7 +96,7 @@ describe('handleSpacePreview', () => {
 			previewVersion: 0,
 		});
 
-		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX);
 		expect(res.status).toBe(200);
 	});
 
@@ -118,13 +121,14 @@ describe('handleSpacePreview', () => {
 			env,
 			'space-a',
 			'main',
+			CTX,
 		);
 		expect(res.status).toBe(200);
 	});
 
 	it('returns 401 when neither token nor cookie is present', async () => {
 		const env = makeEnv();
-		const res = await handleSpacePreview(previewRequest(), env, 'space-a', 'main');
+		const res = await handleSpacePreview(previewRequest(), env, 'space-a', 'main', CTX);
 		expect(res.status).toBe(401);
 	});
 
@@ -137,7 +141,7 @@ describe('handleSpacePreview', () => {
 			previewVersion: 0,
 		});
 
-		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX);
 		expect(res.status).toBe(401);
 	});
 
@@ -152,13 +156,13 @@ describe('handleSpacePreview', () => {
 
 		// Minted at version 0 — accepted while the app is still at version 0.
 		expect(
-			(await handleSpacePreview(previewRequest(token), env, 'space-a', 'main')).status,
+			(await handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX)).status,
 		).toBe(200);
 
 		// A visibility toggle bumps previewVersion; the same token is now stale.
 		currentPreviewVersion = 1;
 		expect(
-			(await handleSpacePreview(previewRequest(token), env, 'space-a', 'main')).status,
+			(await handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX)).status,
 		).toBe(401);
 	});
 
@@ -172,7 +176,7 @@ describe('handleSpacePreview', () => {
 			previewVersion: 0,
 		});
 
-		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		const res = await handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX);
 		expect(res.status).toBe(200);
 		const setCookie = res.headers.get('Set-Cookie') ?? '';
 		expect(setCookie).toContain('SameSite=None');

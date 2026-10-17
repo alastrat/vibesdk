@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { PLATFORM_FEE_LABEL, platformFeeCents } from '../../../shared/types/templates';
-import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, type StripeAccount } from './stripe-client';
+import { StripeApiError, accountFlags, createStripeClient, encodeForm, isMissingAccountError, sellerReadiness, type StripeAccount } from './stripe-client';
+
+/** A fetch that answers every call with `response` and remembers what it was sent. */
+function recordingFetch(response: unknown) {
+	const calls: Array<{ url: string; init: RequestInit }> = [];
+	const fakeFetch: typeof fetch = async (input, init) => {
+		calls.push({ url: String(input), init: init ?? {} });
+		return new Response(JSON.stringify(response), { status: 200 });
+	};
+	return { calls, fakeFetch };
+}
 
 describe('platformFeeCents', () => {
 	it('keeps 7% plus 60 cents of every price option, and nothing of a free site', () => {
@@ -33,7 +43,7 @@ describe('encodeForm', () => {
 });
 
 describe('accountFlags', () => {
-	it('reads payout readiness from the account', () => {
+	it('reads payout readiness and card payments from the account', () => {
 		const account: StripeAccount = {
 			id: 'acct_1',
 			details_submitted: true,
@@ -46,8 +56,36 @@ describe('accountFlags', () => {
 			chargesEnabled: true,
 			payoutsEnabled: false,
 			transfersActive: true,
+			cardPaymentsActive: false,
 		});
-		expect(accountFlags({ ...account, capabilities: undefined }).transfersActive).toBe(false);
+		expect(accountFlags({ ...account, capabilities: { transfers: 'active', card_payments: 'active' } }).cardPaymentsActive).toBe(true);
+		expect(accountFlags({ ...account, capabilities: undefined })).toMatchObject({ transfersActive: false, cardPaymentsActive: false });
+	});
+});
+
+describe('sellerReadiness', () => {
+	const FLAGS = { detailsSubmitted: true, chargesEnabled: true, payoutsEnabled: true, transfersActive: true, cardPaymentsActive: true };
+
+	it('combines the stored flags with the selling-terms agreement', () => {
+		expect(sellerReadiness(FLAGS, true)).toEqual({
+			termsAccepted: true,
+			connected: true,
+			detailsSubmitted: true,
+			cardPaymentsActive: true,
+			transfersActive: true,
+			payoutsEnabled: true,
+		});
+	});
+
+	it('reads a seller with no Connect account as not connected', () => {
+		expect(sellerReadiness(null, true)).toEqual({
+			termsAccepted: true,
+			connected: false,
+			detailsSubmitted: false,
+			cardPaymentsActive: false,
+			transfersActive: false,
+			payoutsEnabled: false,
+		});
 	});
 });
 
@@ -95,6 +133,8 @@ describe('createStripeClient', () => {
 		const body = decodeURIComponent(String(calls[0].init.body));
 		expect(body).toContain('payment_intent_data[application_fee_amount]=263');
 		expect(body).toContain('payment_intent_data[transfer_data][destination]=acct_1');
+		// US dollars by card or a card wallet only, as the fee assumes Stripe's card rate.
+		for (const part of ['payment_method_types[0]=card', 'adaptive_pricing[enabled]=false', 'wallet_options[link][display]=never']) expect(body).toContain(part);
 		expect(body).toContain('line_items[0][price_data][unit_amount]=2900');
 		expect(body).toContain('client_reference_id=u1');
 		// 35 minutes after the pinned time, in Unix seconds; Stripe's minimum is 30.
@@ -171,5 +211,201 @@ describe('createStripeClient', () => {
 			code: 'resource_missing',
 		});
 		await expect(client.retrieveAccount('acct_missing')).rejects.toBeInstanceOf(StripeApiError);
+	});
+});
+
+describe('refunds for catalog items', () => {
+	it("reads the payment's charge and its transfer to the seller", async () => {
+		const transfer = { id: 'tr_1', amount: 5109, amount_reversed: 0 };
+		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: { id: 'ch_1', transfer } });
+		const intent = await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');
+
+		expect(intent.latest_charge).toEqual({ id: 'ch_1', transfer });
+		expect(calls[0].init.method).toBe('GET');
+		expect(decodeURIComponent(calls[0].url)).toBe('https://api.stripe.com/v1/payment_intents/pi_1?expand[0]=latest_charge.transfer&expand[1]=latest_charge.balance_transaction');
+	});
+
+	it('refunds part of a payment once per idempotency key', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 're_1', amount: 5000, status: 'succeeded' });
+		await createStripeClient('sk_test_fake', fakeFetch).createRefund({
+			paymentIntentId: 'pi_1',
+			amountCents: 5000,
+			idempotencyKey: 'catalog-refund-co_1-ci_cap',
+			metadata: { catalogOrderId: 'co_1' },
+		});
+
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/refunds');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('catalog-refund-co_1-ci_cap');
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(body).toContain('payment_intent=pi_1');
+		expect(body).toContain('amount=5000');
+		expect(body).toContain('metadata[catalogOrderId]=co_1');
+	});
+
+	it("takes the seller's share back from their transfer", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'trr_1', amount: 2600 });
+		await createStripeClient('sk_test_fake', fakeFetch).createTransferReversal({
+			transferId: 'tr_1',
+			amountCents: 2600,
+			idempotencyKey: 'catalog-reversal-co_1-ci_cap',
+			metadata: { catalogOrderId: 'co_1' },
+		});
+
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/transfers/tr_1/reversals');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('catalog-reversal-co_1-ci_cap');
+		expect(decodeURIComponent(String(calls[0].init.body))).toContain('amount=2600');
+	});
+});
+
+describe('store checkout sessions', () => {
+	const INPUT = {
+		checkoutId: 'chk_1',
+		lines: [{ name: 'Trail Mug, Blue', quantity: 2, unitPriceCents: 2000 }],
+		shippingCents: 600,
+		shipToCountry: 'US',
+		applicationFeeCents: 163,
+		sellerStripeAccountId: 'acct_1',
+		metadata: { kind: 'store_order', checkoutId: 'chk_1', storeAppId: 'app_1' },
+		returnUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+		nowMs: 1_800_000_000_000,
+	};
+
+	it('charges the priced lines and shipping, with the fee and the seller as merchant', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession(INPUT);
+
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('store-checkout-chk_1');
+		const body = decodeURIComponent(String(calls[0].init.body));
+		for (const part of [
+			'line_items[0][quantity]=2',
+			'line_items[0][price_data][currency]=usd',
+			'line_items[0][price_data][unit_amount]=2000',
+			'line_items[0][price_data][product_data][name]=Trail Mug, Blue',
+			'shipping_address_collection[allowed_countries][0]=US',
+			'shipping_options[0][shipping_rate_data][type]=fixed_amount',
+			'shipping_options[0][shipping_rate_data][fixed_amount][amount]=600',
+			'shipping_options[0][shipping_rate_data][display_name]=Shipping',
+			'payment_method_types[0]=card',
+			'payment_intent_data[application_fee_amount]=163',
+			'payment_intent_data[on_behalf_of]=acct_1',
+			'payment_intent_data[transfer_data][destination]=acct_1',
+			'payment_intent_data[metadata][checkoutId]=chk_1',
+			'metadata[kind]=store_order',
+			'client_reference_id=chk_1',
+			'ui_mode=elements',
+			'return_url=https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+			`expires_at=${1_800_000_000 + 35 * 60}`,
+		]) {
+			expect(body).toContain(part);
+		}
+	});
+
+	it("charges in US dollars only, by card or a card wallet, with no local-currency prices and no Link bank payments", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession(INPUT);
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(body).toContain('adaptive_pricing[enabled]=false');
+		expect(body).toContain('wallet_options[link][display]=never');
+	});
+
+	it('labels free shipping', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_2', url: null });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({ ...INPUT, shippingCents: 0 });
+		expect(decodeURIComponent(String(calls[0].init.body))).toContain('shipping_options[0][shipping_rate_data][display_name]=Free shipping');
+	});
+});
+
+describe('connected-account calls', () => {
+	it('reads the seller balance as the seller, in USD only', async () => {
+		const { calls, fakeFetch } = recordingFetch({
+			available: [{ amount: 1500, currency: 'usd' }, { amount: 900, currency: 'eur' }],
+			pending: [{ amount: 2500, currency: 'usd' }],
+		});
+		expect(await createStripeClient('sk_test_fake', fakeFetch).retrieveBalance('acct_1')).toEqual({ availableCents: 1500, pendingCents: 2500 });
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/balance');
+		expect(new Headers(calls[0].init.headers).get('Stripe-Account')).toBe('acct_1');
+	});
+
+	it('transfers to a seller with a stable key', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'tr_9', amount: 4099 });
+		await createStripeClient('sk_test_fake', fakeFetch).createTransfer({ destination: 'acct_1', amountCents: 4099, idempotencyKey: 'dispute-return-dp_1', metadata: { disputeId: 'dp_1' } });
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/transfers');
+		expect(body).toContain('destination=acct_1');
+		expect(body).toContain('amount=4099');
+		expect(body).toContain('currency=usd');
+		expect(new Headers(calls[0].init.headers).get('Idempotency-Key')).toBe('dispute-return-dp_1');
+	});
+
+	it('sets the payout schedule and lets Stripe debit the bank for a negative balance', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'acct_1', details_submitted: true, charges_enabled: true, payouts_enabled: true });
+		await createStripeClient('sk_test_fake', fakeFetch).updatePayoutSchedule('acct_1', { interval: 'weekly', weeklyAnchor: 'monday', monthlyAnchor: null, delayDays: 10 });
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts/acct_1');
+		for (const part of ['settings[payouts][schedule][interval]=weekly', 'settings[payouts][schedule][weekly_anchor]=monday', 'settings[payouts][schedule][delay_days]=10', 'settings[payouts][debit_negative_balances]=true']) {
+			expect(body).toContain(part);
+		}
+		expect(body).not.toContain('monthly_anchor');
+	});
+
+	it('asks Stripe for card payments on an existing account', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'acct_1', details_submitted: true, charges_enabled: true, payouts_enabled: true });
+		await createStripeClient('sk_test_fake', fakeFetch).requestCardPayments('acct_1');
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts/acct_1');
+		expect(calls[0].init.method).toBe('POST');
+		expect(decodeURIComponent(String(calls[0].init.body))).toBe('capabilities[card_payments][requested]=true');
+	});
+
+	it("changes only the payout delay, leaving the seller's chosen payout days alone", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'acct_1', details_submitted: true, charges_enabled: true, payouts_enabled: true });
+		await createStripeClient('sk_test_fake', fakeFetch).updatePayoutDelay('acct_1', 5);
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/accounts/acct_1');
+		expect(decodeURIComponent(String(calls[0].init.body))).toBe('settings[payouts][schedule][delay_days]=5');
+	});
+
+	it('expands the charge fee with the transfer', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'pi_1', latest_charge: null });
+		await createStripeClient('sk_test_fake', fakeFetch).retrievePaymentIntent('pi_1');
+		const url = decodeURIComponent(calls[0].url);
+		expect(url).toContain('expand[0]=latest_charge.transfer');
+		expect(url).toContain('expand[1]=latest_charge.balance_transaction');
+	});
+});
+
+describe('Elements sessions', () => {
+	it("pins Stripe's API version on every request, so a new account default can't change responses", async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: null, client_secret: 'cs_1_secret' });
+		await createStripeClient('sk_test_fake', fakeFetch).retrieveCheckoutSession('cs_1');
+		expect(new Headers(calls[0].init.headers).get('Stripe-Version')).toBe('2026-03-25.dahlia');
+	});
+
+	it('creates the store session for Elements on Estori\'s own page: a return address, and no hosted-page addresses', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: null, client_secret: 'cs_1_secret' });
+		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({
+			checkoutId: 'chk_1',
+			lines: [{ name: 'Trail Mug, Blue', quantity: 1, unitPriceCents: 2000 }],
+			shippingCents: 0,
+			shipToCountry: 'US',
+			applicationFeeCents: 88,
+			sellerStripeAccountId: 'acct_1',
+			metadata: { kind: 'store_order' },
+			returnUrl: 'https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}',
+			nowMs: 1_800_000_000_000,
+		});
+		const body = decodeURIComponent(String(calls[0].init.body));
+		expect(body).toContain('ui_mode=elements');
+		expect(body).toContain('return_url=https://store.test/__estori/return?session_id={CHECKOUT_SESSION_ID}');
+		expect(body).not.toContain('success_url');
+		expect(body).not.toContain('cancel_url');
+	});
+
+	it('expires a session, and takes one already expired or completed as done', async () => {
+		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', status: 'expired' });
+		await createStripeClient('sk_test_fake', fakeFetch).expireCheckoutSession('cs_1');
+		expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions/cs_1/expire');
+		expect(calls[0].init.method).toBe('POST');
+		const refused: typeof fetch = async () => new Response(JSON.stringify({ error: { message: 'Only Checkout Sessions with a status in [\"open\"] can be expired.', type: 'invalid_request_error' } }), { status: 400 });
+		await expect(createStripeClient('sk_test_fake', refused).expireCheckoutSession('cs_1')).resolves.toBeUndefined();
 	});
 });

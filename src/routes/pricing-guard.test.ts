@@ -38,6 +38,15 @@ describe('pricing page', () => {
 		expect(faq).toContain('group-open:block');
 	});
 
+	it('answers whether Estori takes a cut of store sales as the selling terms do', () => {
+		const faq = source('/src/components/public-site/PublicFaq.tsx');
+		expect(faq).not.toContain('only Stripe charges');
+		const answer = faq.slice(faq.indexOf('Does Estori take a cut of my store sales?'));
+		expect(answer.slice(0, 400)).toContain('card processing');
+		expect(answer.slice(0, 400)).toContain('catalog price');
+		expect(answer.slice(0, 400)).toContain('/platform/payments');
+	});
+
 	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
 		const order = ['<PlanCards />', '<ComparePlans />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={PRICING_FAQ} />'];
 		const positions = order.map((tag) => page.indexOf(tag));

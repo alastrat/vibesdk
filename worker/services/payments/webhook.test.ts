@@ -44,4 +44,9 @@ describe('parseStripeEvent', () => {
 		expect(parseStripeEvent('not json')).toBeNull();
 		expect(parseStripeEvent(JSON.stringify({ id: 'evt_1' }))).toBeNull();
 	});
+
+	it('keeps the connected account a Connect event came from', () => {
+		expect(parseStripeEvent(JSON.stringify({ id: 'evt_1', type: 'payout.paid', account: 'acct_1', data: { object: { id: 'po_1' } } }))?.account).toBe('acct_1');
+		expect(parseStripeEvent(JSON.stringify({ id: 'evt_2', type: 'charge.dispute.created', data: { object: {} } }))?.account).toBeUndefined();
+	});
 });

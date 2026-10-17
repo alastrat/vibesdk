@@ -1,0 +1,1 @@
+ALTER TABLE `store_disputes` ADD `closed_at` integer;

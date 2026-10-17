@@ -17,6 +17,8 @@ import {
 import { getAgentStub } from './agents';
 import { servePublicSite } from './services/public-site/serve';
 import { AppService } from './database/services/AppService';
+import { runCatalogSchedule } from './services/catalog/scheduler';
+import { runStorePaymentsSchedule } from './services/store-payments/wiring';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -28,6 +30,7 @@ import {
 export { UserAppSandboxService } from './services/sandbox/sandboxSdkClient';
 export { CodeGeneratorAgent } from './agents/core/codingAgent';
 export { UserSecretsStore } from './services/secrets/UserSecretsStore';
+export { CatalogOrderRunner } from './services/catalog/CatalogOrderRunner';
 // SpaceDO (same-worker integration) — git-backed files + preview/deploy for
 // `think` apps. Re-exported so wrangler can bind it via durable_objects.bindings.
 // AppDatabase is NOT exported here — it lives inside SpaceDO's Worker Loader
@@ -275,7 +278,7 @@ const worker = {
 			if (!params) {
 				return new Response('Not Found', { status: 404 });
 			}
-			const response = await handleSpacePreview(request, env, params.spaceName, params.branch);
+			const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
 			return withPreviewCorsHeaders(env, request, response);
 		}
 
@@ -286,7 +289,7 @@ const worker = {
 				if (separatePreviewDomain) {
 					return new Response('Not Found', { status: 404 });
 				}
-				const response = await handleSpacePreview(request, env, params.spaceName, params.branch);
+				const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
 				return withPreviewCorsHeaders(env, request, response);
 			}
 
@@ -342,6 +345,10 @@ const worker = {
 		}
 
 		return new Response('Not Found', { status: 404 });
+	},
+	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+		ctx.waitUntil(runCatalogSchedule(controller.cron, env));
+		ctx.waitUntil(runStorePaymentsSchedule(controller.cron, env));
 	},
 } satisfies ExportedHandler<Env>;
 

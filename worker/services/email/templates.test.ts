@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { passwordResetEmail, verifyEmailEmail } from './templates';
+import { passwordResetEmail, platformAlertEmail, verifyEmailEmail } from './templates';
 
 const LINK = 'https://estori.app/reset-password?token=abc123';
 
@@ -78,5 +78,16 @@ describe('HTML escaping', () => {
 		const email = passwordResetEmail('user@example.com', 'https://estori.app/x?a="onmouseover="y');
 		expect(email.html).not.toContain('"onmouseover="');
 		expect(email.html).toContain('&quot;onmouseover=&quot;');
+	});
+});
+
+describe('platformAlertEmail', () => {
+	it('names the alert, its subject and details, and escapes them', () => {
+		const email = platformAlertEmail('ops@example.test', { kind: 'not-shipped', subject: 'co_<1>', message: 'Placed 6 days ago', details: [['Order', 'co_<1>']] }, "An order hasn't shipped");
+		expect(email.to).toBe('ops@example.test');
+		expect(email.subject).toBe("Estori alert: An order hasn't shipped (co_<1>)");
+		expect(email.text).toContain('Placed 6 days ago');
+		expect(email.text).toContain('Order: co_<1>');
+		expect(email.html).toContain('co_&lt;1&gt;');
 	});
 });

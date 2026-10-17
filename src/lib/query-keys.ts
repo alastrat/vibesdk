@@ -128,6 +128,9 @@ export const queryKeys = {
 		contactRequests: {
 			admin: () => [...queryKeys.account.all, 'contact-requests', 'admin'] as const,
 		},
+		catalog: {
+			products: (query: string) => [...queryKeys.account.all, 'catalog', query] as const,
+		},
 		limits: {
 			all: () => [...queryKeys.account.all, 'limits'] as const,
 			usageAll: () =>

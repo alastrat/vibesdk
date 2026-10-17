@@ -147,6 +147,10 @@
             {
                 "class_name": "SpaceDO",
                 "name": "SPACE_DO"
+            },
+            {
+                "class_name": "CatalogOrderRunner",
+                "name": "CATALOG_ORDER_RUNNER"
             }
 		]
 	},
@@ -201,8 +205,17 @@
                 "ThinkAgent"
             ],
             "tag": "v6"
+        },
+        {
+            "new_sqlite_classes": [
+                "CatalogOrderRunner"
+            ],
+            "tag": "v7"
         }
 	],
+    "triggers": {
+        "crons": ["*/15 * * * *", "5 * * * *", "35 6 * * *"]
+    },
 	"routes": [
         {
             "pattern": "build.cloudflare.dev",

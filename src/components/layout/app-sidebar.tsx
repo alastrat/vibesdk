@@ -6,6 +6,7 @@ import {
 	GlobeHemisphereWestIcon,
 	LockKeyIcon,
 	MagnifyingGlassIcon,
+	PackageIcon,
 	PlusIcon,
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
@@ -302,6 +303,23 @@ export function AppSidebar() {
 							)}
 							icon={<CompassIcon className="size-4" />}
 						/>
+						{user && (
+							<Button
+								shape="square"
+								size="base"
+								variant="ghost"
+								id="catalog-link"
+								aria-label="Catalog"
+								title="Catalog"
+								aria-current={pathname === '/catalog' ? 'page' : undefined}
+								onClick={() => navigate('/catalog')}
+								className={cn(
+									'text-kumo-subtle hover:text-kumo-default',
+									pathname === '/catalog' && 'bg-(--sidebar-active-bg) text-kumo-default',
+								)}
+								icon={<PackageIcon className="size-4" />}
+							/>
+						)}
 					</div>
 				) : (
 					<div className="flex flex-col gap-1.5">
@@ -338,6 +356,17 @@ export function AppSidebar() {
 							>
 								Discover
 							</Sidebar.MenuButton>
+							{user && (
+								<Sidebar.MenuButton
+									active={pathname === '/catalog'}
+									icon={<PackageIcon weight="duotone" className="size-4 -mr-1" />}
+									id="catalog-link"
+									tooltip="Catalog"
+									onClick={() => navigate('/catalog')}
+								>
+									Catalog
+								</Sidebar.MenuButton>
+							)}
 						</Sidebar.Menu>
 
 						{user && (

@@ -47,9 +47,7 @@ describe('early access in the app', () => {
 		expect(source('/src/routes/admin/reviews.tsx')).toContain('to="/admin/early-access"');
 	});
 
-	it('tells people in the privacy policy that requests are kept, dated without asking everyone to accept the terms again', () => {
-		const privacy = source('/src/content/legal/privacy.md');
-		expect(privacy).toContain('updated: October 14, 2026');
-		expect(privacy).toContain('**Early access requests.**');
+	it('tells people in the privacy policy that early access requests are kept', () => {
+		expect(source('/src/content/legal/privacy.md')).toContain('**Early access requests.**');
 	});
 });

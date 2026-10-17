@@ -15,6 +15,7 @@ import APP_FILE_STRUCTURE from './skills/app-file-structure/SKILL.md?raw';
 import FRONTEND_DESIGN from './skills/frontend-design/SKILL.md?raw';
 import FRONTEND_DESIGN_LANDING_PAGE from './skills/frontend-design-landing-page/SKILL.md?raw';
 import FRONTEND_DESIGN_SAAS from './skills/frontend-design-saas/SKILL.md?raw';
+import STORE_CHECKOUT from './skills/store-checkout/SKILL.md?raw';
 
 /** Raw `SKILL.md` contents keyed by their source directory name. */
 const RAW_SKILLS: Record<string, string> = {
@@ -22,6 +23,7 @@ const RAW_SKILLS: Record<string, string> = {
 	'frontend-design': FRONTEND_DESIGN,
 	'frontend-design-landing-page': FRONTEND_DESIGN_LANDING_PAGE,
 	'frontend-design-saas': FRONTEND_DESIGN_SAAS,
+	'store-checkout': STORE_CHECKOUT,
 };
 
 function buildEntries(): SkillManifestEntry[] {

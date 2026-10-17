@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
-version: 2026-10-13
-updated: October 14, 2026
+version: 2026-10-16
+updated: October 16, 2026
 ---
 
 This Privacy Policy explains how {{entity.name}} ("Globalink", "we", "us") collects, uses and shares personal data when you use Estori at estori.app (the "Service"). Globalink is the controller of the personal data described here.
@@ -43,10 +43,11 @@ We share personal data only as described here.
 
 - **Cloudflare**: hosting, databases, file storage, AI request routing, browser rendering for site screenshots and for pages you ask the AI to look at, sending account emails such as password resets and email confirmations, and operational logs.
 - **AI model providers** (currently Anthropic and Google): your prompts, messages, images and site files are sent to the model you choose, or to a fallback model when the chosen one is unavailable, to generate and edit your site.
-- **Stripe**: payments, seller onboarding and payouts. Stripe receives buyers' and sellers' email addresses and the payment and payout details they give Stripe directly.
+- **Stripe**: payments, seller onboarding and payouts. Stripe receives buyers', shoppers' and sellers' email addresses, shoppers' shipping addresses, and the payment and payout details people give Stripe directly.
+- **Fulfillment partners**: when a store sells products from the Estori catalog, the shopper's name, shipping address, email and phone number go to the partner that ships the order.
 - **GitHub**: only if you choose to export a site to GitHub.
 
-**Other users and the public.** Public sites, their screenshots, product pages, your display name and avatar, and public stats are visible to everyone. A seller sees that a sale happened; buyers' details aren't shown to sellers.
+**Other users and the public.** Public sites, their screenshots, product pages, your display name and avatar, and public stats are visible to everyone. A paid site's seller sees that a sale happened; its buyers' details aren't shown to them. A store's owner sees the orders their store takes, with each shopper's name, email, phone number (when given) and shipping address.
 
 **Legal and safety reasons.** When required by law, or to protect the rights, safety and property of users, the public or Globalink.
 
@@ -100,6 +101,8 @@ The Service is for people 18 and older. We don't knowingly collect personal data
 ## 10. Your store's visitors
 
 When people visit a store you build, the store may collect their information, for example orders or contact forms. We store and process that information on your behalf to run your store. You're responsible for telling your visitors how your store uses their data and for any privacy notice your store needs.
+
+Shoppers who pay at a store give their name, email, shipping address and card details to Stripe at checkout. We receive the name, email, phone number (when given) and shipping address to record the order, deliver catalog products and show the order to the store's owner, who sells to them.
 
 ## 11. Changes to this Policy
 

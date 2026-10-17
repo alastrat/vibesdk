@@ -3,6 +3,7 @@ import type { FileSystem } from "@cloudflare/shell"
 import { createApp, createWorker, type AssetConfig, type Modules } from "@cloudflare/worker-bundler"
 import { parseWranglerConfig, WranglerConfigError } from "./wrangler-config"
 import { globInfos } from "./fileinfo"
+import { storeManifestOf } from "./store-manifest"
 
 // ─── Deploy Engine ──────────────────────────────────────────────────────────
 
@@ -28,6 +29,8 @@ export interface BranchDeploymentBundle {
   assets: Record<string, string>
   assetConfig: AssetConfig | undefined
   compatibilityDate: string
+  /** The raw `estori-store.json` of the deployed tree, or null when the store has none. */
+  storeManifest: string | null
 }
 
 export async function handleDeployCommand(
@@ -124,19 +127,21 @@ async function deployBranch(
     assets: serializedAssets,
     assetConfig,
     compatibilityDate: compatDate,
+    storeManifest,
   } = bundle
 
   const now = Date.now()
   ctx.sql.exec(
     `INSERT OR REPLACE INTO deployments
-     (branch, commit_hash, main_module, modules, assets, asset_config, deployed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     branch,
     commitHash,
     mainModule,
     JSON.stringify(serializedModules),
     JSON.stringify(serializedAssets),
     assetConfig ? JSON.stringify(assetConfig) : "{}",
+    storeManifest,
     now
   )
 
@@ -210,6 +215,7 @@ export async function buildBranchDeployment(
         assets: serializeAssets(result.assets),
         assetConfig: result.assetConfig,
         compatibilityDate: wranglerCfg.compatibilityDate ?? "2025-04-01",
+        storeManifest: storeManifestOf(files),
       }
     }
 
@@ -224,6 +230,7 @@ export async function buildBranchDeployment(
       assets: {},
       assetConfig,
       compatibilityDate: wranglerCfg.compatibilityDate ?? "2025-04-01",
+      storeManifest: storeManifestOf(files),
     }
   } catch (e) {
     throw new Error(`Build failed: ${e instanceof Error ? e.message : String(e)}`)

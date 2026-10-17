@@ -1,6 +1,7 @@
 import { contactTopicLabel, type ContactRequestInput } from '../../../shared/types/contact';
 import { escapeHtml } from '../../utils/html';
 import type { OutgoingEmail } from './types';
+import type { PlatformAlert } from '../alerts/platform-alerts';
 
 const BUTTON_STYLE =
 	'display:inline-block;padding:12px 20px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;';
@@ -118,5 +119,40 @@ export function contactNotificationEmail(to: string, request: ContactRequestInpu
 		body: `${request.firstName} ${request.lastName} wrote from the contact page. Reply to them at ${request.email}.`,
 		details,
 		footer: 'Every request is also listed in the admin area.',
+	});
+}
+
+/** An alert for the people who run Estori: what happened, to which order or product, and what's known. */
+export function platformAlertEmail(to: string, alert: PlatformAlert, label: string): OutgoingEmail {
+	return renderEmail({
+		to,
+		subject: `Estori alert: ${label} (${alert.subject})`,
+		heading: label,
+		body: alert.message,
+		details: [['About', alert.subject], ...(alert.details ?? [])],
+		footer: 'Each alert repeats at most once a day for the same order or product.',
+	});
+}
+
+/** To a seller whose store reached its weekly sales cap. */
+export function sellerLimitReachedEmail(to: string, weeklySalesCents: number): OutgoingEmail {
+	return renderEmail({
+		to,
+		subject: 'Your store reached its weekly sales limit',
+		heading: 'Your store paused new orders',
+		body: `Your store reached its limit of $${(weeklySalesCents / 100).toFixed(2)} in sales over 7 days, so it isn't taking new orders until the oldest sales leave that window. Limits grow as your store builds a record of delivered orders.`,
+		footer: 'You can see your limits under Profile, Paid listings, Get paid with Stripe.',
+	});
+}
+
+/** To a seller whose order had items Estori refunded to the shopper. */
+export function sellerItemsRefundedEmail(to: string, itemCount: number, reason: 'supplier' | 'risk'): OutgoingEmail {
+	const why = reason === 'supplier' ? 'they could not be shipped' : 'the payment looked risky and could not be confirmed in time';
+	return renderEmail({
+		to,
+		subject: 'We refunded items from an order in your store',
+		heading: 'Items refunded',
+		body: `We refunded ${itemCount} item${itemCount === 1 ? '' : 's'} from an order in your store because ${why}. Your share of those items was taken back, and the shopper got their money for them.`,
+		footer: 'The order shows each item as refunded.',
 	});
 }

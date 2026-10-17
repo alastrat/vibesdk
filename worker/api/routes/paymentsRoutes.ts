@@ -9,6 +9,8 @@ import { handleStripeWebhook } from '../controllers/payments/webhook';
 export function setupPaymentsRoutes(app: Hono<AppEnv>): void {
     app.post('/api/stripe/connect/onboarding', setAuthLevel(AuthConfig.authenticated), adaptController(StripeConnectController, StripeConnectController.startOnboarding));
     app.get('/api/stripe/connect/status', setAuthLevel(AuthConfig.authenticated), adaptController(StripeConnectController, StripeConnectController.getStatus));
+    app.post('/api/stripe/connect/terms', setAuthLevel(AuthConfig.authenticated), adaptController(StripeConnectController, StripeConnectController.acceptSellerTerms));
+    app.put('/api/stripe/connect/payouts', setAuthLevel(AuthConfig.authenticated), adaptController(StripeConnectController, StripeConnectController.setPayoutSchedule));
     app.post('/api/stripe/connect/dashboard', setAuthLevel(AuthConfig.authenticated), adaptController(StripeConnectController, StripeConnectController.dashboardLink));
     app.post('/api/stripe/webhook', setAuthLevel(AuthConfig.public), (c) => handleStripeWebhook(c.req.raw, c.env));
 }

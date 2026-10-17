@@ -7,6 +7,7 @@ import { AppCard } from '@/components/shared/AppCard';
 import { LinkButton, cn } from '@cloudflare/kumo';
 import { BuildBox } from '@/components/build-box';
 import { DiscoverStrip } from '@/components/publishing/DiscoverStrip';
+import { PaymentsSetupPrompt } from '@/components/payments/PaymentsSetupPrompt';
 import { pageTitle } from '@/brand';
 
 export default function Home() {
@@ -56,6 +57,7 @@ export default function Home() {
 							</h1>
 						</div>
 						<BuildBox />
+						<PaymentsSetupPrompt />
 					</motion.div>
 					<DiscoverStrip />
 				</div>

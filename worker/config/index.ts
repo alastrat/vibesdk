@@ -1,5 +1,6 @@
 import { ConfigurableSecuritySettings, getConfigurableSecurityDefaults } from "./security";
 import { createLogger } from "../logger";
+import { DEFAULT_SELLER_LIMITS, type SellerLimitsSettings } from "../../shared/types/seller-levels";
 
 const logger = createLogger('GlobalConfigurableSettings');
 
@@ -86,6 +87,7 @@ export interface GlobalMessagingSettings {
 export interface GlobalConfigurableSettings {
     security: ConfigurableSecuritySettings;
     globalMessaging: GlobalMessagingSettings;
+    sellerLimits: SellerLimitsSettings;
 }
 
 type StoredConfig = DeepPartial<GlobalConfigurableSettings>;
@@ -102,7 +104,8 @@ export async function getGlobalConfigurableSettings(env: Env): Promise<GlobalCon
         globalMessaging: {
             globalUserMessage: "",
             changeLogs: ""
-        }
+        },
+        sellerLimits: DEFAULT_SELLER_LIMITS,
     };
     
     try {
@@ -129,6 +132,18 @@ export async function getGlobalConfigurableSettings(env: Env): Promise<GlobalCon
         // On error, fallback to default configuration
         return defaultConfig;
     }
+}
+
+/**
+ * A seller's limits, read from KV every time rather than the per-user cache, so an admin's pin or override applies to
+ * the next checkout and level sync. Unreadable stored settings throw: guessing could drop a limit an admin set.
+ */
+export async function getSellerLimitsSettings(env: Env, userId: string): Promise<SellerLimitsSettings> {
+    const global = (await getGlobalConfigurableSettings(env)).sellerLimits;
+    const storedConfigJson = await env.VibecoderStore.get(`user_config:${userId}`);
+    if (!storedConfigJson) return global;
+    const storedConfig: StoredConfig = JSON.parse(storedConfigJson);
+    return storedConfig.sellerLimits ? deepMerge<SellerLimitsSettings>(global, storedConfig.sellerLimits) : global;
 }
 
 export async function getUserConfigurableSettings(env: Env, userId: string): Promise<GlobalConfigurableSettings> {

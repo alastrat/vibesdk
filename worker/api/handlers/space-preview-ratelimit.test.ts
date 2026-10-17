@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // class identity inside space-preview.ts (Vite resolves the `shared` alias).
 import { RateLimitExceededError } from 'shared/types/errors';
 
+/** The request's execution context; work handed to waitUntil is dropped in these tests. */
+const CTX = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
+
 // getPreviewVersion is always 0 here (no visibility revocation under test).
 vi.mock('../../database/services/AppService', () => ({
 	AppService: class {
@@ -69,7 +72,7 @@ describe('handleSpacePreview rate limiting', () => {
 			userId: 'user-a',
 			previewVersion: 0,
 		});
-		const req = () => handleSpacePreview(previewRequest(token), env, 'space-a', 'main');
+		const req = () => handleSpacePreview(previewRequest(token), env, 'space-a', 'main', CTX);
 
 		for (let i = 0; i < LIMIT; i++) {
 			expect((await req()).status).toBe(200);
@@ -95,10 +98,10 @@ describe('handleSpacePreview rate limiting', () => {
 
 		// Exhaust token A.
 		for (let i = 0; i < LIMIT; i++) {
-			await handleSpacePreview(previewRequest(tokenA), env, 'space-a', 'main');
+			await handleSpacePreview(previewRequest(tokenA), env, 'space-a', 'main', CTX);
 		}
-		expect((await handleSpacePreview(previewRequest(tokenA), env, 'space-a', 'main')).status).toBe(429);
+		expect((await handleSpacePreview(previewRequest(tokenA), env, 'space-a', 'main', CTX)).status).toBe(429);
 		// Token B is unaffected.
-		expect((await handleSpacePreview(previewRequest(tokenB), env, 'space-a', 'main')).status).toBe(200);
+		expect((await handleSpacePreview(previewRequest(tokenB), env, 'space-a', 'main', CTX)).status).toBe(200);
 	});
 });

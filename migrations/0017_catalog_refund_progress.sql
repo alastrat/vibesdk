@@ -1,0 +1,1 @@
+ALTER TABLE `catalog_order_items` ADD `seller_reversal_due_cents` integer DEFAULT 0 NOT NULL;

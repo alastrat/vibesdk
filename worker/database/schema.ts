@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text, integer, real, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 // Relative on purpose: drizzle-kit loads this file without the `shared` alias.
 import {
     TEMPLATE_CATEGORIES,
@@ -8,6 +8,26 @@ import {
     TEMPLATE_VERSION_STATUSES,
     USER_ROLES,
 } from '../../shared/types/templates';
+import {
+    CATALOG_ITEM_STATUSES,
+    CATALOG_OFFER_UNAVAILABLE_REASONS,
+    CATALOG_ORDER_STATUSES,
+    CATALOG_PRODUCT_STATUSES,
+    CATALOG_SUPPLIERS,
+    CATALOG_VARIANT_STATUSES,
+} from '../../shared/types/catalog';
+import {
+    DISPUTE_REVERSAL_STATES,
+    PAYOUT_INTERVALS,
+    SELLER_CHARGE_KINDS,
+    STORE_CHECKOUT_STATUSES,
+    STORE_FULFILLMENT_STATUSES,
+    STORE_LINE_KINDS,
+    STORE_MODES,
+    STORE_PAYMENT_STATUSES,
+    STORE_REFUND_INITIATORS,
+} from '../../shared/types/store-payments';
+import { SELLER_LEVELS } from '../../shared/types/seller-levels';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -64,6 +84,9 @@ export const users = sqliteTable('users', {
     // Terms of Service agreement: when and which version; null until the user agrees.
     termsAcceptedAt: integer('terms_accepted_at', { mode: 'timestamp' }),
     termsVersion: text('terms_version'),
+    /** The selling-terms version the user agreed to before their stores take payments; null until they do. */
+    sellerTermsVersion: text('seller_terms_version'),
+    sellerTermsAcceptedAt: integer('seller_terms_accepted_at', { mode: 'timestamp' }),
     
     // Soft delete
     deletedAt: integer('deleted_at', { mode: 'timestamp' }),
@@ -351,9 +374,295 @@ export const stripeConnectAccounts = sqliteTable('stripe_connect_accounts', {
     chargesEnabled: integer('charges_enabled', { mode: 'boolean' }).notNull().default(false),
     payoutsEnabled: integer('payouts_enabled', { mode: 'boolean' }).notNull().default(false),
     transfersActive: integer('transfers_active', { mode: 'boolean' }).notNull().default(false),
+    /** The seller can be the merchant of record (on_behalf_of); store checkout requires it. */
+    cardPaymentsActive: integer('card_payments_active', { mode: 'boolean' }).notNull().default(false),
+    /** How often the seller is paid; they choose, and pay Stripe's per-payout cost. */
+    payoutInterval: text('payout_interval', { enum: PAYOUT_INTERVALS }).notNull().default('weekly'),
+    /** A weekday for weekly payouts, or a day of the month (as text) for monthly ones. */
+    payoutAnchor: text('payout_anchor').notNull().default('monday'),
+    sellerLevel: text('seller_level', { enum: SELLER_LEVELS }).notNull().default('new'),
+    /** The payout delay last set on Stripe; null until Estori first sets it. */
+    payoutDelayDays: integer('payout_delay_days'),
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
 });
+
+/**
+ * Catalog orders - the catalog part of a paid store checkout. Estori buys these items from suppliers with the
+ * application fee it took from the payment; one order per Checkout session.
+ */
+export const catalogOrders = sqliteTable('catalog_orders', {
+    id: text('id').primaryKey(),
+    sellerUserId: text('seller_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    storeAppId: text('store_app_id').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id').notNull(),
+    stripePaymentIntentId: text('stripe_payment_intent_id').notNull(),
+    status: text('status', { enum: CATALOG_ORDER_STATUSES }).notNull().default('awaiting-placement'),
+    totalCents: integer('total_cents').notNull(),
+    catalogTotalCents: integer('catalog_total_cents').notNull(),
+    applicationFeeCents: integer('application_fee_cents').notNull(),
+    currency: text('currency').notNull().default('usd'),
+    destinationCountry: text('destination_country').notNull(),
+    // The shopper's address as JSON: supplier orders are placed after the webhook answers.
+    shippingAddress: text('shipping_address').notNull(),
+    placementAttempts: integer('placement_attempts').notNull().default(0),
+    lastError: text('last_error'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    checkoutSessionIdx: uniqueIndex('catalog_orders_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),
+    sellerIdx: index('catalog_orders_seller_idx').on(table.sellerUserId),
+    statusIdx: index('catalog_orders_status_idx').on(table.status),
+}));
+
+/** Catalog order items - one per catalog line, with the price locked at checkout and the supplier's progress. */
+export const catalogOrderItems = sqliteTable('catalog_order_items', {
+    id: text('id').primaryKey(),
+    orderId: text('order_id').notNull().references(() => catalogOrders.id, { onDelete: 'cascade' }),
+    catalogVariantId: text('catalog_variant_id').notNull(),
+    supplier: text('supplier', { enum: CATALOG_SUPPLIERS }).notNull(),
+    supplierVariantId: text('supplier_variant_id').notNull(),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    catalogPriceCents: integer('catalog_price_cents').notNull(),
+    status: text('status', { enum: CATALOG_ITEM_STATUSES }).notNull().default('pending'),
+    supplierOrderId: text('supplier_order_id'),
+    trackingNumber: text('tracking_number'),
+    carrier: text('carrier'),
+    supplierRefunded: integer('supplier_refunded', { mode: 'boolean' }).notNull().default(false),
+    // The seller's share of a refunded item still to take back from their transfer; 0 once reversed.
+    sellerReversalDueCents: integer('seller_reversal_due_cents').notNull().default(0),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    orderIdx: index('catalog_order_items_order_idx').on(table.orderId),
+    supplierOrderIdx: index('catalog_order_items_supplier_order_idx').on(table.supplierOrderId),
+}));
+
+/**
+ * Store checkouts - a cart Estori priced and sent to Stripe. Financial records: no foreign key to apps, so they
+ * outlive a deleted app.
+ */
+export const storeCheckouts = sqliteTable('store_checkouts', {
+    id: text('id').primaryKey(),
+    mode: text('mode', { enum: STORE_MODES }).notNull(),
+    appId: text('app_id').notNull(),
+    storeVersionId: text('store_version_id'),
+    commitHash: text('commit_hash').notNull(),
+    sellerUserId: text('seller_user_id').notNull(),
+    sellerStripeAccountId: text('seller_stripe_account_id'),
+    shipToCountry: text('ship_to_country').notNull(),
+    // The PricedCart as JSON: what the shopper pays is fixed here, never re-read from the store.
+    pricedCart: text('priced_cart').notNull(),
+    subtotalCents: integer('subtotal_cents').notNull(),
+    shippingCents: integer('shipping_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    applicationFeeCents: integer('application_fee_cents').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    status: text('status', { enum: STORE_CHECKOUT_STATUSES }).notNull().default('creating'),
+    successPath: text('success_path').notNull(),
+    cancelPath: text('cancel_path').notNull(),
+    note: text('note'),
+    /** What this checkout counts toward the seller's weekly cap: own lines twice, the rest once. */
+    weightedCents: integer('weighted_cents').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    sessionIdx: uniqueIndex('store_checkouts_session_unique_idx').on(table.stripeCheckoutSessionId),
+    appIdx: index('store_checkouts_app_idx').on(table.appId),
+    sellerIdx: index('store_checkouts_seller_idx').on(table.sellerUserId, table.mode, table.createdAt),
+}));
+
+/** Store orders - one per paid checkout, numbered per store and mode. */
+export const storeOrders = sqliteTable('store_orders', {
+    id: text('id').primaryKey(),
+    mode: text('mode', { enum: STORE_MODES }).notNull(),
+    appId: text('app_id').notNull(),
+    orderNumber: integer('order_number').notNull(),
+    checkoutId: text('checkout_id').notNull(),
+    sellerUserId: text('seller_user_id').notNull(),
+    sellerStripeAccountId: text('seller_stripe_account_id'),
+    storeVersionId: text('store_version_id'),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id'),
+    stripePaymentIntentId: text('stripe_payment_intent_id'),
+    paymentStatus: text('payment_status', { enum: STORE_PAYMENT_STATUSES }).notNull().default('paid'),
+    fulfillmentStatus: text('fulfillment_status', { enum: STORE_FULFILLMENT_STATUSES }).notNull().default('unfulfilled'),
+    trackingNumber: text('tracking_number'),
+    carrier: text('carrier'),
+    subtotalCents: integer('subtotal_cents').notNull(),
+    shippingCents: integer('shipping_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    applicationFeeCents: integer('application_fee_cents').notNull(),
+    refundedCents: integer('refunded_cents').notNull().default(0),
+    currency: text('currency').notNull().default('usd'),
+    customerEmail: text('customer_email'),
+    customerName: text('customer_name'),
+    // The shopper's address as JSON, for the seller to ship own products.
+    shippingAddress: text('shipping_address'),
+    note: text('note'),
+    needsAttention: text('needs_attention'),
+    revision: integer('revision').notNull().default(1),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    checkoutIdx: uniqueIndex('store_orders_checkout_unique_idx').on(table.checkoutId),
+    sessionIdx: uniqueIndex('store_orders_session_unique_idx').on(table.stripeCheckoutSessionId),
+    numberIdx: uniqueIndex('store_orders_number_unique_idx').on(table.appId, table.mode, table.orderNumber),
+    paymentIntentIdx: index('store_orders_payment_intent_idx').on(table.stripePaymentIntentId),
+    sellerIdx: index('store_orders_seller_idx').on(table.sellerUserId),
+}));
+
+/** Store order items - the priced lines, as the shopper paid for them. */
+export const storeOrderItems = sqliteTable('store_order_items', {
+    orderId: text('order_id').notNull().references(() => storeOrders.id, { onDelete: 'cascade' }),
+    lineNo: integer('line_no').notNull(),
+    kind: text('kind', { enum: STORE_LINE_KINDS }).notNull(),
+    productId: text('product_id').notNull(),
+    variantId: text('variant_id').notNull(),
+    name: text('name').notNull(),
+    quantity: integer('quantity').notNull(),
+    unitPriceCents: integer('unit_price_cents').notNull(),
+    catalogVariantId: text('catalog_variant_id'),
+    lockedCatalogPriceCents: integer('locked_catalog_price_cents'),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.orderId, table.lineNo] }),
+}));
+
+/**
+ * Every refund of a store order line, by whoever started it. The row is claimed before Stripe is called, so a line is
+ * refunded once whoever asks; the Stripe refund and the seller's reversal are filled in as they happen.
+ */
+export const storeRefunds = sqliteTable('store_refunds', {
+    id: text('id').primaryKey(),
+    orderId: text('order_id').notNull().references(() => storeOrders.id),
+    lineNo: integer('line_no').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    requestId: text('request_id').notNull(),
+    initiatedBy: text('initiated_by', { enum: STORE_REFUND_INITIATORS }).notNull(),
+    stripeRefundId: text('stripe_refund_id'),
+    /** What to take back from the seller's transfer for this line; 0 when the catalog refund handles it. */
+    reversalCents: integer('reversal_cents').notNull().default(0),
+    reversalId: text('reversal_id'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    orderLineUnique: uniqueIndex('store_refunds_order_line_unique_idx').on(table.orderId, table.lineNo),
+    orderIdx: index('store_refunds_order_idx').on(table.orderId),
+}));
+
+/** A shopper's dispute of a store order, and what Estori took back from the seller for it. */
+export const storeDisputes = sqliteTable('store_disputes', {
+    id: text('id').primaryKey(),
+    orderId: text('order_id').notNull().references(() => storeOrders.id),
+    amountCents: integer('amount_cents').notNull(),
+    reason: text('reason').notNull(),
+    status: text('status').notNull(),
+    /** none: nothing to take back yet (an inquiry); planned: saved before Stripe is called; done or refused after. */
+    reversalState: text('reversal_state', { enum: DISPUTE_REVERSAL_STATES }).notNull().default('none'),
+    reversalId: text('reversal_id'),
+    reversedCents: integer('reversed_cents').notNull().default(0),
+    feeCents: integer('fee_cents').notNull().default(0),
+    returnedCents: integer('returned_cents').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    /** When Stripe decided the dispute or closed the inquiry; a loss counts toward the seller's level from then. */
+    closedAt: integer('closed_at', { mode: 'timestamp' }),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/** What a seller owes Estori outside one sale; taken from their next sales. */
+export const sellerCharges = sqliteTable('seller_charges', {
+    id: text('id').primaryKey(),
+    sellerUserId: text('seller_user_id').notNull().references(() => users.id),
+    kind: text('kind', { enum: SELLER_CHARGE_KINDS }).notNull(),
+    sourceId: text('source_id').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    collectedCents: integer('collected_cents').notNull().default(0),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    kindSourceUnique: uniqueIndex('seller_charges_kind_source_unique_idx').on(table.kind, table.sourceId),
+    openIdx: index('seller_charges_seller_idx').on(table.sellerUserId, table.createdAt),
+}));
+
+export const sellerChargeCollections = sqliteTable('seller_charge_collections', {
+    chargeId: text('charge_id').notNull().references(() => sellerCharges.id),
+    orderId: text('order_id').notNull().references(() => storeOrders.id),
+    /** Null while the collection is claimed but not yet taken from the transfer. */
+    reversalId: text('reversal_id'),
+    amountCents: integer('amount_cents').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    chargeOrderUnique: uniqueIndex('seller_charge_collections_unique_idx').on(table.chargeId, table.orderId),
+}));
+
+/** The card fee Stripe charged above what the sale collected, taken back from the seller once per order. */
+export const storeFeeAdjustments = sqliteTable('store_fee_adjustments', {
+    orderId: text('order_id').primaryKey().references(() => storeOrders.id),
+    collectedCents: integer('collected_cents').notNull(),
+    actualFeeCents: integer('actual_fee_cents').notNull(),
+    /** What to take back, saved before Stripe is called; the reversal id follows once it's done. */
+    differenceCents: integer('difference_cents').notNull().default(0),
+    reversalId: text('reversal_id'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+});
+
+/** Catalog products - the curated supplier products Estori sells, refreshed from the supplier. */
+export const catalogProducts = sqliteTable('catalog_products', {
+    id: text('id').primaryKey(),
+    supplier: text('supplier', { enum: CATALOG_SUPPLIERS }).notNull(),
+    supplierProductId: text('supplier_product_id').notNull(),
+    status: text('status', { enum: CATALOG_PRODUCT_STATUSES }).notNull().default('active'),
+    category: text('category').notNull(),
+    title: text('title'),
+    description: text('description'),
+    // JSON arrays and objects: R2 keys of the copied images, and the supplier's English properties.
+    images: text('images').notNull().default('[]'),
+    attributes: text('attributes').notNull().default('{}'),
+    detailsRefreshedAt: integer('details_refreshed_at', { mode: 'timestamp' }),
+    refreshClaimedUntil: integer('refresh_claimed_until', { mode: 'timestamp' }),
+    lastRefreshError: text('last_refresh_error'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    supplierIdx: uniqueIndex('catalog_products_supplier_unique_idx').on(table.supplier, table.supplierProductId),
+    statusIdx: index('catalog_products_status_idx').on(table.status),
+}));
+
+/** Catalog variants - one per supplier variant; the id is the catalogVariantId stores and carts carry. */
+export const catalogVariants = sqliteTable('catalog_variants', {
+    id: text('id').primaryKey(),
+    productId: text('product_id').notNull().references(() => catalogProducts.id, { onDelete: 'cascade' }),
+    supplierVariantId: text('supplier_variant_id').notNull(),
+    sku: text('sku'),
+    name: text('name').notNull(),
+    options: text('options').notNull().default('{}'),
+    imageKey: text('image_key'),
+    weightGrams: integer('weight_grams').notNull(),
+    supplierCostCents: integer('supplier_cost_cents').notNull(),
+    // JSON { countryCode: quantity } of the supplier's stock by warehouse country.
+    stock: text('stock').notNull().default('{}'),
+    status: text('status', { enum: CATALOG_VARIANT_STATUSES }).notNull().default('active'),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    supplierVariantIdx: uniqueIndex('catalog_variants_supplier_variant_unique_idx').on(table.supplierVariantId),
+    productIdx: index('catalog_variants_product_idx').on(table.productId),
+}));
+
+/** Catalog variant offers - a variant's price and availability for one destination country. */
+export const catalogVariantOffers = sqliteTable('catalog_variant_offers', {
+    variantId: text('variant_id').notNull().references(() => catalogVariants.id, { onDelete: 'cascade' }),
+    destinationCountry: text('destination_country').notNull(),
+    originCountry: text('origin_country').notNull(),
+    logisticName: text('logistic_name'),
+    deliveryDaysMin: integer('delivery_days_min'),
+    deliveryDaysMax: integer('delivery_days_max'),
+    supplierCostCents: integer('supplier_cost_cents').notNull(),
+    shippingCents: integer('shipping_cents'),
+    catalogPriceCents: integer('catalog_price_cents'),
+    available: integer('available', { mode: 'boolean' }).notNull(),
+    unavailableReason: text('unavailable_reason', { enum: CATALOG_OFFER_UNAVAILABLE_REASONS }),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.variantId, table.destinationCountry] }),
+}));
 
 /**
  * Favorites table - Track user favorite apps
