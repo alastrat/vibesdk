@@ -1,6 +1,6 @@
 /** D1 reads and writes for catalog orders and their items. */
 
-import { and, eq, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, inArray, lt, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { CatalogOrderRow, CatalogOrderStore, ItemPatch, NewCatalogOrder } from '../../services/catalog/store';
@@ -137,12 +137,15 @@ export class CatalogOrderService extends BaseService implements CatalogOrderStor
         return rows.map((row) => row.id);
     }
 
-    /** Orders with an item in this status since before `before`: late to ship ('placed') or to arrive ('shipped'). */
-    async lateItems(status: 'placed' | 'shipped', before: Date): Promise<string[]> {
+    /**
+     * Orders with an item in this status since before `before`, but no earlier than `since`: late to ship ('placed') or
+     * to arrive ('shipped'), and still within the window in which they're alerted.
+     */
+    async lateItems(status: 'placed' | 'shipped', before: Date, since: Date): Promise<string[]> {
         const rows = await this.database
             .selectDistinct({ orderId: schema.catalogOrderItems.orderId })
             .from(schema.catalogOrderItems)
-            .where(and(eq(schema.catalogOrderItems.status, status), lt(schema.catalogOrderItems.updatedAt, before)))
+            .where(and(eq(schema.catalogOrderItems.status, status), lt(schema.catalogOrderItems.updatedAt, before), gt(schema.catalogOrderItems.updatedAt, since)))
             .limit(100)
             .all();
         return rows.map((row) => row.orderId);

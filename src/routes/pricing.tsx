@@ -67,7 +67,7 @@ export default function PricingPage() {
 								<tbody>
 									{sellerKeepsTable().map((row) => (
 										<tr key={row.priceCents} className="border-t border-white/15">
-											<td className="py-2.5">{formatTemplatePrice(row.priceCents)}</td>
+											<th scope="row" className="py-2.5 font-normal">{formatTemplatePrice(row.priceCents)}</th>
 											<td className="py-2.5 text-white/70">{formatCents(row.feeCents)}</td>
 											<td className="py-2.5 text-right">{formatCents(row.sellerCents)}</td>
 										</tr>

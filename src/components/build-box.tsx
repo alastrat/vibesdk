@@ -51,11 +51,8 @@ export function BuildBox({
 	const { isLoadingCapabilities, capabilities, getEnabledFeatures } =
 		useFeature();
 
-	useEffect(() => {
-		if (!modelId && capabilities?.defaultThinkModel) {
-			setModelId(capabilities.defaultThinkModel);
-		}
-	}, [capabilities, modelId]);
+	// The user's pick, or the default once capabilities load, so the picker never paints empty first.
+	const selectedModelId = modelId || capabilities?.defaultThinkModel || '';
 	const { data: limitsData, loading: usageLimitsLoading } =
 		useLimitsContext();
 	const [showLimitDialog, setShowLimitDialog] =
@@ -129,7 +126,7 @@ export function BuildBox({
 			images.length > 0
 				? `&images=${encodeURIComponent(JSON.stringify(images))}`
 				: '';
-		const modelParam = mode === 'app' && modelId ? `&model=${encodeURIComponent(modelId)}` : '';
+		const modelParam = mode === 'app' && selectedModelId ? `&model=${encodeURIComponent(selectedModelId)}` : '';
 		const intendedUrl = `/chat/new?query=${encodedQuery}&projectType=${encodedMode}${behaviorParam}${modelParam}${imageParam}`;
 
 		if (
@@ -205,7 +202,7 @@ export function BuildBox({
 						)}
 						<ThinkModelPicker
 							options={capabilities?.thinkModels ?? []}
-							value={modelId}
+							value={selectedModelId}
 							onChange={setModelId}
 						/>
 					</div>

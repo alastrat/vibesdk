@@ -11,6 +11,7 @@ const sources = import.meta.glob<string>(
 		'/src/routes/chat/components/chat-input.tsx',
 		'/src/routes/chat/hooks/use-chat.ts',
 		'/src/routes/chat/utils/handle-websocket-message.ts',
+		'/worker/agents/think/ThinkAgent.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -39,8 +40,15 @@ describe('model picker: home prompt', () => {
 
 	it('sends the chosen model only when one is set', () => {
 		expect(source('/src/components/build-box.tsx')).toContain(
-			"const modelParam = mode === 'app' && modelId ? `&model=${encodeURIComponent(modelId)}` : '';",
+			"const modelParam = mode === 'app' && selectedModelId ? `&model=${encodeURIComponent(selectedModelId)}` : '';",
 		);
+	});
+
+	it('shows the default model from the first paint, derived rather than seeded in an effect', () => {
+		const box = source('/src/components/build-box.tsx');
+		expect(box).toContain("const selectedModelId = modelId || capabilities?.defaultThinkModel || '';");
+		expect(box).not.toContain('setModelId(capabilities.defaultThinkModel)');
+		expect(box).toContain('value={selectedModelId}');
 	});
 });
 
@@ -138,3 +146,13 @@ describe('model picker: clearing the failure card', () => {
 		expect(started).toContain('setModelUnavailable(null)');
 	});
 });
+
+describe('model picker: the response timeout', () => {
+	it("names the agent's own timeout in the unavailable card, so the two can't disagree", () => {
+		const card = source('/src/components/ModelUnavailableNotice.tsx');
+		expect(card).toContain('MODEL_RESPONSE_TIMEOUT_MS / 1000');
+		expect(card).not.toContain('within 60 seconds');
+		expect(source('/worker/agents/think/ThinkAgent.ts')).toMatch(/import \{[^}]*MODEL_RESPONSE_TIMEOUT_MS[^}]*\} from '\.\.\/\.\.\/\.\.\/shared\/think'/);
+	});
+});
+

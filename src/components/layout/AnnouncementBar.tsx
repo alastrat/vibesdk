@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 export function AnnouncementBar() {
 	return (
 		<div className="bg-public-gold text-public-charcoal">
-			<div className="mx-auto grid h-11 max-w-[1248px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 text-[13px] sm:px-6 lg:grid-cols-[1fr_minmax(0,auto)_1fr]">
+			<div className="mx-auto grid h-11 max-w-[1296px] grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 text-[13px] sm:px-6 lg:grid-cols-[1fr_minmax(0,auto)_1fr]">
 				{/* Balances Learn more, so the news sits in the middle of the strip. */}
 				<span aria-hidden className="hidden lg:block" />
 				<p className="flex min-w-0 lg:justify-center">

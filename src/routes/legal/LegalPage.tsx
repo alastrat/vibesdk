@@ -17,7 +17,7 @@ export function LegalPage({ slug }: { slug: LegalSlug }) {
 			<p className="mt-4 text-sm text-public-muted">
 				Version {document.version} · Last updated {document.updated}
 			</p>
-			<div className="prose prose-neutral mt-10 max-w-none text-[17px] leading-[1.7] font-light text-public-ink prose-headings:font-normal prose-headings:tracking-[-0.01em] prose-headings:text-public-ink prose-a:text-public-blue prose-a:underline-offset-4 prose-strong:font-medium">
+			<div className="prose prose-neutral mt-10 max-w-none text-[17px] leading-[1.7] font-light text-public-ink prose-headings:font-normal prose-headings:tracking-[-0.01em] prose-headings:text-public-ink prose-a:text-public-blue prose-a:underline-offset-4 prose-strong:font-medium prose-li:marker:text-public-muted">
 				<ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeExternalLinks, { target: '_blank', rel: ['noopener', 'noreferrer'] }]]}>
 					{document.body}
 				</ReactMarkdown>

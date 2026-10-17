@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import type { ModelUnavailableNotice as Notice, ThinkModelOption } from '@/api-types';
 import { describeCreditChange } from '@/utils/credit-change';
+import { MODEL_RESPONSE_TIMEOUT_MS } from '../../shared/think';
 
 const PROVIDER_NAMES: Record<string, string> = {
 	'google-ai-studio': 'Google',
@@ -16,7 +17,7 @@ function reasonText(reason: Notice['reason'], provider: string): string {
 		case 'unavailable':
 			return `${provider} returned an error`;
 		case 'timeout':
-			return `${provider} did not respond within 60 seconds`;
+			return `${provider} did not respond within ${Math.round(MODEL_RESPONSE_TIMEOUT_MS / 1000)} seconds`;
 	}
 }
 

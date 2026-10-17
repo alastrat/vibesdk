@@ -44,8 +44,9 @@ export interface StartCheckoutDeps {
 	/** Releases the seller's oldest unpaid checkouts in this mode until this much of the cap is free; answers what it freed. */
 	releaseHolds(mode: StoreMode, cents: number): Promise<number>;
 	/**
-	 * Expires a checkout of this store that is still starting or open, and its Stripe session, so it stops counting toward
-	 * the weekly cap. Any other checkout is left as it is.
+	 * Replaces a checkout of this store that is still starting or open: its Stripe session is expired first, and only then
+	 * does it stop counting toward the weekly cap. When Stripe can't expire it, it stays open and counted. Any other
+	 * checkout is left as it is.
 	 */
 	replaceCheckout(checkoutId: string): Promise<void>;
 	/** Tells Estori and the seller that the store reached this weekly cap; may finish after the shopper is answered. */

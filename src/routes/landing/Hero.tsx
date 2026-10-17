@@ -22,7 +22,7 @@ export function Hero({ stores }: { stores: readonly ShowcaseStore[] }) {
 	return (
 		<section className="overflow-x-clip bg-public-charcoal text-white">
 			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
-			<div className="mx-auto max-w-[1248px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
+			<div className="mx-auto max-w-[1296px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
 				<Eyebrow tone="dark">AI-powered online stores</Eyebrow>
 				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>Describe your store. Estori builds it in minutes.</h1>
 				<p className={cn(LEAD, 'mx-auto mt-6 max-w-2xl text-pretty text-white/80')}>

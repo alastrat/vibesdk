@@ -12,6 +12,8 @@ import { tool, type Tool } from 'ai';
 import { z } from 'zod';
 import { withDurableObjectResetRetry, type SpaceWorkspaceStub } from './space-workspace-ops';
 import { LIVE_BRANCH } from '../../../shared/types/live-stores';
+import { STORE_MANIFEST_FILE } from '../../../shared/types/store-payments';
+import { parseStoreManifest } from '../../services/store-payments/manifest';
 
 const DESCRIPTION = [
 	'Commit the current working tree and deploy a branch so its preview rebuilds and serves the latest code.',
@@ -19,7 +21,21 @@ const DESCRIPTION = [
 	'Call this after writing/editing files to make changes visible in the preview. Returns the deploy result as JSON, including the preview path and any build errors — read those errors and fix the code if the build failed, then redeploy.',
 	'',
 	"Defaults to the 'main' branch. The 'live' branch is the seller's published store: never deploy it.",
+	'',
+	'When the project has estori-store.json, the result includes storeFile: checkout is off until it is valid, so fix every error it lists and deploy again.',
 ].join('\n');
+
+/** The store file's check, so the agent hears of a mistake that turns checkout off; nothing when there is no file. */
+async function storeFileCheck(getStub: () => SpaceWorkspaceStub): Promise<{ ok: true } | { ok: false; errors: string[] } | null> {
+	let text: string;
+	try {
+		text = await withDurableObjectResetRetry(getStub, (stub) => stub.readFile(STORE_MANIFEST_FILE));
+	} catch {
+		return null;
+	}
+	const parsed = parseStoreManifest(text);
+	return parsed.ok ? { ok: true } : { ok: false, errors: parsed.errors };
+}
 
 export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub }): Tool {
 	const { getStub } = opts;
@@ -46,7 +62,8 @@ export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub 
 			}
 			try {
 				const result = await withDurableObjectResetRetry(getStub, (stub) => stub.deploy(branch));
-				return JSON.stringify({ branch, ...(result as Record<string, unknown>) }, null, 2);
+				const storeFile = await storeFileCheck(getStub);
+				return JSON.stringify({ branch, ...(result as Record<string, unknown>), ...(storeFile ? { storeFile } : {}) }, null, 2);
 			} catch (e) {
 				return JSON.stringify({
 					branch,

@@ -89,17 +89,20 @@ It defines `window.Estori`:
   right now" instead of the button.
 
 ```js
-const store = await Estori.store();
+// Pages load store.js as a classic script, so await only inside an async function.
+async function main() {
+  const store = await Estori.store();
 
-function renderCart() {
-  document.querySelector('#cart-count').textContent = String(Estori.cart.count());
-  // Render Estori.cart.items() with each variant's name, image and price from store.products.
+  function renderCart() {
+    document.querySelector('#cart-count').textContent = String(Estori.cart.count());
+    // Render Estori.cart.items() with each variant's name, image and price from store.products.
+  }
+  Estori.cart.onChange(renderCart);
+  renderCart();
+
+  document.querySelector('#add-to-cart').addEventListener('click', () => Estori.cart.add('trail-mug-blue', 1));
+  document.querySelector('#checkout').addEventListener('click', () => Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' }));
 }
-Estori.cart.onChange(renderCart);
-renderCart();
-
-document.querySelector('#add-to-cart').addEventListener('click', () => Estori.cart.add('trail-mug-blue', 1));
-document.querySelector('#checkout').addEventListener('click', () => Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' }));
 
 async function showConfirmation() {
   const orderId = new URLSearchParams(location.search).get('order');
@@ -107,6 +110,8 @@ async function showConfirmation() {
   const receipt = await Estori.order(orderId);
   if (receipt) document.querySelector('#order-number').textContent = `Order #${receipt.orderNumber}`;
 }
+
+main();
 ```
 
 ## 4. What store code must never do

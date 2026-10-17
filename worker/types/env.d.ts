@@ -31,6 +31,8 @@ declare namespace Cloudflare {
 		SENTRY_DSN: string;
 		SERPAPI_KEY: string;
 
+		// "true" lets a failed build model's notice offer switching to the fallback model.
+		ENABLE_THINK_MODEL_FALLBACK?: string;
 		// The catalog supplier's API key; without it catalog prices read as unavailable.
 		CJDROPSHIPPING_API_KEY?: string;
 		// Live supplier orders need ENVIRONMENT prod and this set to "true"; anything else places sandbox orders.

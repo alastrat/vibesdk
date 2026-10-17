@@ -15,7 +15,7 @@ Artifacts needs no command: the `estori-production` namespace is created automat
 Users pick the build model (Gemini 3.6 Flash, Gemini 3.8 Flash, Claude Sonnet 5.5 or Claude Opus 5.5), and Claude Sonnet 5.5 is the default. Each provider key lives in a different place:
 
 - Google: the `GOOGLE_AI_STUDIO_API_KEY` Worker secret, uploaded from CI on every deploy and preferred over the gateway key. Also store the key in AI Gateway → `estori-gateway` → Provider Keys.
-- Anthropic: only in AI Gateway → `estori-gateway` → Provider Keys. This key is required, because every new build starts on Claude Sonnet 5.5. Without it the request fails with 401, which is not a provider failure, so the chat shows a plain error and no switch card.
+- Anthropic: only in AI Gateway → `estori-gateway` → Provider Keys. This key is required: new builds default to Claude Sonnet 5.5, and a Gemini failure offers switching to it. Without it the request fails with 401, which is not a provider failure, so the chat shows a plain error and no switch card.
 
 When a provider fails (429, 5xx or a timeout), the chat can offer switching to the other provider's model, with the credits per step. `ENABLE_THINK_MODEL_FALLBACK` in `wrangler.estori.jsonc` only controls whether the card offers that switch; set it to `"false"` if the other provider's key is missing, so the chat does not offer a model that would fail with 401.
 

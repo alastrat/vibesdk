@@ -26,6 +26,13 @@ describe('the store checkout skill', () => {
 		expect(SKILL).not.toMatch(/localStorage\.(setItem|removeItem|getItem)/);
 	});
 
+	it('teaches store code that runs in the classic script tags the skill asks for', () => {
+		const example = SKILL.match(/```js\n([\s\S]+?)\n```/)?.[1] ?? '';
+		expect(example).toContain('Estori.store()');
+		// Parsing only: a top-level await is a syntax error outside a module.
+		expect(() => new Function(example)).not.toThrow();
+	});
+
 	it("leaves the checkout page to Estori: the store's button only calls Estori.checkout()", () => {
 		expect(SKILL).toContain("Never build a checkout page");
 		expect(SKILL).toContain('Never collect an email, a shipping address or card details');

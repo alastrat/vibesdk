@@ -16,9 +16,10 @@ function recorder() {
 	return { statuses, onProviderStatus: (failure: ProviderFailure | null) => statuses.push(failure) };
 }
 
-/** Never resolves until the request's signal aborts, like a provider that hangs. */
+/** Never resolves until the request's signal aborts, like a provider that hangs; an aborted signal rejects at once, as fetch does. */
 function hang(_input: RequestInfo | URL, request?: RequestInit): Promise<Response> {
 	return new Promise((_resolve, reject) => {
+		if (request?.signal?.aborted) return reject(new DOMException('aborted', 'AbortError'));
 		request?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
 	});
 }
@@ -129,4 +130,55 @@ describe('createModelTransport', () => {
 		await expect(pending).rejects.toThrow();
 		expect(statuses).toEqual([]);
 	});
+
+	it("records a failure whose error body never finishes, without waiting for the provider's message", async () => {
+		const { statuses, onProviderStatus } = recorder();
+		const stalled = () => new Response(new ReadableStream({ start: () => undefined }), { status: 503 });
+		const transport = createModelTransport({ timeoutMs: 1000, detailTimeoutMs: 20, onProviderStatus, fetchImpl: async () => stalled() });
+		const res = await transport(URL, init());
+		expect(res.status).toBe(503);
+		expect(statuses).toEqual([{ modelId: 'google-ai-studio/gemini-3.6-flash', reason: 'overloaded', status: 503 }]);
+		// The caller gets a body it can read, not the stalled one, so the turn ends instead of hanging.
+		expect(await res.json()).toEqual({ error: { message: 'The model provider answered 503 and did not finish its error' } });
+	});
+
+	it('clears the failure once the provider answers again', async () => {
+		const { statuses, onProviderStatus } = recorder();
+		const answers = [new Response('{}', { status: 503 }), new Response('{}', { status: 200 })];
+		const transport = createModelTransport({ timeoutMs: 1000, onProviderStatus, fetchImpl: async () => answers.shift() ?? new Response('{}') });
+		await transport(URL, init());
+		await transport(URL, init());
+		expect(statuses).toEqual([{ modelId: 'google-ai-studio/gemini-3.6-flash', reason: 'overloaded', status: 503 }, null]);
+	});
+
+	it('records rate limits and server errors by their status, with no detail for a body that is not JSON', async () => {
+		const { statuses, onProviderStatus } = recorder();
+		const answers = [new Response('slow down', { status: 429 }), new Response('<html>boom</html>', { status: 500 })];
+		const transport = createModelTransport({ timeoutMs: 1000, onProviderStatus, fetchImpl: async () => answers.shift() ?? new Response('{}') });
+		await transport(URL, init());
+		await transport(URL, init());
+		expect(statuses).toEqual([
+			{ modelId: 'google-ai-studio/gemini-3.6-flash', reason: 'rate_limited', status: 429 },
+			{ modelId: 'google-ai-studio/gemini-3.6-flash', reason: 'unavailable', status: 500 },
+		]);
+	});
+
+	it('names an unknown model when the body has none', async () => {
+		const { statuses, onProviderStatus } = recorder();
+		const transport = createModelTransport({ timeoutMs: 1000, onProviderStatus, fetchImpl: async () => new Response('{}', { status: 503 }) });
+		await transport(URL, { method: 'POST', body: 'not json' });
+		expect(statuses).toEqual([{ modelId: 'unknown', reason: 'overloaded', status: 503 }]);
+	});
+
+	it('rethrows a signal aborted before the request at once, without waiting for the timer or recording a failure', async () => {
+		const { statuses, onProviderStatus } = recorder();
+		const controller = new AbortController();
+		controller.abort();
+		// The timer is far longer than the test, so only passing the caller's abort on to the request can end it.
+		const started = Date.now();
+		await expect(createModelTransport({ timeoutMs: 60_000, onProviderStatus, fetchImpl: hang })(URL, { ...init(), signal: controller.signal })).rejects.toThrow();
+		expect(Date.now() - started).toBeLessThan(1000);
+		expect(statuses).toEqual([]);
+	});
 });
+

@@ -70,4 +70,8 @@ describe('public pages', () => {
 		expect(legal).toContain('document.version');
 		expect(legal).toContain('max-w-[720px]');
 	});
+
+	it('gives the legal lists bullets readable on white, in the muted text color', () => {
+		expect(source('/src/routes/legal/LegalPage.tsx')).toContain('prose-li:marker:text-public-muted');
+	});
 });

@@ -3,6 +3,9 @@
 import { customHostnameProblem, normalizeHostname } from '../../../shared/types/live-stores';
 import type { LiveStoreService, StoreDomainRow } from '../../database/services/LiveStoreService';
 import type { CustomHostnameProvider } from './domains';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('StoreDomainChecks');
 
 /** A domain still waiting for DNS this long is failed, so it stops being checked. */
 export const DOMAIN_SETUP_DAYS = 7;
@@ -138,10 +141,16 @@ export async function sweepPendingDomains(deps: DomainFlowDeps): Promise<{ check
 	let connected = 0;
 	let failed = 0;
 	for (const row of pending) {
-		await check({ ...deps, provider }, row);
-		const after = await deps.stores.domainOfApp(row.appId);
-		if (after?.status === 'active') connected += 1;
-		if (after?.status === 'failed') failed += 1;
+		try {
+			await check({ ...deps, provider }, row);
+			const after = await deps.stores.domainOfApp(row.appId);
+			if (after?.status === 'active') connected += 1;
+			if (after?.status === 'failed') failed += 1;
+		} catch (error) {
+			// This domain is checked again next hour; the rest of the run goes on.
+			logger.error('A store domain could not be checked', { hostname: row.hostname, error });
+			failed += 1;
+		}
 	}
 	return { checked: pending.length, connected, failed };
 }

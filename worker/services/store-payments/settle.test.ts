@@ -6,7 +6,7 @@ const ORDER: SettleOrder = { id: 'ord_1', sellerUserId: 'u1', paymentIntentId: '
 const OTHER: SettleOrder = { ...ORDER, id: 'ord_2', paymentIntentId: 'pi_2' };
 
 /** D1 and Stripe in memory, shared by every sale settled against it. */
-function world(input: { fee?: number; reversed?: number; charges?: Array<{ id: string; amountCents: number }>; refuse?: boolean } = {}) {
+function world(input: { fee?: number; reversed?: number; charges?: Array<{ id: string; amountCents: number }>; refuse?: boolean; racedClaimCents?: number } = {}) {
 	const reversals: Array<{ amountCents: number; idempotencyKey: string }> = [];
 	const reversedByTransfer = new Map<string, number>([['tr_1', input.reversed ?? 0], ['tr_2', 0]]);
 	const adjustments = new Map<string, { differenceCents: number; reversalId: string | null }>();
@@ -40,10 +40,15 @@ function world(input: { fee?: number; reversed?: number; charges?: Array<{ id: s
 		claims: async (orderId) => claims.filter((claim) => claim.orderId === orderId),
 		// Atomic, as one D1 statement: claims only what is still owed.
 		claimCollection: async (claim) => {
-			if (claims.some((made) => made.chargeId === claim.chargeId && made.orderId === claim.orderId)) return true;
-			if ((charges.get(claim.chargeId) ?? 0) - collected(claim.chargeId) < claim.amountCents) return false;
+			// Another run of this same sale claiming first, with the amount it worked out.
+			if (input.racedClaimCents !== undefined && !claims.some((made) => made.chargeId === claim.chargeId && made.orderId === claim.orderId)) {
+				claims.push({ chargeId: claim.chargeId, orderId: claim.orderId, amountCents: input.racedClaimCents, reversalId: null });
+			}
+			const existing = claims.find((made) => made.chargeId === claim.chargeId && made.orderId === claim.orderId);
+			if (existing) return existing.amountCents;
+			if ((charges.get(claim.chargeId) ?? 0) - collected(claim.chargeId) < claim.amountCents) return null;
 			claims.push({ chargeId: claim.chargeId, orderId: claim.orderId, amountCents: claim.amountCents, reversalId: null });
-			return true;
+			return claim.amountCents;
 		},
 		completeCollection: async (done) => {
 			const claim = claims.find((made) => made.chargeId === done.chargeId && made.orderId === done.orderId);
@@ -96,6 +101,12 @@ describe('settleSale', () => {
 		await Promise.all([settleSale(w.deps, ORDER), settleSale(w.deps, OTHER)]);
 		expect(w.collected('sc_1')).toBe(275);
 		expect(w.reversals.map((reversal) => reversal.amountCents)).toEqual([275]);
+	});
+
+	it("reverses the amount stored for a claim another run of this sale made first, so Stripe's idempotency key matches what was claimed", async () => {
+		const w = world({ charges: [{ id: 'sc_1', amountCents: 500 }], racedClaimCents: 300 });
+		expect(await settleSale(w.deps, ORDER)).toEqual({ feeDifferenceCents: 0, collectedCents: 300 });
+		expect(w.reversals).toEqual([{ amountCents: 300, idempotencyKey: 'seller-charge-sc_1-ord_1' }]);
 	});
 
 	it('finishes a collection claimed before a crash with the claimed amount and key', async () => {

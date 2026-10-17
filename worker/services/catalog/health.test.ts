@@ -7,11 +7,11 @@ const DAY = 24 * 60 * 60 * 1000;
 
 function fakeDeps(overrides: Partial<CatalogHealthDeps> = {}) {
 	const alerts: PlatformAlert[] = [];
-	const asked: Array<{ status: string; before: number }> = [];
+	const asked: Array<{ status: string; before: number; since: number }> = [];
 	const deps: CatalogHealthDeps = {
 		refreshHealth: async () => ({ activeProducts: 6, lastRefreshAt: new Date(NOW - 2 * 60 * 60 * 1000) }),
-		lateItems: async (status, before) => {
-			asked.push({ status, before: before.getTime() });
+		lateItems: async (status, before, since) => {
+			asked.push({ status, before: before.getTime(), since: since.getTime() });
 			return [];
 		},
 		alert: async (alert) => void alerts.push(alert),
@@ -22,13 +22,14 @@ function fakeDeps(overrides: Partial<CatalogHealthDeps> = {}) {
 }
 
 describe('runCatalogHealth', () => {
-	it('raises nothing for a healthy catalog, and looks back 5 days for shipping and 30 for delivery', async () => {
+	it('raises nothing for a healthy catalog, and looks back 5 days for shipping and 30 for delivery, for 30 days each', async () => {
 		const { deps, alerts, asked } = fakeDeps();
 		expect(await runCatalogHealth(deps, NOW)).toBe(0);
 		expect(alerts).toEqual([]);
+		// An item stays on the daily alert for 30 days after it becomes late, then it stops repeating.
 		expect(asked).toEqual([
-			{ status: 'placed', before: NOW - 5 * DAY },
-			{ status: 'shipped', before: NOW - 30 * DAY },
+			{ status: 'placed', before: NOW - 5 * DAY, since: NOW - 35 * DAY },
+			{ status: 'shipped', before: NOW - 30 * DAY, since: NOW - 60 * DAY },
 		]);
 	});
 
