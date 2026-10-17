@@ -62,6 +62,7 @@ export enum RateLimitType {
 	EMAIL_CONFIRMATION_RESEND = 'emailConfirmationResend',
 	CONTACT_SALES = 'contactSales',
 	CONTACT_RECIPIENT = 'contactRecipient',
+	STORE_CHECKOUT = 'storeCheckout',
 }
 
 export interface RateLimitSettings {
@@ -78,6 +79,7 @@ export interface RateLimitSettings {
 	[RateLimitType.EMAIL_CONFIRMATION_RESEND]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.CONTACT_SALES]: DORateLimitConfig | KVRateLimitConfig;
 	[RateLimitType.CONTACT_RECIPIENT]: DORateLimitConfig | KVRateLimitConfig;
+	[RateLimitType.STORE_CHECKOUT]: DORateLimitConfig | KVRateLimitConfig;
 }
 
 export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
@@ -179,5 +181,13 @@ export const DEFAULT_RATE_LIMIT_SETTINGS: RateLimitSettings = {
 		store: RateLimitStore.DURABLE_OBJECT,
 		limit: 2,
 		period: 24 * 60 * 60,
+	},
+	// Per-shopper cap on checkouts started on one live store; each one creates a Stripe session and holds room
+	// under the seller's weekly cap until it's paid or released.
+	storeCheckout: {
+		enabled: true,
+		store: RateLimitStore.DURABLE_OBJECT,
+		limit: 20,
+		period: 10 * 60,
 	},
 };

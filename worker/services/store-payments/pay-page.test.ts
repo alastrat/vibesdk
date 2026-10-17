@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { payPageHeaders, renderPayPage, STRIPE_JS_URL } from './pay-page';
+import { PAY_PAGE_SCRIPT, payPageHeaders, renderPayPage, STRIPE_JS_URL } from './pay-page';
 import type { StoreInfo } from '../../../shared/types/store-payments';
 
 const INFO: StoreInfo = {
@@ -12,7 +12,7 @@ const INFO: StoreInfo = {
 };
 
 const page = (overrides: Partial<Parameters<typeof renderPayPage>[0]> = {}) =>
-	renderPayPage({ basePath: '/space/app_1/preview/main', publishableKey: 'pk_test_123', info: INFO, nonce: 'n0nce', ...overrides });
+	renderPayPage({ basePath: '/space/app_1/preview/main', publishableKey: 'pk_test_123', info: INFO, nonce: 'n0nce', returnPaths: { successPath: '/thanks', cancelPath: '/cart' }, ...overrides });
 
 function configOf(html: string): Record<string, unknown> {
 	const match = html.match(/<script type="application\/json" id="estori-pay-config">([\s\S]*?)<\/script>/);
@@ -49,6 +49,12 @@ describe('renderPayPage', () => {
 		const config = configOf(page());
 		expect(config).toMatchObject({ basePath: '/space/app_1/preview/main', publishableKey: 'pk_test_123', countries: ['US', 'CA'], dark: true, radius: { button: '999px' } });
 		expect(config.products).toEqual([{ id: 'kenya', name: 'Kenya Nyeri AA', image: '/space/app_1/preview/main/images/kenya.jpg', variants: [{ id: 'kenya-250', name: 'Whole bean, 250g', priceCents: 2000 }] }]);
+	});
+
+	it('takes its return paths from the server, which already checked them, and never reads them from its own address', () => {
+		expect(configOf(page())).toMatchObject({ successPath: '/thanks', cancelPath: '/cart' });
+		expect(PAY_PAGE_SCRIPT).not.toContain("params.get('success')");
+		expect(PAY_PAGE_SCRIPT).not.toContain("params.get('cancel')");
 	});
 
 	it('keeps store text from closing its script or adding markup', () => {

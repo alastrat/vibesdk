@@ -109,6 +109,7 @@ export type StoreCheckoutRefusal =
 	| 'cart_limits'
 	| 'order_over_limit'
 	| 'store_paused'
+	| 'too_many_checkouts'
 	| 'stripe_failed';
 
 /** One line of the order summary on Estori's checkout page, priced by Estori. */
@@ -170,6 +171,7 @@ export const STORE_CHECKOUT_MESSAGES: Readonly<Record<StoreCheckoutRefusal, stri
 	cart_limits: "Your cart is more than one order can hold.",
 	order_over_limit: "This store can't take an order this large yet.",
 	store_paused: "This store isn't taking new orders right now. Try again later.",
+	too_many_checkouts: 'Too many checkouts were started from here. Wait a few minutes and try again.',
 	stripe_failed: "Checkout couldn't start. Try again in a moment.",
 };
 

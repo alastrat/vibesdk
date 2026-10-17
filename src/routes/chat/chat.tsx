@@ -28,6 +28,7 @@ import {
 	Globe,
 	Lock,
 	LockOpen,
+	Storefront,
 } from '@phosphor-icons/react';
 import {
 	Badge,
@@ -70,6 +71,7 @@ import { useImageUpload } from '@/hooks/use-image-upload';
 import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { PublishDialog } from '@/components/publishing/PublishDialog';
+import { GoLiveDialog } from '@/components/live-store/GoLiveDialog';
 import { ModelUnavailableNotice } from '@/components/ModelUnavailableNotice';
 import { BuildProgressBar } from '@/components/BuildProgressBar';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
@@ -362,6 +364,7 @@ function ChatSession() {
 	const [isResetDialogOpen, setIsResetDialogOpen] = useState(false);
 	const [isGitCloneModalOpen, setIsGitCloneModalOpen] = useState(false);
 	const [isPublishDialogOpen, setIsPublishDialogOpen] = useState(false);
+	const [isGoLiveOpen, setIsGoLiveOpen] = useState(false);
 
 	// Deploy target for think apps: user-account deploys are gated behind the
 	// platform's ENABLE_USER_ACCOUNT_DEPLOY flag (surfaced via capabilities).
@@ -451,6 +454,11 @@ function ChatSession() {
 											: 'Deploy'}
 							</Button>
 						</>
+					)}
+					{isOwner && app && (
+						<Button variant="primary" size="sm" onClick={() => setIsGoLiveOpen(true)} icon={<Storefront className="size-3.5" weight="duotone" />}>
+							Go live
+						</Button>
 					)}
 					{isOwner && app?.visibility === 'private' && (
 						<Button
@@ -1521,6 +1529,7 @@ function ChatSession() {
 						onOpenChange={setIsPublishDialogOpen}
 					/>
 				)}
+				{app && isOwner && <GoLiveDialog appId={app.id} open={isGoLiveOpen} onOpenChange={setIsGoLiveOpen} />}
 
 				{/* Deploy gate dialog (backend-reported CF connection failure) */}
 				{showDeployGateDialog}

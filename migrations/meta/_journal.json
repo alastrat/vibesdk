@@ -183,6 +183,13 @@
       "when": 1792196475246,
       "tag": "0025_store_checkouts_seller_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1792248113041,
+      "tag": "0026_live_stores",
+      "breakpoints": true
     }
   ]
 }

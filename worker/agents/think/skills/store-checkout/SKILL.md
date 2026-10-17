@@ -127,8 +127,12 @@ store as usual, then tell the user in one sentence what's left, using `nextStep`
 
 ## 6. Test and live
 
-In the preview, the store's owner pays with Stripe's test cards (4242 4242 4242 4242, any future date, any CVC). Anyone
-else viewing the preview sees "This is a demo".
+- In the preview, the store's owner pays with Stripe's test cards (4242 4242 4242 4242, any future date, any CVC).
+  Anyone else viewing the preview sees "This is a demo".
+- The owner publishes the store with the Go live button in the editor. It then has its own address, where any
+  shopper can pay. Payments are test payments until Estori turns on real ones.
+- Your changes reach the preview only. When the user wants shoppers to see them, tell them to open Go live and press
+  Publish changes. You can't publish for them.
 
 ## 7. Catalog products
 
