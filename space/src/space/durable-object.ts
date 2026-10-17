@@ -8,6 +8,7 @@ import {
   handleDeployCommand,
   LIVE_BRANCH,
   LIVE_PATH_PREFIX,
+  servedUrl,
   publishLiveDeployment,
   type BranchDeploymentBundle,
   type DeployContext,
@@ -880,8 +881,7 @@ export class SpaceDO extends DurableObject<Env> {
     // Live store routes: the platform worker forwards `/__live/<path>` for a store's own address. It's served at the
     // root, so nothing is rewritten, and from its own Facet, so the live store's data is apart from the preview's.
     if (path === LIVE_PATH_PREFIX || path.startsWith(`${LIVE_PATH_PREFIX}/`)) {
-      const liveUrl = new URL(path.slice(LIVE_PATH_PREFIX.length) || "/", url.origin)
-      liveUrl.search = url.search
+      const liveUrl = servedUrl(url, path.slice(LIVE_PATH_PREFIX.length))
       const response = await this.servePreview(LIVE_BRANCH, new Request(liveUrl.toString(), request))
       return stripPreviewSecurityHeaders(response)
     }
@@ -894,9 +894,7 @@ export class SpaceDO extends DurableObject<Env> {
       const basePath = `/space/${spaceName}/preview/${encodeURIComponent(branch)}`
 
       // Rewrite the URL so the dynamic worker sees a clean path
-      const subPath = previewMatch[2] || "/"
-      const previewUrl = new URL(subPath, url.origin)
-      previewUrl.search = url.search
+      const previewUrl = servedUrl(url, previewMatch[2] || "/")
       const previewRequest = new Request(previewUrl.toString(), request)
       const response = await this.servePreview(branch, previewRequest)
 

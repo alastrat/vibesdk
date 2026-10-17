@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { env, runInDurableObject } from 'cloudflare:test';
-import { DEPLOYMENTS_TABLE_SQL, LIVE_BRANCH, isReservedBranch, publishLiveDeployment } from '../src/space/deploy-engine';
+import { DEPLOYMENTS_TABLE_SQL, LIVE_BRANCH, isReservedBranch, publishLiveDeployment, servedUrl } from '../src/space/deploy-engine';
 import type {} from './test-env';
 
 function uniqueStub(name: string) {
@@ -57,5 +57,15 @@ describe('publishLiveDeployment', () => {
 		expect(isReservedBranch('live')).toBe(true);
 		expect(isReservedBranch('LIVE')).toBe(true);
 		expect(isReservedBranch('main')).toBe(false);
+	});
+});
+
+describe('servedUrl', () => {
+	it("keeps the store's own host for any path, so a path that starts with // can't name another host", () => {
+		const url = servedUrl(new URL('https://northwind-tea.estori.shop/__live//evil.example/login?next=1'), '//evil.example/login');
+		expect(url.host).toBe('northwind-tea.estori.shop');
+		expect(url.pathname).toBe('//evil.example/login');
+		expect(url.search).toBe('?next=1');
+		expect(servedUrl(new URL('https://northwind-tea.estori.shop/__live'), '').href).toBe('https://northwind-tea.estori.shop/');
 	});
 });

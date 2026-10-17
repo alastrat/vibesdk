@@ -37,6 +37,16 @@ export const PREVIEW_BRANCH = "main"
 /** Live store requests from the platform worker arrive under this path. Mirrors SPACE_LIVE_PATH in shared/types/live-stores.ts. */
 export const LIVE_PATH_PREFIX = "/__live"
 
+/**
+ * The request URL a served build sees: the original's host and query with `path`. Setting the path on a copy keeps a
+ * path that starts with `//` a path, where parsing it against the origin would read it as another host.
+ */
+export function servedUrl(original: URL, path: string): URL {
+  const url = new URL(original.toString())
+  url.pathname = path || "/"
+  return url
+}
+
 export function isReservedBranch(branch: string): boolean {
   return branch.toLowerCase() === LIVE_BRANCH
 }
