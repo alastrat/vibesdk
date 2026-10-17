@@ -27,8 +27,10 @@ export interface SettleSaleDeps {
 	openCharges(sellerUserId: string): Promise<Array<{ id: string; amountCents: number; collectedCents: number }>>;
 	/** This order's claims, finished or not. */
 	claims(orderId: string): Promise<Array<{ chargeId: string; amountCents: number; reversalId: string | null }>>;
-	/** Claims an amount of a charge for this order only while that much is still owed; true when the claim is this order's. */
-	/** The amount this sale holds of the charge, as stored, or null when another sale claimed what was owed. */
+	/**
+	 * Claims an amount of a charge for this order only while that much is still owed. Answers the amount this sale holds,
+	 * as stored, or null when another sale claimed what was owed.
+	 */
 	claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<number | null>;
 	completeCollection(done: { chargeId: string; orderId: string; reversalId: string }): Promise<void>;
 	releaseClaim(release: { chargeId: string; orderId: string }): Promise<void>;

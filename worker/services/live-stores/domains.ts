@@ -4,6 +4,7 @@
  */
 
 import type { StoreDomainProvider, StoreDomainRecord, StoreDomainStatus } from '../../../shared/types/live-stores';
+import { storeHostConfig } from './hosts';
 
 export interface DomainState {
 	status: StoreDomainStatus;
@@ -148,7 +149,8 @@ export function localDomainProvider(config: { cnameTarget: string }): CustomHost
 
 /** Cloudflare for SaaS when it's configured, the local stand-in in development, and none otherwise. */
 export function domainProviderFromEnv(env: Env): CustomHostnameProvider | null {
-	const storesDomain = env.STORES_DOMAIN?.trim();
+	// The same stores domain routing uses, so no domain is connected while stores are off.
+	const storesDomain = storeHostConfig(env).storesDomain;
 	if (!storesDomain) return null;
 	if (env.CF_SAAS_ZONE_ID && env.CF_SAAS_API_TOKEN && env.STORES_CNAME_TARGET) {
 		return cloudflareSaasProvider({ zoneId: env.CF_SAAS_ZONE_ID, apiToken: env.CF_SAAS_API_TOKEN, cnameTarget: env.STORES_CNAME_TARGET });

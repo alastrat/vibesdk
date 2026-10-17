@@ -231,7 +231,12 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 						openSession: (id) => checkouts.openSessionOf(id, target.appId),
 						expireSession: async (sessionId) => {
 							if (!stripe) throw new Error('Stripe is not configured');
-							await stripe.expireCheckoutSession(sessionId);
+							try {
+								await stripe.expireCheckoutSession(sessionId);
+							} catch (error) {
+								logger.warn('A replaced checkout keeps its session: Stripe could not expire it', { appId: target.appId, sessionId, error });
+								throw error;
+							}
 						},
 						markReplaced: async (id) => {
 							await checkouts.replaceOpen(id, target.appId);

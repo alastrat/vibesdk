@@ -98,8 +98,8 @@ export class StoreCheckoutService extends BaseService {
     }
 
     /**
-     * Expires a checkout of this store that is still starting or open, for a replacement after a cart edit; null for any
-     * other. The answer names its Stripe session, which the caller expires too.
+     * Marks a checkout of this store that is still starting or open as replaced, once its Stripe session (if any) has been
+     * expired; null for any other.
      */
     async replaceOpen(checkoutId: string, appId: string): Promise<{ sessionId: string | null } | null> {
         const rows = await this.database

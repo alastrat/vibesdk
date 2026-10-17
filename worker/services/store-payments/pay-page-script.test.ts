@@ -26,6 +26,9 @@ interface FakeElement {
 	onclick: (() => void) | null;
 	onchange: (() => void) | null;
 	classList: { toggle(name: string, on?: boolean): void };
+	/** What the script set, so a test can read it back. */
+	classes: Set<string>;
+	attributes: Record<string, string>;
 	appendChild(child: FakeElement): void;
 	setAttribute(name: string, value: string): void;
 	addEventListener(type: string, listener: () => void): void;
@@ -35,6 +38,8 @@ interface FakeElement {
 function element(id = ''): FakeElement {
 	const children: FakeElement[] = [];
 	const listeners: Record<string, Array<() => void>> = {};
+	const classes = new Set<string>();
+	const attributes: Record<string, string> = {};
 	return {
 		id,
 		hidden: false,
@@ -51,9 +56,11 @@ function element(id = ''): FakeElement {
 		children,
 		onclick: null,
 		onchange: null,
-		classList: { toggle: () => undefined },
+		classList: { toggle: (name, on) => void ((on ?? !classes.has(name)) ? classes.add(name) : classes.delete(name)) },
+		classes,
+		attributes,
 		appendChild: (child) => void children.push(child),
-		setAttribute: () => undefined,
+		setAttribute: (name, value) => void (attributes[name] = value),
 		addEventListener: (type, listener) => void (listeners[type] = [...(listeners[type] ?? []), listener]),
 		fire: (type) => (listeners[type] ?? []).forEach((listener) => listener()),
 	};
@@ -263,8 +270,27 @@ describe("Estori's checkout page script", () => {
 		// The page starts folded, with "Show order summary" in its markup.
 		page.elements.get('summary-toggle')?.onclick?.();
 		expect(page.elements.get('summary-toggle-label')?.textContent).toBe('Hide order summary');
+		expect(page.elements.get('summary')?.classes.has('open')).toBe(true);
+		expect(page.elements.get('summary-toggle')?.attributes['aria-expanded']).toBe('true');
 		page.elements.get('summary-toggle')?.onclick?.();
 		expect(page.elements.get('summary-toggle-label')?.textContent).toBe('Show order summary');
+		expect(page.elements.get('summary')?.classes.has('open')).toBe(false);
+		expect(page.elements.get('summary-toggle')?.attributes['aria-expanded']).toBe('false');
+	});
+
+	it("tells the shopper to refresh when the session can't load, even while an earlier email error is still showing", async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_first')]);
+		await settle();
+		typeEmail(page, 'not-an-email');
+		await settle();
+		expect(page.elements.get('email-error')?.hidden).toBe(false);
+		page.stripe.control.loadFails = true;
+		const field = page.elements.get('email');
+		if (field) field.value = 'shopper@example.com';
+		page.elements.get('pay')?.onclick?.();
+		await settle();
+		expect(page.elements.get('notice')).toMatchObject({ hidden: false, textContent: "This checkout can't continue. Refresh the page and try again." });
 	});
 
 	it('shows the checkout again when items are added to an empty cart from another tab', async () => {

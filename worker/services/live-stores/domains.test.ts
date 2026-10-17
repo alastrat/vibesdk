@@ -112,4 +112,10 @@ describe('choosing a provider', () => {
 		expect(domainProviderFromEnv({ STORES_DOMAIN: 'estori.shop', ENVIRONMENT: 'prod' } as unknown as Env)).toBeNull();
 		expect(domainProviderFromEnv({ ...saas, STORES_DOMAIN: '', ENVIRONMENT: 'prod' } as unknown as Env)).toBeNull();
 	});
+
+	it('offers no provider while stores are off because the stores domain overlaps an Estori domain', () => {
+		const saas = { CF_SAAS_ZONE_ID: ZONE, CF_SAAS_API_TOKEN: 'token', STORES_CNAME_TARGET: TARGET, CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod' };
+		expect(domainProviderFromEnv({ ...saas, STORES_DOMAIN: 'stores.estori.app' } as unknown as Env)).toBeNull();
+		expect(domainProviderFromEnv({ ...saas, STORES_DOMAIN: 'estori.shop' } as unknown as Env)?.name).toBe('cloudflare');
+	});
 });

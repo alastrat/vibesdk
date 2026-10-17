@@ -65,6 +65,13 @@ describe('renderPayPage', () => {
 		expect(html).toContain('.summary-toggle { display: none;');
 	});
 
+	it('keeps the ship-to country out of the folded part, so a shopper on a phone can always change it', () => {
+		const html = page();
+		const summary = html.slice(html.indexOf('id="summary"'), html.indexOf('</aside>'));
+		expect(summary).toContain('id="country-row"');
+		expect(summary.slice(summary.indexOf('id="summary-body"'))).not.toContain('id="country-row"');
+	});
+
 	it('keeps store text from closing its script or adding markup', () => {
 		const html = page({ info: { ...INFO, brand: { ...INFO.brand!, name: 'Evil </script><script>alert(1)</script>' }, products: [{ ...INFO.products[0], name: '</script><img src=x onerror=alert(1)>' }] } });
 		expect(html).not.toContain('</script><script>alert(1)');
