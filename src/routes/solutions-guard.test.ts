@@ -29,6 +29,7 @@ describe('solution pages', () => {
 			"path: 'solutions/subscriptions'",
 			"path: 'solutions/communities'",
 			"path: 'platform/catalog-fulfillment'",
+			"path: 'platform/payments'",
 			"path: 'platform/email-marketing'",
 			"path: 'platform/web-analytics'",
 			"path: 'platform/seo'",
@@ -56,7 +57,12 @@ describe('solution pages', () => {
 			'/src/routes/platform/seo.tsx': '<SolutionCopyPage head={SEARCH_OPTIMIZATION_PAGE} copy={SEARCH_OPTIMIZATION_COPY} />',
 		};
 		for (const [path, render] of Object.entries(pages)) expect(source(path), path).toContain(render);
+		// The payments page adds the seller levels, from the limits pricing and checkout use, after its cards.
+		const payments = source('/src/routes/platform/payments.tsx');
+		expect(payments).toContain('<SolutionCopyPage head={PAYMENTS_PAGE} copy={PAYMENTS_COPY}>');
+		expect(payments).toContain('SELLER_LEVEL_LIMITS.map');
 		const template = source('/src/components/public-site/SolutionCopyPage.tsx');
+		expect(template).toContain('{children}');
 		for (const part of [
 			'<PageMeta {...head} />',
 			'tag={copy.capability}',

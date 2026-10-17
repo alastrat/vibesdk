@@ -8,7 +8,15 @@ const LAUNCH_FAQ: readonly FaqItem[] = [
 	{ question: 'Is Estori free?', answer: `Yes. ${FREE_PLAN_ANSWER}` },
 	{ question: 'What does Coming soon mean?', answer: "A capability or plan we're building. It isn't part of Estori until it launches, and its details may change before then." },
 	{ question: 'Can my store take payments?', answer: PAYMENTS_ANSWER },
-	{ question: 'Does Estori take a cut of my store sales?', answer: 'No. When store payments launch, only Stripe charges for card processing.' },
+	{
+		question: 'Does Estori take a cut of my store sales?',
+		answer: (
+			<>
+				Estori keeps the card processing cost of each sale, plus the catalog price of any catalog products in it, and nothing more
+				from your own products. See <Link to="/platform/payments">how payments work</Link>.
+			</>
+		),
+	},
 	{ question: 'Who owns the store I build?', answer: 'You do. Keep editing it, keep it private, or publish it to Discover.' },
 	{ question: 'What does Estori charge for template sales?', answer: `${PLATFORM_FEE_LABEL} per sale. You receive the rest through Stripe.` },
 	{ question: 'Can I resell a store I bought?', answer: "No. A store you buy is yours to adapt for your own business, but it can't be republished or resold." },

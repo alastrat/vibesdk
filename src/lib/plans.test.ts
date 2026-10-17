@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
 import { CAPABILITIES } from './capabilities';
-import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, formatCredits, formatUsd, planById, premiumTierFor } from './plans';
+import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, SELLER_LEVEL_LIMITS, formatCredits, formatUsd, planById, premiumTierFor } from './plans';
 
 describe('plans', () => {
 	it('looks a plan up by id', () => {
@@ -56,5 +57,30 @@ describe('plans', () => {
 			if (!section.capability || CAPABILITIES[section.capability].status === 'available') continue;
 			for (const row of section.rows) expect(row.cells.basic).toBe(false);
 		}
+	});
+
+	it("lists the payment rules, with each seller level's limits from the same settings checkout uses", () => {
+		const payments = PLAN_COMPARISON.find((section) => section.capability === 'payments');
+		const cells = (label: string) => payments?.rows.find((row) => row.label === label)?.cells;
+		const { new: fresh, established } = DEFAULT_SELLER_LIMITS.levels;
+		expect(cells('Largest order, by seller level')?.premium).toBe(`${formatUsd(fresh.largestOrderCents)} new, ${formatUsd(established.largestOrderCents)} established`);
+		expect(cells('Weekly sales, by seller level')?.premium).toBe(`${formatUsd(fresh.weeklySalesCents)} new, ${formatUsd(established.weeklySalesCents)} established`);
+		expect(cells('Payout wait, by seller level')?.premium).toBe(`${fresh.payoutDelayDays} business days new, ${established.payoutDelayDays} established`);
+		expect(cells("Estori's fee on your own products")?.premium).toBe('Card processing');
+		expect(cells("Estori's fee on catalog products")?.premium).toBe('Card processing and the catalog price');
+		expect(cells('Refunds and disputes')?.premium).toBe('Paid by the seller');
+		expect(cells('Delivery checks on orders you ship')).toEqual({ basic: false, premium: true, enterprise: true });
+		expect(SELLER_LEVEL_LIMITS.map((level) => level.largestOrder)).toEqual([formatUsd(fresh.largestOrderCents), formatUsd(established.largestOrderCents)]);
+	});
+
+	it("sets the payment limits by seller level, so they're the same on every plan that takes payments", () => {
+		const payments = PLAN_COMPARISON.find((section) => section.capability === 'payments');
+		expect(payments?.rows.length).toBeGreaterThan(5);
+		for (const row of payments?.rows ?? []) expect(row.cells.enterprise, row.label).toEqual(row.cells.premium);
+	});
+
+	it('charges the template fee on every plan, since selling templates works today', () => {
+		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
+		expect(builder?.rows.find((row) => row.label === 'Fee on template sales')?.cells).toEqual({ basic: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL });
 	});
 });

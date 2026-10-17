@@ -1,3 +1,5 @@
+import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { stripeFeesText } from '@/components/payments/payout-costs';
 import type { CapabilityId } from '@/lib/capabilities';
 import { COMING_SOON_ANSWER, PAYMENTS_ANSWER, type CardCopy, type TextFaqItem } from './positioning';
 
@@ -64,6 +66,72 @@ export const CATALOG_FULFILLMENT_COPY: SolutionCopy = {
 		COMING_SOON_QUESTION,
 	],
 	more: { to: '/solutions/resellers', label: 'Estori for dropshippers and resellers' },
+};
+
+const { daysSinceFirstSale, completedOrders } = DEFAULT_SELLER_LIMITS.graduation;
+
+/** What makes a new seller an established one, as the level check decides it. */
+export const LEVEL_UP_RULE = `${daysSinceFirstSale} days since your first sale, ${completedOrders} completed orders and no lost disputes in the last 90 days`;
+
+export const PAYMENTS_COPY: SolutionCopy = {
+	capability: 'payments',
+	eyebrow: 'Payments',
+	title: 'Checkout on your store, payouts to your bank',
+	lead: "Shoppers pay on a checkout page at your store's own address, in your store's look. You sell to them, and Estori takes the payment for you through Stripe.",
+	sections: [
+		{
+			eyebrow: 'Checkout',
+			title: 'A checkout that looks like your store',
+			cards: [
+				{ title: 'On your own address', body: "Shoppers pay on a checkout page at your store's own address, with your logo, colors and font. They never leave your store." },
+				{ title: 'A cart they can change', body: 'The order summary shows the cart, and shoppers change quantities or remove items right there before they pay.' },
+				{ title: 'You are the seller', body: 'Your store is the merchant of record. Shoppers buy from you by card, in US dollars, under your store\'s name.' },
+			],
+		},
+		{
+			eyebrow: 'Getting paid',
+			title: 'What each sale costs, and when you get paid',
+			cards: [
+				{
+					title: 'What Estori keeps',
+					body: "From each sale, Estori keeps the card processing cost, plus the catalog price of any catalog products. When a card costs more to process, such as a card from another country, Estori keeps the difference from that sale.",
+				},
+				{ title: 'Payouts on your schedule', body: `Choose daily, weekly or monthly payouts to your bank. Your account costs ${stripeFeesText(DEFAULT_SELLER_LIMITS.costs)}.` },
+				{ title: 'Templates you sell', body: `Selling a store as a template in Discover costs ${PLATFORM_FEE_LABEL} a sale, and you receive the rest through Stripe.` },
+			],
+		},
+	],
+	steps: [
+		'Set up payments in Estori: accept the selling terms, connect your Stripe account and add your bank.',
+		'Shoppers check out on your store, and Estori orders any catalog products from the supplier.',
+		"Your sales are paid out to your bank after your level's wait, on the schedule you choose.",
+	],
+	faq: [
+		{ question: 'Can my store take payments today?', answer: 'Not yet. Payments run in test mode on store previews, so you can try a checkout, and live stores open soon.' },
+		{
+			question: 'Who pays for refunds?',
+			answer: "You do. You pay the whole refund, including the catalog price and card processing of what you refund. A refund goes through when your Stripe balance can cover it.",
+		},
+		{
+			question: 'What happens when a shopper disputes a payment?',
+			answer: "You pay the disputed amount and the dispute fee Stripe charges. Estori takes the amount back from the sale when the dispute opens, and returns it if the dispute is decided in your favor.",
+		},
+		{
+			question: 'Why does my store have limits?',
+			answer: 'Every store has a largest order, a weekly sales limit and a wait before payouts, set by its seller level. A store that reaches a limit stops taking new orders until the limit allows them again.',
+		},
+		{
+			question: 'How do my limits grow?',
+			answer: `New sellers start with lower limits and a longer wait. After ${LEVEL_UP_RULE}, you become an established seller, with higher limits and faster payouts.`,
+		},
+		{ question: 'Do my limits depend on my plan?', answer: 'No. Your seller level sets them, the same on every plan that takes payments.' },
+		{
+			question: 'Why would an order be held?',
+			answer: "When Estori's payment checks flag an order as risky, it's held before Estori buys its catalog products. If it can't be cleared within 24 hours, the shopper is refunded for those products.",
+		},
+		COMING_SOON_QUESTION,
+	],
+	more: { to: '/pricing#compare-title', label: 'Payments in each plan' },
 };
 
 export const SUBSCRIPTIONS_COPY: SolutionCopy = {

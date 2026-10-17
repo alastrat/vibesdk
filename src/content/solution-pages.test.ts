@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from '@/lib/capabilities';
-import { CATALOG_FULFILLMENT_COPY, COMMUNITIES_COPY, EMAIL_MARKETING_COPY, SEARCH_OPTIMIZATION_COPY, SUBSCRIPTIONS_COPY, WEB_ANALYTICS_COPY } from './solution-pages';
+import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { stripeFeesText } from '@/components/payments/payout-costs';
+import { CATALOG_FULFILLMENT_COPY, COMMUNITIES_COPY, EMAIL_MARKETING_COPY, PAYMENTS_COPY, SEARCH_OPTIMIZATION_COPY, SUBSCRIPTIONS_COPY, WEB_ANALYTICS_COPY } from './solution-pages';
 
 const COPIES = {
 	'catalog & fulfillment': CATALOG_FULFILLMENT_COPY,
@@ -9,6 +11,7 @@ const COPIES = {
 	'email marketing': EMAIL_MARKETING_COPY,
 	'web analytics': WEB_ANALYTICS_COPY,
 	'SEO, GEO & AEO': SEARCH_OPTIMIZATION_COPY,
+	payments: PAYMENTS_COPY,
 };
 
 describe('solution and platform pages', () => {
@@ -51,5 +54,33 @@ describe('solution and platform pages', () => {
 		expect(text).toContain('generative engine optimization');
 		expect(text).toContain('answer engine optimization');
 		expect(SEARCH_OPTIMIZATION_COPY.more).toEqual({ to: '/agentic-commerce', label: 'How AI recommendations work' });
+	});
+
+	it('explains payments as the selling terms do: the seller sells, what Estori keeps, refunds, disputes, holds and payouts', () => {
+		expect(PAYMENTS_COPY.capability).toBe('payments');
+		const text = JSON.stringify(PAYMENTS_COPY);
+		for (const phrase of [
+			'merchant of record',
+			"your store's own address",
+			'card processing',
+			'catalog price',
+			PLATFORM_FEE_LABEL,
+			'another country',
+			'You pay the whole refund',
+			'dispute fee',
+			'24 hours',
+			stripeFeesText(DEFAULT_SELLER_LIMITS.costs),
+		]) {
+			expect(text, phrase).toContain(phrase);
+		}
+		expect(PAYMENTS_COPY.more).toEqual({ to: '/pricing#compare-title', label: 'Payments in each plan' });
+	});
+
+	it('says how a seller moves up a level, from the rules the level check uses', () => {
+		const { daysSinceFirstSale, completedOrders } = DEFAULT_SELLER_LIMITS.graduation;
+		const answer = PAYMENTS_COPY.faq.find((item) => item.question === 'How do my limits grow?')?.answer ?? '';
+		expect(answer).toContain(`${daysSinceFirstSale} days`);
+		expect(answer).toContain(`${completedOrders} completed orders`);
+		expect(answer).toContain('no lost disputes');
 	});
 });

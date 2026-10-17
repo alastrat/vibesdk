@@ -13,6 +13,7 @@ export type CapabilityId =
 	| 'operations-agents'
 	| 'personalized-shopping'
 	| 'product-catalog'
+	| 'payments'
 	| 'digital-products'
 	| 'developer-templates'
 	| 'content-creators'
@@ -65,6 +66,13 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, Capability>> = {
 		description: "Vetted suppliers' products, shipped for you",
 		status: 'coming-soon',
 		path: '/platform/catalog-fulfillment',
+	},
+	payments: {
+		id: 'payments',
+		name: 'Payments',
+		description: 'Checkout on your store, and payouts to your bank',
+		status: 'coming-soon',
+		path: '/platform/payments',
 	},
 	'digital-products': {
 		id: 'digital-products',
@@ -121,6 +129,7 @@ export const CAPABILITIES: Readonly<Record<CapabilityId, Capability>> = {
 export const PLATFORM_CAPABILITIES: readonly CapabilityId[] = [
 	'store-builder',
 	'product-catalog',
+	'payments',
 	'operations-agents',
 	'personalized-shopping',
 	'email-marketing',

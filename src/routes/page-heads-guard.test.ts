@@ -33,6 +33,7 @@ const PAGE_HEADS: Readonly<Record<string, string>> = {
 	'/src/routes/solutions/subscriptions.tsx': 'head={SUBSCRIPTIONS_PAGE}',
 	'/src/routes/solutions/communities.tsx': 'head={COMMUNITIES_PAGE}',
 	'/src/routes/platform/catalog-fulfillment.tsx': 'head={CATALOG_FULFILLMENT_PAGE}',
+	'/src/routes/platform/payments.tsx': 'head={PAYMENTS_PAGE}',
 	'/src/routes/platform/email-marketing.tsx': 'head={EMAIL_MARKETING_PAGE}',
 	'/src/routes/platform/web-analytics.tsx': 'head={WEB_ANALYTICS_PAGE}',
 	'/src/routes/platform/seo.tsx': 'head={SEARCH_OPTIMIZATION_PAGE}',

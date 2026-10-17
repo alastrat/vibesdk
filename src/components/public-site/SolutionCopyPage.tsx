@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import { isEarlyAccessCapability } from '@/api-types';
@@ -15,9 +16,10 @@ import { StartBuildingButton } from './StartBuildingButton';
 /**
  * A solution or platform page laid out from its copy: the dark hero with the capability's status, its two sections of
  * cards, how it works, its questions and the closing panel. An early-access capability takes requests in the hero and
- * after a sign-in that reloads the page; any other sends visitors to sales.
+ * after a sign-in that reloads the page; any other sends visitors to sales. A page can add its own sections after the
+ * cards.
  */
-export function SolutionCopyPage({ head, copy }: { head: PageHead; copy: SolutionCopy }) {
+export function SolutionCopyPage({ head, copy, children }: { head: PageHead; copy: SolutionCopy; children?: ReactNode }) {
 	useEarlyAccessFromUrl();
 	const lastSection = copy.sections.length - 1;
 	return (
@@ -51,6 +53,7 @@ export function SolutionCopyPage({ head, copy }: { head: PageHead; copy: Solutio
 					)}
 				</CardSection>
 			))}
+			{children}
 			<HowItWorks steps={copy.steps} />
 			<PublicFaq items={copy.faq} />
 			<ClosingPanel />
