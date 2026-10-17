@@ -4,6 +4,9 @@ import { recordingD1 } from '../../database/test-support/recording-d1';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
 
 const BASE = 'https://preview.test/space/app_1/preview/main';
+/** The request's execution context; work handed to waitUntil is dropped in these tests. */
+const CTX = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
+
 const TARGET: StorePlatformTarget = {
 	appId: 'app_1',
 	branch: 'main',
@@ -31,36 +34,36 @@ describe('handleStorePlatform', () => {
 	});
 
 	it('serves the store script', async () => {
-		const response = await handleStorePlatform(new Request(`${BASE}/__estori/store.js`), testEnv().env, { ...TARGET, platformPath: '/__estori/store.js' });
+		const response = await handleStorePlatform(new Request(`${BASE}/__estori/store.js`), testEnv().env, { ...TARGET, platformPath: '/__estori/store.js' }, CTX);
 		expect(response.status).toBe(200);
 		expect(response.headers.get('Content-Type')).toContain('text/javascript');
 	});
 
 	it('refuses checkouts from another origin, of another type or too large, before reading anything', async () => {
 		const { env, statements } = testEnv();
-		expect((await handleStorePlatform(checkoutRequest({ origin: 'https://evil.example' }), env, TARGET)).status).toBe(400);
-		expect((await handleStorePlatform(checkoutRequest({ contentType: 'text/plain' }), env, TARGET)).status).toBe(400);
-		expect((await handleStorePlatform(checkoutRequest({ body: JSON.stringify({ note: 'x'.repeat(17 * 1024) }) }), env, TARGET)).status).toBe(413);
+		expect((await handleStorePlatform(checkoutRequest({ origin: 'https://evil.example' }), env, TARGET, CTX)).status).toBe(400);
+		expect((await handleStorePlatform(checkoutRequest({ contentType: 'text/plain' }), env, TARGET, CTX)).status).toBe(400);
+		expect((await handleStorePlatform(checkoutRequest({ body: JSON.stringify({ note: 'x'.repeat(17 * 1024) }) }), env, TARGET, CTX)).status).toBe(413);
 		expect(statements).toHaveLength(0);
 	});
 
 	it('answers a demo for public previews', async () => {
-		const response = await handleStorePlatform(checkoutRequest(), testEnv().env, TARGET);
+		const response = await handleStorePlatform(checkoutRequest(), testEnv().env, TARGET, CTX);
 		expect(response.status).toBe(403);
 		expect(await response.json()).toMatchObject({ ok: false, reason: 'demo_only' });
 	});
 
 	it('shows a receipt only to the browser holding it, and answers unknown paths itself', async () => {
-		const receipt = await handleStorePlatform(new Request(`${BASE}/__estori/orders/ord_abc`), testEnv().env, { ...TARGET, platformPath: '/__estori/orders/ord_abc' });
+		const receipt = await handleStorePlatform(new Request(`${BASE}/__estori/orders/ord_abc`), testEnv().env, { ...TARGET, platformPath: '/__estori/orders/ord_abc' }, CTX);
 		expect(receipt.status).toBe(404);
-		const unknown = await handleStorePlatform(new Request(`${BASE}/__estori/admin`), testEnv().env, { ...TARGET, platformPath: '/__estori/admin' });
+		const unknown = await handleStorePlatform(new Request(`${BASE}/__estori/admin`), testEnv().env, { ...TARGET, platformPath: '/__estori/admin' }, CTX);
 		expect(unknown.status).toBe(404);
 	});
 
 	it('sends a returning shopper back to the store when the payment cannot be read yet', async () => {
 		vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Stripe is unreachable'));
 		const request = new Request(`${BASE}/__estori/return?session_id=cs_1`);
-		const response = await handleStorePlatform(request, testEnv({ STRIPE_SECRET_KEY: 'sk_test_fake' }).env, { ...TARGET, platformPath: '/__estori/return' });
+		const response = await handleStorePlatform(request, testEnv({ STRIPE_SECRET_KEY: 'sk_test_fake' }).env, { ...TARGET, platformPath: '/__estori/return' }, CTX);
 		expect(response.status).toBe(303);
 		expect(response.headers.get('Location')).toBe(`${BASE}/?status=processing`);
 	});

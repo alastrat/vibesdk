@@ -129,10 +129,11 @@ async function serveAuthorizedPreview(
 	spaceName: string,
 	branch: string,
 	claims: SpacePreviewClaims,
+	ctx: ExecutionContext,
 ): Promise<Response> {
 	const platform = matchStorePlatformPath(new URL(request.url).pathname);
 	if (platform) {
-		return handleStorePlatform(request, env, { appId: spaceName, branch, ...platform, previewUserId: claims.userId });
+		return handleStorePlatform(request, env, { appId: spaceName, branch, ...platform, previewUserId: claims.userId }, ctx);
 	}
 	return forwardToSpacePreview(request, env, spaceName);
 }
@@ -148,6 +149,7 @@ export async function handleSpacePreview(
 	env: Env,
 	spaceName: string,
 	branch: string,
+	ctx: ExecutionContext,
 ): Promise<Response> {
 	const url = new URL(request.url);
 	const crossSite = isSeparatePreviewDomain(env);
@@ -160,7 +162,7 @@ export async function handleSpacePreview(
 		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
 			const limited = await enforcePreviewRateLimit(env, cookieToken, request);
 			if (limited) return limited;
-			return serveAuthorizedPreview(request, env, spaceName, branch, claims);
+			return serveAuthorizedPreview(request, env, spaceName, branch, claims, ctx);
 		}
 	}
 
@@ -171,7 +173,7 @@ export async function handleSpacePreview(
 		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {
 			const limited = await enforcePreviewRateLimit(env, queryToken, request);
 			if (limited) return limited;
-			const response = await serveAuthorizedPreview(request, env, spaceName, branch, claims);
+			const response = await serveAuthorizedPreview(request, env, spaceName, branch, claims, ctx);
 			if (isWebSocketResponse(response)) {
 				return response;
 			}

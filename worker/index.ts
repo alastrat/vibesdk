@@ -277,7 +277,7 @@ const worker = {
 			if (!params) {
 				return new Response('Not Found', { status: 404 });
 			}
-			const response = await handleSpacePreview(request, env, params.spaceName, params.branch);
+			const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
 			return withPreviewCorsHeaders(env, request, response);
 		}
 
@@ -288,7 +288,7 @@ const worker = {
 				if (separatePreviewDomain) {
 					return new Response('Not Found', { status: 404 });
 				}
-				const response = await handleSpacePreview(request, env, params.spaceName, params.branch);
+				const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
 				return withPreviewCorsHeaders(env, request, response);
 			}
 

@@ -59,8 +59,8 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 		nowMs: () => 1_800_000_000_000,
 		sellerLimits: async () => ({ largestOrderCents: 15_000, weeklySalesCents: 50_000 }),
 		weeklyUsage: async () => 0,
-		limitReached: async () => {
-			limits.push('reached');
+		limitReached: async (weeklySalesCents) => {
+			limits.push(`reached ${weeklySalesCents}`);
 		},
 		...overrides,
 	};
@@ -173,7 +173,7 @@ describe('startStoreCheckout', () => {
 		// The cart is two own mugs at $20 plus $6 shipping: $46.00, weighted $86.00.
 		const { deps, limits } = fakeDeps({ weeklyUsage: async () => 50_000 - 8599 });
 		expect(await startStoreCheckout(deps, INPUT)).toEqual({ ok: false, reason: 'store_paused', message: "This store isn't taking new orders right now. Try again later." });
-		expect(limits).toEqual(['reached']);
+		expect(limits).toEqual(['reached 50000']);
 
 		const fits = fakeDeps({ weeklyUsage: async () => 50_000 - 8600 });
 		expect(await startStoreCheckout(fits.deps, INPUT)).toMatchObject({ ok: true });
@@ -183,5 +183,12 @@ describe('startStoreCheckout', () => {
 		const { deps, saved } = fakeDeps();
 		await startStoreCheckout(deps, INPUT);
 		expect(saved[0].weightedCents).toBe(8600);
+	});
+
+	it("counts the week's sales in the cart's own mode, so test checkouts never fill a live store's cap", async () => {
+		const modes: string[] = [];
+		const { deps } = fakeDeps({ weeklyUsage: async (mode) => (modes.push(mode), 0) });
+		await startStoreCheckout(deps, INPUT);
+		expect(modes).toEqual(['test']);
 	});
 });

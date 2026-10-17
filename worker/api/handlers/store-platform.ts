@@ -136,7 +136,7 @@ async function sellerLimitsOf(env: Env, sellerUserId: string): Promise<SellerLev
 	return limitsFor(level, settings);
 }
 
-async function serveCheckout(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
+async function serveCheckout(request: Request, env: Env, target: StorePlatformTarget, ctx: ExecutionContext): Promise<Response> {
 	const url = new URL(request.url);
 	const sameOrigin = request.headers.get('Origin') === url.origin;
 	const isJson = (request.headers.get('Content-Type') ?? '').toLowerCase().startsWith('application/json');
@@ -165,12 +165,15 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			attachSession: (checkoutId, sessionId) => checkouts.attachSession(checkoutId, sessionId),
 			markFailed: (checkoutId) => checkouts.markFailed(checkoutId),
 			sellerLimits: () => sellerLimitsOf(env, target.previewUserId),
-			// Previews take test-mode payments only; live stores will count their own mode.
-			weeklyUsage: () => checkouts.weeklyUsage(target.previewUserId, 'test', new Date(Date.now() - WEEK_MS)),
-			limitReached: async () => {
-				const { weeklySalesCents } = await sellerLimitsOf(env, target.previewUserId);
-				await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: target.previewUserId, message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
-				await sellerNoticesFromEnv(env)({ sellerUserId: target.previewUserId, kind: 'limit-reached', weeklySalesCents });
+			weeklyUsage: (mode) => checkouts.weeklyUsage(target.previewUserId, mode, new Date(Date.now() - WEEK_MS)),
+			// The shopper is answered at once; the alert and the seller's email go out after.
+			limitReached: async (weeklySalesCents) => {
+				ctx.waitUntil(
+					(async () => {
+						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: target.previewUserId, message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
+						await sellerNoticesFromEnv(env)({ sellerUserId: target.previewUserId, kind: 'limit-reached', weeklySalesCents });
+					})(),
+				);
 			},
 			newCheckoutId: () => `chk_${crypto.randomUUID().replace(/-/g, '')}`,
 			nowMs: () => Date.now(),
@@ -234,14 +237,14 @@ async function serveReceipt(request: Request, env: Env, target: StorePlatformTar
 	return json(receiptOf(order));
 }
 
-export async function handleStorePlatform(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
+export async function handleStorePlatform(request: Request, env: Env, target: StorePlatformTarget, ctx: ExecutionContext): Promise<Response> {
 	const path = target.platformPath;
 	try {
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store.js`) {
 			return new Response(STORE_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
 		}
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(env, target);
-		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target);
+		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target, ctx);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/return`) return await serveReturn(request, env, target);
 		const receipt = path.match(/^\/__estori\/orders\/(ord_[a-z0-9]{1,64})$/);
 		if (request.method === 'GET' && receipt) return await serveReceipt(request, env, target, receipt[1]);

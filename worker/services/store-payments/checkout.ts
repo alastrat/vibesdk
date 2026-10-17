@@ -11,6 +11,7 @@ import {
 	type StoreCheckoutResponse,
 	type StoreInfo,
 	type StoreManifest,
+	type StoreMode,
 } from '../../../shared/types/store-payments';
 import type { StoreCheckoutSessionInput } from '../payments/stripe-client';
 import { parseStoreManifest } from './manifest';
@@ -35,10 +36,10 @@ export interface StartCheckoutDeps {
 	markFailed(checkoutId: string): Promise<void>;
 	/** The seller's largest order and weekly sales cap, from their level and any admin override. */
 	sellerLimits(): Promise<{ largestOrderCents: number; weeklySalesCents: number }>;
-	/** The weight of the seller's checkouts in the last 7 days that are paid or may still be. */
-	weeklyUsage(): Promise<number>;
-	/** Tells Estori and the seller that the store reached its weekly cap. */
-	limitReached(): Promise<void>;
+	/** The weight of the seller's checkouts in this mode in the last 7 days that are paid or may still be. */
+	weeklyUsage(mode: StoreMode): Promise<number>;
+	/** Tells Estori and the seller that the store reached this weekly cap; may finish after the shopper is answered. */
+	limitReached(weeklySalesCents: number): Promise<void>;
 	newCheckoutId(): string;
 	nowMs(): number;
 }
@@ -90,8 +91,8 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	if (priced.cart.totalCents > limits.largestOrderCents) return refusal('order_over_limit');
 	// Saved as creating before Stripe is called, so the next checkout's usage counts this one.
 	const weightedCents = weightedCartCents(priced.cart);
-	if ((await deps.weeklyUsage()) + weightedCents > limits.weeklySalesCents) {
-		await deps.limitReached();
+	if ((await deps.weeklyUsage(priced.cart.mode)) + weightedCents > limits.weeklySalesCents) {
+		await deps.limitReached(limits.weeklySalesCents);
 		return refusal('store_paused');
 	}
 
