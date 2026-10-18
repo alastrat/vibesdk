@@ -8,6 +8,8 @@ import { envWith, insertApp, insertUser, migratedD1 } from '../test-support/real
 import { LiveStoreService } from './LiveStoreService';
 
 const NOW = new Date(1_800_000_000_000);
+const HOUR = 60 * 60 * 1000;
+const DAY_AGO = new Date(NOW.getTime() - 24 * HOUR);
 let db: D1Database;
 
 beforeAll(async () => {
@@ -50,15 +52,35 @@ describe('live stores on real SQL', () => {
 		expect(await stores.domainByHostname('www.northwindtea.com')).toBeNull();
 		// Pending domains don't route yet.
 		expect(await stores.storeForHostname('shop.northwindtea.com')).toBeNull();
-		expect((await stores.pendingDomains()).map((domain) => domain.hostname)).toEqual(['shop.northwindtea.com']);
+		expect((await stores.domainsDue(DAY_AGO)).map((domain) => domain.hostname)).toEqual(['shop.northwindtea.com']);
 
 		await stores.updateDomain('shop.northwindtea.com', { status: 'active', records, lastError: null, checkedAt: NOW, verifiedAt: NOW });
 		expect(await stores.storeForHostname('shop.northwindtea.com')).toEqual({ appId: 'app_tea', slug: 'northwind-tea', status: 'live', sellerUserId: 'seller_1' });
 		expect(await stores.domainOfApp('app_tea')).toMatchObject({ hostname: 'shop.northwindtea.com', status: 'active', providerId: 'ch_1', records });
-		expect(await stores.pendingDomains()).toEqual([]);
+		expect(await stores.domainsDue(DAY_AGO)).toEqual([]);
 
 		await stores.removeDomain('app_tea');
 		expect(await stores.storeForHostname('shop.northwindtea.com')).toBeNull();
 		expect(await stores.domainOfApp('app_tea')).toBeNull();
+	});
+
+	it('gives the sweep domains waiting for DNS, connected ones with a warning, and connected ones last checked before the cutoff, oldest check first', async () => {
+		const stores = new LiveStoreService(envWith(db));
+		const records = [{ type: 'CNAME' as const, name: 'shop.example.com', value: 'stores.estori.shop', purpose: 'routing' as const }];
+		const domains = [
+			{ hostname: 'shop.pending.com', status: 'pending' as const, lastError: null, checkedHoursAgo: 1 },
+			{ hostname: 'shop.warned.com', status: 'active' as const, lastError: 'We can no longer see this domain.', checkedHoursAgo: 0.5 },
+			{ hostname: 'shop.stale.com', status: 'active' as const, lastError: null, checkedHoursAgo: 25 },
+			{ hostname: 'shop.fresh.com', status: 'active' as const, lastError: null, checkedHoursAgo: 2 },
+			{ hostname: 'shop.failed.com', status: 'failed' as const, lastError: 'Gave up.', checkedHoursAgo: 48 },
+		];
+		for (const [index, domain] of domains.entries()) {
+			const appId = `app_due_${index}`;
+			await insertApp(db, { id: appId, userId: 'seller_1' });
+			await stores.addDomain({ appId, hostname: domain.hostname, provider: 'cloudflare', providerId: `ch_${index}`, records, now: NOW });
+			await stores.updateDomain(domain.hostname, { status: domain.status, records, lastError: domain.lastError, checkedAt: new Date(NOW.getTime() - domain.checkedHoursAgo * HOUR) });
+		}
+		expect((await stores.domainsDue(DAY_AGO)).map((domain) => domain.hostname)).toEqual(['shop.stale.com', 'shop.pending.com', 'shop.warned.com']);
+		expect((await stores.domainsDue(DAY_AGO, 2)).map((domain) => domain.hostname)).toEqual(['shop.stale.com', 'shop.pending.com']);
 	});
 });

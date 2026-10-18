@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { addStoreDomain, checkStoreDomain, releaseDeletedStoreDomain, removeStoreDomain, sweepPendingDomains, DOMAIN_CLAIM_HOLD_HOURS, DOMAIN_SETUP_DAYS, type DomainFlowDeps } from './domain-checks';
+import { addStoreDomain, checkStoreDomain, releaseDeletedStoreDomain, removeStoreDomain, sweepStoreDomains, CONNECTED_DOMAIN_CHECK_HOURS, DOMAIN_CLAIM_HOLD_HOURS, DOMAIN_SETUP_DAYS, type DomainFlowDeps } from './domain-checks';
 import type { CustomHostnameProvider, DomainState } from './domains';
 import type { StoreDomainRow } from '../../database/services/LiveStoreService';
 
 const DAY = 24 * 60 * 60 * 1000;
 const RECORDS = [{ type: 'CNAME' as const, name: 'shop.northwindtea.com', value: 'stores.estori.shop', purpose: 'routing' as const }];
+const RENEWAL_RECORDS = [...RECORDS, { type: 'TXT' as const, name: '_acme-challenge.shop.northwindtea.com', value: 'renewal-token', purpose: 'certificate' as const }];
+const ACTIVE: DomainState = { status: 'active', records: RECORDS, error: null };
 
-function world(options: { checks?: DomainState[]; createFails?: boolean; removeFails?: boolean; saveFails?: boolean; takenBy?: Record<string, string> } = {}) {
+function world(options: { checks?: Array<DomainState | Error>; createFails?: boolean; removeFails?: boolean; saveFails?: boolean; takenBy?: Record<string, string>; updateFailsFor?: string } = {}) {
 	const rows = new Map<string, StoreDomainRow>();
 	const removedAtProvider: string[] = [];
+	const warned: string[] = [];
+	const dueCutoffs: Date[] = [];
 	let now = new Date(1_800_000_000_000);
 	const provider: CustomHostnameProvider = {
 		name: 'cloudflare',
@@ -16,7 +20,11 @@ function world(options: { checks?: DomainState[]; createFails?: boolean; removeF
 			if (options.createFails) throw new Error('Duplicate custom hostname found.');
 			return { providerId: `ch_${hostname}`, status: 'pending', records: RECORDS, error: null };
 		},
-		check: async () => options.checks?.shift() ?? { status: 'pending', records: RECORDS, error: null },
+		check: async () => {
+			const next = options.checks?.shift();
+			if (next instanceof Error) throw next;
+			return next ?? { status: 'pending', records: RECORDS, error: null };
+		},
 		remove: async (hostname) => {
 			if (options.removeFails) throw new Error('Cloudflare is unreachable');
 			removedAtProvider.push(hostname);
@@ -37,16 +45,21 @@ function world(options: { checks?: DomainState[]; createFails?: boolean; removeF
 				return 'added';
 			},
 			updateDomain: async (hostname, update) => {
+				if (options.updateFailsFor === hostname) throw new Error('D1_ERROR: database is locked');
 				const row = rows.get(hostname);
 				if (row) rows.set(hostname, { ...row, ...update, verifiedAt: update.verifiedAt === undefined ? row.verifiedAt : update.verifiedAt });
 			},
 			removeDomain: async (appId) => {
 				for (const [hostname, row] of rows) if (row.appId === appId) rows.delete(hostname);
 			},
-			pendingDomains: async () => [...rows.values()].filter((row) => row.status === 'pending'),
+			domainsDue: async (connectedCheckedBefore) => {
+				dueCutoffs.push(connectedCheckedBefore);
+				return [...rows.values()].filter((row) => row.status === 'pending' || (row.status === 'active' && (row.lastError !== null || !row.checkedAt || row.checkedAt < connectedCheckedBefore)));
+			},
 		},
+		warnSeller: async (domain) => void warned.push(domain.hostname),
 	};
-	return { deps, rows, removedAtProvider, advance: (ms: number) => (now = new Date(now.getTime() + ms)) };
+	return { deps, rows, removedAtProvider, warned, dueCutoffs, advance: (ms: number) => (now = new Date(now.getTime() + ms)) };
 }
 
 describe('adding a domain', () => {
@@ -117,11 +130,78 @@ describe('checking a domain', () => {
 		expect(await checkStoreDomain(deps, 'app_tea')).toMatchObject({ ok: true, domain: { status: 'failed', lastError: "The DNS records weren't added within 7 days. Remove the domain and add it again." } });
 	});
 
+	it('keeps sweeping the other domains when one fails to save, and counts it failed for this run', async () => {
+		const { deps, rows } = world({ checks: [{ status: 'active', records: RECORDS, error: null }, { status: 'active', records: RECORDS, error: null }], updateFailsFor: 'shop.northwindtea.com' });
+		await addStoreDomain({ ...deps, stores: { ...deps.stores, updateDomain: async () => undefined } }, 'app_tea', 'shop.northwindtea.com');
+		await addStoreDomain(deps, 'app_lumen', 'shop.lumenhome.com');
+		expect(await sweepStoreDomains(deps)).toEqual({ checked: 2, connected: 1, failed: 1, warned: 0 });
+		expect(rows.get('shop.lumenhome.com')?.status).toBe('active');
+	});
+
 	it('sweeps every pending domain, connecting the ones that are ready', async () => {
 		const { deps, rows } = world({ checks: [{ status: 'active', records: RECORDS, error: null }] });
 		await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com');
-		expect(await sweepPendingDomains(deps)).toEqual({ checked: 1, connected: 1, failed: 0 });
+		expect(await sweepStoreDomains(deps)).toEqual({ checked: 1, connected: 1, failed: 0, warned: 0 });
 		expect(rows.get('shop.northwindtea.com')?.status).toBe('active');
+	});
+});
+
+describe('a connected domain', () => {
+	const connect = async (checks: Array<DomainState | Error>) => {
+		const flow = world({ checks: [ACTIVE, ...checks] });
+		await addStoreDomain(flow.deps, 'app_tea', 'shop.northwindtea.com');
+		await checkStoreDomain(flow.deps, 'app_tea');
+		return flow;
+	};
+
+	it('keeps serving when the provider stops seeing its records, shows the records to fix with a warning, and tells the seller once', async () => {
+		const { deps, warned } = await connect([
+			{ status: 'pending', records: RENEWAL_RECORDS, error: null },
+			{ status: 'pending', records: RENEWAL_RECORDS, error: null },
+		]);
+		const checked = await checkStoreDomain(deps, 'app_tea');
+		expect(checked).toMatchObject({ ok: true, domain: { status: 'active', records: RENEWAL_RECORDS, verifiedAt: new Date(1_800_000_000_000) } });
+		expect(checked.ok && checked.domain.lastError).toBe(
+			"We can't see this domain's DNS records right now. Your store still answers on it, but visitors may not reach it until the records below are back at your DNS provider.",
+		);
+		expect(warned).toEqual(['shop.northwindtea.com']);
+		await checkStoreDomain(deps, 'app_tea');
+		expect(warned).toEqual(['shop.northwindtea.com']);
+	});
+
+	it("adds the provider's reason to the warning when it gives one", async () => {
+		const { deps } = await connect([{ status: 'failed', records: RECORDS, error: 'custom hostname does not CNAME to this zone.' }]);
+		const checked = await checkStoreDomain(deps, 'app_tea');
+		expect(checked).toMatchObject({ ok: true, domain: { status: 'active' } });
+		expect(checked.ok && checked.domain.lastError).toMatch(/at your DNS provider\. The reason given: custom hostname does not CNAME to this zone\.$/);
+	});
+
+	it('clears the warning once the records are seen again, and warns again if they go a second time', async () => {
+		const { deps, warned } = await connect([{ status: 'pending', records: RECORDS, error: null }, ACTIVE, { status: 'pending', records: RECORDS, error: null }]);
+		await checkStoreDomain(deps, 'app_tea');
+		expect(await checkStoreDomain(deps, 'app_tea')).toMatchObject({ ok: true, domain: { status: 'active', lastError: null } });
+		await checkStoreDomain(deps, 'app_tea');
+		expect(warned).toEqual(['shop.northwindtea.com', 'shop.northwindtea.com']);
+	});
+
+	it("stays as it was when the provider can't answer, since that says nothing about the seller's DNS", async () => {
+		const { deps, warned, advance } = await connect([new Error('Cloudflare answered 503')]);
+		advance(60_000);
+		expect(await checkStoreDomain(deps, 'app_tea')).toMatchObject({ ok: true, domain: { status: 'active', lastError: null, records: RECORDS, checkedAt: new Date(1_800_000_060_000) } });
+		expect(warned).toEqual([]);
+	});
+
+	it(`is swept again every ${CONNECTED_DOMAIN_CHECK_HOURS} hours, or every hour while it has a warning, counting only what changed`, async () => {
+		const { deps, rows, warned, dueCutoffs, advance } = world({ checks: [ACTIVE, { status: 'pending', records: RECORDS, error: null }, ACTIVE] });
+		await addStoreDomain(deps, 'app_lumen', 'shop.lumenhome.com');
+		await checkStoreDomain(deps, 'app_lumen');
+		await addStoreDomain(deps, 'app_tea', 'shop.northwindtea.com');
+		advance(CONNECTED_DOMAIN_CHECK_HOURS * 60 * 60 * 1000 + 1);
+		expect(await sweepStoreDomains(deps)).toEqual({ checked: 2, connected: 1, failed: 0, warned: 1 });
+		expect(dueCutoffs).toEqual([new Date(1_800_000_000_001)]);
+		expect(rows.get('shop.northwindtea.com')?.status).toBe('active');
+		expect(rows.get('shop.lumenhome.com')).toMatchObject({ status: 'active', lastError: expect.stringContaining('Your store still answers on it') });
+		expect(warned).toEqual(['shop.lumenhome.com']);
 	});
 });
 

@@ -25,7 +25,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 
 	return (
 		<section id="discover" aria-labelledby="showcase-title" className="scroll-mt-36 bg-public-charcoal py-20 text-white sm:py-28">
-			<div className="mx-auto flex max-w-[1248px] flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+			<div className="mx-auto flex max-w-[1296px] flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
 				<div className="max-w-2xl">
 					<Eyebrow tone="dark">Discover</Eyebrow>
 					<h2 id="showcase-title" className={cn(HEADING_SECTION, 'mt-4 text-balance')}>
@@ -56,7 +56,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 			</div>
 			<div className="group/edges relative mt-12">
 				{layout.kind === 'static' ? (
-					<div className="mx-auto flex max-w-[1248px] flex-wrap gap-4 px-4 sm:px-6">
+					<div className="mx-auto flex max-w-[1296px] flex-wrap gap-4 px-4 sm:px-6">
 						{layout.row.map((store) => (
 							<ShowcaseCard key={store.id} store={store} />
 						))}
@@ -78,7 +78,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 					</div>
 				)}
 			</div>
-			<div className="mx-auto mt-10 max-w-[1248px] px-4 sm:px-6">
+			<div className="mx-auto mt-10 max-w-[1296px] px-4 sm:px-6">
 				<TextLink to="/discover" tone="dark">
 					Browse all stores in Discover
 				</TextLink>

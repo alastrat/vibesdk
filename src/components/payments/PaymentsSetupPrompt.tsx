@@ -3,30 +3,32 @@ import { LinkButton } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { useStripeConnectStatus } from '@/hooks/use-payments';
 import { SELLER_SETUP_PATH } from '@/api-types';
+import { setupPrompt } from './setup-prompt';
 
 const DISMISSED_KEY = 'estori:payments-setup-dismissed';
 
-function readDismissed(): boolean {
+function readDismissed(): string | null {
 	try {
-		return window.localStorage.getItem(DISMISSED_KEY) === '1';
+		return window.localStorage.getItem(DISMISSED_KEY);
 	} catch {
-		return false;
+		return null;
 	}
 }
 
-/** After sign-up: offers payments setup to a signed-in user with no Stripe account, until they set up or dismiss it. */
+/** Offers payments setup to a signed-in user until their stores can take payments, unless they dismissed this step. */
 export function PaymentsSetupPrompt() {
 	const { user } = useAuth();
 	const signedIn = !!user && !user.isAnonymous;
 	const status = useStripeConnectStatus(signedIn);
 	const [dismissed, setDismissed] = useState(readDismissed);
 
-	if (!signedIn || dismissed || !status.data?.configured || status.data.connected) return null;
+	const prompt = signedIn && status.data ? setupPrompt(status.data, dismissed) : null;
+	if (!prompt) return null;
 
 	const dismiss = () => {
-		setDismissed(true);
+		setDismissed(prompt.key);
 		try {
-			window.localStorage.setItem(DISMISSED_KEY, '1');
+			window.localStorage.setItem(DISMISSED_KEY, prompt.key);
 		} catch {
 			// Browser storage may be off; the prompt just returns next visit.
 		}
@@ -34,13 +36,13 @@ export function PaymentsSetupPrompt() {
 
 	return (
 		<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 ring ring-kumo-hairline">
-			<span className="text-sm text-kumo-default">Want your stores to take payments? Set up payments when you're ready to sell.</span>
+			<span className="text-sm text-kumo-default">{prompt.message}</span>
 			<div className="flex items-center gap-2">
 				<button type="button" className="text-sm text-kumo-subtle underline" onClick={dismiss}>
 					Not now
 				</button>
 				<LinkButton size="sm" variant="primary" href={SELLER_SETUP_PATH}>
-					Set up payments
+					{prompt.action}
 				</LinkButton>
 			</div>
 		</div>

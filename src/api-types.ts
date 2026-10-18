@@ -288,7 +288,7 @@ export { SELLER_SETUP_MESSAGES, SELLER_SETUP_PATH, SELLER_TERMS_VERSION, sellerS
 export type { SellerAccountCosts, SellerLevel, SellerLimitsData } from '../shared/types/seller-levels.js';
 export { COMPLETED_ORDER_MIN_AGE_DAYS, DEFAULT_SELLER_LIMITS } from '../shared/types/seller-levels.js';
 export type { AddStoreDomainRequest, LiveStoreView, PublishLiveStoreRequest, StoreDomainRecord, StoreDomainView } from '../shared/types/live-stores.js';
-export { SLUG_MAX_LENGTH, slugProblem } from '../shared/types/live-stores.js';
+export { SLUG_MAX_LENGTH, recordHost, slugProblem } from '../shared/types/live-stores.js';
 export {
 	CONFIRM_LINK_INVALID_MESSAGE,
 	FORGOT_PASSWORD_MESSAGE,

@@ -9,11 +9,13 @@ export const SELLER_CHARGE_UNPAID_AFTER_MS = 60 * DAY_MS;
 export const REFRESH_STALLED_AFTER_MS = DAY_MS;
 export const NOT_SHIPPED_AFTER_MS = 5 * DAY_MS;
 export const NOT_DELIVERED_AFTER_MS = 30 * DAY_MS;
+/** A late item is alerted daily for this long after it becomes late; after that it stops repeating. */
+export const LATE_ALERT_WINDOW_MS = 30 * DAY_MS;
 
 export interface CatalogHealthDeps {
 	refreshHealth(): Promise<{ activeProducts: number; lastRefreshAt: Date | null }>;
-	/** Distinct catalog order ids with an item in this status since before this time. */
-	lateItems(status: 'placed' | 'shipped', before: Date): Promise<string[]>;
+	/** Distinct catalog order ids with an item in this status since before `before`, but no earlier than `since`. */
+	lateItems(status: 'placed' | 'shipped', before: Date, since: Date): Promise<string[]>;
 	alert(alert: PlatformAlert): Promise<void>;
 	/** What each seller still owes on charges added before this time. */
 	unpaidCharges(before: Date): Promise<Array<{ sellerUserId: string; owedCents: number }>>;
@@ -26,10 +28,10 @@ export async function runCatalogHealth(deps: CatalogHealthDeps, nowMs: number): 
 	if (refresh.activeProducts > 0 && (refresh.lastRefreshAt === null || nowMs - refresh.lastRefreshAt.getTime() > REFRESH_STALLED_AFTER_MS)) {
 		alerts.push({ kind: 'refresh-stalled', subject: 'catalog', message: 'No catalog product refreshed in the last 24 hours, so offers will stop selling after 72.' });
 	}
-	for (const orderId of await deps.lateItems('placed', new Date(nowMs - NOT_SHIPPED_AFTER_MS))) {
+	for (const orderId of await deps.lateItems('placed', new Date(nowMs - NOT_SHIPPED_AFTER_MS), new Date(nowMs - NOT_SHIPPED_AFTER_MS - LATE_ALERT_WINDOW_MS))) {
 		alerts.push({ kind: 'not-shipped', subject: orderId, message: 'An item was placed with the supplier more than 5 days ago and has no tracking yet.' });
 	}
-	for (const orderId of await deps.lateItems('shipped', new Date(nowMs - NOT_DELIVERED_AFTER_MS))) {
+	for (const orderId of await deps.lateItems('shipped', new Date(nowMs - NOT_DELIVERED_AFTER_MS), new Date(nowMs - NOT_DELIVERED_AFTER_MS - LATE_ALERT_WINDOW_MS))) {
 		alerts.push({ kind: 'not-delivered', subject: orderId, message: 'An item shipped more than 30 days ago and hasn\'t been delivered.' });
 	}
 	for (const unpaid of await deps.unpaidCharges(new Date(nowMs - SELLER_CHARGE_UNPAID_AFTER_MS))) {

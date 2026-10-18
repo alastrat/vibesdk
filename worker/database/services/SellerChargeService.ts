@@ -55,9 +55,10 @@ export class SellerChargeService extends BaseService {
 
 	/**
 	 * Claims an amount of a charge for one sale before Stripe is called. One statement, so it only inserts while that much
-	 * is still owed: two sales collecting at once can't both claim it. True when the claim belongs to this sale.
+	 * is still owed: two sales collecting at once can't both claim it. Answers the amount this sale holds, which is what
+	 * was stored first when another run of the same sale claimed it, or null when the claim went to another sale.
 	 */
-	async claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<boolean> {
+	async claimCollection(claim: { chargeId: string; orderId: string; amountCents: number; now: Date }): Promise<number | null> {
 		const at = Math.floor(claim.now.getTime() / 1000);
 		await this.database.run(sql`INSERT INTO seller_charge_collections (charge_id, order_id, reversal_id, amount_cents, created_at)
 			SELECT ${claim.chargeId}, ${claim.orderId}, NULL, ${claim.amountCents}, ${at} FROM seller_charges c
@@ -66,11 +67,11 @@ export class SellerChargeService extends BaseService {
 			ON CONFLICT (charge_id, order_id) DO NOTHING`);
 		await this.refreshCollected(claim.chargeId, claim.now);
 		const row = await this.database
-			.select({ chargeId: schema.sellerChargeCollections.chargeId })
+			.select({ amountCents: schema.sellerChargeCollections.amountCents })
 			.from(schema.sellerChargeCollections)
 			.where(and(eq(schema.sellerChargeCollections.chargeId, claim.chargeId), eq(schema.sellerChargeCollections.orderId, claim.orderId)))
 			.get();
-		return row !== undefined;
+		return row?.amountCents ?? null;
 	}
 
 	async completeCollection(done: { chargeId: string; orderId: string; reversalId: string }): Promise<void> {

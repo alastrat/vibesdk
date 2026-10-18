@@ -1,14 +1,15 @@
-/** Emails to sellers about their store: a reached limit, or items Estori refunded. Once a day per kind and subject. */
+/** Emails to sellers about their store: a reached limit, items Estori refunded, or a domain whose DNS went. Once a day per kind and subject. */
 
 import { createEmailSender } from '../email/sender';
-import { sellerItemsRefundedEmail, sellerLimitReachedEmail } from '../email/templates';
-import type { EmailSender } from '../email/types';
+import { sellerDomainUnreachableEmail, sellerItemsRefundedEmail, sellerLimitReachedEmail } from '../email/templates';
+import type { EmailSender, OutgoingEmail } from '../email/types';
 import { UserService } from '../../database';
 import { createLogger } from '../../logger';
 
 export type SellerNotice =
 	| { sellerUserId: string; kind: 'limit-reached'; weeklySalesCents: number }
-	| { sellerUserId: string; kind: 'items-refunded'; orderId: string; itemCount: number; reason: 'supplier' | 'risk' };
+	| { sellerUserId: string; kind: 'items-refunded'; orderId: string; itemCount: number; reason: 'supplier' | 'risk' }
+	| { sellerUserId: string; kind: 'domain-unreachable'; hostname: string };
 
 export interface SellerNoticeDeps {
 	throttle: { get(key: string): Promise<string | null>; put(key: string, value: string, options: { expirationTtl: number }): Promise<void> };
@@ -18,13 +19,35 @@ export interface SellerNoticeDeps {
 
 const DAY_SECONDS = 24 * 60 * 60;
 
+/** What a notice is about, so each is sent once a day: the seller's store, an order, or a domain. */
+function subjectOf(notice: SellerNotice): string {
+	switch (notice.kind) {
+		case 'limit-reached':
+			return notice.sellerUserId;
+		case 'items-refunded':
+			return notice.orderId;
+		case 'domain-unreachable':
+			return notice.hostname;
+	}
+}
+
+function emailFor(to: string, notice: SellerNotice): OutgoingEmail {
+	switch (notice.kind) {
+		case 'limit-reached':
+			return sellerLimitReachedEmail(to, notice.weeklySalesCents);
+		case 'items-refunded':
+			return sellerItemsRefundedEmail(to, notice.itemCount, notice.reason);
+		case 'domain-unreachable':
+			return sellerDomainUnreachableEmail(to, notice.hostname);
+	}
+}
+
 export async function sendSellerNotice(deps: SellerNoticeDeps, notice: SellerNotice): Promise<'sent' | 'throttled' | 'not-sent'> {
-	const subject = notice.kind === 'limit-reached' ? notice.sellerUserId : notice.orderId;
-	const key = `seller-notice:${notice.kind}:${subject}`;
+	const key = `seller-notice:${notice.kind}:${subjectOf(notice)}`;
 	if (await deps.throttle.get(key)) return 'throttled';
 	const to = await deps.sellerEmail(notice.sellerUserId);
 	if (!deps.sender || !to) return 'not-sent';
-	await deps.sender.send(notice.kind === 'limit-reached' ? sellerLimitReachedEmail(to, notice.weeklySalesCents) : sellerItemsRefundedEmail(to, notice.itemCount, notice.reason));
+	await deps.sender.send(emailFor(to, notice));
 	await deps.throttle.put(key, '1', { expirationTtl: DAY_SECONDS });
 	return 'sent';
 }

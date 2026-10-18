@@ -21,4 +21,23 @@ describe('ScreenshotSecurity.enrichUrls', () => {
 		]);
 		expect(app.showcaseScreenshotUrl).toBeNull();
 	});
+
+	it('signs only the showcase when an app has no desktop screenshot', async () => {
+		const [app] = await new ScreenshotSecurity(env).enrichUrls([{ id: 'app1', screenshotUrl: null, showcaseScreenshotUrl: '/api/screenshots/app1/showcase.jpg' }]);
+		expect(app.screenshotUrl).toBeNull();
+		expect(app.showcaseScreenshotUrl).toMatch(/^\/api\/screenshots\/app1\/showcase\.jpg\?token=/);
+	});
+
+	it('leaves an app without the showcase field as it is, adding nothing', async () => {
+		const [app] = await new ScreenshotSecurity(env).enrichUrls([{ id: 'app1', screenshotUrl: '/api/screenshots/app1/latest.png' }]);
+		expect(app.screenshotUrl).toMatch(/\?token=/);
+		expect(app.showcaseScreenshotUrl).toBeUndefined();
+	});
+
+	it('hands back the very same object when there is nothing to sign', async () => {
+		const plain = { id: 'app1', screenshotUrl: 'https://cdn.example/elsewhere.png', showcaseScreenshotUrl: null };
+		const [app] = await new ScreenshotSecurity(env).enrichUrls([plain]);
+		expect(app).toBe(plain);
+	});
 });
+

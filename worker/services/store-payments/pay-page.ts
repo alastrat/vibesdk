@@ -152,6 +152,7 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 .fine { color: var(--muted); font-size: 13px; margin: 12px 0 0; text-align: center; }
 .summary { position: sticky; top: 24px; }
 .summary h2 { font-size: 22px; margin: 0 0 16px; }
+.summary-toggle { display: none; width: 100%; justify-content: space-between; align-items: center; gap: 12px; padding: 0; border: 0; background: none; color: var(--text); font: 600 17px var(--font); cursor: pointer; }
 .lines { list-style: none; margin: 0; padding: 0; }
 .line { display: grid; grid-template-columns: 64px 1fr auto; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .thumb { width: 64px; height: 64px; border-radius: var(--field); background: color-mix(in srgb, var(--text) 8%, var(--surface)); object-fit: cover; }
@@ -163,19 +164,26 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 .stepper button { width: 34px; height: 32px; border: 0; background: none; color: var(--text); font-size: 17px; cursor: pointer; }
 .stepper output { min-width: 26px; text-align: center; font-size: 15px; }
 .remove { background: none; border: 0; padding: 0; color: var(--muted); font: 14px var(--font); text-decoration: underline; cursor: pointer; }
-.country { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; }
+.country { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0 0 16px; }
 .country select { font: 15px var(--font); color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: var(--field); padding: 6px 8px; }
 .totals { margin: 16px 0 0; display: grid; grid-template-columns: 1fr auto; gap: 8px 0; }
 .totals dd { padding-left: 16px; }
 .totals dt { color: var(--muted); }
 .totals dd { margin: 0; text-align: right; }
 .totals .total { font-size: 20px; font-weight: 700; color: var(--text); padding-top: 12px; border-top: 1px solid var(--line); }
+.note { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.note h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.note p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice { margin: 0 0 20px; padding: 14px 16px; border-radius: var(--field); background: color-mix(in srgb, #d92d20 14%, var(--surface)); border: 1px solid color-mix(in srgb, #d92d20 40%, transparent); }
 .empty { text-align: center; padding: 48px 24px; }
 .busy { opacity: 0.6; pointer-events: none; transition: opacity 0.15s; }
 @media (max-width: 860px) {
   .grid { grid-template-columns: 1fr; }
   .summary { position: static; order: -1; }
+  .summary h2 { display: none; }
+  .summary-toggle { display: flex; }
+  .summary.open .summary-toggle { margin-bottom: 16px; }
+  .summary:not(.open) .summary-body { display: none; }
   .panel { padding: 20px; }
 }
 </style>
@@ -196,15 +204,19 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
       <button class="pay" id="pay" type="button" disabled>Pay</button>
       <p class="fine">Payments are processed securely by Stripe. ${brand.name ? escapeHtml(brand.name) : 'This store'} is the seller.</p>
     </section>
-    <aside class="panel summary" aria-label="Order summary">
+    <aside class="panel summary" id="summary" aria-label="Order summary">
+      <button class="summary-toggle" id="summary-toggle" type="button" aria-expanded="false" aria-controls="summary-body"><span id="summary-toggle-label">Show order summary</span><span id="summary-toggle-total">&mdash;</span></button>
       <h2>Order summary</h2>
-      <ul class="lines" id="lines"></ul>
       <div class="country" id="country-row" hidden><label for="country">Ship to</label><select id="country"></select></div>
-      <dl class="totals">
-        <dt>Subtotal</dt><dd id="subtotal">&mdash;</dd>
-        <dt>Shipping</dt><dd id="shipping">&mdash;</dd>
-        <dt class="total">Total</dt><dd class="total" id="total">&mdash;</dd>
-      </dl>
+      <div class="summary-body" id="summary-body">
+        <ul class="lines" id="lines"></ul>
+        <dl class="totals">
+          <dt>Subtotal</dt><dd id="subtotal">&mdash;</dd>
+          <dt>Shipping</dt><dd id="shipping">&mdash;</dd>
+          <dt class="total">Total</dt><dd class="total" id="total">&mdash;</dd>
+        </dl>
+        <div class="note" id="note-row" hidden><h3>Order note</h3><p id="note-text"></p></div>
+      </div>
     </aside>
   </div>
   <div class="panel empty" id="empty" hidden>
@@ -223,10 +235,8 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 /** The page's own script: the order summary, the shared cart, and Stripe's form on a Checkout Session. */
 export const PAY_PAGE_SCRIPT = `(function () {
   var config = JSON.parse(document.getElementById('estori-pay-config').textContent);
-  var params = new URLSearchParams(window.location.search);
   var successPath = config.successPath;
   var cancelPath = config.cancelPath;
-  var note = params.get('note');
   var $ = function (id) { return document.getElementById(id); };
   $('back').href = config.basePath + cancelPath;
   $('empty-back').href = config.basePath + cancelPath;
@@ -266,24 +276,26 @@ export const PAY_PAGE_SCRIPT = `(function () {
   // Stripe's own email field can't be given an email, and Stripe won't pay once the page sets the email while that field
   // is mounted. So the email is the page's own field, sent to each session, and it survives a cart edit.
   var emailField = $('email');
+  // Answers 'sent', 'refused' (Stripe refused the email, explained under its field) or 'unavailable' (the session can't
+  // be used, so it can't be paid either).
   function sendEmail(showErrors) {
     var current = checkout;
-    if (!current) return Promise.resolve(false);
+    if (!current) return Promise.resolve('unavailable');
     return current.loadActions().then(function (loaded) {
-      if (loaded.type !== 'success') return false;
+      if (loaded.type !== 'success') return 'unavailable';
       return Promise.resolve(loaded.actions.updateEmail(emailField.value.trim())).then(function (result) {
         if (result && result.type === 'error') {
           if (showErrors) {
             $('email-error').textContent = result.error.message;
             $('email-error').hidden = false;
           }
-          return false;
+          return 'refused';
         }
         $('email-error').hidden = true;
-        return true;
+        return 'sent';
       });
     }).catch(function () {
-      return false;
+      return 'unavailable';
     });
   }
   emailField.addEventListener('change', function () {
@@ -379,6 +391,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
     $('subtotal').textContent = summary ? money(summary.subtotalCents) : '\\u2014';
     $('shipping').textContent = summary ? (summary.shippingCents === 0 ? 'Free' : money(summary.shippingCents)) : '\\u2014';
     $('total').textContent = summary ? money(summary.totalCents) : '\\u2014';
+    $('summary-toggle-total').textContent = $('total').textContent;
   }
 
   function setBusy(busy) {
@@ -447,17 +460,23 @@ export const PAY_PAGE_SCRIPT = `(function () {
     var payment = checkout.createPaymentElement();
     payment.mount('#payment-element');
     elements = [shipping, payment];
-    return emailField.value.trim() ? sendEmail(false) : Promise.resolve(false);
+    return emailField.value.trim() ? sendEmail(false) : Promise.resolve(null);
   }
 
   function start() {
     // A start asked for while a card is being confirmed waits for its answer, so the session being paid stays.
     if (starting || confirming) { again = true; return; }
     if (cart.count() === 0) { showEmpty(); return; }
+    // Items added in another tab after the cart was empty bring the checkout back.
+    $('checkout').hidden = false;
+    $('empty').hidden = true;
     starting = true;
     setBusy(true);
     hideNotice();
     var body = { items: cart.items(), shipTo: shipTo(), successPath: successPath, cancelPath: cancelPath };
+    var note = cart.note();
+    $('note-text').textContent = note;
+    $('note-row').hidden = !note;
     if (note) body.note = note;
     if (checkoutId) body.replaces = checkoutId;
     fetch(config.basePath + '/__estori/checkout', {
@@ -510,6 +529,15 @@ export const PAY_PAGE_SCRIPT = `(function () {
     holdPay();
   });
 
+  // On phones the summary folds behind a button that carries the total; it is always open on wider screens.
+  var summaryOpen = false;
+  $('summary-toggle').onclick = function () {
+    summaryOpen = !summaryOpen;
+    $('summary').classList.toggle('open', summaryOpen);
+    $('summary-toggle').setAttribute('aria-expanded', summaryOpen ? 'true' : 'false');
+    $('summary-toggle-label').textContent = summaryOpen ? 'Hide order summary' : 'Show order summary';
+  };
+
   $('pay').onclick = function () {
     if (!checkout || starting || confirming || timer !== null) return;
     var current = checkout;
@@ -517,7 +545,11 @@ export const PAY_PAGE_SCRIPT = `(function () {
     holdPay();
     hideNotice();
     sendEmail(true).then(function (sent) {
-      if (!sent) return null;
+      if (sent !== 'sent') {
+        // A refused email is explained under its field; a session that can't be used can't be paid either.
+        if (sent === 'unavailable') showNotice("This checkout can't continue. Refresh the page and try again.");
+        return null;
+      }
       return current.loadActions().then(function (loaded) {
         if (loaded.type !== 'success') throw new Error('Checkout is not ready');
         return loaded.actions.confirm();

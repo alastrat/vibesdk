@@ -1,5 +1,6 @@
 /** What a store's owner sees in the Go live panel: its address, its published version, and its own domain. */
 
+import { getDomain } from 'tldts';
 import { slugFromTitle, type LiveStoreView, type StoreDomainView } from '../../../shared/types/live-stores';
 import type { LiveStoreRow, StoreDomainRow } from '../../database/services/LiveStoreService';
 import { parseStoreManifest } from '../store-payments/manifest';
@@ -18,6 +19,7 @@ export function devPortOf(customDomain: string | undefined): string | null {
 function domainView(domain: StoreDomainRow, devPort: string | null): StoreDomainView {
 	return {
 		hostname: domain.hostname,
+		rootDomain: getDomain(domain.hostname),
 		url: storeUrl(domain.hostname, devPort),
 		status: domain.status,
 		records: domain.records,

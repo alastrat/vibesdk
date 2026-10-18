@@ -7,7 +7,7 @@
  * page on the store's own address; the store never builds a checkout page or touches a payment.
  */
 
-import { STORE_CART_MAX_LINES, STORE_LINE_MAX_QUANTITY } from '../../../shared/types/store-payments';
+import { STORE_CART_MAX_LINES, STORE_LINE_MAX_QUANTITY, STORE_NOTE_MAX_LENGTH } from '../../../shared/types/store-payments';
 
 const EMPTY_CART = JSON.stringify({ ok: false, reason: 'invalid_request', message: 'Your cart is empty.' });
 
@@ -16,8 +16,12 @@ export const STORE_SCRIPT = `(function () {
   var basePath = new URL(script.src, window.location.href).pathname.replace(/\\/__estori\\/store\\.js$/i, '');
   var base = basePath + '/__estori';
   var CART_KEY = 'estori:cart:' + basePath;
+  // Orders whose receipt already cleared the cart in this browser, newest last.
+  var CLEARED_KEY = 'estori:cleared-orders:' + basePath;
+  var CLEARED_KEEP = 20;
   var MAX_LINES = ${STORE_CART_MAX_LINES};
   var MAX_QUANTITY = ${STORE_LINE_MAX_QUANTITY};
+  var MAX_NOTE = ${STORE_NOTE_MAX_LENGTH};
   var listeners = [];
 
   function call(path, init) {
@@ -52,7 +56,11 @@ export const STORE_SCRIPT = `(function () {
         if (quantity > 0 && items.length < MAX_LINES) items.push({ variantId: item.variantId, quantity: quantity });
       });
     }
-    return { items: items, shipTo: saved && typeof saved.shipTo === 'string' ? saved.shipTo : null };
+    return {
+      items: items,
+      shipTo: saved && typeof saved.shipTo === 'string' ? saved.shipTo : null,
+      note: saved && typeof saved.note === 'string' ? saved.note.slice(0, MAX_NOTE) : '',
+    };
   }
 
   function notify() {
@@ -62,6 +70,19 @@ export const STORE_SCRIPT = `(function () {
         listener(items);
       } catch (error) {}
     });
+  }
+
+  function firstReceipt(orderId) {
+    var cleared = [];
+    try {
+      var saved = JSON.parse(window.localStorage.getItem(CLEARED_KEY) || '[]');
+      if (Array.isArray(saved)) cleared = saved.filter(function (id) { return typeof id === 'string'; });
+    } catch (error) {}
+    if (cleared.indexOf(orderId) !== -1) return false;
+    try {
+      window.localStorage.setItem(CLEARED_KEY, JSON.stringify(cleared.concat(orderId).slice(-CLEARED_KEEP)));
+    } catch (error) {}
+    return true;
   }
 
   function write(saved) {
@@ -106,10 +127,12 @@ export const STORE_SCRIPT = `(function () {
         return items.filter(function (item) { return item.variantId !== variantId; });
       });
     },
+    // An empty cart has no order left for its note.
     clear: function () {
-      withItems(function () {
-        return [];
-      });
+      var saved = read();
+      saved.items = [];
+      saved.note = '';
+      write(saved);
     },
     count: function () {
       return read().items.reduce(function (sum, item) { return sum + item.quantity; }, 0);
@@ -121,6 +144,15 @@ export const STORE_SCRIPT = `(function () {
       if (typeof country !== 'string' || !/^[A-Za-z]{2}$/.test(country)) return;
       var saved = read();
       saved.shipTo = country.toUpperCase();
+      write(saved);
+    },
+    note: function () {
+      return read().note;
+    },
+    setNote: function (note) {
+      if (typeof note !== 'string') return;
+      var saved = read();
+      saved.note = note.trim().slice(0, MAX_NOTE);
       write(saved);
     },
     onChange: function (listener) {
@@ -151,19 +183,21 @@ export const STORE_SCRIPT = `(function () {
         });
       }
       if (request.shipTo) cart.setShipTo(request.shipTo);
+      // The note goes with the cart, which the checkout page reads, never in the page address.
+      if (typeof request.note === 'string') cart.setNote(request.note);
       if (cart.count() === 0) return Promise.resolve(${EMPTY_CART});
       var query = new URLSearchParams();
       if (typeof request.successPath === 'string') query.set('success', request.successPath);
       if (typeof request.cancelPath === 'string') query.set('cancel', request.cancelPath);
-      if (typeof request.note === 'string') query.set('note', request.note);
       var search = query.toString();
       window.location.assign(base + '/pay' + (search ? '?' + search : ''));
       return Promise.resolve({ ok: true });
     },
-    // A receipt means the order was paid, so the cart it came from is done.
+    // A receipt means the order was paid, so the cart it came from is done: cleared the first time only, so reopening
+    // an old confirmation leaves a cart the shopper has filled since.
     order: function (orderId) {
       return call('/orders/' + encodeURIComponent(orderId)).then(function (receipt) {
-        if (receipt && receipt.orderId === orderId) cart.clear();
+        if (receipt && receipt.orderId === orderId && firstReceipt(orderId)) cart.clear();
         return receipt;
       });
     },

@@ -73,12 +73,15 @@ It defines `window.Estori`:
   - `Estori.cart.add(variantId, quantity)`, `Estori.cart.setQuantity(variantId, quantity)` (0 removes),
     `Estori.cart.remove(variantId)` and `Estori.cart.clear()` change it.
   - `Estori.cart.shipTo()` and `Estori.cart.setShipTo(country)` hold the ship-to country, one of `shipping.countries`.
+  - `Estori.cart.note()` and `Estori.cart.setNote(text)` hold an optional order note, such as a gift message, up to
+    500 characters. The checkout page shows it, and the seller sees it on the order. Clearing the cart removes it.
   - `Estori.cart.onChange(listener)` calls `listener(items)` after every change, including edits made on the checkout
     page or in another tab. Re-render the cart badge and cart view from it.
 - `Estori.store()` resolves with `{ mode, paymentsAvailable, currency, shipping, products, brand }` from the deployed
   `estori-store.json`.
 - `Estori.checkout({ successPath, cancelPath, note })` opens Estori's checkout page for the cart. `successPath` is the
-  store's confirmation page; `cancelPath` is where "Continue shopping" goes back to.
+  store's confirmation page; `cancelPath` is where "Continue shopping" goes back to. A `note` is saved to the cart, as
+  `Estori.cart.setNote(note)` would.
 - `Estori.order(orderId)` resolves with the shopper's receipt, and empties the cart once the order is paid.
 
 ## 3. Cart, checkout and confirmation
@@ -89,17 +92,20 @@ It defines `window.Estori`:
   right now" instead of the button.
 
 ```js
-const store = await Estori.store();
+// Pages load store.js as a classic script, so await only inside an async function.
+async function main() {
+  const store = await Estori.store();
 
-function renderCart() {
-  document.querySelector('#cart-count').textContent = String(Estori.cart.count());
-  // Render Estori.cart.items() with each variant's name, image and price from store.products.
+  function renderCart() {
+    document.querySelector('#cart-count').textContent = String(Estori.cart.count());
+    // Render Estori.cart.items() with each variant's name, image and price from store.products.
+  }
+  Estori.cart.onChange(renderCart);
+  renderCart();
+
+  document.querySelector('#add-to-cart').addEventListener('click', () => Estori.cart.add('trail-mug-blue', 1));
+  document.querySelector('#checkout').addEventListener('click', () => Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' }));
 }
-Estori.cart.onChange(renderCart);
-renderCart();
-
-document.querySelector('#add-to-cart').addEventListener('click', () => Estori.cart.add('trail-mug-blue', 1));
-document.querySelector('#checkout').addEventListener('click', () => Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' }));
 
 async function showConfirmation() {
   const orderId = new URLSearchParams(location.search).get('order');
@@ -107,6 +113,8 @@ async function showConfirmation() {
   const receipt = await Estori.order(orderId);
   if (receipt) document.querySelector('#order-number').textContent = `Order #${receipt.orderNumber}`;
 }
+
+main();
 ```
 
 ## 4. What store code must never do

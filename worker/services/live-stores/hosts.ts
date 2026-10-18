@@ -6,6 +6,9 @@
 import { storeSubdomainSlug } from '../../../shared/types/live-stores';
 import { LiveStoreService, type LiveStoreTarget } from '../../database/services/LiveStoreService';
 import { getPreviewDomain } from '../../utils/urls';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('LiveStoreHosts');
 
 export interface StoreHostConfig {
 	/** Live stores are off when it's null. */
@@ -34,13 +37,28 @@ function withoutPort(domain: string | undefined): string {
 	return (domain ?? '').toLowerCase().replace(/:\d+$/, '');
 }
 
+let warnedOverlap = false;
+
+/**
+ * Stores run code their sellers wrote, so the stores domain must be apart from Estori's: one that is, sits under or
+ * contains the main or preview domain would let stores share their cookies. Such a setting turns stores off. Local
+ * development keeps `stores.localhost` under `localhost`.
+ */
+function overlapsEstori(storesDomain: string, customDomain: string, previewDomain: string): boolean {
+	return [customDomain, previewDomain].some((domain) => Boolean(domain) && (isUnder(storesDomain, domain) || isUnder(domain, storesDomain)));
+}
+
 export function storeHostConfig(env: Env): StoreHostConfig {
-	return {
-		storesDomain: env.STORES_DOMAIN?.trim().toLowerCase() || null,
-		customDomain: withoutPort(env.CUSTOM_DOMAIN),
-		previewDomain: withoutPort(getPreviewDomain(env)),
-		dev: env.ENVIRONMENT === 'dev' || env.ENVIRONMENT === 'local',
-	};
+	const customDomain = withoutPort(env.CUSTOM_DOMAIN);
+	const previewDomain = withoutPort(getPreviewDomain(env));
+	const dev = env.ENVIRONMENT === 'dev' || env.ENVIRONMENT === 'local';
+	let storesDomain = env.STORES_DOMAIN?.trim().toLowerCase() || null;
+	if (storesDomain && !dev && overlapsEstori(storesDomain, customDomain, previewDomain)) {
+		if (!warnedOverlap) logger.warn('Live stores are off: STORES_DOMAIN overlaps an Estori domain', { storesDomain });
+		warnedOverlap = true;
+		storesDomain = null;
+	}
+	return { storesDomain, customDomain, previewDomain, dev };
 }
 
 function isUnder(hostname: string, domain: string): boolean {

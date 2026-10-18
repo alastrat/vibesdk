@@ -36,7 +36,9 @@ describe('the Go live view', () => {
 
 	it("shows the store's domain with its records and its own address", () => {
 		const domain = { hostname: 'shop.northwindtea.com', appId: 'e0dcb2a3-0ea1', status: 'pending' as const, provider: 'cloudflare' as const, providerId: 'ch_1', records: [], lastError: null, createdAt: new Date(0), checkedAt: null, verifiedAt: null };
-		expect(liveStoreView({ ...BASE, domain }).domain).toEqual({ hostname: 'shop.northwindtea.com', url: 'https://shop.northwindtea.com', status: 'pending', records: [], lastError: null, checkedAt: null, verifiedAt: null });
+		expect(liveStoreView({ ...BASE, domain }).domain).toEqual({ hostname: 'shop.northwindtea.com', rootDomain: 'northwindtea.com', url: 'https://shop.northwindtea.com', status: 'pending', records: [], lastError: null, checkedAt: null, verifiedAt: null });
+		// Record names are shown relative to the domain the seller manages, found with the public suffix list.
+		expect(liveStoreView({ ...BASE, domain: { ...domain, hostname: 'store.shop.example.co.uk' } }).domain?.rootDomain).toBe('example.co.uk');
 	});
 
 	it('is unavailable without a stores domain', () => {

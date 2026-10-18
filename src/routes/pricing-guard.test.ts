@@ -135,6 +135,8 @@ describe('pricing page', () => {
 		expect(page).toContain('sellerKeepsTable()');
 		expect(page).not.toMatch(/7% \+ \$0\.60/);
 		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
+		// Each row is named by its price, so a screen reader reads the fee and the amount kept against it.
+		expect(page).toContain('<th scope="row" className="py-2.5 font-normal">{formatTemplatePrice(row.priceCents)}</th>');
 	});
 
 	it('answers the credit questions', () => {

@@ -33,6 +33,7 @@ import type { ProjectStage } from '../utils/project-stage-helpers';
 import { useLimitsContext } from '@/contexts/limits-context';
 import { RESUME_BUILD_MESSAGE } from '../../../../shared/think';
 import type { BuildStatus } from '../utils/build-status';
+import { failureReporterForAttempt } from '../utils/connection-failure';
 
 export type Edit = Omit<CodeFixEdits, 'type'>;
 
@@ -405,6 +406,7 @@ export function useChat({
 
 				// Mark this attempt id
 				const myAttemptId = ++connectAttemptIdRef.current;
+				const reportFailure = failureReporterForAttempt((reason) => handleConnectionFailureRef.current?.(wsUrl, disableGenerate, reason));
 
 				// Connection timeout - if connection doesn't open within 30 seconds
 				const connectionTimeout = setTimeout(() => {
@@ -413,7 +415,7 @@ export function useChat({
 					if (ws.readyState === WebSocket.CONNECTING) {
 						logger.warn('⏰ WebSocket connection timeout');
 						ws.close();
-						handleConnectionFailureRef.current?.(wsUrl, disableGenerate, 'Connection timeout');
+						reportFailure('Connection timeout');
 					}
 				}, 30000);
 
@@ -471,7 +473,7 @@ export function useChat({
 					if (myAttemptId !== connectAttemptIdRef.current) return;
 					if (!shouldReconnectRef.current) return;
 					logger.error('❌ WebSocket error:', error);
-					handleConnectionFailureRef.current?.(wsUrl, disableGenerate, 'WebSocket error');
+					reportFailure('WebSocket error');
 				});
 
 				ws.addEventListener('close', (event) => {
@@ -485,7 +487,7 @@ export function useChat({
 					setIsWebSocketOpen(false);
 					if (!shouldReconnectRef.current) return;
 					// Retry on any close while mounted (including 1000) to improve resilience
-					handleConnectionFailureRef.current?.(wsUrl, disableGenerate, `Connection closed (code: ${event.code})`);
+					reportFailure(`Connection closed (code: ${event.code})`);
 				});
 
 				return function disconnect() {

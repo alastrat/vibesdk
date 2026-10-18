@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ALERT_THROTTLE_SECONDS, PLATFORM_ALERT_EMAILS, sendPlatformAlert, type PlatformAlert, type PlatformAlertDeps } from './platform-alerts';
+import { ALERT_THROTTLE_SECONDS, PLATFORM_ALERT_EMAILS, platformAlertsFromEnv, sendPlatformAlert, type PlatformAlert, type PlatformAlertDeps } from './platform-alerts';
 import { PLATFORM_ADMIN_EMAILS } from '../auth/admin-access';
 import type { OutgoingEmail } from '../email/types';
 
@@ -73,3 +73,16 @@ describe('sendPlatformAlert', () => {
 		expect(await sendPlatformAlert(deps, ALERT)).toBe('throttled');
 	});
 });
+
+describe('platformAlertsFromEnv', () => {
+	it("never throws when the alert email can't be sent, so the work that raised it carries on", async () => {
+		const sends: string[] = [];
+		const env = {
+			EMAIL: { send: async (message: { to: string }) => (sends.push(message.to), Promise.reject(new Error('Email Service is down'))) },
+			VibecoderStore: { get: async () => null, put: async () => undefined },
+		} as unknown as Env;
+		await expect(platformAlertsFromEnv(env)({ kind: 'not-shipped', subject: 'co_1', message: 'An item has no tracking yet.' })).resolves.toBeUndefined();
+		expect(sends.length).toBeGreaterThan(0);
+	});
+});
+

@@ -24,7 +24,7 @@ export function TemplateEarnings() {
 	const keepRef = useRef<HTMLDivElement>(null);
 	const price = formatTemplatePrice(EXAMPLE_SALE_CENTS);
 	const keeps = sellerKeepsCents(EXAMPLE_SALE_CENTS) / 100;
-	const beam = { containerRef, gradientStartColor: '#ffffff', gradientStopColor: '#bcd4ff', pathColor: '#ffffff', className: 'hidden sm:block' };
+	const beam = { containerRef, gradientStartColor: '#ffffff', gradientStopColor: '#bcd4ff', pathColor: '#ffffff', className: 'hidden md:block' };
 
 	return (
 		<section className="bg-white px-3 pt-6 sm:px-6">
@@ -34,7 +34,7 @@ export function TemplateEarnings() {
 				<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-white')}>
 					Publish to Discover, set a price, and get paid through Stripe when someone starts from your store.
 				</p>
-				<div ref={containerRef} className="relative mx-auto mt-12 grid max-w-3xl grid-cols-2 gap-6 sm:grid-cols-4">
+				<div ref={containerRef} className="relative mx-auto mt-12 grid max-w-3xl grid-cols-2 gap-6 md:grid-cols-4">
 					<FlowNode ref={storeRef} label="Your store" value="Published" />
 					<FlowNode ref={discoverRef} label="Discover" value={price} />
 					<FlowNode ref={buyerRef} label="A buyer" value={`Pays ${price}`} />

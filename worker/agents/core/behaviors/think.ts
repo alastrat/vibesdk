@@ -727,6 +727,7 @@ export class ThinkCodingBehavior
 	 * card that can offer a switch; anything else stays a plain error.
 	 */
 	private async reportTurnError(error: string): Promise<void> {
+		this.logger.warn('A build turn failed', { error });
 		const failure = await this.getThinkStub()
 			.then((stub) => stub.getProviderFailure())
 			.catch((e: unknown) => {
@@ -737,8 +738,7 @@ export class ThinkCodingBehavior
 			this.broadcast(WebSocketMessageResponses.ERROR, { error });
 			return;
 		}
-		const flags = this.env as unknown as { ENABLE_THINK_MODEL_FALLBACK?: string };
-		const notice = modelUnavailableNotice(failure, flags.ENABLE_THINK_MODEL_FALLBACK === 'true');
+		const notice = modelUnavailableNotice(failure, this.env.ENABLE_THINK_MODEL_FALLBACK === 'true');
 		this.logger.warn('Provider failure reported to the chat', notice);
 		this.broadcast(WebSocketMessageResponses.MODEL_UNAVAILABLE, notice);
 	}

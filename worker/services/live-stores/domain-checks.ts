@@ -1,22 +1,29 @@
-/** Adding, checking and removing a store's own domain, and the hourly check of domains still waiting for DNS. */
+/** Adding, checking and removing a store's own domain, and the hourly check of domains waiting for DNS or due a recheck. */
 
 import { customHostnameProblem, normalizeHostname } from '../../../shared/types/live-stores';
 import type { LiveStoreService, StoreDomainRow } from '../../database/services/LiveStoreService';
 import type { CustomHostnameProvider } from './domains';
+import { createLogger } from '../../logger';
+
+const logger = createLogger('StoreDomainChecks');
 
 /** A domain still waiting for DNS this long is failed, so it stops being checked. */
 export const DOMAIN_SETUP_DAYS = 7;
 /** Another store may take over a claim still waiting for DNS after this long, so a mistyped claim can't hold a real owner's domain. */
 export const DOMAIN_CLAIM_HOLD_HOURS = 24;
+/** A connected domain is checked again this often, so a seller hears when its DNS records go. */
+export const CONNECTED_DOMAIN_CHECK_HOURS = 24;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 
 export interface DomainFlowDeps {
 	provider: CustomHostnameProvider | null;
-	stores: Pick<LiveStoreService, 'domainOfApp' | 'domainByHostname' | 'addDomain' | 'updateDomain' | 'removeDomain' | 'pendingDomains'>;
+	stores: Pick<LiveStoreService, 'domainOfApp' | 'domainByHostname' | 'addDomain' | 'updateDomain' | 'removeDomain' | 'domainsDue'>;
 	/** Estori's own domains, which a seller can't connect. */
 	own: { storesDomain: string | null; estoriDomains: readonly string[] };
 	now(): Date;
+	/** Tells the store's seller that a connected domain's DNS records can no longer be seen. */
+	warnSeller(domain: StoreDomainRow): Promise<void>;
 }
 
 export type DomainResult = { ok: true; domain: StoreDomainRow } | { ok: false; message: string };
@@ -79,14 +86,30 @@ function claimReplaceable(claim: StoreDomainRow, now: Date): boolean {
 	return claim.status === 'pending' && now.getTime() - claim.createdAt.getTime() > DOMAIN_CLAIM_HOLD_HOURS * HOUR_MS;
 }
 
+const CONNECTED_WARNING =
+	"We can't see this domain's DNS records right now. Your store still answers on it, but visitors may not reach it until the records below are back at your DNS provider.";
+
+function connectedWarning(reason: string | null): string {
+	return reason ? `${CONNECTED_WARNING} The reason given: ${reason}` : CONNECTED_WARNING;
+}
+
 async function check(deps: DomainFlowDeps & { provider: CustomHostnameProvider }, row: StoreDomainRow): Promise<void> {
 	const now = deps.now();
 	let state;
 	try {
 		state = await deps.provider.check(row.hostname, row.providerId);
 	} catch (error) {
-		// The provider couldn't answer: the domain stays as it was, with the reason, for the next check.
-		await deps.stores.updateDomain(row.hostname, { status: row.status, records: row.records, lastError: errorText(error), checkedAt: now });
+		// The provider couldn't answer: the domain stays as it was for the next check. A connected domain's seller isn't
+		// shown the reason, since it says nothing about their DNS.
+		await deps.stores.updateDomain(row.hostname, { status: row.status, records: row.records, lastError: row.status === 'active' ? row.lastError : errorText(error), checkedAt: now });
+		return;
+	}
+	const records = state.records.length > 0 ? state.records : row.records;
+	if (row.status === 'active') {
+		// A connected domain keeps serving whatever the provider says; the seller is warned, with the records to fix.
+		const lastError = state.status === 'active' ? null : connectedWarning(state.error);
+		await deps.stores.updateDomain(row.hostname, { status: 'active', records, lastError, checkedAt: now });
+		if (lastError && !row.lastError) await deps.warnSeller(row);
 		return;
 	}
 	const expired = state.status === 'pending' && now.getTime() - row.createdAt.getTime() > DOMAIN_SETUP_DAYS * DAY_MS;
@@ -94,10 +117,10 @@ async function check(deps: DomainFlowDeps & { provider: CustomHostnameProvider }
 	const lastError = expired ? `The DNS records weren't added within ${DOMAIN_SETUP_DAYS} days. Remove the domain and add it again.` : state.error;
 	await deps.stores.updateDomain(row.hostname, {
 		status,
-		records: state.records.length > 0 ? state.records : row.records,
+		records,
 		lastError,
 		checkedAt: now,
-		...(status === 'active' && row.status !== 'active' ? { verifiedAt: now } : {}),
+		...(status === 'active' ? { verifiedAt: now } : {}),
 	});
 }
 
@@ -130,18 +153,29 @@ export async function releaseDeletedStoreDomain(provider: CustomHostnameProvider
 	await provider?.remove(domain.hostname, domain.providerId).catch(() => undefined);
 }
 
-/** Checks every domain still waiting for DNS; one that fails to answer never stops the others. */
-export async function sweepPendingDomains(deps: DomainFlowDeps): Promise<{ checked: number; connected: number; failed: number }> {
-	if (!deps.provider) return { checked: 0, connected: 0, failed: 0 };
+/**
+ * Checks the domains waiting for DNS, and connected ones due a recheck: every hour while they have a warning, otherwise
+ * once a day. One that fails to answer never stops the others. Counts only what changed.
+ */
+export async function sweepStoreDomains(deps: DomainFlowDeps): Promise<{ checked: number; connected: number; failed: number; warned: number }> {
+	if (!deps.provider) return { checked: 0, connected: 0, failed: 0, warned: 0 };
 	const provider = deps.provider;
-	const pending = await deps.stores.pendingDomains();
+	const due = await deps.stores.domainsDue(new Date(deps.now().getTime() - CONNECTED_DOMAIN_CHECK_HOURS * HOUR_MS));
 	let connected = 0;
 	let failed = 0;
-	for (const row of pending) {
-		await check({ ...deps, provider }, row);
-		const after = await deps.stores.domainOfApp(row.appId);
-		if (after?.status === 'active') connected += 1;
-		if (after?.status === 'failed') failed += 1;
+	let warned = 0;
+	for (const row of due) {
+		try {
+			await check({ ...deps, provider }, row);
+			const after = await deps.stores.domainOfApp(row.appId);
+			if (row.status !== 'active' && after?.status === 'active') connected += 1;
+			if (after?.status === 'failed') failed += 1;
+			if (row.status === 'active' && !row.lastError && after?.lastError) warned += 1;
+		} catch (error) {
+			// This domain is checked again next hour; the rest of the run goes on.
+			logger.error('A store domain could not be checked', { hostname: row.hostname, error });
+			failed += 1;
+		}
 	}
-	return { checked: pending.length, connected, failed };
+	return { checked: due.length, connected, failed, warned };
 }

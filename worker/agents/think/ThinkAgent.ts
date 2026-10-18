@@ -33,9 +33,7 @@ import { resolveThinkModel } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 import { createAssetCache, inlineAgentAssets } from './agent-assets';
-
-/** How long a provider may take to start responding before the request counts as failed. */
-const MODEL_RESPONSE_TIMEOUT_MS = 60_000;
+import { MODEL_RESPONSE_TIMEOUT_MS } from '../../../shared/think';
 
 /** Memory for conversation images already read from R2, so later steps skip the read. */
 const ASSET_CACHE_BYTES = 20 * 1024 * 1024;

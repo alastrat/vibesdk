@@ -3,6 +3,16 @@ import { toast } from 'sonner';
 import { Badge, Button, LinkButton, Loader } from '@cloudflare/kumo';
 import { Copy } from '@phosphor-icons/react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import {
 	useAddStoreDomain,
@@ -12,8 +22,9 @@ import {
 	useRemoveStoreDomain,
 	useTakeLiveStoreOffline,
 } from '@/hooks/use-live-store';
-import { SLUG_MAX_LENGTH, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
+import { SLUG_MAX_LENGTH, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
 import { publishAction } from './publish-action';
+import { connectedDomainNote, domainNeedsRecords } from './domain-note';
 
 interface GoLiveDialogProps {
 	appId: string;
@@ -116,15 +127,13 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 						</LinkButton>
 					)}
 					{view.status === 'live' && (
-						<Button
-							variant="secondary"
-							size="sm"
-							onClick={() => offline.mutate(undefined, { onSuccess: () => toast.success('Your store is offline'), onError: (error) => toast.error(error.message) })}
-							disabled={offline.isPending}
-							loading={offline.isPending}
-						>
-							Take offline
-						</Button>
+						<ConfirmButton
+							label="Take offline"
+							title="Take your store offline?"
+							description="Shoppers will see that your store isn't open, and checkouts they have open are cancelled. Publish again to reopen it."
+							pending={offline.isPending}
+							onConfirm={() => offline.mutate(undefined, { onSuccess: () => toast.success('Your store is offline'), onError: (error) => toast.error(error.message) })}
+						/>
 					)}
 				</div>
 				{view.url && view.status === 'live' && <p className="text-sm break-all">{view.url}</p>}
@@ -160,26 +169,32 @@ function DomainSection({ appId, view }: { appId: string; view: LiveStoreView }) 
 					</div>
 				</form>
 			)}
-			{view.domain && <DomainDetails appId={appId} domain={view.domain} />}
+			{view.domain && <DomainDetails appId={appId} domain={view.domain} storeStatus={view.status} />}
 		</section>
 	);
 }
 
-function DomainDetails({ appId, domain }: { appId: string; domain: StoreDomainView }) {
+function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: StoreDomainView; storeStatus: LiveStoreView['status'] }) {
 	const check = useCheckStoreDomain(appId);
 	const remove = useRemoveStoreDomain(appId);
+	const connected = connectedDomainNote(storeStatus);
 	return (
 		<div className="grid gap-3">
 			<div className="flex items-center justify-between gap-3">
 				<span className="text-sm font-medium break-all">{domain.hostname}</span>
-				{domain.status === 'active' && <Badge variant="success">Connected</Badge>}
+				{domain.status === 'active' && (domain.lastError ? <Badge variant="warning">Check DNS</Badge> : <Badge variant="success">Connected</Badge>)}
 				{domain.status === 'pending' && <Badge variant="info">Waiting for DNS</Badge>}
 				{domain.status === 'failed' && <Badge variant="outline">Not connected</Badge>}
 			</div>
 			{domain.lastError && <p className="text-sm text-kumo-danger">{domain.lastError}</p>}
-			{domain.status !== 'active' && (
+			{domainNeedsRecords(domain) && (
 				<div className="grid gap-2">
 					<p className="text-sm text-kumo-subtle">Add these records at your domain's DNS provider. It can take a few minutes, sometimes hours, before they're seen.</p>
+					{domain.rootDomain && (
+						<p className="text-sm text-kumo-subtle">
+							Most DNS providers, such as GoDaddy, add {domain.rootDomain} to each name for you, so enter the name as shown. If yours asks for the full name, use the one under it.
+						</p>
+					)}
 					<div className="overflow-x-auto rounded-md border border-kumo-line">
 						<table className="w-full text-left text-sm">
 							<thead>
@@ -190,42 +205,90 @@ function DomainDetails({ appId, domain }: { appId: string; domain: StoreDomainVi
 								</tr>
 							</thead>
 							<tbody>
-								{domain.records.map((record) => (
-									<tr key={`${record.type}-${record.name}`} className="border-t border-kumo-line align-top">
-										<td className="px-3 py-2">
-											{record.type}
-											<div className="text-xs text-kumo-subtle">{PURPOSE_LABELS[record.purpose]}</div>
-										</td>
-										<td className="px-3 py-2">
-											<RecordValue value={record.name} />
-										</td>
-										<td className="px-3 py-2">
-											<RecordValue value={record.value} />
-										</td>
-									</tr>
-								))}
+								{domain.records.map((record) => {
+									const host = recordHost(record.name, domain.rootDomain);
+									return (
+										<tr key={`${record.type}-${record.name}`} className="border-t border-kumo-line align-top">
+											<td className="px-3 py-2">
+												{record.type}
+												<div className="text-xs text-kumo-subtle">{PURPOSE_LABELS[record.purpose]}</div>
+											</td>
+											<td className="px-3 py-2">
+												<RecordValue value={host} />
+												{host !== record.name && <div className="text-xs break-all text-kumo-subtle">{record.name}</div>}
+											</td>
+											<td className="px-3 py-2">
+												<RecordValue value={record.value} />
+											</td>
+										</tr>
+									);
+								})}
 							</tbody>
 						</table>
 					</div>
 				</div>
 			)}
-			{domain.status === 'active' && <p className="text-sm break-all">Your store is also at {domain.url}</p>}
+			{domain.status === 'active' && connected.showAddress && <p className="text-sm break-all">Your store is also at {domain.url}</p>}
+			{domain.status === 'active' && connected.note && <p className="text-sm text-kumo-subtle">{connected.note}</p>}
 			<div className="flex flex-wrap gap-2">
-				{domain.status !== 'active' && (
+				{domainNeedsRecords(domain) && (
 					<Button variant="secondary" size="sm" onClick={() => check.mutate(undefined, { onError: (error) => toast.error(error.message) })} disabled={check.isPending} loading={check.isPending}>
 						Check now
 					</Button>
 				)}
-				{domain.status === 'active' && (
+				{domain.status === 'active' && connected.showAddress && (
 					<LinkButton size="sm" variant="secondary" href={domain.url} target="_blank" rel="noopener noreferrer">
 						Open {domain.hostname}
 					</LinkButton>
 				)}
-				<Button variant="ghost" size="sm" onClick={() => remove.mutate(undefined, { onError: (error) => toast.error(error.message) })} disabled={remove.isPending} loading={remove.isPending}>
-					Remove domain
-				</Button>
+				<ConfirmButton
+					label="Remove domain"
+					variant="ghost"
+					title="Remove this domain?"
+					description={`Your store stops answering on ${domain.hostname}. To connect it again, you'll add new DNS records.`}
+					pending={remove.isPending}
+					onConfirm={() => remove.mutate(undefined, { onError: (error) => toast.error(error.message) })}
+				/>
 			</div>
 		</div>
+	);
+}
+
+/** A button whose action can't be undone in one click: it asks first. */
+function ConfirmButton({
+	label,
+	title,
+	description,
+	pending,
+	onConfirm,
+	variant = 'secondary',
+}: {
+	label: string;
+	title: string;
+	description: string;
+	pending: boolean;
+	onConfirm: () => void;
+	variant?: 'secondary' | 'ghost';
+}) {
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<Button variant={variant} size="sm" onClick={() => setOpen(true)} disabled={pending} loading={pending}>
+				{label}
+			</Button>
+			<AlertDialog open={open} onOpenChange={setOpen}>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>{title}</AlertDialogTitle>
+						<AlertDialogDescription>{description}</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogAction onClick={onConfirm}>{label}</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
+		</>
 	);
 }
 

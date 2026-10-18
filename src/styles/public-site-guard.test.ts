@@ -10,6 +10,9 @@ const sources = import.meta.glob<string>(
 		'/src/components/marketing/ComingSoon.tsx',
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/AnnouncementBar.tsx',
+		'/src/components/layout/SiteFooter.tsx',
+		'/src/routes/landing/Hero.tsx',
+		'/src/routes/landing/StoreShowcase.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -79,9 +82,18 @@ describe('public site styles', () => {
 		expect(source('/src/components/layout/AnnouncementBar.tsx')).toMatch(/className="mx-auto grid h-11 /);
 		const bar = source('/src/components/layout/PublicTopBar.tsx');
 		expect(bar).toContain('<div className="relative border-b border-public-line bg-white">');
-		expect(bar).toContain('flex h-16 max-w-[1248px] items-center justify-between gap-4 px-4 sm:h-[72px]');
+		expect(bar).toContain('flex h-16 max-w-[1296px] items-center justify-between gap-4 px-4 sm:h-[72px]');
 		const start = publicCss.indexOf('.public-site {');
 		expect(publicCss.slice(start, publicCss.indexOf('}', start))).toContain('--public-header-h: 109px;');
 		expect(publicCss).toMatch(/@media \(width >= 40rem\) \{\s*\.public-site \{\s*--public-header-h: 117px;\s*\}\s*\}/);
 	});
+
+	it("lines the top bar, hero, showcase and footer up with the sections' 1248px content, padding inside a 1296px box", () => {
+		for (const path of ['/src/components/layout/PublicTopBar.tsx', '/src/components/layout/AnnouncementBar.tsx', '/src/components/layout/SiteFooter.tsx', '/src/routes/landing/Hero.tsx', '/src/routes/landing/StoreShowcase.tsx']) {
+			const file = source(path);
+			expect(file, path).toContain('max-w-[1296px]');
+			expect(file, path).not.toMatch(/max-w-\[1248px\][^"]*sm:px-6/);
+		}
+	});
 });
+
