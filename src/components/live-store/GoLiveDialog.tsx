@@ -22,9 +22,9 @@ import {
 	useRemoveStoreDomain,
 	useTakeLiveStoreOffline,
 } from '@/hooks/use-live-store';
-import { SLUG_MAX_LENGTH, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
+import { SLUG_MAX_LENGTH, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
 import { publishAction } from './publish-action';
-import { connectedDomainNote } from './domain-note';
+import { connectedDomainNote, domainNeedsRecords } from './domain-note';
 
 interface GoLiveDialogProps {
 	appId: string;
@@ -182,14 +182,19 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 		<div className="grid gap-3">
 			<div className="flex items-center justify-between gap-3">
 				<span className="text-sm font-medium break-all">{domain.hostname}</span>
-				{domain.status === 'active' && <Badge variant="success">Connected</Badge>}
+				{domain.status === 'active' && (domain.lastError ? <Badge variant="warning">Check DNS</Badge> : <Badge variant="success">Connected</Badge>)}
 				{domain.status === 'pending' && <Badge variant="info">Waiting for DNS</Badge>}
 				{domain.status === 'failed' && <Badge variant="outline">Not connected</Badge>}
 			</div>
 			{domain.lastError && <p className="text-sm text-kumo-danger">{domain.lastError}</p>}
-			{domain.status !== 'active' && (
+			{domainNeedsRecords(domain) && (
 				<div className="grid gap-2">
 					<p className="text-sm text-kumo-subtle">Add these records at your domain's DNS provider. It can take a few minutes, sometimes hours, before they're seen.</p>
+					{domain.rootDomain && (
+						<p className="text-sm text-kumo-subtle">
+							Most DNS providers, such as GoDaddy, add {domain.rootDomain} to each name for you, so enter the name as shown. If yours asks for the full name, use the one under it.
+						</p>
+					)}
 					<div className="overflow-x-auto rounded-md border border-kumo-line">
 						<table className="w-full text-left text-sm">
 							<thead>
@@ -200,20 +205,24 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 								</tr>
 							</thead>
 							<tbody>
-								{domain.records.map((record) => (
-									<tr key={`${record.type}-${record.name}`} className="border-t border-kumo-line align-top">
-										<td className="px-3 py-2">
-											{record.type}
-											<div className="text-xs text-kumo-subtle">{PURPOSE_LABELS[record.purpose]}</div>
-										</td>
-										<td className="px-3 py-2">
-											<RecordValue value={record.name} />
-										</td>
-										<td className="px-3 py-2">
-											<RecordValue value={record.value} />
-										</td>
-									</tr>
-								))}
+								{domain.records.map((record) => {
+									const host = recordHost(record.name, domain.rootDomain);
+									return (
+										<tr key={`${record.type}-${record.name}`} className="border-t border-kumo-line align-top">
+											<td className="px-3 py-2">
+												{record.type}
+												<div className="text-xs text-kumo-subtle">{PURPOSE_LABELS[record.purpose]}</div>
+											</td>
+											<td className="px-3 py-2">
+												<RecordValue value={host} />
+												{host !== record.name && <div className="text-xs break-all text-kumo-subtle">{record.name}</div>}
+											</td>
+											<td className="px-3 py-2">
+												<RecordValue value={record.value} />
+											</td>
+										</tr>
+									);
+								})}
 							</tbody>
 						</table>
 					</div>
@@ -222,7 +231,7 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 			{domain.status === 'active' && connected.showAddress && <p className="text-sm break-all">Your store is also at {domain.url}</p>}
 			{domain.status === 'active' && connected.note && <p className="text-sm text-kumo-subtle">{connected.note}</p>}
 			<div className="flex flex-wrap gap-2">
-				{domain.status !== 'active' && (
+				{domainNeedsRecords(domain) && (
 					<Button variant="secondary" size="sm" onClick={() => check.mutate(undefined, { onError: (error) => toast.error(error.message) })} disabled={check.isPending} loading={check.isPending}>
 						Check now
 					</Button>

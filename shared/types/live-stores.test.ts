@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { customHostnameProblem, normalizeHostname, slugFromTitle, slugProblem, storeSubdomainSlug } from './live-stores';
+import { customHostnameProblem, normalizeHostname, recordHost, slugFromTitle, slugProblem, storeSubdomainSlug } from './live-stores';
 
 const OWN = { storesDomain: 'estori.shop', estoriDomains: ['estori.app', 'preview.estori.app'] };
 
@@ -60,5 +60,18 @@ describe('custom domains', () => {
 	it("asks for a subdomain when given a root domain, which can't point at a store with a CNAME", () => {
 		expect(customHostnameProblem('northwindtea.com', OWN)).toBe('Use a subdomain, such as shop.northwindtea.com. Root domains like northwindtea.com need a different DNS record, which isn\'t supported yet.');
 		expect(customHostnameProblem('www.northwindtea.com', OWN)).toBeNull();
+	});
+});
+
+describe('DNS record names', () => {
+	it('gives a name as most DNS providers ask for it, without the root domain they add themselves', () => {
+		expect(recordHost('shop.northwindtea.com', 'northwindtea.com')).toBe('shop');
+		expect(recordHost('_acme-challenge.shop.example.co.uk', 'example.co.uk')).toBe('_acme-challenge.shop');
+		expect(recordHost('northwindtea.com', 'northwindtea.com')).toBe('@');
+	});
+
+	it('keeps the full name when the root domain is unknown or not its own', () => {
+		expect(recordHost('shop.northwindtea.com', null)).toBe('shop.northwindtea.com');
+		expect(recordHost('shop.northwindtea.com', 'windtea.com')).toBe('shop.northwindtea.com');
 	});
 });

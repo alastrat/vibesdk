@@ -109,9 +109,21 @@ export function customHostnameProblem(hostname: string, own: { storesDomain: str
 	return null;
 }
 
+/**
+ * A record's name as most DNS providers, such as GoDaddy, ask for it: without the root domain, which they add
+ * themselves. `@` is the root domain itself; with no root domain, or one that isn't the name's, the full name.
+ */
+export function recordHost(name: string, rootDomain: string | null): string {
+	if (!rootDomain) return name;
+	if (name === rootDomain) return '@';
+	return name.endsWith(`.${rootDomain}`) ? name.slice(0, -(rootDomain.length + 1)) : name;
+}
+
 /** A store's own domain, as its owner sees it. */
 export interface StoreDomainView {
 	hostname: string;
+	/** The domain the seller manages DNS for, such as northwindtea.com for shop.northwindtea.com; null when unknown. */
+	rootDomain: string | null;
 	url: string;
 	status: StoreDomainStatus;
 	records: StoreDomainRecord[];
