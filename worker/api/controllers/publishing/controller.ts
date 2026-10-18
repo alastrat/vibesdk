@@ -37,6 +37,7 @@ import { StripeApiError, accountFlags } from '../../../services/payments/stripe-
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../../../services/payments/config';
 import { checkoutDecision, confirmDecision, confirmResponse, type CheckoutInput } from '../../../services/payments/checkout';
 import { fulfillCheckoutSession } from '../../../services/payments/fulfill';
+import { fulfillDepsFromEnv } from '../../../services/payments/purchase-wiring';
 import { platformFeeCents } from '../../../../shared/types/templates';
 import { toOwnerPaidListing } from './publishingDto';
 import { publishMessage } from './publishMessage';
@@ -285,7 +286,7 @@ export class PublishingController extends BaseController {
     static async confirmPurchase(
         request: Request,
         env: Env,
-        _ctx: ExecutionContext,
+        ctx: ExecutionContext,
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<ConfirmPurchaseData>>> {
         try {
@@ -300,15 +301,8 @@ export class PublishingController extends BaseController {
             const session = await stripe.retrieveCheckoutSession(sessionId);
             const decision = confirmDecision(session, { appId: context.pathParams.id, userId: context.user!.id });
             if (!decision.ok) return PublishingController.createErrorResponse<ConfirmPurchaseData>(decision.error, decision.status);
-            const listings = new TemplateService(env);
-            const result = await fulfillCheckoutSession(
-                {
-                    listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
-                    recordStripePurchase: (record) => listings.recordStripePurchase(record),
-                    sessionRecorded: (checkoutSessionId) => listings.hasCheckoutSession(checkoutSessionId),
-                },
-                session,
-            );
+            // The buyer is waiting on this page, so their receipt goes out after the answer.
+            const result = await fulfillCheckoutSession(fulfillDepsFromEnv(env, (sending) => ctx.waitUntil(sending)), session);
             const payment = { sessionId: session.id, paymentIntentId: session.payment_intent };
             if (result === 'duplicate-purchase') {
                 this.logger.warn('The buyer paid twice for one site; the second payment needs a refund', payment);

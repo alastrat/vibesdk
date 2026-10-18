@@ -310,6 +310,15 @@ export class TemplateService extends BaseService {
     }
 
     /** Record a paid Stripe Checkout session; false when this session or this buyer's purchase already exists. */
+    /** What a paid site's receipt names: the site's title and the buyer's account email. */
+    async receiptFacts(appId: string, buyerUserId: string): Promise<{ siteTitle: string | null; buyerEmail: string | null }> {
+        const [app, buyer] = await Promise.all([
+            this.database.select({ title: schema.apps.title }).from(schema.apps).where(eq(schema.apps.id, appId)).get(),
+            this.database.select({ email: schema.users.email }).from(schema.users).where(eq(schema.users.id, buyerUserId)).get(),
+        ]);
+        return { siteTitle: app?.title ?? null, buyerEmail: buyer?.email ?? null };
+    }
+
     async recordStripePurchase(input: StripePurchaseRecord): Promise<boolean> {
         const inserted = await this.database
             .insert(schema.templatePurchases)

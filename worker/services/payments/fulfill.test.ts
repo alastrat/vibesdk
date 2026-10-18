@@ -20,6 +20,7 @@ function harness(listingExists = true) {
 	const sessions = new Set<string>();
 	const buyers = new Set<string>();
 	const records: StripePurchaseRecord[] = [];
+	const receipts: Array<{ checkoutSessionId: string; checkoutEmail: string | null }> = [];
 	const deps: FulfillDeps = {
 		listingExists: async () => listing.exists,
 		recordStripePurchase: async (record) => {
@@ -31,11 +32,24 @@ function harness(listingExists = true) {
 			return true;
 		},
 		sessionRecorded: async (checkoutSessionId) => sessions.has(checkoutSessionId),
+		sendReceipt: async (purchase, checkoutEmail) => void receipts.push({ checkoutSessionId: purchase.checkoutSessionId, checkoutEmail }),
 	};
-	return { deps, records, listing };
+	return { deps, records, listing, receipts };
 }
 
 describe('fulfillCheckoutSession', () => {
+	it("sends the buyer one receipt, from whichever of the webhook and the return page records the purchase first", async () => {
+		const { deps, receipts, listing } = harness();
+		const session = { ...PAID, customer_details: { email: 'checkout@example.com', name: null, phone: null } };
+		expect(await fulfillCheckoutSession(deps, session)).toBe('recorded');
+		expect(await fulfillCheckoutSession(deps, session)).toBe('already-recorded');
+		expect(await fulfillCheckoutSession(deps, { ...PAID, id: 'cs_2' })).toBe('duplicate-purchase');
+		listing.exists = false;
+		expect(await fulfillCheckoutSession(deps, { ...PAID, id: 'cs_3' })).toBe('listing-missing');
+		expect(await fulfillCheckoutSession(deps, { ...PAID, id: 'cs_4', payment_status: 'unpaid' })).toBe('not-paid');
+		expect(receipts).toEqual([{ checkoutSessionId: 'cs_1', checkoutEmail: 'checkout@example.com' }]);
+	});
+
 	it('records the price, the 7% + 60 cent fee and the seller amount', async () => {
 		const { deps, records } = harness();
 		expect(await fulfillCheckoutSession(deps, PAID)).toBe('recorded');
