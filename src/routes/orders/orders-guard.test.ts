@@ -43,4 +43,26 @@ describe('the seller Orders pages', () => {
 			for (const name of [...SUPPLIER_NAMES, ...AI_ASSISTANT_NAMES]) expect(text, `${path}: ${name}`).not.toContain(name);
 		}
 	});
+
+	it('shows the order with the seller and Estori parts apart, the money split and the warnings', () => {
+		const page = source('/src/routes/orders/order.tsx');
+		for (const part of ['You ship', 'Estori ships', 'moneySplit(order)', 'shipToLines(order.shipTo)', 'order.needsAttention', 'order.dispute', 'CATALOG_PROGRESS_LABELS', 'order.note']) expect(page, part).toContain(part);
+	});
+
+	it('marks the order shipped with a carrier and tracking number, edits it, and asks before marking it not shipped', () => {
+		const page = source('/src/routes/orders/order.tsx');
+		expect(page).toContain('SELLER_CARRIERS.map');
+		expect(page).toContain('shipment.mutate(');
+		expect(page).toMatch(/<ConfirmButton[^>]*label="Mark as not shipped"/);
+		expect(page).toContain('disabled={shipment.isPending}');
+	});
+
+	it('refunds chosen lines once per attempt, and keeps the button off while it runs', () => {
+		const page = source('/src/routes/orders/order.tsx');
+		expect(page).toContain('crypto.randomUUID()');
+		expect(page).toContain('refund.mutate(');
+		expect(page).toContain('disabled={refund.isPending || chosen.length === 0}');
+		expect(page).toContain('!item.refunded');
+	});
 });
+
