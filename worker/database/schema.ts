@@ -489,6 +489,7 @@ export const storeOrders = sqliteTable('store_orders', {
     fulfillmentStatus: text('fulfillment_status', { enum: STORE_FULFILLMENT_STATUSES }).notNull().default('unfulfilled'),
     trackingNumber: text('tracking_number'),
     carrier: text('carrier'),
+    shippedAt: integer('shipped_at', { mode: 'timestamp' }),
     subtotalCents: integer('subtotal_cents').notNull(),
     shippingCents: integer('shipping_cents').notNull(),
     totalCents: integer('total_cents').notNull(),
@@ -509,7 +510,7 @@ export const storeOrders = sqliteTable('store_orders', {
     sessionIdx: uniqueIndex('store_orders_session_unique_idx').on(table.stripeCheckoutSessionId),
     numberIdx: uniqueIndex('store_orders_number_unique_idx').on(table.appId, table.mode, table.orderNumber),
     paymentIntentIdx: index('store_orders_payment_intent_idx').on(table.stripePaymentIntentId),
-    sellerIdx: index('store_orders_seller_idx').on(table.sellerUserId),
+    sellerCreatedIdx: index('store_orders_seller_created_idx').on(table.sellerUserId, table.createdAt),
 }));
 
 /** Store order items - the priced lines, as the shopper paid for them. */

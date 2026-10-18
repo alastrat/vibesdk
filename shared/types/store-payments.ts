@@ -289,3 +289,88 @@ export interface StoreRefundRequest {
 export interface StoreRefundResponse {
 	refundedCents: number;
 }
+
+/** The seller's Orders page; the new-order email links to one order under it. */
+export const SELLER_ORDERS_PATH = '/orders';
+
+export function sellerOrderPath(orderId: string): string {
+	return `${SELLER_ORDERS_PATH}/${encodeURIComponent(orderId)}`;
+}
+
+/** Orders with items the seller ships and hasn't yet, or every order. */
+export const SELLER_ORDER_VIEWS = ['to-ship', 'all'] as const;
+export type SellerOrderView = (typeof SELLER_ORDER_VIEWS)[number];
+
+/** Live orders only, or test orders too. */
+export const SELLER_ORDER_MODES = ['live', 'all'] as const;
+export type SellerOrderModeFilter = (typeof SELLER_ORDER_MODES)[number];
+
+export function isSellerOrderView(value: string): value is SellerOrderView {
+	return (SELLER_ORDER_VIEWS as readonly string[]).includes(value);
+}
+
+export function isSellerOrderModeFilter(value: string): value is SellerOrderModeFilter {
+	return (SELLER_ORDER_MODES as readonly string[]).includes(value);
+}
+
+export const SELLER_CARRIERS = ['usps', 'ups', 'fedex', 'dhl', 'other'] as const;
+export type SellerCarrier = (typeof SELLER_CARRIERS)[number];
+export const SELLER_CARRIER_NAMES: Readonly<Record<Exclude<SellerCarrier, 'other'>, string>> = { usps: 'USPS', ups: 'UPS', fedex: 'FedEx', dhl: 'DHL' };
+
+/** An order in the seller's list. */
+export interface SellerOrderRow {
+	id: string;
+	orderNumber: number;
+	mode: StoreMode;
+	appId: string;
+	/** Null when the store's app was deleted. */
+	storeTitle: string | null;
+	createdAt: string;
+	customerName: string | null;
+	customerEmail: string | null;
+	totalCents: number;
+	paymentStatus: StorePaymentStatus;
+	fulfillmentStatus: StoreFulfillmentStatus;
+	units: number;
+	/** Units of the seller's own products with no refund: what they ship. */
+	ownUnits: number;
+	/** Units of catalog items with no refund: what Estori ships. */
+	catalogUnits: number;
+}
+
+export interface SellerOrdersData {
+	orders: SellerOrderRow[];
+	nextCursor: string | null;
+	/** The stores the seller has orders in, for the store filter. */
+	stores: { appId: string; title: string | null }[];
+	/** The seller has test orders, so the page can say they're hidden. */
+	hasTestOrders: boolean;
+}
+
+export interface SellerOrderLine {
+	lineNo: number;
+	name: string;
+	kind: StoreLineKind;
+	quantity: number;
+	unitPriceCents: number;
+	catalogVariantId: string | null;
+	/** A refund was claimed or made for this line. */
+	refunded: boolean;
+}
+
+export interface SellerOrderDetail extends Omit<StoreOrderSummary, 'items'> {
+	appId: string;
+	storeTitle: string | null;
+	customerPhone: string | null;
+	refundedCents: number;
+	carrier: string | null;
+	trackingNumber: string | null;
+	shippedAt: string | null;
+	/** The latest dispute, when the shopper disputed the payment. */
+	dispute: { amountCents: number; status: string } | null;
+	items: SellerOrderLine[];
+}
+
+export type SellerShipmentRequest =
+	| { shipped: true; carrier: SellerCarrier | null; carrierName?: string; trackingNumber?: string | null }
+	| { shipped: false };

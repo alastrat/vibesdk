@@ -3,6 +3,7 @@
 import { and, asc, desc, eq, exists, inArray, lt, or, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
+import { keysetCursorOf, parseKeysetCursor } from './keyset-cursor';
 import type {
     AdminCatalogOrderDetail,
     AdminCatalogOrdersData,
@@ -19,20 +20,12 @@ export interface LateCutoffs {
 
 export const ADMIN_CATALOG_ORDERS_PAGE = 50;
 
-/** A page ends at an order's creation second and id, so orders created in the same second are neither skipped nor repeated. */
-const CURSOR = /^(\d{1,12}):([A-Za-z0-9_-]{1,64})$/;
-
-export function parseCatalogOrdersCursor(cursor: string): { createdAt: Date; id: string } | null {
-    const match = CURSOR.exec(cursor);
-    return match ? { createdAt: new Date(Number(match[1]) * 1000), id: match[2] } : null;
-}
-
 export class CatalogOrderAdminService extends BaseService {
     async listOrders(input: { view: AdminCatalogOrderView; late: LateCutoffs; cursor?: string | null; limit?: number }): Promise<AdminCatalogOrdersData> {
         const orders = schema.catalogOrders;
         const items = schema.catalogOrderItems;
         const limit = input.limit ?? ADMIN_CATALOG_ORDERS_PAGE;
-        const after = input.cursor ? parseCatalogOrdersCursor(input.cursor) : null;
+        const after = input.cursor ? parseKeysetCursor(input.cursor) : null;
         if (input.cursor && !after) throw new Error('Invalid cursor');
 
         const lateOrHeldItem = this.database
@@ -79,7 +72,7 @@ export class CatalogOrderAdminService extends BaseService {
         const last = page[page.length - 1];
         return {
             orders: page.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), itemCounts: counts.get(row.id) ?? {} })),
-            nextCursor: rows.length > limit && last ? `${Math.floor(last.createdAt.getTime() / 1000)}:${last.id}` : null,
+            nextCursor: rows.length > limit && last ? keysetCursorOf(last.createdAt, last.id) : null,
         };
     }
 
