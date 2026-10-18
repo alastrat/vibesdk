@@ -74,6 +74,7 @@ function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 	const orders: NewStoreOrder[] = [];
 	const handedOff: PaidCatalogCheckout[] = [];
 	const settled: string[] = [];
+	const notified: string[] = [];
 	const deps: RecordStoreOrderDeps = {
 		getCheckout: async (id) => (id === CHECKOUT.id ? CHECKOUT : null),
 		recordOrder: async (order) => {
@@ -86,12 +87,24 @@ function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 		settleSale: async (orderId) => {
 			settled.push(orderId);
 		},
+		notifyNewOrder: async (orderId) => {
+			notified.push(orderId);
+		},
 		now: () => new Date(5),
 	};
-	return { deps, orders, handedOff, settled };
+	return { deps, orders, handedOff, settled, notified };
 }
 
 describe('recordStoreOrder', () => {
+	it('tells the seller about the order once, when it is first recorded', async () => {
+		const first = fakeDeps('recorded');
+		await recordStoreOrder(first.deps, PAID);
+		expect(first.notified).toEqual(['ord_ab12']);
+		const again = fakeDeps('already-recorded');
+		await recordStoreOrder(again.deps, PAID);
+		expect(again.notified).toEqual([]);
+	});
+
 	it("records a paid session from the checkout's prices and the shopper's details, and hands over catalog lines", async () => {
 		const { deps, orders, handedOff } = fakeDeps();
 		const result = await recordStoreOrder(deps, PAID);

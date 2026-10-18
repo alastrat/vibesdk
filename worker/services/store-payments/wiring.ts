@@ -9,6 +9,7 @@ import { CATALOG_SWEEP_CRON, restartCatalogPlacement, scheduleCatalogPlacement }
 import { stripeFromEnv } from '../payments/config';
 import type { StripeClient } from '../payments/stripe-client';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
+import { newOrderNotifierFromEnv } from './order-emails';
 import { settleSale, sweepUnsettledSales } from './settle';
 import type { DisputeDeps } from './disputes';
 import type { RefundLinesDeps } from './refund-lines';
@@ -26,6 +27,7 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 	return {
 		getCheckout: (checkoutId) => checkouts.get(checkoutId),
 		recordOrder: (order) => orders.recordOrder(order),
+		notifyNewOrder: newOrderNotifierFromEnv(env),
 		handOffCatalogLines: async (paid) => {
 			const recorded = await recordPaidCatalogOrder({ store: new CatalogOrderService(env), newId: generateId, now: () => new Date() }, paid);
 			if (recorded.result === 'recorded' && recorded.orderId) await scheduleCatalogPlacement(env, recorded.orderId);
