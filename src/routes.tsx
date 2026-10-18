@@ -17,6 +17,7 @@ import AdminCatalogOrdersPage from './routes/admin/catalog-orders';
 import AdminCatalogOrderPage from './routes/admin/catalog-order';
 import SellerOrdersPage from './routes/orders/orders';
 import SellerOrderPage from './routes/orders/order';
+import ShopperEmailsPage from './routes/emails/emails';
 import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
@@ -105,6 +106,14 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<SellerOrderPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'emails',
+						element: (
+							<ProtectedRoute>
+								<ShopperEmailsPage />
 							</ProtectedRoute>
 						),
 					},

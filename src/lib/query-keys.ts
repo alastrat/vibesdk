@@ -139,6 +139,13 @@ export const queryKeys = {
 			list: (view: string, mode: string, store: string | null) => [...queryKeys.account.sellerOrders.all(), 'list', view, mode, store ?? 'all'] as const,
 			detail: (orderId: string) => [...queryKeys.account.sellerOrders.all(), 'detail', orderId] as const,
 		},
+		/** Each store's shopper emails: never persisted, like the rest of `account`. */
+		shopperEmails: {
+			all: () => [...queryKeys.account.all, 'shopper-emails'] as const,
+			stores: () => [...queryKeys.account.shopperEmails.all(), 'stores'] as const,
+			store: (appId: string) => [...queryKeys.account.shopperEmails.all(), 'store', appId] as const,
+			preview: (appId: string, kind: string, subject: string, heading: string, body: string) => [...queryKeys.account.shopperEmails.all(), 'preview', appId, kind, subject, heading, body] as const,
+		},
 		/** Admins' catalog orders: never persisted, like the rest of `account`. */
 		catalogOrders: {
 			all: () => [...queryKeys.account.all, 'catalog-orders'] as const,

@@ -31,8 +31,11 @@ const RECENT_EMAILS = 50;
 export const TEST_SENDS_PER_HOUR = 10;
 const TWO_HOURS_SECONDS = 2 * 60 * 60;
 
+/** A store's email, or Estori's default when it saved none; "edited" means its text differs from the default. */
 function templateView(kind: ShopperEmailKind, saved: ShopperEmailTemplate | undefined): ShopperEmailTemplateView {
-    return saved ? { kind, edited: true, ...saved } : { kind, edited: false, enabled: true, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES[kind] };
+    const fallback = DEFAULT_SHOPPER_EMAIL_TEMPLATES[kind];
+    if (!saved) return { kind, edited: false, enabled: true, ...fallback };
+    return { kind, edited: saved.subject !== fallback.subject || saved.heading !== fallback.heading || saved.body !== fallback.body, ...saved };
 }
 
 function recentView(row: ShopperEmailRow & { orderNumber: number | null }): RecentShopperEmail {

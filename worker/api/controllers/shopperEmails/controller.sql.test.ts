@@ -2,7 +2,7 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
-import { SHOPPER_EMAIL_PLACEHOLDERS } from '../../../../shared/types/shopper-emails';
+import { DEFAULT_SHOPPER_EMAIL_TEMPLATES, SHOPPER_EMAIL_PLACEHOLDERS } from '../../../../shared/types/shopper-emails';
 import { ShopperEmailsController } from './controller';
 import type { RouteContext } from '../../types/route-context';
 
@@ -59,6 +59,9 @@ describe('the shopper emails API', () => {
 
 		const reset = await json(await ShopperEmailsController.resetTemplate(send('DELETE', {}), envWith(db), {} as ExecutionContext, as({ id: 'app_tea', kind: 'order_shipped' })));
 		expect(reset.body.data).toMatchObject({ kind: 'order_shipped', edited: false, enabled: true });
+		// Turning Estori's default off keeps its text, so it still reads as the default.
+		const off = await json(await save('order_shipped', { ...DEFAULT_SHOPPER_EMAIL_TEMPLATES.order_shipped, enabled: false }));
+		expect(off.body.data).toMatchObject({ kind: 'order_shipped', edited: false, enabled: false });
 	});
 
 	it('saves where replies go, and refuses anything but one email address', async () => {

@@ -54,7 +54,7 @@ export const DEFAULT_SHOPPER_EMAIL_TEMPLATES: Readonly<Record<ShopperEmailKind, 
 
 export interface ShopperEmailTemplateView extends ShopperEmailTemplate {
 	kind: ShopperEmailKind;
-	/** The seller saved their own version; otherwise this is Estori's default. */
+	/** Its text differs from Estori's default. */
 	edited: boolean;
 }
 
