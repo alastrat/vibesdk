@@ -23,7 +23,7 @@ import {
 import { createEmailSender } from '../../../services/email/sender';
 import { storeName } from '../../../services/shopper-emails/outbox';
 import { maskEmail, renderShopperEmail, sampleContent, TEMPLATE_TEST_NOTE } from '../../../services/shopper-emails/template';
-import { shopperEmailFrom, shopperEmailStoreFromEnv } from '../../../services/shopper-emails/wiring';
+import { shopperEmailStoreFromEnv } from '../../../services/shopper-emails/wiring';
 import { parseReplyTo, parseTemplateFields, parseTemplateRequest } from './template-request';
 
 const RECENT_EMAILS = 50;
@@ -67,14 +67,15 @@ export class ShopperEmailsController extends BaseController {
         if (!appId) return ShopperEmailsController.createErrorResponse('Missing store id', 400);
         try {
             const emails = new ShopperEmailService(env);
-            const facts = await emails.storeFacts(appId);
-            if (!facts) return ShopperEmailsController.createErrorResponse('Store not found', 404);
+            const store = await shopperEmailStoreFromEnv(env)(appId);
+            if (!store) return ShopperEmailsController.createErrorResponse('Store not found', 404);
             const [saved, replyTo, recent] = await Promise.all([emails.templates(appId), emails.replyTo(appId), emails.recent(appId, RECENT_EMAILS)]);
             return ShopperEmailsController.createSuccessResponse<ShopperEmailsData>({
                 templates: SHOPPER_EMAIL_KINDS.map((kind) => templateView(kind, saved.get(kind))),
                 placeholders: SHOPPER_EMAIL_PLACEHOLDERS,
                 replyTo,
-                sellerEmail: facts.sellerEmail,
+                sellerEmail: store.sellerEmail,
+                senderEmail: store.fromEmail,
                 recent: recent.map(recentView),
             });
         } catch (error) {
@@ -165,7 +166,7 @@ export class ShopperEmailsController extends BaseController {
                 subject: email.subject,
                 html: email.html,
                 text: email.text,
-                fromEmail: shopperEmailFrom(env),
+                fromEmail: store.fromEmail,
                 fromName: content.storeName,
                 replyTo: replyTo ?? store.sellerEmail ?? undefined,
                 headers: { 'X-Estori-Store': target.appId, 'X-Estori-Email': target.kind },

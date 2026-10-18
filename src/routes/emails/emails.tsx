@@ -110,6 +110,10 @@ function StoreEmails({ appId, data }: { appId: string; data: ShopperEmailsData }
 				))}
 			</ul>
 
+			<p className="text-sm text-kumo-subtle">
+				Shoppers get these emails from <span className="font-medium text-kumo-default break-all">{data.senderEmail}</span>, under your store's name.
+			</p>
+
 			<ReplyToForm appId={appId} replyTo={data.replyTo} sellerEmail={data.sellerEmail} />
 
 			<section className="grid gap-3">

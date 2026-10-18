@@ -202,8 +202,8 @@ export class ShopperEmailService extends BaseService {
         return rows;
     }
 
-    /** What a store's emails show and where test orders go: its title, its seller's email and whether it's confirmed, and its slug while it's live. */
-    async storeFacts(appId: string): Promise<{ title: string | null; sellerEmail: string | null; sellerEmailConfirmed: boolean; liveSlug: string | null } | null> {
+    /** What a store's emails show and where test orders go: its title, its seller's email and whether it's confirmed, its slug, and the slug again while it's live. */
+    async storeFacts(appId: string): Promise<{ title: string | null; sellerEmail: string | null; sellerEmailConfirmed: boolean; slug: string | null; liveSlug: string | null } | null> {
         const row = await this.database
             .select({ title: schema.apps.title, sellerEmail: schema.users.email, confirmed: schema.users.emailVerified, slug: schema.liveStores.slug, status: schema.liveStores.status })
             .from(schema.apps)
@@ -212,7 +212,7 @@ export class ShopperEmailService extends BaseService {
             .where(eq(schema.apps.id, appId))
             .get();
         if (!row) return null;
-        return { title: row.title, sellerEmail: row.sellerEmail, sellerEmailConfirmed: row.confirmed === true, liveSlug: row.status === 'live' ? row.slug : null };
+        return { title: row.title, sellerEmail: row.sellerEmail, sellerEmailConfirmed: row.confirmed === true, slug: row.slug, liveSlug: row.status === 'live' ? row.slug : null };
     }
 
     /** Refunded lines of the order that no refund email names yet; a refund Stripe never made isn't one. */

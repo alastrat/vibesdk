@@ -10,6 +10,7 @@ import { createEmailSender } from '../email/sender';
 import { EMAIL_FROM } from '../email/types';
 import { storeHostConfig } from '../live-stores/hosts';
 import { devPortOf, storeUrl } from '../live-stores/view';
+import { storeSenderAddress } from './sender-address';
 import { queueShopperEmail, sendDueShopperEmails, type DeferSend, type ShopperEmailDeps, type ShopperEmailEvent } from './outbox';
 import { sweepMissedShopperEmails, type ReconcileDeps } from './reconcile';
 
@@ -18,11 +19,12 @@ const logger = createLogger('ShopperEmailsWiring');
 const KEEP_EMAILS_MS = 90 * 24 * 60 * 60 * 1000;
 const DUE_EMAILS_PER_RUN = 100;
 
-/** A store's title, seller email and, while it's live, its address on the stores domain. */
+/** A store's title, seller email, its own sender address and, while it's live, its address on the stores domain. */
 export function shopperEmailStoreFromEnv(env: Env): ShopperEmailDeps['store'] {
 	const emails = new ShopperEmailService(env);
 	const { storesDomain } = storeHostConfig(env);
 	const devPort = devPortOf(env.CUSTOM_DOMAIN);
+	const shopperFrom = env.SHOPPER_EMAIL_FROM?.trim() || null;
 	return async (appId) => {
 		const facts = await emails.storeFacts(appId);
 		if (!facts) return null;
@@ -31,11 +33,12 @@ export function shopperEmailStoreFromEnv(env: Env): ShopperEmailDeps['store'] {
 			sellerEmail: facts.sellerEmail,
 			sellerEmailConfirmed: facts.sellerEmailConfirmed,
 			storeUrl: facts.liveSlug && storesDomain ? storeUrl(`${facts.liveSlug}.${storesDomain}`, devPort) : null,
+			fromEmail: storeSenderAddress(facts.slug, shopperFrom),
 		};
 	};
 }
 
-/** The address shopper emails come from: SHOPPER_EMAIL_FROM, else Estori's no-reply address. */
+/** The shared sender address: SHOPPER_EMAIL_FROM, else Estori's no-reply address. Stores send from their own address on its domain. */
 export function shopperEmailFrom(env: Env): string {
 	return env.SHOPPER_EMAIL_FROM?.trim() || EMAIL_FROM.email;
 }

@@ -26,6 +26,8 @@ export interface ShopperEmailStoreFacts {
 	sellerEmailConfirmed: boolean;
 	/** The live store's address, when it's live. */
 	storeUrl: string | null;
+	/** The store's own sender address, such as northwind-tea@orders.estori.app. */
+	fromEmail: string;
 }
 
 export interface ShopperEmailDeps {
@@ -33,6 +35,7 @@ export interface ShopperEmailDeps {
 	order(orderId: string): Promise<StoreOrderView | null>;
 	store(appId: string): Promise<ShopperEmailStoreFacts | null>;
 	sender: EmailSender | null;
+	/** The shared sender address, for a store that no longer exists. */
 	fromEmail: string;
 	alert(alert: { kind: 'shopper-email-failed' | 'shopper-email-capped'; subject: string; message: string }): Promise<void>;
 	now(): Date;
@@ -157,7 +160,7 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 			subject: email.subject,
 			html: email.html,
 			text: email.text,
-			fromEmail: deps.fromEmail,
+			fromEmail: store?.fromEmail ?? deps.fromEmail,
 			fromName: content.storeName,
 			replyTo: replyTo ?? store?.sellerEmail ?? undefined,
 			headers: { 'X-Estori-Store': order.appId, 'X-Estori-Email': row.kind },

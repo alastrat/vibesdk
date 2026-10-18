@@ -41,7 +41,9 @@ describe('the shopper emails API', () => {
 			['order_shipped', false, true],
 			['refund_issued', false, true],
 		]);
-		expect(data).toMatchObject({ placeholders: SHOPPER_EMAIL_PLACEHOLDERS, replyTo: null, sellerEmail: 'seller_1@example.test' });
+		expect(data).toMatchObject({ placeholders: SHOPPER_EMAIL_PLACEHOLDERS, replyTo: null, sellerEmail: 'seller_1@example.test', senderEmail: 'no-reply@estori.app' });
+		const onDomain = await json(await ShopperEmailsController.read(new Request('https://estori.app/api/stores/app_tea/emails'), envWith(db, { SHOPPER_EMAIL_FROM: 'no-reply@orders.estori.app' }), {} as ExecutionContext, as({ id: 'app_tea' })));
+		expect(onDomain.body.data?.senderEmail).toBe('northwind-tea@orders.estori.app');
 		expect(data.recent).toEqual([{ id: 'em_1', kind: 'order_confirmation', orderNumber: 1, recipient: 'a***@example.test', status: 'sent', test: false, createdAt: new Date(100_000).toISOString(), sentAt: new Date(100_000).toISOString() }]);
 		const missing = await ShopperEmailsController.read(new Request('https://estori.app/api/stores/app_gone/emails'), envWith(db), {} as ExecutionContext, as({ id: 'app_gone' }));
 		expect(missing.status).toBe(404);
@@ -84,10 +86,11 @@ describe('the shopper emails API', () => {
 	});
 
 	it("sends a test to the store's seller once their email is confirmed, marked as a test, at most 10 an hour", async () => {
-		const sent: Array<{ to: string; subject: string }> = [];
+		const sent: Array<{ to: string; subject: string; from: unknown }> = [];
 		const counts = new Map<string, string>();
 		const env = envWith(db, {
-			EMAIL: { send: async (message: { to: string; subject: string }) => (sent.push(message), { messageId: 'msg_1' }) },
+			SHOPPER_EMAIL_FROM: 'no-reply@orders.estori.app',
+			EMAIL: { send: async (message: { to: string; subject: string; from: unknown }) => (sent.push(message), { messageId: 'msg_1' }) },
 			VibecoderStore: { get: async (key: string) => counts.get(key) ?? null, put: async (key: string, value: string) => void counts.set(key, value) },
 		});
 		const test = () => ShopperEmailsController.test(send('POST', SHIPPED), env, {} as ExecutionContext, as({ id: 'app_tea', kind: 'order_shipped' }));
@@ -98,7 +101,7 @@ describe('the shopper emails API', () => {
 		await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = 'seller_1'`).run();
 		const first = await json(await test());
 		expect(first.body.data).toEqual({ sentTo: 'seller_1@example.test' });
-		expect(sent[0]).toMatchObject({ to: 'seller_1@example.test', subject: '[Test] Order 1042 shipped' });
+		expect(sent[0]).toMatchObject({ to: 'seller_1@example.test', subject: '[Test] Order 1042 shipped', from: { email: 'northwind-tea@orders.estori.app', name: 'Northwind Tea' } });
 		for (let i = 1; i < 10; i += 1) expect((await test()).status).toBe(200);
 		expect((await test()).status).toBe(429);
 		expect(sent).toHaveLength(10);

@@ -24,7 +24,7 @@ describe('the Emails page', () => {
 
 	it('shows each email with its switch, Edit and where it came from, a store picker, and where replies go', () => {
 		const page = source('/src/routes/emails/emails.tsx');
-		for (const part of ['data.templates.map', '<Switch', 'Edit', 'templateOrigin(template)', 'stores.data.stores', 'Replies go to', 'Publish a store to set up its emails.', 'Recent emails', 'STATUS_LABELS']) expect(page, part).toContain(part);
+		for (const part of ['data.templates.map', '<Switch', 'Edit', 'templateOrigin(template)', 'stores.data.stores', 'Replies go to', 'Publish a store to set up its emails.', 'Recent emails', 'STATUS_LABELS', 'Shoppers get these emails from', 'data.senderEmail']) expect(page, part).toContain(part);
 	});
 
 	it("says Estori sends order emails only, since Cloudflare doesn't allow marketing email", () => {

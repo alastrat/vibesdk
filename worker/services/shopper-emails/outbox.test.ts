@@ -56,7 +56,7 @@ function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmail
 			sentSince: async () => input.sentToday ?? 0,
 		},
 		order: async () => ({ ...ORDER, ...input.order }),
-		store: async () => ({ title: 'Northwind Tea', sellerEmail: input.sellerEmail === undefined ? 'seller@example.test' : input.sellerEmail, sellerEmailConfirmed: input.sellerEmailConfirmed ?? true, storeUrl: 'https://northwind-tea.estori.shop' }),
+		store: async () => ({ title: 'Northwind Tea', sellerEmail: input.sellerEmail === undefined ? 'seller@example.test' : input.sellerEmail, sellerEmailConfirmed: input.sellerEmailConfirmed ?? true, storeUrl: 'https://northwind-tea.estori.shop', fromEmail: 'northwind-tea@orders.estori.app' }),
 		sender: {
 			send: async (email) => {
 				if (input.sendError) throw input.sendError;
@@ -78,12 +78,12 @@ function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmail
 const coded = (code: string) => Object.assign(new Error(code), { code });
 
 describe('the shopper email outbox', () => {
-	it("sends an event's email once, to the shopper, from the store's name with its reply-to and headers", async () => {
+	it("sends an event's email once, to the shopper, from the store's own name and address with its reply-to and headers", async () => {
 		const { deps, rows, sent } = world({ replyTo: 'help@northwind.test' });
 		await queueShopperEmail(deps, CONFIRMATION);
 		await queueShopperEmail(deps, CONFIRMATION);
 		expect(sent).toHaveLength(1);
-		expect(sent[0]).toMatchObject({ to: 'ana@example.test', fromEmail: 'orders@estori.app', fromName: 'Northwind Tea', replyTo: 'help@northwind.test', headers: { 'X-Estori-Store': 'app_tea', 'X-Estori-Email': 'order_confirmation' } });
+		expect(sent[0]).toMatchObject({ to: 'ana@example.test', fromEmail: 'northwind-tea@orders.estori.app', fromName: 'Northwind Tea', replyTo: 'help@northwind.test', headers: { 'X-Estori-Store': 'app_tea', 'X-Estori-Email': 'order_confirmation' } });
 		expect(sent[0].subject).toBe('Your Northwind Tea order #1042');
 		expect([...rows.values()][0]).toMatchObject({ status: 'sent', recipient: 'ana@example.test', messageId: 'msg_1', sentAt: NOW, test: false });
 	});

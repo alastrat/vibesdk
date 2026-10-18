@@ -79,6 +79,8 @@ export interface ShopperEmailsData {
 	/** Where shoppers' replies go; null means the seller's account email. */
 	replyTo: string | null;
 	sellerEmail: string | null;
+	/** The store's own sender address, such as northwind-tea@orders.estori.app. */
+	senderEmail: string;
 	recent: RecentShopperEmail[];
 }
 

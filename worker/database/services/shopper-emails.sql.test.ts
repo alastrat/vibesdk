@@ -98,11 +98,12 @@ describe('the shopper email outbox on real SQL', () => {
 
 describe("a store's facts for its shopper emails on real SQL", () => {
 	it("reads the store's title, its seller's email and its slug while it's live", async () => {
-		expect(await service().storeFacts('app_tea')).toEqual({ title: 'Northwind Tea', sellerEmail: 'seller_1@example.test', sellerEmailConfirmed: false, liveSlug: 'northwind-tea' });
+		expect(await service().storeFacts('app_tea')).toEqual({ title: 'Northwind Tea', sellerEmail: 'seller_1@example.test', sellerEmailConfirmed: false, slug: 'northwind-tea', liveSlug: 'northwind-tea' });
 		await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = 'seller_1'`).run();
-		expect(await service().storeFacts('app_home')).toEqual({ title: 'Lumen Home', sellerEmail: 'seller_1@example.test', sellerEmailConfirmed: true, liveSlug: null });
+		expect(await service().storeFacts('app_home')).toEqual({ title: 'Lumen Home', sellerEmail: 'seller_1@example.test', sellerEmailConfirmed: true, slug: null, liveSlug: null });
+		// Offline, it has no address to visit, but keeps the slug its emails come from.
 		await db.prepare(`UPDATE live_stores SET status = 'offline' WHERE app_id = 'app_tea'`).run();
-		expect((await service().storeFacts('app_tea'))?.liveSlug).toBeNull();
+		expect(await service().storeFacts('app_tea')).toMatchObject({ slug: 'northwind-tea', liveSlug: null });
 		expect(await service().storeFacts('app_gone')).toBeNull();
 	});
 });
