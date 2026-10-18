@@ -41,6 +41,8 @@ interface CloudflareAnswer<T> {
 /** Cloudflare's code for a hostname already on the zone. */
 const DUPLICATE_HOSTNAME = 1406;
 
+const GONE = 'This domain is no longer set up for your store. Remove it and add it again.';
+
 /** Statuses after which a hostname won't become active without the seller starting over. */
 const FAILED_HOSTNAME = ['blocked', 'moved', 'deleted', 'pending_deletion', 'test_blocked', 'test_failed'];
 
@@ -111,7 +113,14 @@ export function cloudflareSaasProvider(config: { zoneId: string; apiToken: strin
 		},
 		async check(_hostname, providerId) {
 			if (!providerId) return { status: 'failed', records: [], error: 'This domain was never created at Cloudflare. Remove it and add it again.' };
-			const found = await call('GET', `/${encodeURIComponent(providerId)}`);
+			let found: CloudflareHostname | null;
+			try {
+				found = await call('GET', `/${encodeURIComponent(providerId)}`);
+			} catch (error) {
+				// Gone at Cloudflare, so no records will bring it back.
+				if (error instanceof CustomHostnameApiError && error.status === 404) return { status: 'failed', records: [], error: GONE };
+				throw error;
+			}
 			if (!found) throw new CustomHostnameApiError('Cloudflare returned no custom hostname', 502);
 			return stateOf(found);
 		},

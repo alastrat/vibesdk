@@ -76,6 +76,20 @@ describe('the Cloudflare for SaaS provider', () => {
 		await expect(provider.remove('shop.northwindtea.com', 'ch_gone')).resolves.toBeUndefined();
 	});
 
+	it('fails a hostname Cloudflare no longer has, so the seller is told to add it again instead of it looking connected', async () => {
+		const { provider } = cloudflare([
+			{ status: 404, body: { success: false, errors: [{ code: 1436, message: 'Custom hostname not found' }] } },
+			{ status: 503, body: { success: false, errors: [{ code: 10000, message: 'Service unavailable' }] } },
+		]);
+		expect(await provider.check('shop.northwindtea.com', 'ch_gone')).toEqual({
+			status: 'failed',
+			records: [],
+			error: 'This domain is no longer set up for your store. Remove it and add it again.',
+		});
+		// Any other refusal is Cloudflare not answering, which says nothing about the domain.
+		await expect(provider.check('shop.northwindtea.com', 'ch_1')).rejects.toThrow('Service unavailable');
+	});
+
 	it('replaces a hostname left on the zone from before, such as a deleted store\'s, so the domain can be connected again', async () => {
 		const { provider, calls } = cloudflare([
 			{ status: 409, body: { success: false, errors: [{ code: 1406, message: 'Duplicate custom hostname found.' }] } },
