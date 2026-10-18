@@ -21,8 +21,8 @@ export interface ShopperEmailContent {
 	refundCents: number | null;
 	/** The live store's address, for the Visit button. */
 	storeUrl: string | null;
-	/** For a test order: the masked shopper whose email came to the seller instead. */
-	testFor: string | null;
+	/** A note the seller sees atop an email that came to them as a test; it also marks the subject [Test]. */
+	testNote: string | null;
 }
 
 const PLACEHOLDER = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
@@ -99,6 +99,14 @@ export function maskEmail(email: string | null): string | null {
 	return `${email[0]}***${email.slice(at)}`;
 }
 
+/** The note on a test order's email, which goes to the seller instead of the shopper. */
+export function testOrderNote(customerEmail: string | null): string {
+	return `This test order's email came to you instead of the shopper (${maskEmail(customerEmail) ?? 'no email given'}).`;
+}
+
+/** The note on a template test the seller sent themselves. */
+export const TEMPLATE_TEST_NOTE = "This is a test of your template, filled in with a sample order. Shoppers get it with their own order's details.";
+
 /** The facts a sample order shows in a preview or test email. */
 export function sampleContent(kind: ShopperEmailKind, storeName: string, storeUrl: string | null): ShopperEmailContent {
 	return {
@@ -116,7 +124,7 @@ export function sampleContent(kind: ShopperEmailKind, storeName: string, storeUr
 		trackingNumber: kind === 'order_shipped' ? '9400 1000 0000 0000 0000 00' : null,
 		refundCents: kind === 'refund_issued' ? 1500 : null,
 		storeUrl,
-		testFor: null,
+		testNote: null,
 	};
 }
 
@@ -155,7 +163,7 @@ function eventBlock(content: ShopperEmailContent): Block {
 /** Subject, HTML and text for one shopper email. */
 export function renderShopperEmail(template: ShopperEmailTemplateFields, content: ShopperEmailContent): { subject: string; html: string; text: string } {
 	const values = valuesOf(content);
-	const subject = `${content.testFor ? '[Test] ' : ''}${fillPlaceholders(template.subject, values).replace(/[\r\n]+/g, ' ').trim()}`;
+	const subject = `${content.testNote ? '[Test] ' : ''}${fillPlaceholders(template.subject, values).replace(/[\r\n]+/g, ' ').trim()}`;
 	const heading = fillPlaceholders(template.heading, values).replace(/[\r\n]+/g, ' ').trim();
 	const paragraphs = fillPlaceholders(template.body, values)
 		.split(/\n\s*\n/)
@@ -163,7 +171,7 @@ export function renderShopperEmail(template: ShopperEmailTemplateFields, content
 		.filter(Boolean);
 	const block = eventBlock(content);
 	const footer = `${content.storeName} sent you this email about your order #${content.orderNumber}. Reply to this email to reach the store.`;
-	const testNote = content.testFor ? `This test order's email came to you instead of the shopper (${content.testFor}).` : null;
+	const testNote = content.testNote;
 
 	const html = `<!doctype html>
 <html>

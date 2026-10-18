@@ -8,7 +8,7 @@ import type { ShopperEmailPayload, ShopperEmailRow, ShopperEmailService } from '
 import type { EmailSender } from '../email/types';
 import { classifySendError } from '../email/send-errors';
 import type { StoreOrderView } from '../store-payments/store';
-import { maskEmail, renderShopperEmail, type ShopperEmailContent } from './template';
+import { renderShopperEmail, testOrderNote, type ShopperEmailContent } from './template';
 import { createLogger } from '../../logger';
 
 export interface ShopperEmailEvent {
@@ -83,7 +83,7 @@ export function contentFor(row: Pick<ShopperEmailRow, 'kind' | 'payload'>, order
 		trackingNumber: row.payload.trackingNumber ?? null,
 		refundCents: row.payload.amountCents ?? null,
 		storeUrl: store?.storeUrl ?? null,
-		testFor: order.mode === 'test' ? (maskEmail(order.customerEmail) ?? 'no email given') : null,
+		testNote: order.mode === 'test' ? testOrderNote(order.customerEmail) : null,
 	};
 }
 

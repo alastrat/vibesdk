@@ -87,6 +87,19 @@ export interface ShopperEmailStoreOption {
 	title: string;
 }
 
+export interface ShopperEmailStoresData {
+	stores: ShopperEmailStoreOption[];
+}
+
+export interface ShopperEmailSettings {
+	/** Where shoppers' replies go; null means the seller's account email. */
+	replyTo: string | null;
+}
+
+export interface ShopperEmailTestResult {
+	sentTo: string;
+}
+
 export interface ShopperEmailPreview {
 	subject: string;
 	html: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { maskEmail, renderShopperEmail, sampleContent, templateProblem, trackingUrl, type ShopperEmailContent } from './template';
+import { maskEmail, renderShopperEmail, sampleContent, templateProblem, testOrderNote, trackingUrl, type ShopperEmailContent } from './template';
 import { DEFAULT_SHOPPER_EMAIL_TEMPLATES } from '../../../shared/types/shopper-emails';
 
 const CONFIRMATION: ShopperEmailContent = { ...sampleContent('order_confirmation', 'Northwind Tea', 'https://northwind-tea.estori.shop'), customerName: 'Ana <b>Ruiz</b>' };
@@ -52,10 +52,11 @@ describe('a rendered shopper email', () => {
 	});
 
 	it('marks a test order that came to the seller, and greets a shopper with no name', () => {
-		const email = renderShopperEmail(DEFAULT_SHOPPER_EMAIL_TEMPLATES.order_confirmation, { ...CONFIRMATION, customerName: null, testFor: 'a***@example.com' });
+		const email = renderShopperEmail(DEFAULT_SHOPPER_EMAIL_TEMPLATES.order_confirmation, { ...CONFIRMATION, customerName: null, testNote: testOrderNote('ana@example.com') });
 		expect(email.subject).toBe('[Test] Your Northwind Tea order #1042');
 		expect(email.text).toContain("This test order's email came to you instead of the shopper (a***@example.com).");
 		expect(email.text).toContain('Thanks for your order, there');
+		expect(testOrderNote(null)).toContain('(no email given)');
 	});
 });
 

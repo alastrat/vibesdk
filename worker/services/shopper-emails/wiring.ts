@@ -17,21 +17,31 @@ const logger = createLogger('ShopperEmailsWiring');
 const KEEP_EMAILS_MS = 90 * 24 * 60 * 60 * 1000;
 const DUE_EMAILS_PER_RUN = 100;
 
-export function shopperEmailDepsFromEnv(env: Env): ShopperEmailDeps {
+/** A store's title, seller email and, while it's live, its address on the stores domain. */
+export function shopperEmailStoreFromEnv(env: Env): ShopperEmailDeps['store'] {
 	const emails = new ShopperEmailService(env);
-	const orders = new StoreOrderService(env);
 	const { storesDomain } = storeHostConfig(env);
 	const devPort = devPortOf(env.CUSTOM_DOMAIN);
+	return async (appId) => {
+		const facts = await emails.storeFacts(appId);
+		if (!facts) return null;
+		return { title: facts.title, sellerEmail: facts.sellerEmail, storeUrl: facts.liveSlug && storesDomain ? storeUrl(`${facts.liveSlug}.${storesDomain}`, devPort) : null };
+	};
+}
+
+/** The address shopper emails come from: SHOPPER_EMAIL_FROM, else Estori's no-reply address. */
+export function shopperEmailFrom(env: Env): string {
+	return env.SHOPPER_EMAIL_FROM?.trim() || EMAIL_FROM.email;
+}
+
+export function shopperEmailDepsFromEnv(env: Env): ShopperEmailDeps {
+	const orders = new StoreOrderService(env);
 	return {
-		emails,
+		emails: new ShopperEmailService(env),
 		order: (orderId) => orders.getOrder(orderId),
-		store: async (appId) => {
-			const facts = await emails.storeFacts(appId);
-			if (!facts) return null;
-			return { title: facts.title, sellerEmail: facts.sellerEmail, storeUrl: facts.liveSlug && storesDomain ? storeUrl(`${facts.liveSlug}.${storesDomain}`, devPort) : null };
-		},
+		store: shopperEmailStoreFromEnv(env),
 		sender: createEmailSender(env),
-		fromEmail: env.SHOPPER_EMAIL_FROM?.trim() || EMAIL_FROM.email,
+		fromEmail: shopperEmailFrom(env),
 		alert: platformAlertsFromEnv(env),
 		now: () => new Date(),
 		newId: generateId,
