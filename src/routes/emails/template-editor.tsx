@@ -151,7 +151,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 						{preview.data ? (
 							<>
 								<p className="font-medium text-kumo-default">{preview.data.subject}</p>
-								<iframe title="Email preview" sandbox="" srcDoc={preview.data.html} className="h-[480px] w-full rounded-md border border-kumo-line bg-white" />
+								<iframe key={preview.dataUpdatedAt} title="Email preview" sandbox="" srcDoc={preview.data.html} className="h-[480px] w-full rounded-md border border-kumo-line bg-white" />
 							</>
 						) : (
 							<p className="text-kumo-subtle">{preview.error ? preview.error.message : 'Loading the preview'}</p>

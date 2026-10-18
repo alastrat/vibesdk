@@ -36,6 +36,8 @@ describe('the Emails page', () => {
 		expect(editor).toContain('placeholders.map');
 		expect(editor).toContain('sandbox=""');
 		expect(editor).toContain('srcDoc={preview.data.html}');
+		// A new frame per preview: Chromium can drop a srcdoc change that lands while the last one still loads.
+		expect(editor).toContain('key={preview.dataUpdatedAt}');
 		expect(editor).toContain('Send me a test');
 		expect(editor).toMatch(/<ConfirmButton[^>]*label="Reset to default"/);
 		expect(editor).toContain('disabled={save.isPending}');
