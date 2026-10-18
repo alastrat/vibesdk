@@ -111,4 +111,45 @@ describe('seller orders on real SQL', () => {
 		expect(seen).toEqual(['e', 'd', 'c', 'b', 'a']);
 		await expect(service.listOrders({ sellerUserId: 'seller_1', view: 'all', mode: 'live', cursor: 'garbage' })).rejects.toThrow('Invalid cursor');
 	});
+
+	it("reads an order's shipment, refunded lines, latest dispute and store, for its seller only", async () => {
+		await sale({ id: 'facts', hoursAgo: 1, payment: 'disputed', lines: [['own', 1, true], ['own', 1]] });
+		await db
+			.prepare(`INSERT INTO store_disputes (id, order_id, amount_cents, reason, status, created_at, updated_at) VALUES ('dp_old', 'facts', 500, 'fraudulent', 'won', ?, ?), ('dp_new', 'facts', 4000, 'fraudulent', 'needs_response', ?, ?)`)
+			.bind(at(5), at(5), at(1), at(1))
+			.run();
+		const service = new SellerOrderService(envWith(db));
+		expect(await service.orderFacts('seller_1', 'facts')).toEqual({ storeTitle: 'Northwind Tea', carrier: null, trackingNumber: null, shippedAt: null, refundedLineNos: [1], dispute: { amountCents: 4000, status: 'needs_response' } });
+		expect(await service.orderFacts('seller_2', 'facts')).toBeNull();
+	});
+
+	it('marks an order shipped, keeps the first shipped date on an edit, and marks it not shipped again', async () => {
+		await sale({ id: 'ship', hoursAgo: 1, lines: [['own', 1], ['catalog', 1]] });
+		const service = new SellerOrderService(envWith(db));
+		expect(await service.setShipment({ sellerUserId: 'seller_1', orderId: 'ship', shipment: { carrier: 'USPS', trackingNumber: '9400 1000' }, now: NOW })).toBe('updated');
+		expect(await service.setShipment({ sellerUserId: 'seller_1', orderId: 'ship', shipment: { carrier: 'UPS', trackingNumber: '1Z999' }, now: new Date(NOW.getTime() + HOUR) })).toBe('updated');
+		expect(await service.orderFacts('seller_1', 'ship')).toMatchObject({ carrier: 'UPS', trackingNumber: '1Z999', shippedAt: new Date(Math.floor(NOW.getTime() / 1000) * 1000) });
+		expect(await db.prepare("SELECT fulfillment_status AS status FROM store_orders WHERE id = 'ship'").first()).toEqual({ status: 'fulfilled' });
+		expect(await service.setShipment({ sellerUserId: 'seller_1', orderId: 'ship', shipment: null, now: NOW })).toBe('updated');
+		expect(await service.orderFacts('seller_1', 'ship')).toMatchObject({ carrier: null, trackingNumber: null, shippedAt: null });
+		expect(await db.prepare("SELECT fulfillment_status AS status FROM store_orders WHERE id = 'ship'").first()).toEqual({ status: 'unfulfilled' });
+	});
+
+	it("refuses to ship another seller's order, one Estori ships whole, one whose own items were refunded, and a refunded one", async () => {
+		await sale({ id: 'catalog-only', hoursAgo: 1, lines: [['catalog', 1]] });
+		await sale({ id: 'own-refunded', hoursAgo: 2, payment: 'partially_refunded', lines: [['own', 1, true], ['catalog', 1]] });
+		await sale({ id: 'refunded', hoursAgo: 3, payment: 'refunded', lines: [['own', 1]] });
+		const service = new SellerOrderService(envWith(db));
+		const ship = (orderId: string, sellerUserId = 'seller_1') => service.setShipment({ sellerUserId, orderId, shipment: { carrier: null, trackingNumber: null }, now: NOW });
+		expect(await ship('catalog-only', 'seller_2')).toBe('not-found');
+		expect(await ship('catalog-only')).toBe('no-own-items');
+		expect(await ship('own-refunded')).toBe('nothing-to-ship');
+		expect(await ship('refunded')).toBe('refunded');
+	});
+
+	it("finds a new order's store name and its seller's email for the email", async () => {
+		await sale({ id: 'new', hoursAgo: 0, lines: [['own', 1]] });
+		expect(await new SellerOrderService(envWith(db)).newOrderEmailFacts('new')).toEqual({ storeTitle: 'Northwind Tea', sellerEmail: 'seller_1@example.test' });
+		expect(await new SellerOrderService(envWith(db)).newOrderEmailFacts('missing')).toBeNull();
+	});
 });

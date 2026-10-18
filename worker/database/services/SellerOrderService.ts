@@ -1,12 +1,23 @@
 /** A seller's own store orders: the Orders page's list and order facts, and marking an order shipped. Every query is scoped to the seller. */
 
-import { and, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { keysetCursorOf, parseKeysetCursor } from './keyset-cursor';
 import type { SellerOrderModeFilter, SellerOrdersData, SellerOrderView } from '../../../shared/types/store-payments';
 
 export const SELLER_ORDERS_PAGE = 50;
+
+export interface SellerOrderFacts {
+    storeTitle: string | null;
+    carrier: string | null;
+    trackingNumber: string | null;
+    shippedAt: Date | null;
+    refundedLineNos: number[];
+    dispute: { amountCents: number; status: string } | null;
+}
+
+export type ShipmentResult = 'updated' | 'not-found' | 'no-own-items' | 'nothing-to-ship' | 'refunded';
 
 /** Units of this kind on the order with no refund claimed or made. */
 function unrefundedUnits(kind: 'own' | 'catalog') {
@@ -75,5 +86,69 @@ export class SellerOrderService extends BaseService {
             stores,
             hasTestOrders: Boolean(testOrder),
         };
+    }
+
+    async orderFacts(sellerUserId: string, orderId: string): Promise<SellerOrderFacts | null> {
+        const orders = schema.storeOrders;
+        const row = await this.database
+            .select({ storeTitle: schema.apps.title, carrier: orders.carrier, trackingNumber: orders.trackingNumber, shippedAt: orders.shippedAt })
+            .from(orders)
+            .leftJoin(schema.apps, eq(schema.apps.id, orders.appId))
+            .where(and(eq(orders.id, orderId), eq(orders.sellerUserId, sellerUserId)))
+            .get();
+        if (!row) return null;
+        const [refunds, dispute] = await Promise.all([
+            this.database.select({ lineNo: schema.storeRefunds.lineNo }).from(schema.storeRefunds).where(eq(schema.storeRefunds.orderId, orderId)).orderBy(asc(schema.storeRefunds.lineNo)).all(),
+            this.database
+                .select({ amountCents: schema.storeDisputes.amountCents, status: schema.storeDisputes.status })
+                .from(schema.storeDisputes)
+                .where(eq(schema.storeDisputes.orderId, orderId))
+                .orderBy(desc(schema.storeDisputes.createdAt))
+                .limit(1)
+                .get(),
+        ]);
+        return { ...row, refundedLineNos: refunds.map((refund) => refund.lineNo), dispute: dispute ?? null };
+    }
+
+    /** Marks the order's own items shipped, or not shipped again with `shipment: null`. An edit keeps the first shipped date. */
+    async setShipment(input: { sellerUserId: string; orderId: string; shipment: { carrier: string | null; trackingNumber: string | null } | null; now: Date }): Promise<ShipmentResult> {
+        const orders = schema.storeOrders;
+        const order = await this.database
+            .select({ paymentStatus: orders.paymentStatus, shippedAt: orders.shippedAt })
+            .from(orders)
+            .where(and(eq(orders.id, input.orderId), eq(orders.sellerUserId, input.sellerUserId)))
+            .get();
+        if (!order) return 'not-found';
+        const ownLines = await this.database
+            .select({ lineNo: schema.storeOrderItems.lineNo })
+            .from(schema.storeOrderItems)
+            .where(and(eq(schema.storeOrderItems.orderId, input.orderId), eq(schema.storeOrderItems.kind, 'own')))
+            .all();
+        if (ownLines.length === 0) return 'no-own-items';
+        const touch = { revision: sql`${orders.revision} + 1`, updatedAt: input.now };
+        if (!input.shipment) {
+            await this.database.update(orders).set({ fulfillmentStatus: 'unfulfilled', carrier: null, trackingNumber: null, shippedAt: null, ...touch }).where(eq(orders.id, input.orderId)).run();
+            return 'updated';
+        }
+        if (order.paymentStatus === 'refunded') return 'refunded';
+        const refunded = new Set((await this.database.select({ lineNo: schema.storeRefunds.lineNo }).from(schema.storeRefunds).where(eq(schema.storeRefunds.orderId, input.orderId)).all()).map((row) => row.lineNo));
+        if (ownLines.every((line) => refunded.has(line.lineNo))) return 'nothing-to-ship';
+        await this.database
+            .update(orders)
+            .set({ fulfillmentStatus: 'fulfilled', carrier: input.shipment.carrier, trackingNumber: input.shipment.trackingNumber, shippedAt: order.shippedAt ?? input.now, ...touch })
+            .where(eq(orders.id, input.orderId))
+            .run();
+        return 'updated';
+    }
+
+    async newOrderEmailFacts(orderId: string): Promise<{ storeTitle: string | null; sellerEmail: string | null } | null> {
+        const row = await this.database
+            .select({ storeTitle: schema.apps.title, sellerEmail: schema.users.email })
+            .from(schema.storeOrders)
+            .leftJoin(schema.apps, eq(schema.apps.id, schema.storeOrders.appId))
+            .leftJoin(schema.users, eq(schema.users.id, schema.storeOrders.sellerUserId))
+            .where(eq(schema.storeOrders.id, orderId))
+            .get();
+        return row ?? null;
     }
 }
