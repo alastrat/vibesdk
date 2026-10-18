@@ -241,6 +241,21 @@ export type {
 	StorePaymentStatus,
 } from '../shared/types/store-payments';
 export { SELLER_CARRIER_NAMES, SELLER_CARRIERS, SELLER_ORDERS_PATH, sellerOrderPath } from '../shared/types/store-payments';
+export type {
+	RecentShopperEmail,
+	ShopperEmailKind,
+	ShopperEmailPreview,
+	ShopperEmailSettings,
+	ShopperEmailsData,
+	ShopperEmailStatus,
+	ShopperEmailStoreOption,
+	ShopperEmailStoresData,
+	ShopperEmailTemplate,
+	ShopperEmailTemplateFields,
+	ShopperEmailTemplateView,
+	ShopperEmailTestResult,
+} from '../shared/types/shopper-emails';
+export { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_LABELS, SHOPPER_EMAIL_LIMITS, SHOPPER_EMAIL_STATUSES, SHOPPER_EMAILS_PATH } from '../shared/types/shopper-emails';
 export type { CatalogProductsData, CatalogProductView, CatalogVariantView } from '../shared/types/catalog';
 export type {
 	AdminCatalogOrderDetail,

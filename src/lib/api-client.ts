@@ -99,6 +99,15 @@ import type{
 	SellerOrdersData,
 	SellerOrderView,
 	SellerShipmentRequest,
+	ShopperEmailKind,
+	ShopperEmailPreview,
+	ShopperEmailSettings,
+	ShopperEmailsData,
+	ShopperEmailStoresData,
+	ShopperEmailTemplate,
+	ShopperEmailTemplateFields,
+	ShopperEmailTemplateView,
+	ShopperEmailTestResult,
 	StoreRefundRequest,
 	StoreRefundResponse,
 	LiveStoreView,
@@ -690,6 +699,38 @@ class ApiClient {
 	/** Marks the order's own items shipped, with an optional carrier and tracking number, or not shipped again. */
 	async setSellerOrderShipment(orderId: string, body: SellerShipmentRequest): Promise<ApiResponse<SellerOrderDetail>> {
 		return this.request<SellerOrderDetail>(`/api/orders/${encodeURIComponent(orderId)}/shipment`, { method: 'POST', body });
+	}
+
+	/** The signed-in seller's stores that can email shoppers: those with a live store or an order. */
+	async getShopperEmailStores(): Promise<ApiResponse<ShopperEmailStoresData>> {
+		return this.request<ShopperEmailStoresData>('/api/emails/stores');
+	}
+
+	async getShopperEmails(appId: string): Promise<ApiResponse<ShopperEmailsData>> {
+		return this.request<ShopperEmailsData>(`/api/stores/${encodeURIComponent(appId)}/emails`);
+	}
+
+	async saveShopperEmail(appId: string, kind: ShopperEmailKind, template: ShopperEmailTemplate): Promise<ApiResponse<ShopperEmailTemplateView>> {
+		return this.request<ShopperEmailTemplateView>(`/api/stores/${encodeURIComponent(appId)}/emails/${kind}`, { method: 'PUT', body: template });
+	}
+
+	/** Forgets the store's version, so the email goes back to Estori's default. */
+	async resetShopperEmail(appId: string, kind: ShopperEmailKind): Promise<ApiResponse<ShopperEmailTemplateView>> {
+		return this.request<ShopperEmailTemplateView>(`/api/stores/${encodeURIComponent(appId)}/emails/${kind}`, { method: 'DELETE' });
+	}
+
+	async saveShopperEmailSettings(appId: string, settings: ShopperEmailSettings): Promise<ApiResponse<ShopperEmailSettings>> {
+		return this.request<ShopperEmailSettings>(`/api/stores/${encodeURIComponent(appId)}/emails-settings`, { method: 'PUT', body: settings });
+	}
+
+	/** Renders a template, saved or not, filled in with a sample order. */
+	async previewShopperEmail(appId: string, kind: ShopperEmailKind, fields: ShopperEmailTemplateFields): Promise<ApiResponse<ShopperEmailPreview>> {
+		return this.request<ShopperEmailPreview>(`/api/stores/${encodeURIComponent(appId)}/emails/${kind}/preview`, { method: 'POST', body: fields });
+	}
+
+	/** Sends a template, saved or not, filled in with a sample order, to the signed-in seller. */
+	async sendShopperEmailTest(appId: string, kind: ShopperEmailKind, fields: ShopperEmailTemplateFields): Promise<ApiResponse<ShopperEmailTestResult>> {
+		return this.request<ShopperEmailTestResult>(`/api/stores/${encodeURIComponent(appId)}/emails/${kind}/test`, { method: 'POST', body: fields });
 	}
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {

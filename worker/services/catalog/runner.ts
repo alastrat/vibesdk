@@ -54,6 +54,8 @@ export interface RunnerDeps {
 	/** Radar's risk level for the payment; 'unknown' when Stripe gave none. */
 	paymentRisk(paymentIntentId: string): Promise<'normal' | 'elevated' | 'highest' | 'unknown'>;
 	notifySeller(notice: SellerNotice): Promise<void>;
+	/** Emails the shopper the shipments and refunds the order's records show they haven't heard about; never throws. */
+	emailShopper(paymentIntentId: string): Promise<void>;
 }
 
 export function initialRunnerState(orderId: string, nowMs: number): RunnerState {
@@ -149,6 +151,7 @@ async function expireRiskHold(state: RunnerState, deps: RunnerDeps, nowMs: numbe
 			return riskStepFailed(state, deps, nowMs, { kind: 'refund-failed', message: `Refunding a risk-held order failed: ${errorText(error)}` });
 		}
 		await deps.notifySeller({ sellerUserId: order.sellerUserId, kind: 'items-refunded', orderId: order.id, itemCount: pending.length, reason: 'risk' });
+		await deps.emailShopper(order.paymentIntentId);
 	}
 	if (order) await deps.store.updateOrder(order.id, { status: 'placement-done', placementAttempts: order.placementAttempts, lastError: 'Not released within 24 hours' });
 	return { ...state, placement: 'done', riskHoldUntil: null, nextSyncAt: null };
@@ -193,6 +196,7 @@ async function refund(state: RunnerState, deps: RunnerDeps, nowMs: number): Prom
 		const totals = await refundCatalogItems(refundDeps, { orderId: order.id, itemIds: rejected.map((item) => item.id), reason: 'supplier-rejected' });
 		if (totals.refundedItemIds.length > 0) {
 			await deps.notifySeller({ sellerUserId: order.sellerUserId, kind: 'items-refunded', orderId: order.id, itemCount: totals.refundedItemIds.length, reason: 'supplier' });
+			await deps.emailShopper(order.paymentIntentId);
 		}
 		return { ...state, refundFailures: 0, nextRefundAt: nowMs };
 	} catch (error) {
@@ -210,12 +214,15 @@ async function sync(state: RunnerState, deps: RunnerDeps, nowMs: number): Promis
 	const order = await deps.store.getOrder(state.orderId);
 	if (!order) return { ...state, nextSyncAt: null };
 	let items = [...order.items];
+	let shipped = false;
 	for (const supplierOrderId of new Set(inTransit(items).map((item) => item.supplierOrderId as string))) {
 		for (const update of await deps.supplierUpdates(supplierOrderId)) {
 			const patches = applySupplierUpdate(items, update);
 			if (patches.length === 0) continue;
 			await deps.store.patchItems(patches);
 			if (update.kind === 'cancelled') await deps.alert({ kind: 'supplier-cancelled', orderId: state.orderId, message: update.reason });
+			// A reissued tracking number patches no status, so the shopper hears once per shipment.
+			if (patches.some((patch) => patch.status === 'shipped')) shipped = true;
 			items = items.map((item) => {
 				const patch = patches.find((candidate) => candidate.itemId === item.id);
 				if (!patch) return item;
@@ -224,6 +231,7 @@ async function sync(state: RunnerState, deps: RunnerDeps, nowMs: number): Promis
 			});
 		}
 	}
+	if (shipped) await deps.emailShopper(order.paymentIntentId);
 	const stillOpen = inTransit(items).length > 0 && nowMs - state.startedAt < RUNNER_SYNC_MAX_AGE_MS;
 	return { ...state, nextSyncAt: stillOpen ? nowMs + RUNNER_SYNC_INTERVAL_MS : null };
 }

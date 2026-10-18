@@ -197,6 +197,13 @@
       "when": 1792324957315,
       "tag": "0027_seller_order_shipments",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1792327649313,
+      "tag": "0028_shopper_emails",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,12 @@ beforeAll(async () => {
 });
 
 const as = (userId: string, pathParams: Record<string, string> = {}) => ({ user: { id: userId }, pathParams }) as unknown as RouteContext;
+/** A request's context that keeps what it was asked to finish after answering. */
+function requestContext() {
+	const later: Array<Promise<unknown>> = [];
+	const ctx = { waitUntil: (promise: Promise<unknown>) => void later.push(promise), passThroughOnException: () => undefined } as unknown as ExecutionContext;
+	return { ctx, later };
+}
 const json = async (response: Response) => ({ status: response.status, body: (await response.json()) as { data?: Record<string, unknown>; error?: unknown } });
 
 describe('the seller orders API', () => {
@@ -37,11 +43,12 @@ describe('the seller orders API', () => {
 	});
 
 	it('marks the order shipped and answers it, refuses a bad body, and refuses an order with nothing the seller ships', async () => {
+		const request = requestContext();
 		const ship = (body: unknown, orderId = 'ord_1') =>
 			SellerOrdersController.shipment(
 				new Request(`https://estori.app/api/orders/${orderId}/shipment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
 				envWith(db),
-				{} as ExecutionContext,
+				request.ctx,
 				as('seller_1', { id: orderId }),
 			);
 		const shipped = await json(await ship({ shipped: true, carrier: 'ups', trackingNumber: '1Z999' }));
@@ -50,6 +57,42 @@ describe('the seller orders API', () => {
 		expect((await ship({ shipped: true, carrier: null }, 'missing')).status).toBe(404);
 		await db.prepare(`UPDATE store_order_items SET kind = 'catalog', catalog_variant_id = 'cv_1' WHERE order_id = 'ord_1'`).run();
 		expect((await ship({ shipped: true, carrier: null })).status).toBe(409);
+		await Promise.all(request.later);
+	});
+
+	it('emails the shopper once when the seller ships, about the items the seller ships that were not refunded', async () => {
+		const at = Math.floor(Date.now() / 1000);
+		await db
+			.prepare(`INSERT INTO store_orders (id, mode, app_id, order_number, checkout_id, seller_user_id, customer_email, subtotal_cents, shipping_cents, total_cents, application_fee_cents, created_at, updated_at) VALUES ('ord_2', 'live', 'app_tea', 2, 'chk_2', 'seller_1', 'ana@example.test', 4000, 0, 4000, 400, ?, ?)`)
+			.bind(at, at)
+			.run();
+		await db
+			.prepare(
+				`INSERT INTO store_order_items (order_id, line_no, kind, product_id, variant_id, name, quantity, unit_price_cents, catalog_variant_id) VALUES ('ord_2', 1, 'own', 'tea', 'tea-50', 'Oolong', 1, 1000, NULL), ('ord_2', 2, 'own', 'tea', 'tea-90', 'Sencha', 1, 1000, NULL), ('ord_2', 3, 'catalog', 'pot', 'pot-1', 'Teapot', 1, 2000, 'cv_pot')`,
+			)
+			.run();
+		await db.prepare(`INSERT INTO store_refunds (id, order_id, line_no, amount_cents, request_id, initiated_by, stripe_refund_id, created_at) VALUES ('sr_2_2', 'ord_2', 2, 1000, 'req_00000002', 'seller', 're_2', ?)`).bind(at).run();
+		const request = requestContext();
+		const ship = (body: unknown) =>
+			SellerOrdersController.shipment(
+				new Request('https://estori.app/api/orders/ord_2/shipment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+				envWith(db),
+				request.ctx,
+				as('seller_1', { id: 'ord_2' }),
+			);
+		const emails = async () => (await db.prepare(`SELECT kind, event_key, payload FROM shopper_emails WHERE order_id = 'ord_2'`).all<{ kind: string; event_key: string; payload: string }>()).results;
+
+		expect((await ship({ shipped: false })).status).toBe(200);
+		expect(await emails()).toEqual([]);
+		expect((await ship({ shipped: true, carrier: 'usps', trackingNumber: '9400 1' })).status).toBe(200);
+		// The email is written before the answer, and sent after it.
+		expect(request.later).toHaveLength(1);
+		await Promise.all(request.later);
+		expect((await ship({ shipped: false })).status).toBe(200);
+		expect((await ship({ shipped: true, carrier: 'ups', trackingNumber: '1Z9' })).status).toBe(200);
+		const sent = await emails();
+		expect(sent.map((email) => [email.kind, email.event_key])).toEqual([['order_shipped', 'own']]);
+		expect(JSON.parse(sent[0].payload)).toEqual({ lineNos: [1], carrier: 'USPS', trackingNumber: '9400 1' });
 	});
 
 	it("refunds through the seller's own order, whatever happened to its store, and answers not found to another seller", async () => {

@@ -44,6 +44,8 @@ export interface RefundLinesDeps {
 	/** A charge, once per line, for the seller share the transfer couldn't cover. */
 	addShortfall(shortfall: { orderId: string; lineNo: number; amountCents: number }): Promise<void>;
 	applyRefunds(orderId: string): Promise<void>;
+	/** Emails the shopper about the order's refunded lines no email has named yet; never throws. */
+	notifyRefunds(orderId: string): Promise<void>;
 	now(): Date;
 }
 
@@ -112,5 +114,7 @@ export async function refundStoreLines(deps: RefundLinesDeps, input: { order: St
 		}
 	}
 	await deps.applyRefunds(order.id);
+	// From the records, so lines an earlier request refunded before failing are named too.
+	await deps.notifyRefunds(order.id);
 	return { ok: true, refundedCents };
 }

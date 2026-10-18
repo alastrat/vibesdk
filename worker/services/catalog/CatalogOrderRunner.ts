@@ -17,6 +17,8 @@ import { cjOrderToUpdates } from './cj/updates';
 import { catalogRefundRecords } from './refund-records';
 import { initialRunnerState, releaseRiskHold, retryRunnerState, runnerStep, type RunnerDeps, type RunnerState } from './runner';
 import { sellerNoticesFromEnv } from '../alerts/seller-notices';
+import { shopperEmailReconcileFromEnv } from '../shopper-emails/wiring';
+import { emailNewCatalogShipments, emailNewRefunds } from '../shopper-emails/reconcile';
 
 const logger = createLogger('CatalogOrderRunner');
 const STATE_KEY = 'state';
@@ -41,6 +43,7 @@ function runnerDeps(env: Env, paymentMode: StoreMode | null): RunnerDeps {
 	const client = cjClientFromEnv(env);
 	const sendAlert = platformAlertsFromEnv(env);
 	const alert: RunnerDeps['alert'] = (event) => sendAlert({ kind: event.kind, subject: event.orderId, message: event.message });
+	const shopperEmails = shopperEmailReconcileFromEnv(env);
 	const adapter = client
 		? new CJDropshippingAdapter({ client, destinations: CATALOG_DESTINATIONS, mode: catalogSupplierMode(env, paymentMode), alert: (event) => alert({ kind: event.kind, orderId: event.reference, message: event.message }) })
 		: { supplier: 'cjdropshipping' as const, placeOrder: async () => ({ ok: false as const, kind: 'retryable' as const, reason: 'The catalog supplier is not configured' }) };
@@ -62,6 +65,17 @@ function runnerDeps(env: Env, paymentMode: StoreMode | null): RunnerDeps {
 			return level === 'normal' || level === 'elevated' || level === 'highest' ? level : 'unknown';
 		},
 		notifySeller: sellerNoticesFromEnv(env),
+		emailShopper: async (paymentIntentId) => {
+			try {
+				const order = await new StoreOrderService(env).findByPaymentIntent(paymentIntentId);
+				if (!order) return;
+				await emailNewCatalogShipments(shopperEmails, order.id);
+				await emailNewRefunds(shopperEmails, order.id);
+			} catch (error) {
+				logger.error('Could not email the shopper about their order', { paymentIntentId, error });
+			}
+		},
+
 	};
 }
 

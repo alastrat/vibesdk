@@ -38,6 +38,13 @@ describe('returnPageRecordDeps', () => {
 		const deps = returnPageRecordDeps({ DB: failing, STRIPE_SECRET_KEY: 'sk_test_return' } as unknown as Env);
 		await expect(deps.settleSale('ord_1')).resolves.toBeUndefined();
 	});
+
+	it("leaves the shopper's confirmation to the webhook, so the return page doesn't wait on Email Service", async () => {
+		const { d1, statements } = recordingD1();
+		const deps = returnPageRecordDeps({ DB: d1, STRIPE_SECRET_KEY: 'sk_test_return' } as unknown as Env);
+		await deps.queueShopperEmail({ orderId: 'ord_1', kind: 'order_confirmation', eventKey: 'order', payload: {} });
+		expect(statements).toEqual([]);
+	});
 });
 
 describe('runStorePaymentsSchedule', () => {

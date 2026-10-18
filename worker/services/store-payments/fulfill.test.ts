@@ -3,6 +3,7 @@ import type { StripeCheckoutSession } from '../payments/stripe-client';
 import type { PaidCatalogCheckout } from '../catalog/record';
 import { recordStoreOrder, type RecordStoreOrderDeps } from './fulfill';
 import type { NewStoreOrder, StoreCheckoutRecord } from './store';
+import type { ShopperEmailEvent } from '../shopper-emails/outbox';
 
 const CHECKOUT: StoreCheckoutRecord = {
 	id: 'chk_ab12',
@@ -75,6 +76,7 @@ function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 	const handedOff: PaidCatalogCheckout[] = [];
 	const settled: string[] = [];
 	const notified: string[] = [];
+	const queued: ShopperEmailEvent[] = [];
 	const deps: RecordStoreOrderDeps = {
 		getCheckout: async (id) => (id === CHECKOUT.id ? CHECKOUT : null),
 		recordOrder: async (order) => {
@@ -90,9 +92,12 @@ function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 		notifyNewOrder: async (orderId) => {
 			notified.push(orderId);
 		},
+		queueShopperEmail: async (event) => {
+			queued.push(event);
+		},
 		now: () => new Date(5),
 	};
-	return { deps, orders, handedOff, settled, notified };
+	return { deps, orders, handedOff, settled, notified, queued };
 }
 
 describe('recordStoreOrder', () => {
@@ -103,6 +108,19 @@ describe('recordStoreOrder', () => {
 		const again = fakeDeps('already-recorded');
 		await recordStoreOrder(again.deps, PAID);
 		expect(again.notified).toEqual([]);
+	});
+
+	it("queues the shopper's confirmation after the sale's money work, on every delivery, since the outbox sends it once", async () => {
+		const steps: string[] = [];
+		const first = fakeDeps('recorded');
+		first.deps.handOffCatalogLines = async () => void steps.push('hand off');
+		first.deps.settleSale = async () => void steps.push('settle');
+		first.deps.queueShopperEmail = async (event) => void steps.push(`email ${event.kind} ${event.eventKey}`);
+		await recordStoreOrder(first.deps, PAID);
+		expect(steps).toEqual(['hand off', 'settle', 'email order_confirmation order']);
+		const again = fakeDeps('already-recorded');
+		await recordStoreOrder(again.deps, PAID);
+		expect(again.queued).toEqual([{ orderId: 'ord_ab12', kind: 'order_confirmation', eventKey: 'order', payload: {} }]);
 	});
 
 	it("records a paid session from the checkout's prices and the shopper's details, and hands over catalog lines", async () => {

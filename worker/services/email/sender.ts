@@ -7,12 +7,15 @@ const logger = createLogger('Email');
 function cloudflareSender(binding: TransactionalEmailBinding): EmailSender {
 	return {
 		async send(email) {
-			await binding.send({
+			const from = email.fromEmail || email.fromName ? { email: email.fromEmail ?? EMAIL_FROM.email, name: email.fromName ?? EMAIL_FROM.name } : EMAIL_FROM;
+			return binding.send({
 				to: email.to,
-				from: EMAIL_FROM,
+				from,
 				subject: email.subject,
 				html: email.html,
 				text: email.text,
+				...(email.replyTo ? { replyTo: email.replyTo } : {}),
+				...(email.headers ? { headers: email.headers } : {}),
 			});
 		},
 	};
@@ -21,7 +24,7 @@ function cloudflareSender(binding: TransactionalEmailBinding): EmailSender {
 /** Writes the email to the dev server log so its link can be followed locally. */
 const devLogSender: EmailSender = {
 	async send(email) {
-		logger.info('Email not sent (dev log)', { to: email.to, subject: email.subject, text: email.text });
+		logger.info('Email not sent (dev log)', { to: email.to, fromName: email.fromName, replyTo: email.replyTo, subject: email.subject, text: email.text });
 	},
 };
 

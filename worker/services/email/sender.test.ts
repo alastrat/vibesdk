@@ -31,6 +31,22 @@ describe('createEmailSender', () => {
 		});
 	});
 
+	it("sends a store's email from its own name, with a reply-to and headers, and answers the message id", async () => {
+		const send = vi.fn().mockResolvedValue({ messageId: 'm9' });
+		const sender = createEmailSender(envWith({ ENVIRONMENT: 'prod', EMAIL: { send } }));
+		const sent = await sender!.send({ ...MESSAGE, fromEmail: 'orders@estori.app', fromName: 'Northwind Tea', replyTo: 'seller@example.test', headers: { 'X-Estori-Store': 'app_tea' } });
+		expect(send).toHaveBeenCalledWith({
+			to: MESSAGE.to,
+			from: { email: 'orders@estori.app', name: 'Northwind Tea' },
+			subject: MESSAGE.subject,
+			html: MESSAGE.html,
+			text: MESSAGE.text,
+			replyTo: 'seller@example.test',
+			headers: { 'X-Estori-Store': 'app_tea' },
+		});
+		expect(sent).toEqual({ messageId: 'm9' });
+	});
+
 	it('names the sender as an address object, not a display-name string', () => {
 		expect(EMAIL_FROM).toEqual({ email: 'no-reply@estori.app', name: 'Estori' });
 	});

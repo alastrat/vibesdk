@@ -18,6 +18,7 @@ const ORDER: StoreOrderView = {
 function world(input: { balance?: number; reversible?: number; catalogSellerCents?: number; rows?: StoreRefundRow[]; reversalFails?: boolean } = {}) {
 	const calls: string[] = [];
 	const shortfalls: Array<{ lineNo: number; amountCents: number }> = [];
+	const notified: string[] = [];
 	const rows = new Map((input.rows ?? []).map((row) => [row.lineNo, { ...row }]));
 	let reversalFails = input.reversalFails ?? false;
 	const deps: RefundLinesDeps = {
@@ -58,9 +59,10 @@ function world(input: { balance?: number; reversible?: number; catalogSellerCent
 		},
 		addShortfall: async (shortfall) => void shortfalls.push({ lineNo: shortfall.lineNo, amountCents: shortfall.amountCents }),
 		applyRefunds: async () => void calls.push('apply'),
+		notifyRefunds: async (orderId) => void notified.push(orderId),
 		now: () => new Date(0),
 	};
-	return { deps, calls, shortfalls, rows, heal: () => (reversalFails = false) };
+	return { deps, calls, shortfalls, rows, notified, heal: () => (reversalFails = false) };
 }
 
 describe('refundStoreLines', () => {
@@ -75,6 +77,15 @@ describe('refundStoreLines', () => {
 		const { deps, calls } = world();
 		expect(await refundStoreLines(deps, { order: ORDER, lineNos: [1, 2], requestId: 'rq_1' })).toEqual({ ok: true, refundedCents: 6599 });
 		expect(calls[0]).toBe('catalog 1');
+	});
+
+	it('has the shopper emailed after a refund, from what the records say was refunded, and not after a refused one', async () => {
+		const { deps, notified } = world();
+		await refundStoreLines(deps, { order: ORDER, lineNos: [2, 1], requestId: 'rq_1' });
+		expect(notified).toEqual(['ord_1']);
+		const refused = world({ balance: 0 });
+		await refundStoreLines(refused.deps, { order: ORDER, lineNos: [2], requestId: 'rq_1' });
+		expect(refused.notified).toEqual([]);
 	});
 
 	it("refuses when the seller's balance is short, before any money moves", async () => {
@@ -101,8 +112,11 @@ describe('refundStoreLines', () => {
 		await expect(refundStoreLines(w.deps, { order: ORDER, lineNos: [2], requestId: 'rq_1' })).rejects.toThrow('Stripe is unavailable');
 		w.heal();
 		w.calls.length = 0;
+		expect(w.notified).toEqual([]);
 		expect(await refundStoreLines(w.deps, { order: ORDER, lineNos: [2], requestId: 'rq_2' })).toEqual({ ok: true, refundedCents: 0 });
 		expect(w.calls).toEqual(['reversal 2500 store-reversal-rq_1-2', 'apply']);
+		// The first request refunded the shopper and failed before telling them; this one does.
+		expect(w.notified).toEqual(['ord_1']);
 	});
 
 	it('keeps a shortfall whose record failed, and records it on the next request', async () => {

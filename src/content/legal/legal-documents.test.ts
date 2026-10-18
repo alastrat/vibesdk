@@ -70,6 +70,13 @@ describe('legal documents', () => {
 		expect(terms.body).toContain('Globalink is the merchant of record for purchases of paid sites');
 	});
 
+	it("says the store's order emails reach shoppers through Estori, and how long Estori keeps a record of each", () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain('sending the order emails stores send their shoppers');
+		expect(privacy).toContain("We use the shopper's email to send the store's order emails through Estori");
+		expect(privacy).toContain('for 90 days');
+	});
+
 	it("tells shoppers whose data goes where, and leaves store purchases to the store's policy", () => {
 		expect(LEGAL_DOCUMENTS.privacy.body).toContain('**Fulfillment partners**');
 		expect(LEGAL_DOCUMENTS.privacy.body).toContain('Shoppers who pay at a store');

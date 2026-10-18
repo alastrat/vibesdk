@@ -9,6 +9,7 @@ import type { ShippingAddress } from '../catalog/supplier';
 import type { StripeCheckoutSession } from '../payments/stripe-client';
 import { toCheckoutCart } from './pricing';
 import type { NewStoreOrder, StoreCheckoutRecord } from './store';
+import type { ShopperEmailEvent } from '../shopper-emails/outbox';
 
 export interface RecordStoreOrderDeps {
 	getCheckout(checkoutId: string): Promise<StoreCheckoutRecord | null>;
@@ -19,6 +20,8 @@ export interface RecordStoreOrderDeps {
 	settleSale(orderId: string): Promise<void>;
 	/** Emails the seller about the order; never throws. */
 	notifyNewOrder(orderId: string): Promise<void>;
+	/** Emails the shopper about an order event; never throws. */
+	queueShopperEmail(event: ShopperEmailEvent): Promise<void>;
 	now(): Date;
 }
 
@@ -114,5 +117,7 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 	}
 	// The order stays recorded if settling fails; the error fails the webhook delivery, so Stripe delivers it again.
 	await deps.settleSale(orderId);
+	// After the money work, and on every delivery: a run that died after recording still sends it, and the outbox sends it once.
+	await deps.queueShopperEmail({ orderId, kind: 'order_confirmation', eventKey: 'order', payload: {} });
 	return { result, orderId, checkout };
 }

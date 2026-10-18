@@ -3,6 +3,7 @@ import {
 	BookmarkSimpleIcon,
 	CaretRightIcon,
 	CompassIcon,
+	EnvelopeSimpleIcon,
 	GlobeHemisphereWestIcon,
 	LockKeyIcon,
 	MagnifyingGlassIcon,
@@ -29,7 +30,7 @@ import { useUsageLimitsBadgeState } from '@/components/usage-limits-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
-import { SELLER_ORDERS_PATH } from '@/api-types';
+import { SELLER_ORDERS_PATH, SHOPPER_EMAILS_PATH } from '@/api-types';
 
 interface App {
 	id: string;
@@ -339,6 +340,23 @@ export function AppSidebar() {
 								icon={<ReceiptIcon className="size-4" />}
 							/>
 						)}
+						{user && (
+							<Button
+								shape="square"
+								size="base"
+								variant="ghost"
+								id="emails-link"
+								aria-label="Emails"
+								title="Emails"
+								aria-current={pathname.startsWith(SHOPPER_EMAILS_PATH) ? 'page' : undefined}
+								onClick={() => navigate(SHOPPER_EMAILS_PATH)}
+								className={cn(
+									'text-kumo-subtle hover:text-kumo-default',
+									pathname.startsWith(SHOPPER_EMAILS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
+								)}
+								icon={<EnvelopeSimpleIcon className="size-4" />}
+							/>
+						)}
 					</div>
 				) : (
 					<div className="flex flex-col gap-1.5">
@@ -395,6 +413,17 @@ export function AppSidebar() {
 									onClick={() => navigate(SELLER_ORDERS_PATH)}
 								>
 									Orders
+								</Sidebar.MenuButton>
+							)}
+							{user && (
+								<Sidebar.MenuButton
+									active={pathname.startsWith(SHOPPER_EMAILS_PATH)}
+									icon={<EnvelopeSimpleIcon weight="duotone" className="size-4 -mr-1" />}
+									id="emails-link"
+									tooltip="Emails"
+									onClick={() => navigate(SHOPPER_EMAILS_PATH)}
+								>
+									Emails
 								</Sidebar.MenuButton>
 							)}
 						</Sidebar.Menu>
