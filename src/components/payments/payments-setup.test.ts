@@ -30,12 +30,14 @@ describe('payments setup', () => {
 		expect(hooks).toContain('queryKeys.account.payments.status(');
 	});
 
-	it('offers setup after sign-up on the home page, once, until the seller dismisses it', () => {
+	it('offers setup on the home page until the seller can take payments, remembering the step they dismissed', () => {
 		const prompt = source('/src/components/payments/PaymentsSetupPrompt.tsx');
 		expect(prompt).toContain('SELLER_SETUP_PATH');
 		expect(prompt).toContain("'estori:payments-setup-dismissed'");
 		expect(prompt).toContain('try {');
-		expect(prompt).toContain('status.data.connected');
+		expect(prompt).toContain('setupPrompt(status.data, dismissed)');
+		expect(prompt).toContain('window.localStorage.setItem(DISMISSED_KEY, prompt.key)');
+		expect(prompt).not.toContain('status.data.connected');
 		expect(source('/src/routes/home.tsx')).toContain('<PaymentsSetupPrompt />');
 	});
 
