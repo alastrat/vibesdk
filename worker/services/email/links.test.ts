@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appBaseUrl, resetPasswordLink, verifyEmailLink } from './links';
+import { adminCatalogOrderLink, appBaseUrl, configuredBaseUrl, resetPasswordLink, verifyEmailLink } from './links';
 
 function envWith(customDomain: string): Env {
 	return { CUSTOM_DOMAIN: customDomain } as Env;
@@ -51,5 +51,17 @@ describe('link builders', () => {
 		expect(verifyEmailLink('http://localhost:8100', 'Ab-_09')).toBe(
 			'http://localhost:8100/verify-email?token=Ab-_09',
 		);
+	});
+});
+
+describe('links without a request, such as from a scheduled job', () => {
+	it("use the deployment's own domain: https in production, http on this machine, none without one", () => {
+		expect(configuredBaseUrl(envWith('estori.app'))).toBe('https://estori.app');
+		expect(configuredBaseUrl(envWith('localhost:8100'))).toBe('http://localhost:8100');
+		expect(configuredBaseUrl(envWith('  '))).toBeNull();
+	});
+
+	it("point an admin at a catalog order's page", () => {
+		expect(adminCatalogOrderLink('https://estori.app', '85a761c1-a364')).toBe('https://estori.app/admin/catalog-orders/85a761c1-a364');
 	});
 });

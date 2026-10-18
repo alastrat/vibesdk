@@ -7,10 +7,12 @@ import { runCatalogRefresh } from '../../../services/catalog/scheduler';
 import { catalogSupplierMode, paymentModeOf } from '../../../services/catalog/CatalogOrderRunner';
 import { cjClientFromEnv } from '../../../services/catalog/cj/client';
 import { sandboxMoves } from '../../../services/catalog/sandbox';
-import { CatalogOrderService, CatalogProductService } from '../../../database';
+import { CatalogOrderAdminService, CatalogOrderService, CatalogProductService } from '../../../database';
+import { parseCatalogOrdersCursor } from '../../../database/services/CatalogOrderAdminService';
+import { lateCutoffs, runnerView } from '../../../services/catalog/admin-orders';
 import { catalogProductView } from '../../../services/catalog/catalog-view';
 import { catalogImagePath } from '../../../services/catalog/images';
-import type { CatalogProductsData } from '../../../../shared/types/catalog';
+import { isAdminCatalogOrderView, type AdminCatalogOrderDetail, type AdminCatalogOrdersData, type CatalogProductsData } from '../../../../shared/types/catalog';
 
 const PRODUCT_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const FILE = /^[0-9a-f]{16}\.(jpg|jpeg|png|webp)$/;
@@ -57,6 +59,36 @@ export class CatalogController extends BaseController {
 
     private static runner(env: Env, orderId: string) {
         return env.CATALOG_ORDER_RUNNER.get(env.CATALOG_ORDER_RUNNER.idFromName(orderId));
+    }
+
+    /** Catalog orders for admins, 50 a page: the ones that need someone unless `view=all`. */
+    static async listOrders(request: Request, env: Env, _ctx: ExecutionContext, _context: RouteContext): Promise<ControllerResponse<ApiResponse<AdminCatalogOrdersData>>> {
+        const params = new URL(request.url).searchParams;
+        const view = params.get('view') ?? 'attention';
+        const cursor = params.get('cursor');
+        if (!isAdminCatalogOrderView(view)) return CatalogController.createErrorResponse('Unknown view', 400);
+        if (cursor && !parseCatalogOrdersCursor(cursor)) return CatalogController.createErrorResponse('Invalid cursor', 400);
+        try {
+            return CatalogController.createSuccessResponse(await new CatalogOrderAdminService(env).listOrders({ view, late: lateCutoffs(Date.now()), cursor }));
+        } catch (error) {
+            return CatalogController.handleError(error, 'list catalog orders') as ControllerResponse<ApiResponse<AdminCatalogOrdersData>>;
+        }
+    }
+
+    /** One catalog order for admins, with where its runner stands; a runner that can't be read leaves that part out. */
+    static async orderDetail(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AdminCatalogOrderDetail>>> {
+        const orderId = context.pathParams.id;
+        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        try {
+            const order = await new CatalogOrderAdminService(env).getOrder(orderId);
+            if (!order) return CatalogController.createErrorResponse('Order not found', 404);
+            const state = await CatalogController.runner(env, orderId)
+                .snapshot()
+                .catch(() => null);
+            return CatalogController.createSuccessResponse({ ...order, sandbox: catalogSupplierMode(env, order.mode) === 'sandbox', runner: runnerView(state) });
+        } catch (error) {
+            return CatalogController.handleError(error, 'read a catalog order') as ControllerResponse<ApiResponse<AdminCatalogOrderDetail>>;
+        }
     }
 
     static async runnerSnapshot(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ runner: unknown }>>> {

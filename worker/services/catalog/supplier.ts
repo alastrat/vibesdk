@@ -1,20 +1,8 @@
 /** What Estori needs from a catalog supplier. The CJdropshipping adapter implements it (see its spec). */
 
 export { CATALOG_SUPPLIERS, type CatalogSupplier } from '../../../shared/types/catalog';
-import type { CatalogSupplier } from '../../../shared/types/catalog';
-
-export interface ShippingAddress {
-	name: string;
-	line1: string;
-	line2: string | null;
-	city: string;
-	region: string | null;
-	postalCode: string;
-	/** ISO 3166-1 alpha-2, e.g. "US". */
-	countryCode: string;
-	phone: string | null;
-	email: string | null;
-}
+import type { CatalogSupplier, ShippingAddress } from '../../../shared/types/catalog';
+export type { ShippingAddress } from '../../../shared/types/catalog';
 
 export interface SupplierOrderLine {
 	supplierVariantId: string;

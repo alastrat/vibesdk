@@ -3,6 +3,7 @@
 import { createLogger } from '../../logger';
 import { createEmailSender } from '../email/sender';
 import { platformAlertEmail } from '../email/templates';
+import { adminCatalogOrderLink, configuredBaseUrl } from '../email/links';
 import type { EmailSender } from '../email/types';
 
 /** Who receives alerts; apart from the admin list, so an admin email change doesn't move them. */
@@ -32,6 +33,21 @@ export const PLATFORM_ALERT_KINDS = [
 	'seller-charge-unpaid',
 ] as const;
 export type PlatformAlertKind = (typeof PLATFORM_ALERT_KINDS)[number];
+
+/** Alerts whose subject is a catalog order id, so their email links to the order's admin page. */
+const CATALOG_ORDER_ALERT_KINDS: ReadonlySet<PlatformAlertKind> = new Set<PlatformAlertKind>([
+	'needs-attention',
+	'refund-failed',
+	'runner-step-failed',
+	'held-order',
+	'low-balance',
+	'supplier-account',
+	'lines-mismatch',
+	'supplier-cancelled',
+	'not-shipped',
+	'not-delivered',
+	'risk-hold',
+]);
 
 const ALERT_LABELS: Readonly<Record<PlatformAlertKind, string>> = {
 	'needs-attention': 'A catalog order needs you',
@@ -69,6 +85,8 @@ export interface PlatformAlertDeps {
 	};
 	sender: EmailSender | null;
 	recipients: readonly string[];
+	/** Estori's own address, for links in alerts; null leaves them out. */
+	adminBaseUrl: string | null;
 	log(alert: PlatformAlert): void;
 }
 
@@ -77,7 +95,8 @@ export async function sendPlatformAlert(deps: PlatformAlertDeps, alert: Platform
 	const key = `alert:${alert.kind}:${alert.subject}`;
 	if (await deps.throttle.get(key)) return 'throttled';
 	if (!deps.sender || deps.recipients.length === 0) return 'not-sent';
-	for (const to of deps.recipients) await deps.sender.send(platformAlertEmail(to, alert, ALERT_LABELS[alert.kind]));
+	const link = deps.adminBaseUrl && CATALOG_ORDER_ALERT_KINDS.has(alert.kind) ? adminCatalogOrderLink(deps.adminBaseUrl, alert.subject) : null;
+	for (const to of deps.recipients) await deps.sender.send(platformAlertEmail(to, alert, ALERT_LABELS[alert.kind], link));
 	await deps.throttle.put(key, '1', { expirationTtl: ALERT_THROTTLE_SECONDS });
 	return 'sent';
 }
@@ -90,6 +109,7 @@ export function platformAlertsFromEnv(env: Env): (alert: PlatformAlert) => Promi
 		throttle: env.VibecoderStore,
 		sender: createEmailSender(env),
 		recipients: PLATFORM_ALERT_EMAILS,
+		adminBaseUrl: configuredBaseUrl(env),
 		log: (alert) => logger.error('Platform alert', alert),
 	};
 	return async (alert) => {

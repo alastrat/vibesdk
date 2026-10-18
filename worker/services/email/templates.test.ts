@@ -83,7 +83,7 @@ describe('HTML escaping', () => {
 
 describe('platformAlertEmail', () => {
 	it('names the alert, its subject and details, and escapes them', () => {
-		const email = platformAlertEmail('ops@example.test', { kind: 'not-shipped', subject: 'co_<1>', message: 'Placed 6 days ago', details: [['Order', 'co_<1>']] }, "An order hasn't shipped");
+		const email = platformAlertEmail('ops@example.test', { kind: 'not-shipped', subject: 'co_<1>', message: 'Placed 6 days ago', details: [['Order', 'co_<1>']] }, "An order hasn't shipped", null);
 		expect(email.to).toBe('ops@example.test');
 		expect(email.subject).toBe("Estori alert: An order hasn't shipped (co_<1>)");
 		expect(email.text).toContain('Placed 6 days ago');

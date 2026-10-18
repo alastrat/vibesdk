@@ -230,6 +230,18 @@ export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
 export type { StoreOrdersData, StoreOrderSummary, CatalogItemProgress, StoreRefundRequest, StoreRefundResponse, PayoutInterval } from '../shared/types/store-payments';
 export type { CatalogProductsData, CatalogProductView, CatalogVariantView } from '../shared/types/catalog';
+export type {
+	AdminCatalogOrderDetail,
+	AdminCatalogOrderItem,
+	AdminCatalogOrderRow,
+	AdminCatalogOrderRunner,
+	AdminCatalogOrdersData,
+	AdminCatalogOrderView,
+	CatalogItemStatus,
+	CatalogOrderStatus,
+	ShippingAddress,
+} from '../shared/types/catalog';
+export { ADMIN_CATALOG_ORDERS_PATH } from '../shared/types/catalog';
 
 export type {
 	AdminSalesData,
