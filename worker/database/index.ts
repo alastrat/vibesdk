@@ -19,6 +19,7 @@ export { StoreRefundService } from './services/StoreRefundService';
 export { StoreDisputeService } from './services/StoreDisputeService';
 export { CatalogOrderService } from './services/CatalogOrderService';
 export { CatalogOrderAdminService } from './services/CatalogOrderAdminService';
+export { SellerOrderService } from './services/SellerOrderService';
 export { CatalogProductService } from './services/CatalogProductService';
 export { StoreCheckoutService } from './services/StoreCheckoutService';
 export { StoreOrderService } from './services/StoreOrderService';
