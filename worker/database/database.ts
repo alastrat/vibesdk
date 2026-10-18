@@ -30,13 +30,26 @@ export type {
  * Provides database connection, shared utilities, and core operations.
  * Domain-specific operations are handled by dedicated service classes.
  */
+/**
+ * Bindings Sentry already instruments. The binding outlives every service built on it, and Sentry wraps `prepare` in
+ * place without checking, so wrapping on each construction would nest one proxy per service until queries overflow.
+ */
+const instrumentedBindings = new WeakSet<D1Database>();
+
+function instrumentOnce(db: D1Database): D1Database {
+    if (instrumentedBindings.has(db)) return db;
+    const instrumented = Sentry.instrumentD1WithSentry(db);
+    instrumentedBindings.add(instrumented);
+    return instrumented;
+}
+
 export class DatabaseService {
     public readonly db: DrizzleD1Database<typeof schema>;
     private readonly d1: D1Database;
     private readonly enableReplicas: boolean;
 
     constructor(env: Env) {
-        const instrumented = Sentry.instrumentD1WithSentry(env.DB);
+        const instrumented = instrumentOnce(env.DB);
         this.d1 = instrumented;
         this.db = drizzle(instrumented, { schema });
         this.enableReplicas = env.ENABLE_READ_REPLICAS === 'true';
