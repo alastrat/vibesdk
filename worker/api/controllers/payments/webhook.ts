@@ -6,7 +6,7 @@
  */
 
 import { createLogger } from '../../../logger';
-import { SellerChargeService, StoreCheckoutService, StripeConnectService, TemplateService } from '../../../database';
+import { SellerChargeService, StoreCheckoutService, StripeConnectService } from '../../../database';
 import { STORE_ORDER_KIND } from '../../../../shared/types/store-payments';
 import { disputeDepsFromEnv, recordStoreSession, settleOnTransferDeps } from '../../../services/store-payments/wiring';
 import { isStripeChargeTransfer, settleOnTransfer } from '../../../services/store-payments/settle';
@@ -14,6 +14,7 @@ import { handleDisputeClosed, handleDisputeOpened, isStripeDispute } from '../..
 import { accountFlags } from '../../../services/payments/stripe-client';
 import { parseStripeEvent, verifyStripeSignature, type StripeEvent } from '../../../services/payments/webhook';
 import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount, isStripePayout } from '../../../services/payments/fulfill';
+import { fulfillDepsFromEnv } from '../../../services/payments/purchase-wiring';
 import { chargesForPayout } from '../../../services/payments/seller-costs';
 import { getGlobalConfigurableSettings } from '../../../config';
 
@@ -60,15 +61,7 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
             logger.info('Store checkout session handled', { id: object.id, result: stored.result });
             return;
         }
-        const listings = new TemplateService(env);
-        const result = await fulfillCheckoutSession(
-            {
-                listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
-                recordStripePurchase: (record) => listings.recordStripePurchase(record),
-                sessionRecorded: (checkoutSessionId) => listings.hasCheckoutSession(checkoutSessionId),
-            },
-            object,
-        );
+        const result = await fulfillCheckoutSession(fulfillDepsFromEnv(env), object);
         if (result === 'duplicate-purchase' || result === 'listing-missing') {
             // Stripe captured the payment but nothing was recorded; a retry cannot fix it, so answer 200 and flag it.
             logger.warn(`Checkout session paid but not recorded (${result}); refund the payment in the Stripe dashboard`, {

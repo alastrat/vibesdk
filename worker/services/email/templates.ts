@@ -1,5 +1,6 @@
 import { contactTopicLabel, type ContactRequestInput } from '../../../shared/types/contact';
 import { escapeHtml } from '../../utils/html';
+import { LEGAL_CONTACT, LEGAL_ENTITY, legalAddressLine } from '../../../shared/types/legal';
 import type { OutgoingEmail } from './types';
 import type { PlatformAlert } from '../alerts/platform-alerts';
 
@@ -210,5 +211,45 @@ export function sellerItemsRefundedEmail(to: string, itemCount: number, reason: 
 		heading: 'Items refunded',
 		body: `We refunded ${itemCount} item${itemCount === 1 ? '' : 's'} from an order in your store because ${why}. Your share of those items was taken back, and the shopper got their money for them.`,
 		footer: 'The order shows each item as refunded.',
+	});
+}
+
+export interface PurchaseReceipt {
+	siteTitle: string | null;
+	amountCents: number;
+	currency: string;
+	paidAt: Date;
+	/** The Stripe payment, as the Stripe dashboard shows it. */
+	receiptNumber: string;
+	/** The site's page, where the buyer makes a copy; null without a configured domain. */
+	siteLink: string | null;
+	/** Estori's own address, for the policy links; null leaves them out. */
+	baseUrl: string | null;
+}
+
+const RECEIPT_TITLE_MAX = 100;
+
+function money(cents: number, currency: string): string {
+	const code = currency.toUpperCase();
+	return `${new Intl.NumberFormat('en-US', { style: 'currency', currency: code }).format(cents / 100)} ${code}`;
+}
+
+/** To the buyer of a paid site: Globalink sells paid sites, so the receipt names it as the seller. */
+export function purchaseReceiptEmail(to: string, receipt: PurchaseReceipt): OutgoingEmail {
+	const title = (receipt.siteTitle ?? '').replace(/\s+/g, ' ').trim().slice(0, RECEIPT_TITLE_MAX) || 'your site';
+	const policies = receipt.baseUrl ? ` See our Refund Policy (${receipt.baseUrl}/refunds) and Privacy Policy (${receipt.baseUrl}/privacy).` : '';
+	return renderEmail({
+		to,
+		subject: `Your Estori receipt: ${title}`,
+		heading: 'Thanks for your purchase',
+		body: `You bought ${title}. You can now make copies of it in your Estori account and adapt them for your own business or personal projects. Copies are yours to use, but they can't be resold, shared or published as templates.`,
+		action: receipt.siteLink ? { label: 'Make your copy', link: receipt.siteLink } : undefined,
+		details: [
+			['Site', title],
+			['Amount paid', money(receipt.amountCents, receipt.currency)],
+			['Date', new Intl.DateTimeFormat('en-US', { dateStyle: 'long', timeZone: 'UTC' }).format(receipt.paidAt)],
+			['Receipt number', receipt.receiptNumber],
+		],
+		footer: `Sold by ${LEGAL_ENTITY.name}, ${legalAddressLine()}. For help, or a refund within 14 days, email ${LEGAL_CONTACT.support}.${policies}`,
 	});
 }

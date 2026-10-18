@@ -10,6 +10,8 @@ export interface FulfillDeps {
 	recordStripePurchase(record: StripePurchaseRecord): Promise<boolean>;
 	/** Whether a purchase already exists for this Checkout session. */
 	sessionRecorded(checkoutSessionId: string): Promise<boolean>;
+	/** Emails the buyer their receipt; never throws. `checkoutEmail` is the address given at checkout. */
+	sendReceipt(purchase: StripePurchaseRecord, checkoutEmail: string | null): Promise<void>;
 }
 
 /**
@@ -34,7 +36,7 @@ export async function fulfillCheckoutSession(deps: FulfillDeps, session: StripeC
 
 	const priceCents = session.amount_total;
 	const fee = platformFeeCents(priceCents);
-	const recorded = await deps.recordStripePurchase({
+	const record: StripePurchaseRecord = {
 		listingId,
 		sourceAppId: appId,
 		versionId: metadata.versionId ?? null,
@@ -46,8 +48,12 @@ export async function fulfillCheckoutSession(deps: FulfillDeps, session: StripeC
 		checkoutSessionId: session.id,
 		paymentIntentId: session.payment_intent,
 		sellerStripeAccountId,
-	});
-	if (recorded) return 'recorded';
+	};
+	// The purchase is recorded once per session, so only the first of the webhook and the return page sends it.
+	if (await deps.recordStripePurchase(record)) {
+		await deps.sendReceipt(record, session.customer_details?.email ?? null);
+		return 'recorded';
+	}
 	return (await deps.sessionRecorded(session.id)) ? 'already-recorded' : 'duplicate-purchase';
 }
 
