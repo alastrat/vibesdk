@@ -16,7 +16,7 @@ import { formatFileSize, formatMoney } from '@/lib/paid-listing-display';
 import { showcaseRefreshMessage } from '@/lib/showcase-refresh-message';
 import { SHOWCASE_MOVING_MIN } from '@/lib/showcase';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
-import { formatTemplatePrice, type PendingReview } from '@/api-types';
+import { ADMIN_CATALOG_ORDERS_PATH, formatTemplatePrice, type PendingReview } from '@/api-types';
 import { isForbiddenError } from '@/lib/security-error';
 
 export default function AdminReviewsPage() {
@@ -38,6 +38,9 @@ export default function AdminReviewsPage() {
 						</Link>
 						<Link to="/admin/contact-requests" className="w-fit text-sm text-kumo-default underline underline-offset-2">
 							Contact requests
+						</Link>
+						<Link to={ADMIN_CATALOG_ORDERS_PATH} className="w-fit text-sm text-kumo-default underline underline-offset-2">
+							Catalog orders
 						</Link>
 					</div>
 				</div>

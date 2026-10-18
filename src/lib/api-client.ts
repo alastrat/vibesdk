@@ -101,6 +101,9 @@ import type{
 	AddStoreDomainRequest,
 	PayoutInterval,
 	CatalogProductsData,
+	AdminCatalogOrdersData,
+	AdminCatalogOrderDetail,
+	AdminCatalogOrderView,
 	StripeLinkData,
 	TemplateCategory,
 	AuthUser,
@@ -700,6 +703,37 @@ class ApiClient {
 	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {
 		const search = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
 		return this.request<CatalogProductsData>(`/api/catalog/products${search}`);
+	}
+
+	/** Admins: catalog orders, 50 a page, the ones that need someone unless the view is `all`. */
+	async getAdminCatalogOrders(view: AdminCatalogOrderView, cursor: string | null): Promise<ApiResponse<AdminCatalogOrdersData>> {
+		const query = new URLSearchParams({ view });
+		if (cursor) query.set('cursor', cursor);
+		return this.request<AdminCatalogOrdersData>(`/api/admin/catalog/orders?${query}`, {}, true);
+	}
+
+	async getAdminCatalogOrder(orderId: string): Promise<ApiResponse<AdminCatalogOrderDetail>> {
+		return this.request<AdminCatalogOrderDetail>(`/api/admin/catalog/orders/${encodeURIComponent(orderId)}`, {}, true);
+	}
+
+	/** Asks the supplier for the order's updates now. */
+	async syncCatalogOrder(orderId: string): Promise<ApiResponse<{ signalled: true }>> {
+		return this.request<{ signalled: true }>(`/api/admin/catalog/orders/${encodeURIComponent(orderId)}/sync`, { method: 'POST' });
+	}
+
+	/** Places a stuck order again. */
+	async retryCatalogOrder(orderId: string): Promise<ApiResponse<{ retried: true }>> {
+		return this.request<{ retried: true }>(`/api/admin/catalog/orders/${encodeURIComponent(orderId)}/retry`, { method: 'POST' });
+	}
+
+	/** Places an order held for a risky payment, after review. */
+	async releaseCatalogOrder(orderId: string): Promise<ApiResponse<{ released: boolean }>> {
+		return this.request<{ released: boolean }>(`/api/admin/catalog/orders/${encodeURIComponent(orderId)}/release`, { method: 'POST' });
+	}
+
+	/** Moves a sandbox supplier order along, so the rest of the flow can be tried. */
+	async moveSandboxCatalogOrder(orderId: string, action: 'ship' | 'deliver'): Promise<ApiResponse<{ moved: string[] }>> {
+		return this.request<{ moved: string[] }>(`/api/admin/catalog/orders/${encodeURIComponent(orderId)}/sandbox`, { method: 'POST', body: { action } });
 	}
 
 	async getStripeDashboardLink(): Promise<ApiResponse<StripeLinkData>> {

@@ -53,7 +53,7 @@ describe('the Go live panel', () => {
 
 	it('asks before taking the store offline or removing its domain, and shows a domain as serving only while the store is live', () => {
 		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
-		expect(dialog).toContain("from '@/components/ui/alert-dialog'");
+		expect(dialog).toContain("import { ConfirmButton } from '@/components/confirm-button';");
 		for (const copy of ['Take your store offline?', 'Remove this domain?']) expect(dialog, copy).toContain(copy);
 		expect(dialog).toContain('connectedDomainNote(storeStatus)');
 	});

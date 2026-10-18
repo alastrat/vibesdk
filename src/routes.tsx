@@ -13,6 +13,8 @@ import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
 import AdminEarlyAccessPage from './routes/admin/early-access';
 import AdminContactRequestsPage from './routes/admin/contact-requests';
+import AdminCatalogOrdersPage from './routes/admin/catalog-orders';
+import AdminCatalogOrderPage from './routes/admin/catalog-order';
 import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
@@ -133,6 +135,22 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<AdminContactRequestsPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'admin/catalog-orders',
+						element: (
+							<ProtectedRoute>
+								<AdminCatalogOrdersPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'admin/catalog-orders/:id',
+						element: (
+							<ProtectedRoute>
+								<AdminCatalogOrderPage />
 							</ProtectedRoute>
 						),
 					},
