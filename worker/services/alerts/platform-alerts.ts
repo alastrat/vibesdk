@@ -31,6 +31,8 @@ export const PLATFORM_ALERT_KINDS = [
 	'seller-level-changed',
 	'seller-level-sync-failed',
 	'seller-charge-unpaid',
+	'shopper-email-failed',
+	'shopper-email-capped',
 ] as const;
 export type PlatformAlertKind = (typeof PLATFORM_ALERT_KINDS)[number];
 
@@ -68,6 +70,8 @@ const ALERT_LABELS: Readonly<Record<PlatformAlertKind, string>> = {
 	'seller-level-changed': "A seller's level changed",
 	'seller-level-sync-failed': "A seller's payout delay couldn't be set",
 	'seller-charge-unpaid': 'A seller owes Estori',
+	'shopper-email-failed': "A shopper email couldn't be sent",
+	'shopper-email-capped': 'A store reached its daily email limit',
 };
 
 export interface PlatformAlert {

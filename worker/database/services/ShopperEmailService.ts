@@ -170,6 +170,19 @@ export class ShopperEmailService extends BaseService {
         return rows;
     }
 
+    /** What a store's emails show and where test orders go: its title, its seller's email, and its slug while it's live. */
+    async storeFacts(appId: string): Promise<{ title: string | null; sellerEmail: string | null; liveSlug: string | null } | null> {
+        const row = await this.database
+            .select({ title: schema.apps.title, sellerEmail: schema.users.email, slug: schema.liveStores.slug, status: schema.liveStores.status })
+            .from(schema.apps)
+            .leftJoin(schema.users, eq(schema.users.id, schema.apps.userId))
+            .leftJoin(schema.liveStores, eq(schema.liveStores.appId, schema.apps.id))
+            .where(eq(schema.apps.id, appId))
+            .get();
+        if (!row) return null;
+        return { title: row.title, sellerEmail: row.sellerEmail, liveSlug: row.status === 'live' ? row.slug : null };
+    }
+
     async orderIdForSession(checkoutSessionId: string): Promise<string | null> {
         const row = await this.database.select({ id: schema.storeOrders.id }).from(schema.storeOrders).where(eq(schema.storeOrders.stripeCheckoutSessionId, checkoutSessionId)).get();
         return row?.id ?? null;
