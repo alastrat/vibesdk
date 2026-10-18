@@ -23,6 +23,14 @@ describe('catalog routes', () => {
 		}
 	});
 
+	it('lists catalog orders and shows one to admins only', () => {
+		const routes = source('/worker/api/routes/catalogRoutes.ts').split('\n');
+		for (const path of ["'/api/admin/catalog/orders'", "'/api/admin/catalog/orders/:id'"]) {
+			const route = routes.find((line) => line.includes(`app.get(${path},`));
+			expect(route, path).toContain('setAuthLevel(AuthConfig.admin)');
+		}
+	});
+
 	it('shows the catalog to signed-in sellers', () => {
 		const routes = source('/worker/api/routes/catalogRoutes.ts').split('\n');
 		expect(routes.find((line) => line.includes("'/api/catalog/products'"))).toContain('setAuthLevel(AuthConfig.authenticated)');

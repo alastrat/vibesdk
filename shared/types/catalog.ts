@@ -1,5 +1,7 @@
 /** Catalog values shared by the database schema, the worker and the store builder. All amounts are US cents. */
 
+import type { StoreMode } from './store-payments';
+
 export const CATALOG_SUPPLIERS = ['cjdropshipping'] as const;
 export type CatalogSupplier = (typeof CATALOG_SUPPLIERS)[number];
 
@@ -10,6 +12,99 @@ export type CatalogOrderStatus = (typeof CATALOG_ORDER_STATUSES)[number];
 /** `withheld`: never placed, because a dispute already returned the payment; neither placed nor refunded. */
 export const CATALOG_ITEM_STATUSES = ['pending', 'placed', 'rejected', 'shipped', 'delivered', 'refunded', 'withheld'] as const;
 export type CatalogItemStatus = (typeof CATALOG_ITEM_STATUSES)[number];
+
+/** Where a catalog order ships: the shopper's address, as Stripe collected it. */
+export interface ShippingAddress {
+	name: string;
+	line1: string;
+	line2: string | null;
+	city: string;
+	region: string | null;
+	postalCode: string;
+	/** ISO 3166-1 alpha-2, e.g. "US". */
+	countryCode: string;
+	phone: string | null;
+	email: string | null;
+}
+
+/** The admin pages for catalog orders; alert emails link to an order under it. */
+export const ADMIN_CATALOG_ORDERS_PATH = '/admin/catalog-orders';
+
+/** Orders that need someone (stuck, risk-held, an item held back, or late to ship or arrive), or every order. */
+export const ADMIN_CATALOG_ORDER_VIEWS = ['attention', 'all'] as const;
+export type AdminCatalogOrderView = (typeof ADMIN_CATALOG_ORDER_VIEWS)[number];
+
+export function isAdminCatalogOrderView(value: string): value is AdminCatalogOrderView {
+	return (ADMIN_CATALOG_ORDER_VIEWS as readonly string[]).includes(value);
+}
+
+/** A catalog order in the admin list. */
+export interface AdminCatalogOrderRow {
+	id: string;
+	createdAt: string;
+	status: CatalogOrderStatus;
+	/** The store sale's mode and number; null when the store order can't be found. */
+	mode: StoreMode | null;
+	orderNumber: number | null;
+	storeAppId: string;
+	storeTitle: string | null;
+	sellerEmail: string | null;
+	/** How many items are in each status. */
+	itemCounts: Partial<Record<CatalogItemStatus, number>>;
+	lastError: string | null;
+}
+
+export interface AdminCatalogOrdersData {
+	orders: AdminCatalogOrderRow[];
+	/** Passed back to read the next page; null on the last one. */
+	nextCursor: string | null;
+}
+
+export interface AdminCatalogOrderItem {
+	id: string;
+	/** The product's name on the store order; null when it can't be found. */
+	name: string | null;
+	catalogVariantId: string;
+	quantity: number;
+	unitPriceCents: number;
+	catalogPriceCents: number;
+	status: CatalogItemStatus;
+	supplierOrderId: string | null;
+	trackingNumber: string | null;
+	carrier: string | null;
+	supplierRefunded: boolean;
+}
+
+/** Where the order's runner stands, read from its Durable Object. */
+export interface AdminCatalogOrderRunner {
+	placement: 'due' | 'done' | 'needs-attention' | 'risk-hold';
+	/** The next placement attempt, while one is due. */
+	nextPlacementAt: string | null;
+	/** The next read of the supplier, while items are in transit. */
+	nextSyncAt: string | null;
+	/** When an unreviewed risk hold refunds the catalog items. */
+	riskHoldUntil: string | null;
+	refundFailures: number;
+	/** The stored state as JSON, for debugging. */
+	raw: string;
+}
+
+export interface AdminCatalogOrderDetail extends Omit<AdminCatalogOrderRow, 'itemCounts'> {
+	sellerUserId: string;
+	stripePaymentIntentId: string;
+	currency: string;
+	totalCents: number;
+	catalogTotalCents: number;
+	applicationFeeCents: number;
+	/** Refunded to the shopper on the store order, in total. */
+	refundedCents: number;
+	shipTo: ShippingAddress;
+	placementAttempts: number;
+	items: AdminCatalogOrderItem[];
+	/** The supplier's sandbox takes this order, so it can be moved along by hand. */
+	sandbox: boolean;
+	runner: AdminCatalogOrderRunner | null;
+}
 
 /** Estori's margin, a percentage of supplier cost plus shipping. Provisional: the owner confirms it before launch. */
 export const CATALOG_MARGIN_PERCENT = 20;

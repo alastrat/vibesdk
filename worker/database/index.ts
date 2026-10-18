@@ -18,6 +18,7 @@ export { SellerChargeService } from './services/SellerChargeService';
 export { StoreRefundService } from './services/StoreRefundService';
 export { StoreDisputeService } from './services/StoreDisputeService';
 export { CatalogOrderService } from './services/CatalogOrderService';
+export { CatalogOrderAdminService } from './services/CatalogOrderAdminService';
 export { CatalogProductService } from './services/CatalogProductService';
 export { StoreCheckoutService } from './services/StoreCheckoutService';
 export { StoreOrderService } from './services/StoreOrderService';
