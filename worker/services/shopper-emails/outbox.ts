@@ -5,7 +5,7 @@
 
 import { DEFAULT_SHOPPER_EMAIL_TEMPLATES, type ShopperEmailKind, type ShopperEmailStatus } from '../../../shared/types/shopper-emails';
 import type { ShopperEmailPayload, ShopperEmailRow, ShopperEmailService } from '../../database/services/ShopperEmailService';
-import type { EmailSender } from '../email/types';
+import type { EmailSender, SentEmail } from '../email/types';
 import { classifySendError } from '../email/send-errors';
 import type { StoreOrderView } from '../store-payments/store';
 import { renderShopperEmail, testOrderNote, type ShopperEmailContent } from './template';
@@ -94,14 +94,23 @@ export function contentFor(row: Pick<ShopperEmailRow, 'kind' | 'payload'>, order
 	};
 }
 
-/** Writes the event's email once, then tries to send it. Never throws. */
-export async function queueShopperEmail(deps: ShopperEmailDeps, event: ShopperEmailEvent): Promise<void> {
+/** Takes a send to finish after the caller answers, such as `ctx.waitUntil`. */
+export type DeferSend = (sending: Promise<unknown>) => void;
+
+/**
+ * Writes the event's email once, then sends it: at once, or through `defer` so a request needn't wait on Email
+ * Service. A send that doesn't finish is picked up by the schedule. Never throws.
+ */
+export async function queueShopperEmail(deps: ShopperEmailDeps, event: ShopperEmailEvent, defer?: DeferSend): Promise<void> {
 	try {
 		const order = await deps.order(event.orderId);
 		if (!order) return;
 		const id = deps.newId();
 		const queued = await deps.emails.enqueue({ id, appId: order.appId, orderId: order.id, kind: event.kind, eventKey: event.eventKey, payload: event.payload, now: deps.now() });
-		if (queued) await sendShopperEmail(deps, id);
+		if (!queued) return;
+		const sending = sendShopperEmail(deps, id).catch((error: unknown) => logger.error('Could not send a shopper email', { id, error }));
+		if (defer) defer(sending);
+		else await sending;
 	} catch (error) {
 		logger.error('Could not queue a shopper email', { event, error });
 	}
@@ -135,14 +144,15 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 	}
 	if ((await deps.emails.sentSince(order.appId, startOfUtcDay(now))) >= STORE_DAILY_EMAIL_CAP) {
 		await deps.emails.finish(id, { status: 'capped', recipient, test });
-		await deps.alert({ kind: 'shopper-email-capped', subject: order.appId, message: `A store reached ${STORE_DAILY_EMAIL_CAP} shopper emails today; the rest wait out the day unsent.` });
+		await deps.alert({ kind: 'shopper-email-capped', subject: order.appId, message: `A store reached ${STORE_DAILY_EMAIL_CAP} shopper emails today, so the rest of today's aren't sent.` });
 		return 'capped';
 	}
 
 	const content = contentFor(row, order, store);
 	const email = renderShopperEmail(template, content);
+	let result: SentEmail | void;
 	try {
-		const result = await deps.sender.send({
+		result = await deps.sender.send({
 			to: recipient,
 			subject: email.subject,
 			html: email.html,
@@ -152,8 +162,6 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 			replyTo: replyTo ?? store?.sellerEmail ?? undefined,
 			headers: { 'X-Estori-Store': order.appId, 'X-Estori-Email': row.kind },
 		});
-		await deps.emails.finish(id, { status: 'sent', recipient, test, messageId: result?.messageId ?? null, sentAt: deps.now() });
-		return 'sent';
 	} catch (error) {
 		const outcome = classifySendError(error);
 		if (outcome === 'suppressed') {
@@ -168,6 +176,14 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 		await deps.alert({ kind: 'shopper-email-failed', subject: order.appId, message: `A ${row.kind.replace(/_/g, ' ')} email for order #${order.orderNumber} could not be sent: ${errorText(error)}` });
 		return 'failed';
 	}
+	// It went out, so a failure to record it isn't a send failure: the lease lets a later run try again, at least once.
+	try {
+		await deps.emails.finish(id, { status: 'sent', recipient, test, messageId: result?.messageId ?? null, sentAt: deps.now() });
+	} catch (error) {
+		logger.error('Shopper email sent but not recorded', { id, messageId: result?.messageId, error });
+		throw error;
+	}
+	return 'sent';
 }
 
 /** Sends the emails that came due, oldest first, one at a time; returns how many it tried. */

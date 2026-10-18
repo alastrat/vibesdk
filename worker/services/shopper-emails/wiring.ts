@@ -10,7 +10,8 @@ import { createEmailSender } from '../email/sender';
 import { EMAIL_FROM } from '../email/types';
 import { storeHostConfig } from '../live-stores/hosts';
 import { devPortOf, storeUrl } from '../live-stores/view';
-import { queueShopperEmail, sendDueShopperEmails, type ShopperEmailDeps, type ShopperEmailEvent } from './outbox';
+import { queueShopperEmail, sendDueShopperEmails, type DeferSend, type ShopperEmailDeps, type ShopperEmailEvent } from './outbox';
+import { sweepMissedShopperEmails, type ReconcileDeps } from './reconcile';
 
 const logger = createLogger('ShopperEmailsWiring');
 /** Sent and failed emails stay on the Emails page this long. */
@@ -53,15 +54,25 @@ export function shopperEmailDepsFromEnv(env: Env): ShopperEmailDeps {
 	};
 }
 
-/** Queues an order event's shopper email and tries it at once; never throws. */
-export function shopperEmailQueueFromEnv(env: Env): (event: ShopperEmailEvent) => Promise<void> {
-	return (event) => queueShopperEmail(shopperEmailDepsFromEnv(env), event);
+/** Queues an order event's shopper email and sends it, at once or through `defer`; never throws. */
+export function shopperEmailQueueFromEnv(env: Env, defer?: DeferSend): (event: ShopperEmailEvent) => Promise<void> {
+	return (event) => queueShopperEmail(shopperEmailDepsFromEnv(env), event, defer);
 }
 
-/** Every 15 minutes: emails Cloudflare deferred go out again. Daily: emails older than 90 days are forgotten. */
+/** Refund and shipment emails from the order's records, sent at once or through `defer`. */
+export function shopperEmailReconcileFromEnv(env: Env, defer?: DeferSend): ReconcileDeps {
+	return { emails: new ShopperEmailService(env), queue: shopperEmailQueueFromEnv(env, defer), now: () => new Date() };
+}
+
+/**
+ * Every 15 minutes: refund and shipment emails no event queued are queued, and emails Cloudflare deferred go out
+ * again. Daily: emails older than 90 days are forgotten.
+ */
 export async function runShopperEmailSchedule(cron: string, env: Env): Promise<void> {
 	try {
 		if (cron === CATALOG_REFRESH_CRON) {
+			const checked = await sweepMissedShopperEmails(shopperEmailReconcileFromEnv(env));
+			if (checked > 0) logger.info('Queued shopper emails no event queued', { checked });
 			const tried = await sendDueShopperEmails(shopperEmailDepsFromEnv(env), DUE_EMAILS_PER_RUN);
 			if (tried > 0) logger.info('Sent due shopper emails', { tried });
 		} else if (cron === CATALOG_HEALTH_CRON) {

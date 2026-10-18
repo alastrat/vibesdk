@@ -45,7 +45,7 @@ export class SellerOrdersController extends BaseController {
         }
     }
 
-    static async shipment(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<SellerOrderDetail>>> {
+    static async shipment(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<SellerOrderDetail>>> {
         const orderId = context.pathParams.id;
         const body = await SellerOrdersController.parseJsonBody<unknown>(request);
         const shipment = body.success ? parseSellerShipmentRequest(body.data) : null;
@@ -63,7 +63,7 @@ export class SellerOrdersController extends BaseController {
             const detail = await SellerOrdersController.detailOf(env, sellerUserId, orderId);
             // One email per order: an edit, or shipping again after an undo, sends nothing more.
             if (detail && shipment.shipped) {
-                await shopperEmailQueueFromEnv(env)({
+                await shopperEmailQueueFromEnv(env, (sending) => ctx.waitUntil(sending))({
                     orderId,
                     kind: 'order_shipped',
                     eventKey: 'own',
@@ -77,7 +77,7 @@ export class SellerOrdersController extends BaseController {
     }
 
     /** Refunds lines of the seller's own order; it works for an order whose store was deleted, as the store route can't. */
-    static async refund(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<StoreRefundResponse>>> {
+    static async refund(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<StoreRefundResponse>>> {
         const orderId = context.pathParams.id;
         const body = await SellerOrdersController.parseJsonBody<unknown>(request);
         const refundRequest = body.success ? parseStoreRefundRequest(body.data) : null;
@@ -85,7 +85,7 @@ export class SellerOrdersController extends BaseController {
         try {
             const order = await new StoreOrderService(env).getOrder(orderId);
             if (!order || order.sellerUserId !== context.user!.id) return SellerOrdersController.createErrorResponse('Order not found', 404);
-            const outcome = await refundOrderLines(env, order, refundRequest);
+            const outcome = await refundOrderLines(env, order, refundRequest, (sending) => ctx.waitUntil(sending));
             return outcome.ok ? SellerOrdersController.createSuccessResponse({ refundedCents: outcome.refundedCents }) : SellerOrdersController.createErrorResponse(outcome.message, outcome.status);
         } catch (error) {
             return SellerOrdersController.handleError(error, 'refund an order') as ControllerResponse<ApiResponse<StoreRefundResponse>>;

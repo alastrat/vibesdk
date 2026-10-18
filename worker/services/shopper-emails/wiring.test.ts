@@ -6,13 +6,16 @@ import { EMAIL_FROM } from '../email/types';
 import { runShopperEmailSchedule, shopperEmailDepsFromEnv } from './wiring';
 
 describe('shopper emails wiring', () => {
-	it('sends the emails that came due every 15 minutes, forgets old ones daily, and does nothing on other schedules', async () => {
+	it('sends the emails that came due and the ones no event queued every 15 minutes, forgets old ones daily, and does nothing on other schedules', async () => {
 		const { d1, statements } = recordingD1();
 		const env = { DB: d1, ENVIRONMENT: 'dev' } as unknown as Env;
 		await runShopperEmailSchedule(CATALOG_SWEEP_CRON, env);
 		expect(statements).toEqual([]);
 		await runShopperEmailSchedule(CATALOG_REFRESH_CRON, env);
 		expect(statements.some((entry) => entry.sql.startsWith('select') && entry.sql.includes('"shopper_emails"'))).toBe(true);
+		// The sweep for refund and shipment emails no event queued runs on the same schedule.
+		expect(statements.some((entry) => entry.sql.includes('"store_refunds"') && entry.sql.includes('json_each'))).toBe(true);
+		expect(statements.some((entry) => entry.sql.includes('"catalog_order_items"'))).toBe(true);
 		statements.length = 0;
 		await runShopperEmailSchedule(CATALOG_HEALTH_CRON, env);
 		expect(statements.some((entry) => entry.sql.startsWith('delete from "shopper_emails"'))).toBe(true);

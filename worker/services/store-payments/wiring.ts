@@ -10,7 +10,9 @@ import { stripeFromEnv } from '../payments/config';
 import type { StripeClient } from '../payments/stripe-client';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
 import { newOrderNotifierFromEnv } from './order-emails';
-import { shopperEmailQueueFromEnv } from '../shopper-emails/wiring';
+import { shopperEmailQueueFromEnv, shopperEmailReconcileFromEnv } from '../shopper-emails/wiring';
+import { emailNewRefunds } from '../shopper-emails/reconcile';
+import type { DeferSend } from '../shopper-emails/outbox';
 import { settleSale, sweepUnsettledSales } from './settle';
 import type { DisputeDeps } from './disputes';
 import type { RefundLinesDeps } from './refund-lines';
@@ -162,7 +164,7 @@ export function disputeDepsFromEnv(env: Env): DisputeDeps {
 }
 
 /** A seller's refund of store order lines: D1 and Stripe wiring, with catalog lines handed to the catalog refund. */
-export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: StoreOrderView; sellerAccountId: string; requestId: string }): RefundLinesDeps {
+export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: StoreOrderView; sellerAccountId: string; requestId: string }, defer?: DeferSend): RefundLinesDeps {
 	const { order } = input;
 	const orders = new StoreOrderService(env);
 	const refunds = new StoreRefundService(env);
@@ -194,7 +196,7 @@ export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: 
 			await new SellerChargeService(env).add({ sellerUserId: order.sellerUserId, kind: 'refund-shortfall', sourceId: `refund-${shortfall.orderId}-${shortfall.lineNo}`, amountCents: shortfall.amountCents, now: now() });
 		},
 		applyRefunds: (orderId) => orders.applyRefunds(orderId, now()),
-		queueShopperEmail: shopperEmailQueueFromEnv(env),
+		notifyRefunds: (orderId) => emailNewRefunds(shopperEmailReconcileFromEnv(env, defer), orderId),
 		now,
 	};
 }

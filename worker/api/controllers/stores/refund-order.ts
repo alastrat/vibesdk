@@ -4,16 +4,18 @@ import { PAYMENTS_NOT_CONFIGURED_MESSAGE, stripeFromEnv } from '../../../service
 import { refundStoreLines } from '../../../services/store-payments/refund-lines';
 import { storeRefundDeps } from '../../../services/store-payments/wiring';
 import type { StoreOrderView } from '../../../services/store-payments/store';
+import type { DeferSend } from '../../../services/shopper-emails/outbox';
 import { shortBalanceMessage } from './refund-request';
 
 export type OrderRefundOutcome = { ok: true; refundedCents: number } | { ok: false; status: 400 | 409; message: string };
 
-export async function refundOrderLines(env: Env, order: StoreOrderView, request: { lineNos: number[]; requestId: string }): Promise<OrderRefundOutcome> {
+/** `defer` finishes the shopper's refund email after the answer, such as through `ctx.waitUntil`. */
+export async function refundOrderLines(env: Env, order: StoreOrderView, request: { lineNos: number[]; requestId: string }, defer?: DeferSend): Promise<OrderRefundOutcome> {
     const stripe = stripeFromEnv(env);
     if (!stripe) return { ok: false, status: 400, message: PAYMENTS_NOT_CONFIGURED_MESSAGE };
     const sellerAccountId = order.sellerStripeAccountId;
     if (!sellerAccountId) return { ok: false, status: 400, message: 'This order has no seller account to refund from' };
-    const result = await refundStoreLines(storeRefundDeps(env, stripe, { order, sellerAccountId, requestId: request.requestId }), {
+    const result = await refundStoreLines(storeRefundDeps(env, stripe, { order, sellerAccountId, requestId: request.requestId }, defer), {
         order,
         lineNos: request.lineNos,
         requestId: request.requestId,

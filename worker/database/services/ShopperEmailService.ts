@@ -1,6 +1,6 @@
 /** D1 for shopper emails: each store's templates and reply-to setting, and the outbox that sends each order event's email once. */
 
-import { and, asc, desc, eq, exists, gte, lt, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, gte, inArray, isNotNull, lt, lte, sql, type SQLWrapper } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { DEFAULT_SHOPPER_EMAIL_TEMPLATES, type ShopperEmailKind, type ShopperEmailStatus, type ShopperEmailStoreOption, type ShopperEmailTemplate } from '../../../shared/types/shopper-emails';
@@ -45,6 +45,31 @@ type EmailRecord = typeof schema.shopperEmails.$inferSelect;
 
 function rowOf(record: EmailRecord): ShopperEmailRow {
     return { ...record, payload: payloadOf(record.payload) };
+}
+
+/** The outbox wrote the order's confirmation: orders from before shopper emails have none, and are left alone. */
+function confirmationWritten(orderId: SQLWrapper) {
+    return sql`EXISTS (SELECT 1 FROM shopper_emails c WHERE c.order_id = ${orderId} AND c.kind = 'order_confirmation')`;
+}
+
+/** No refund email names this line of the order yet. */
+function refundLineNotEmailed(orderId: SQLWrapper, lineNo: SQLWrapper) {
+    return sql`NOT EXISTS (SELECT 1 FROM shopper_emails e, json_each(e.payload, '$.lineNos') j WHERE e.order_id = ${orderId} AND e.kind = 'refund_issued' AND j.value = ${lineNo})`;
+}
+
+/** No shipped email covers this supplier shipment of the order yet. */
+function shipmentNotEmailed(orderId: SQLWrapper, supplierOrderId: SQLWrapper) {
+    return sql`NOT EXISTS (SELECT 1 FROM shopper_emails e WHERE e.order_id = ${orderId} AND e.kind = 'order_shipped' AND e.event_key = 'catalog:' || ${supplierOrderId})`;
+}
+
+/** A catalog item on its way with tracking, on a supplier shipment no shipped email covers yet. */
+function unemailedShipment() {
+    return and(
+        inArray(schema.catalogOrderItems.status, ['shipped', 'delivered']),
+        isNotNull(schema.catalogOrderItems.supplierOrderId),
+        isNotNull(schema.catalogOrderItems.trackingNumber),
+        shipmentNotEmailed(schema.storeOrders.id, schema.catalogOrderItems.supplierOrderId),
+    );
 }
 
 export class ShopperEmailService extends BaseService {
@@ -188,5 +213,69 @@ export class ShopperEmailService extends BaseService {
             .get();
         if (!row) return null;
         return { title: row.title, sellerEmail: row.sellerEmail, sellerEmailConfirmed: row.confirmed === true, liveSlug: row.status === 'live' ? row.slug : null };
+    }
+
+    /** Refunded lines of the order that no refund email names yet; a refund Stripe never made isn't one. */
+    async refundsToEmail(orderId: string): Promise<Array<{ lineNo: number; amountCents: number }>> {
+        const refunds = schema.storeRefunds;
+        return this.database
+            .select({ lineNo: refunds.lineNo, amountCents: refunds.amountCents })
+            .from(refunds)
+            .where(and(eq(refunds.orderId, orderId), isNotNull(refunds.stripeRefundId), refundLineNotEmailed(refunds.orderId, refunds.lineNo)))
+            .orderBy(asc(refunds.lineNo))
+            .all();
+    }
+
+    /** The order's catalog shipments with tracking that no shipped email covers yet, one per supplier order. */
+    async catalogShipmentsToEmail(orderId: string): Promise<Array<{ supplierOrderId: string; carrier: string | null; trackingNumber: string; catalogVariantIds: string[] }>> {
+        const rows = await this.database
+            .select({ supplierOrderId: schema.catalogOrderItems.supplierOrderId, carrier: schema.catalogOrderItems.carrier, trackingNumber: schema.catalogOrderItems.trackingNumber, catalogVariantId: schema.catalogOrderItems.catalogVariantId })
+            .from(schema.catalogOrderItems)
+            .innerJoin(schema.catalogOrders, eq(schema.catalogOrders.id, schema.catalogOrderItems.orderId))
+            .innerJoin(schema.storeOrders, eq(schema.storeOrders.stripeCheckoutSessionId, schema.catalogOrders.stripeCheckoutSessionId))
+            .where(and(eq(schema.storeOrders.id, orderId), unemailedShipment()))
+            .orderBy(asc(schema.catalogOrderItems.supplierOrderId), asc(schema.catalogOrderItems.id))
+            .all();
+        const shipments = new Map<string, { supplierOrderId: string; carrier: string | null; trackingNumber: string; catalogVariantIds: string[] }>();
+        for (const row of rows) {
+            if (!row.supplierOrderId || !row.trackingNumber) continue;
+            const shipment = shipments.get(row.supplierOrderId) ?? { supplierOrderId: row.supplierOrderId, carrier: row.carrier, trackingNumber: row.trackingNumber, catalogVariantIds: [] };
+            shipment.catalogVariantIds.push(row.catalogVariantId);
+            shipments.set(row.supplierOrderId, shipment);
+        }
+        return [...shipments.values()];
+    }
+
+    /** Orders with a refund made between `since` and `before` that no refund email names. */
+    async ordersWithRefundsToEmail(since: Date, before: Date, limit: number): Promise<string[]> {
+        const refunds = schema.storeRefunds;
+        const rows = await this.database
+            .selectDistinct({ orderId: refunds.orderId })
+            .from(refunds)
+            .where(
+                and(
+                    isNotNull(refunds.stripeRefundId),
+                    gte(refunds.createdAt, since),
+                    lt(refunds.createdAt, before),
+                    confirmationWritten(refunds.orderId),
+                    refundLineNotEmailed(refunds.orderId, refunds.lineNo),
+                ),
+            )
+            .limit(limit)
+            .all();
+        return rows.map((row) => row.orderId);
+    }
+
+    /** Orders with catalog items shipped since `since` that no shipped email covers. */
+    async ordersWithShipmentsToEmail(since: Date, limit: number): Promise<string[]> {
+        const rows = await this.database
+            .selectDistinct({ orderId: schema.storeOrders.id })
+            .from(schema.catalogOrderItems)
+            .innerJoin(schema.catalogOrders, eq(schema.catalogOrders.id, schema.catalogOrderItems.orderId))
+            .innerJoin(schema.storeOrders, eq(schema.storeOrders.stripeCheckoutSessionId, schema.catalogOrders.stripeCheckoutSessionId))
+            .where(and(gte(schema.catalogOrderItems.updatedAt, since), confirmationWritten(schema.storeOrders.id), unemailedShipment()))
+            .limit(limit)
+            .all();
+        return rows.map((row) => row.orderId);
     }
 }

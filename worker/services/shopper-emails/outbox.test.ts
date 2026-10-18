@@ -19,10 +19,11 @@ const ORDER: StoreOrderView = {
 };
 const CONFIRMATION: ShopperEmailEvent = { orderId: 'ord_1', kind: 'order_confirmation', eventKey: 'order', payload: {} };
 
-function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmailTemplate; replyTo?: string | null; sellerEmail?: string | null; sellerEmailConfirmed?: boolean; sentToday?: number; sendError?: unknown; attempts?: number; enqueueFails?: boolean } = {}) {
+function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmailTemplate; replyTo?: string | null; sellerEmail?: string | null; sellerEmailConfirmed?: boolean; sentToday?: number; sendError?: unknown; attempts?: number; enqueueFails?: boolean; recordingSentFails?: boolean } = {}) {
 	const rows = new Map<string, ShopperEmailRow>();
 	const sent: OutgoingEmail[] = [];
 	const alerts: string[] = [];
+	const alertMessages: string[] = [];
 	let ids = 0;
 	let now = NOW;
 	const deps: ShopperEmailDeps = {
@@ -41,6 +42,7 @@ function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmail
 				return claimed;
 			},
 			finish: async (id, update) => {
+				if (update.status === 'sent' && input.recordingSentFails) throw new Error('D1_ERROR: database is locked');
 				const row = rows.get(id);
 				if (row) rows.set(id, { ...row, ...update, messageId: update.messageId ?? null, error: update.error ?? null, sentAt: update.sentAt ?? null });
 			},
@@ -63,11 +65,14 @@ function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmail
 			},
 		},
 		fromEmail: 'orders@estori.app',
-		alert: async (alert) => void alerts.push(alert.kind),
+		alert: async (alert) => {
+			alerts.push(alert.kind);
+			alertMessages.push(alert.message);
+		},
 		now: () => now,
 		newId: () => `em_${(ids += 1)}`,
 	};
-	return { deps, rows, sent, alerts, advance: (ms: number) => (now = new Date(now.getTime() + ms)) };
+	return { deps, rows, sent, alerts, alertMessages, advance: (ms: number) => (now = new Date(now.getTime() + ms)) };
 }
 
 const coded = (code: string) => Object.assign(new Error(code), { code });
@@ -114,6 +119,25 @@ describe('the shopper email outbox', () => {
 		expect(capped.sent).toHaveLength(0);
 		expect([...capped.rows.values()][0].status).toBe('capped');
 		expect(capped.alerts).toEqual(['shopper-email-capped']);
+		expect(capped.alertMessages[0]).toContain("the rest of today's aren't sent");
+	});
+
+	it('neither resends nor reports as failed an email that went out when recording it fails, and the lease tries it again later', async () => {
+		const { deps, rows, sent, alerts } = world({ recordingSentFails: true });
+		await queueShopperEmail(deps, CONFIRMATION);
+		expect(sent).toHaveLength(1);
+		expect([...rows.values()][0]).toMatchObject({ status: 'queued', attempts: 1, error: null, nextAttemptAt: new Date(NOW.getTime() + SEND_BACKOFF_MS[0]) });
+		expect(alerts).toEqual([]);
+	});
+
+	it('hands the send to the caller to finish later, after writing the email', async () => {
+		const { deps, rows, sent } = world();
+		const later: Array<Promise<unknown>> = [];
+		await queueShopperEmail(deps, CONFIRMATION, (sending) => void later.push(sending));
+		expect([...rows.values()][0].status).toBe('queued');
+		expect(sent).toHaveLength(0);
+		await Promise.all(later);
+		expect(sent).toHaveLength(1);
 	});
 
 	it('stops for a suppressed address, and fails readably for an order without an email', async () => {

@@ -106,3 +106,69 @@ describe("a store's facts for its shopper emails on real SQL", () => {
 		expect(await service().storeFacts('app_gone')).toBeNull();
 	});
 });
+
+describe('what the outbox still owes a shopper, from the order records, on real SQL', () => {
+	const at = (offsetMs: number) => seconds(new Date(NOW.getTime() + offsetMs));
+	const refund = (lineNo: number, stripeRefundId: string | null, amountCents: number, createdAt = at(-20 * MINUTE), orderId = 'ord_home') =>
+		db
+			.prepare(`INSERT INTO store_refunds (id, order_id, line_no, amount_cents, request_id, initiated_by, stripe_refund_id, created_at) VALUES (?, ?, ?, ?, 'req_00000001', 'seller', ?, ?)`)
+			.bind(`sr_${orderId}_${lineNo}`, orderId, lineNo, amountCents, stripeRefundId, createdAt)
+			.run();
+	const email = (kind: string, eventKey: string, payload: object, orderId = 'ord_home') =>
+		service().enqueue({ id: `em_${kind}_${eventKey}`, appId: 'app_home', orderId, kind: kind as 'refund_issued', eventKey, payload, now: NOW });
+	const shipCatalog = async () => {
+		await db
+			.prepare(`INSERT INTO catalog_orders (id, seller_user_id, store_app_id, stripe_checkout_session_id, stripe_payment_intent_id, total_cents, catalog_total_cents, application_fee_cents, destination_country, shipping_address, created_at, updated_at) VALUES ('co_1', 'seller_1', 'app_home', 'cs_home', 'pi_home', 2000, 800, 200, 'US', '{}', 0, 0)`)
+			.run();
+		const item = (id: string, variant: string, status: string, supplierOrderId: string | null, tracking: string | null, carrier: string | null) =>
+			db
+				.prepare(`INSERT INTO catalog_order_items (id, order_id, catalog_variant_id, supplier, supplier_variant_id, quantity, unit_price_cents, catalog_price_cents, status, supplier_order_id, tracking_number, carrier, updated_at) VALUES (?, 'co_1', ?, 'cjdropshipping', ?, 1, 1000, 400, ?, ?, ?, ?, ?)`)
+				.bind(id, variant, `sv_${variant}`, status, supplierOrderId, tracking, carrier, at(-5 * MINUTE))
+				.run();
+		await item('ci_1', 'cv_lamp', 'shipped', 'SD1', 'T1', 'USPS');
+		await item('ci_2', 'cv_mug', 'delivered', 'SD1', 'T1', 'USPS');
+		await item('ci_3', 'cv_cap', 'placed', 'SD2', null, null);
+		await item('ci_4', 'cv_hat', 'shipped', 'SD3', 'T3', 'UPS');
+	};
+
+	it('lists the refunded lines no refund email has named yet, leaving out a refund Stripe never made', async () => {
+		await refund(1, 're_1', 1500);
+		await refund(2, 're_2', 1000);
+		await refund(3, null, 700);
+		expect(await service().refundsToEmail('ord_home')).toEqual([
+			{ lineNo: 1, amountCents: 1500 },
+			{ lineNo: 2, amountCents: 1000 },
+		]);
+		await email('refund_issued', 'catalog:re_1', { lineNos: [1], amountCents: 1500 });
+		expect(await service().refundsToEmail('ord_home')).toEqual([{ lineNo: 2, amountCents: 1000 }]);
+	});
+
+	it("groups the order's catalog shipments with tracking by supplier order, leaving out ones already emailed", async () => {
+		await shipCatalog();
+		expect(await service().catalogShipmentsToEmail('ord_home')).toEqual([
+			{ supplierOrderId: 'SD1', carrier: 'USPS', trackingNumber: 'T1', catalogVariantIds: ['cv_lamp', 'cv_mug'] },
+			{ supplierOrderId: 'SD3', carrier: 'UPS', trackingNumber: 'T3', catalogVariantIds: ['cv_hat'] },
+		]);
+		await email('order_shipped', 'catalog:SD1', {});
+		expect((await service().catalogShipmentsToEmail('ord_home')).map((shipment) => shipment.supplierOrderId)).toEqual(['SD3']);
+	});
+
+	it('finds orders owed a refund or shipment email, only among orders whose confirmation the outbox wrote, and only settled refunds', async () => {
+		await refund(2, 're_2', 1000);
+		await shipCatalog();
+		const since = new Date(NOW.getTime() - 7 * 24 * 60 * MINUTE);
+		const settled = new Date(NOW.getTime() - 10 * MINUTE);
+		// No confirmation yet: an order from before shopper emails, which the sweep leaves alone.
+		expect(await service().ordersWithRefundsToEmail(since, settled, 10)).toEqual([]);
+		expect(await service().ordersWithShipmentsToEmail(since, 10)).toEqual([]);
+		await email('order_confirmation', 'order', {});
+		expect(await service().ordersWithRefundsToEmail(since, settled, 10)).toEqual(['ord_home']);
+		expect(await service().ordersWithRefundsToEmail(since, new Date(NOW.getTime() - 30 * MINUTE), 10)).toEqual([]);
+		expect(await service().ordersWithShipmentsToEmail(since, 10)).toEqual(['ord_home']);
+		await email('refund_issued', 'lines:2', { lineNos: [2], amountCents: 1000 });
+		await email('order_shipped', 'catalog:SD1', {});
+		await email('order_shipped', 'catalog:SD3', {});
+		expect(await service().ordersWithRefundsToEmail(since, settled, 10)).toEqual([]);
+		expect(await service().ordersWithShipmentsToEmail(since, 10)).toEqual([]);
+	});
+});

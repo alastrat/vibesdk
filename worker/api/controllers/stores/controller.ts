@@ -62,7 +62,7 @@ export class StoreOrdersController extends BaseController {
     static async refund(
         request: Request,
         env: Env,
-        _ctx: ExecutionContext,
+        ctx: ExecutionContext,
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<StoreRefundResponse>>> {
         try {
@@ -73,7 +73,7 @@ export class StoreOrdersController extends BaseController {
             if (!appId || !orderId || !refundRequest) return this.createErrorResponse<StoreRefundResponse>('Send the lines to refund and a request id', 400);
             const order = await new StoreOrderService(env).getOrder(orderId);
             if (!order || order.appId !== appId) return this.createErrorResponse<StoreRefundResponse>('Order not found', 404);
-            const outcome = await refundOrderLines(env, order, refundRequest);
+            const outcome = await refundOrderLines(env, order, refundRequest, (sending) => ctx.waitUntil(sending));
             return outcome.ok ? this.createSuccessResponse<StoreRefundResponse>({ refundedCents: outcome.refundedCents }) : this.createErrorResponse<StoreRefundResponse>(outcome.message, outcome.status);
         } catch (error) {
             return this.handleError(error, 'refund a store order') as ControllerResponse<ApiResponse<StoreRefundResponse>>;

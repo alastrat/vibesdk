@@ -4,25 +4,16 @@
  */
 
 import { CatalogOrderService, SellerChargeService, StoreRefundService } from '../../database';
-import type { ShopperEmailEvent } from '../shopper-emails/outbox';
-import { shopperEmailQueueFromEnv } from '../shopper-emails/wiring';
 import type { RefundItemsDeps } from './refund-items';
 
-/**
- * `requestId` is the seller's refund request, or null when Estori started the refund. A refund Estori started emails
- * the shopper here; a seller's refund emails them once for the whole request instead.
- */
-export function catalogRefundRecords(
-	env: Env,
-	requestId: string | null,
-	queueShopperEmail: (event: ShopperEmailEvent) => Promise<void> = shopperEmailQueueFromEnv(env),
-): Pick<RefundItemsDeps, 'recordRefund' | 'addShortfall'> {
+/** `requestId` is the seller's refund request, or null when Estori started the refund. */
+export function catalogRefundRecords(env: Env, requestId: string | null): Pick<RefundItemsDeps, 'recordRefund' | 'addShortfall'> {
 	const catalog = new CatalogOrderService(env);
 	return {
 		recordRefund: async (entry) => {
 			const located = await catalog.locateItem(entry.catalogItemId);
 			if (!located) return;
-			const line = await new StoreRefundService(env).recordForCatalogItem({
+			await new StoreRefundService(env).recordForCatalogItem({
 				checkoutSessionId: located.checkoutSessionId,
 				catalogVariantId: located.catalogVariantId,
 				refundId: entry.refundId,
@@ -31,9 +22,6 @@ export function catalogRefundRecords(
 				requestId,
 				now: new Date(),
 			});
-			if (line && entry.reason !== 'seller-refund') {
-				await queueShopperEmail({ orderId: line.orderId, kind: 'refund_issued', eventKey: `catalog:${entry.refundId}`, payload: { lineNos: [line.lineNo], amountCents: entry.amountCents } });
-			}
 		},
 		addShortfall: async (shortfall) => {
 			const located = await catalog.locateItem(shortfall.catalogItemId);

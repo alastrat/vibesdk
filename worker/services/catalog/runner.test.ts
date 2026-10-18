@@ -40,7 +40,7 @@ function deps(
 	const notices: string[] = [];
 	const shortfalls: Array<{ catalogItemId: string; amountCents: number }> = [];
 	const alerts: string[] = [];
-	const shipped: Array<Parameters<RunnerDeps['notifyShipped']>[0]> = [];
+	const emailed: string[] = [];
 	const adapter: SupplierAdapter = {
 		supplier: 'cjdropshipping',
 		placeOrder: async () => results.shift() ?? { ok: false, kind: 'retryable', reason: 'No scripted result' },
@@ -63,9 +63,9 @@ function deps(
 		addShortfall: async (shortfall) => void shortfalls.push(shortfall),
 		paymentRisk: async () => risk,
 		notifySeller: async (notice) => void notices.push(notice.kind),
-		notifyShipped: async (event) => void shipped.push(event),
+		emailShopper: async (paymentIntentId) => void emailed.push(paymentIntentId),
 	};
-	return { runnerDeps, refunds, alerts, shortfalls, notices, shipped };
+	return { runnerDeps, refunds, alerts, shortfalls, notices, emailed };
 }
 
 describe('runnerStep', () => {
@@ -90,13 +90,15 @@ describe('runnerStep', () => {
 
 	it('refunds rejected items from the stored state, including ones rejected by an attempt that then retried', async () => {
 		const store = await storeWithOrder();
-		const { runnerDeps, refunds } = deps(store, [
+		const { runnerDeps, refunds, emailed } = deps(store, [
 			{ ok: false, kind: 'rejected', reason: 'Out of stock', rejectedVariantIds: ['cj_cap'] },
 			{ ok: false, kind: 'retryable', reason: 'Timed out' },
 		]);
 
 		const step = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
 		expect(refunds).toEqual([4000]);
+		// Once for the refund, after Stripe made it: the shopper's email comes from what was recorded.
+		expect(emailed).toEqual(['pi_1']);
 		expect(store.orders.get('co_1')?.items.map((item) => item.status)).toEqual(['pending', 'refunded']);
 		expect(step.state.placement).toBe('due');
 	});
@@ -121,7 +123,7 @@ describe('runnerStep', () => {
 
 	it('tells the shopper once when items first ship, and not again when the supplier reissues tracking', async () => {
 		const store = await storeWithOrder();
-		const { runnerDeps, shipped } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }], [
+		const { runnerDeps, emailed } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }], [
 			[{ kind: 'shipped', supplierOrderId: 'cj_9', trackingNumber: 'SBX1', carrier: 'USPS' }],
 			[{ kind: 'shipped', supplierOrderId: 'cj_9', trackingNumber: 'SBX2', carrier: 'UPS' }],
 		]);
@@ -130,7 +132,7 @@ describe('runnerStep', () => {
 		step = await runnerStep(step.state, runnerDeps, NOW + RUNNER_SYNC_INTERVAL_MS);
 		await runnerStep(step.state, runnerDeps, NOW + 2 * RUNNER_SYNC_INTERVAL_MS);
 		expect(store.orders.get('co_1')?.items.map((item) => item.trackingNumber)).toEqual(['SBX2', 'SBX2']);
-		expect(shipped).toEqual([{ paymentIntentId: 'pi_1', supplierOrderId: 'cj_9', trackingNumber: 'SBX1', carrier: 'USPS', catalogVariantIds: ['cv_mug', 'cv_cap'] }]);
+		expect(emailed).toEqual(['pi_1']);
 	});
 
 	it("charges the seller what the sale's transfer can no longer cover when a rejected item is refunded", async () => {
@@ -220,10 +222,11 @@ describe('runnerStep', () => {
 
 	it("refunds an unreviewed risky order's catalog items after 24 hours and tells the seller", async () => {
 		const store = await storeWithOrder();
-		const { runnerDeps, refunds, notices } = deps(store, [], [], 0, 'elevated');
+		const { runnerDeps, refunds, notices, emailed } = deps(store, [], [], 0, 'elevated');
 		const held = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
 		const after = await runnerStep(held.state, runnerDeps, NOW + RISK_HOLD_MS);
 		expect(refunds.sort()).toEqual([4000, 5000]);
+		expect(emailed).toEqual(['pi_1']);
 		expect(after.state.placement).toBe('done');
 		expect(notices).toEqual(['items-refunded']);
 		expect(store.orders.get('co_1')?.items.every((item) => item.status === 'refunded')).toBe(true);
