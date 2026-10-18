@@ -5,7 +5,7 @@ const sources = import.meta.glob<string>(['/worker/api/routes/sellerOrderRoutes.
 describe('seller order routes', () => {
 	it('serve signed-in sellers their own orders, and are registered', () => {
 		const routes = (sources['/worker/api/routes/sellerOrderRoutes.ts'] ?? '').split('\n');
-		for (const route of ["app.get('/api/orders',", "app.get('/api/orders/:id',", "app.post('/api/orders/:id/shipment',"]) {
+		for (const route of ["app.get('/api/orders',", "app.get('/api/orders/:id',", "app.post('/api/orders/:id/shipment',", "app.post('/api/orders/:id/refunds',"]) {
 			expect(routes.find((line) => line.includes(route)), route).toContain('setAuthLevel(AuthConfig.authenticated)');
 		}
 		expect(sources['/worker/api/routes/index.ts']).toContain('setupSellerOrderRoutes(app)');

@@ -51,4 +51,21 @@ describe('the seller orders API', () => {
 		await db.prepare(`UPDATE store_order_items SET kind = 'catalog', catalog_variant_id = 'cv_1' WHERE order_id = 'ord_1'`).run();
 		expect((await ship({ shipped: true, carrier: null })).status).toBe(409);
 	});
+
+	it("refunds through the seller's own order, whatever happened to its store, and answers not found to another seller", async () => {
+		const refund = (userId: string, body: unknown) =>
+			SellerOrdersController.refund(
+				new Request('https://estori.app/api/orders/ord_1/refunds', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+				envWith(db),
+				{} as ExecutionContext,
+				as(userId, { id: 'ord_1' }),
+			);
+		expect((await refund('seller_2', { lineNos: [1], requestId: 'req_00000001' })).status).toBe(404);
+		expect((await refund('seller_1', { lineNos: 'all' })).status).toBe(400);
+		// The seller owns the order, so it reaches the refund itself: this test env has no Stripe key.
+		const answer = await json(await refund('seller_1', { lineNos: [1], requestId: 'req_00000001' }));
+		expect(answer.status).toBe(400);
+		expect(JSON.stringify(answer.body)).toContain("Payments aren't set up");
+	});
 });
+

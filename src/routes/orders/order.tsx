@@ -126,7 +126,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 									<span>
 										{item.quantity} × {item.name}
 										<span className="block text-xs text-kumo-subtle">
-											{item.refunded ? 'Refunded' : progress ? CATALOG_PROGRESS_LABELS[progress.status] : 'Preparing'}
+											{item.refunded ? 'Refunded' : item.refundPending ? 'Refund pending' : progress ? CATALOG_PROGRESS_LABELS[progress.status] : 'Preparing'}
 											{progress?.trackingNumber && ` · ${progress.carrier ? `${progress.carrier} ` : ''}${progress.trackingNumber}`}
 										</span>
 									</span>
@@ -173,6 +173,7 @@ function Lines({ lines }: { lines: SellerOrderLine[] }) {
 					<span>
 						{item.quantity} × {item.name}
 						{item.refunded && <span className="block text-xs text-kumo-subtle">Refunded</span>}
+						{item.refundPending && <span className="block text-xs text-kumo-subtle">Refund pending: refund it again to finish</span>}
 					</span>
 					<span>{formatCents(item.unitPriceCents * item.quantity)}</span>
 				</li>
@@ -268,10 +269,18 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 
 /** Refunds the lines the seller picks; the seller's Stripe balance pays, and the page says when it's short. */
 function RefundButton({ order }: { order: SellerOrderDetail }) {
-	const refund = useRefundSellerOrder(order.appId, order.id);
+	const refund = useRefundSellerOrder(order.id);
 	const [open, setOpen] = useState(false);
 	const [chosen, setChosen] = useState<number[]>([]);
 	const refundable = order.items.filter((item) => !item.refunded);
+	// Stripe refuses refunds on a disputed charge, and a lost dispute already returned the money.
+	if (order.paymentStatus === 'disputed' || order.paymentStatus === 'dispute_lost') {
+		return (
+			<p className="text-sm text-kumo-subtle">
+				{order.paymentStatus === 'disputed' ? "Refunds are paused while the shopper's bank reviews this payment." : "The shopper's bank already returned this payment, so there's nothing to refund."}
+			</p>
+		);
+	}
 	if (refundable.length === 0 || order.paymentStatus === 'refunded') return null;
 	const total = refundable.filter((item) => chosen.includes(item.lineNo)).reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
 	const toggle = (lineNo: number) => setChosen((current) => (current.includes(lineNo) ? current.filter((entry) => entry !== lineNo) : [...current, lineNo]));
@@ -308,6 +317,7 @@ function RefundButton({ order }: { order: SellerOrderDetail }) {
 									<span className="flex items-center gap-2">
 										<input type="checkbox" checked={chosen.includes(item.lineNo)} onChange={() => toggle(item.lineNo)} />
 										{item.quantity} × {item.name}
+										{item.refundPending && <span className="text-xs text-kumo-subtle">(Refund pending)</span>}
 									</span>
 									<span>{formatCents(item.unitPriceCents * item.quantity)}</span>
 								</label>

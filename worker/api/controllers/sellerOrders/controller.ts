@@ -5,8 +5,10 @@ import type { RouteContext } from '../../types/route-context';
 import type { ApiResponse, ControllerResponse } from '../types';
 import { CatalogOrderService, SellerOrderService, StoreOrderService } from '../../../database';
 import { parseKeysetCursor } from '../../../database/services/keyset-cursor';
-import { isSellerOrderModeFilter, isSellerOrderView, type CatalogItemProgress, type SellerOrderDetail, type SellerOrdersData } from '../../../../shared/types/store-payments';
+import { isSellerOrderModeFilter, isSellerOrderView, type CatalogItemProgress, type SellerOrderDetail, type SellerOrdersData, type StoreRefundResponse } from '../../../../shared/types/store-payments';
 import { parseSellerShipmentRequest } from './shipment-request';
+import { parseStoreRefundRequest } from '../stores/refund-request';
+import { refundOrderLines } from '../stores/refund-order';
 import { sellerOrderDetail } from './order-detail';
 
 const SHIPMENT_REFUSALS = {
@@ -61,6 +63,22 @@ export class SellerOrdersController extends BaseController {
             return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse('Order not found', 404);
         } catch (error) {
             return SellerOrdersController.handleError(error, 'update a shipment') as ControllerResponse<ApiResponse<SellerOrderDetail>>;
+        }
+    }
+
+    /** Refunds lines of the seller's own order; it works for an order whose store was deleted, as the store route can't. */
+    static async refund(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<StoreRefundResponse>>> {
+        const orderId = context.pathParams.id;
+        const body = await SellerOrdersController.parseJsonBody<unknown>(request);
+        const refundRequest = body.success ? parseStoreRefundRequest(body.data) : null;
+        if (!orderId || !refundRequest) return SellerOrdersController.createErrorResponse('Send the lines to refund and a request id', 400);
+        try {
+            const order = await new StoreOrderService(env).getOrder(orderId);
+            if (!order || order.sellerUserId !== context.user!.id) return SellerOrdersController.createErrorResponse('Order not found', 404);
+            const outcome = await refundOrderLines(env, order, refundRequest);
+            return outcome.ok ? SellerOrdersController.createSuccessResponse({ refundedCents: outcome.refundedCents }) : SellerOrdersController.createErrorResponse(outcome.message, outcome.status);
+        } catch (error) {
+            return SellerOrdersController.handleError(error, 'refund an order') as ControllerResponse<ApiResponse<StoreRefundResponse>>;
         }
     }
 

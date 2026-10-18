@@ -7,6 +7,7 @@ import { orderSummary } from '../stores/order-summary';
 
 export function sellerOrderDetail(order: StoreOrderView, facts: SellerOrderFacts, catalogItems: CatalogItemProgress[]): SellerOrderDetail {
 	const refunded = new Set(facts.refundedLineNos);
+	const pending = new Set(facts.pendingRefundLineNos);
 	const { items: _items, ...summary } = orderSummary(order, catalogItems);
 	return {
 		...summary,
@@ -26,6 +27,7 @@ export function sellerOrderDetail(order: StoreOrderView, facts: SellerOrderFacts
 			unitPriceCents: item.unitPriceCents,
 			catalogVariantId: item.catalogVariantId,
 			refunded: refunded.has(item.lineNo),
+			refundPending: pending.has(item.lineNo),
 		})),
 	};
 }

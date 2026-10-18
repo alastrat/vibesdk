@@ -40,11 +40,11 @@ export function useSellerOrderShipment(orderId: string) {
 	});
 }
 
-/** Refunds lines through the store refund endpoint; one request id per attempt, so a retry never refunds twice. */
-export function useRefundSellerOrder(appId: string, orderId: string) {
+/** Refunds lines of the seller's own order; one request id per attempt, so a retry never refunds twice. */
+export function useRefundSellerOrder(orderId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
-		mutationFn: (request: { lineNos: number[]; requestId: string }) => unwrap(apiClient.refundStoreOrder(appId, orderId, request), "Couldn't refund the items"),
+		mutationFn: (request: { lineNos: number[]; requestId: string }) => unwrap(apiClient.refundSellerOrder(orderId, request), "Couldn't refund the items"),
 		onSuccess: () => {
 			void queryClient.invalidateQueries({ queryKey: queryKeys.account.sellerOrders.all() });
 		},

@@ -4,13 +4,12 @@ import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { ApiResponse, ControllerResponse } from '../types';
 import { CatalogOrderService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../../database';
-import { PAYMENTS_NOT_CONFIGURED_MESSAGE, stripeFromEnv, stripeModeOf } from '../../../services/payments/config';
+import { stripeModeOf } from '../../../services/payments/config';
 import { getSellerLimitsSettings } from '../../../config';
 import { limitsView } from './limits-view';
 import type { SellerLimitsData } from '../../../../shared/types/seller-levels';
-import { refundStoreLines } from '../../../services/store-payments/refund-lines';
-import { storeRefundDeps } from '../../../services/store-payments/wiring';
-import { parseStoreRefundRequest, shortBalanceMessage } from './refund-request';
+import { parseStoreRefundRequest } from './refund-request';
+import { refundOrderLines } from './refund-order';
 import type { StoreOrdersData, StoreRefundResponse } from '../../../../shared/types/store-payments';
 import { orderSummary } from './order-summary';
 
@@ -72,23 +71,10 @@ export class StoreOrdersController extends BaseController {
             const body = await this.parseJsonBody<unknown>(request);
             const refundRequest = body.success ? parseStoreRefundRequest(body.data) : null;
             if (!appId || !orderId || !refundRequest) return this.createErrorResponse<StoreRefundResponse>('Send the lines to refund and a request id', 400);
-            const stripe = stripeFromEnv(env);
-            if (!stripe) return this.createErrorResponse<StoreRefundResponse>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
-            const orders = new StoreOrderService(env);
-            const order = await orders.getOrder(orderId);
+            const order = await new StoreOrderService(env).getOrder(orderId);
             if (!order || order.appId !== appId) return this.createErrorResponse<StoreRefundResponse>('Order not found', 404);
-            const sellerAccountId = order.sellerStripeAccountId;
-            if (!sellerAccountId) return this.createErrorResponse<StoreRefundResponse>('This order has no seller account to refund from', 400);
-
-            const result = await refundStoreLines(storeRefundDeps(env, stripe, { order, sellerAccountId, requestId: refundRequest.requestId }), {
-                order,
-                lineNos: refundRequest.lineNos,
-                requestId: refundRequest.requestId,
-            });
-            if (result.ok) return this.createSuccessResponse<StoreRefundResponse>({ refundedCents: result.refundedCents });
-            if (result.reason === 'seller_balance_short') return this.createErrorResponse<StoreRefundResponse>(shortBalanceMessage(result.shortCents), 409);
-            if (result.reason === 'unknown_lines') return this.createErrorResponse<StoreRefundResponse>(`This order has no line ${result.lineNos.join(', ')}`, 400);
-            return this.createErrorResponse<StoreRefundResponse>('These lines were already refunded', 400);
+            const outcome = await refundOrderLines(env, order, refundRequest);
+            return outcome.ok ? this.createSuccessResponse<StoreRefundResponse>({ refundedCents: outcome.refundedCents }) : this.createErrorResponse<StoreRefundResponse>(outcome.message, outcome.status);
         } catch (error) {
             return this.handleError(error, 'refund a store order') as ControllerResponse<ApiResponse<StoreRefundResponse>>;
         }

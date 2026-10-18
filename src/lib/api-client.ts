@@ -682,6 +682,11 @@ class ApiClient {
 		return this.request<SellerOrderDetail>(`/api/orders/${encodeURIComponent(orderId)}`);
 	}
 
+	/** Refunds lines of the seller's own order; the seller's Stripe balance pays. */
+	async refundSellerOrder(orderId: string, request: StoreRefundRequest): Promise<ApiResponse<StoreRefundResponse>> {
+		return this.request<StoreRefundResponse>(`/api/orders/${encodeURIComponent(orderId)}/refunds`, { method: 'POST', body: request });
+	}
+
 	/** Marks the order's own items shipped, with an optional carrier and tracking number, or not shipped again. */
 	async setSellerOrderShipment(orderId: string, body: SellerShipmentRequest): Promise<ApiResponse<SellerOrderDetail>> {
 		return this.request<SellerOrderDetail>(`/api/orders/${encodeURIComponent(orderId)}/shipment`, { method: 'POST', body });

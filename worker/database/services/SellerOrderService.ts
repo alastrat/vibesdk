@@ -1,6 +1,6 @@
 /** A seller's own store orders: the Orders page's list and order facts, and marking an order shipped. Every query is scoped to the seller. */
 
-import { and, asc, desc, eq, inArray, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { keysetCursorOf, parseKeysetCursor } from './keyset-cursor';
@@ -13,15 +13,18 @@ export interface SellerOrderFacts {
     carrier: string | null;
     trackingNumber: string | null;
     shippedAt: Date | null;
+    /** Lines whose refund Stripe made. */
     refundedLineNos: number[];
+    /** Lines whose refund was claimed but never made; refunding them again finishes it. */
+    pendingRefundLineNos: number[];
     dispute: { amountCents: number; status: string } | null;
 }
 
 export type ShipmentResult = 'updated' | 'not-found' | 'no-own-items' | 'nothing-to-ship' | 'refunded';
 
-/** Units of this kind on the order with no refund claimed or made. */
+/** Units of this kind on the order with no refund made; a claim Stripe never completed still counts. */
 function unrefundedUnits(kind: 'own' | 'catalog') {
-    return sql<number>`(SELECT COALESCE(SUM(i.quantity), 0) FROM store_order_items i WHERE i.order_id = ${schema.storeOrders.id} AND i.kind = ${kind} AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no))`;
+    return sql<number>`(SELECT COALESCE(SUM(i.quantity), 0) FROM store_order_items i WHERE i.order_id = ${schema.storeOrders.id} AND i.kind = ${kind} AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no AND r.stripe_refund_id IS NOT NULL))`;
 }
 
 export class SellerOrderService extends BaseService {
@@ -30,7 +33,7 @@ export class SellerOrderService extends BaseService {
         const limit = input.limit ?? SELLER_ORDERS_PAGE;
         const after = input.cursor ? parseKeysetCursor(input.cursor) : null;
         if (input.cursor && !after) throw new Error('Invalid cursor');
-        const ownToShip = sql`EXISTS (SELECT 1 FROM store_order_items i WHERE i.order_id = ${orders.id} AND i.kind = 'own' AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no))`;
+        const ownToShip = sql`EXISTS (SELECT 1 FROM store_order_items i WHERE i.order_id = ${orders.id} AND i.kind = 'own' AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no AND r.stripe_refund_id IS NOT NULL))`;
 
         const rows = await this.database
             .select({
@@ -98,7 +101,12 @@ export class SellerOrderService extends BaseService {
             .get();
         if (!row) return null;
         const [refunds, dispute] = await Promise.all([
-            this.database.select({ lineNo: schema.storeRefunds.lineNo }).from(schema.storeRefunds).where(eq(schema.storeRefunds.orderId, orderId)).orderBy(asc(schema.storeRefunds.lineNo)).all(),
+            this.database
+                .select({ lineNo: schema.storeRefunds.lineNo, stripeRefundId: schema.storeRefunds.stripeRefundId })
+                .from(schema.storeRefunds)
+                .where(eq(schema.storeRefunds.orderId, orderId))
+                .orderBy(asc(schema.storeRefunds.lineNo))
+                .all(),
             this.database
                 .select({ amountCents: schema.storeDisputes.amountCents, status: schema.storeDisputes.status })
                 .from(schema.storeDisputes)
@@ -107,7 +115,12 @@ export class SellerOrderService extends BaseService {
                 .limit(1)
                 .get(),
         ]);
-        return { ...row, refundedLineNos: refunds.map((refund) => refund.lineNo), dispute: dispute ?? null };
+        return {
+            ...row,
+            refundedLineNos: refunds.filter((refund) => refund.stripeRefundId !== null).map((refund) => refund.lineNo),
+            pendingRefundLineNos: refunds.filter((refund) => refund.stripeRefundId === null).map((refund) => refund.lineNo),
+            dispute: dispute ?? null,
+        };
     }
 
     /** Marks the order's own items shipped, or not shipped again with `shipment: null`. An edit keeps the first shipped date. */
@@ -131,7 +144,12 @@ export class SellerOrderService extends BaseService {
             return 'updated';
         }
         if (order.paymentStatus === 'refunded') return 'refunded';
-        const refunded = new Set((await this.database.select({ lineNo: schema.storeRefunds.lineNo }).from(schema.storeRefunds).where(eq(schema.storeRefunds.orderId, input.orderId)).all()).map((row) => row.lineNo));
+        const refundRows = await this.database
+            .select({ lineNo: schema.storeRefunds.lineNo })
+            .from(schema.storeRefunds)
+            .where(and(eq(schema.storeRefunds.orderId, input.orderId), isNotNull(schema.storeRefunds.stripeRefundId)))
+            .all();
+        const refunded = new Set(refundRows.map((row) => row.lineNo));
         if (ownLines.every((line) => refunded.has(line.lineNo))) return 'nothing-to-ship';
         await this.database
             .update(orders)

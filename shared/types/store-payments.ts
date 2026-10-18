@@ -354,8 +354,10 @@ export interface SellerOrderLine {
 	quantity: number;
 	unitPriceCents: number;
 	catalogVariantId: string | null;
-	/** A refund was claimed or made for this line. */
+	/** Stripe made this line's refund. */
 	refunded: boolean;
+	/** A refund was claimed but never made; refunding the line again finishes it. */
+	refundPending: boolean;
 }
 
 export interface SellerOrderDetail extends Omit<StoreOrderSummary, 'items'> {

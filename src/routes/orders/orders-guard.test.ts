@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../copy-rules';
 
-const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/components/layout/app-sidebar.tsx', '/src/routes/orders/orders.tsx', '/src/routes/orders/order.tsx'], {
+const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/components/layout/app-sidebar.tsx', '/src/routes/orders/orders.tsx', '/src/routes/orders/order.tsx', '/src/hooks/use-seller-orders.ts'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -63,6 +63,15 @@ describe('the seller Orders pages', () => {
 		expect(page).toContain('refund.mutate(');
 		expect(page).toContain('disabled={refund.isPending || chosen.length === 0}');
 		expect(page).toContain('!item.refunded');
+	});
+
+	it("pauses refunds while the shopper's bank has the payment, offers a pending refund again, and refunds through the order", () => {
+		const page = source('/src/routes/orders/order.tsx');
+		expect(page).toContain("Refunds are paused while the shopper's bank reviews this payment.");
+		expect(page).toContain('Refund pending');
+		expect(page).toContain('item.refundPending');
+		const hooks = sources['/src/hooks/use-seller-orders.ts'] ?? '';
+		expect(hooks).toContain('apiClient.refundSellerOrder(orderId, request)');
 	});
 });
 

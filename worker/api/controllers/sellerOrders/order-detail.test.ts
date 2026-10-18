@@ -16,11 +16,11 @@ const ORDER: StoreOrderView = {
 
 describe('an order for its seller', () => {
 	it('adds the store, phone, shipment, refunds, dispute and per-line refunds to the order summary', () => {
-		const detail = sellerOrderDetail(ORDER, { storeTitle: 'Northwind Tea', carrier: 'USPS', trackingNumber: '9400', shippedAt: new Date(1000), refundedLineNos: [2], dispute: null }, []);
+		const detail = sellerOrderDetail(ORDER, { storeTitle: 'Northwind Tea', carrier: 'USPS', trackingNumber: '9400', shippedAt: new Date(1000), refundedLineNos: [2], pendingRefundLineNos: [1], dispute: null }, []);
 		expect(detail).toMatchObject({ id: 'ord_1', appId: 'app_tea', storeTitle: 'Northwind Tea', customerPhone: '+15125550100', refundedCents: 1000, carrier: 'USPS', trackingNumber: '9400', shippedAt: new Date(1000).toISOString(), dispute: null, note: 'Gift' });
 		expect(detail.items).toEqual([
-			{ lineNo: 1, name: 'Oolong', kind: 'own', quantity: 2, unitPriceCents: 1000, catalogVariantId: null, refunded: false },
-			{ lineNo: 2, name: 'Feeder', kind: 'catalog', quantity: 1, unitPriceCents: 1000, catalogVariantId: 'cv_1', refunded: true },
+			{ lineNo: 1, name: 'Oolong', kind: 'own', quantity: 2, unitPriceCents: 1000, catalogVariantId: null, refunded: false, refundPending: true },
+			{ lineNo: 2, name: 'Feeder', kind: 'catalog', quantity: 1, unitPriceCents: 1000, catalogVariantId: 'cv_1', refunded: true, refundPending: false },
 		]);
 	});
 });

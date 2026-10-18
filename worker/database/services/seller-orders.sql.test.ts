@@ -119,7 +119,7 @@ describe('seller orders on real SQL', () => {
 			.bind(at(5), at(5), at(1), at(1))
 			.run();
 		const service = new SellerOrderService(envWith(db));
-		expect(await service.orderFacts('seller_1', 'facts')).toEqual({ storeTitle: 'Northwind Tea', carrier: null, trackingNumber: null, shippedAt: null, refundedLineNos: [1], dispute: { amountCents: 4000, status: 'needs_response' } });
+		expect(await service.orderFacts('seller_1', 'facts')).toEqual({ storeTitle: 'Northwind Tea', carrier: null, trackingNumber: null, shippedAt: null, refundedLineNos: [1], pendingRefundLineNos: [], dispute: { amountCents: 4000, status: 'needs_response' } });
 		expect(await service.orderFacts('seller_2', 'facts')).toBeNull();
 	});
 
@@ -152,4 +152,18 @@ describe('seller orders on real SQL', () => {
 		expect(await new SellerOrderService(envWith(db)).newOrderEmailFacts('new')).toEqual({ storeTitle: 'Northwind Tea', sellerEmail: 'seller_1@example.test' });
 		expect(await new SellerOrderService(envWith(db)).newOrderEmailFacts('missing')).toBeNull();
 	});
+
+	it('treats a refund claimed but never made as pending: the line still counts to ship, can be shipped, and reads as pending', async () => {
+		await sale({ id: 'pending', hoursAgo: 1, lines: [['own', 1]] });
+		await db
+			.prepare(`INSERT INTO store_refunds (id, order_id, line_no, amount_cents, request_id, initiated_by, stripe_refund_id, created_at) VALUES ('rf_pending', 'pending', 1, 1000, 'req', 'seller', NULL, ?)`)
+			.bind(at(0))
+			.run();
+		const service = new SellerOrderService(envWith(db));
+		expect(await ids()).toEqual(['pending']);
+		expect((await service.listOrders({ sellerUserId: 'seller_1', view: 'all', mode: 'live' })).orders[0]).toMatchObject({ ownUnits: 1 });
+		expect(await service.orderFacts('seller_1', 'pending')).toMatchObject({ refundedLineNos: [], pendingRefundLineNos: [1] });
+		expect(await service.setShipment({ sellerUserId: 'seller_1', orderId: 'pending', shipment: { carrier: null, trackingNumber: null }, now: NOW })).toBe('updated');
+	});
 });
+
