@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { recordingD1 } from '../../database/test-support/recording-d1';
 import { catalogRefundRecords } from './refund-records';
+import type { ShopperEmailEvent } from '../shopper-emails/outbox';
 
 /** Catalog item ci_cap was sold by u1 on line 1 of store order ord_1. */
 const rows = (sql: string): unknown[][] => {
@@ -29,5 +30,14 @@ describe('catalogRefundRecords', () => {
 		const { d1, statements } = recordingD1(rows);
 		await catalogRefundRecords({ DB: d1 } as unknown as Env, 'rq_1').recordRefund({ catalogItemId: 'ci_cap', refundId: 're_1', amountCents: 2800, reason: 'seller-refund' });
 		expect(insertInto(statements, 'store_refunds')?.params).toEqual(expect.arrayContaining(['sr_ord_1_1', 'seller', 'rq_1', 're_1']));
+	});
+
+	it('emails the shopper about a refund Estori started, once per Stripe refund, and leaves a seller refund to its own email', async () => {
+		const queued: ShopperEmailEvent[] = [];
+		const queue = async (event: ShopperEmailEvent) => void queued.push(event);
+		await catalogRefundRecords({ DB: recordingD1(rows).d1 } as unknown as Env, null, queue).recordRefund({ catalogItemId: 'ci_cap', refundId: 're_1', amountCents: 2800, reason: 'supplier-rejected' });
+		expect(queued).toEqual([{ orderId: 'ord_1', kind: 'refund_issued', eventKey: 'catalog:re_1', payload: { lineNos: [1], amountCents: 2800 } }]);
+		await catalogRefundRecords({ DB: recordingD1(rows).d1 } as unknown as Env, 'rq_1', queue).recordRefund({ catalogItemId: 'ci_cap', refundId: 're_2', amountCents: 2800, reason: 'seller-refund' });
+		expect(queued).toHaveLength(1);
 	});
 });

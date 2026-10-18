@@ -182,9 +182,4 @@ export class ShopperEmailService extends BaseService {
         if (!row) return null;
         return { title: row.title, sellerEmail: row.sellerEmail, liveSlug: row.status === 'live' ? row.slug : null };
     }
-
-    async orderIdForSession(checkoutSessionId: string): Promise<string | null> {
-        const row = await this.database.select({ id: schema.storeOrders.id }).from(schema.storeOrders).where(eq(schema.storeOrders.stripeCheckoutSessionId, checkoutSessionId)).get();
-        return row?.id ?? null;
-    }
 }

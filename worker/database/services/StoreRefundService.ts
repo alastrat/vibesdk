@@ -70,16 +70,17 @@ export class StoreRefundService extends BaseService {
 
 	/**
 	 * A catalog item's refund, recorded on its store order line once it happened: found by the Checkout session and catalog
-	 * variant. The catalog item tracks its own reversal, so the line needs none here.
+	 * variant. The catalog item tracks its own reversal, so the line needs none here. Returns the line, or null when the
+	 * item was sold on none.
 	 */
-	async recordForCatalogItem(entry: { checkoutSessionId: string; catalogVariantId: string; refundId: string; amountCents: number; initiatedBy: StoreRefundInitiator; requestId: string | null; now: Date }): Promise<void> {
+	async recordForCatalogItem(entry: { checkoutSessionId: string; catalogVariantId: string; refundId: string; amountCents: number; initiatedBy: StoreRefundInitiator; requestId: string | null; now: Date }): Promise<{ orderId: string; lineNo: number } | null> {
 		const line = await this.database
 			.select({ orderId: schema.storeOrderItems.orderId, lineNo: schema.storeOrderItems.lineNo })
 			.from(schema.storeOrderItems)
 			.innerJoin(schema.storeOrders, eq(schema.storeOrders.id, schema.storeOrderItems.orderId))
 			.where(and(eq(schema.storeOrders.stripeCheckoutSessionId, entry.checkoutSessionId), eq(schema.storeOrderItems.catalogVariantId, entry.catalogVariantId)))
 			.get();
-		if (!line) return;
+		if (!line) return null;
 		await this.database
 			.insert(schema.storeRefunds)
 			.values({
@@ -96,5 +97,6 @@ export class StoreRefundService extends BaseService {
 			.onConflictDoUpdate({ target: [schema.storeRefunds.orderId, schema.storeRefunds.lineNo], set: { stripeRefundId: entry.refundId } })
 			.run();
 		await new StoreOrderService(this.env).applyRefunds(line.orderId, entry.now);
+		return line;
 	}
 }

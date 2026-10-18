@@ -10,6 +10,7 @@ import { stripeFromEnv } from '../payments/config';
 import type { StripeClient } from '../payments/stripe-client';
 import { recordStoreOrder, type RecordStoreOrderDeps, type RecordStoreOrderResult } from './fulfill';
 import { newOrderNotifierFromEnv } from './order-emails';
+import { shopperEmailQueueFromEnv } from '../shopper-emails/wiring';
 import { settleSale, sweepUnsettledSales } from './settle';
 import type { DisputeDeps } from './disputes';
 import type { RefundLinesDeps } from './refund-lines';
@@ -28,6 +29,7 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 		getCheckout: (checkoutId) => checkouts.get(checkoutId),
 		recordOrder: (order) => orders.recordOrder(order),
 		notifyNewOrder: newOrderNotifierFromEnv(env),
+		queueShopperEmail: shopperEmailQueueFromEnv(env),
 		handOffCatalogLines: async (paid) => {
 			const recorded = await recordPaidCatalogOrder({ store: new CatalogOrderService(env), newId: generateId, now: () => new Date() }, paid);
 			if (recorded.result === 'recorded' && recorded.orderId) await scheduleCatalogPlacement(env, recorded.orderId);
@@ -190,6 +192,7 @@ export function storeRefundDeps(env: Env, stripe: StripeClient, input: { order: 
 			await new SellerChargeService(env).add({ sellerUserId: order.sellerUserId, kind: 'refund-shortfall', sourceId: `refund-${shortfall.orderId}-${shortfall.lineNo}`, amountCents: shortfall.amountCents, now: now() });
 		},
 		applyRefunds: (orderId) => orders.applyRefunds(orderId, now()),
+		queueShopperEmail: shopperEmailQueueFromEnv(env),
 		now,
 	};
 }

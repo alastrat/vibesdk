@@ -17,6 +17,7 @@ import { cjOrderToUpdates } from './cj/updates';
 import { catalogRefundRecords } from './refund-records';
 import { initialRunnerState, releaseRiskHold, retryRunnerState, runnerStep, type RunnerDeps, type RunnerState } from './runner';
 import { sellerNoticesFromEnv } from '../alerts/seller-notices';
+import { shopperEmailQueueFromEnv } from '../shopper-emails/wiring';
 
 const logger = createLogger('CatalogOrderRunner');
 const STATE_KEY = 'state';
@@ -41,6 +42,7 @@ function runnerDeps(env: Env, paymentMode: StoreMode | null): RunnerDeps {
 	const client = cjClientFromEnv(env);
 	const sendAlert = platformAlertsFromEnv(env);
 	const alert: RunnerDeps['alert'] = (event) => sendAlert({ kind: event.kind, subject: event.orderId, message: event.message });
+	const queueShopperEmail = shopperEmailQueueFromEnv(env);
 	const adapter = client
 		? new CJDropshippingAdapter({ client, destinations: CATALOG_DESTINATIONS, mode: catalogSupplierMode(env, paymentMode), alert: (event) => alert({ kind: event.kind, orderId: event.reference, message: event.message }) })
 		: { supplier: 'cjdropshipping' as const, placeOrder: async () => ({ ok: false as const, kind: 'retryable' as const, reason: 'The catalog supplier is not configured' }) };
@@ -62,6 +64,20 @@ function runnerDeps(env: Env, paymentMode: StoreMode | null): RunnerDeps {
 			return level === 'normal' || level === 'elevated' || level === 'highest' ? level : 'unknown';
 		},
 		notifySeller: sellerNoticesFromEnv(env),
+		notifyShipped: async (shipment) => {
+			try {
+				const order = await new StoreOrderService(env).findByPaymentIntent(shipment.paymentIntentId);
+				if (!order) return;
+				await queueShopperEmail({
+					orderId: order.id,
+					kind: 'order_shipped',
+					eventKey: `catalog:${shipment.supplierOrderId}`,
+					payload: { catalogVariantIds: shipment.catalogVariantIds, carrier: shipment.carrier, trackingNumber: shipment.trackingNumber },
+				});
+			} catch (error) {
+				logger.error('Could not tell the shopper items shipped', { shipment, error });
+			}
+		},
 	};
 }
 

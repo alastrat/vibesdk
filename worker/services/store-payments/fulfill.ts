@@ -9,6 +9,7 @@ import type { ShippingAddress } from '../catalog/supplier';
 import type { StripeCheckoutSession } from '../payments/stripe-client';
 import { toCheckoutCart } from './pricing';
 import type { NewStoreOrder, StoreCheckoutRecord } from './store';
+import type { ShopperEmailEvent } from '../shopper-emails/outbox';
 
 export interface RecordStoreOrderDeps {
 	getCheckout(checkoutId: string): Promise<StoreCheckoutRecord | null>;
@@ -19,6 +20,8 @@ export interface RecordStoreOrderDeps {
 	settleSale(orderId: string): Promise<void>;
 	/** Emails the seller about the order; never throws. */
 	notifyNewOrder(orderId: string): Promise<void>;
+	/** Emails the shopper about an order event; never throws. */
+	queueShopperEmail(event: ShopperEmailEvent): Promise<void>;
 	now(): Date;
 }
 
@@ -98,7 +101,10 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 		})),
 		createdAt: deps.now(),
 	});
-	if (result === 'recorded') await deps.notifyNewOrder(orderId);
+	if (result === 'recorded') {
+		await deps.notifyNewOrder(orderId);
+		await deps.queueShopperEmail({ orderId, kind: 'order_confirmation', eventKey: 'order', payload: {} });
+	}
 
 	// A flagged order waits for the owner instead of buying from the supplier.
 	const hasCatalogLines = checkout.pricedCart.lines.some((line) => line.kind === 'catalog');

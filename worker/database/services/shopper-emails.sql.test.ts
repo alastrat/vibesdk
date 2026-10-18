@@ -51,8 +51,6 @@ describe('shopper email templates and settings on real SQL', () => {
 			{ appId: 'app_home', title: 'Lumen Home' },
 			{ appId: 'app_tea', title: 'Northwind Tea' },
 		]);
-		expect(await service().orderIdForSession('cs_home')).toBe('ord_home');
-		expect(await service().orderIdForSession('cs_missing')).toBeNull();
 	});
 });
 

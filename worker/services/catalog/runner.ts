@@ -54,6 +54,8 @@ export interface RunnerDeps {
 	/** Radar's risk level for the payment; 'unknown' when Stripe gave none. */
 	paymentRisk(paymentIntentId: string): Promise<'normal' | 'elevated' | 'highest' | 'unknown'>;
 	notifySeller(notice: SellerNotice): Promise<void>;
+	/** Tells the shopper items first shipped; never throws. */
+	notifyShipped(event: { paymentIntentId: string; supplierOrderId: string; trackingNumber: string; carrier: string; catalogVariantIds: string[] }): Promise<void>;
 }
 
 export function initialRunnerState(orderId: string, nowMs: number): RunnerState {
@@ -216,6 +218,17 @@ async function sync(state: RunnerState, deps: RunnerDeps, nowMs: number): Promis
 			if (patches.length === 0) continue;
 			await deps.store.patchItems(patches);
 			if (update.kind === 'cancelled') await deps.alert({ kind: 'supplier-cancelled', orderId: state.orderId, message: update.reason });
+			// A reissued tracking number patches no status, so the shopper hears once per shipment.
+			const firstShipped = items.filter((item) => patches.some((patch) => patch.itemId === item.id && patch.status === 'shipped'));
+			if (update.kind === 'shipped' && firstShipped.length > 0) {
+				await deps.notifyShipped({
+					paymentIntentId: order.paymentIntentId,
+					supplierOrderId,
+					trackingNumber: update.trackingNumber,
+					carrier: update.carrier,
+					catalogVariantIds: firstShipped.map((item) => item.catalogVariantId),
+				});
+			}
 			items = items.map((item) => {
 				const patch = patches.find((candidate) => candidate.itemId === item.id);
 				if (!patch) return item;

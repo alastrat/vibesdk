@@ -10,6 +10,7 @@ import { parseSellerShipmentRequest } from './shipment-request';
 import { parseStoreRefundRequest } from '../stores/refund-request';
 import { refundOrderLines } from '../stores/refund-order';
 import { sellerOrderDetail } from './order-detail';
+import { shopperEmailQueueFromEnv } from '../../../services/shopper-emails/wiring';
 
 const SHIPMENT_REFUSALS = {
     'no-own-items': 'Estori ships everything in this order.',
@@ -60,6 +61,15 @@ export class SellerOrdersController extends BaseController {
             if (result === 'not-found') return SellerOrdersController.createErrorResponse('Order not found', 404);
             if (result !== 'updated') return SellerOrdersController.createErrorResponse(SHIPMENT_REFUSALS[result], 409);
             const detail = await SellerOrdersController.detailOf(env, sellerUserId, orderId);
+            // One email per order: an edit, or shipping again after an undo, sends nothing more.
+            if (detail && shipment.shipped) {
+                await shopperEmailQueueFromEnv(env)({
+                    orderId,
+                    kind: 'order_shipped',
+                    eventKey: 'own',
+                    payload: { lineNos: detail.items.filter((item) => item.kind === 'own' && !item.refunded).map((item) => item.lineNo), carrier: detail.carrier, trackingNumber: detail.trackingNumber },
+                });
+            }
             return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse('Order not found', 404);
         } catch (error) {
             return SellerOrdersController.handleError(error, 'update a shipment') as ControllerResponse<ApiResponse<SellerOrderDetail>>;

@@ -40,6 +40,7 @@ function deps(
 	const notices: string[] = [];
 	const shortfalls: Array<{ catalogItemId: string; amountCents: number }> = [];
 	const alerts: string[] = [];
+	const shipped: Array<Parameters<RunnerDeps['notifyShipped']>[0]> = [];
 	const adapter: SupplierAdapter = {
 		supplier: 'cjdropshipping',
 		placeOrder: async () => results.shift() ?? { ok: false, kind: 'retryable', reason: 'No scripted result' },
@@ -62,8 +63,9 @@ function deps(
 		addShortfall: async (shortfall) => void shortfalls.push(shortfall),
 		paymentRisk: async () => risk,
 		notifySeller: async (notice) => void notices.push(notice.kind),
+		notifyShipped: async (event) => void shipped.push(event),
 	};
-	return { runnerDeps, refunds, alerts, shortfalls, notices };
+	return { runnerDeps, refunds, alerts, shortfalls, notices, shipped };
 }
 
 describe('runnerStep', () => {
@@ -115,6 +117,20 @@ describe('runnerStep', () => {
 		step = await runnerStep(step.state, runnerDeps, NOW + 2 * RUNNER_SYNC_INTERVAL_MS);
 		expect(store.orders.get('co_1')?.items.map((item) => item.status)).toEqual(['delivered', 'delivered']);
 		expect(step.nextAlarmAt).toBeNull();
+	});
+
+	it('tells the shopper once when items first ship, and not again when the supplier reissues tracking', async () => {
+		const store = await storeWithOrder();
+		const { runnerDeps, shipped } = deps(store, [{ ok: true, supplierOrderId: 'cj_9' }], [
+			[{ kind: 'shipped', supplierOrderId: 'cj_9', trackingNumber: 'SBX1', carrier: 'USPS' }],
+			[{ kind: 'shipped', supplierOrderId: 'cj_9', trackingNumber: 'SBX2', carrier: 'UPS' }],
+		]);
+
+		let step = await runnerStep(initialRunnerState('co_1', NOW), runnerDeps, NOW);
+		step = await runnerStep(step.state, runnerDeps, NOW + RUNNER_SYNC_INTERVAL_MS);
+		await runnerStep(step.state, runnerDeps, NOW + 2 * RUNNER_SYNC_INTERVAL_MS);
+		expect(store.orders.get('co_1')?.items.map((item) => item.trackingNumber)).toEqual(['SBX2', 'SBX2']);
+		expect(shipped).toEqual([{ paymentIntentId: 'pi_1', supplierOrderId: 'cj_9', trackingNumber: 'SBX1', carrier: 'USPS', catalogVariantIds: ['cv_mug', 'cv_cap'] }]);
 	});
 
 	it("charges the seller what the sale's transfer can no longer cover when a rejected item is refunded", async () => {

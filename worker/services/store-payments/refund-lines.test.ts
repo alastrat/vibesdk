@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { refundStoreLines, type RefundLinesDeps, type StoreRefundRow } from './refund-lines';
 import type { StoreOrderView } from './store';
+import type { ShopperEmailEvent } from '../shopper-emails/outbox';
 
 const ORDER: StoreOrderView = {
 	id: 'ord_1', orderNumber: 1, mode: 'test', appId: 'app_1', paymentStatus: 'paid', fulfillmentStatus: 'unfulfilled',
@@ -18,6 +19,7 @@ const ORDER: StoreOrderView = {
 function world(input: { balance?: number; reversible?: number; catalogSellerCents?: number; rows?: StoreRefundRow[]; reversalFails?: boolean } = {}) {
 	const calls: string[] = [];
 	const shortfalls: Array<{ lineNo: number; amountCents: number }> = [];
+	const queued: ShopperEmailEvent[] = [];
 	const rows = new Map((input.rows ?? []).map((row) => [row.lineNo, { ...row }]));
 	let reversalFails = input.reversalFails ?? false;
 	const deps: RefundLinesDeps = {
@@ -58,9 +60,10 @@ function world(input: { balance?: number; reversible?: number; catalogSellerCent
 		},
 		addShortfall: async (shortfall) => void shortfalls.push({ lineNo: shortfall.lineNo, amountCents: shortfall.amountCents }),
 		applyRefunds: async () => void calls.push('apply'),
+		queueShopperEmail: async (event) => void queued.push(event),
 		now: () => new Date(0),
 	};
-	return { deps, calls, shortfalls, rows, heal: () => (reversalFails = false) };
+	return { deps, calls, shortfalls, rows, queued, heal: () => (reversalFails = false) };
 }
 
 describe('refundStoreLines', () => {
@@ -75,6 +78,15 @@ describe('refundStoreLines', () => {
 		const { deps, calls } = world();
 		expect(await refundStoreLines(deps, { order: ORDER, lineNos: [1, 2], requestId: 'rq_1' })).toEqual({ ok: true, refundedCents: 6599 });
 		expect(calls[0]).toBe('catalog 1');
+	});
+
+	it('emails the shopper what the refund gave back, keyed by its lines, and nothing for a refused refund', async () => {
+		const { deps, queued } = world();
+		await refundStoreLines(deps, { order: ORDER, lineNos: [2, 1], requestId: 'rq_1' });
+		expect(queued).toEqual([{ orderId: 'ord_1', kind: 'refund_issued', eventKey: 'lines:1,2', payload: { lineNos: [1, 2], amountCents: 6599 } }]);
+		const refused = world({ balance: 0 });
+		await refundStoreLines(refused.deps, { order: ORDER, lineNos: [2], requestId: 'rq_1' });
+		expect(refused.queued).toEqual([]);
 	});
 
 	it("refuses when the seller's balance is short, before any money moves", async () => {
@@ -101,8 +113,11 @@ describe('refundStoreLines', () => {
 		await expect(refundStoreLines(w.deps, { order: ORDER, lineNos: [2], requestId: 'rq_1' })).rejects.toThrow('Stripe is unavailable');
 		w.heal();
 		w.calls.length = 0;
+		expect(w.queued).toEqual([]);
 		expect(await refundStoreLines(w.deps, { order: ORDER, lineNos: [2], requestId: 'rq_2' })).toEqual({ ok: true, refundedCents: 0 });
 		expect(w.calls).toEqual(['reversal 2500 store-reversal-rq_1-2', 'apply']);
+		// The shopper was refunded by the first request, which failed before telling them.
+		expect(w.queued).toEqual([{ orderId: 'ord_1', kind: 'refund_issued', eventKey: 'lines:2', payload: { lineNos: [2], amountCents: 2500 } }]);
 	});
 
 	it('keeps a shortfall whose record failed, and records it on the next request', async () => {
@@ -119,11 +134,13 @@ describe('refundStoreLines', () => {
 	});
 
 	it('refunds a line once when two requests for it arrive at the same time', async () => {
-		const { deps, calls } = world();
+		const { deps, calls, queued } = world();
 		await Promise.all([refundStoreLines(deps, { order: ORDER, lineNos: [2], requestId: 'rq_1' }), refundStoreLines(deps, { order: ORDER, lineNos: [2], requestId: 'rq_2' })]);
 		// The loser reuses the winner's keys, so Stripe answers it with the same refund and reversal.
 		expect(new Set(calls.filter((call) => call.startsWith('refund ')))).toEqual(new Set(['refund 2500 store-refund-rq_1-2']));
 		expect(new Set(calls.filter((call) => call.startsWith('reversal ')))).toEqual(new Set(['reversal 2500 store-reversal-rq_1-2']));
+		// Both name the same lines, so the outbox keeps one email.
+		expect(new Set(queued.map((event) => event.eventKey))).toEqual(new Set(['lines:2']));
 	});
 
 	it('never refunds a finished line again, whatever the request id', async () => {

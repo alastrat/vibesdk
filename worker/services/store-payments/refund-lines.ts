@@ -11,6 +11,7 @@
 import type { StripeClient, StripePaymentIntent } from '../payments/stripe-client';
 import type { StoreRefundInitiator } from '../../../shared/types/store-payments';
 import type { StoreOrderView } from './store';
+import type { ShopperEmailEvent } from '../shopper-emails/outbox';
 
 export type RefundLinesResult =
 	| { ok: true; refundedCents: number }
@@ -44,6 +45,8 @@ export interface RefundLinesDeps {
 	/** A charge, once per line, for the seller share the transfer couldn't cover. */
 	addShortfall(shortfall: { orderId: string; lineNo: number; amountCents: number }): Promise<void>;
 	applyRefunds(orderId: string): Promise<void>;
+	/** Emails the shopper about an order event; never throws. */
+	queueShopperEmail(event: ShopperEmailEvent): Promise<void>;
 	now(): Date;
 }
 
@@ -112,5 +115,10 @@ export async function refundStoreLines(deps: RefundLinesDeps, input: { order: St
 		}
 	}
 	await deps.applyRefunds(order.id);
+	// A resumed line's shopper was refunded by an earlier request that failed before telling them. Each line is refunded
+	// once, so its lines key the email: two requests racing for the same lines send one.
+	const shopperCents = refundedCents + ownResumed.filter((row) => row.stripeRefundId !== null).reduce((sum, row) => sum + row.amountCents, 0);
+	const lineNos = [...catalogNew, ...ownNew.map((item) => item.lineNo), ...ownResumed.map((row) => row.lineNo)].sort((a, b) => a - b);
+	await deps.queueShopperEmail({ orderId: order.id, kind: 'refund_issued', eventKey: `lines:${lineNos.join(',')}`, payload: { lineNos, amountCents: shopperCents } });
 	return { ok: true, refundedCents };
 }
