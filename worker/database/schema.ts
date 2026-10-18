@@ -28,6 +28,7 @@ import {
     STORE_REFUND_INITIATORS,
 } from '../../shared/types/store-payments';
 import { SELLER_LEVELS } from '../../shared/types/seller-levels';
+import { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_STATUSES } from '../../shared/types/shopper-emails';
 import { LIVE_STORE_STATUSES, STORE_DOMAIN_PROVIDERS, STORE_DOMAIN_STATUSES } from '../../shared/types/live-stores';
 
 // Schema enum arrays derived from config types  
@@ -1188,5 +1189,48 @@ export const storeDomains = sqliteTable('store_domains', {
 }, (table) => ({
     appUnique: uniqueIndex('store_domains_app_unique_idx').on(table.appId),
     statusIdx: index('store_domains_status_idx').on(table.status),
+}));
+
+/** A store's own version of an order-event email; a kind with no row uses Estori's default. */
+export const shopperEmailTemplates = sqliteTable('shopper_email_templates', {
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: SHOPPER_EMAIL_KINDS }).notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    subject: text('subject').notNull(),
+    heading: text('heading').notNull(),
+    body: text('body').notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.appId, table.kind] }),
+}));
+
+/** Where shoppers' replies to a store's emails go; null means the seller's account email. */
+export const shopperEmailSettings = sqliteTable('shopper_email_settings', {
+    appId: text('app_id').primaryKey().references(() => apps.id, { onDelete: 'cascade' }),
+    replyTo: text('reply_to'),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/** The outbox and log of shopper emails: one row per order, kind and event, sent once with retries. Kept 90 days. */
+export const shopperEmails = sqliteTable('shopper_emails', {
+    id: text('id').primaryKey(),
+    appId: text('app_id').notNull(),
+    orderId: text('order_id').notNull(),
+    kind: text('kind', { enum: SHOPPER_EMAIL_KINDS }).notNull(),
+    eventKey: text('event_key').notNull(),
+    payload: text('payload').notNull().default('{}'),
+    status: text('status', { enum: SHOPPER_EMAIL_STATUSES }).notNull().default('queued'),
+    test: integer('test', { mode: 'boolean' }).notNull().default(false),
+    recipient: text('recipient'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: integer('next_attempt_at', { mode: 'timestamp' }).notNull(),
+    messageId: text('message_id'),
+    error: text('error'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+    sentAt: integer('sent_at', { mode: 'timestamp' }),
+}, (table) => ({
+    eventIdx: uniqueIndex('shopper_emails_event_unique_idx').on(table.orderId, table.kind, table.eventKey),
+    appCreatedIdx: index('shopper_emails_app_created_idx').on(table.appId, table.createdAt),
+    dueIdx: index('shopper_emails_due_idx').on(table.status, table.nextAttemptAt),
 }));
 
