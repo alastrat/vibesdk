@@ -147,6 +147,49 @@ export function sellerLimitReachedEmail(to: string, weeklySalesCents: number): O
 	});
 }
 
+export interface NewOrderEmailInput {
+	storeTitle: string;
+	orderNumber: number;
+	test: boolean;
+	totalCents: number;
+	shareCents: number;
+	items: ReadonlyArray<{ name: string; quantity: number; kind: 'own' | 'catalog' }>;
+	shipTo: { name: string; city: string; region: string | null; countryCode: string } | null;
+	note: string | null;
+	link: string | null;
+}
+
+const dollars = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
+
+/** To a seller for each new order in their stores: what sold, where it ships, and what they ship themselves. */
+export function sellerNewOrderEmail(to: string, order: NewOrderEmailInput): OutgoingEmail {
+	const own = order.items.filter((item) => item.kind === 'own').map((item) => item.name);
+	const catalog = order.items.filter((item) => item.kind === 'catalog').map((item) => item.name);
+	// A test order ships nothing, so it gets no shipping steps.
+	const steps = order.test
+		? ['This was a test order. No money was charged and nothing ships.']
+		: [
+				...(own.length > 0 ? [`Ship these items: ${own.join(', ')}. Mark the order shipped in Estori when they're on their way.`] : []),
+				...(catalog.length > 0 ? [`Estori ships ${catalog.join(', ')}. You don't need to do anything for these.`] : []),
+			];
+	const shipTo = order.shipTo ? [order.shipTo.name, order.shipTo.city, order.shipTo.region, order.shipTo.countryCode].filter(Boolean).join(', ') : 'No shipping address';
+	return renderEmail({
+		to,
+		subject: `${order.test ? '[Test] ' : ''}New order #${order.orderNumber} at ${order.storeTitle}: ${dollars(order.totalCents)}`,
+		heading: 'You have a new order',
+		body: steps.join(' '),
+		...(order.link ? { action: { label: 'Open the order', link: order.link } } : {}),
+		details: [
+			['Items', order.items.map((item) => `${item.quantity} × ${item.name}`).join('\n')],
+			['Total', dollars(order.totalCents)],
+			['Your share', dollars(order.shareCents)],
+			['Ship to', shipTo],
+			...(order.note ? [['Note', order.note] as const] : []),
+		],
+		footer: 'You get this email for every order in your stores.',
+	});
+}
+
 /** To a seller whose connected domain's DNS records can no longer be seen; the store keeps answering on it. */
 export function sellerDomainUnreachableEmail(to: string, hostname: string): OutgoingEmail {
 	return renderEmail({

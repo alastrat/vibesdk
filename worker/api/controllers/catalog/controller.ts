@@ -8,7 +8,7 @@ import { catalogSupplierMode, paymentModeOf } from '../../../services/catalog/Ca
 import { cjClientFromEnv } from '../../../services/catalog/cj/client';
 import { sandboxMoves } from '../../../services/catalog/sandbox';
 import { CatalogOrderAdminService, CatalogOrderService, CatalogProductService } from '../../../database';
-import { parseCatalogOrdersCursor } from '../../../database/services/CatalogOrderAdminService';
+import { parseKeysetCursor } from '../../../database/services/keyset-cursor';
 import { lateCutoffs, runnerView } from '../../../services/catalog/admin-orders';
 import { catalogProductView } from '../../../services/catalog/catalog-view';
 import { catalogImagePath } from '../../../services/catalog/images';
@@ -67,7 +67,7 @@ export class CatalogController extends BaseController {
         const view = params.get('view') ?? 'attention';
         const cursor = params.get('cursor');
         if (!isAdminCatalogOrderView(view)) return CatalogController.createErrorResponse('Unknown view', 400);
-        if (cursor && !parseCatalogOrdersCursor(cursor)) return CatalogController.createErrorResponse('Invalid cursor', 400);
+        if (cursor && !parseKeysetCursor(cursor)) return CatalogController.createErrorResponse('Invalid cursor', 400);
         try {
             return CatalogController.createSuccessResponse(await new CatalogOrderAdminService(env).listOrders({ view, late: lateCutoffs(Date.now()), cursor }));
         } catch (error) {

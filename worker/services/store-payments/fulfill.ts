@@ -17,6 +17,8 @@ export interface RecordStoreOrderDeps {
 	handOffCatalogLines(paid: PaidCatalogCheckout): Promise<void>;
 	/** Takes back any card fee above what was collected, and the seller's open charges. Safe to repeat; throws to be retried. */
 	settleSale(orderId: string): Promise<void>;
+	/** Emails the seller about the order; never throws. */
+	notifyNewOrder(orderId: string): Promise<void>;
 	now(): Date;
 }
 
@@ -96,6 +98,7 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 		})),
 		createdAt: deps.now(),
 	});
+	if (result === 'recorded') await deps.notifyNewOrder(orderId);
 
 	// A flagged order waits for the owner instead of buying from the supplier.
 	const hasCatalogLines = checkout.pricedCart.lines.some((line) => line.kind === 'catalog');

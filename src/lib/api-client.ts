@@ -94,6 +94,11 @@ import type{
 	StripeConnectStatusData,
 	SellerLimitsData,
 	StoreOrdersData,
+	SellerOrderDetail,
+	SellerOrderModeFilter,
+	SellerOrdersData,
+	SellerOrderView,
+	SellerShipmentRequest,
 	StoreRefundRequest,
 	StoreRefundResponse,
 	LiveStoreView,
@@ -663,6 +668,28 @@ class ApiClient {
 	/** Record the seller's agreement to the current selling terms; returns their refreshed status. */
 	async acceptSellerTerms(version: string): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/terms', { method: 'POST', body: { version } });
+	}
+
+	/** The signed-in seller's orders across their stores, 50 a page. */
+	async getSellerOrders(filters: { view: SellerOrderView; mode: SellerOrderModeFilter; store: string | null; cursor: string | null }): Promise<ApiResponse<SellerOrdersData>> {
+		const query = new URLSearchParams({ view: filters.view, mode: filters.mode });
+		if (filters.store) query.set('store', filters.store);
+		if (filters.cursor) query.set('cursor', filters.cursor);
+		return this.request<SellerOrdersData>(`/api/orders?${query}`);
+	}
+
+	async getSellerOrder(orderId: string): Promise<ApiResponse<SellerOrderDetail>> {
+		return this.request<SellerOrderDetail>(`/api/orders/${encodeURIComponent(orderId)}`);
+	}
+
+	/** Refunds lines of the seller's own order; the seller's Stripe balance pays. */
+	async refundSellerOrder(orderId: string, request: StoreRefundRequest): Promise<ApiResponse<StoreRefundResponse>> {
+		return this.request<StoreRefundResponse>(`/api/orders/${encodeURIComponent(orderId)}/refunds`, { method: 'POST', body: request });
+	}
+
+	/** Marks the order's own items shipped, with an optional carrier and tracking number, or not shipped again. */
+	async setSellerOrderShipment(orderId: string, body: SellerShipmentRequest): Promise<ApiResponse<SellerOrderDetail>> {
+		return this.request<SellerOrderDetail>(`/api/orders/${encodeURIComponent(orderId)}/shipment`, { method: 'POST', body });
 	}
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {

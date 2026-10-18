@@ -15,6 +15,8 @@ import AdminEarlyAccessPage from './routes/admin/early-access';
 import AdminContactRequestsPage from './routes/admin/contact-requests';
 import AdminCatalogOrdersPage from './routes/admin/catalog-orders';
 import AdminCatalogOrderPage from './routes/admin/catalog-order';
+import SellerOrdersPage from './routes/orders/orders';
+import SellerOrderPage from './routes/orders/order';
 import { ProtectedRoute } from './routes/protected-route';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
@@ -87,6 +89,22 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<CatalogPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'orders',
+						element: (
+							<ProtectedRoute>
+								<SellerOrdersPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'orders/:id',
+						element: (
+							<ProtectedRoute>
+								<SellerOrderPage />
 							</ProtectedRoute>
 						),
 					},

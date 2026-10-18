@@ -133,6 +133,12 @@ export const queryKeys = {
 		catalog: {
 			products: (query: string) => [...queryKeys.account.all, 'catalog', query] as const,
 		},
+		/** The seller's orders: never persisted, like the rest of `account`. */
+		sellerOrders: {
+			all: () => [...queryKeys.account.all, 'seller-orders'] as const,
+			list: (view: string, mode: string, store: string | null) => [...queryKeys.account.sellerOrders.all(), 'list', view, mode, store ?? 'all'] as const,
+			detail: (orderId: string) => [...queryKeys.account.sellerOrders.all(), 'detail', orderId] as const,
+		},
 		/** Admins' catalog orders: never persisted, like the rest of `account`. */
 		catalogOrders: {
 			all: () => [...queryKeys.account.all, 'catalog-orders'] as const,

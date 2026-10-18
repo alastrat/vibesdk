@@ -7,6 +7,7 @@ import {
 	LockKeyIcon,
 	MagnifyingGlassIcon,
 	PackageIcon,
+	ReceiptIcon,
 	PlusIcon,
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
@@ -28,6 +29,7 @@ import { useUsageLimitsBadgeState } from '@/components/usage-limits-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
+import { SELLER_ORDERS_PATH } from '@/api-types';
 
 interface App {
 	id: string;
@@ -320,6 +322,23 @@ export function AppSidebar() {
 								icon={<PackageIcon className="size-4" />}
 							/>
 						)}
+						{user && (
+							<Button
+								shape="square"
+								size="base"
+								variant="ghost"
+								id="orders-link"
+								aria-label="Orders"
+								title="Orders"
+								aria-current={pathname.startsWith(SELLER_ORDERS_PATH) ? 'page' : undefined}
+								onClick={() => navigate(SELLER_ORDERS_PATH)}
+								className={cn(
+									'text-kumo-subtle hover:text-kumo-default',
+									pathname.startsWith(SELLER_ORDERS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
+								)}
+								icon={<ReceiptIcon className="size-4" />}
+							/>
+						)}
 					</div>
 				) : (
 					<div className="flex flex-col gap-1.5">
@@ -365,6 +384,17 @@ export function AppSidebar() {
 									onClick={() => navigate('/catalog')}
 								>
 									Catalog
+								</Sidebar.MenuButton>
+							)}
+							{user && (
+								<Sidebar.MenuButton
+									active={pathname.startsWith(SELLER_ORDERS_PATH)}
+									icon={<ReceiptIcon weight="duotone" className="size-4 -mr-1" />}
+									id="orders-link"
+									tooltip="Orders"
+									onClick={() => navigate(SELLER_ORDERS_PATH)}
+								>
+									Orders
 								</Sidebar.MenuButton>
 							)}
 						</Sidebar.Menu>
