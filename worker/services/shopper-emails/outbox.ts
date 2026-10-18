@@ -22,6 +22,8 @@ export interface ShopperEmailEvent {
 export interface ShopperEmailStoreFacts {
 	title: string | null;
 	sellerEmail: string | null;
+	/** Test emails go only to a confirmed address, so an account can't aim Estori's email at a stranger. */
+	sellerEmailConfirmed: boolean;
 	/** The live store's address, when it's live. */
 	storeUrl: string | null;
 }
@@ -51,6 +53,11 @@ const logger = createLogger('ShopperEmails');
 
 function errorText(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function missingRecipient(test: boolean, store: ShopperEmailStoreFacts | null): string {
+	if (!test) return 'The order has no email address';
+	return store?.sellerEmail ? "The seller's email address isn't confirmed" : 'The seller has no email address';
 }
 
 export function storeName(title: string | null): string {
@@ -113,13 +120,13 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 	const test = order.mode === 'test';
 	const [store, templates, replyTo] = await Promise.all([deps.store(order.appId), deps.emails.templates(order.appId), deps.emails.replyTo(order.appId)]);
 	const template = templates.get(row.kind) ?? { enabled: true, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES[row.kind] };
-	const recipient = test ? (store?.sellerEmail ?? null) : order.customerEmail;
+	const recipient = test ? (store?.sellerEmailConfirmed ? store.sellerEmail : null) : order.customerEmail;
 	if (!template.enabled) {
 		await deps.emails.finish(id, { status: 'disabled', recipient, test });
 		return 'disabled';
 	}
 	if (!recipient) {
-		await deps.emails.finish(id, { status: 'failed', recipient: null, test, error: test ? 'The seller has no email address' : 'The order has no email address' });
+		await deps.emails.finish(id, { status: 'failed', recipient: null, test, error: missingRecipient(test, store) });
 		return 'failed';
 	}
 	if (!deps.sender) {

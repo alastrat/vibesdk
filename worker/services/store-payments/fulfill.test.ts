@@ -110,13 +110,17 @@ describe('recordStoreOrder', () => {
 		expect(again.notified).toEqual([]);
 	});
 
-	it('sends the shopper one order confirmation, when the order is first recorded', async () => {
+	it("queues the shopper's confirmation after the sale's money work, on every delivery, since the outbox sends it once", async () => {
+		const steps: string[] = [];
 		const first = fakeDeps('recorded');
+		first.deps.handOffCatalogLines = async () => void steps.push('hand off');
+		first.deps.settleSale = async () => void steps.push('settle');
+		first.deps.queueShopperEmail = async (event) => void steps.push(`email ${event.kind} ${event.eventKey}`);
 		await recordStoreOrder(first.deps, PAID);
-		expect(first.queued).toEqual([{ orderId: 'ord_ab12', kind: 'order_confirmation', eventKey: 'order', payload: {} }]);
+		expect(steps).toEqual(['hand off', 'settle', 'email order_confirmation order']);
 		const again = fakeDeps('already-recorded');
 		await recordStoreOrder(again.deps, PAID);
-		expect(again.queued).toEqual([]);
+		expect(again.queued).toEqual([{ orderId: 'ord_ab12', kind: 'order_confirmation', eventKey: 'order', payload: {} }]);
 	});
 
 	it("records a paid session from the checkout's prices and the shopper's details, and hands over catalog lines", async () => {

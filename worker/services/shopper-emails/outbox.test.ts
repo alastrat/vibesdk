@@ -19,7 +19,7 @@ const ORDER: StoreOrderView = {
 };
 const CONFIRMATION: ShopperEmailEvent = { orderId: 'ord_1', kind: 'order_confirmation', eventKey: 'order', payload: {} };
 
-function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmailTemplate; replyTo?: string | null; sellerEmail?: string | null; sentToday?: number; sendError?: unknown; attempts?: number; enqueueFails?: boolean } = {}) {
+function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmailTemplate; replyTo?: string | null; sellerEmail?: string | null; sellerEmailConfirmed?: boolean; sentToday?: number; sendError?: unknown; attempts?: number; enqueueFails?: boolean } = {}) {
 	const rows = new Map<string, ShopperEmailRow>();
 	const sent: OutgoingEmail[] = [];
 	const alerts: string[] = [];
@@ -54,7 +54,7 @@ function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmail
 			sentSince: async () => input.sentToday ?? 0,
 		},
 		order: async () => ({ ...ORDER, ...input.order }),
-		store: async () => ({ title: 'Northwind Tea', sellerEmail: input.sellerEmail === undefined ? 'seller@example.test' : input.sellerEmail, storeUrl: 'https://northwind-tea.estori.shop' }),
+		store: async () => ({ title: 'Northwind Tea', sellerEmail: input.sellerEmail === undefined ? 'seller@example.test' : input.sellerEmail, sellerEmailConfirmed: input.sellerEmailConfirmed ?? true, storeUrl: 'https://northwind-tea.estori.shop' }),
 		sender: {
 			send: async (email) => {
 				if (input.sendError) throw input.sendError;
@@ -95,6 +95,13 @@ describe('the shopper email outbox', () => {
 		expect(sent[0].to).toBe('seller@example.test');
 		expect(sent[0].subject).toBe('[Test] Your Northwind Tea order #1042');
 		expect([...rows.values()][0]).toMatchObject({ status: 'sent', test: true });
+	});
+
+	it("sends a test order's email nowhere while the seller's email isn't confirmed, so no one can aim it at a stranger", async () => {
+		const { deps, rows, sent } = world({ order: { mode: 'test' }, sellerEmailConfirmed: false });
+		await queueShopperEmail(deps, CONFIRMATION);
+		expect(sent).toHaveLength(0);
+		expect([...rows.values()][0]).toMatchObject({ status: 'failed', test: true, error: "The seller's email address isn't confirmed" });
 	});
 
 	it('sends nothing for a template the seller turned off, or past the store daily cap, which alerts', async () => {

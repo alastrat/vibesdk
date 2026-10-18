@@ -25,7 +25,12 @@ export function shopperEmailStoreFromEnv(env: Env): ShopperEmailDeps['store'] {
 	return async (appId) => {
 		const facts = await emails.storeFacts(appId);
 		if (!facts) return null;
-		return { title: facts.title, sellerEmail: facts.sellerEmail, storeUrl: facts.liveSlug && storesDomain ? storeUrl(`${facts.liveSlug}.${storesDomain}`, devPort) : null };
+		return {
+			title: facts.title,
+			sellerEmail: facts.sellerEmail,
+			sellerEmailConfirmed: facts.sellerEmailConfirmed,
+			storeUrl: facts.liveSlug && storesDomain ? storeUrl(`${facts.liveSlug}.${storesDomain}`, devPort) : null,
+		};
 	};
 }
 

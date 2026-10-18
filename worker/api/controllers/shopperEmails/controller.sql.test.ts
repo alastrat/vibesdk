@@ -57,8 +57,12 @@ describe('the shopper emails API', () => {
 		expect((await save('order_shipped', { subject: 'No switch' })).status).toBe(400);
 		expect((await save('newsletter', SHIPPED)).status).toBe(404);
 
+		// The saved email is switched off; resetting its text keeps it off.
 		const reset = await json(await ShopperEmailsController.resetTemplate(send('DELETE', {}), envWith(db), {} as ExecutionContext, as({ id: 'app_tea', kind: 'order_shipped' })));
-		expect(reset.body.data).toMatchObject({ kind: 'order_shipped', edited: false, enabled: true });
+		expect(reset.body.data).toEqual({ kind: 'order_shipped', edited: false, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES.order_shipped, enabled: false });
+		await save('order_shipped', { ...SHIPPED, enabled: true });
+		const resetOn = await json(await ShopperEmailsController.resetTemplate(send('DELETE', {}), envWith(db), {} as ExecutionContext, as({ id: 'app_tea', kind: 'order_shipped' })));
+		expect(resetOn.body.data).toMatchObject({ kind: 'order_shipped', edited: false, enabled: true });
 		// Turning Estori's default off keeps its text, so it still reads as the default.
 		const off = await json(await save('order_shipped', { ...DEFAULT_SHOPPER_EMAIL_TEMPLATES.order_shipped, enabled: false }));
 		expect(off.body.data).toMatchObject({ kind: 'order_shipped', edited: false, enabled: false });
@@ -79,7 +83,7 @@ describe('the shopper emails API', () => {
 		expect((await preview({ subject: '', heading: 'Shipped', body: '' })).status).toBe(400);
 	});
 
-	it('sends a test to the signed-in seller, marked as a test, at most 10 an hour', async () => {
+	it("sends a test to the store's seller once their email is confirmed, marked as a test, at most 10 an hour", async () => {
 		const sent: Array<{ to: string; subject: string }> = [];
 		const counts = new Map<string, string>();
 		const env = envWith(db, {
@@ -87,6 +91,11 @@ describe('the shopper emails API', () => {
 			VibecoderStore: { get: async (key: string) => counts.get(key) ?? null, put: async (key: string, value: string) => void counts.set(key, value) },
 		});
 		const test = () => ShopperEmailsController.test(send('POST', SHIPPED), env, {} as ExecutionContext, as({ id: 'app_tea', kind: 'order_shipped' }));
+		const unconfirmed = await json(await test());
+		expect(unconfirmed.status).toBe(403);
+		expect(unconfirmed.body.error?.message).toContain('Confirm your email address');
+		expect(sent).toHaveLength(0);
+		await db.prepare(`UPDATE users SET email_verified = 1 WHERE id = 'seller_1'`).run();
 		const first = await json(await test());
 		expect(first.body.data).toEqual({ sentTo: 'seller_1@example.test' });
 		expect(sent[0]).toMatchObject({ to: 'seller_1@example.test', subject: '[Test] Order 1042 shipped' });

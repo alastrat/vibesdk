@@ -101,10 +101,7 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 		})),
 		createdAt: deps.now(),
 	});
-	if (result === 'recorded') {
-		await deps.notifyNewOrder(orderId);
-		await deps.queueShopperEmail({ orderId, kind: 'order_confirmation', eventKey: 'order', payload: {} });
-	}
+	if (result === 'recorded') await deps.notifyNewOrder(orderId);
 
 	// A flagged order waits for the owner instead of buying from the supplier.
 	const hasCatalogLines = checkout.pricedCart.lines.some((line) => line.kind === 'catalog');
@@ -120,5 +117,7 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 	}
 	// The order stays recorded if settling fails; the error fails the webhook delivery, so Stripe delivers it again.
 	await deps.settleSale(orderId);
+	// After the money work, and on every delivery: a run that died after recording still sends it, and the outbox sends it once.
+	await deps.queueShopperEmail({ orderId, kind: 'order_confirmation', eventKey: 'order', payload: {} });
 	return { result, orderId, checkout };
 }

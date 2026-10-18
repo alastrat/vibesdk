@@ -100,8 +100,8 @@ export class ShopperEmailsController extends BaseController {
         const target = ShopperEmailsController.target(context);
         if (!target) return ShopperEmailsController.createErrorResponse('No such email', 404);
         try {
-            await new ShopperEmailService(env).resetTemplate(target.appId, target.kind);
-            return ShopperEmailsController.createSuccessResponse(templateView(target.kind, undefined));
+            const kept = await new ShopperEmailService(env).resetTemplate(target.appId, target.kind, new Date());
+            return ShopperEmailsController.createSuccessResponse(templateView(target.kind, kept ?? undefined));
         } catch (error) {
             return ShopperEmailsController.handleError(error, 'reset a shopper email') as ControllerResponse<ApiResponse<ShopperEmailTemplateView>>;
         }
@@ -137,7 +137,7 @@ export class ShopperEmailsController extends BaseController {
         }
     }
 
-    /** Sends a template, saved or not, filled in with a sample order, to the signed-in seller. */
+    /** Sends a template, saved or not, filled in with a sample order, to the store's seller once their email is confirmed. */
     static async test(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailTestResult>>> {
         const target = ShopperEmailsController.target(context);
         if (!target) return ShopperEmailsController.createErrorResponse('No such email', 404);
@@ -148,17 +148,20 @@ export class ShopperEmailsController extends BaseController {
         if (!sender) return ShopperEmailsController.createErrorResponse("Email sending isn't set up on this deployment", 400);
         const user = context.user!;
         try {
+            const [store, replyTo] = await Promise.all([shopperEmailStoreFromEnv(env)(target.appId), new ShopperEmailService(env).replyTo(target.appId)]);
+            if (!store) return ShopperEmailsController.createErrorResponse('Store not found', 404);
+            // Only to the store's seller at a confirmed address, so an account can't aim Estori's email at a stranger.
+            const to = store.sellerEmailConfirmed ? store.sellerEmail : null;
+            if (!to) return ShopperEmailsController.createErrorResponse('Confirm your email address to send yourself tests. Use the link Estori emailed you when you signed up.', 403);
             const key = `shopper-email-tests:${user.id}:${new Date().toISOString().slice(0, 13)}`;
             const sentThisHour = Number((await env.VibecoderStore.get(key)) ?? '0');
             if (sentThisHour >= TEST_SENDS_PER_HOUR) return ShopperEmailsController.createErrorResponse(`You can send ${TEST_SENDS_PER_HOUR} test emails an hour. Try again later.`, 429);
-            const [store, replyTo] = await Promise.all([shopperEmailStoreFromEnv(env)(target.appId), new ShopperEmailService(env).replyTo(target.appId)]);
-            if (!store) return ShopperEmailsController.createErrorResponse('Store not found', 404);
             const content = { ...sampleContent(target.kind, storeName(store.title), store.storeUrl), testNote: TEMPLATE_TEST_NOTE };
             const email = renderShopperEmail(parsed.value, content);
             // Counted before sending, so a failing send can't be retried without limit.
             await env.VibecoderStore.put(key, String(sentThisHour + 1), { expirationTtl: TWO_HOURS_SECONDS });
             await sender.send({
-                to: user.email,
+                to,
                 subject: email.subject,
                 html: email.html,
                 text: email.text,
@@ -167,7 +170,7 @@ export class ShopperEmailsController extends BaseController {
                 replyTo: replyTo ?? store.sellerEmail ?? undefined,
                 headers: { 'X-Estori-Store': target.appId, 'X-Estori-Email': target.kind },
             });
-            return ShopperEmailsController.createSuccessResponse<ShopperEmailTestResult>({ sentTo: user.email });
+            return ShopperEmailsController.createSuccessResponse<ShopperEmailTestResult>({ sentTo: to });
         } catch (error) {
             return ShopperEmailsController.handleError(error, 'send a test shopper email') as ControllerResponse<ApiResponse<ShopperEmailTestResult>>;
         }

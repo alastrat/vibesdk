@@ -72,6 +72,8 @@ export function returnPageRecordDeps(env: Env): RecordStoreOrderDeps {
 				logger.warn('Store sale not settled on the return page; the webhook settles it', { orderId, error });
 			}
 		},
+		// The webhook that always follows sends it, so the shopper's redirect doesn't wait on Email Service.
+		queueShopperEmail: async () => undefined,
 	};
 }
 

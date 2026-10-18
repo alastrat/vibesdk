@@ -3,7 +3,7 @@
 import { and, asc, desc, eq, exists, gte, lt, lte, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
-import type { ShopperEmailKind, ShopperEmailStatus, ShopperEmailStoreOption, ShopperEmailTemplate } from '../../../shared/types/shopper-emails';
+import { DEFAULT_SHOPPER_EMAIL_TEMPLATES, type ShopperEmailKind, type ShopperEmailStatus, type ShopperEmailStoreOption, type ShopperEmailTemplate } from '../../../shared/types/shopper-emails';
 
 /** What an event adds to its email: the lines or catalog items it's about, tracking, and a refund amount. */
 export interface ShopperEmailPayload {
@@ -62,8 +62,15 @@ export class ShopperEmailService extends BaseService {
             .run();
     }
 
-    async resetTemplate(appId: string, kind: ShopperEmailKind): Promise<void> {
+    /** Back to Estori's text. A switched-off email stays off, and the template that keeps it off is returned; otherwise null. */
+    async resetTemplate(appId: string, kind: ShopperEmailKind, now: Date): Promise<ShopperEmailTemplate | null> {
+        if ((await this.templates(appId)).get(kind)?.enabled === false) {
+            const off = { enabled: false, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES[kind] };
+            await this.saveTemplate(appId, kind, off, now);
+            return off;
+        }
         await this.database.delete(schema.shopperEmailTemplates).where(and(eq(schema.shopperEmailTemplates.appId, appId), eq(schema.shopperEmailTemplates.kind, kind))).run();
+        return null;
     }
 
     async replyTo(appId: string): Promise<string | null> {
@@ -170,16 +177,16 @@ export class ShopperEmailService extends BaseService {
         return rows;
     }
 
-    /** What a store's emails show and where test orders go: its title, its seller's email, and its slug while it's live. */
-    async storeFacts(appId: string): Promise<{ title: string | null; sellerEmail: string | null; liveSlug: string | null } | null> {
+    /** What a store's emails show and where test orders go: its title, its seller's email and whether it's confirmed, and its slug while it's live. */
+    async storeFacts(appId: string): Promise<{ title: string | null; sellerEmail: string | null; sellerEmailConfirmed: boolean; liveSlug: string | null } | null> {
         const row = await this.database
-            .select({ title: schema.apps.title, sellerEmail: schema.users.email, slug: schema.liveStores.slug, status: schema.liveStores.status })
+            .select({ title: schema.apps.title, sellerEmail: schema.users.email, confirmed: schema.users.emailVerified, slug: schema.liveStores.slug, status: schema.liveStores.status })
             .from(schema.apps)
             .leftJoin(schema.users, eq(schema.users.id, schema.apps.userId))
             .leftJoin(schema.liveStores, eq(schema.liveStores.appId, schema.apps.id))
             .where(eq(schema.apps.id, appId))
             .get();
         if (!row) return null;
-        return { title: row.title, sellerEmail: row.sellerEmail, liveSlug: row.status === 'live' ? row.slug : null };
+        return { title: row.title, sellerEmail: row.sellerEmail, sellerEmailConfirmed: row.confirmed === true, liveSlug: row.status === 'live' ? row.slug : null };
     }
 }
