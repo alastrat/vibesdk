@@ -13,6 +13,8 @@ export const STORE_CART_MIN_CENTS = 50;
 export const STORE_CART_MAX_CENTS = 1_000_000;
 export const STORE_CART_MAX_LINES = 50;
 export const STORE_LINE_MAX_QUANTITY = 99;
+/** An order note, such as a gift message: kept with the cart, shown on the checkout page and stored on the order. */
+export const STORE_NOTE_MAX_LENGTH = 500;
 export const STORE_PRICE_MIN_CENTS = 50;
 export const STORE_PRICE_MAX_CENTS = 1_000_000;
 
@@ -150,6 +152,10 @@ export interface StoreCartApi {
 	count(): number;
 	shipTo(): string | null;
 	setShipTo(country: string): void;
+	/** The order note, or an empty string. */
+	note(): string;
+	/** Trimmed and cut to STORE_NOTE_MAX_LENGTH; an empty note removes it. Clearing the cart removes it too. */
+	setNote(note: string): void;
 	/** Called after every change, here or in another tab; returns a function that stops listening. */
 	onChange(listener: (items: StoreCartItem[]) => void): () => void;
 }
@@ -262,6 +268,8 @@ export interface StoreOrderSummary {
 	customerName: string | null;
 	customerEmail: string | null;
 	shipTo: { name: string; line1: string; line2: string | null; city: string; region: string | null; postalCode: string; countryCode: string } | null;
+	/** The shopper's order note, such as a gift message. */
+	note: string | null;
 	needsAttention: string | null;
 	createdAt: string;
 	items: { name: string; kind: StoreLineKind; quantity: number; unitPriceCents: number }[];

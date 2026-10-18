@@ -26,6 +26,11 @@ describe('the store checkout skill', () => {
 		expect(SKILL).not.toMatch(/localStorage\.(setItem|removeItem|getItem)/);
 	});
 
+	it('keeps the order note in the cart, where the checkout page reads it', () => {
+		expect(SKILL).toContain('`Estori.cart.note()` and `Estori.cart.setNote(text)`');
+		expect(SKILL).toContain('the seller sees it on the order');
+	});
+
 	it('teaches store code that runs in the classic script tags the skill asks for', () => {
 		const example = SKILL.match(/```js\n([\s\S]+?)\n```/)?.[1] ?? '';
 		expect(example).toContain('Estori.store()');

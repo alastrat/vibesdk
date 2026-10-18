@@ -72,6 +72,12 @@ describe('renderPayPage', () => {
 		expect(summary.slice(summary.indexOf('id="summary-body"'))).not.toContain('id="country-row"');
 	});
 
+	it('has a place for the order note in the summary, hidden until the cart has one', () => {
+		const html = page();
+		const summary = html.slice(html.indexOf('id="summary-body"'), html.indexOf('</aside>'));
+		expect(summary).toContain('<div class="note" id="note-row" hidden><h3>Order note</h3><p id="note-text"></p></div>');
+	});
+
 	it('keeps store text from closing its script or adding markup', () => {
 		const html = page({ info: { ...INFO, brand: { ...INFO.brand!, name: 'Evil </script><script>alert(1)</script>' }, products: [{ ...INFO.products[0], name: '</script><img src=x onerror=alert(1)>' }] } });
 		expect(html).not.toContain('</script><script>alert(1)');

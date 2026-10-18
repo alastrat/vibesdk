@@ -73,12 +73,15 @@ It defines `window.Estori`:
   - `Estori.cart.add(variantId, quantity)`, `Estori.cart.setQuantity(variantId, quantity)` (0 removes),
     `Estori.cart.remove(variantId)` and `Estori.cart.clear()` change it.
   - `Estori.cart.shipTo()` and `Estori.cart.setShipTo(country)` hold the ship-to country, one of `shipping.countries`.
+  - `Estori.cart.note()` and `Estori.cart.setNote(text)` hold an optional order note, such as a gift message, up to
+    500 characters. The checkout page shows it, and the seller sees it on the order. Clearing the cart removes it.
   - `Estori.cart.onChange(listener)` calls `listener(items)` after every change, including edits made on the checkout
     page or in another tab. Re-render the cart badge and cart view from it.
 - `Estori.store()` resolves with `{ mode, paymentsAvailable, currency, shipping, products, brand }` from the deployed
   `estori-store.json`.
 - `Estori.checkout({ successPath, cancelPath, note })` opens Estori's checkout page for the cart. `successPath` is the
-  store's confirmation page; `cancelPath` is where "Continue shopping" goes back to.
+  store's confirmation page; `cancelPath` is where "Continue shopping" goes back to. A `note` is saved to the cart, as
+  `Estori.cart.setNote(note)` would.
 - `Estori.order(orderId)` resolves with the shopper's receipt, and empties the cart once the order is paid.
 
 ## 3. Cart, checkout and confirmation

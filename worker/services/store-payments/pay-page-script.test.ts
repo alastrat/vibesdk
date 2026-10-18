@@ -191,6 +191,23 @@ describe("Estori's checkout page script", () => {
 	beforeEach(() => vi.useFakeTimers());
 	afterEach(() => vi.useRealTimers());
 
+	it("shows the cart's order note in the summary and sends it with the checkout", async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }], note: 'Happy birthday, Mom!' })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_note')]);
+		await settle();
+		expect(page.posted[0]).toMatchObject({ note: 'Happy birthday, Mom!' });
+		expect(page.elements.get('note-row')?.hidden).toBe(false);
+		expect(page.elements.get('note-text')?.textContent).toBe('Happy birthday, Mom!');
+	});
+
+	it('hides the note and sends none when the cart has no note', async () => {
+		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
+		const page = openPage(tab, [started('chk_plain')]);
+		await settle();
+		expect(page.posted[0]).not.toHaveProperty('note');
+		expect(page.elements.get('note-row')?.hidden).toBe(true);
+	});
+
 	it('remembers its checkout for the tab, so a reload replaces it instead of holding a second one against the weekly cap', async () => {
 		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }] })]]), session: new Map<string, string>() };
 		const first = openPage(tab, [started('chk_first')]);

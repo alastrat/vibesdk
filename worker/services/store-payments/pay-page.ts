@@ -171,6 +171,9 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 .totals dt { color: var(--muted); }
 .totals dd { margin: 0; text-align: right; }
 .totals .total { font-size: 20px; font-weight: 700; color: var(--text); padding-top: 12px; border-top: 1px solid var(--line); }
+.note { margin: 16px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.note h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: var(--muted); }
+.note p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .notice { margin: 0 0 20px; padding: 14px 16px; border-radius: var(--field); background: color-mix(in srgb, #d92d20 14%, var(--surface)); border: 1px solid color-mix(in srgb, #d92d20 40%, transparent); }
 .empty { text-align: center; padding: 48px 24px; }
 .busy { opacity: 0.6; pointer-events: none; transition: opacity 0.15s; }
@@ -212,6 +215,7 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
           <dt>Shipping</dt><dd id="shipping">&mdash;</dd>
           <dt class="total">Total</dt><dd class="total" id="total">&mdash;</dd>
         </dl>
+        <div class="note" id="note-row" hidden><h3>Order note</h3><p id="note-text"></p></div>
       </div>
     </aside>
   </div>
@@ -231,10 +235,8 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 /** The page's own script: the order summary, the shared cart, and Stripe's form on a Checkout Session. */
 export const PAY_PAGE_SCRIPT = `(function () {
   var config = JSON.parse(document.getElementById('estori-pay-config').textContent);
-  var params = new URLSearchParams(window.location.search);
   var successPath = config.successPath;
   var cancelPath = config.cancelPath;
-  var note = params.get('note');
   var $ = function (id) { return document.getElementById(id); };
   $('back').href = config.basePath + cancelPath;
   $('empty-back').href = config.basePath + cancelPath;
@@ -472,6 +474,9 @@ export const PAY_PAGE_SCRIPT = `(function () {
     setBusy(true);
     hideNotice();
     var body = { items: cart.items(), shipTo: shipTo(), successPath: successPath, cancelPath: cancelPath };
+    var note = cart.note();
+    $('note-text').textContent = note;
+    $('note-row').hidden = !note;
     if (note) body.note = note;
     if (checkoutId) body.replaces = checkoutId;
     fetch(config.basePath + '/__estori/checkout', {

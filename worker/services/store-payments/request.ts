@@ -1,12 +1,11 @@
 /** What a store may send to start a checkout: variant ids, quantities, a ship-to country, return paths and a note. Pure. */
 
-import { STORE_CART_MAX_LINES, type StoreCheckoutRequest } from '../../../shared/types/store-payments';
+import { STORE_CART_MAX_LINES, STORE_NOTE_MAX_LENGTH, type StoreCheckoutRequest } from '../../../shared/types/store-payments';
 
 const REQUEST_KEYS = ['items', 'shipTo', 'successPath', 'cancelPath', 'note', 'replaces'];
 const CHECKOUT_ID = /^chk_[a-z0-9_]{1,64}$/;
 const ITEM_KEYS = ['variantId', 'quantity'];
 const MAX_PATH = 200;
-const MAX_NOTE = 500;
 const MAX_VARIANT_ID = 64;
 const RESOLVE_BASE = 'https://store.invalid';
 
@@ -54,7 +53,7 @@ export function parseCheckoutRequest(body: unknown): StoreCheckoutRequest | null
 	if (typeof shipTo !== 'string' || !/^[A-Za-z]{2}$/.test(shipTo)) return null;
 	if (successPath !== undefined && typeof successPath !== 'string') return null;
 	if (cancelPath !== undefined && typeof cancelPath !== 'string') return null;
-	if (note !== undefined && (typeof note !== 'string' || note.length > MAX_NOTE)) return null;
+	if (note !== undefined && (typeof note !== 'string' || note.length > STORE_NOTE_MAX_LENGTH)) return null;
 	if (replaces !== undefined && (typeof replaces !== 'string' || !CHECKOUT_ID.test(replaces))) return null;
 	return {
 		items: parsedItems,

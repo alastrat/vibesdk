@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STORE_SCRIPT } from './store-script';
-import type { StoreCartApi } from '../../../shared/types/store-payments';
+import { STORE_NOTE_MAX_LENGTH, type StoreCartApi } from '../../../shared/types/store-payments';
 
 interface FakeEstori {
 	cart: StoreCartApi;
@@ -70,6 +70,21 @@ describe('Estori.cart', () => {
 		expect(heard).toEqual([1]);
 	});
 
+	it('keeps an order note with the cart, trimmed and cut to its limit; an empty note or a cleared cart drops it', () => {
+		const { Estori } = browser();
+		Estori.cart.setNote('  Gift wrap, please  ');
+		expect(Estori.cart.note()).toBe('Gift wrap, please');
+		Estori.cart.setNote('x'.repeat(600));
+		expect(Estori.cart.note()).toHaveLength(STORE_NOTE_MAX_LENGTH);
+		Estori.cart.setNote('');
+		expect(Estori.cart.note()).toBe('');
+		Estori.cart.setNote('Leave it at the door');
+		Estori.cart.add('mug-blue');
+		expect(Estori.cart.note()).toBe('Leave it at the door');
+		Estori.cart.clear();
+		expect(Estori.cart.note()).toBe('');
+	});
+
 	it('reads a damaged cart as empty instead of failing the store', () => {
 		const storage = new Map([['estori:cart:/space/app_1/preview/main', '{not json']]);
 		expect(browser('/space/app_1/preview/main', storage).Estori.cart.items()).toEqual([]);
@@ -82,6 +97,17 @@ describe('Estori.checkout', () => {
 		Estori.cart.add('mug-blue');
 		expect(await Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' })).toEqual({ ok: true });
 		expect(assigned).toEqual(['/space/app_1/preview/main/__estori/pay?success=%2Fthanks&cancel=%2Fcart']);
+	});
+
+	it('keeps a note passed to checkout in the cart, out of the page address', async () => {
+		const { Estori, assigned } = browser();
+		Estori.cart.add('mug-blue');
+		await Estori.checkout({ cancelPath: '/cart', note: 'Happy birthday, Mom!' });
+		expect(Estori.cart.note()).toBe('Happy birthday, Mom!');
+		expect(assigned).toEqual(['/space/app_1/preview/main/__estori/pay?cancel=%2Fcart']);
+		// A store written for the old contract passes its items too; the note outlives the cart being refilled.
+		await Estori.checkout({ items: [{ variantId: 'cap-red', quantity: 1 }], note: 'Gift' });
+		expect(Estori.cart.note()).toBe('Gift');
 	});
 
 	it('takes the items of a store written for the old contract into the cart first', async () => {
