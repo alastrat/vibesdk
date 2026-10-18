@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from '@/components/ui/input';
 import { useRefundSellerOrder, useSellerOrder, useSellerOrderShipment } from '@/hooks/use-seller-orders';
 import { formatCents } from '@/lib/pricing';
-import { CATALOG_PROGRESS_LABELS, PAYMENT_LABELS, customerLabel, moneySplit, shipToLines, storeLabel } from './order-format';
+import { CATALOG_PROGRESS_LABELS, PAYMENT_LABELS, carrierChoice, customerLabel, moneySplit, shipToLines, storeLabel } from './order-format';
 
 export default function SellerOrderPage() {
 	const { id = '' } = useParams();
@@ -158,7 +158,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
-		<section className="grid gap-3">
+		<section className="grid content-start gap-3">
 			<h2 className="text-lg font-medium text-kumo-strong">{title}</h2>
 			{children}
 		</section>
@@ -186,8 +186,8 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 	const shipment = useSellerOrderShipment(order.id);
 	const shipped = order.fulfillmentStatus === 'fulfilled';
 	const [editing, setEditing] = useState(false);
-	const [carrier, setCarrier] = useState<SellerCarrier | ''>('');
-	const [carrierName, setCarrierName] = useState('');
+	const [carrier, setCarrier] = useState<SellerCarrier | ''>(() => carrierChoice(order.carrier).carrier);
+	const [carrierName, setCarrierName] = useState(() => carrierChoice(order.carrier).carrierName);
 	const [trackingNumber, setTrackingNumber] = useState(order.trackingNumber ?? '');
 
 	const submit = (event: FormEvent) => {

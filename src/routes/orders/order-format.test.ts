@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { customerLabel, itemsSummary, moneySplit, shipToLines, shippingStatus, storeLabel } from './order-format';
+import { carrierChoice, customerLabel, itemsSummary, moneySplit, shipToLines, shippingStatus, storeLabel } from './order-format';
 
 const ROW = { units: 3, ownUnits: 2, catalogUnits: 1, fulfillmentStatus: 'unfulfilled' as const, paymentStatus: 'paid' as const };
 
@@ -29,4 +29,12 @@ describe('orders on the seller pages', () => {
 		expect(shipToLines(null)).toEqual(['No shipping address on this order']);
 		expect(shipToLines({ name: 'Ana Ruiz', line1: '12 Elm St', line2: 'Apt 2', city: 'Austin', region: 'TX', postalCode: '78701', countryCode: 'US' })).toEqual(['Ana Ruiz', '12 Elm St', 'Apt 2', 'Austin, TX 78701', 'US']);
 	});
+
+	it("opens the shipment form on the carrier already saved, so an edit doesn't drop it", () => {
+		expect(carrierChoice('USPS')).toEqual({ carrier: 'usps', carrierName: '' });
+		expect(carrierChoice('FedEx')).toEqual({ carrier: 'fedex', carrierName: '' });
+		expect(carrierChoice('Canada Post')).toEqual({ carrier: 'other', carrierName: 'Canada Post' });
+		expect(carrierChoice(null)).toEqual({ carrier: '', carrierName: '' });
+	});
 });
+

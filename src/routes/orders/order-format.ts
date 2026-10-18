@@ -1,4 +1,4 @@
-import type { CatalogItemStatus, SellerOrderDetail, SellerOrderRow, StorePaymentStatus } from '@/api-types';
+import { SELLER_CARRIER_NAMES, type CatalogItemStatus, type SellerCarrier, type SellerOrderDetail, type SellerOrderRow, type StorePaymentStatus } from '@/api-types';
 
 export const PAYMENT_LABELS: Readonly<Record<StorePaymentStatus, string>> = {
 	paid: 'Paid',
@@ -53,4 +53,11 @@ export function shipToLines(shipTo: SellerOrderDetail['shipTo']): string[] {
 	if (!shipTo) return ['No shipping address on this order'];
 	const cityLine = [shipTo.city, [shipTo.region, shipTo.postalCode].filter(Boolean).join(' ')].filter(Boolean).join(', ');
 	return [shipTo.name, shipTo.line1, ...(shipTo.line2 ? [shipTo.line2] : []), cityLine, shipTo.countryCode].filter(Boolean);
+}
+
+/** The shipment form's carrier for a saved carrier name: a named carrier, or Other with the name typed. */
+export function carrierChoice(saved: string | null): { carrier: SellerCarrier | ''; carrierName: string } {
+	if (!saved) return { carrier: '', carrierName: '' };
+	const named = (Object.entries(SELLER_CARRIER_NAMES) as Array<[Exclude<SellerCarrier, 'other'>, string]>).find(([, name]) => name === saved);
+	return named ? { carrier: named[0], carrierName: '' } : { carrier: 'other', carrierName: saved };
 }
