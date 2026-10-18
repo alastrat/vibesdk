@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NEW_ORDER_EMAILS_PER_DAY, notifySellerOfNewOrder, type NewOrderEmailDeps } from './order-emails';
+import { NEW_ORDER_EMAILS_PER_DAY, newOrderNotifier, notifySellerOfNewOrder, type NewOrderEmailDeps } from './order-emails';
 import type { OutgoingEmail } from '../email/types';
 import type { StoreOrderView } from './store';
 
@@ -54,6 +54,8 @@ describe('the new-order email', () => {
 		await notifySellerOfNewOrder(deps, 'ord_1');
 		expect(sent[0].subject).toBe('[Test] New order #1042 at Northwind Tea: $45.99');
 		expect(sent[0].text).toContain('This was a test order. No money was charged and nothing ships.');
+		expect(sent[0].text).not.toContain('Ship these items');
+		expect(sent[0].text).not.toContain('Estori ships');
 	});
 
 	it('names "your store" when the store is gone, and sends nothing to a seller without an email', async () => {
@@ -73,4 +75,13 @@ describe('the new-order email', () => {
 		await notifySellerOfNewOrder(lastMinute.deps, 'ord_1');
 		expect(lastMinute.kv.get('seller-order-emails:seller_1:2026-10-18')).toEqual({ value: '1', ttl: 2 * 24 * 60 * 60 });
 	});
+
+	it('never throws to the order it is about, when the send or a lookup fails', async () => {
+		const failing = world();
+		const notify = newOrderNotifier({ ...failing.deps, sender: { send: async () => { throw new Error('E_DAILY_LIMIT_EXCEEDED'); } } });
+		await expect(notify('ord_1')).resolves.toBeUndefined();
+		const lost = newOrderNotifier({ ...failing.deps, order: async () => { throw new Error('D1_ERROR'); } });
+		await expect(lost('ord_1')).resolves.toBeUndefined();
+	});
 });
+

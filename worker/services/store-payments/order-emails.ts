@@ -55,15 +55,7 @@ export async function notifySellerOfNewOrder(deps: NewOrderEmailDeps, orderId: s
 const logger = createLogger('SellerOrderEmails');
 
 /** Never throws: a lost email must not undo or retry an order; the Orders page always has it. */
-export function newOrderNotifierFromEnv(env: Env): (orderId: string) => Promise<void> {
-	const deps: NewOrderEmailDeps = {
-		order: (orderId) => new StoreOrderService(env).getOrder(orderId),
-		facts: (orderId) => new SellerOrderService(env).newOrderEmailFacts(orderId),
-		sender: createEmailSender(env),
-		counter: env.VibecoderStore,
-		baseUrl: configuredBaseUrl(env),
-		now: () => new Date(),
-	};
+export function newOrderNotifier(deps: NewOrderEmailDeps): (orderId: string) => Promise<void> {
 	return async (orderId) => {
 		try {
 			const outcome = await notifySellerOfNewOrder(deps, orderId);
@@ -72,4 +64,15 @@ export function newOrderNotifierFromEnv(env: Env): (orderId: string) => Promise<
 			logger.error('Could not email the seller about a new order', { orderId, error });
 		}
 	};
+}
+
+export function newOrderNotifierFromEnv(env: Env): (orderId: string) => Promise<void> {
+	return newOrderNotifier({
+		order: (orderId) => new StoreOrderService(env).getOrder(orderId),
+		facts: (orderId) => new SellerOrderService(env).newOrderEmailFacts(orderId),
+		sender: createEmailSender(env),
+		counter: env.VibecoderStore,
+		baseUrl: configuredBaseUrl(env),
+		now: () => new Date(),
+	});
 }

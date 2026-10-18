@@ -165,11 +165,13 @@ const dollars = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
 export function sellerNewOrderEmail(to: string, order: NewOrderEmailInput): OutgoingEmail {
 	const own = order.items.filter((item) => item.kind === 'own').map((item) => item.name);
 	const catalog = order.items.filter((item) => item.kind === 'catalog').map((item) => item.name);
-	const steps = [
-		...(order.test ? ['This was a test order. No money was charged and nothing ships.'] : []),
-		...(own.length > 0 ? [`Ship these items: ${own.join(', ')}. Mark the order shipped in Estori when they're on their way.`] : []),
-		...(catalog.length > 0 ? [`Estori ships ${catalog.join(', ')}. You don't need to do anything for these.`] : []),
-	];
+	// A test order ships nothing, so it gets no shipping steps.
+	const steps = order.test
+		? ['This was a test order. No money was charged and nothing ships.']
+		: [
+				...(own.length > 0 ? [`Ship these items: ${own.join(', ')}. Mark the order shipped in Estori when they're on their way.`] : []),
+				...(catalog.length > 0 ? [`Estori ships ${catalog.join(', ')}. You don't need to do anything for these.`] : []),
+			];
 	const shipTo = order.shipTo ? [order.shipTo.name, order.shipTo.city, order.shipTo.region, order.shipTo.countryCode].filter(Boolean).join(', ') : 'No shipping address';
 	return renderEmail({
 		to,
