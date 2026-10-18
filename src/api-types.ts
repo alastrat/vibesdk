@@ -229,6 +229,18 @@ export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/t
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
 export type { StoreOrdersData, StoreOrderSummary, CatalogItemProgress, StoreRefundRequest, StoreRefundResponse, PayoutInterval } from '../shared/types/store-payments';
+export type {
+	SellerCarrier,
+	SellerOrderDetail,
+	SellerOrderLine,
+	SellerOrderModeFilter,
+	SellerOrderRow,
+	SellerOrdersData,
+	SellerOrderView,
+	SellerShipmentRequest,
+	StorePaymentStatus,
+} from '../shared/types/store-payments';
+export { SELLER_CARRIER_NAMES, SELLER_CARRIERS, SELLER_ORDERS_PATH, sellerOrderPath } from '../shared/types/store-payments';
 export type { CatalogProductsData, CatalogProductView, CatalogVariantView } from '../shared/types/catalog';
 export type {
 	AdminCatalogOrderDetail,
