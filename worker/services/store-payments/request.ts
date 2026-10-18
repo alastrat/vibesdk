@@ -10,7 +10,7 @@ const MAX_VARIANT_ID = 64;
 const RESOLVE_BASE = 'https://store.invalid';
 
 /** C0 control characters and DEL, which no return path may carry. */
-function hasControlCharacter(value: string): boolean {
+export function hasControlCharacter(value: string): boolean {
 	for (let index = 0; index < value.length; index++) {
 		const code = value.charCodeAt(index);
 		if (code <= 0x1f || code === 0x7f) return true;
