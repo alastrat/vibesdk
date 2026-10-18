@@ -1,6 +1,6 @@
 /** D1 reads and writes for live stores: each store's address, its published version, and the seller's own domain. */
 
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import type { LiveStoreStatus, StoreDomainProvider, StoreDomainRecord, StoreDomainStatus } from '../../../shared/types/live-stores';
@@ -172,12 +172,21 @@ export class LiveStoreService extends BaseService {
         await this.database.delete(schema.storeDomains).where(eq(schema.storeDomains.appId, appId));
     }
 
-    /** Domains still waiting for DNS, least recently checked first, for the hourly sweep. */
-    async pendingDomains(limit = 50): Promise<StoreDomainRow[]> {
+    /**
+     * The domains the hourly sweep checks, least recently checked first: those waiting for DNS, and connected ones
+     * with a warning or last checked before `connectedCheckedBefore`.
+     */
+    async domainsDue(connectedCheckedBefore: Date, limit = 50): Promise<StoreDomainRow[]> {
+        const domains = schema.storeDomains;
         const rows = await this.database
             .select()
-            .from(schema.storeDomains)
-            .where(eq(schema.storeDomains.status, 'pending'))
+            .from(domains)
+            .where(
+                or(
+                    eq(domains.status, 'pending'),
+                    and(eq(domains.status, 'active'), or(isNotNull(domains.lastError), isNull(domains.checkedAt), lt(domains.checkedAt, connectedCheckedBefore))),
+                ),
+            )
             .orderBy(asc(schema.storeDomains.checkedAt))
             .limit(limit)
             .all();

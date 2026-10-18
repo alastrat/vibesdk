@@ -145,6 +145,17 @@ export function sellerLimitReachedEmail(to: string, weeklySalesCents: number): O
 	});
 }
 
+/** To a seller whose connected domain's DNS records can no longer be seen; the store keeps answering on it. */
+export function sellerDomainUnreachableEmail(to: string, hostname: string): OutgoingEmail {
+	return renderEmail({
+		to,
+		subject: `Check the DNS records for ${hostname}`,
+		heading: 'Your store may be hard to reach',
+		body: `We can't see the DNS records that point ${hostname} to your store. Your store still answers on it, but visitors may not reach it until the records are back where you manage your domain's DNS.`,
+		footer: 'In Estori, open your store and choose Go live to see the records to add.',
+	});
+}
+
 /** To a seller whose order had items Estori refunded to the shopper. */
 export function sellerItemsRefundedEmail(to: string, itemCount: number, reason: 'supplier' | 'risk'): OutgoingEmail {
 	const why = reason === 'supplier' ? 'they could not be shipped' : 'the payment looked risky and could not be confirmed in time';
