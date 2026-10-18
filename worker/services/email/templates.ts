@@ -123,12 +123,14 @@ export function contactNotificationEmail(to: string, request: ContactRequestInpu
 }
 
 /** An alert for the people who run Estori: what happened, to which order or product, and what's known. */
-export function platformAlertEmail(to: string, alert: PlatformAlert, label: string): OutgoingEmail {
+/** To the people who run Estori; `link` opens what the alert is about, such as a catalog order's admin page. */
+export function platformAlertEmail(to: string, alert: PlatformAlert, label: string, link: string | null): OutgoingEmail {
 	return renderEmail({
 		to,
 		subject: `Estori alert: ${label} (${alert.subject})`,
 		heading: label,
 		body: alert.message,
+		...(link ? { action: { label: 'Open the order', link } } : {}),
 		details: [['About', alert.subject], ...(alert.details ?? [])],
 		footer: 'Each alert repeats at most once a day for the same order or product.',
 	});

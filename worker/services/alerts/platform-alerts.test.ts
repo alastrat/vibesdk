@@ -14,6 +14,7 @@ function fakeDeps(overrides: Partial<PlatformAlertDeps> = {}) {
 		},
 		sender: { send: async (email) => void sent.push(email) },
 		recipients: ['ops@example.test', 'owner@example.test'],
+		adminBaseUrl: null,
 		log: (alert) => void logged.push(alert),
 		...overrides,
 	};
@@ -39,6 +40,23 @@ describe('sendPlatformAlert', () => {
 		expect(await sendPlatformAlert(deps, { ...ALERT, subject: 'co_2' })).toBe('sent');
 		expect(sent).toHaveLength(4);
 		expect(logged).toHaveLength(3);
+	});
+
+	it("links an alert about a catalog order to the order's admin page, and others to nothing", async () => {
+		const { deps, sent } = fakeDeps({ adminBaseUrl: 'https://estori.app' });
+		await sendPlatformAlert(deps, ALERT);
+		expect(sent[0].text).toContain('Open the order: https://estori.app/admin/catalog-orders/co_1');
+		expect(sent[0].html).toContain('<a href="https://estori.app/admin/catalog-orders/co_1"');
+		await sendPlatformAlert(deps, { kind: 'not-shipped', subject: 'co_2', message: 'Late' });
+		expect(sent[2].text).toContain('https://estori.app/admin/catalog-orders/co_2');
+		await sendPlatformAlert(deps, { kind: 'seller-limit-reached', subject: 'user_1', message: 'Cap reached' });
+		expect(sent[4].text).not.toContain('Open the order');
+	});
+
+	it('leaves the link out when the deployment has no address of its own', async () => {
+		const { deps, sent } = fakeDeps();
+		await sendPlatformAlert(deps, ALERT);
+		expect(sent[0].text).not.toContain('Open the order');
 	});
 
 	it('logs, sends nothing and throttles nothing without an email sender', async () => {
