@@ -93,12 +93,20 @@ export type MergeOutcome =
   | { result: "up-to-date" }
   | { result: "fast-forward" | "merged"; commit: string }
   | { result: "conflicts"; files: string[]; deletedByDraft: string[]; deletedByLive: string[]; ours: string }
+  | BinaryChangedOnBothSides
+
+/** Nothing was merged: git can't combine two different versions of a binary file, so the seller has to pick one. */
+export interface BinaryChangedOnBothSides {
+  result: "binary-changed-on-both-sides"
+  files: string[]
+}
 
 /** What bringing in the live store's changes did, as SpaceDO reports it. */
 export type BringInOutcome =
   | { result: "up-to-date" }
   | { result: "fast-forward" | "merged"; commit: string; deploy: unknown }
   | { result: "conflicts"; files: string[]; deletedByDraft: string[]; deletedByLive: string[]; liveChanges: string[] }
+  | BinaryChangedOnBothSides
   | { error: string }
 
 /**
@@ -146,15 +154,13 @@ interface WalkedFile {
 }
 
 /**
- * A conflicted merge makes isomorphic-git write every file of the merged tree back as text, which corrupts binary
- * files neither side touched, and it never removes a file the live store deleted. This puts each file the merge
- * settled without a conflict back to the exact bytes git holds, and the surviving side of a one-side deletion too.
- * Files both sides changed without a conflict keep the text merge's result.
+ * Every file in the merge base, the draft and the published commit with its blob oid in each (null where absent).
+ * Empty when the two have no single merge base, which `git.merge` reports itself.
  */
-async function restoreSettledFiles(fs: FileSystem, ours: string, published: string, conflicts: ConflictSets): Promise<void> {
+async function walkThreeWays(fs: FileSystem, ours: string, published: string): Promise<WalkedFile[]> {
   const gitFs = createGitFs(fs)
   const [base] = await git.findMergeBase({ fs: gitFs, dir: "/", oids: [ours, published] })
-  if (!base) return
+  if (!base) return []
   const walked = (await git.walk({
     fs: gitFs,
     dir: "/",
@@ -167,11 +173,52 @@ async function restoreSettledFiles(fs: FileSystem, ours: string, published: stri
       return { filepath, base: baseOid, ours: oursOid, theirs: theirsOid }
     },
   })) as Array<WalkedFile | undefined>
+  return walked.filter((file): file is WalkedFile => file !== undefined)
+}
+
+const UTF8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true })
+
+/** A NUL byte, or bytes that aren't valid UTF-8: text decoding would change them. */
+function isBinary(bytes: Uint8Array): boolean {
+  if (bytes.includes(0)) return true
+  try {
+    UTF8.decode(bytes)
+    return false
+  } catch {
+    return true
+  }
+}
+
+/**
+ * Paths both sides changed to different content (or added with different content) where either version is binary.
+ * isomorphic-git decodes both sides as UTF-8 before merging and writes the merged text back, so two different binary
+ * versions can decode to the same text and merge cleanly into bytes that neither side had.
+ */
+async function binaryChangedOnBothSides(fs: FileSystem, walked: WalkedFile[]): Promise<string[]> {
+  const gitFs = createGitFs(fs)
+  const files: string[] = []
+  for (const { filepath, base, ours, theirs } of walked) {
+    if (!ours || !theirs || ours === theirs || ours === base || theirs === base) continue
+    const versions = await Promise.all([ours, theirs].map((oid) => git.readBlob({ fs: gitFs, dir: "/", oid })))
+    if (versions.some(({ blob }) => isBinary(blob))) files.push(filepath)
+  }
+  return files
+}
+
+/**
+ * A conflicted merge makes isomorphic-git write every file of the merged tree back as text, which corrupts binary
+ * files neither side touched, and it never removes a file the live store deleted. This puts each file the merge
+ * settled without a conflict back to the exact bytes git holds, and the surviving side of a one-side deletion too.
+ * Files both sides changed without a conflict keep the text merge's result; none of them is binary, which
+ * `mergePublished` checks first.
+ */
+async function restoreSettledFiles(fs: FileSystem, walked: WalkedFile[], conflicts: ConflictSets): Promise<void> {
+  const gitFs = createGitFs(fs)
   const marked = new Set(conflicts.files)
   const deletedByDraft = new Set(conflicts.deletedByDraft)
   const deletedByLive = new Set(conflicts.deletedByLive)
   for (const file of walked) {
-    if (!file || marked.has(file.filepath)) continue
+    if (marked.has(file.filepath)) continue
     let settled: string | null
     if (deletedByDraft.has(file.filepath)) settled = file.theirs
     else if (deletedByLive.has(file.filepath)) settled = file.ours
@@ -192,8 +239,10 @@ async function restoreSettledFiles(fs: FileSystem, ours: string, published: stri
 }
 
 /**
- * Merges the published commit into the checked-out draft `branch`. On a conflict, the markers stay in the working
- * tree and the branch stays where it was, for the AI to resolve.
+ * Merges the published commit into the checked-out draft `branch`. The working tree must be saved first (callers
+ * commit before merging), since the merge and a later cancel treat anything untracked as the merge's own. When both
+ * sides changed the same binary file it merges nothing and says so, as git can't combine them. On a text conflict,
+ * the markers stay in the working tree and the branch stays where it was, for the AI to resolve.
  */
 export async function mergePublished(
   fs: FileSystem,
@@ -204,6 +253,9 @@ export async function mergePublished(
   const ours = await branchTip(fs, branch)
   if (!ours) throw new Error(`Draft branch "${branch}" has no commits`)
   if (await includes(fs, ours, published)) return { result: "up-to-date" }
+  const walked = await walkThreeWays(fs, ours, published)
+  const binary = await binaryChangedOnBothSides(fs, walked)
+  if (binary.length > 0) return { result: "binary-changed-on-both-sides", files: binary }
   const gitFs = createGitFs(fs)
   try {
     const merged = await git.merge({
@@ -222,7 +274,7 @@ export async function mergePublished(
   } catch (error) {
     const conflicts = conflictSets(error)
     if (conflicts === null) throw error
-    await restoreSettledFiles(fs, ours, published, conflicts)
+    await restoreSettledFiles(fs, walked, conflicts)
     return { result: "conflicts", ...conflicts, ours }
   }
 }

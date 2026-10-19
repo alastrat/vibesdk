@@ -213,6 +213,60 @@ describe("a conflicted merge", () => {
   })
 })
 
+describe("a binary file changed on both sides", () => {
+  const cases = [
+    // Both decode to the same text (replacement characters), so a text merge would call them identical.
+    { name: "bytes that aren't UTF-8", base: [0xff, 0x41, 0x42], draft: [0xff, 0xfe, 0x41], live: [0xfe, 0xff, 0x41] },
+    { name: "bytes with a NUL", base: [0x41, 0x00, 0x42], draft: [0x41, 0x00, 0x43], live: [0x41, 0x00, 0x44, 0x45] },
+  ]
+
+  it.each(cases)("refuses the merge and changes nothing when both sides replaced a file with $name", async ({ base, draft, live }) => {
+    const { fs, g, commitEdits, published } = await quickFixRepo(
+      [{ path: "/about.html", text: "Our tea is grown with care.\n" }, { path: "/logo.png", text: new Uint8Array(live) }],
+      [{ path: "/logo.png", text: new Uint8Array(base) }],
+    )
+    const ours = await commitEdits(
+      [{ path: "/logo.png", text: new Uint8Array(draft) }, { path: "/about.html", text: "Our teas are grown wiht love.\n" }],
+      "Rewrite the about page",
+    )
+    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "binary-changed-on-both-sides", files: ["logo.png"] })
+    expect(await branchTip(fs, "main")).toBe(ours)
+    expect(bytes(await fs.readFileBytes("/logo.png"))).toEqual(draft)
+    expect(await fs.readFile("/about.html")).toBe("Our teas are grown wiht love.\n")
+    expect(await g.status()).toEqual([])
+  })
+
+  it("refuses when a text merge would call the two versions identical and commit neither", async () => {
+    const same = { base: [0xff, 0x41, 0x42], draft: [0xff, 0xfe, 0x41], live: [0xfe, 0xff, 0x41] }
+    const { fs, commitEdits, published } = await quickFixRepo(
+      { path: "/logo.png", text: new Uint8Array(same.live) },
+      [{ path: "/logo.png", text: new Uint8Array(same.base) }],
+    )
+    const ours = await commitEdits(
+      [{ path: "/logo.png", text: new Uint8Array(same.draft) }, { path: "/index.html", text: "<h1>Northwind Tea</h1>\n" }],
+      "Redesign the home page",
+    )
+    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "binary-changed-on-both-sides", files: ["logo.png"] })
+    expect(await branchTip(fs, "main")).toBe(ours)
+    expect(bytes(await fs.readFileBytes("/logo.png"))).toEqual(same.draft)
+  })
+
+  it("refuses when both sides added different binary files at the same path", async () => {
+    const { fs, commitEdits, published } = await quickFixRepo({ path: "/hero.png", text: BANNER_V2 })
+    const ours = await commitEdits([{ path: "/hero.png", text: BANNER_V1 }], "Add a hero image")
+    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "binary-changed-on-both-sides", files: ["hero.png"] })
+    expect(await branchTip(fs, "main")).toBe(ours)
+    expect(bytes(await fs.readFileBytes("/hero.png"))).toEqual(bytes(BANNER_V1))
+  })
+
+  it("merges when both sides changed it to the same bytes", async () => {
+    const { fs, commitEdits, published } = await quickFixRepo({ path: "/hero.png", text: BANNER_V2 })
+    await commitEdits([{ path: "/hero.png", text: BANNER_V2 }, { path: "/index.html", text: "<h1>Northwind Tea</h1>\n" }], "Add a hero image")
+    expect((await mergePublished(fs, "main", published, AUTHOR)).result).toBe("merged")
+    expect(bytes(await fs.readFileBytes("/hero.png"))).toEqual(bytes(BANNER_V2))
+  })
+})
+
 describe("resolving and cancelling", () => {
   async function conflicted() {
     const setup = await quickFixRepo({ path: "/about.html", text: "Our tea is grown with care.\n" })
