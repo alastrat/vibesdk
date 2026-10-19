@@ -65,6 +65,16 @@ describe('draft tools', () => {
 		expect(skill).toContain("never start a new draft unless the seller asks or you're on Main");
 	});
 
+	it('tells the AI to change drafts in a step of its own, since a file edit beside it can land in either draft', () => {
+		const sentence = 'Call this on its own, never in the same step as file edits.';
+		const tools = createDraftTools({ getStub: () => ({}) as SpaceWorkspaceStub });
+		for (const name of ['create_draft', 'switch_draft', 'bring_in_live_changes'] as const) {
+			expect(tools[name].description, name).toContain(sentence);
+			expect(tools[name].description, name).not.toMatch(GIT_WORDS);
+		}
+		expect(SKILL.replace(/\s+/g, ' ')).toContain(sentence);
+	});
+
 	it('starts a draft and switches to it, deploying its preview', async () => {
 		const { calls, run } = harness();
 		const result = await run('create_draft', { name: 'Spring sale', from: 'main' });

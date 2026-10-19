@@ -35,6 +35,8 @@ const BINARY_ON_BOTH_SIDES = [
 	'The files in `files` (images or fonts) changed in this draft and in the live store, and cannot be combined.',
 	'Tell the seller which files they are and that they should replace them in one version first.',
 ].join(' ');
+/** File edits in the same step run in no fixed order around the change, so they can land in either draft. */
+const ON_ITS_OWN = 'Call this on its own, never in the same step as file edits.';
 const BUILD_FAILED = [
 	"The live store's changes are in this draft, but it did not build.",
 	'Fix the build and call deploy_space again, or call cancel_bringing_in_live_changes and tell the seller what blocked it.',
@@ -132,6 +134,7 @@ export function createDraftTools(opts: { getStub: GetStub }): Record<DraftToolNa
 				'Start a new draft and switch to it. from "main" copies Main; from "live" copies the live store, for a quick fix that can be published alone while Main keeps unpublished work.',
 				"Suggest a quick fix only when you're editing Main, it has unpublished changes, and the seller asks for a small change to the live store.",
 				"If you're already editing another draft, make the change in that draft: never start a new draft unless the seller asks or you're on Main.",
+				ON_ITS_OWN,
 			].join(' '),
 			inputSchema: z.object({
 				name: z.string().describe('Short name the seller will see, e.g. "Typo fix".'),
@@ -144,7 +147,7 @@ export function createDraftTools(opts: { getStub: GetStub }): Record<DraftToolNa
 			},
 		}),
 		switch_draft: tool({
-			description: 'Switch to another draft by its name. Your edits then go to that draft, and the preview shows it.',
+			description: `Switch to another draft by its name. Your edits then go to that draft, and the preview shows it. ${ON_ITS_OWN}`,
 			inputSchema: z.object({ draft: z.string().describe("The draft's name.") }),
 			execute: async (args: { draft: string }) => {
 				const draft = await findDraft(getStub, args.draft);
@@ -156,6 +159,7 @@ export function createDraftTools(opts: { getStub: GetStub }): Record<DraftToolNa
 			description: [
 				"Bring the live store's changes into a draft (the one you are editing by default), for a draft that is behind the live store. Never call it unless the seller asks.",
 				'When it returns conflicts, follow its `next` text, and finish with deploy_space or cancel_bringing_in_live_changes in the same turn.',
+				ON_ITS_OWN,
 			].join(' '),
 			inputSchema: z.object({ draft: z.string().optional().describe("The draft's name; defaults to the one you are editing.") }),
 			execute: async (args: { draft?: string }) => {
