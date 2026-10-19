@@ -225,6 +225,14 @@ export type {
   QueryAppTableResponse,
   WipeAppDatabaseResponse,
 } from 'worker/api/controllers/appDatabase/types';
+export type {
+  CreateDraftRequest,
+  RenameDraftRequest,
+  DraftStart,
+  DraftSummary,
+  DraftsSnapshot,
+} from 'worker/api/controllers/drafts/types';
+export { MAIN_DRAFT_ID, DRAFT_NAME_MAX_LENGTH } from '../shared/types/drafts.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';

@@ -13,9 +13,11 @@ import { domainFlowDepsFromEnv } from '../../../services/live-stores/wiring';
 import { takeStoreOffline } from '../../../services/live-stores/take-offline';
 import { StoreCheckoutService } from '../../../database/services/StoreCheckoutService';
 import { stripeFromEnv } from '../../../services/payments/config';
+import type { PublishContext, PublishDraftResult } from '@space-do/space';
 
 interface LiveSpaceStub {
-    publishLive(): Promise<{ commitHash: string; storeManifest: string | null } | { error: string }>;
+    publishDraft(id?: string): Promise<PublishDraftResult>;
+    getPublishContext(): Promise<PublishContext>;
     getStoreManifest(branch: string): Promise<{ commitHash: string; manifest: string | null } | null>;
 }
 
@@ -27,11 +29,11 @@ function spaceOf(env: Env, appId: string): LiveSpaceStub | null {
 async function viewOf(env: Env, appId: string): Promise<LiveStoreView> {
     const stores = new LiveStoreService(env);
     const space = spaceOf(env, appId);
-    const [app, record, domain, preview, published] = await Promise.all([
+    const [app, record, domain, context, published] = await Promise.all([
         new AppService(env).getAppDetails(appId),
         stores.getByApp(appId),
         stores.domainOfApp(appId),
-        space?.getStoreManifest('main') ?? null,
+        space?.getPublishContext() ?? null,
         space?.getStoreManifest('live') ?? null,
     ]);
     return liveStoreView({
@@ -41,7 +43,9 @@ async function viewOf(env: Env, appId: string): Promise<LiveStoreView> {
         devPort: devPortOf(env.CUSTOM_DOMAIN),
         domainsAvailable: domainFlowDepsFromEnv(env).provider !== null,
         record,
-        previewCommit: preview?.commitHash ?? null,
+        previewCommit: context?.active.tip ?? null,
+        draft: context ? { id: context.active.id, name: context.active.name } : null,
+        publishedDraft: context?.publishedDraft ?? null,
         publishedManifest: published?.manifest ?? null,
         domain,
     });
@@ -58,14 +62,15 @@ export class LiveStoreController extends BaseController {
         }
     }
 
-    /** Publishes the previewed version at the slug, which the first publish takes and a later one may change. */
+    /** Publishes a draft (the one being edited unless the body names another) at the slug, which the first publish takes and a later one may change. */
     static async publish(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<LiveStoreView>>> {
         const appId = context.pathParams.id;
         if (!appId) return this.createErrorResponse<LiveStoreView>('Store not found', 404);
         try {
             if (!storeHostConfig(env).storesDomain) return this.createErrorResponse<LiveStoreView>("Store addresses aren't set up yet.", 409);
-            const body = await this.parseJsonBody<{ slug?: unknown }>(request);
+            const body = await this.parseJsonBody<{ slug?: unknown; draftId?: unknown }>(request);
             const slug = body.success && typeof body.data?.slug === 'string' ? body.data.slug.trim().toLowerCase() : '';
+            const draftId = body.success && typeof body.data?.draftId === 'string' ? body.data.draftId : undefined;
             const problem = slugProblem(slug);
             if (problem) return this.createErrorResponse<LiveStoreView>(problem, 400);
             const stores = new LiveStoreService(env);
@@ -74,7 +79,7 @@ export class LiveStoreController extends BaseController {
 
             const space = spaceOf(env, appId);
             if (!space) return this.createErrorResponse<LiveStoreView>("This store can't be published right now.", 503);
-            const published = await space.publishLive();
+            const published = await space.publishDraft(draftId);
             if ('error' in published) return this.createErrorResponse<LiveStoreView>(published.error, 409);
             const saved = await stores.publish({ appId, slug, commit: published.commitHash, now: new Date() });
             if (saved === 'slug-taken') return this.createErrorResponse<LiveStoreView>('That address is taken. Try another.', 409);

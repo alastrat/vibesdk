@@ -7,6 +7,7 @@ import { setupStoreRoutes } from './storeRoutes';
 import { setupSellerOrderRoutes } from './sellerOrderRoutes';
 import { setupShopperEmailRoutes } from './shopperEmailRoutes';
 import { setupLiveStoreRoutes } from './liveStoreRoutes';
+import { setupDraftRoutes } from './draftRoutes';
 import { setupCatalogRoutes } from './catalogRoutes';
 import { setupEarlyAccessRoutes } from './earlyAccessRoutes';
 import { setupContactRoutes } from './contactRoutes';
@@ -74,6 +75,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
     setupSellerOrderRoutes(app);
     setupShopperEmailRoutes(app);
     setupLiveStoreRoutes(app);
+    setupDraftRoutes(app);
 
     // Catalog images and catalog operations
     setupCatalogRoutes(app);

@@ -25,20 +25,21 @@ function spaces(duringPublish?: () => Promise<void>) {
 	const namespace = {
 		idFromName: (name: string) => name,
 		get: (appId: string) => ({
-			publishLive: async () => {
-				published.push(appId);
+			publishDraft: async (draftId?: string) => {
+				published.push(draftId ? `${appId}:${draftId}` : appId);
 				await duringPublish?.();
-				return { commitHash: 'c0ffee1', storeManifest: null };
+				return { commitHash: 'c0ffee1', storeManifest: null, draftId: draftId ?? 'main', draftName: draftId ? 'Typo fix' : 'Main' };
 			},
+			getPublishContext: async () => ({ active: { id: 'main', name: 'Main', tip: 'c0ffee1' }, publishedDraft: null }),
 			getStoreManifest: async () => ({ commitHash: 'c0ffee1', manifest: null }),
 		}),
 	};
 	return { namespace, published };
 }
 
-function publishAs(appId: string, slug: string, namespace: unknown) {
+function publishAs(appId: string, slug: string, namespace: unknown, draftId?: string) {
 	const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace });
-	const request = new Request(`https://estori.app/api/stores/${appId}/live/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug }) });
+	const request = new Request(`https://estori.app/api/stores/${appId}/live/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftId ? { slug, draftId } : { slug }) });
 	return LiveStoreController.publish(request, env, {} as ExecutionContext, { pathParams: { id: appId } } as unknown as RouteContext);
 }
 
@@ -55,6 +56,16 @@ describe('publishing a live store', () => {
 		expect(published).toEqual(['app_tea']);
 		const row = await db.prepare("SELECT slug, status, published_commit FROM live_stores WHERE app_id = 'app_tea'").first();
 		expect(row).toEqual({ slug: 'northwind-tea', status: 'live', published_commit: 'c0ffee1' });
+	});
+
+	it('publishes the draft the seller picked', async () => {
+		const { namespace, published } = spaces();
+		const response = await publishAs('app_tea', 'northwind-fix', namespace, 'k3x9q2mf');
+		expect(response.status).toBe(200);
+		expect(published).toEqual(['app_tea:k3x9q2mf']);
+		expect((await bodyOf(response)).data).toMatchObject({ status: 'live', slug: 'northwind-fix' });
+		const row = await db.prepare("SELECT published_commit FROM live_stores WHERE app_id = 'app_tea'").first();
+		expect(row).toEqual({ published_commit: 'c0ffee1' });
 	});
 
 	it("refuses an address another store holds before publishing anything, so the build isn't replaced", async () => {

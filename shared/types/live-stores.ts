@@ -149,10 +149,16 @@ export interface LiveStoreView {
 	domain: StoreDomainView | null;
 	/** False until Estori sets up a way to connect sellers' domains. */
 	domainsAvailable: boolean;
+	/** The draft being edited, which Publish sends live. */
+	draft: { id: string; name: string } | null;
+	/** The draft the live store was published from. */
+	publishedDraft: { id: string; name: string } | null;
 }
 
 export interface PublishLiveStoreRequest {
 	slug: string;
+	/** Defaults to the draft being edited. */
+	draftId?: string;
 }
 
 export interface AddStoreDomainRequest {
