@@ -20,6 +20,7 @@ import { createAskQuestionsTool } from './ask-questions-tool';
 import { createBrowserConsoleLogsTool } from './browser-logs-tool';
 import { createDeploySpaceTool } from './deploy-tool';
 import { createCommitTool } from './commit-tool';
+import { createDraftTools } from './draft-tools';
 import { createSetTitleTool } from './set-title-tool';
 import { catalogToolDepsFromEnv, createCatalogTools } from './catalog-tools';
 import { createPaymentsSetupTool, paymentsSetupDepsFromEnv } from './payments-setup-tool';
@@ -328,6 +329,8 @@ export class ThinkAgent extends Think<Env> {
 				commit: createCommitTool({ getStub: () => this.getSpaceStub() }),
 				// Commit + deploy the SpaceDO branch so the preview rebuilds.
 				deploy_space: createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
+				// Drafts: list, start and switch, and bring in the live store's changes.
+				...createDraftTools({ getStub: () => this.getSpaceStub() }),
 				// Client-side debugging via a real headless browser.
 				get_browser_console_logs: createBrowserConsoleLogsTool({
 					env: this.env,

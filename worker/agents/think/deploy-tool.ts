@@ -15,12 +15,15 @@ import { LIVE_BRANCH } from '../../../shared/types/live-stores';
 import { STORE_MANIFEST_FILE } from '../../../shared/types/store-payments';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
 
+/** What SpaceDO's commit says while a merge still has conflict markers in the working tree. */
+const CONFLICT_MARKERS_REFUSAL = 'Remove the conflict markers';
+
 const DESCRIPTION = [
-	'Commit the current working tree and deploy a branch so its preview rebuilds and serves the latest code.',
+	'Commit the current working tree and deploy the draft you are editing so its preview rebuilds and serves the latest code.',
 	'',
 	'Call this after writing/editing files to make changes visible in the preview. Returns the deploy result as JSON, including the preview path and any build errors — read those errors and fix the code if the build failed, then redeploy.',
 	'',
-	"Defaults to the 'main' branch. The 'live' branch is the seller's published store: never deploy it.",
+	"Deploys the draft you are editing. To deploy another draft, switch to it with switch_draft first. The 'live' version is the seller's published store: never deploy it.",
 	'',
 	'When the project has estori-store.json, the result includes storeFile: checkout is off until it is valid, so fix every error it lists and deploy again.',
 ].join('\n');
@@ -45,19 +48,28 @@ export function createDeploySpaceTool(opts: { getStub: () => SpaceWorkspaceStub 
 			branch: z
 				.string()
 				.optional()
-				.describe("Git branch to deploy. Defaults to 'main'."),
+				.describe('Leave empty: deploys the draft you are editing.'),
 		}),
 		execute: async (args: { branch?: string }) => {
-			const branch = args.branch && args.branch.length > 0 ? args.branch : 'main';
+			const active = await withDurableObjectResetRetry(getStub, (stub) => stub.getActiveDraft());
+			const requested = args.branch && args.branch.length > 0 ? args.branch : active.branch;
 			// The live store serves what the seller published from Estori; an agent deploy must never replace it.
-			if (branch.toLowerCase() === LIVE_BRANCH) {
-				return JSON.stringify({ branch, error: `Branch "${branch}" is reserved for the live store. Deploy 'main'; the seller publishes it from Estori.` });
+			if (requested.toLowerCase() === LIVE_BRANCH) {
+				return JSON.stringify({ branch: requested, error: `"${requested}" is reserved for the live store. Deploy the draft you are editing; the seller publishes it from Estori.` });
 			}
+			if (requested !== active.branch) {
+				return JSON.stringify({ branch: requested, error: `That isn't the draft you are editing. Switch to it with switch_draft first.` });
+			}
+			const branch = requested;
 			try {
 				await withDurableObjectResetRetry(getStub, (stub) =>
 					stub.gitCommit('deploy: snapshot working tree'),
 				);
-			} catch {
+			} catch (e) {
+				// Deploying now would build the draft's old version and report success while the markers stand.
+				if (e instanceof Error && e.message.startsWith(CONFLICT_MARKERS_REFUSAL)) {
+					return JSON.stringify({ branch, error: e.message });
+				}
 				// No changes to commit (clean tree) — proceed to deploy the existing HEAD.
 			}
 			try {
