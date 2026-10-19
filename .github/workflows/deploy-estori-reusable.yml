@@ -1,0 +1,133 @@
+name: Deploy (Estori, shared)
+
+# The gate and deploy steps every Estori environment runs. Callers pass `secrets: inherit`; the deploy job's
+# environment supplies its own secrets, variables and protection rules.
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment to deploy to (production or staging)
+        required: true
+        type: string
+      wrangler-config:
+        description: Wrangler config for the environment
+        required: true
+        type: string
+      app-origin:
+        description: The app's origin, for the smoke checks
+        required: true
+        type: string
+      preview-probe-url:
+        description: The preview host, for the smoke checks
+        required: true
+        type: string
+      worker-name:
+        description: The Worker's name, for the rollback hint
+        required: true
+        type: string
+      preview-custom-domain:
+        description: "'true' publishes the preview host as a custom domain, so Cloudflare creates its DNS record"
+        required: false
+        type: string
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run test
+
+  deploy:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # The environment's own secrets and variables apply here, and its protection rules (production's approval) too.
+    environment: ${{ inputs.environment }}
+
+    env:
+      CI: true
+      WRANGLER_NON_INTERACTIVE: true
+      WRANGLER_CONFIG_PATH: ${{ inputs.wrangler-config }}
+      DEPLOY_PREVIEW_CUSTOM_DOMAIN: ${{ inputs.preview-custom-domain }}
+      # deploy.ts drops the ARTIFACTS binding unless this is "true"; it is also uploaded as a Worker secret.
+      ENABLE_ARTIFACTS: "true"
+      # Keep the broad deploy token out of the Worker's secrets.
+      DEPLOY_SKIP_SECRETS: CLOUDFLARE_API_TOKEN
+      CLOUDFLARE_AI_GATEWAY_URL: ${{ vars.CLOUDFLARE_AI_GATEWAY_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Cache Bun install cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Add local binaries to PATH
+        run: echo "${{ github.workspace }}/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Deploy via deploy script
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
+          GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: bun scripts/deploy.ts
+
+      - name: Smoke test
+        env:
+          ACCESS_CLIENT_ID: ${{ secrets.ACCESS_CLIENT_ID }}
+          ACCESS_CLIENT_SECRET: ${{ secrets.ACCESS_CLIENT_SECRET }}
+          ESTORI_APP_ORIGIN: ${{ inputs.app-origin }}
+          ESTORI_PREVIEW_PROBE_URL: ${{ inputs.preview-probe-url }}
+          ESTORI_WORKER_NAME: ${{ inputs.worker-name }}
+          ESTORI_STAGING_GATE_KEY: ${{ secrets.ESTORI_STAGING_GATE_KEY }}
+        run: bun scripts/estori-smoke.ts

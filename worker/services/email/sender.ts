@@ -1,5 +1,6 @@
 import { createLogger } from '../../logger';
 import { isDev } from '../../utils/envs';
+import { blockedRecipientError, recipientAllowlist } from './recipient-allowlist';
 import { EMAIL_FROM, type EmailSender, type TransactionalEmailBinding } from './types';
 
 const logger = createLogger('Email');
@@ -28,12 +29,38 @@ const devLogSender: EmailSender = {
 	},
 };
 
-/** The Cloudflare binding when configured, the dev log in local development, otherwise null. */
+/** Sends only to recipients `allows` lets through; the rest are logged and fail with BLOCKED_RECIPIENT_CODE. */
+function allowlisted(sender: EmailSender, allows: (recipient: string) => boolean): EmailSender {
+	return {
+		async send(email) {
+			if (!allows(email.to)) {
+				logger.info('Email not sent: not on the allowlist', { to: email.to, subject: email.subject });
+				throw blockedRecipientError();
+			}
+			return sender.send(email);
+		},
+	};
+}
+
+const STAGING_ENVIRONMENT = 'staging';
+const STAGING_SUBJECT_PREFIX = '[Staging] ';
+
+/** Marks every subject, so staging's emails are never mistaken for production's. */
+function stagingSubjects(sender: EmailSender): EmailSender {
+	return { send: (email) => sender.send({ ...email, subject: `${STAGING_SUBJECT_PREFIX}${email.subject}` }) };
+}
+
+/**
+ * The Cloudflare binding when configured, the dev log in local development, otherwise null; limited to
+ * EMAIL_RECIPIENT_ALLOWLIST when set. Staging marks its subjects, and without an allowlist sends to no one.
+ */
 export function createEmailSender(env: Env): EmailSender | null {
-	if (env.EMAIL) {
-		return cloudflareSender(env.EMAIL);
-	}
-	return isDev(env) ? devLogSender : null;
+	const sender = env.EMAIL ? cloudflareSender(env.EMAIL) : isDev(env) ? devLogSender : null;
+	if (!sender) return null;
+	const staging = env.ENVIRONMENT === STAGING_ENVIRONMENT;
+	const allows = recipientAllowlist(env.EMAIL_RECIPIENT_ALLOWLIST) ?? (staging ? () => false : null);
+	const limited = allows ? allowlisted(sender, allows) : sender;
+	return staging ? stagingSubjects(limited) : limited;
 }
 
 export function isEmailSendingEnabled(env: Env): boolean {

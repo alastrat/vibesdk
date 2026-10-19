@@ -11,6 +11,8 @@ describe('a failed send', () => {
 
 	it('stops for a suppressed address, and gives up on what a retry cannot fix', () => {
 		expect(classifySendError(coded('E_RECIPIENT_SUPPRESSED'))).toBe('suppressed');
+		// Staging's allowlist blocked it: final, and nothing to alert about.
+		expect(classifySendError(coded('E_STAGING_BLOCKED'))).toBe('suppressed');
 		for (const code of ['E_VALIDATION_ERROR', 'E_SENDER_NOT_VERIFIED', 'E_SENDER_DOMAIN_NOT_AVAILABLE', 'E_HEADER_NOT_ALLOWED']) expect(classifySendError(coded(code)), code).toBe('failed');
 	});
 });

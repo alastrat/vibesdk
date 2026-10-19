@@ -1168,10 +1168,18 @@ class CloudflareDeploymentManager {
                 }
 			}
 
-			expectedRoutes = [
-				{ pattern: customDomain, custom_domain: true },
-				wildcardRoute,
-			];
+			// Estori serves previews by path on one host, so an environment whose preview host has no DNS record (staging)
+			// publishes it as a custom domain instead, and Cloudflare creates its DNS record and certificate.
+			const previewAsCustomDomain = process.env.DEPLOY_PREVIEW_CUSTOM_DOMAIN === 'true' && !!customPreviewDomain && customPreviewDomain !== customDomain;
+			expectedRoutes = previewAsCustomDomain
+				? [
+						{ pattern: customDomain, custom_domain: true },
+						{ pattern: customPreviewDomain, custom_domain: true },
+					]
+				: [
+						{ pattern: customDomain, custom_domain: true },
+						wildcardRoute,
+					];
 
 			// Check if routes need updating
 			let needsUpdate = false;

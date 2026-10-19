@@ -1,0 +1,27 @@
+name: Deploy (Estori staging)
+
+# Every merge to main deploys to staging; production deploys only from estori-live, with the owner's approval.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: estori-staging
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    if: github.repository == 'alastrat/vibesdk'
+    uses: ./.github/workflows/deploy-estori-reusable.yml
+    with:
+      environment: staging
+      wrangler-config: wrangler.estori-staging.jsonc
+      app-origin: https://staging.estori.app
+      preview-probe-url: https://preview-staging.estori.app/
+      worker-name: estori-staging
+      preview-custom-domain: 'true'
+    secrets: inherit

@@ -92,4 +92,14 @@ describe('runSmokeChecks', () => {
 		const preview = (await runSmokeChecks(CONFIG, impl)).find((r) => r.name === 'preview-host');
 		expect(preview).toEqual({ name: 'preview-host', ok: false, detail: 'certificate has expired' });
 	});
+
+	it("sends staging's key with the app checks when one is set, and never to the preview host", async () => {
+		const { impl, seen } = fakeFetch(healthy);
+		await runSmokeChecks({ ...CONFIG, stagingGateKey: 'staging-key' }, impl);
+		expect(seen.filter((call) => call.url.startsWith('https://estori.app/')).every((call) => call.headers.get('x-estori-staging-key') === 'staging-key')).toBe(true);
+		expect(seen.find((call) => call.url === 'https://preview.estori.app/')?.headers.get('x-estori-staging-key')).toBeNull();
+		const plain = fakeFetch(healthy);
+		await runSmokeChecks(CONFIG, plain.impl);
+		expect(plain.seen.every((call) => call.headers.get('x-estori-staging-key') === null)).toBe(true);
+	});
 });
