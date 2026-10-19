@@ -52,7 +52,8 @@
   - **The page:** `/__staging` shows a small form. Posting the right key sets an `HttpOnly`, `Secure`, `SameSite=Lax` cookie for 30 days. The cookie holds a SHA-256 digest of the key, not the key.
   - **Automated checks** send the key in an `x-estori-staging-key` header instead.
   - **The check:** comparisons are constant-time.
-- **Locked responses:** API paths get a 401 JSON error, and pages get a short HTML page that links to `/__staging`. Every response from a gated Worker carries `X-Robots-Tag: noindex, nofollow`.
+- **Locked responses:** API paths get a 401 JSON error, and pages get a short HTML page that links to `/__staging`. Everything the gate returns carries `X-Robots-Tag: noindex, nofollow`. Pages behind the gate get nothing extra, since crawlers never get past it.
+- **No key on staging:** with `ENVIRONMENT=staging` and no key set, the Worker returns 503 to everything, webhook included. A deploy that lands before the key is set is never open.
 - **Production is unchanged:** the key isn't set there, so the gate does nothing.
 - **Once Access protects `staging.estori.app`,** the key can stay as a second lock or be removed.
 
