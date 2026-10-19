@@ -10,6 +10,7 @@ import {
   LIVE_PATH_PREFIX,
   servedUrl,
   publishLiveDeployment,
+  PREVIEW_BRANCH,
   type BranchDeploymentBundle,
   type DeployContext,
 } from "./deploy-engine"
@@ -583,7 +584,7 @@ export class SpaceDO extends DurableObject<Env> {
    */
   async publishLive(): Promise<{ commitHash: string; storeManifest: string | null } | { error: string }> {
     await this.ensureInit()
-    return publishLiveDeployment(this.ctx.storage.sql, Date.now()) ?? { error: "Deploy the store's preview before publishing it." }
+    return publishLiveDeployment(this.ctx.storage.sql, Date.now(), PREVIEW_BRANCH) ?? { error: "Deploy the store's preview before publishing it." }
   }
 
   async getDeploymentBundle(branch: string): Promise<BranchDeploymentBundle> {

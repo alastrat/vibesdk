@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { env, runInDurableObject } from 'cloudflare:test';
-import { DEPLOYMENTS_TABLE_SQL, LIVE_BRANCH, isReservedBranch, publishLiveDeployment, servedUrl } from '../src/space/deploy-engine';
+import { DEPLOYMENTS_TABLE_SQL, LIVE_BRANCH, isReservedBranch, publishLiveDeployment, publishedVersion, servedUrl } from '../src/space/deploy-engine';
 import type {} from './test-env';
 
 function uniqueStub(name: string) {
@@ -31,14 +31,14 @@ describe('publishLiveDeployment', () => {
 			const sql = state.storage.sql;
 			sql.exec(DEPLOYMENTS_TABLE_SQL);
 			deployMain(sql, 'c1', '{"version":1}');
-			expect(publishLiveDeployment(sql, 50)).toEqual({ commitHash: 'c1', storeManifest: '{"version":1}' });
+			expect(publishLiveDeployment(sql, 50, 'main')).toEqual({ commitHash: 'c1', storeManifest: '{"version":1}' });
 			const live = rowOf(sql, LIVE_BRANCH);
 			expect(live).toMatchObject({ branch: 'live', commit_hash: 'c1', main_module: 'index.js', store_manifest: '{"version":1}', deployed_at: 50 });
 			expect(live?.modules).toBe(rowOf(sql, 'main')?.modules);
 
 			deployMain(sql, 'c2', null);
 			expect(rowOf(sql, LIVE_BRANCH)).toMatchObject({ commit_hash: 'c1' });
-			expect(publishLiveDeployment(sql, 60)).toEqual({ commitHash: 'c2', storeManifest: null });
+			expect(publishLiveDeployment(sql, 60, 'main')).toEqual({ commitHash: 'c2', storeManifest: null });
 			expect(rowOf(sql, LIVE_BRANCH)).toMatchObject({ commit_hash: 'c2', deployed_at: 60 });
 			expect(rowOf(sql, 'main')).toMatchObject({ commit_hash: 'c2', deployed_at: 1 });
 		});
@@ -48,8 +48,37 @@ describe('publishLiveDeployment', () => {
 		await runInDurableObject(uniqueStub('empty'), async (_instance, state) => {
 			const sql = state.storage.sql;
 			sql.exec(DEPLOYMENTS_TABLE_SQL);
-			expect(publishLiveDeployment(sql, 50)).toBeNull();
+			expect(publishLiveDeployment(sql, 50, 'main')).toBeNull();
 			expect(rowOf(sql, LIVE_BRANCH)).toBeNull();
+		});
+	});
+
+	it("publishes a draft's own build and records the draft it came from", async () => {
+		await runInDurableObject(uniqueStub('draft'), async (_instance, state) => {
+			const sql = state.storage.sql;
+			sql.exec(DEPLOYMENTS_TABLE_SQL);
+			deployMain(sql, 'm1', null);
+			sql.exec(
+				`INSERT INTO deployments (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at) VALUES ('draft-fix00001', 'f1', 'index.js', '{}', '{}', '{}', '{"version":2}', 2)`,
+			);
+			expect(publishedVersion(sql)).toBeNull();
+			expect(publishLiveDeployment(sql, 70, 'draft-fix00001')).toEqual({ commitHash: 'f1', storeManifest: '{"version":2}' });
+			expect(publishedVersion(sql)).toEqual({ commit: 'f1', sourceBranch: 'draft-fix00001' });
+			expect(rowOf(sql, 'main')).toMatchObject({ commit_hash: 'm1' });
+			expect(publishLiveDeployment(sql, 80, 'draft-never00')).toBeNull();
+			expect(publishLiveDeployment(sql, 80, 'live')).toBeNull();
+			expect(publishedVersion(sql)).toEqual({ commit: 'f1', sourceBranch: 'draft-fix00001' });
+		});
+	});
+
+	it('reads a store published before drafts as published from Main', async () => {
+		await runInDurableObject(uniqueStub('legacy'), async (_instance, state) => {
+			const sql = state.storage.sql;
+			sql.exec(DEPLOYMENTS_TABLE_SQL);
+			sql.exec(
+				`INSERT INTO deployments (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at) VALUES ('live', 'old', 'index.js', '{}', '{}', '{}', NULL, 1)`,
+			);
+			expect(publishedVersion(sql)).toEqual({ commit: 'old', sourceBranch: 'main' });
 		});
 	});
 

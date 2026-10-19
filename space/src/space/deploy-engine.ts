@@ -25,13 +25,14 @@ export const DEPLOYMENTS_TABLE_SQL = `
     assets TEXT NOT NULL DEFAULT '{}',
     asset_config TEXT NOT NULL DEFAULT '{}',
     store_manifest TEXT,
+    source_branch TEXT,
     deployed_at INTEGER NOT NULL
   )
 `
 
 /** The deployment a live store serves. Only publishing writes it, so no deploy may use the name. */
 export const LIVE_BRANCH = "live"
-/** The branch whose deployment the seller previews, and publishing copies. */
+/** Main's branch, which stores published before drafts were published from. */
 export const PREVIEW_BRANCH = "main"
 
 /** Live store requests from the platform worker arrive under this path. Mirrors SPACE_LIVE_PATH in shared/types/live-stores.ts. */
@@ -51,25 +52,45 @@ export function isReservedBranch(branch: string): boolean {
   return branch.toLowerCase() === LIVE_BRANCH
 }
 
+/** What the live store serves, and the draft branch it was published from. */
+export interface PublishedVersion {
+  commit: string
+  sourceBranch: string
+}
+
 /**
- * Copies the previewed deployment into `live` unchanged, so shoppers get exactly the build the seller previewed. It
- * neither rebuilds nor checks anything out, so the working tree never moves. Null when the preview was never deployed.
+ * Copies a draft's deployment into `live` unchanged, so shoppers get exactly the build the seller previewed. It
+ * neither rebuilds nor checks anything out, so the working tree never moves. Null when the draft was never deployed.
  */
-export function publishLiveDeployment(sql: SqlStorage, nowMs: number): { commitHash: string; storeManifest: string | null } | null {
+export function publishLiveDeployment(
+  sql: SqlStorage,
+  nowMs: number,
+  branch: string,
+): { commitHash: string; storeManifest: string | null } | null {
+  if (isReservedBranch(branch)) return null
   const preview = sql
-    .exec("SELECT commit_hash, store_manifest FROM deployments WHERE branch = ?", PREVIEW_BRANCH)
+    .exec("SELECT commit_hash, store_manifest FROM deployments WHERE branch = ?", branch)
     .toArray()[0]
   if (!preview) return null
   sql.exec(
     `INSERT OR REPLACE INTO deployments
-     (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at)
-     SELECT ?, commit_hash, main_module, modules, assets, asset_config, store_manifest, ?
+     (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at, source_branch)
+     SELECT ?, commit_hash, main_module, modules, assets, asset_config, store_manifest, ?, ?
      FROM deployments WHERE branch = ?`,
     LIVE_BRANCH,
     nowMs,
-    PREVIEW_BRANCH,
+    branch,
+    branch,
   )
   return { commitHash: String(preview.commit_hash), storeManifest: preview.store_manifest === null ? null : String(preview.store_manifest) }
+}
+
+/** The live store's commit and its draft branch. A store published before drafts came from Main. */
+export function publishedVersion(sql: SqlStorage): PublishedVersion | null {
+  const row = sql.exec("SELECT commit_hash, source_branch FROM deployments WHERE branch = ?", LIVE_BRANCH).toArray()[0]
+  if (!row) return null
+  const source = row.source_branch
+  return { commit: String(row.commit_hash), sourceBranch: typeof source === "string" && source.length > 0 ? source : PREVIEW_BRANCH }
 }
 
 export interface DeployContext {
