@@ -87,6 +87,14 @@ describe("SpaceDO drafts wiring", () => {
     expect(rollback.indexOf("this.commitAndMirror(")).toBeLessThan(rollback.indexOf("this.deploy(branch)"))
   })
 
+  it("refuses to roll back a draft that isn't checked out, before moving HEAD off it", () => {
+    const rollback = methodBody(spaceDo, "async rollbackToCommit(")
+    const refusal = rollback.indexOf('return { error: "Switch to this draft before rolling it back." }')
+    expect(refusal).toBeGreaterThan(rollback.indexOf("this.withDraftLock("))
+    expect(rollback.slice(rollback.indexOf("this.withDraftLock("), refusal)).toContain("await this.currentBranch()")
+    expect(refusal).toBeLessThan(rollback.indexOf("this.git.checkout({ ref: target.oid })"))
+  })
+
   it("leaves no draft behind when its start can't be loaded or saved", () => {
     const create = methodBody(spaceDo, "async createDraft(")
     const start = create.indexOf("await createDraftBranch(this.fs, added.draft.branch, start)")

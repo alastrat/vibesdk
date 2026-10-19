@@ -602,6 +602,8 @@ export class SpaceDO extends DurableObject<Env> {
     // Locked: HEAD is detached while the target's tree is read, so no draft operation may see it.
     return this.withDraftLock(async () => {
       if (await this.mergeState()) return { error: MERGE_IN_PROGRESS }
+      // The rollback ends on `branch`, so another draft would leave HEAD, and the AI's next writes, off the active one.
+      if (branch !== ((await this.currentBranch()) ?? MAIN_BRANCH)) return { error: "Switch to this draft before rolling it back." }
       // Reads/walks the whole working tree below, so the Artifacts base must be
       // fully materialized into the overlay first.
       await this.materializeAll()
