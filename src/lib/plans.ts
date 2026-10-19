@@ -119,6 +119,7 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 		{ label: 'Start from templates in Discover', cells: ALL },
 		{ label: 'Sell your stores as templates', cells: ALL },
 		{ label: 'Fee on template sales', cells: { basic: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL } },
+		{ label: 'Email receipts for your template buyers', cells: ALL },
 	]),
 	capabilitySection('agentic-commerce', [{ label: 'Get recommended by AI assistants', cells: PAID }]),
 	capabilitySection('operations-agents', [
@@ -140,6 +141,11 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 		{ label: 'Own products in weekly sales', cells: onEveryPlan('Count twice') },
 		{ label: 'Payout wait, by seller level', cells: onEveryPlan(`${NEW_SELLER.payoutDelayDays} business days new, ${ESTABLISHED_SELLER.payoutDelayDays} established`) },
 		{ label: 'Refunds and disputes', cells: onEveryPlan('Paid by the seller') },
+		// The emails Estori sends with each store order, the same on every plan.
+		{ label: 'An email to you for every new order', cells: ALL },
+		{ label: 'Order emails to your shoppers', cells: onEveryPlan('Confirmation, shipped and refund') },
+		{ label: 'Edit each shopper email, or turn it off', cells: ALL },
+		{ label: "Shopper emails from your store's own address", cells: ALL },
 		// Checking the delivery of orders sellers ship themselves is a Premium feature.
 		{ label: 'Delivery checks on orders you ship', cells: PAID },
 	], { everyPlan: true }),
