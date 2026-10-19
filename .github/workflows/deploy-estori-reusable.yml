@@ -25,6 +25,11 @@ on:
         description: The Worker's name, for the rollback hint
         required: true
         type: string
+      preview-custom-domain:
+        description: "'true' publishes the preview host as a custom domain, so Cloudflare creates its DNS record"
+        required: false
+        type: string
+        default: 'false'
 
 permissions:
   contents: read
@@ -73,6 +78,7 @@ jobs:
       CI: true
       WRANGLER_NON_INTERACTIVE: true
       WRANGLER_CONFIG_PATH: ${{ inputs.wrangler-config }}
+      DEPLOY_PREVIEW_CUSTOM_DOMAIN: ${{ inputs.preview-custom-domain }}
       # deploy.ts drops the ARTIFACTS binding unless this is "true"; it is also uploaded as a Worker secret.
       ENABLE_ARTIFACTS: "true"
       # Keep the broad deploy token out of the Worker's secrets.

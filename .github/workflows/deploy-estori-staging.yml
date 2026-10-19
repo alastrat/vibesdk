@@ -23,4 +23,5 @@ jobs:
       app-origin: https://staging.estori.app
       preview-probe-url: https://preview-staging.estori.app/
       worker-name: estori-staging
+      preview-custom-domain: 'true'
     secrets: inherit

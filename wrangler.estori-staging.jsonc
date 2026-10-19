@@ -120,8 +120,9 @@
 			"custom_domain": true
 		},
 		{
-			"pattern": "*preview-staging.estori.app/*",
-			"zone_name": "estori.app"
+			// A custom domain, so Cloudflare manages its DNS record and certificate (deploys set DEPLOY_PREVIEW_CUSTOM_DOMAIN).
+			"pattern": "preview-staging.estori.app",
+			"custom_domain": true
 		}
 	],
 	"vars": {
