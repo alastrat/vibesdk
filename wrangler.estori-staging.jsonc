@@ -1,0 +1,151 @@
+/**
+ * Estori staging Worker configuration: production's, with staging's own data and hosts.
+ * Deployed with WRANGLER_CONFIG_PATH=wrangler.estori-staging.jsonc (see .github/workflows/deploy-estori-staging.yml).
+ * Locked by STAGING_GATE_KEY until Cloudflare Access protects it; email reaches only EMAIL_RECIPIENT_ALLOWLIST.
+ * See docs/superpowers/specs/2026-10-18-staging-environment-design.md.
+ */
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "estori-staging",
+	"main": "worker/index.ts",
+	"alias": {
+		"artifacts-viewer": "./packages/artifacts-viewer/packages/artifacts-viewer/src/index.ts",
+		"artifacts-viewer/server/cache": "./packages/artifacts-viewer/packages/artifacts-viewer/src/server/cache-adapters.ts"
+	},
+	"compatibility_date": "2026-05-23",
+	"compatibility_flags": ["nodejs_compat"],
+	"keep_vars": true,
+	"rules": [
+		{ "type": "Text", "globs": ["**/*.md", "**/*.md?raw"], "fallthrough": true }
+	],
+	"version_metadata": {
+		"binding": "CF_VERSION_METADATA"
+	},
+	"assets": {
+		"directory": "dist/client",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": true,
+		"binding": "ASSETS"
+	},
+	"observability": {
+		"enabled": true,
+		"head_sampling_rate": 1,
+		"logs": {
+			"enabled": true,
+			"invocation_logs": true
+		},
+		"traces": {
+			"enabled": true
+		}
+	},
+	"unsafe": {
+		"bindings": [
+			{
+				"name": "API_RATE_LIMITER",
+				"type": "ratelimit",
+				"namespace_id": "2201",
+				"simple": { "limit": 10000, "period": 60 }
+			},
+			{
+				"name": "AUTH_RATE_LIMITER",
+				"type": "ratelimit",
+				"namespace_id": "2202",
+				"simple": { "limit": 1000, "period": 60 }
+			}
+		]
+	},
+	"ai": {
+		"binding": "AI"
+	},
+	"browser": {
+		"binding": "BROWSER"
+	},
+	"send_email": [
+		{ "name": "EMAIL", "remote": true }
+	],
+	"artifacts": [
+		{
+			"binding": "ARTIFACTS",
+			"namespace": "estori-staging"
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "estori-db-staging",
+			"database_id": "7f9f143f-f0dc-4584-a1eb-fa6854780b7a",
+			"migrations_dir": "migrations"
+		}
+	],
+	"durable_objects": {
+		"bindings": [
+			{ "class_name": "CodeGeneratorAgent", "name": "CodeGenObject" },
+			{ "class_name": "UserAppSandboxService", "name": "Sandbox" },
+			{ "class_name": "DORateLimitStore", "name": "DORateLimitStore" },
+			{ "class_name": "UserSecretsStore", "name": "UserSecretsStore" },
+			{ "class_name": "ThinkAgent", "name": "THINK_DO" },
+			{ "class_name": "SpaceDO", "name": "SPACE_DO" },
+			{ "class_name": "CatalogOrderRunner", "name": "CATALOG_ORDER_RUNNER" }
+		]
+	},
+	"worker_loaders": [
+		{ "binding": "LOADER" }
+	],
+	"r2_buckets": [
+		{
+			"binding": "TEMPLATES_BUCKET",
+			"bucket_name": "estori-assets-staging"
+		}
+	],
+	"kv_namespaces": [
+		{
+			"binding": "VibecoderStore",
+			"id": "b67a272c523a42f3a97ac162af8f30f1"
+		}
+	],
+	"migrations": [
+		{ "new_sqlite_classes": ["CodeGeneratorAgent", "UserAppSandboxService"], "tag": "v1" },
+		{ "new_sqlite_classes": ["DORateLimitStore"], "tag": "v2" },
+		{ "new_sqlite_classes": ["UserSecretsStore"], "tag": "v3" },
+		{ "new_sqlite_classes": ["SpaceDO"], "tag": "v5" },
+		{ "new_sqlite_classes": ["ThinkAgent"], "tag": "v6" },
+		{ "new_sqlite_classes": ["CatalogOrderRunner"], "tag": "v7" }
+	],
+	"triggers": {
+		"crons": ["*/15 * * * *", "5 * * * *", "35 6 * * *"]
+	},
+	"routes": [
+		{
+			"pattern": "staging.estori.app",
+			"custom_domain": true
+		},
+		{
+			"pattern": "*preview-staging.estori.app/*",
+			"zone_name": "estori.app"
+		}
+	],
+	"vars": {
+		"TEMPLATES_REPOSITORY": "https://github.com/cloudflare/vibesdk-templates",
+		"CLOUDFLARE_AI_GATEWAY": "estori-gateway",
+		"ARTIFACTS_NAMESPACE": "estori-staging",
+		// Offer switching to the other provider's model when the build model's provider fails (keys stored in the gateway).
+		"ENABLE_THINK_MODEL_FALLBACK": "true",
+		"PLATFORM_CAPABILITIES": {
+			"features": {
+				"app": { "enabled": true },
+				"presentation": { "enabled": false },
+				"general": { "enabled": false }
+			},
+			"version": "1.0.0"
+		},
+		"CUSTOM_DOMAIN": "staging.estori.app",
+		// Must not end in preview.estori.app, or production's *preview.estori.app/* route would match it too.
+		"CUSTOM_PREVIEW_DOMAIN": "preview-staging.estori.app",
+		// Not "prod": live supplier orders are never placed from staging.
+		"ENVIRONMENT": "staging",
+		"EMAIL_RECIPIENT_ALLOWLIST": "@pluriza.com",
+		"SHOPPER_EMAIL_FROM": "no-reply@orders.estori.app"
+	},
+	"workers_dev": false,
+	"preview_urls": false
+}

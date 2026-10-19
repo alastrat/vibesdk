@@ -1,5 +1,5 @@
 /**
- * Post-deploy smoke checks for the Estori production Worker.
+ * Post-deploy smoke checks for an Estori Worker: production, or staging with ESTORI_* overrides.
  * Usage (CI): ACCESS_CLIENT_ID=... ACCESS_CLIENT_SECRET=... bun scripts/estori-smoke.ts
  */
 
@@ -8,6 +8,8 @@ export interface SmokeConfig {
 	previewProbeUrl: string;
 	accessClientId: string;
 	accessClientSecret: string;
+	/** Staging's gate key, sent with the app checks while staging locks itself; absent for production. */
+	stagingGateKey?: string | null;
 }
 
 export interface SmokeResult {
@@ -35,6 +37,7 @@ export async function runSmokeChecks(config: SmokeConfig, fetchImpl: FetchLike):
 	const accessHeaders = {
 		'CF-Access-Client-Id': config.accessClientId,
 		'CF-Access-Client-Secret': config.accessClientSecret,
+		...(config.stagingGateKey ? { 'x-estori-staging-key': config.stagingGateKey } : {}),
 	};
 
 	return [
@@ -69,18 +72,21 @@ function requireEnv(name: string): string {
 }
 
 async function main(): Promise<void> {
+	// Staging locks itself with its gate key instead of Access, so it needs no Access token.
+	const stagingGateKey = process.env.ESTORI_STAGING_GATE_KEY || null;
 	const config: SmokeConfig = {
 		appOrigin: process.env.ESTORI_APP_ORIGIN ?? 'https://estori.app',
 		previewProbeUrl: process.env.ESTORI_PREVIEW_PROBE_URL ?? 'https://preview.estori.app/',
-		accessClientId: requireEnv('ACCESS_CLIENT_ID'),
-		accessClientSecret: requireEnv('ACCESS_CLIENT_SECRET'),
+		accessClientId: stagingGateKey ? (process.env.ACCESS_CLIENT_ID ?? '') : requireEnv('ACCESS_CLIENT_ID'),
+		accessClientSecret: stagingGateKey ? (process.env.ACCESS_CLIENT_SECRET ?? '') : requireEnv('ACCESS_CLIENT_SECRET'),
+		stagingGateKey,
 	};
 	const results = await runSmokeChecks(config, (url, init) => fetch(url, init));
 	for (const result of results) {
 		console.log(`${result.ok ? 'PASS' : 'FAIL'} ${result.name}: ${result.detail}`);
 	}
 	if (results.some((result) => !result.ok)) {
-		console.log('Rollback: bunx wrangler rollback --name estori-production');
+		console.log(`Rollback: bunx wrangler rollback --name ${process.env.ESTORI_WORKER_NAME ?? 'estori-production'}`);
 		process.exit(1);
 	}
 }
