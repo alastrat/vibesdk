@@ -50,6 +50,10 @@ function statusOf(draft: DraftSummary): string[] {
 	return status;
 }
 
+function startedFromOf(draft: DraftSummary): string {
+	return draft.startedFrom === 'live' ? 'the live store' : 'Main';
+}
+
 function messageOf(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
@@ -119,14 +123,15 @@ export function createDraftTools(opts: { getStub: GetStub }): Record<DraftToolNa
 				return JSON.stringify({
 					published: snapshot.published,
 					limit: snapshot.limit,
-					drafts: snapshot.drafts.map((draft) => ({ name: draft.name, editing: draft.active, status: statusOf(draft) })),
+					drafts: snapshot.drafts.map((draft) => ({ name: draft.name, startedFrom: startedFromOf(draft), editing: draft.active, status: statusOf(draft) })),
 				});
 			},
 		}),
 		create_draft: tool({
 			description: [
 				'Start a new draft and switch to it. from "main" copies Main; from "live" copies the live store, for a quick fix that can be published alone while Main keeps unpublished work.',
-				'Suggest a quick fix when the seller asks for a small change to the live store and Main has unpublished changes.',
+				"Suggest a quick fix only when you're editing Main, it has unpublished changes, and the seller asks for a small change to the live store.",
+				"If you're already editing another draft, make the change in that draft: never start a new draft unless the seller asks or you're on Main.",
 			].join(' '),
 			inputSchema: z.object({
 				name: z.string().describe('Short name the seller will see, e.g. "Typo fix".'),

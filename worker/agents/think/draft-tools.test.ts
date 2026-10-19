@@ -47,10 +47,22 @@ describe('draft tools', () => {
 		const { run } = harness();
 		const listed = await run('list_drafts');
 		expect(listed.drafts).toEqual([
-			{ name: 'Main', editing: true, status: ['unpublished changes', 'behind the live store'] },
-			{ name: 'Typo fix', editing: false, status: ['live'] },
+			{ name: 'Main', startedFrom: 'Main', editing: true, status: ['unpublished changes', 'behind the live store'] },
+			{ name: 'Typo fix', startedFrom: 'the live store', editing: false, status: ['live'] },
 		]);
 		expect(JSON.stringify(listed)).not.toMatch(/branch|draft-k3x9q2mf/);
+	});
+
+	it('says to edit the draft the AI is already in, and to start a quick fix only from Main', async () => {
+		const rule = /already editing another draft/i;
+		const skill = SKILL.replace(/\s+/g, ' ');
+		const description = createDraftTools({ getStub: () => ({}) as SpaceWorkspaceStub }).create_draft.description ?? '';
+		expect(description).toMatch(rule);
+		expect(description).not.toMatch(GIT_WORDS);
+		expect(skill).toMatch(rule);
+		expect(skill).toContain("If you're editing Main and it has unpublished changes, start a quick fix from the live store for a small change");
+		expect(skill).toContain("If you're already editing another draft, make the change in that draft");
+		expect(skill).toContain("never start a new draft unless the seller asks or you're on Main");
 	});
 
 	it('starts a draft and switches to it, deploying its preview', async () => {

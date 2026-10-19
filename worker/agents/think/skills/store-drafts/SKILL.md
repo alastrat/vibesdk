@@ -13,8 +13,10 @@ Talk about drafts, versions and the live store. Never say branch, merge, commit 
 
 ## Quick fixes
 
-When the seller asks for a small change to the live store (a typo, a price, a phone number) and `list_drafts` shows
-Main has unpublished changes, suggest a quick fix so the change goes out alone:
+If you're editing Main and it has unpublished changes, start a quick fix from the live store for a small change (a
+typo, a price, a phone number), so the change goes out alone. If you're already editing another draft, make the change
+in that draft: never start a new draft unless the seller asks or you're on Main. `list_drafts` shows which draft you
+are editing and where each draft started.
 
 1. `create_draft` with `from: "live"` and a short name such as "Typo fix".
 2. Make the change and `deploy_space`.
