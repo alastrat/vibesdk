@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
-import type { LiveStoreView } from '@/api-types';
+import type { LiveStoreView, PublishLiveStoreRequest } from '@/api-types';
 
 export function useLiveStore(appId: string, enabled: boolean) {
 	return useQuery({
@@ -28,8 +28,11 @@ function useLiveStoreMutation<TInput>(appId: string, call: (input: TInput) => Pr
 	});
 }
 
+/** Names the draft to publish, so a switch while the panel is open can't change what goes live. */
 export function usePublishLiveStore(appId: string) {
-	return useLiveStoreMutation(appId, (slug: string) => unwrap(apiClient.publishLiveStore(appId, { slug }), "Couldn't publish your store"));
+	return useLiveStoreMutation(appId, ({ slug, draftId }: PublishLiveStoreRequest) =>
+		unwrap(apiClient.publishLiveStore(appId, { slug, draftId }), "Couldn't publish your store"),
+	);
 }
 
 export function useTakeLiveStoreOffline(appId: string) {

@@ -76,7 +76,7 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 	const problem = slugProblem(slug);
 	const action = publishAction(view, slug);
 	const onPublish = () =>
-		publish.mutate(slug, {
+		publish.mutate({ slug, draftId: view.draft?.id }, {
 			onSuccess: (next) => toast.success(next.url ? `Your store is live at ${next.url}` : 'Your store is live'),
 			onError: (error) => toast.error(error.message),
 		});

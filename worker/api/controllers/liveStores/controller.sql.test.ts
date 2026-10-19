@@ -68,6 +68,22 @@ describe('publishing a live store', () => {
 		expect(row).toEqual({ published_commit: 'c0ffee1' });
 	});
 
+	it("answers 404 when the draft the seller picked doesn't exist, and 409 for SpaceDO's other refusals", async () => {
+		const refusing = (error: string) => ({
+			idFromName: (name: string) => name,
+			get: () => ({
+				publishDraft: async () => ({ error }),
+				getPublishContext: async () => ({ active: { id: 'main', name: 'Main', tip: 'c0ffee1' }, publishedDraft: null }),
+				getStoreManifest: async () => null,
+			}),
+		});
+		const missing = await publishAs('app_tea', 'northwind-gone', refusing("That draft doesn't exist."), 'gone0001');
+		expect(missing.status).toBe(404);
+		const failing = await publishAs('app_tea', 'northwind-broken', refusing("This draft's preview doesn't build. Fix it before publishing."), 'k3x9q2mf');
+		expect(failing.status).toBe(409);
+		expect(await db.prepare("SELECT app_id FROM live_stores WHERE app_id = 'app_tea'").first()).toBeNull();
+	});
+
 	it("refuses an address another store holds before publishing anything, so the build isn't replaced", async () => {
 		await db.prepare("INSERT INTO live_stores (app_id, slug, status, published_commit, published_at, created_at, updated_at) VALUES ('app_home', 'northwind-tea', 'live', 'abc', 0, 0, 0)").run();
 		const { namespace, published } = spaces();

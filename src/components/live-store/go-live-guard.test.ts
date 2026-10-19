@@ -26,6 +26,13 @@ describe('the Go live panel', () => {
 		expect(dialog).toContain('view.checkoutConnected');
 	});
 
+	it('publishes the draft the panel names, not whichever draft is open when the request lands', () => {
+		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
+		expect(dialog).toContain('draftId: view.draft?.id');
+		const hooks = source('/src/hooks/use-live-store.ts');
+		expect(hooks).toContain('apiClient.publishLiveStore(appId, { slug, draftId })');
+	});
+
 	it("connects the seller's own domain, shows each DNS record to copy, checks it and removes it", () => {
 		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
 		for (const part of ['useAddStoreDomain(', 'useCheckStoreDomain(', 'useRemoveStoreDomain(', 'domain.records.map', 'navigator.clipboard.writeText', 'Check now', 'view.domainsAvailable']) {

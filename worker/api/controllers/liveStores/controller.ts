@@ -13,6 +13,7 @@ import { domainFlowDepsFromEnv } from '../../../services/live-stores/wiring';
 import { takeStoreOffline } from '../../../services/live-stores/take-offline';
 import { StoreCheckoutService } from '../../../database/services/StoreCheckoutService';
 import { stripeFromEnv } from '../../../services/payments/config';
+import { draftErrorStatus } from '../../../agents/think/draft-change';
 import type { PublishContext, PublishDraftResult } from '@space-do/space';
 
 interface LiveSpaceStub {
@@ -80,7 +81,7 @@ export class LiveStoreController extends BaseController {
             const space = spaceOf(env, appId);
             if (!space) return this.createErrorResponse<LiveStoreView>("This store can't be published right now.", 503);
             const published = await space.publishDraft(draftId);
-            if ('error' in published) return this.createErrorResponse<LiveStoreView>(published.error, 409);
+            if ('error' in published) return this.createErrorResponse<LiveStoreView>(published.error, draftErrorStatus(published.error));
             const saved = await stores.publish({ appId, slug, commit: published.commitHash, now: new Date() });
             if (saved === 'slug-taken') return this.createErrorResponse<LiveStoreView>('That address is taken. Try another.', 409);
             return this.createSuccessResponse(await viewOf(env, appId));
