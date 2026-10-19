@@ -32,7 +32,7 @@
 | Crons | 15-minute, hourly, daily | the same |
 | `ENVIRONMENT` | `prod` | `staging` |
 
-- **Preview host:** it's one host with path-based previews (`/space/{name}/preview/{branch}/`), as in production. It's a Workers custom domain, so Cloudflare creates its DNS record and certificate. The name must not end in `preview.estori.app`, or production's `*preview.estori.app/*` route would also match it.
+- **Preview host:** it's one host with path-based previews (`/space/{name}/preview/{branch}/`), as in production. It's a Workers custom domain, so Cloudflare creates its DNS record and certificate. Staging's deploys set `DEPLOY_PREVIEW_CUSTOM_DOMAIN=true`, and the deploy script publishes it that way. Production keeps its route and its hand-made DNS record. The name must not end in `preview.estori.app`, or production's `*preview.estori.app/*` route would also match it.
 - **Production-only behavior:** `isProd` covers only `prod` and `production`, so with `ENVIRONMENT=staging`, live supplier orders can't be placed (`CatalogOrderRunner` places sandbox orders).
 - **What's left off:**
   - live store subdomains: `STORES_DOMAIN` is unset, as in production today;
