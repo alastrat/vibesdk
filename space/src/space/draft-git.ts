@@ -84,16 +84,21 @@ export const LIVE_CHANGES_MESSAGE = "Brought in the live store's changes"
 export const MERGE_STATE_KEY = "drafts:merge"
 const CONFLICT_MARKER = /^(<{7}|>{7}) /m
 
+/**
+ * `files` hold conflict markers. `deletedByDraft` are files the draft deleted and the live store changed (the working
+ * tree holds the live version); `deletedByLive` are files the live store deleted and the draft changed (it holds the
+ * draft's version). Neither has markers, so the AI has to decide whether the file stays.
+ */
 export type MergeOutcome =
   | { result: "up-to-date" }
   | { result: "fast-forward" | "merged"; commit: string }
-  | { result: "conflicts"; files: string[]; ours: string }
+  | { result: "conflicts"; files: string[]; deletedByDraft: string[]; deletedByLive: string[]; ours: string }
 
 /** What bringing in the live store's changes did, as SpaceDO reports it. */
 export type BringInOutcome =
   | { result: "up-to-date" }
   | { result: "fast-forward" | "merged"; commit: string; deploy: unknown }
-  | { result: "conflicts"; files: string[]; liveChanges: string[] }
+  | { result: "conflicts"; files: string[]; deletedByDraft: string[]; deletedByLive: string[]; liveChanges: string[] }
   | { error: string }
 
 /**
@@ -107,15 +112,83 @@ export interface MergeState {
   ours: string
   /** The published commit being brought in. */
   theirs: string
+  /** Files with conflict markers. */
   files: string[]
+  /** Files the draft deleted that the live store changed. */
+  deletedByDraft: string[]
+  /** Files the live store deleted that the draft changed. */
+  deletedByLive: string[]
   /** The merge (or fast-forward) commit once there is one. */
   merged: string | null
 }
 
-function conflictFiles(error: unknown): string[] | null {
+interface ConflictSets {
+  files: string[]
+  deletedByDraft: string[]
+  deletedByLive: string[]
+}
+
+function conflictSets(error: unknown): ConflictSets | null {
   if (!(error instanceof Error) || (error as { code?: unknown }).code !== "MergeConflictError") return null
-  const filepaths = (error as { data?: { filepaths?: unknown } }).data?.filepaths
-  return Array.isArray(filepaths) ? filepaths.map(String) : []
+  const data = (error as { data?: { filepaths?: unknown; deleteByUs?: unknown; deleteByTheirs?: unknown } }).data
+  const names = (value: unknown) => (Array.isArray(value) ? value.map(String) : [])
+  const deletedByDraft = names(data?.deleteByUs)
+  const deletedByLive = names(data?.deleteByTheirs)
+  const deleted = new Set([...deletedByDraft, ...deletedByLive])
+  return { files: names(data?.filepaths).filter((file) => !deleted.has(file)), deletedByDraft, deletedByLive }
+}
+
+interface WalkedFile {
+  filepath: string
+  base: string | null
+  ours: string | null
+  theirs: string | null
+}
+
+/**
+ * A conflicted merge makes isomorphic-git write every file of the merged tree back as text, which corrupts binary
+ * files neither side touched, and it never removes a file the live store deleted. This puts each file the merge
+ * settled without a conflict back to the exact bytes git holds, and the surviving side of a one-side deletion too.
+ * Files both sides changed without a conflict keep the text merge's result.
+ */
+async function restoreSettledFiles(fs: FileSystem, ours: string, published: string, conflicts: ConflictSets): Promise<void> {
+  const gitFs = createGitFs(fs)
+  const [base] = await git.findMergeBase({ fs: gitFs, dir: "/", oids: [ours, published] })
+  if (!base) return
+  const walked = (await git.walk({
+    fs: gitFs,
+    dir: "/",
+    trees: [git.TREE({ ref: base }), git.TREE({ ref: ours }), git.TREE({ ref: published })],
+    map: async (filepath, entries) => {
+      if (filepath === ".") return undefined
+      const kinds = await Promise.all(entries.map((entry) => entry?.type() ?? null))
+      if (kinds.some((kind) => kind !== null && kind !== "blob")) return undefined
+      const [baseOid, oursOid, theirsOid] = await Promise.all(entries.map((entry) => entry?.oid() ?? null))
+      return { filepath, base: baseOid, ours: oursOid, theirs: theirsOid }
+    },
+  })) as Array<WalkedFile | undefined>
+  const marked = new Set(conflicts.files)
+  const deletedByDraft = new Set(conflicts.deletedByDraft)
+  const deletedByLive = new Set(conflicts.deletedByLive)
+  for (const file of walked) {
+    if (!file || marked.has(file.filepath)) continue
+    let settled: string | null
+    if (deletedByDraft.has(file.filepath)) settled = file.theirs
+    else if (deletedByLive.has(file.filepath)) settled = file.ours
+    else if (file.ours === file.theirs || file.theirs === file.base) settled = file.ours
+    else if (file.ours === file.base) settled = file.theirs
+    else continue
+    const path = `/${file.filepath}`
+    if (settled === null) {
+      await fs.rm(path, { force: true })
+      continue
+    }
+    const current = await fs.readFileBytes(path).catch(() => null)
+    if (current && (await git.hashBlob({ object: current })).oid === settled) continue
+    const { blob } = await git.readBlob({ fs: gitFs, dir: "/", oid: settled })
+    await fs.mkdir(path.slice(0, path.lastIndexOf("/")) || "/", { recursive: true })
+    await fs.writeFileBytes(path, blob)
+  }
 }
 
 /**
@@ -147,9 +220,10 @@ export async function mergePublished(
     const commit = merged.oid ?? (await branchTip(fs, branch)) ?? ours
     return { result: merged.fastForward ? "fast-forward" : "merged", commit }
   } catch (error) {
-    const files = conflictFiles(error)
-    if (files === null) throw error
-    return { result: "conflicts", files, ours }
+    const conflicts = conflictSets(error)
+    if (conflicts === null) throw error
+    await restoreSettledFiles(fs, ours, published, conflicts)
+    return { result: "conflicts", ...conflicts, ours }
   }
 }
 
@@ -207,16 +281,15 @@ export async function commitMergeResolution(
   return { commit }
 }
 
-/** Puts the draft back at its tip from before the merge, working tree included. */
-export async function cancelMerge(fs: FileSystem, merge: MergeState): Promise<void> {
+/**
+ * Puts the draft back at its tip from before the merge, working tree included. Files the live store added and files
+ * created while resolving are untracked, so the checkout leaves them; they go too, except reserved paths.
+ */
+export async function cancelMerge(fs: FileSystem, merge: MergeState, isReserved: (path: string) => boolean): Promise<void> {
   const gitFs = createGitFs(fs)
-  if (merge.merged === null) {
-    try {
-      await git.abortMerge({ fs: gitFs, dir: "/" })
-    } catch {
-      // The forced checkout below restores the working tree either way.
-    }
-  }
   await git.writeRef({ fs: gitFs, dir: "/", ref: `refs/heads/${merge.branch}`, value: merge.ours, force: true })
   await git.checkout({ fs: gitFs, dir: "/", ref: merge.branch, force: true })
+  for (const [filepath, head, , stage] of await git.statusMatrix({ fs: gitFs, dir: "/" })) {
+    if (head === 0 && stage === 0 && !isReserved(`/${filepath}`)) await fs.rm(`/${filepath}`, { force: true })
+  }
 }
