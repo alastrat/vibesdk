@@ -10,6 +10,7 @@ const sources = import.meta.glob<string>(
 		'/src/routes/chat/chat.tsx',
 		'/src/routes/chat/components/main-content-panel.tsx',
 		'/src/components/live-store/GoLiveDialog.tsx',
+		'/src/hooks/use-live-store.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -51,6 +52,11 @@ describe('the drafts UI', () => {
 		const goLive = source('/src/components/live-store/GoLiveDialog.tsx');
 		expect(goLive).toContain('view.draft');
 		expect(goLive).toContain('Main will be behind the live store until you bring these changes in.');
+	});
+
+	it("refreshes the drafts after anything that changes the live store, since Publish and going offline don't reload the preview", () => {
+		const hooks = source('/src/hooks/use-live-store.ts');
+		expect(hooks).toContain('queryClient.invalidateQueries({ queryKey: queryKeys.drafts(appId) })');
 	});
 
 	it('never says git words or names an AI assistant or supplier', () => {

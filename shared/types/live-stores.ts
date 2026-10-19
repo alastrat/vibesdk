@@ -142,7 +142,7 @@ export interface LiveStoreView {
 	suggestedSlug: string;
 	url: string | null;
 	publishedAt: string | null;
-	/** The preview has a version the live store doesn't serve yet. */
+	/** The draft being edited has a version the live store doesn't serve yet. */
 	hasChanges: boolean;
 	/** The published store file has products, so its checkout takes payments. */
 	checkoutConnected: boolean;

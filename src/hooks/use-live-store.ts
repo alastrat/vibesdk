@@ -13,12 +13,18 @@ export function useLiveStore(appId: string, enabled: boolean) {
 	});
 }
 
-/** Every call answers the store's whole view, so the panel takes it as it is. */
+/**
+ * Every call answers the store's whole view, so the panel takes it as it is.
+ * The drafts' badges and delete rule follow what is live, and Publish or going offline don't reload the preview, so they refetch.
+ */
 function useLiveStoreMutation<TInput>(appId: string, call: (input: TInput) => Promise<LiveStoreView>) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: call,
-		onSuccess: (view) => queryClient.setQueryData(queryKeys.liveStore(appId), view),
+		onSuccess: (view) => {
+			queryClient.setQueryData(queryKeys.liveStore(appId), view);
+			void queryClient.invalidateQueries({ queryKey: queryKeys.drafts(appId) });
+		},
 	});
 }
 
