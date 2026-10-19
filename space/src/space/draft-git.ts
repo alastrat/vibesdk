@@ -206,6 +206,16 @@ async function binaryChangedOnBothSides(fs: FileSystem, walked: WalkedFile[]): P
 }
 
 /**
+ * The blob a file settles to when the merge didn't conflict on it (null: deleted), or "text" when both sides changed
+ * it and isomorphic-git merged the two.
+ */
+function cleanSettlement(file: WalkedFile): string | null | "text" {
+  if (file.ours === file.theirs || file.theirs === file.base) return file.ours
+  if (file.ours === file.base) return file.theirs
+  return "text"
+}
+
+/**
  * A conflicted merge makes isomorphic-git write every file of the merged tree back as text, which corrupts binary
  * files neither side touched, and it never removes a file the live store deleted. This puts each file the merge
  * settled without a conflict back to the exact bytes git holds, and the surviving side of a one-side deletion too.
@@ -219,12 +229,12 @@ async function restoreSettledFiles(fs: FileSystem, walked: WalkedFile[], conflic
   const deletedByLive = new Set(conflicts.deletedByLive)
   for (const file of walked) {
     if (marked.has(file.filepath)) continue
-    let settled: string | null
-    if (deletedByDraft.has(file.filepath)) settled = file.theirs
-    else if (deletedByLive.has(file.filepath)) settled = file.ours
-    else if (file.ours === file.theirs || file.theirs === file.base) settled = file.ours
-    else if (file.ours === file.base) settled = file.theirs
-    else continue
+    const settled = deletedByDraft.has(file.filepath)
+      ? file.theirs
+      : deletedByLive.has(file.filepath)
+        ? file.ours
+        : cleanSettlement(file)
+    if (settled === "text") continue
     const path = `/${file.filepath}`
     if (settled === null) {
       await fs.rm(path, { force: true })
@@ -239,6 +249,29 @@ async function restoreSettledFiles(fs: FileSystem, walked: WalkedFile[], conflic
 }
 
 /**
+ * A conflicted merge leaves the index at the draft's version, and git trusts an index entry whose size and second
+ * match the file: a same-size change written in the same second would look unchanged, so the merge commit would keep
+ * the draft's version and a cancel wouldn't put it back. This stages every file the merge settled to something other
+ * than the draft's version. Conflicted files keep the index entries isomorphic-git left.
+ */
+async function stageSettledFiles(
+  fs: FileSystem,
+  walked: WalkedFile[],
+  conflicts: ConflictSets,
+  isReserved: (path: string) => boolean,
+): Promise<void> {
+  const gitFs = createGitFs(fs)
+  const conflicted = new Set([...conflicts.files, ...conflicts.deletedByDraft, ...conflicts.deletedByLive])
+  for (const file of walked) {
+    if (conflicted.has(file.filepath) || isReserved(`/${file.filepath}`)) continue
+    const settled = cleanSettlement(file)
+    if (settled === file.ours) continue
+    if (settled === null) await git.remove({ fs: gitFs, dir: "/", filepath: file.filepath })
+    else await git.add({ fs: gitFs, dir: "/", filepath: file.filepath })
+  }
+}
+
+/**
  * Merges the published commit into the checked-out draft `branch`. The working tree must be saved first (callers
  * commit before merging), since the merge and a later cancel treat anything untracked as the merge's own. When both
  * sides changed the same binary file it merges nothing and says so, as git can't combine them. On a text conflict,
@@ -249,6 +282,7 @@ export async function mergePublished(
   branch: string,
   published: string,
   author: GitAuthor,
+  isReserved: (path: string) => boolean,
 ): Promise<MergeOutcome> {
   const ours = await branchTip(fs, branch)
   if (!ours) throw new Error(`Draft branch "${branch}" has no commits`)
@@ -275,6 +309,7 @@ export async function mergePublished(
     const conflicts = conflictSets(error)
     if (conflicts === null) throw error
     await restoreSettledFiles(fs, walked, conflicts)
+    await stageSettledFiles(fs, walked, conflicts, isReserved)
     return { result: "conflicts", ...conflicts, ours }
   }
 }

@@ -937,7 +937,7 @@ export class SpaceDO extends DurableObject<Env> {
       if (this.backend.mirrorsToArtifacts && !(await this.backend.push(draft.branch))) {
         return { error: "Couldn't save your work first. Try again." }
       }
-      const outcome = await mergePublished(this.fs, draft.branch, published.commit, DEFAULT_AUTHOR)
+      const outcome = await mergePublished(this.fs, draft.branch, published.commit, DEFAULT_AUTHOR, isReservedPath)
       if (outcome.result === "up-to-date" || outcome.result === "binary-changed-on-both-sides") return outcome
       if (outcome.result === "conflicts") {
         await this.ctx.storage.put(MERGE_STATE_KEY, {

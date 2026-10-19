@@ -2,7 +2,7 @@
  * Bringing the published commit into a draft, on a real repository in memory: fast-forwards, clean merges, conflicts
  * left for the AI with their markers, the merge commit once resolved, and cancelling back to the draft's last version.
  */
-import { describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import * as git from "isomorphic-git"
 import { InMemoryFs } from "@cloudflare/shell"
 import { createGit } from "@cloudflare/shell/git"
@@ -91,21 +91,21 @@ function mergeStateOf(outcome: ReturnType<typeof conflictsOf>, theirs: string): 
 describe("mergePublished", () => {
   it("fast-forwards a draft with nothing of its own", async () => {
     const { fs, published } = await quickFixRepo({ path: "/about.html", text: "Our tea is grown with care.\n" })
-    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "fast-forward", commit: published })
+    expect(await mergePublished(fs, "main", published, AUTHOR, isReserved)).toEqual({ result: "fast-forward", commit: published })
     expect(await branchTip(fs, "main")).toBe(published)
     expect(await fs.readFile("/about.html")).toBe("Our tea is grown with care.\n")
   })
 
   it("says up to date when the draft already has the published version", async () => {
     const { fs, published } = await quickFixRepo({ path: "/about.html", text: "Our tea is grown with care.\n" })
-    await mergePublished(fs, "main", published, AUTHOR)
-    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "up-to-date" })
+    await mergePublished(fs, "main", published, AUTHOR, isReserved)
+    expect(await mergePublished(fs, "main", published, AUTHOR, isReserved)).toEqual({ result: "up-to-date" })
   })
 
   it("makes a merge commit when both sides changed different files, keeping both", async () => {
     const { fs, commit, published } = await quickFixRepo({ path: "/about.html", text: "Our tea is grown with care.\n" })
     const redesign = await commit("/index.html", "<h1>Northwind Tea</h1>\n", "Redesign the home page")
-    const outcome = await mergePublished(fs, "main", published, AUTHOR)
+    const outcome = await mergePublished(fs, "main", published, AUTHOR, isReserved)
     expect(outcome.result).toBe("merged")
     const tip = await branchTip(fs, "main")
     if (!tip) throw new Error("expected Main to have a tip")
@@ -120,7 +120,7 @@ describe("mergePublished", () => {
   it("leaves conflict markers and the draft where it was when both sides changed the same lines", async () => {
     const { fs, commit, published } = await quickFixRepo({ path: "/about.html", text: "Our tea is grown with care.\n" })
     const ours = await commit("/about.html", "Our teas are grown wiht love.\n", "Rewrite the about page")
-    const outcome = await mergePublished(fs, "main", published, AUTHOR)
+    const outcome = await mergePublished(fs, "main", published, AUTHOR, isReserved)
     expect(outcome).toEqual({ result: "conflicts", files: ["about.html"], deletedByDraft: [], deletedByLive: [], ours })
     expect(await branchTip(fs, "main")).toBe(ours)
     expect(await filesWithConflictMarkers(fs, ["about.html"])).toEqual(["about.html"])
@@ -142,7 +142,7 @@ describe("a conflicted merge", () => {
       ],
     )
     const ours = await commitEdits([{ path: "/about.html", text: rewrite }, { path: "/seal.png", text: SEAL_V2 }], "Rewrite the about page")
-    const merge = mergeStateOf(conflictsOf(await mergePublished(fs, "main", published, AUTHOR)), published)
+    const merge = mergeStateOf(conflictsOf(await mergePublished(fs, "main", published, AUTHOR, isReserved)), published)
     expect(merge.ours).toBe(ours)
     expect(bytes(await fs.readFileBytes("/logo.png"))).toEqual(bytes(LOGO))
     expect(bytes(await fs.readFileBytes("/banner.gif"))).toEqual(bytes(BANNER_V2))
@@ -164,7 +164,7 @@ describe("a conflicted merge", () => {
       [{ path: "/old.html", text: "Old page.\n" }],
     )
     await commit("/about.html", rewrite, "Rewrite the about page")
-    conflictsOf(await mergePublished(fs, "main", published, AUTHOR))
+    conflictsOf(await mergePublished(fs, "main", published, AUTHOR, isReserved))
     expect(await fs.exists("/old.html")).toBe(false)
   })
 
@@ -173,7 +173,7 @@ describe("a conflicted merge", () => {
     await fs.rm("/about.html")
     await g.add({ filepath: "." })
     const ours = (await g.commit({ message: "Remove the about page", author: AUTHOR })).oid
-    const outcome = await mergePublished(fs, "main", published, AUTHOR)
+    const outcome = await mergePublished(fs, "main", published, AUTHOR, isReserved)
     expect(outcome).toEqual({ result: "conflicts", files: [], deletedByDraft: ["about.html"], deletedByLive: [], ours })
     expect(await branchTip(fs, "main")).toBe(ours)
     expect(await fs.readFile("/about.html")).toBe("Our tea is grown with care.\n")
@@ -182,7 +182,7 @@ describe("a conflicted merge", () => {
   it("reports a file the live side deleted and the draft changed, holding the draft version", async () => {
     const { fs, commit, published } = await quickFixRepo({ path: "/about.html", text: null })
     const ours = await commit("/about.html", rewrite, "Rewrite the about page")
-    const outcome = await mergePublished(fs, "main", published, AUTHOR)
+    const outcome = await mergePublished(fs, "main", published, AUTHOR, isReserved)
     expect(outcome).toEqual({ result: "conflicts", files: [], deletedByDraft: [], deletedByLive: ["about.html"], ours })
     expect(await branchTip(fs, "main")).toBe(ours)
     expect(await fs.readFile("/about.html")).toBe(rewrite)
@@ -193,7 +193,7 @@ describe("a conflicted merge", () => {
     await fs.rm("/banner.gif")
     await g.add({ filepath: "." })
     await g.commit({ message: "Remove the banner", author: AUTHOR })
-    const outcome = conflictsOf(await mergePublished(fs, "main", published, AUTHOR))
+    const outcome = conflictsOf(await mergePublished(fs, "main", published, AUTHOR, isReserved))
     expect(outcome.deletedByDraft).toEqual(["banner.gif"])
     expect(bytes(await fs.readFileBytes("/banner.gif"))).toEqual(bytes(BANNER_V2))
   })
@@ -203,7 +203,7 @@ describe("a conflicted merge", () => {
     await fs.rm("/about.html")
     await g.add({ filepath: "." })
     const ours = (await g.commit({ message: "Remove the about page", author: AUTHOR })).oid
-    const merge = mergeStateOf(conflictsOf(await mergePublished(fs, "main", published, AUTHOR)), published)
+    const merge = mergeStateOf(conflictsOf(await mergePublished(fs, "main", published, AUTHOR, isReserved)), published)
     await fs.rm("/about.html")
     const resolved = await commitMergeResolution(fs, merge, AUTHOR, isReserved)
     if ("error" in resolved) throw new Error(resolved.error)
@@ -229,7 +229,7 @@ describe("a binary file changed on both sides", () => {
       [{ path: "/logo.png", text: new Uint8Array(draft) }, { path: "/about.html", text: "Our teas are grown wiht love.\n" }],
       "Rewrite the about page",
     )
-    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "binary-changed-on-both-sides", files: ["logo.png"] })
+    expect(await mergePublished(fs, "main", published, AUTHOR, isReserved)).toEqual({ result: "binary-changed-on-both-sides", files: ["logo.png"] })
     expect(await branchTip(fs, "main")).toBe(ours)
     expect(bytes(await fs.readFileBytes("/logo.png"))).toEqual(draft)
     expect(await fs.readFile("/about.html")).toBe("Our teas are grown wiht love.\n")
@@ -246,7 +246,7 @@ describe("a binary file changed on both sides", () => {
       [{ path: "/logo.png", text: new Uint8Array(same.draft) }, { path: "/index.html", text: "<h1>Northwind Tea</h1>\n" }],
       "Redesign the home page",
     )
-    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "binary-changed-on-both-sides", files: ["logo.png"] })
+    expect(await mergePublished(fs, "main", published, AUTHOR, isReserved)).toEqual({ result: "binary-changed-on-both-sides", files: ["logo.png"] })
     expect(await branchTip(fs, "main")).toBe(ours)
     expect(bytes(await fs.readFileBytes("/logo.png"))).toEqual(same.draft)
   })
@@ -254,7 +254,7 @@ describe("a binary file changed on both sides", () => {
   it("refuses when both sides added different binary files at the same path", async () => {
     const { fs, commitEdits, published } = await quickFixRepo({ path: "/hero.png", text: BANNER_V2 })
     const ours = await commitEdits([{ path: "/hero.png", text: BANNER_V1 }], "Add a hero image")
-    expect(await mergePublished(fs, "main", published, AUTHOR)).toEqual({ result: "binary-changed-on-both-sides", files: ["hero.png"] })
+    expect(await mergePublished(fs, "main", published, AUTHOR, isReserved)).toEqual({ result: "binary-changed-on-both-sides", files: ["hero.png"] })
     expect(await branchTip(fs, "main")).toBe(ours)
     expect(bytes(await fs.readFileBytes("/hero.png"))).toEqual(bytes(BANNER_V1))
   })
@@ -262,7 +262,7 @@ describe("a binary file changed on both sides", () => {
   it("merges when both sides changed it to the same bytes", async () => {
     const { fs, commitEdits, published } = await quickFixRepo({ path: "/hero.png", text: BANNER_V2 })
     await commitEdits([{ path: "/hero.png", text: BANNER_V2 }, { path: "/index.html", text: "<h1>Northwind Tea</h1>\n" }], "Add a hero image")
-    expect((await mergePublished(fs, "main", published, AUTHOR)).result).toBe("merged")
+    expect((await mergePublished(fs, "main", published, AUTHOR, isReserved)).result).toBe("merged")
     expect(bytes(await fs.readFileBytes("/hero.png"))).toEqual(bytes(BANNER_V2))
   })
 })
@@ -272,7 +272,7 @@ describe("resolving and cancelling", () => {
     const setup = await quickFixRepo({ path: "/about.html", text: "Our tea is grown with care.\n" })
     await setup.fs.writeFile("/shipping.html", "Free shipping over $50.\n")
     const ours = await setup.commit("/about.html", "Our teas are grown wiht love.\n", "Rewrite the about page")
-    const merge = mergeStateOf(conflictsOf(await mergePublished(setup.fs, "main", setup.published, AUTHOR)), setup.published)
+    const merge = mergeStateOf(conflictsOf(await mergePublished(setup.fs, "main", setup.published, AUTHOR, isReserved)), setup.published)
     return { ...setup, ours, merge }
   }
 
@@ -311,7 +311,7 @@ describe("resolving and cancelling", () => {
       [{ path: "/logo.png", text: LOGO }],
     )
     const ours = await setup.commit("/about.html", "Our teas are grown wiht love.\n", "Rewrite the about page")
-    const merge = mergeStateOf(conflictsOf(await mergePublished(setup.fs, "main", setup.published, AUTHOR)), setup.published)
+    const merge = mergeStateOf(conflictsOf(await mergePublished(setup.fs, "main", setup.published, AUTHOR, isReserved)), setup.published)
     expect(await setup.fs.exists("/returns.html")).toBe(true)
     await setup.fs.writeFile("/broken-import.js", "import './missing.js'\n")
     await setup.fs.mkdir("/.afs", { recursive: true })
@@ -329,7 +329,7 @@ describe("resolving and cancelling", () => {
   it("cancels a committed merge back to the draft's last version, dropping files only the live side added", async () => {
     const setup = await quickFixRepo({ path: "/returns.html", text: "Returns within 30 days.\n" })
     const ours = await setup.commit("/index.html", "<h1>Northwind Tea</h1>\n", "Redesign the home page")
-    const outcome = await mergePublished(setup.fs, "main", setup.published, AUTHOR)
+    const outcome = await mergePublished(setup.fs, "main", setup.published, AUTHOR, isReserved)
     if (outcome.result !== "merged") throw new Error("expected a clean merge")
     expect(await setup.fs.exists("/returns.html")).toBe(true)
     await cancelMerge(
@@ -340,5 +340,52 @@ describe("resolving and cancelling", () => {
     expect(await branchTip(setup.fs, "main")).toBe(ours)
     expect(await setup.fs.exists("/returns.html")).toBe(false)
     expect(await setup.fs.readFile("/index.html")).toBe("<h1>Northwind Tea</h1>\n")
+  })
+})
+
+describe("a conflicted merge with a same-size live change in the same second", () => {
+  // Git trusts a file whose size and modified second match its index entry; the Workers clock only moves on I/O,
+  // so the merge's rewrite of /price.txt lands in the same second as the draft's checkout of it.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] })
+    vi.setSystemTime(new Date("2026-10-19T12:00:00Z"))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function conflictedWithPriceChange() {
+    const setup = await quickFixRepo(
+      [{ path: "/about.html", text: "Our tea is grown with care.\n" }, { path: "/price.txt", text: "Price: $29\n" }],
+      [{ path: "/price.txt", text: "Price: $19\n" }],
+    )
+    const ours = await setup.commit("/about.html", "Our teas are grown wiht love.\n", "Rewrite the about page")
+    const outcome = conflictsOf(await mergePublished(setup.fs, "main", setup.published, AUTHOR, isReserved))
+    expect(outcome.files).toEqual(["about.html"])
+    expect(await setup.fs.readFile("/price.txt")).toBe("Price: $29\n")
+    return { ...setup, ours, merge: mergeStateOf(outcome, setup.published) }
+  }
+
+  it("commits the live side's version of the file in the merge commit", async () => {
+    const { fs, ours, published, merge } = await conflictedWithPriceChange()
+    await fs.writeFile("/about.html", "Our teas are grown with love.\n")
+    const resolved = await commitMergeResolution(fs, merge, AUTHOR, isReserved)
+    if ("error" in resolved) throw new Error(resolved.error)
+    const gitFs = createGitFs(fs)
+    expect((await git.readCommit({ fs: gitFs, dir: "/", oid: resolved.commit })).commit.parent).toEqual([ours, published])
+    const { blob } = await git.readBlob({ fs: gitFs, dir: "/", oid: resolved.commit, filepath: "price.txt" })
+    expect(new TextDecoder().decode(blob)).toBe("Price: $29\n")
+  })
+
+  it("puts the draft's version back when cancelling, with nothing left changed", async () => {
+    const { fs, ours, merge } = await conflictedWithPriceChange()
+    await cancelMerge(fs, merge, isReserved)
+    expect(await branchTip(fs, "main")).toBe(ours)
+    expect(await fs.readFile("/price.txt")).toBe("Price: $19\n")
+    expect(await fs.readFile("/about.html")).toBe("Our teas are grown wiht love.\n")
+    const changed = (await git.statusMatrix({ fs: createGitFs(fs), dir: "/" })).filter(
+      ([, head, workdir, stage]) => `${head}${workdir}${stage}` !== "111",
+    )
+    expect(changed).toEqual([])
   })
 })
