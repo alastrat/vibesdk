@@ -66,6 +66,7 @@ import {
  */
 type ThinkAgentStub = {
 	configureVibe: (config: ThinkAgentConfig) => Promise<void>;
+	setPreviewUrl: (previewUrl: string) => Promise<void>;
 	chat: (userMessage: string | UIMessage, callback: RpcTarget) => Promise<void>;
 	getMessages: () => Promise<UIMessage[]>;
 	clearMessages: () => Promise<void>;
@@ -1156,8 +1157,13 @@ export class ThinkCodingBehavior
 	private async applyActiveDraft(draft: ActiveDraft, deployPreview: boolean): Promise<void> {
 		const changed = this.state.currentBranch !== draft.branch;
 		this.setState({ ...this.state, currentBranch: draft.branch });
-		// The agent's default preview address for its browser tools is per draft.
-		await this.configureThinkAgent();
+		// The agent's default preview address for its browser tools is per draft. Only the address moves: the
+		// prompt isn't re-rendered, since the turn that switched may still be running.
+		try {
+			await (await this.getThinkStub()).setPreviewUrl(await this.getBrowserPreviewURL(0));
+		} catch (error) {
+			this.logger.warn('Pointing the agent at the new draft failed (continuing)', error);
+		}
 		const deployed = deployPreview ? await this.deployCurrentBranch() : null;
 		if (!deployed) {
 			// A failed rebuild has already told the seller; the preview still has to leave the draft it showed.

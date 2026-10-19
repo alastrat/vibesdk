@@ -46,7 +46,15 @@ describe('the Think host and drafts', () => {
 		expect(body).toContain('await this.deployCurrentBranch()');
 		expect(body).toContain('WebSocketMessageResponses.DEPLOYMENT_COMPLETED');
 		expect(body).toContain("`Now working on '${draft.name}'.`");
-		expect(body).toContain('await this.configureThinkAgent()');
+		expect(body).toContain('.setPreviewUrl(await this.getBrowserPreviewURL(0))');
+		expect(body).not.toContain('configureThinkAgent(');
+	});
+
+	it("moves the agent's console check to the new draft without re-rendering its prompt, and only logs when that fails", () => {
+		const body = methodBody(think, 'private async applyActiveDraft(');
+		expect(body).toMatch(/try \{\s*await \(await this\.getThinkStub\(\)\)\.setPreviewUrl\([^)]*\)[^)]*\);\s*\} catch \(error\) \{\s*this\.logger\.warn\(/);
+		expect(body.indexOf('currentBranch: draft.branch')).toBeLessThan(body.indexOf('.setPreviewUrl('));
+		expect(think).toContain('setPreviewUrl: (previewUrl: string) => Promise<void>;');
 	});
 
 	it('shows the new draft in the preview even when its rebuild fails', () => {

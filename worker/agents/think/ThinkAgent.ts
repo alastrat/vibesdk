@@ -76,7 +76,8 @@ export interface ThinkAgentConfig {
 	systemPrompt?: string;
 	/**
 	 * Current preview URL (computed host-side via `getBrowserPreviewURL`), used
-	 * as the default target for the `get_browser_console_logs` tool.
+	 * as the default target for the `get_browser_console_logs` tool. The tool
+	 * reads it when it runs; `setPreviewUrl` moves it when the draft changes.
 	 */
 	previewUrl?: string;
 }
@@ -310,7 +311,6 @@ export class ThinkAgent extends Think<Env> {
 
 	override getTools(): ToolSet {
 		const ops = createSpaceWorkspaceOps(() => this.getSpaceStub());
-		const previewUrl = this.getConfig<ThinkAgentConfig>()?.previewUrl;
 		// Same names as Think's built-in workspace tools, so these SpaceDO-backed
 		// versions win the tool-merge. Bash is disabled via `workspaceBash`.
 		return {
@@ -332,9 +332,10 @@ export class ThinkAgent extends Think<Env> {
 				// Drafts: list, start and switch, and bring in the live store's changes.
 				...createDraftTools({ getStub: () => this.getSpaceStub() }),
 				// Client-side debugging via a real headless browser.
+				// Reads the preview URL when it runs, so a draft switch earlier in the turn is followed.
 				get_browser_console_logs: createBrowserConsoleLogsTool({
 					env: this.env,
-					defaultUrl: previewUrl,
+					getDefaultUrl: () => this.getConfig<ThinkAgentConfig>()?.previewUrl,
 				}),
 			}),
 			// Estori's catalog, for stores that sell catalog products.
@@ -405,6 +406,14 @@ export class ThinkAgent extends Think<Env> {
 			// case the initial freezeSystemPrompt() during chat() renders with
 			// this config anyway.
 		}
+	}
+
+	/**
+	 * RPC for the host when the active draft changes: points the browser tools at the new preview. Unlike
+	 * `configureVibe` it leaves the system prompt alone, so it is safe in the middle of a turn.
+	 */
+	async setPreviewUrl(previewUrl: string): Promise<void> {
+		this.configure<ThinkAgentConfig>({ ...this.requireConfig(), previewUrl });
 	}
 
 	/** RPC for the host: the provider failure behind the last failed turn, if any. */
