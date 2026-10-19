@@ -1158,9 +1158,10 @@ export class ThinkCodingBehavior
 		const changed = this.state.currentBranch !== draft.branch;
 		this.setState({ ...this.state, currentBranch: draft.branch });
 		// The agent's default preview address for its browser tools is per draft. Only the address moves: the
-		// prompt isn't re-rendered, since the turn that switched may still be running.
+		// prompt isn't re-rendered, since the turn that switched may still be running. The app exists by now, so the
+		// address carries its current preview version and survives a visibility toggle.
 		try {
-			await (await this.getThinkStub()).setPreviewUrl(await this.getBrowserPreviewURL(0));
+			await (await this.getThinkStub()).setPreviewUrl(await this.getBrowserPreviewURL());
 		} catch (error) {
 			this.logger.warn('Pointing the agent at the new draft failed (continuing)', error);
 		}

@@ -46,7 +46,7 @@ describe('the Think host and drafts', () => {
 		expect(body).toContain('await this.deployCurrentBranch()');
 		expect(body).toContain('WebSocketMessageResponses.DEPLOYMENT_COMPLETED');
 		expect(body).toContain("`Now working on '${draft.name}'.`");
-		expect(body).toContain('.setPreviewUrl(await this.getBrowserPreviewURL(0))');
+		expect(body).toContain('.setPreviewUrl(await this.getBrowserPreviewURL())');
 		expect(body).not.toContain('configureThinkAgent(');
 	});
 
@@ -55,6 +55,13 @@ describe('the Think host and drafts', () => {
 		expect(body).toMatch(/try \{\s*await \(await this\.getThinkStub\(\)\)\.setPreviewUrl\([^)]*\)[^)]*\);\s*\} catch \(error\) \{\s*this\.logger\.warn\(/);
 		expect(body.indexOf('currentBranch: draft.branch')).toBeLessThan(body.indexOf('.setPreviewUrl('));
 		expect(think).toContain('setPreviewUrl: (previewUrl: string) => Promise<void>;');
+	});
+
+	it("gives the console check's preview address the app's current preview version, so it keeps working after a visibility toggle", () => {
+		const body = methodBody(think, 'private async applyActiveDraft(');
+		const call = body.slice(body.indexOf('.setPreviewUrl('), body.indexOf(';', body.indexOf('.setPreviewUrl(')));
+		expect(call).toContain('getBrowserPreviewURL()');
+		expect(call).not.toContain('getBrowserPreviewURL(0)');
 	});
 
 	it('shows the new draft in the preview even when its rebuild fails', () => {
