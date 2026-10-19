@@ -45,6 +45,8 @@ export interface SpaceFsBackend {
   readonly overlay: FileSystem
   readonly git: Git
   readonly stateBackend: FileSystemStateBackend
+  /** True when commits are mirrored to Artifacts, so a switch must not proceed if the mirror fails. */
+  readonly mirrorsToArtifacts: boolean
   ready(): Promise<void>
   hydrate(path: string): Promise<void>
   materializeAll(): Promise<void>
@@ -72,6 +74,7 @@ async function withTimeout<T>(operation: Promise<T>, timeoutMs: number): Promise
 }
 
 export class ArtifactsBackend implements SpaceFsBackend {
+  readonly mirrorsToArtifacts = true
   readonly overlay: FileSystem
   readonly fs: FileSystem
   readonly git: Git
@@ -86,6 +89,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
     ctx: DurableObjectState,
     private readonly env: Env,
     private readonly repoName: string,
+    baseBranch: string = ARTIFACTS_BASE_BRANCH,
   ) {
     if (!env.ARTIFACTS) throw new Error("SpaceDO is pinned to Artifacts but the ARTIFACTS binding is unavailable")
 
@@ -98,11 +102,11 @@ export class ArtifactsBackend implements SpaceFsBackend {
     const fetchSync = new ArtifactsSync(env.ARTIFACTS, createGit(withErrorCodes(overlay)), repoName, this.remoteStore)
     const source = createArtifactsBaseSource({
       overlay,
-      branch: ARTIFACTS_BASE_BRANCH,
+      branch: baseBranch,
       hasRemote: async () => (await this.remoteStore.read()) !== null,
       fetchBranch: async () => {
         try {
-          return await withTimeout(fetchSync.fetch(ARTIFACTS_BASE_BRANCH), ARTIFACTS_INIT_TIMEOUT_MS)
+          return await withTimeout(fetchSync.fetch(baseBranch), ARTIFACTS_INIT_TIMEOUT_MS)
         } catch {
           return false
         }
@@ -111,7 +115,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
     this.checkpointStore = new CheckpointStore(ctx.storage)
     this.fs = new ArtifactsFileSystem(overlay, {
       source,
-      branch: ARTIFACTS_BASE_BRANCH,
+      branch: baseBranch,
       checkpoint: this.checkpointStore,
       onChange: (path) => this.noteCheckpointDirty(path),
     })
@@ -155,8 +159,18 @@ export class ArtifactsBackend implements SpaceFsBackend {
 
   async push(branch: string): Promise<boolean> {
     const pushed = await this.getArtifactsSync().push(branch)
-    if (pushed) this.resetCheckpointAfterPush()
+    // The checkpoint holds the checked-out branch's unmirrored work; pushing another branch must keep it.
+    if (pushed && (await this.checkedOutBranch()) === branch) this.resetCheckpointAfterPush()
     return pushed
+  }
+
+  private async checkedOutBranch(): Promise<string | null> {
+    try {
+      const result = await this.git.branch({ list: true })
+      return "current" in result && result.current ? result.current : null
+    } catch {
+      return null
+    }
   }
 
   async fetch(branch: string): Promise<void> {
@@ -196,6 +210,7 @@ export class ArtifactsBackend implements SpaceFsBackend {
 }
 
 export class SqlBackend implements SpaceFsBackend {
+  readonly mirrorsToArtifacts = false
   readonly overlay: FileSystem
   readonly fs: FileSystem
   readonly git: Git

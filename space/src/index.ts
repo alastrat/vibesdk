@@ -9,6 +9,19 @@ export type {
 } from "./space/durable-object"
 export type { BranchDeploymentBundle } from "./space/deploy-engine"
 
+// ── Draft types ──────────────────────────────────────────────────
+export type {
+  ActivateDraftResult,
+  ActiveDraft,
+  CreateDraftResult,
+  DraftStart,
+  DraftSummary,
+  DraftsSnapshot,
+  PublishContext,
+  PublishDraftResult,
+} from "./space/drafts-store"
+export type { BringInOutcome, MergeState } from "./space/draft-git"
+
 // ── Environment bindings type ────────────────────────────────────
 export type { Env } from "./env"
 

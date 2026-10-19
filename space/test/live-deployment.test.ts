@@ -4,7 +4,15 @@
  */
 import { describe, it, expect } from 'vitest';
 import { env, runInDurableObject } from 'cloudflare:test';
-import { DEPLOYMENTS_TABLE_SQL, LIVE_BRANCH, isReservedBranch, publishLiveDeployment, publishedVersion, servedUrl } from '../src/space/deploy-engine';
+import {
+	DEPLOYMENTS_TABLE_SQL,
+	LIVE_BRANCH,
+	isReservedBranch,
+	migrateDeploymentsTable,
+	publishLiveDeployment,
+	publishedVersion,
+	servedUrl,
+} from '../src/space/deploy-engine';
 import type {} from './test-env';
 
 function uniqueStub(name: string) {
@@ -79,6 +87,34 @@ describe('publishLiveDeployment', () => {
 				`INSERT INTO deployments (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at) VALUES ('live', 'old', 'index.js', '{}', '{}', '{}', NULL, 1)`,
 			);
 			expect(publishedVersion(sql)).toEqual({ commit: 'old', sourceBranch: 'main' });
+		});
+	});
+
+	it('gives a store deployed before drafts the source column, keeping its live store published from Main', async () => {
+		await runInDurableObject(uniqueStub('migrate'), async (_instance, state) => {
+			const sql = state.storage.sql;
+			sql.exec(`CREATE TABLE deployments (
+				branch TEXT PRIMARY KEY,
+				commit_hash TEXT NOT NULL,
+				main_module TEXT NOT NULL,
+				modules TEXT NOT NULL,
+				assets TEXT NOT NULL DEFAULT '{}',
+				asset_config TEXT NOT NULL DEFAULT '{}',
+				store_manifest TEXT,
+				deployed_at INTEGER NOT NULL
+			)`);
+			sql.exec(
+				`INSERT INTO deployments (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at) VALUES ('live', 'old', 'index.js', '{}', '{}', '{}', NULL, 1)`,
+			);
+			sql.exec(
+				`INSERT INTO deployments (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at) VALUES ('draft-fix00001', 'f1', 'index.js', '{}', '{}', '{}', NULL, 2)`,
+			);
+			migrateDeploymentsTable(sql);
+			migrateDeploymentsTable(sql);
+			expect(publishedVersion(sql)).toEqual({ commit: 'old', sourceBranch: 'main' });
+			expect(publishLiveDeployment(sql, 90, 'draft-fix00001')).toEqual({ commitHash: 'f1', storeManifest: null });
+			expect(rowOf(sql, LIVE_BRANCH)).toMatchObject({ commit_hash: 'f1', source_branch: 'draft-fix00001', deployed_at: 90 });
+			expect(publishedVersion(sql)).toEqual({ commit: 'f1', sourceBranch: 'draft-fix00001' });
 		});
 	});
 
