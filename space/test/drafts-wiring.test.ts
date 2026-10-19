@@ -49,13 +49,53 @@ describe("SpaceDO drafts wiring", () => {
     expect(push.indexOf("checkedOutBranch")).toBeLessThan(push.indexOf("this.resetCheckpointAfterPush()"))
   })
 
-  it("runs draft operations one at a time and makes file writes wait for them", () => {
-    for (const signature of ["async listDrafts(", "async createDraft(", "async deleteDraft(", "async activateDraft(", "async publishDraft(", "async bringInLiveChanges(", "async cancelBringingInLiveChanges("]) {
+  const lockedMethods = [
+    "async listDrafts(",
+    "async createDraft(",
+    "async deleteDraft(",
+    "async activateDraft(",
+    "async publishDraft(",
+    "async bringInLiveChanges(",
+    "async cancelBringingInLiveChanges(",
+    "async rollbackToCommit(",
+  ]
+
+  it("runs draft operations one at a time and makes file writes and commits wait for them", () => {
+    for (const signature of lockedMethods) {
       expect(methodBody(spaceDo, signature), signature).toContain("this.withDraftLock(")
     }
-    for (const signature of ["async writeFile(", "async editFile(", "async deleteFile(", "async rm(", "async patch("]) {
+    for (const signature of ["async writeFile(", "async editFile(", "async deleteFile(", "async rm(", "async patch(", "async gitCommit(", "async importFiles("]) {
       expect(methodBody(spaceDo, signature), signature).toContain("await this.draftOp")
     }
+  })
+
+  it("never waits for the draft lock from inside it", () => {
+    const waiting = ["this.gitCommit(", "this.importFiles(", "this.writeFile(", "this.editFile(", "this.deleteFile(", "this.rm(", "this.patch("]
+    for (const signature of lockedMethods) {
+      const body = methodBody(spaceDo, signature)
+      for (const call of waiting) expect(body, `${signature} calls ${call}`).not.toContain(call)
+    }
+    for (const signature of ["private async commitWorkingTree(", "private async commitAndMirror(", "async deploy(branch: string)", "async undeploy("]) {
+      expect(methodBody(spaceDo, signature), signature).not.toContain("this.draftOp")
+    }
+  })
+
+  it("rolls back under the lock, committing without waiting for it, and refuses mid-merge", () => {
+    const rollback = methodBody(spaceDo, "async rollbackToCommit(")
+    expect(rollback).toContain("if (await this.mergeState()) return { error: MERGE_IN_PROGRESS }")
+    expect(rollback).toContain("this.commitAndMirror(`rollback: restore ${target.oid.slice(0, 8)}`)")
+    expect(rollback.indexOf("this.commitAndMirror(")).toBeLessThan(rollback.indexOf("this.deploy(branch)"))
+  })
+
+  it("leaves no draft behind when its start can't be loaded or saved", () => {
+    const create = methodBody(spaceDo, "async createDraft(")
+    const start = create.indexOf("await createDraftBranch(this.fs, added.draft.branch, start)")
+    const refusal = create.indexOf("Couldn't load the version to start from. Try again.")
+    expect(start).toBeGreaterThan(-1)
+    const failedStart = create.slice(start, refusal)
+    expect(failedStart).toContain("} catch {")
+    expect(failedStart).toContain("removeDraftRecord(sql, added.draft.id)")
+    expect(create.slice(refusal)).toContain("removeDraftRecord(sql, added.draft.id)")
   })
 
   it("fetches the live store's version before computing any draft's state", () => {
@@ -90,8 +130,8 @@ describe("SpaceDO drafts wiring", () => {
   })
 
   it("doesn't mirror a merge until a deploy of it builds", () => {
-    const commit = methodBody(spaceDo, "async gitCommit(")
-    expect(commit).toContain("!(await this.mergeState())")
+    expect(methodBody(spaceDo, "async gitCommit(")).toContain("this.commitAndMirror(message, author)")
+    expect(methodBody(spaceDo, "private async commitAndMirror(")).toContain("!(await this.mergeState())")
     const deploy = methodBody(spaceDo, "async deploy(branch: string)")
     expect(deploy).toContain("mergeCommitPending(this.fs, merge)")
     expect(deploy.indexOf("this.ctx.storage.delete(MERGE_STATE_KEY)")).toBeLessThan(deploy.indexOf("await this.backend.push(branch)"))

@@ -458,17 +458,29 @@ export class SpaceDO extends DurableObject<Env> {
     return { sha: result.oid, message: result.message, committed: true, branch }
   }
 
-  async gitCommit(
+  /**
+   * Commits the working tree and mirrors it in the background, except while a merge is open. It never waits for the
+   * draft lock, so locked operations can call it.
+   */
+  private async commitAndMirror(
     message: string,
-    author?: { name: string; email: string }
+    author?: { name: string; email: string },
   ): Promise<{ sha: string; message: string }> {
-    await this.ensureInit()
     const result = await this.commitWorkingTree(message, author)
     const branch = result.branch
     if (result.committed && branch && !(await this.mergeState())) {
       this.ctx.waitUntil(this.backend.push(branch).then(() => undefined))
     }
     return { sha: result.sha, message: result.message }
+  }
+
+  async gitCommit(
+    message: string,
+    author?: { name: string; email: string }
+  ): Promise<{ sha: string; message: string }> {
+    await this.ensureInit()
+    await this.draftOp
+    return this.commitAndMirror(message, author)
   }
 
   /**
@@ -499,8 +511,9 @@ export class SpaceDO extends DurableObject<Env> {
     message: string,
   ): Promise<{ sha: string; message: string }> {
     await this.ensureInit()
+    await this.draftOp
     await writeWorkdirFiles(this.fs, files, isReservedPath)
-    return this.gitCommit(message)
+    return this.commitAndMirror(message)
   }
 
   async gitLog(limit?: number): Promise<GitLogEntry[]> {
@@ -586,58 +599,62 @@ export class SpaceDO extends DurableObject<Env> {
    */
   async rollbackToCommit(branch: string, commitHash: string): Promise<unknown> {
     await this.ensureInit()
-    // Reads/walks the whole working tree below, so the Artifacts base must be
-    // fully materialized into the overlay first.
-    await this.materializeAll()
+    // Locked: HEAD is detached while the target's tree is read, so no draft operation may see it.
+    return this.withDraftLock(async () => {
+      if (await this.mergeState()) return { error: MERGE_IN_PROGRESS }
+      // Reads/walks the whole working tree below, so the Artifacts base must be
+      // fully materialized into the overlay first.
+      await this.materializeAll()
 
-    await this.backend.fetch(branch)
+      await this.backend.fetch(branch)
 
-    // Verify the target commit exists on this branch's history.
-    const history = await this.git.log({ ref: branch, depth: 1000 })
-    const target = history.find(
-      (entry) => entry.oid === commitHash || entry.oid.startsWith(commitHash),
-    )
-    if (!target) {
-      return { error: `Commit ${commitHash} not found on branch "${branch}"` }
-    }
-
-    // Capture the file tree at the target commit as raw bytes. Reading and
-    // rewriting via bytes (not strings) keeps binary assets — fonts, images,
-    // favicons — byte-for-byte intact. Round-tripping them through UTF-8
-    // corrupts them and inflates each invalid byte into a 3-byte replacement
-    // char, which can push a file past the SQLite inline-value limit and throw
-    // SQLITE_TOOBIG (only reproduced on rollback, since normal deploys never
-    // rewrite these files).
-    await this.git.checkout({ ref: target.oid })
-    const targetFiles = new Map<string, Uint8Array>()
-    for (const info of await globInfos(this.overlay, "**/*")) {
-      if (info.type !== "file") continue
-      if (isReservedPath(info.path)) continue
-      const bytes = await this.overlay.readFileBytes(info.path)
-      if (bytes) targetFiles.set(info.path, bytes)
-    }
-
-    // Return to the branch HEAD and reconcile the working tree: remove files
-    // that are absent from the target, then (over)write the captured files.
-    await this.git.checkout({ ref: branch })
-    for (const info of await globInfos(this.overlay, "**/*")) {
-      if (info.type !== "file") continue
-      if (isReservedPath(info.path)) continue
-      if (!targetFiles.has(info.path)) {
-        await this.overlay.rm(info.path, { force: true })
+      // Verify the target commit exists on this branch's history.
+      const history = await this.git.log({ ref: branch, depth: 1000 })
+      const target = history.find(
+        (entry) => entry.oid === commitHash || entry.oid.startsWith(commitHash),
+      )
+      if (!target) {
+        return { error: `Commit ${commitHash} not found on branch "${branch}"` }
       }
-    }
-    for (const [path, bytes] of targetFiles) {
-      await this.overlay.writeFileBytes(path, bytes)
-    }
 
-    // Commit the restored tree (no-op if nothing changed) and redeploy.
-    try {
-      await this.gitCommit(`rollback: restore ${target.oid.slice(0, 8)}`)
-    } catch {
-      // Clean tree (already at target) — proceed to redeploy existing HEAD.
-    }
-    return this.deploy(branch)
+      // Capture the file tree at the target commit as raw bytes. Reading and
+      // rewriting via bytes (not strings) keeps binary assets — fonts, images,
+      // favicons — byte-for-byte intact. Round-tripping them through UTF-8
+      // corrupts them and inflates each invalid byte into a 3-byte replacement
+      // char, which can push a file past the SQLite inline-value limit and throw
+      // SQLITE_TOOBIG (only reproduced on rollback, since normal deploys never
+      // rewrite these files).
+      await this.git.checkout({ ref: target.oid })
+      const targetFiles = new Map<string, Uint8Array>()
+      for (const info of await globInfos(this.overlay, "**/*")) {
+        if (info.type !== "file") continue
+        if (isReservedPath(info.path)) continue
+        const bytes = await this.overlay.readFileBytes(info.path)
+        if (bytes) targetFiles.set(info.path, bytes)
+      }
+
+      // Return to the branch HEAD and reconcile the working tree: remove files
+      // that are absent from the target, then (over)write the captured files.
+      await this.git.checkout({ ref: branch })
+      for (const info of await globInfos(this.overlay, "**/*")) {
+        if (info.type !== "file") continue
+        if (isReservedPath(info.path)) continue
+        if (!targetFiles.has(info.path)) {
+          await this.overlay.rm(info.path, { force: true })
+        }
+      }
+      for (const [path, bytes] of targetFiles) {
+        await this.overlay.writeFileBytes(path, bytes)
+      }
+
+      // Commit the restored tree (no-op if nothing changed) and redeploy.
+      try {
+        await this.commitAndMirror(`rollback: restore ${target.oid.slice(0, 8)}`)
+      } catch {
+        // Clean tree (already at target) — proceed to redeploy existing HEAD.
+      }
+      return this.deploy(branch)
+    })
   }
 
   // ── Deploy RPC methods ──────────────────────────────────────────
@@ -811,7 +828,13 @@ export class SpaceDO extends DurableObject<Env> {
       }
       const added = addDraft(sql, Date.now(), { name, startedFrom: from })
       if ("error" in added) return added
-      await createDraftBranch(this.fs, added.draft.branch, start)
+      try {
+        await createDraftBranch(this.fs, added.draft.branch, start)
+      } catch {
+        // The start's commit isn't local: a fetch failed without saying so.
+        removeDraftRecord(sql, added.draft.id)
+        return { error: "Couldn't load the version to start from. Try again." }
+      }
       if (this.backend.mirrorsToArtifacts && !(await this.backend.push(added.draft.branch))) {
         await deleteDraftBranch(this.fs, added.draft.branch)
         removeDraftRecord(sql, added.draft.id)
