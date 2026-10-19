@@ -41,6 +41,13 @@ describe("draft branches", () => {
     expect(await branchTip(fs, "main")).toBe(base)
   })
 
+  it("refuses a draft at a commit that is not local and leaves no branch behind", async () => {
+    const { fs } = await repo()
+    const missing = "0123456789abcdef0123456789abcdef01234567"
+    await expect(createDraftBranch(fs, "draft-cccc3333", missing)).rejects.toThrow()
+    expect(await branchTip(fs, "draft-cccc3333")).toBeNull()
+  })
+
   it("fetches a branch a cold start left behind and makes it local", async () => {
     const { fs, commit } = await repo()
     const base = await commit("/index.html", "v1", "base")
@@ -72,6 +79,13 @@ describe("draft states", () => {
     expect(await draftGitState(fs, mainWork, fix)).toEqual({ live: false, unpublishedChanges: true, behindLive: true })
     // A draft the published version already contains is only behind.
     expect(await draftGitState(fs, published, fix)).toEqual({ live: false, unpublishedChanges: false, behindLive: true })
+  })
+
+  it("counts a published commit whose objects are not local as not included", async () => {
+    const { fs, commit } = await repo()
+    const tip = await commit("/index.html", "v1", "first")
+    const missing = "0123456789abcdef0123456789abcdef01234567"
+    expect(await draftGitState(fs, tip, missing)).toEqual({ live: false, unpublishedChanges: true, behindLive: true })
   })
 
   it("says nothing before the first publish or for a draft with no commits", async () => {

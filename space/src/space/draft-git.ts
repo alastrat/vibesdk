@@ -46,8 +46,11 @@ export async function ensureLocalBranch(
   return remote
 }
 
+/** Starts `branch` at `startCommit`, which must be local; throws if the branch exists or the commit is missing. */
 export async function createDraftBranch(fs: FileSystem, branch: string, startCommit: string): Promise<void> {
-  await git.writeRef({ fs: createGitFs(fs), dir: "/", ref: `refs/heads/${branch}`, value: startCommit })
+  const gitFs = createGitFs(fs)
+  await git.readCommit({ fs: gitFs, dir: "/", oid: startCommit })
+  await git.writeRef({ fs: gitFs, dir: "/", ref: `refs/heads/${branch}`, value: startCommit })
 }
 
 export async function deleteDraftBranch(fs: FileSystem, branch: string): Promise<void> {
@@ -55,12 +58,16 @@ export async function deleteDraftBranch(fs: FileSystem, branch: string): Promise
   await git.deleteRef({ fs: createGitFs(fs), dir: "/", ref: `refs/heads/${branch}` })
 }
 
-/** True when `tip`'s history includes `commit`. Missing objects count as not included. */
+/**
+ * True when `tip`'s history includes `commit`. A commit whose objects aren't local counts as not included, so callers
+ * fetch the published commit's branch first; other errors propagate.
+ */
 async function includes(fs: FileSystem, tip: string, commit: string): Promise<boolean> {
   if (tip === commit) return true
   try {
     return await git.isDescendent({ fs: createGitFs(fs), dir: "/", oid: tip, ancestor: commit, depth: -1 })
-  } catch {
+  } catch (error) {
+    if ((error as { code?: unknown }).code !== "NotFoundError") throw error
     return false
   }
 }
