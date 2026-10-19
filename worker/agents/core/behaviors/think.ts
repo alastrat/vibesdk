@@ -51,8 +51,10 @@ import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome }
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
 import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
+import { mirrorCandidates, mirroredFile, rebuildMirror, type MirroredFile } from '../../think/draft-files';
 import {
 	activeDraftOf,
+	cancelledOf,
 	chainDraftChange,
 	deployedCommitOf,
 	DRAFT_BUSY_MESSAGE,
@@ -88,6 +90,8 @@ type SpaceRpcStub = {
 	) => Promise<{ preview_url?: string; commit_hash?: string; error?: string; details?: string }>;
 	getDeploymentBundle: (branch: string) => Promise<BranchDeploymentBundle>;
 	getStoreManifest: (branch: string) => Promise<{ commitHash: string; manifest: string | null } | null>;
+	list: () => Promise<Array<{ path: string; mtime: number; size: number }>>;
+	readFileBytes: (path: string) => Promise<Uint8Array | null>;
 	rollbackToCommit: (branch: string, commitHash: string) => Promise<unknown>;
 	activateDraft: (id: string) => Promise<ActivateDraftResult>;
 	createDraft: (name: string, from: DraftStart) => Promise<CreateDraftResult>;
@@ -870,6 +874,8 @@ export class ThinkCodingBehavior
 					// The tool deployed the draft itself, in order with the AI's other tools; the host only follows it.
 					const draft = activeDraftOf(output);
 					if (draft) await this.applyActiveDraft(draft, false, deployedCommitOf(output));
+				} else if (toolName === 'cancel_bringing_in_live_changes') {
+					if (cancelledOf(output)) await this.rebuildFileMirror();
 				} else if (toolName === 'set_title') {
 					await this.handleSetTitleOutput(args, output);
 				} else if (isFileDeleteTool(toolName)) {
@@ -1183,6 +1189,7 @@ export class ThinkCodingBehavior
 				}))?.commitHash;
 			if (commit && commit !== this.state.lastDeployedCommit) this.recordDeployedCommit(commit);
 		}
+		await this.rebuildFileMirror();
 		if (changed) {
 			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 				message: `Now working on '${draft.name}'.`,
@@ -1202,8 +1209,32 @@ export class ThinkCodingBehavior
 				conversationId: IdGenerator.generateConversationId(),
 				isStreaming: false,
 			});
+			await this.rebuildFileMirror();
 		} catch (error) {
 			this.logger.warn('Cancelling an unfinished merge failed', error);
+		}
+	}
+
+	/**
+	 * Rebuilds the Code tab's copy of the files from the draft now checked out. The copy otherwise only follows the
+	 * AI's writes, so after a switch, a bring-in or a cancel it would show another version's files.
+	 */
+	private async rebuildFileMirror(): Promise<void> {
+		try {
+			const listing = await this.callSpace((space) => space.list());
+			const read = await Promise.all(
+				mirrorCandidates(listing).map(async (path) => {
+					const bytes = await this.callSpace((space) => space.readFileBytes(path));
+					return bytes ? mirroredFile(path, bytes) : null;
+				}),
+			);
+			const files = read.filter((file): file is MirroredFile => file !== null);
+			const { map, removed, changed } = rebuildMirror(this.state.generatedFilesMap, files);
+			this.setState({ ...this.state, generatedFilesMap: map });
+			for (const filePath of removed) this.broadcast(WebSocketMessageResponses.FILE_DELETED, { filePath });
+			for (const file of changed) this.broadcast(WebSocketMessageResponses.FILE_GENERATED, { message: `Updated ${file.filePath}`, file });
+		} catch (error) {
+			this.logger.warn("Rebuilding the Code tab's files after a draft change failed", error);
 		}
 	}
 

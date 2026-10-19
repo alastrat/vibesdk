@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDraftOf, chainDraftChange, deployedCommitOf, DRAFT_SWITCHING_TOOLS, draftErrorStatus } from './draft-change';
+import { activeDraftOf, cancelledOf, chainDraftChange, deployedCommitOf, DRAFT_SWITCHING_TOOLS, draftErrorStatus } from './draft-change';
 
 describe('activeDraftOf', () => {
 	it("reads the draft a tool switched to from its JSON output, so the host's preview follows it", () => {
@@ -43,6 +43,14 @@ describe('deployedCommitOf', () => {
 		]) {
 			expect(deployedCommitOf(output)).toBeNull();
 		}
+	});
+});
+
+describe('cancelledOf', () => {
+	it('reads whether cancelling put the draft back', () => {
+		expect(cancelledOf(JSON.stringify({ cancelled: true }))).toBe(true);
+		expect(cancelledOf({ cancelled: false })).toBe(false);
+		expect(cancelledOf('not json')).toBe(false);
 	});
 });
 

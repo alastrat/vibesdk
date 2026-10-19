@@ -46,6 +46,11 @@ export function deployedCommitOf(output: unknown): string | null {
 	return error === undefined && typeof commit === 'string' ? commit : null;
 }
 
+/** Whether cancelling the bring-in of the live store's changes reports that it put the draft back. */
+export function cancelledOf(output: unknown): boolean {
+	return outputObject(output)?.cancelled === true;
+}
+
 /** Runs `change` once `previous` has settled, pass or fail, so draft changes never overlap on the host. */
 export function chainDraftChange<T>(previous: Promise<unknown> | null, change: () => Promise<T>): Promise<T> {
 	const settled = previous ? previous.then(() => undefined, () => undefined) : Promise.resolve();

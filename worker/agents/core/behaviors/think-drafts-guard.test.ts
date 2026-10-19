@@ -82,6 +82,16 @@ describe('the Think host and drafts', () => {
 		expect(think).toMatch(/const draft = activeDraftOf\(output\);\s*if \(draft\) await this\.applyActiveDraft\(draft, false, deployedCommitOf\(output\)\);/);
 	});
 
+	it("rebuilds the Code tab's copy of the files whenever the draft's files change under it", () => {
+		expect(methodBody(think, 'private async applyActiveDraft(')).toContain('await this.rebuildFileMirror()');
+		expect(methodBody(think, 'private async cancelUnfinishedMerge(')).toMatch(/if \(!cancelled\) return;[\s\S]*await this\.rebuildFileMirror\(\)/);
+		expect(think).toMatch(/toolName === 'cancel_bringing_in_live_changes'\)[\s\S]{0,200}await this\.rebuildFileMirror\(\)/);
+		const rebuild = methodBody(think, 'private async rebuildFileMirror(');
+		for (const part of ['space.list()', 'mirrorCandidates(', 'space.readFileBytes(', 'mirroredFile(', 'rebuildMirror(this.state.generatedFilesMap', 'generatedFilesMap: map', 'WebSocketMessageResponses.FILE_DELETED', 'WebSocketMessageResponses.FILE_GENERATED']) {
+			expect(rebuild, part).toContain(part);
+		}
+	});
+
 	it('follows the draft a tool switched to without deploying from the host mid-turn', () => {
 		expect(think).toContain('DRAFT_SWITCHING_TOOLS.has(toolName)');
 		expect(think).toMatch(/activeDraftOf\(output\)[\s\S]{0,200}applyActiveDraft\(draft, false[,)]/);

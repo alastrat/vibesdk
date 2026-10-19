@@ -313,14 +313,14 @@ export class SpaceDO extends DurableObject<Env> {
     return matches
   }
 
-  async list(prefix?: string): Promise<Array<{ path: string; mtime: number }>> {
+  async list(prefix?: string): Promise<Array<{ path: string; mtime: number; size: number }>> {
     await this.ensureInit()
     await this.materializeAll()
     const pattern = prefix ? `${prefix.replace(/^\//, "")}/**/*` : "**/*"
     const files = await globInfos(this.overlay, pattern)
     return files
       .filter((f: FileInfo) => f.type === "file" && !isReservedPath(f.path))
-      .map((f: FileInfo) => ({ path: f.path, mtime: f.updatedAt }))
+      .map((f: FileInfo) => ({ path: f.path, mtime: f.updatedAt, size: f.size }))
   }
 
   // ── Workspace RPC methods consumed by VibeSDK's Think workspace tools ──
