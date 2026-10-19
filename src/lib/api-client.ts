@@ -113,6 +113,9 @@ import type{
 	LiveStoreView,
 	PublishLiveStoreRequest,
 	AddStoreDomainRequest,
+	CreateDraftRequest,
+	DraftsSnapshot,
+	RenameDraftRequest,
 	PayoutInterval,
 	CatalogProductsData,
 	AdminCatalogOrdersData,
@@ -766,6 +769,27 @@ class ApiClient {
 
 	async removeStoreDomain(appId: string): Promise<ApiResponse<LiveStoreView>> {
 		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/domain`, { method: 'DELETE' });
+	}
+
+	/** The store's drafts and which one is being edited. */
+	async getDrafts(appId: string): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts`);
+	}
+
+	async createDraft(appId: string, request: CreateDraftRequest): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts`, { method: 'POST', body: request });
+	}
+
+	async activateDraft(appId: string, draftId: string): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts/${encodeURIComponent(draftId)}/activate`, { method: 'POST' });
+	}
+
+	async renameDraft(appId: string, draftId: string, request: RenameDraftRequest): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts/${encodeURIComponent(draftId)}`, { method: 'PATCH', body: request });
+	}
+
+	async deleteDraft(appId: string, draftId: string): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' });
 	}
 
 	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {

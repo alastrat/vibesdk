@@ -13,7 +13,7 @@ import {
 	useRemoveStoreDomain,
 	useTakeLiveStoreOffline,
 } from '@/hooks/use-live-store';
-import { SLUG_MAX_LENGTH, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
+import { MAIN_DRAFT_ID, SLUG_MAX_LENGTH, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
 import { publishAction } from './publish-action';
 import { connectedDomainNote, domainNeedsRecords } from './domain-note';
 
@@ -104,7 +104,10 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 				<p id="live-store-slug-help" className={problem ? 'text-sm text-kumo-danger' : 'text-sm text-kumo-subtle'}>
 					{problem ?? 'Lowercase letters, numbers and hyphens. Changing it moves your store to the new address.'}
 				</p>
-				{view.status === 'live' && view.hasChanges && <p className="text-sm text-kumo-subtle">Your preview has changes that aren't live yet.</p>}
+				{view.status === 'live' && view.hasChanges && <p className="text-sm text-kumo-subtle">Your preview of '{view.draft?.name ?? 'Main'}' has changes that aren't live yet.</p>}
+				{view.draft && view.draft.id !== MAIN_DRAFT_ID && action.disabled === false && (
+					<p className="text-sm text-kumo-subtle">Main will be behind the live store until you bring these changes in.</p>
+				)}
 				{view.status !== 'unpublished' && !view.checkoutConnected && (
 					<p className="text-sm text-kumo-danger">This store's checkout isn't connected to payments: its store file has no products.</p>
 				)}
