@@ -37,15 +37,10 @@ When a draft is behind the live store (for example Main after a quick fix was pu
 - **up-to-date, fast-forward or merged:** done, and the preview rebuilt. Tell the seller. If `next` says the build
   failed, fix it and `deploy_space` again, or `cancel_bringing_in_live_changes` and tell the seller what blocked it.
 - **conflicts:** the result lists the live store's changes in `liveChanges`, and up to three kinds of files:
-  - `files` have conflict markers. In each file, every conflict looks like:
-
-        <<<<<<< draft
-        this draft's version
-        =======
-        the live store's version
-        >>>>>>> live
-
-    Keep the intent of both: this draft's work and the live fix. Remove every marker line.
+  - `files` have conflict markers. Each conflict has a line starting `<<<<<<<` followed by a name, this draft's
+    version, a line `=======`, the live store's version, then a line starting `>>>>>>>` followed by a code. Keep the
+    intent of both: this draft's work and the live fix. Remove all three marker lines. Never repeat the names or codes
+    on those lines to the seller.
   - `deletedByDraft` are files this draft deleted and the live store changed. The file holds the live store's version
     for now. Decide whether to keep it or delete it.
   - `deletedByLive` are files the live store deleted and this draft changed. The file holds this draft's version for

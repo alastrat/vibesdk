@@ -4,6 +4,7 @@ import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../../../src/routes/copy-rul
 import { createDraftTools } from './draft-tools';
 import type { SpaceWorkspaceStub } from './space-workspace-ops';
 import SKILL from './skills/store-drafts/SKILL.md?raw';
+import APP_FILE_STRUCTURE from './skills/app-file-structure/SKILL.md?raw';
 
 const skills = import.meta.glob<string>('/worker/agents/think/skills.ts', { query: '?raw', import: 'default', eager: true });
 const agents = import.meta.glob<string>('/worker/agents/think/ThinkAgent.ts', { query: '?raw', import: 'default', eager: true });
@@ -93,6 +94,14 @@ describe('draft tools', () => {
 		expect(result.next).toContain('ask_questions');
 		expect(result.next).not.toMatch(GIT_WORDS);
 		expect(result.activeDraft).toMatchObject({ id: 'main' });
+	});
+
+	it('describes the markers as they really look: a name and a code the seller must never hear', async () => {
+		const result = await harness().run('bring_in_live_changes', {});
+		for (const wrong of ['<<<<<<< draft', '>>>>>>> live']) expect(result.next).not.toContain(wrong);
+		for (const line of ['<<<<<<<', '=======', '>>>>>>>', 'Remove all three marker lines', 'Never repeat the names or codes']) {
+			expect(result.next).toContain(line);
+		}
 	});
 
 	it('switches first when asked to bring changes into another draft', async () => {
@@ -195,6 +204,20 @@ describe('the store drafts skill and its wiring', () => {
 			expect(SKILL).toContain(outcome);
 		}
 		expect(SKILL).toContain('within the same turn');
+	});
+
+	it('describes the markers as they really look: a name and a code the seller must never hear', () => {
+		for (const wrong of ['<<<<<<< draft', '>>>>>>> live']) expect(SKILL).not.toContain(wrong);
+		for (const line of ['<<<<<<<', '=======', '>>>>>>>', 'Remove all three marker lines', 'Never repeat the names or codes']) {
+			expect(SKILL).toContain(line);
+		}
+	});
+
+	it('leaves the deploy skill telling the AI to deploy with no argument, since another draft is refused', () => {
+		expect(APP_FILE_STRUCTURE).not.toContain('deploy_space("main")');
+		expect(APP_FILE_STRUCTURE).not.toContain('deploy_space(branch)');
+		expect(APP_FILE_STRUCTURE).not.toMatch(/deploy_space\(\s*["'`]?\w+/);
+		expect(APP_FILE_STRUCTURE).toContain('deploys the draft you are editing');
 	});
 
 	it('never names an AI assistant or a supplier', () => {

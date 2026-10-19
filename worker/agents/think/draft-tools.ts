@@ -15,8 +15,9 @@ export type DraftToolName = 'list_drafts' | 'create_draft' | 'switch_draft' | 'b
 type Conflicts = Extract<BringInOutcome, { result: 'conflicts' }>;
 
 const MARKED_FILES = [
-	'The files in `files` have conflict markers. In each marked block the first part is this draft and the second is the live store.',
-	"Keep this draft's changes and the live store's fix, and remove every marker line.",
+	"The files in `files` have conflict markers. Each conflict has a line starting `<<<<<<<` followed by a name, this draft's version,",
+	"a line `=======`, the live store's version, then a line starting `>>>>>>>` followed by a code.",
+	"Keep this draft's changes and the live store's fix. Remove all three marker lines. Never repeat the names or codes on those lines to the seller.",
 ].join(' ');
 const DELETED_BY_DRAFT =
 	"The files in `deletedByDraft` were deleted from this draft, but the live store changed them. They hold the live store's version for now: decide whether to keep the file or delete it.";
