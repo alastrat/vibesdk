@@ -28,6 +28,22 @@ describe('the Think host and drafts', () => {
 		expect(body).toContain('this.runDraftChange(');
 	});
 
+	it('cancels a leftover merge before creating a draft, only while the AI is idle', () => {
+		const body = methodBody(think, 'async createDraft(');
+		const cancel = body.indexOf('await this.cancelUnfinishedMerge()');
+		expect(cancel).toBeGreaterThan(body.indexOf('this.isCodeGenerating()'));
+		expect(cancel).toBeLessThan(body.indexOf('space.createDraft(name, from)'));
+	});
+
+	it('cancels a leftover merge for a publish only while the AI is idle', () => {
+		const body = methodBody(think, 'async cancelLeftoverMerge(');
+		expect(body).toContain('if (this.isCodeGenerating()) return;');
+		expect(body.indexOf('this.isCodeGenerating()')).toBeLessThan(body.indexOf('this.cancelUnfinishedMerge()'));
+		const agent = source('/worker/agents/core/codingAgent.ts');
+		expect(agent).toContain('async cancelLeftoverMerge(): Promise<void>');
+		expect(methodBody(agent.replace(/\n {4}/g, '\n\t'), 'async cancelLeftoverMerge(')).toContain('this.behavior.cancelLeftoverMerge()');
+	});
+
 	it('claims a switch in the same step as it checks that the AI is idle', () => {
 		const body = methodBody(think, 'async switchDraft(');
 		const between = body.slice(body.indexOf('this.isCodeGenerating()'), body.indexOf('this.runDraftChange('));

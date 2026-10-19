@@ -1145,9 +1145,17 @@ export class ThinkCodingBehavior
 	/** Starts a draft from Main or from the live store, then switches to it. */
 	async createDraft(name: string, from: DraftStart): Promise<DraftChangeResult> {
 		if (this.isCodeGenerating()) return { error: DRAFT_BUSY_MESSAGE, status: 409 };
+		// A merge left by a crashed turn would block creating the draft; no turn is running, so none is being resolved.
+		await this.cancelUnfinishedMerge();
 		const created = await this.callSpace((space) => space.createDraft(name, from));
 		if ('error' in created) return { error: created.error, status: 400 };
 		return this.switchDraft(created.id);
+	}
+
+	/** Cancels a merge a crashed turn left behind, so it can't block publishing. A no-op while the AI works on the store. */
+	async cancelLeftoverMerge(): Promise<void> {
+		if (this.isCodeGenerating()) return;
+		await this.cancelUnfinishedMerge();
 	}
 
 	/** Queues behind a switch in flight, so two switches never apply to the store at once. */

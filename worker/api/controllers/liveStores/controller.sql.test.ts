@@ -4,10 +4,22 @@
  * rolled back after it.
  */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { LiveStoreController } from './controller';
 import type { RouteContext } from '../../types/route-context';
+
+/** The agent's calls to clear a leftover merge, in order with SpaceDO's publishes when a test records those too. */
+const calls = vi.hoisted((): string[] => []);
+
+// The agents module pulls in the Durable Object classes, which the test runtime can't load.
+vi.mock('../../../agents', () => ({
+	getAgentStub: async (_env: unknown, appId: string) => ({
+		cancelLeftoverMerge: async () => {
+			calls.push(`cancel:${appId}`);
+		},
+	}),
+}));
 
 let db: D1Database;
 
@@ -48,6 +60,10 @@ async function bodyOf(response: Response): Promise<{ success: boolean; data?: { 
 }
 
 describe('publishing a live store', () => {
+	beforeEach(() => {
+		calls.length = 0;
+	});
+
 	it('publishes the previewed build at a free address and answers the live view', async () => {
 		const { namespace, published } = spaces();
 		const response = await publishAs('app_tea', 'northwind-tea', namespace);
@@ -56,6 +72,16 @@ describe('publishing a live store', () => {
 		expect(published).toEqual(['app_tea']);
 		const row = await db.prepare("SELECT slug, status, published_commit FROM live_stores WHERE app_id = 'app_tea'").first();
 		expect(row).toEqual({ slug: 'northwind-tea', status: 'live', published_commit: 'c0ffee1' });
+	});
+
+	it("clears a merge a crashed turn left behind before publishing, so it can't block the seller", async () => {
+		const { namespace, published } = spaces(async () => {
+			calls.push('publish');
+		});
+		const response = await publishAs('app_tea', 'northwind-tea', namespace, 'k3x9q2mf');
+		expect(response.status).toBe(200);
+		expect(published).toEqual(['app_tea:k3x9q2mf']);
+		expect(calls).toEqual(['cancel:app_tea', 'publish']);
 	});
 
 	it('publishes the draft the seller picked', async () => {

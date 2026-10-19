@@ -28,6 +28,13 @@ describe('live store routes', () => {
 		expect(source('/worker/api/routes/index.ts')).toContain('setupLiveStoreRoutes(app)');
 	});
 
+	it('cancels a merge a crashed turn left behind before publishing, through the agent that knows whether one runs', () => {
+		const controller = source('/worker/api/controllers/liveStores/controller.ts');
+		const cancel = controller.indexOf('.cancelLeftoverMerge()');
+		expect(cancel).toBeGreaterThan(-1);
+		expect(cancel).toBeLessThan(controller.indexOf('space.publishDraft(draftId)'));
+	});
+
 	it('takes a store offline through the flow that also expires its open checkouts', () => {
 		const controller = source('/worker/api/controllers/liveStores/controller.ts');
 		expect(controller).toContain('await takeStoreOffline({');

@@ -13,6 +13,7 @@ import { domainFlowDepsFromEnv } from '../../../services/live-stores/wiring';
 import { takeStoreOffline } from '../../../services/live-stores/take-offline';
 import { StoreCheckoutService } from '../../../database/services/StoreCheckoutService';
 import { stripeFromEnv } from '../../../services/payments/config';
+import { getAgentStub } from '../../../agents';
 import { draftErrorStatus } from '../../../agents/think/draft-change';
 import type { PublishContext, PublishDraftResult } from '@space-do/space';
 
@@ -80,6 +81,8 @@ export class LiveStoreController extends BaseController {
 
             const space = spaceOf(env, appId);
             if (!space) return this.createErrorResponse<LiveStoreView>("This store can't be published right now.", 503);
+            // A merge left by a crashed turn would refuse the publish; the agent clears it unless a turn is resolving it.
+            await (await getAgentStub(env, appId)).cancelLeftoverMerge();
             const published = await space.publishDraft(draftId);
             if ('error' in published) return this.createErrorResponse<LiveStoreView>(published.error, draftErrorStatus(published.error));
             const saved = await stores.publish({ appId, slug, commit: published.commitHash, now: new Date() });

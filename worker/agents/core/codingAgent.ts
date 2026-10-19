@@ -414,6 +414,11 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         return this.behavior.createDraft(name, from);
     }
 
+    /** Cancels a merge a crashed turn left behind, so it can't block publishing; a no-op while the AI works. Think apps only. */
+    async cancelLeftoverMerge(): Promise<void> {
+        if (this.behavior instanceof ThinkCodingBehavior) await this.behavior.cancelLeftoverMerge();
+    }
+
     /** A preview link that names no user, for public product pages; null unless a deployed Think app. */
     async getPublicPreviewURL(): Promise<string | null> {
         return this.behavior.getPublicPreviewURL();
