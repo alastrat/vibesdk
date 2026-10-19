@@ -38,6 +38,8 @@ declare namespace Cloudflare {
 		SHOPPER_EMAIL_FROM?: string;
 		// Comma-separated addresses and @domains this deployment may email; staging sets it so email reaches only the team.
 		EMAIL_RECIPIENT_ALLOWLIST?: string;
+		// Staging only: until Cloudflare Access protects it, every request needs this key (see services/staging-gate.ts).
+		STAGING_GATE_KEY?: string;
 		// The catalog supplier's API key; without it catalog prices read as unavailable.
 		CJDROPSHIPPING_API_KEY?: string;
 		// Live supplier orders need ENVIRONMENT prod and this set to "true"; anything else places sandbox orders.

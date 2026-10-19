@@ -23,6 +23,7 @@ import { resolveStoreHost } from './services/live-stores/hosts';
 import { handleLiveStore } from './api/handlers/live-store';
 import { runLiveStoresSchedule } from './services/live-stores/wiring';
 import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
+import { stagingGate } from './services/staging-gate';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -267,6 +268,10 @@ const worker = {
 		if (ipRegex.test(hostname)) {
 			return new Response('Access denied. Please use the assigned domain name.', { status: 403 });
 		}
+
+		// 3. Staging locks itself with STAGING_GATE_KEY until Cloudflare Access protects it; unset in production.
+		const gated = await stagingGate(request, env, { previewDomain, separatePreviewDomain });
+		if (gated) return gated;
 
 		// --- Domain-based Routing ---
 
