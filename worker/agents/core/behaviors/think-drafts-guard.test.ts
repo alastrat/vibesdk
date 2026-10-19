@@ -70,9 +70,21 @@ describe('the Think host and drafts', () => {
 		expect(deployed).toBeGreaterThan(-1);
 	});
 
+	it("records the new draft's deployed commit when the host didn't deploy it, so a snapshot matches the preview", () => {
+		const body = methodBody(think, 'private async applyActiveDraft(');
+		const lookup = body.indexOf('space.getStoreManifest(draft.branch)');
+		expect(lookup).toBeGreaterThan(-1);
+		expect(body.indexOf('this.recordDeployedCommit(', lookup)).toBeGreaterThan(lookup);
+		expect(think).toContain('getStoreManifest: (branch: string) => Promise<{ commitHash: string; manifest: string | null } | null>;');
+	});
+
+	it('records the commit a switching tool deployed', () => {
+		expect(think).toMatch(/const draft = activeDraftOf\(output\);\s*if \(draft\) await this\.applyActiveDraft\(draft, false, deployedCommitOf\(output\)\);/);
+	});
+
 	it('follows the draft a tool switched to without deploying from the host mid-turn', () => {
 		expect(think).toContain('DRAFT_SWITCHING_TOOLS.has(toolName)');
-		expect(think).toMatch(/activeDraftOf\(output\)[\s\S]{0,200}applyActiveDraft\(draft, false\)/);
+		expect(think).toMatch(/activeDraftOf\(output\)[\s\S]{0,200}applyActiveDraft\(draft, false[,)]/);
 	});
 
 	it('makes a turn wait for a switch, and never lets a merge outlive its turn', () => {

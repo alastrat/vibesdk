@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDraftOf, chainDraftChange, DRAFT_SWITCHING_TOOLS, draftErrorStatus } from './draft-change';
+import { activeDraftOf, chainDraftChange, deployedCommitOf, DRAFT_SWITCHING_TOOLS, draftErrorStatus } from './draft-change';
 
 describe('activeDraftOf', () => {
 	it("reads the draft a tool switched to from its JSON output, so the host's preview follows it", () => {
@@ -21,6 +21,28 @@ describe('activeDraftOf', () => {
 	it('answers 404 for a missing draft and 409 for any other refusal', () => {
 		expect(draftErrorStatus("That draft doesn't exist.")).toBe(404);
 		expect(draftErrorStatus("Couldn't save your work before switching. Try again.")).toBe(409);
+	});
+});
+
+describe('deployedCommitOf', () => {
+	it('reads the commit a switching tool deployed, from its JSON string or object output', () => {
+		const switched = { activeDraft: { id: 'main', name: 'Main', branch: 'main' }, deploy: { preview_url: 'https://p', commit_hash: 'c0ffee1' } };
+		expect(deployedCommitOf(JSON.stringify(switched))).toBe('c0ffee1');
+		expect(deployedCommitOf(switched)).toBe('c0ffee1');
+		expect(deployedCommitOf({ result: 'merged', commit: 'abc1234', deploy: { commit_hash: 'abc1234' } })).toBe('abc1234');
+	});
+
+	it("has none when the tool didn't deploy or the build failed", () => {
+		const draft = { id: 'main', name: 'Main', branch: 'main' };
+		for (const output of [
+			JSON.stringify({ activeDraft: draft }),
+			{ activeDraft: draft, deploy: { error: 'Build failed', commit_hash: 'c0ffee1' } },
+			{ activeDraft: draft, deploy: { error: 'Deploy failed: reset' } },
+			'not json',
+			null,
+		]) {
+			expect(deployedCommitOf(output)).toBeNull();
+		}
 	});
 });
 

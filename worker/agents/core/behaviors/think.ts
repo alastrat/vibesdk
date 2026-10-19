@@ -54,6 +54,7 @@ import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
 import {
 	activeDraftOf,
 	chainDraftChange,
+	deployedCommitOf,
 	DRAFT_BUSY_MESSAGE,
 	DRAFT_SWITCHING_TOOLS,
 	draftErrorStatus,
@@ -86,6 +87,7 @@ type SpaceRpcStub = {
 		branch: string,
 	) => Promise<{ preview_url?: string; commit_hash?: string; error?: string; details?: string }>;
 	getDeploymentBundle: (branch: string) => Promise<BranchDeploymentBundle>;
+	getStoreManifest: (branch: string) => Promise<{ commitHash: string; manifest: string | null } | null>;
 	rollbackToCommit: (branch: string, commitHash: string) => Promise<unknown>;
 	activateDraft: (id: string) => Promise<ActivateDraftResult>;
 	createDraft: (name: string, from: DraftStart) => Promise<CreateDraftResult>;
@@ -867,7 +869,7 @@ export class ThinkCodingBehavior
 				} else if (DRAFT_SWITCHING_TOOLS.has(toolName)) {
 					// The tool deployed the draft itself, in order with the AI's other tools; the host only follows it.
 					const draft = activeDraftOf(output);
-					if (draft) await this.applyActiveDraft(draft, false);
+					if (draft) await this.applyActiveDraft(draft, false, deployedCommitOf(output));
 				} else if (toolName === 'set_title') {
 					await this.handleSetTitleOutput(args, output);
 				} else if (isFileDeleteTool(toolName)) {
@@ -1153,8 +1155,11 @@ export class ThinkCodingBehavior
 		}
 	}
 
-	/** Points the session at the draft the workspace now has checked out: the agent, the preview and the chat. */
-	private async applyActiveDraft(draft: ActiveDraft, deployPreview: boolean): Promise<void> {
+	/**
+	 * Points the session at the draft the workspace now has checked out: the agent, the preview and the chat.
+	 * `deployedByTool` is the commit a tool's own deploy of the draft built.
+	 */
+	private async applyActiveDraft(draft: ActiveDraft, deployPreview: boolean, deployedByTool: string | null = null): Promise<void> {
 		const changed = this.state.currentBranch !== draft.branch;
 		this.setState({ ...this.state, currentBranch: draft.branch });
 		// The agent's default preview address for its browser tools is per draft. Only the address moves: the
@@ -1169,6 +1174,14 @@ export class ThinkCodingBehavior
 		if (!deployed) {
 			// A failed rebuild has already told the seller; the preview still has to leave the draft it showed.
 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, { previewURL: await this.getBrowserPreviewURL() });
+			// The preview shows the draft's own last build, so a template or Discover snapshot has to take that commit.
+			const commit =
+				deployedByTool ??
+				(await this.callSpace((space) => space.getStoreManifest(draft.branch)).catch((error: unknown) => {
+					this.logger.warn("Reading the draft's deployed commit failed (continuing)", error);
+					return null;
+				}))?.commitHash;
+			if (commit && commit !== this.state.lastDeployedCommit) this.recordDeployedCommit(commit);
 		}
 		if (changed) {
 			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {

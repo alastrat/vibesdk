@@ -19,8 +19,8 @@ function isActiveDraft(value: unknown): value is ActiveDraft {
 	return typeof draft.id === 'string' && typeof draft.name === 'string' && typeof draft.branch === 'string';
 }
 
-/** The `activeDraft` a draft tool reports, from its JSON string or object output. */
-export function activeDraftOf(output: unknown): ActiveDraft | null {
+/** A tool's JSON string or object output as an object, or null. */
+function outputObject(output: unknown): Record<string, unknown> | null {
 	let parsed: unknown = output;
 	if (typeof output === 'string') {
 		try {
@@ -29,9 +29,21 @@ export function activeDraftOf(output: unknown): ActiveDraft | null {
 			return null;
 		}
 	}
-	if (!parsed || typeof parsed !== 'object') return null;
-	const draft = (parsed as { activeDraft?: unknown }).activeDraft;
+	return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+}
+
+/** The `activeDraft` a draft tool reports, from its JSON string or object output. */
+export function activeDraftOf(output: unknown): ActiveDraft | null {
+	const draft = outputObject(output)?.activeDraft;
 	return isActiveDraft(draft) ? draft : null;
+}
+
+/** The commit a draft tool's own deploy built, or null when it didn't deploy or the build failed. */
+export function deployedCommitOf(output: unknown): string | null {
+	const deploy = outputObject(output)?.deploy;
+	if (!deploy || typeof deploy !== 'object') return null;
+	const { error, commit_hash: commit } = deploy as { error?: unknown; commit_hash?: unknown };
+	return error === undefined && typeof commit === 'string' ? commit : null;
 }
 
 /** Runs `change` once `previous` has settled, pass or fail, so draft changes never overlap on the host. */
