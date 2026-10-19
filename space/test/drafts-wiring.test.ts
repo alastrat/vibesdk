@@ -152,6 +152,19 @@ describe("SpaceDO drafts wiring", () => {
     expect(cancel.indexOf("cancelMerge(")).toBeLessThan(cancel.indexOf("this.ctx.storage.delete(MERGE_STATE_KEY)"))
   })
 
+  it("saves the checkpoint of unsaved work after a merge and after a cancel, so a restart can't undo either", () => {
+    const bringIn = methodBody(spaceDo, "async bringInLiveChanges(")
+    const conflicts = bringIn.slice(bringIn.indexOf('if (outcome.result === "conflicts")'), bringIn.indexOf('result: "conflicts",'))
+    expect(conflicts.indexOf("await this.flushCheckpoint()")).toBeGreaterThan(conflicts.indexOf("this.ctx.storage.put(MERGE_STATE_KEY"))
+    const merged = bringIn.slice(bringIn.lastIndexOf("this.ctx.storage.put(MERGE_STATE_KEY"))
+    expect(merged.indexOf("await this.flushCheckpoint()")).toBeGreaterThan(-1)
+    expect(merged.indexOf("await this.flushCheckpoint()")).toBeLessThan(merged.indexOf("this.deploy(draft.branch)"))
+    const cancel = methodBody(spaceDo, "async cancelBringingInLiveChanges(")
+    const flush = cancel.indexOf("await this.flushCheckpoint()")
+    expect(flush).toBeGreaterThan(cancel.indexOf("cancelMerge("))
+    expect(flush).toBeLessThan(cancel.indexOf("this.ctx.storage.delete(MERGE_STATE_KEY)"))
+  })
+
   it("publishes a draft only after its latest version is deployed, never mid-merge", () => {
     const publish = methodBody(spaceDo, "async publishDraft(")
     expect(publish).toContain("Wait for the AI to finish bringing in the live store's changes.")

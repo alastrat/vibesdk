@@ -950,6 +950,8 @@ export class SpaceDO extends DurableObject<Env> {
           deletedByLive: outcome.deletedByLive,
           merged: null,
         } satisfies MergeState)
+        // Saved after the merge state, so a restart never brings back markers without the merge that explains them.
+        await this.flushCheckpoint()
         return {
           result: "conflicts",
           files: outcome.files,
@@ -969,6 +971,7 @@ export class SpaceDO extends DurableObject<Env> {
         deletedByLive: [],
         merged: outcome.commit,
       } satisfies MergeState)
+      await this.flushCheckpoint()
       touchDraftBranch(this.ctx.storage.sql, draft.branch, Date.now())
       const deploy = await this.deploy(draft.branch)
       return { result: outcome.result, commit: outcome.commit, deploy }
@@ -982,6 +985,8 @@ export class SpaceDO extends DurableObject<Env> {
       if (!merge) return { cancelled: false }
       await this.materializeAll()
       await cancelMerge(this.fs, merge, isReservedPath)
+      // Saved before the merge state goes, so a restart never brings back markers without the merge that explains them.
+      await this.flushCheckpoint()
       await this.ctx.storage.delete(MERGE_STATE_KEY)
       return { cancelled: true }
     })
