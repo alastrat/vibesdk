@@ -106,4 +106,17 @@ describe('isEmailSendingEnabled', () => {
 	it('is false in production without a binding', () => {
 		expect(isEmailSendingEnabled(envWith({ ENVIRONMENT: 'prod' }))).toBe(false);
 	});
+
+});
+
+describe('createEmailSender with a recipient allowlist', () => {
+	it('sends only to allowed recipients when the allowlist is set, as on staging, and says why it blocked one', async () => {
+		const send = vi.fn().mockResolvedValue({ messageId: 'm1' });
+		const env = { ENVIRONMENT: 'staging', EMAIL: { send }, EMAIL_RECIPIENT_ALLOWLIST: '@pluriza.com' } as unknown as Env;
+		const sender = createEmailSender(env);
+		await sender!.send({ ...MESSAGE, to: 'alastrat@pluriza.com' });
+		expect(send).toHaveBeenCalledTimes(1);
+		await expect(sender!.send(MESSAGE)).rejects.toMatchObject({ code: 'E_STAGING_BLOCKED' });
+		expect(send).toHaveBeenCalledTimes(1);
+	});
 });

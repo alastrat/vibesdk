@@ -1,5 +1,6 @@
 import { createLogger } from '../../logger';
 import { isDev } from '../../utils/envs';
+import { blockedRecipientError, recipientAllowlist } from './recipient-allowlist';
 import { EMAIL_FROM, type EmailSender, type TransactionalEmailBinding } from './types';
 
 const logger = createLogger('Email');
@@ -28,12 +29,24 @@ const devLogSender: EmailSender = {
 	},
 };
 
-/** The Cloudflare binding when configured, the dev log in local development, otherwise null. */
+/** Sends only to recipients `allows` lets through; the rest are logged and fail with BLOCKED_RECIPIENT_CODE. */
+function allowlisted(sender: EmailSender, allows: (recipient: string) => boolean): EmailSender {
+	return {
+		async send(email) {
+			if (!allows(email.to)) {
+				logger.info('Email not sent: not on the allowlist', { to: email.to, subject: email.subject });
+				throw blockedRecipientError();
+			}
+			return sender.send(email);
+		},
+	};
+}
+
+/** The Cloudflare binding when configured, the dev log in local development, otherwise null; limited to EMAIL_RECIPIENT_ALLOWLIST when set. */
 export function createEmailSender(env: Env): EmailSender | null {
-	if (env.EMAIL) {
-		return cloudflareSender(env.EMAIL);
-	}
-	return isDev(env) ? devLogSender : null;
+	const sender = env.EMAIL ? cloudflareSender(env.EMAIL) : isDev(env) ? devLogSender : null;
+	const allows = recipientAllowlist(env.EMAIL_RECIPIENT_ALLOWLIST);
+	return sender && allows ? allowlisted(sender, allows) : sender;
 }
 
 export function isEmailSendingEnabled(env: Env): boolean {
