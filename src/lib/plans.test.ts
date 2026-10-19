@@ -99,4 +99,14 @@ describe('plans', () => {
 		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
 		expect(builder?.rows.find((row) => row.label === 'Fee on template sales')?.cells).toEqual({ basic: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL });
 	});
+
+	it('lists the emails Estori sends today: the new-order email, the shopper order emails and template receipts, on every plan', () => {
+		const every = { basic: true, premium: true, enterprise: true };
+		const row = (capability: string, label: string) => PLAN_COMPARISON.find((section) => section.capability === capability)?.rows.find((entry) => entry.label === label)?.cells;
+		expect(row('payments', 'An email to you for every new order')).toEqual(every);
+		expect(row('payments', 'Order emails to your shoppers')).toEqual({ basic: 'Confirmation, shipped and refund', premium: 'Confirmation, shipped and refund', enterprise: 'Confirmation, shipped and refund' });
+		expect(row('payments', 'Edit each shopper email, or turn it off')).toEqual(every);
+		expect(row('payments', "Shopper emails from your store's own address")).toEqual(every);
+		expect(row('store-builder', 'Email receipts for your template buyers')).toEqual(every);
+	});
 });
