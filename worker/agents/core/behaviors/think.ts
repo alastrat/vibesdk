@@ -51,7 +51,7 @@ import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome }
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
 import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
-import { mirrorCandidates, mirroredFile, rebuildMirror, type MirroredFile } from '../../think/draft-files';
+import { rebuildMirror, selectMirrorFiles } from '../../think/draft-files';
 import {
 	activeDraftOf,
 	cancelledOf,
@@ -1230,13 +1230,7 @@ export class ThinkCodingBehavior
 	private async rebuildFileMirror(): Promise<void> {
 		try {
 			const listing = await this.callSpace((space) => space.list());
-			const read = await Promise.all(
-				mirrorCandidates(listing).map(async (path) => {
-					const bytes = await this.callSpace((space) => space.readFileBytes(path));
-					return bytes ? mirroredFile(path, bytes) : null;
-				}),
-			);
-			const files = read.filter((file): file is MirroredFile => file !== null);
+			const files = await selectMirrorFiles(listing, (path) => this.callSpace((space) => space.readFileBytes(path)));
 			const { map, removed, changed } = rebuildMirror(this.state.generatedFilesMap, files);
 			this.setState({ ...this.state, generatedFilesMap: map });
 			for (const filePath of removed) this.broadcast(WebSocketMessageResponses.FILE_DELETED, { filePath });

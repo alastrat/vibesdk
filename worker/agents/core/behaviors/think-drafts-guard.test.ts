@@ -103,7 +103,7 @@ describe('the Think host and drafts', () => {
 		expect(methodBody(think, 'private async cancelUnfinishedMerge(')).toMatch(/if \(!cancelled\) return;[\s\S]*await this\.rebuildFileMirror\(\)/);
 		expect(think).toMatch(/toolName === 'cancel_bringing_in_live_changes'\)[\s\S]{0,200}await this\.rebuildFileMirror\(\)/);
 		const rebuild = methodBody(think, 'private async rebuildFileMirror(');
-		for (const part of ['space.list()', 'mirrorCandidates(', 'space.readFileBytes(', 'mirroredFile(', 'rebuildMirror(this.state.generatedFilesMap', 'generatedFilesMap: map', 'WebSocketMessageResponses.FILE_DELETED', 'WebSocketMessageResponses.FILE_GENERATED']) {
+		for (const part of ['space.list()', 'selectMirrorFiles(', 'space.readFileBytes(', 'rebuildMirror(this.state.generatedFilesMap', 'generatedFilesMap: map', 'WebSocketMessageResponses.FILE_DELETED', 'WebSocketMessageResponses.FILE_GENERATED']) {
 			expect(rebuild, part).toContain(part);
 		}
 	});
