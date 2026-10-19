@@ -14,9 +14,13 @@ export function useDrafts(appId: string, enabled: boolean, refreshKey: string | 
 		retry: false,
 	});
 	const { refetch } = query;
+	const queryClient = useQueryClient();
 	useEffect(() => {
-		if (enabled && appId && refreshKey) void refetch();
-	}, [enabled, appId, refreshKey, refetch]);
+		if (!enabled || !appId || !refreshKey) return;
+		void refetch();
+		// A switch or deploy by the AI also changes what Publish sends, and the Go live view reads it from the live store.
+		void queryClient.invalidateQueries({ queryKey: queryKeys.liveStore(appId) });
+	}, [enabled, appId, refreshKey, refetch, queryClient]);
 	return query;
 }
 

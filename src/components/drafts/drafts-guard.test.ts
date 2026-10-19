@@ -11,6 +11,7 @@ const sources = import.meta.glob<string>(
 		'/src/routes/chat/components/main-content-panel.tsx',
 		'/src/components/live-store/GoLiveDialog.tsx',
 		'/src/hooks/use-live-store.ts',
+		'/src/hooks/use-drafts.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -71,6 +72,14 @@ describe('the drafts UI', () => {
 	it("refreshes the drafts after anything that changes the live store, since Publish and going offline don't reload the preview", () => {
 		const hooks = source('/src/hooks/use-live-store.ts');
 		expect(hooks).toContain('queryClient.invalidateQueries({ queryKey: queryKeys.drafts(appId) })');
+	});
+
+	it("refreshes the Go live view when the preview reloads, since the AI's switches and deploys change what Publish sends", () => {
+		const hooks = source('/src/hooks/use-drafts.ts');
+		const effect = hooks.slice(hooks.indexOf('useEffect(() => {'), hooks.indexOf('}, [enabled'));
+		expect(effect).toContain('void refetch();');
+		expect(effect).toContain('void queryClient.invalidateQueries({ queryKey: queryKeys.liveStore(appId) });');
+		expect(hooks).toMatch(/\}, \[enabled, appId, refreshKey, refetch, queryClient\]\);/);
 	});
 
 	it('never says git words or names an AI assistant or supplier', () => {
