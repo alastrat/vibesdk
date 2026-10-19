@@ -53,6 +53,7 @@ import { buildTurnMessage } from '../../think/turn-message';
 import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
 import {
 	activeDraftOf,
+	chainDraftChange,
 	DRAFT_BUSY_MESSAGE,
 	DRAFT_SWITCHING_TOOLS,
 	draftErrorStatus,
@@ -1094,6 +1095,8 @@ export class ThinkCodingBehavior
 			});
 			return;
 		}
+		// The branch to roll back is the one a switch in flight is moving to.
+		if (this.draftChange) await this.draftChange.catch(() => undefined);
 
 		const branch = this.state.currentBranch || 'main';
 		try {
@@ -1138,8 +1141,9 @@ export class ThinkCodingBehavior
 		return this.switchDraft(created.id);
 	}
 
+	/** Queues behind a switch in flight, so two switches never apply to the store at once. */
 	private async runDraftChange<T>(change: () => Promise<T>): Promise<T> {
-		const run = change();
+		const run = chainDraftChange(this.draftChange, change);
 		this.draftChange = run;
 		try {
 			return await run;
@@ -1154,9 +1158,9 @@ export class ThinkCodingBehavior
 		this.setState({ ...this.state, currentBranch: draft.branch });
 		// The agent's default preview address for its browser tools is per draft.
 		await this.configureThinkAgent();
-		if (deployPreview) {
-			await this.deployCurrentBranch();
-		} else {
+		const deployed = deployPreview ? await this.deployCurrentBranch() : null;
+		if (!deployed) {
+			// A failed rebuild has already told the seller; the preview still has to leave the draft it showed.
 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, { previewURL: await this.getBrowserPreviewURL() });
 		}
 		if (changed) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeDraftOf, DRAFT_SWITCHING_TOOLS, draftErrorStatus } from './draft-change';
+import { activeDraftOf, chainDraftChange, DRAFT_SWITCHING_TOOLS, draftErrorStatus } from './draft-change';
 
 describe('activeDraftOf', () => {
 	it("reads the draft a tool switched to from its JSON output, so the host's preview follows it", () => {
@@ -21,5 +21,62 @@ describe('activeDraftOf', () => {
 	it('answers 404 for a missing draft and 409 for any other refusal', () => {
 		expect(draftErrorStatus("That draft doesn't exist.")).toBe(404);
 		expect(draftErrorStatus("Couldn't save your work before switching. Try again.")).toBe(409);
+	});
+});
+
+function deferred() {
+	let resolve!: () => void;
+	let reject!: (error: unknown) => void;
+	const promise = new Promise<void>((res, rej) => {
+		resolve = res;
+		reject = rej;
+	});
+	return { promise, resolve, reject };
+}
+
+const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+describe('chainDraftChange', () => {
+	it("starts a change only after the one before it finishes, so two switches never apply to the store at once", async () => {
+		const events: string[] = [];
+		const first = deferred();
+		const a = chainDraftChange(null, async () => {
+			events.push('a start');
+			await first.promise;
+			events.push('a end');
+			return 'a';
+		});
+		const b = chainDraftChange(a, async () => {
+			events.push('b start');
+			return 'b';
+		});
+		await settle();
+		expect(events).toEqual(['a start']);
+		first.resolve();
+		expect(await b).toBe('b');
+		expect(await a).toBe('a');
+		expect(events).toEqual(['a start', 'a end', 'b start']);
+	});
+
+	it('still runs a change after the one before it failed', async () => {
+		const first = deferred();
+		const a = chainDraftChange(null, () => first.promise);
+		const b = chainDraftChange(a, async () => 'b ran');
+		first.reject(new Error('boom'));
+		await expect(a).rejects.toThrow('boom');
+		await expect(b).resolves.toBe('b ran');
+	});
+
+	it('starts straight away when nothing is pending', async () => {
+		const events: string[] = [];
+		const pending = deferred();
+		const run = chainDraftChange(null, async () => {
+			events.push('start');
+			await pending.promise;
+		});
+		await settle();
+		expect(events).toEqual(['start']);
+		pending.resolve();
+		await run;
 	});
 });

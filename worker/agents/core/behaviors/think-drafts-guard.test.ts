@@ -28,6 +28,18 @@ describe('the Think host and drafts', () => {
 		expect(body).toContain('this.runDraftChange(');
 	});
 
+	it('claims a switch in the same step as it checks that the AI is idle', () => {
+		const body = methodBody(think, 'async switchDraft(');
+		const between = body.slice(body.indexOf('this.isCodeGenerating()'), body.indexOf('this.runDraftChange('));
+		expect(between).not.toContain('await');
+	});
+
+	it('runs switches one after another on the host', () => {
+		const body = methodBody(think, 'private async runDraftChange<T>(');
+		expect(body).toContain('chainDraftChange(this.draftChange, change)');
+		expect(body).toContain('if (this.draftChange === run) this.draftChange = null;');
+	});
+
 	it('points the preview and the agent at the new draft, deploying it only when stale', () => {
 		const body = methodBody(think, 'private async applyActiveDraft(');
 		expect(body).toContain('currentBranch: draft.branch');
@@ -35,6 +47,12 @@ describe('the Think host and drafts', () => {
 		expect(body).toContain('WebSocketMessageResponses.DEPLOYMENT_COMPLETED');
 		expect(body).toContain("`Now working on '${draft.name}'.`");
 		expect(body).toContain('await this.configureThinkAgent()');
+	});
+
+	it('shows the new draft in the preview even when its rebuild fails', () => {
+		const body = methodBody(think, 'private async applyActiveDraft(');
+		const deployed = body.search(/const deployed = deployPreview \? await this\.deployCurrentBranch\(\) : null;\s*if \(!deployed\) \{[^}]*DEPLOYMENT_COMPLETED[^}]*getBrowserPreviewURL\(\)/);
+		expect(deployed).toBeGreaterThan(-1);
 	});
 
 	it('follows the draft a tool switched to without deploying from the host mid-turn', () => {
@@ -56,6 +74,13 @@ describe('the Think host and drafts', () => {
 		expect(check).toBeGreaterThan(-1);
 		expect(check).toBeLessThan(body.indexOf('and redeployed.'));
 		expect(check).toBeLessThan(body.indexOf('this.captureDeployedScreenshot()'));
+	});
+
+	it('makes a rollback wait for a switch in flight before it reads the branch', () => {
+		const body = methodBody(think, 'async rollbackToCommit(');
+		const wait = body.indexOf('await this.draftChange');
+		expect(wait).toBeGreaterThan(body.indexOf('this.isCodeGenerating()'));
+		expect(wait).toBeLessThan(body.indexOf('this.state.currentBranch'));
 	});
 
 	it('exposes switching and creating drafts on the agent for the drafts API', () => {

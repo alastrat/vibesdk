@@ -33,3 +33,9 @@ export function activeDraftOf(output: unknown): ActiveDraft | null {
 	const draft = (parsed as { activeDraft?: unknown }).activeDraft;
 	return isActiveDraft(draft) ? draft : null;
 }
+
+/** Runs `change` once `previous` has settled, pass or fail, so draft changes never overlap on the host. */
+export function chainDraftChange<T>(previous: Promise<unknown> | null, change: () => Promise<T>): Promise<T> {
+	const settled = previous ? previous.then(() => undefined, () => undefined) : Promise.resolve();
+	return settled.then(change);
+}
