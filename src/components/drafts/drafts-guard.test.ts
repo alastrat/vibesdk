@@ -63,6 +63,13 @@ describe('the drafts UI', () => {
 		expect(header.slice(0, header.indexOf('{previewTitle}'))).toMatch(/className="min-w-0 truncate /);
 	});
 
+	it('keeps the drafts menu inside the pane, whatever the width of the header', () => {
+		const switcher = source('/src/components/drafts/DraftSwitcher.tsx');
+		const tag = switcher.match(/<PopoverContent[^>]*>/)?.[0] ?? '';
+		expect(tag).toContain('align="start"');
+		expect(tag).toContain('collisionPadding={8}');
+	});
+
 	it('names the draft Publish sends, and warns that Main falls behind', () => {
 		const goLive = source('/src/components/live-store/GoLiveDialog.tsx');
 		expect(goLive).toContain('view.draft');

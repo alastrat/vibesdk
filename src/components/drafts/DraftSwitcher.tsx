@@ -66,7 +66,7 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 						<CaretDown className="size-3.5 shrink-0 text-text-primary/50" />
 					</button>
 				</PopoverTrigger>
-				<PopoverContent align="start" className="grid w-80 gap-2 p-2">
+				<PopoverContent align="start" collisionPadding={8} className="grid w-80 gap-2 p-2">
 					{snapshot.drafts.map((draft) => (
 						<div key={draft.id} className="grid gap-1 rounded p-2 hover:bg-kumo-elevated">
 							<button type="button" className="flex items-center gap-2 text-left text-sm" onClick={() => switchTo(draft)} disabled={draft.active || isGenerating || activate.isPending}>
