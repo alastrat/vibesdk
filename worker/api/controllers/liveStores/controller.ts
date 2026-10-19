@@ -82,7 +82,12 @@ export class LiveStoreController extends BaseController {
             const space = spaceOf(env, appId);
             if (!space) return this.createErrorResponse<LiveStoreView>("This store can't be published right now.", 503);
             // A merge left by a crashed turn would refuse the publish; the agent clears it unless a turn is resolving it.
-            await (await getAgentStub(env, appId)).cancelLeftoverMerge();
+            // If the agent can't be reached, SpaceDO still refuses a draft with a leftover merge on its own.
+            try {
+                await (await getAgentStub(env, appId)).cancelLeftoverMerge();
+            } catch (error) {
+                this.logger.warn('Could not clear a leftover merge before publishing; publishing anyway', { appId, error });
+            }
             const published = await space.publishDraft(draftId);
             if ('error' in published) return this.createErrorResponse<LiveStoreView>(published.error, draftErrorStatus(published.error));
             const saved = await stores.publish({ appId, slug, commit: published.commitHash, now: new Date() });
