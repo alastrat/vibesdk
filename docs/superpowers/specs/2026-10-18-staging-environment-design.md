@@ -43,7 +43,7 @@
 **Goal:** staging is meant to sit behind Cloudflare Access like production.
 - **The blocker:** the deploy token can't read or edit the zone's Access applications. Creating Access protection is also a security setting change that the owner makes.
 
-**The fix: until the owner adds Access, the Worker locks itself.** When `STAGING_GATE_KEY` is set:
+**The fix: until the owner adds Access, the Worker locks itself.** The gate runs only where `ENVIRONMENT=staging`, so a key that ends up in local development or production locks nothing. On staging:
 - **Every request is locked**, except three kinds:
   - the preview host, which isn't behind Access in production either;
   - `POST /api/stripe/webhook`, whose Stripe signature is checked;
@@ -83,15 +83,17 @@ Staging uses production's AI Gateway and provider keys. Building apps on staging
 - **Account emails:** a password reset or confirmation to a blocked address fails the way any failed send does.
 
 **Values:**
-- **Staging:** `@pluriza.com`.
+- **Staging:** `@pluriza.com`. If staging has no list, it sends to no one, so removing the list can't open it up.
 - **Production:** unset, so production sends to anyone, as today.
+
+**Subjects:** on staging every subject starts with "[Staging] ", so alerts and notices from staging can't be mistaken for production's. Platform alerts go to the team, so they pass the allowlist.
 
 ## 7. Deploying
 
 - **Workflows:**
   - **Shared steps:** `deploy-estori.yml`'s jobs move into a reusable workflow, `deploy-estori-reusable.yml`. It takes the environment, Wrangler config, app origin, preview probe URL and Worker name.
   - **Production:** `deploy-estori.yml` calls it for production on a push to `estori-live`. It still runs the gate (lint, typecheck, tests) and waits for the owner's approval.
-  - **Staging:** the new `deploy-estori-staging.yml` calls it for staging on a push to `main`, with no approval. One deploy runs at a time, and a newer push waits its turn.
+  - **Staging:** the new `deploy-estori-staging.yml` calls it for staging on a push to `main`, with no approval. One deploy runs at a time. While one runs, only the newest push waits, and the pushes in between are skipped, since the newest includes them. The `staging` GitHub environment only accepts deployments from `main`.
 - **Migrations:** `scripts/deploy.ts` applies remote migrations before the Worker ships, so every migration runs on staging's D1 before production's.
 - **Smoke checks:**
   - `scripts/estori-smoke.ts` reads the Worker name for its rollback hint;
@@ -126,6 +128,7 @@ Production releases keep their current path: push `main` to `estori-live`, and t
 
 ## 10. Testing the setup
 
+- **A config test:** staging's config never names production's hosts, database, buckets, namespaces or Worker. A push to `main` deploys it without approval, so a mistake there could otherwise take over a production domain.
 - **Unit tests:**
   - **Gate:** locked, unlocked by cookie and by header, exempt webhook and preview host, a wrong key, and the noindex header.
   - **Allowlist:** addresses and domains, case-insensitive, and unset in production.

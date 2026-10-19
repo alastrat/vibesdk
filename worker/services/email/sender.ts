@@ -42,11 +42,25 @@ function allowlisted(sender: EmailSender, allows: (recipient: string) => boolean
 	};
 }
 
-/** The Cloudflare binding when configured, the dev log in local development, otherwise null; limited to EMAIL_RECIPIENT_ALLOWLIST when set. */
+const STAGING_ENVIRONMENT = 'staging';
+const STAGING_SUBJECT_PREFIX = '[Staging] ';
+
+/** Marks every subject, so staging's emails are never mistaken for production's. */
+function stagingSubjects(sender: EmailSender): EmailSender {
+	return { send: (email) => sender.send({ ...email, subject: `${STAGING_SUBJECT_PREFIX}${email.subject}` }) };
+}
+
+/**
+ * The Cloudflare binding when configured, the dev log in local development, otherwise null; limited to
+ * EMAIL_RECIPIENT_ALLOWLIST when set. Staging marks its subjects, and without an allowlist sends to no one.
+ */
 export function createEmailSender(env: Env): EmailSender | null {
 	const sender = env.EMAIL ? cloudflareSender(env.EMAIL) : isDev(env) ? devLogSender : null;
-	const allows = recipientAllowlist(env.EMAIL_RECIPIENT_ALLOWLIST);
-	return sender && allows ? allowlisted(sender, allows) : sender;
+	if (!sender) return null;
+	const staging = env.ENVIRONMENT === STAGING_ENVIRONMENT;
+	const allows = recipientAllowlist(env.EMAIL_RECIPIENT_ALLOWLIST) ?? (staging ? () => false : null);
+	const limited = allows ? allowlisted(sender, allows) : sender;
+	return staging ? stagingSubjects(limited) : limited;
 }
 
 export function isEmailSendingEnabled(env: Env): boolean {

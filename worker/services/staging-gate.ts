@@ -1,8 +1,8 @@
 /**
  * Staging locks itself with STAGING_GATE_KEY until Cloudflare Access protects it. A browser unlocks on the unlock
  * page and keeps a 30-day cookie holding a digest of the key, never the key; automated checks send the key in a
- * header. Stripe's signed webhook and the preview host stay open, as in production. Staging (ENVIRONMENT=staging)
- * without its key stays shut; elsewhere, without a key nothing changes.
+ * header. Stripe's signed webhook and the preview host stay open, as in production. It runs only where
+ * ENVIRONMENT=staging, and staging without its key stays shut.
  */
 
 import { parseCookies } from '../utils/authUtils';
@@ -79,10 +79,11 @@ function locked(pathname: string): Response {
 
 /** The response that keeps a request out, or null to let it through. */
 export async function stagingGate(request: Request, env: Env, hosts: { previewDomain: string; separatePreviewDomain: boolean }): Promise<Response | null> {
+	// Only staging is ever gated, so a key that reaches local development or production locks nothing.
+	if (env.ENVIRONMENT !== STAGING_ENVIRONMENT) return null;
 	const key = env.STAGING_GATE_KEY?.trim();
 	// Staging without its key stays shut, so a deploy that lands before the key is set is never open.
-	if (!key && env.ENVIRONMENT === STAGING_ENVIRONMENT) return page('Estori staging', '<h1 style="font-size:20px;">Estori staging isn\'t set up yet</h1>', 503);
-	if (!key) return null;
+	if (!key) return page('Estori staging', '<h1 style="font-size:20px;">Estori staging isn\'t set up yet</h1>', 503);
 	const { hostname, pathname } = new URL(request.url);
 	if (hosts.separatePreviewDomain && hostname === hosts.previewDomain) return null;
 	if (pathname === STRIPE_WEBHOOK_PATH && request.method === 'POST') return null;

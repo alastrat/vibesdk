@@ -3,7 +3,7 @@ import { STAGING_GATE_PATH, stagingGate } from './staging-gate';
 
 const KEY = 'correct-horse-battery-staple';
 const HOSTS = { previewDomain: 'preview-staging.estori.app', separatePreviewDomain: true };
-const env = (key?: string) => ({ STAGING_GATE_KEY: key }) as unknown as Env;
+const env = (key?: string, environment = 'staging') => ({ STAGING_GATE_KEY: key, ENVIRONMENT: environment }) as unknown as Env;
 const at = (path: string, init?: RequestInit) => new Request(`https://staging.estori.app${path}`, init);
 
 async function unlockCookie(): Promise<string> {
@@ -13,12 +13,14 @@ async function unlockCookie(): Promise<string> {
 }
 
 describe('the staging gate', () => {
-	it('does nothing where no key is set, as in production', async () => {
-		expect(await stagingGate(at('/'), env(undefined), HOSTS)).toBeNull();
+	it('only ever runs on staging, so a key that reaches local development or production locks nothing', async () => {
+		expect(await stagingGate(at('/'), env(undefined, 'prod'), HOSTS)).toBeNull();
+		expect(await stagingGate(at('/'), env(KEY, 'prod'), HOSTS)).toBeNull();
+		expect(await stagingGate(at('/emails'), env(KEY, 'dev'), HOSTS)).toBeNull();
 	});
 
 	it('keeps staging shut, webhook included, until its key is set, so a first deploy is never open', async () => {
-		const unset = { ENVIRONMENT: 'staging' } as unknown as Env;
+		const unset = env(undefined);
 		for (const request of [at('/'), at('/api/health'), at('/api/stripe/webhook', { method: 'POST', body: '{}' }), at(STAGING_GATE_PATH)]) {
 			const response = await stagingGate(request, unset, HOSTS);
 			expect(response?.status, request.url).toBe(503);

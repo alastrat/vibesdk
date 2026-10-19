@@ -119,4 +119,13 @@ describe('createEmailSender with a recipient allowlist', () => {
 		await expect(sender!.send(MESSAGE)).rejects.toMatchObject({ code: 'E_STAGING_BLOCKED' });
 		expect(send).toHaveBeenCalledTimes(1);
 	});
+
+	it("marks staging's emails as staging, and sends none if staging has no allowlist", async () => {
+		const send = vi.fn().mockResolvedValue({ messageId: 'm1' });
+		await createEmailSender({ ENVIRONMENT: 'staging', EMAIL: { send }, EMAIL_RECIPIENT_ALLOWLIST: '@pluriza.com' } as unknown as Env)!.send({ ...MESSAGE, to: 'alastrat@pluriza.com' });
+		expect(send.mock.calls[0][0].subject).toBe('[Staging] Reset your Estori password');
+		const open = createEmailSender({ ENVIRONMENT: 'staging', EMAIL: { send } } as unknown as Env);
+		await expect(open!.send({ ...MESSAGE, to: 'alastrat@pluriza.com' })).rejects.toMatchObject({ code: 'E_STAGING_BLOCKED' });
+		expect(send).toHaveBeenCalledTimes(1);
+	});
 });
