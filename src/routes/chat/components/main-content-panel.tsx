@@ -291,7 +291,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 			<div className="flex min-w-0 items-center gap-2">
 				{draftSwitcher}
 				<span
-					className="truncate text-sm font-mono text-text-50/70"
+					className="min-w-0 truncate text-sm font-mono text-text-50/70"
 					title={previewTitle}
 				>
 					{previewTitle}

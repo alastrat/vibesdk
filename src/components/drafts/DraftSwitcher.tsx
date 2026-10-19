@@ -18,11 +18,12 @@ interface DraftSwitcherProps {
 	onSendMessage: (message: string) => void;
 }
 
-function Badges({ draft }: { draft: DraftSummary }) {
+/** `limit` caps how many badges show; the menu lists them all, the header trigger shows one. */
+function Badges({ draft, limit }: { draft: DraftSummary; limit?: number }) {
 	return (
 		<>
-			{draftBadges(draft).map((badge) => (
-				<Badge key={badge.label} variant={badge.variant}>
+			{draftBadges(draft).slice(0, limit).map((badge) => (
+				<Badge key={badge.label} variant={badge.variant} className="shrink-0">
 					{badge.label}
 				</Badge>
 			))}
@@ -59,9 +60,9 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 		<>
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger asChild>
-					<button type="button" className="flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-sm hover:bg-kumo-elevated" title="Drafts">
-						<span className="truncate font-medium">{active.name}</span>
-						<Badges draft={active} />
+					<button type="button" className="flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-sm hover:bg-kumo-elevated" title="Drafts">
+						<span className="min-w-[3.5rem] max-w-[10rem] truncate font-medium">{active.name}</span>
+						<Badges draft={active} limit={1} />
 						<CaretDown className="size-3.5 shrink-0 text-text-primary/50" />
 					</button>
 				</PopoverTrigger>

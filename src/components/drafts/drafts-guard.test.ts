@@ -48,6 +48,20 @@ describe('the drafts UI', () => {
 		}
 	});
 
+	it("keeps the draft's name readable in the preview header: the trigger shows one badge, and the preview title is what shrinks", () => {
+		const switcher = source('/src/components/drafts/DraftSwitcher.tsx');
+		const trigger = switcher.slice(switcher.indexOf('<PopoverTrigger'), switcher.indexOf('</PopoverTrigger>'));
+		expect(trigger).toContain('<Badges draft={active} limit={1} />');
+		expect(trigger).toMatch(/<button[^>]*className="[^"]*\bshrink-0\b/);
+		expect(trigger).toContain('min-w-[3.5rem] max-w-[10rem] truncate');
+		expect(trigger).toMatch(/<CaretDown className="[^"]*\bshrink-0\b/);
+		expect(switcher).toContain('.slice(0, limit)');
+		expect(switcher).toMatch(/className="shrink-0"/);
+		const panel = source('/src/routes/chat/components/main-content-panel.tsx');
+		const header = panel.slice(panel.indexOf('{draftSwitcher}'));
+		expect(header.slice(0, header.indexOf('{previewTitle}'))).toMatch(/className="min-w-0 truncate /);
+	});
+
 	it('names the draft Publish sends, and warns that Main falls behind', () => {
 		const goLive = source('/src/components/live-store/GoLiveDialog.tsx');
 		expect(goLive).toContain('view.draft');
