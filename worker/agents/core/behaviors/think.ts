@@ -34,7 +34,13 @@ import { BuildProgressTracker } from '../../think/build-progress';
 import { screenshotTarget } from '../../think/screenshot-policy';
 import { createShowcaseCaptureDeps } from '../../../services/showcase/showcase-capture';
 import { captureShowcaseScreenshot, showcaseEligible } from '../../../services/showcase/showcase-screenshot';
-import type { BranchDeploymentBundle } from '@space-do/space';
+import type {
+	ActivateDraftResult,
+	ActiveDraft,
+	BranchDeploymentBundle,
+	CreateDraftResult,
+	DraftStart,
+} from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
 import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
@@ -45,6 +51,13 @@ import { describeReferenceSummary, extractReferenceUrls, type ReferenceOutcome }
 import { captureReferences } from '../../think/reference-service';
 import { buildTurnMessage } from '../../think/turn-message';
 import { initialProjectTitle, siteCopyQuery } from '../../think/site-start';
+import {
+	activeDraftOf,
+	DRAFT_BUSY_MESSAGE,
+	DRAFT_SWITCHING_TOOLS,
+	draftErrorStatus,
+	type DraftChangeResult,
+} from '../../think/draft-change';
 
 /**
  * Minimal stub shape for the `ThinkAgent` DO (see `worker/agents/think/ThinkAgent.ts`).
@@ -72,6 +85,9 @@ type SpaceRpcStub = {
 	) => Promise<{ preview_url?: string; commit_hash?: string; error?: string; details?: string }>;
 	getDeploymentBundle: (branch: string) => Promise<BranchDeploymentBundle>;
 	rollbackToCommit: (branch: string, commitHash: string) => Promise<unknown>;
+	activateDraft: (id: string) => Promise<ActivateDraftResult>;
+	createDraft: (name: string, from: DraftStart) => Promise<CreateDraftResult>;
+	cancelBringingInLiveChanges: () => Promise<{ cancelled: boolean }>;
 	importFiles: (
 		files: Array<{ path: string; bytes: Uint8Array }>,
 		message: string,
@@ -568,11 +584,13 @@ export class ThinkCodingBehavior
 	async build(): Promise<void> {
 		this.buildProgress = new BuildProgressTracker(Date.now());
 		try {
+			await this.cancelUnfinishedMerge();
 			if (!this.isMVPGenerated() && this.state.query && this.state.pendingUserInputs.length === 0) {
 				this.setState({ ...this.state, pendingUserInputs: [this.state.query] });
 			}
 
 			while (this.state.pendingUserInputs.length > 0) {
+				if (this.draftChange) await this.draftChange.catch(() => undefined);
 				const pending = this.state.pendingUserInputs.slice();
 				const images = this.state.pendingImages ?? [];
 				this.setState({ ...this.state, pendingUserInputs: [], pendingImages: [] });
@@ -664,6 +682,7 @@ export class ThinkCodingBehavior
 					isStreaming: false,
 				});
 			}
+			await this.cancelUnfinishedMerge();
 		}
 		if (turnError !== undefined) {
 			await this.reportTurnError(turnError);
@@ -843,6 +862,10 @@ export class ThinkCodingBehavior
 				});
 				if (toolName === 'deploy_space') {
 					await this.handleDeploySpaceOutput(output);
+				} else if (DRAFT_SWITCHING_TOOLS.has(toolName)) {
+					// The tool deployed the draft itself, in order with the AI's other tools; the host only follows it.
+					const draft = activeDraftOf(output);
+					if (draft) await this.applyActiveDraft(draft, false);
 				} else if (toolName === 'set_title') {
 					await this.handleSetTitleOutput(args, output);
 				} else if (isFileDeleteTool(toolName)) {
@@ -958,9 +981,9 @@ export class ThinkCodingBehavior
 	 * that into VibeSDK: parse the tool's JSON result, and on success surface the
 	 * preview to the FE (the same `DEPLOYMENT_COMPLETED { previewURL }` event
 	 * `deployCurrentBranch` emits). On a reported build error, emit
-	 * `DEPLOYMENT_FAILED`.
+	 * `DEPLOYMENT_FAILED`. Resolves to whether the output reported no error.
 	 */
-	private async handleDeploySpaceOutput(output: unknown): Promise<void> {
+	private async handleDeploySpaceOutput(output: unknown): Promise<boolean> {
 		let parsed: Record<string, unknown> | undefined;
 		if (typeof output === 'string') {
 			try { parsed = JSON.parse(output) as Record<string, unknown>; } catch { parsed = undefined; }
@@ -970,7 +993,7 @@ export class ThinkCodingBehavior
 
 		if (parsed && typeof parsed.error === 'string') {
 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, { error: parsed.error });
-			return;
+			return false;
 		}
 
 		const commitHash = parsed && typeof parsed.commit_hash === 'string' ? parsed.commit_hash : undefined;
@@ -983,6 +1006,7 @@ export class ThinkCodingBehavior
 		} catch (e) {
 			this.logger.warn('Failed to surface preview after deploy_space', e);
 		}
+		return true;
 	}
 
 	/**
@@ -1074,7 +1098,8 @@ export class ThinkCodingBehavior
 		const branch = this.state.currentBranch || 'main';
 		try {
 			const output = await this.callSpace((space) => space.rollbackToCommit(branch, hash));
-			await this.handleDeploySpaceOutput(output);
+			const deployed = await this.handleDeploySpaceOutput(output);
+			if (!deployed) return;
 			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
 				message: `Rolled back to commit \`${hash.slice(0, 8)}\` and redeployed.`,
 				conversationId: IdGenerator.generateConversationId(),
@@ -1086,6 +1111,75 @@ export class ThinkCodingBehavior
 			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_FAILED, {
 				error: e instanceof Error ? e.message : String(e),
 			});
+		}
+	}
+
+	/** A draft switch in progress. A turn waits for it, so the AI never edits the draft being left. */
+	private draftChange: Promise<unknown> | null = null;
+
+	/** Switches the workspace to the draft. Refused while the AI works on the store. */
+	async switchDraft(draftId: string): Promise<DraftChangeResult> {
+		if (this.isCodeGenerating()) return { error: DRAFT_BUSY_MESSAGE, status: 409 };
+		return this.runDraftChange(async (): Promise<DraftChangeResult> => {
+			// A merge left by a crashed turn would block the switch; no turn is running, so none is being resolved.
+			await this.callSpace((space) => space.cancelBringingInLiveChanges());
+			const result = await this.callSpace((space) => space.activateDraft(draftId));
+			if ('error' in result) return { error: result.error, status: draftErrorStatus(result.error) };
+			await this.applyActiveDraft(result.draft, result.previewStale);
+			return { ok: true, draftId: result.draft.id };
+		});
+	}
+
+	/** Starts a draft from Main or from the live store, then switches to it. */
+	async createDraft(name: string, from: DraftStart): Promise<DraftChangeResult> {
+		if (this.isCodeGenerating()) return { error: DRAFT_BUSY_MESSAGE, status: 409 };
+		const created = await this.callSpace((space) => space.createDraft(name, from));
+		if ('error' in created) return { error: created.error, status: 400 };
+		return this.switchDraft(created.id);
+	}
+
+	private async runDraftChange<T>(change: () => Promise<T>): Promise<T> {
+		const run = change();
+		this.draftChange = run;
+		try {
+			return await run;
+		} finally {
+			if (this.draftChange === run) this.draftChange = null;
+		}
+	}
+
+	/** Points the session at the draft the workspace now has checked out: the agent, the preview and the chat. */
+	private async applyActiveDraft(draft: ActiveDraft, deployPreview: boolean): Promise<void> {
+		const changed = this.state.currentBranch !== draft.branch;
+		this.setState({ ...this.state, currentBranch: draft.branch });
+		// The agent's default preview address for its browser tools is per draft.
+		await this.configureThinkAgent();
+		if (deployPreview) {
+			await this.deployCurrentBranch();
+		} else {
+			this.broadcast(WebSocketMessageResponses.DEPLOYMENT_COMPLETED, { previewURL: await this.getBrowserPreviewURL() });
+		}
+		if (changed) {
+			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+				message: `Now working on '${draft.name}'.`,
+				conversationId: IdGenerator.generateConversationId(),
+				isStreaming: false,
+			});
+		}
+	}
+
+	/** Merges never outlive the turn that started them, so a draft is never left half-merged or unbuilt. */
+	private async cancelUnfinishedMerge(): Promise<void> {
+		try {
+			const { cancelled } = await this.callSpace((space) => space.cancelBringingInLiveChanges());
+			if (!cancelled) return;
+			this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
+				message: "Bringing in the live store's changes didn't finish, so this draft is back as it was. Ask again to retry.",
+				conversationId: IdGenerator.generateConversationId(),
+				isStreaming: false,
+			});
+		} catch (error) {
+			this.logger.warn('Cancelling an unfinished merge failed', error);
 		}
 	}
 

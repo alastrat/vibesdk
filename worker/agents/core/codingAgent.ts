@@ -39,6 +39,8 @@ import {
 import { PendingWsTicket, TicketConsumptionResult } from '../../types/auth-types';
 import { WsTicketManager } from '../../utils/wsTicketManager';
 import { readTokenCookie } from '../../utils/oauthCookie';
+import type { DraftStart } from '@space-do/space';
+import type { DraftChangeResult } from '../think/draft-change';
 
 const DEFAULT_CONVERSATION_SESSION_ID = 'default';
 
@@ -398,6 +400,18 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
     /** The last deployed commit; null unless a deployed Think app. */
     async getDeployedCommit(): Promise<string | null> {
         return this.behavior.getDeployedCommit();
+    }
+
+    /** Switches the store's workspace to a draft; refused while the AI works. Think apps only. */
+    async switchDraft(draftId: string): Promise<DraftChangeResult> {
+        if (!(this.behavior instanceof ThinkCodingBehavior)) return { error: "Drafts aren't available for this project.", status: 409 };
+        return this.behavior.switchDraft(draftId);
+    }
+
+    /** Starts a draft and switches to it; refused while the AI works. Think apps only. */
+    async createDraft(name: string, from: DraftStart): Promise<DraftChangeResult> {
+        if (!(this.behavior instanceof ThinkCodingBehavior)) return { error: "Drafts aren't available for this project.", status: 409 };
+        return this.behavior.createDraft(name, from);
     }
 
     /** A preview link that names no user, for public product pages; null unless a deployed Think app. */
