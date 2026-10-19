@@ -103,10 +103,11 @@ export function newDraftId(
   return id
 }
 
+/** C0 and C1 controls, DEL, and the Unicode line and paragraph separators, which some renderers break lines on. */
 function hasControlCharacter(text: string): boolean {
   return [...text].some((character) => {
     const code = character.codePointAt(0) ?? 0
-    return code < 32 || code === 127
+    return code < 32 || (code >= 127 && code <= 159) || code === 0x2028 || code === 0x2029
   })
 }
 
