@@ -23,11 +23,11 @@ export const CONFIRM_TIMEOUT_MS = 30_000;
 
 export type CheckoutReturn = 'plan' | 'credits' | 'cancelled';
 
-/** Where Stripe sent the seller back from, read from the billing page's address. */
+/** What the checkout page's return says the seller paid for, read from the billing page's address. */
 export function checkoutReturnOf(search: string): CheckoutReturn | null {
 	const params = new URLSearchParams(search);
-	if (params.get('checkout') === 'success') return 'plan';
-	if (params.get('credits') === 'success') return 'credits';
+	const confirm = params.get('confirm');
+	if (confirm === 'plan' || confirm === 'credits') return confirm;
 	if (params.get('checkout') === 'cancelled') return 'cancelled';
 	return null;
 }

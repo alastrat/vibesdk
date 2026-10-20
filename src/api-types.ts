@@ -296,6 +296,7 @@ export {
 	EXTRA_CREDITS_DISCLOSURE,
 	PAYMENTS_NOT_SET_UP_MESSAGE,
 	PLAN_LIMIT_ERROR_CODE,
+	renewalDisclosure,
 } from '../shared/types/billing.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';

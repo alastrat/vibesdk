@@ -36,6 +36,8 @@ export interface StripeCheckoutActions {
 	confirm(): Promise<StripeCheckoutActionResult>;
 	applyPromotionCode(code: string): Promise<StripeCheckoutActionResult>;
 	removePromotionCode(): Promise<StripeCheckoutActionResult>;
+	/** The session as it stands, for a first read of the total before any `change` event. */
+	getSession(): StripeCheckoutSession;
 }
 
 export type StripeCheckoutLoadActionsResult =
@@ -64,6 +66,8 @@ export interface StripeCheckoutSdk {
 	on(event: 'change', handler: (session: StripeCheckoutSession) => void): void;
 	loadActions(): Promise<StripeCheckoutLoadActionsResult>;
 	createPaymentElement(): StripePaymentElement;
+	/** Re-applies the look to the mounted elements, for a theme switch. */
+	changeAppearance(appearance: StripeAppearance): void;
 }
 
 export interface StripeNextActionError {

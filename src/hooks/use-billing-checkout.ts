@@ -1,0 +1,240 @@
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { BILLING_PATH, TERMS_VERSION, type CheckoutClientStart } from '@/api-types';
+import { useTheme } from '@/contexts/theme-context';
+import { apiClient } from '@/lib/api-client';
+import { queryKeys } from '@/lib/query-keys';
+import { BILLING_APPEARANCE_TOKENS, billingAppearance } from '@/lib/stripe/appearance';
+import { loadStripe, type StripeCheckoutActionResult, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
+import { unwrap } from '@/lib/unwrap-response';
+import {
+	CODE_FAILED_MESSAGE,
+	FORM_NOT_LOADED_MESSAGE,
+	PAYMENT_FAILED_MESSAGE,
+	canPayNow,
+	checkoutPathOf,
+	checkoutReducer,
+	initialCheckoutState,
+	isExpiredRefusal,
+	loadWithin,
+	readCheckoutRequest,
+	singleFlight,
+	startRefusalOf,
+	submitPayment,
+	type CheckoutRequest,
+} from '@/routes/settings/checkout-state';
+import { CHECKOUT_FAILED_MESSAGE } from './use-billing';
+
+/** Where the page keeps what it asked for, so the return route can send an open or expired checkout back to it. */
+const REQUEST_KEY = 'billing:checkout-request';
+
+export function rememberCheckoutRequest(request: CheckoutRequest): void {
+	try {
+		sessionStorage.setItem(REQUEST_KEY, JSON.stringify(request));
+	} catch {
+		// Without storage the return leaves the choice of plan or amount to the billing page.
+	}
+}
+
+export function recallCheckoutRequest(): CheckoutRequest | null {
+	try {
+		return readCheckoutRequest(sessionStorage.getItem(REQUEST_KEY));
+	} catch {
+		return null;
+	}
+}
+
+function openSession(request: CheckoutRequest): Promise<CheckoutClientStart> {
+	const opened = request.kind === 'plan' ? apiClient.startPlanCheckout(request.plan) : apiClient.buyCredits(request.credits);
+	return unwrap(opened, CHECKOUT_FAILED_MESSAGE);
+}
+
+/** Stripe's look for the card form, from the theme tokens as they are on the page now. */
+function appearanceFor(theme: 'light' | 'dark') {
+	const root = getComputedStyle(document.documentElement);
+	const tokens = Object.fromEntries(BILLING_APPEARANCE_TOKENS.map((name) => [name, root.getPropertyValue(name).trim()]));
+	return billingAppearance(theme, tokens);
+}
+
+/**
+ * Opens the seller's checkout session when it mounts, shows Stripe's card form in `container`, and drives the page's
+ * state: the terms and box, a promotion code, and the payment, which records consent before it confirms. Each start
+ * opens a new session with its own Stripe instance; `restart` opens another, and so does a change of request.
+ */
+export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArrival: boolean) {
+	const navigate = useNavigate();
+	const queryClient = useQueryClient();
+	const { resolvedTheme } = useTheme();
+	const [state, dispatch] = useReducer(checkoutReducer, expiredOnArrival, initialCheckoutState);
+	const [stale, setStale] = useState(expiredOnArrival);
+	const [attempt, setAttempt] = useState(0);
+	const container = useRef<HTMLDivElement | null>(null);
+	const sdk = useRef<StripeCheckoutSdk | null>(null);
+	const actions = useRef<StripeCheckoutActions | null>(null);
+	const latest = useRef(state);
+	const theme = useRef(resolvedTheme);
+
+	useEffect(() => {
+		latest.current = state;
+	});
+
+	// The request as primitives, so a new address for the same request doesn't open another session.
+	const plan = request?.kind === 'plan' ? request.plan : null;
+	const credits = request?.kind === 'credits' ? request.credits : null;
+
+	useEffect(() => {
+		const asked: CheckoutRequest | null = plan !== null ? { kind: 'plan', plan } : credits !== null ? { kind: 'credits', credits } : null;
+		if (asked === null || stale) return;
+		let current = true;
+		let payment: StripePaymentElement | null = null;
+		dispatch({ type: 'start' });
+
+		const run = async () => {
+			let start: CheckoutClientStart;
+			try {
+				start = await openSession(asked);
+			} catch (failure) {
+				if (!current) return;
+				const refusal = startRefusalOf(failure, CHECKOUT_FAILED_MESSAGE);
+				if (refusal.kind === 'refused') {
+					dispatch({ type: 'refused', message: refusal.message, retryable: refusal.retryable });
+					return;
+				}
+				void queryClient.invalidateQueries({ queryKey: queryKeys.billing() });
+				navigate(asked.kind === 'plan' ? `${BILLING_PATH}?plan=${asked.plan}` : BILLING_PATH, { replace: true });
+				return;
+			}
+			if (!current) return;
+			rememberCheckoutRequest(asked);
+			dispatch({ type: 'started', start });
+
+			try {
+				const stripe = await loadWithin(loadStripe(start.publishableKey));
+				if (!current) return;
+				const checkout = stripe.initCheckoutElementsSdk({ clientSecret: start.clientSecret, elementsOptions: { appearance: appearanceFor(theme.current) } });
+				sdk.current = checkout;
+				// Stripe.js refuses to confirm until the page has read the total, so every change reads it.
+				checkout.on('change', (session) => dispatch({ type: 'sessionChanged', status: session.status.type, amount: session.total.total.amount }));
+				const target = container.current;
+				if (!target) throw new Error('The card form has nowhere to open');
+				// The form is mounted before its actions load, as the store checkout does, so it shows while they are fetched.
+				payment = checkout.createPaymentElement();
+				payment.on('change', ({ complete }) => dispatch({ type: 'cardChanged', complete }));
+				payment.mount(target);
+				const loaded = await loadWithin(checkout.loadActions());
+				if (!current) return;
+				if (loaded.type !== 'success') throw new Error('The card form could not open');
+				const session = loaded.actions.getSession();
+				dispatch({ type: 'sessionChanged', status: session.status.type, amount: session.total.total.amount });
+				actions.current = loaded.actions;
+				dispatch({ type: 'formReady' });
+			} catch {
+				if (current) dispatch({ type: 'refused', message: FORM_NOT_LOADED_MESSAGE, retryable: true });
+			}
+		};
+		void run();
+
+		return () => {
+			current = false;
+			payment?.destroy();
+			sdk.current = null;
+			actions.current = null;
+		};
+	}, [plan, credits, stale, attempt, navigate, queryClient]);
+
+	// The theme tokens are applied by the theme provider's effect, which runs after this one, so the look is read a frame later.
+	useEffect(() => {
+		theme.current = resolvedTheme;
+		const frame = requestAnimationFrame(() => sdk.current?.changeAppearance(appearanceFor(resolvedTheme)));
+		return () => cancelAnimationFrame(frame);
+	}, [resolvedTheme]);
+
+	const refreshTerms = useCallback(async (sessionId: string) => {
+		try {
+			const view = await unwrap(apiClient.getCheckoutTerms(sessionId), CHECKOUT_FAILED_MESSAGE);
+			if (latest.current.sessionId === sessionId) dispatch({ type: 'termsLoaded', view });
+		} catch (failure) {
+			if (latest.current.sessionId !== sessionId) return;
+			dispatch(isExpiredRefusal(failure) ? { type: 'expired' } : { type: 'termsFailed' });
+		}
+	}, []);
+
+	const retryTerms = useCallback(() => {
+		const { sessionId } = latest.current;
+		if (sessionId === null) return;
+		dispatch({ type: 'termsRequested' });
+		void refreshTerms(sessionId);
+	}, [refreshTerms]);
+
+	/** A code applied or removed changes the price, so the terms are fetched again and the box is unticked. */
+	const changeCode = useCallback(
+		async (change: (checkoutActions: StripeCheckoutActions) => Promise<StripeCheckoutActionResult>, applied: string | null) => {
+			const checkoutActions = actions.current;
+			const { sessionId } = latest.current;
+			if (!checkoutActions || sessionId === null) return;
+			dispatch({ type: 'codeSubmitted' });
+			let result: StripeCheckoutActionResult | null;
+			try {
+				result = await change(checkoutActions);
+			} catch {
+				result = null;
+			}
+			if (result?.type !== 'success') {
+				dispatch({ type: 'codeRejected', message: result?.error.message || CODE_FAILED_MESSAGE });
+				return;
+			}
+			dispatch({ type: 'codeChanged', applied });
+			await refreshTerms(sessionId);
+		},
+		[refreshTerms],
+	);
+
+	const applyCode = useCallback(
+		(raw: string) => {
+			const code = raw.trim();
+			if (code !== '') void changeCode((checkoutActions) => checkoutActions.applyPromotionCode(code), code);
+		},
+		[changeCode],
+	);
+
+	const removeCode = useCallback(() => void changeCode((checkoutActions) => checkoutActions.removePromotionCode(), null), [changeCode]);
+
+	/** One press at a time: a second click while the first is recording consent or confirming joins it, never repeats it. */
+	const pay = useMemo(
+		() =>
+			singleFlight(async () => {
+				const current = latest.current;
+				const checkoutActions = actions.current;
+				const { sessionId, order, terms } = current;
+				if (!canPayNow(current) || !checkoutActions || sessionId === null || order === null) return;
+				dispatch({ type: 'payStarted' });
+				const outcome = await submitPayment({
+					kind: order.kind,
+					recordConsent: () =>
+						terms?.status === 'ready'
+							? unwrap(apiClient.recordCheckoutConsent({ sessionId, termsVersion: TERMS_VERSION, consentText: terms.view.consentText }), PAYMENT_FAILED_MESSAGE)
+							: Promise.reject(new Error(PAYMENT_FAILED_MESSAGE)),
+					confirm: () => checkoutActions.confirm(),
+					readStatus: () => unwrap(apiClient.getCheckoutStatus(sessionId), CHECKOUT_FAILED_MESSAGE),
+				});
+				dispatch({ type: 'payOutcome', outcome });
+				if (outcome.kind === 'price-changed') await refreshTerms(sessionId);
+				if (outcome.kind === 'finished') navigate(outcome.target, { replace: true });
+			}),
+		[navigate, refreshTerms],
+	);
+
+	const restart = useCallback(() => {
+		if (stale) {
+			setStale(false);
+			navigate(checkoutPathOf(request), { replace: true });
+			return;
+		}
+		setAttempt((count) => count + 1);
+	}, [stale, request, navigate]);
+
+	const toggleConsent = useCallback((consented: boolean) => dispatch({ type: 'consentToggled', consented }), []);
+
+	return { state, container, toggleConsent, applyCode, removeCode, retryTerms, pay, restart };
+}

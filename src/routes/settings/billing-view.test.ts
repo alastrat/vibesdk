@@ -50,8 +50,11 @@ const actions = (choices: ReturnType<typeof planChoicesFor>) => choices.map((cho
 
 describe('the billing page', () => {
 	it('reads where the seller came back from, and the plan a link asked for', () => {
-		expect(checkoutReturnOf('?checkout=success')).toBe('plan');
-		expect(checkoutReturnOf('?credits=success')).toBe('credits');
+		expect(checkoutReturnOf('?confirm=plan')).toBe('plan');
+		expect(checkoutReturnOf('?confirm=credits')).toBe('credits');
+		expect(checkoutReturnOf('?confirm=other')).toBeNull();
+		expect(checkoutReturnOf('?checkout=success')).toBeNull();
+		expect(checkoutReturnOf('?credits=success')).toBeNull();
 		expect(checkoutReturnOf('?checkout=cancelled')).toBe('cancelled');
 		expect(checkoutReturnOf('')).toBeNull();
 		expect(requestedPlanOf('?plan=premium')).toBe('premium');

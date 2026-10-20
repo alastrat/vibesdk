@@ -6,6 +6,8 @@ import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
 import BillingPage from './routes/settings/billing';
+import BillingCheckoutPage from './routes/settings/billing-checkout';
+import BillingCheckoutReturnPage from './routes/settings/billing-checkout-return';
 import AppsPage from './routes/apps';
 import CatalogPage from './routes/catalog';
 import AppView from './routes/app';
@@ -84,6 +86,22 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<BillingPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'settings/billing/checkout',
+						element: (
+							<ProtectedRoute>
+								<BillingCheckoutPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'settings/billing/checkout/return',
+						element: (
+							<ProtectedRoute>
+								<BillingCheckoutReturnPage />
 							</ProtectedRoute>
 						),
 					},
