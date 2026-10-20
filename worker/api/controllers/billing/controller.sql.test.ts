@@ -3,6 +3,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { BillingController } from './controller';
+import { CARD_READ_BUDGET_MS } from '../../../services/billing/view';
 import type { RouteContext } from '../../types/route-context';
 
 let db: D1Database;
@@ -167,6 +168,73 @@ describe('the card on the billing view', () => {
 		expect(response.status).toBe(200);
 		expect((await response.json()).data).toMatchObject({ enabled: true, plan: 'pro', card: null });
 		expect(warn).toHaveBeenCalled();
+	});
+
+	describe('when Stripe is slow to say what the card is', () => {
+		afterEach(() => vi.useRealTimers());
+
+		/** Stripe answers nothing until `fail` is called, which makes every read it was asked fail. */
+		function stripeHangs(): { asked: Promise<void>; fail: (error: Error) => void } {
+			let started!: () => void;
+			const asked = new Promise<void>((resolve) => {
+				started = resolve;
+			});
+			const failures: Array<(error: Error) => void> = [];
+			vi.spyOn(globalThis, 'fetch').mockImplementation(
+				() =>
+					new Promise<Response>((_, reject) => {
+						failures.push(reject);
+						started();
+					}),
+			);
+			return { asked, fail: (error) => failures.forEach((reject) => reject(error)) };
+		}
+
+		it('answers the page with no card and a warning once the reads have taken 1.5 seconds', async () => {
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+			const stripe = stripeHangs();
+			let answered = false;
+			const response = BillingController.get(get('/api/billing'), env(), ctx, context('u_card')).then((answer) => {
+				answered = true;
+				return answer;
+			});
+			await stripe.asked;
+			await vi.advanceTimersByTimeAsync(CARD_READ_BUDGET_MS - 1);
+			expect(answered).toBe(false);
+			await vi.advanceTimersByTimeAsync(1);
+			const answer = await response;
+			expect(answer.status).toBe(200);
+			expect((await answer.json()).data).toMatchObject({ enabled: true, plan: 'pro', card: null });
+			expect(CARD_READ_BUDGET_MS).toBe(1_500);
+			expect(warn.mock.calls.flat().join(' ')).toContain('took too long');
+		});
+
+		it('records, and does not leave unhandled, a card read that fails after the page was answered', async () => {
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+			const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+			const stripe = stripeHangs();
+			const response = BillingController.get(get('/api/billing'), env(), ctx, context('u_card'));
+			await stripe.asked;
+			await vi.advanceTimersByTimeAsync(CARD_READ_BUDGET_MS);
+			expect((await response).status).toBe(200);
+			const warned = warn.mock.calls.length;
+			stripe.fail(new Error('Stripe gave up after the page was answered'));
+			await vi.advanceTimersByTimeAsync(0);
+			expect(warn.mock.calls.length).toBeGreaterThan(warned);
+			expect(warn.mock.calls.flat().join(' ')).toContain('Stripe gave up after the page was answered');
+		});
+
+		it('leaves no timer behind for a card that was read in time', async () => {
+			vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+			vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+				const path = new URL(String(input)).pathname;
+				return path === '/v1/payment_methods/pm_sub' ? Response.json(cardMethod('pm_sub', 'visa', '4242', 8, 2028)) : Response.json({ id: 'sub_card', default_payment_method: 'pm_sub' });
+			});
+			const answer = await BillingController.get(get('/api/billing'), env(), ctx, context('u_card'));
+			expect((await answer.json()).data.card).toMatchObject({ last4: '4242' });
+			expect(vi.getTimerCount()).toBe(0);
+		});
 	});
 });
 

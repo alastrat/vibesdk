@@ -20,9 +20,12 @@ function purchaseView(purchase: CreditPurchaseRecord): PurchaseView {
 	};
 }
 
+/** How long the billing view waits for Stripe to name the card; the view feeds every page's banner, so it can't wait on Stripe's pace. */
+export const CARD_READ_BUDGET_MS = 1_500;
+
 /**
  * The card the account's invoices are charged to: the live subscription's own, else the customer's. Null with no Stripe
- * customer, no card, or when Stripe can't say. The page doesn't wait on Stripe's answer, so a failed read is a warning.
+ * customer, no card, when Stripe can't say, or when it takes longer than `CARD_READ_BUDGET_MS`; the last two are warnings.
  */
 export async function cardForView(
 	stripe: Pick<StripeClient, 'retrieveCustomer' | 'retrieveSubscription' | 'retrievePaymentMethod'> | null,
@@ -30,11 +33,22 @@ export async function cardForView(
 	account: Pick<BillingAccount, 'userId' | 'subscription'>,
 ): Promise<CardOnFile | null> {
 	if (!stripe || !customerId) return null;
-	try {
-		return await cardOnFile(stripe, customerId, liveSubscription(account.subscription)?.stripeSubscriptionId ?? null);
-	} catch (error) {
+	// Settled with a warning rather than rejected, so a read that fails after the budget ran out is recorded, never unhandled.
+	const read = cardOnFile(stripe, customerId, liveSubscription(account.subscription)?.stripeSubscriptionId ?? null).catch((error: unknown) => {
 		logger.warn("Could not read the account's card for the billing page", { userId: account.userId, error });
 		return null;
+	});
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	const budget = new Promise<null>((resolve) => {
+		timer = setTimeout(() => {
+			logger.warn("Reading the account's card took too long for the billing page", { userId: account.userId, budgetMs: CARD_READ_BUDGET_MS });
+			resolve(null);
+		}, CARD_READ_BUDGET_MS);
+	});
+	try {
+		return await Promise.race([read, budget]);
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
