@@ -15,9 +15,26 @@ export const CLI_PROJECT_VAR = 'POSTHOG_CLI_PROJECT_ID';
 export function uploadCommands(env: Record<string, string | undefined>, assetsDir: string): string[][] {
 	if (!env[CLI_TOKEN_VAR] || !env[CLI_PROJECT_VAR]) return [];
 	return [
-		['sourcemap', 'inject', '--directory', assetsDir],
+		['sourcemap', 'inject', '--directory', assetsDir, '--release-name', 'estori'],
 		['sourcemap', 'upload', '--directory', assetsDir, '--release-name', 'estori'],
 	];
+}
+
+/** The CLI downloads its binary at runtime, so it gets only what it needs and none of the deploy's other credentials. */
+export function cliEnv(env: Record<string, string | undefined>): Record<string, string> {
+	const kept: Record<string, string> = {};
+	for (const name of ['PATH', 'HOME', 'TMPDIR', 'CI', CLI_TOKEN_VAR, CLI_PROJECT_VAR]) {
+		const value = env[name];
+		if (value !== undefined) kept[name] = value;
+	}
+	return kept;
+}
+
+/** Why a spawned CLI call failed: its exit status, or the error when the binary could not start (a failed download). */
+export function failureReason(run: { status: number | null; signal?: string | null; error?: Error }): string {
+	if (run.error) return run.error.message;
+	if (run.status !== null) return `exit status ${run.status}`;
+	return run.signal ? `signal ${run.signal}` : 'unknown failure';
 }
 
 export function isSourceMap(file: string): boolean {
@@ -32,9 +49,9 @@ async function main(): Promise<void> {
 	const { readdirSync, rmSync } = await import('node:fs');
 	const cli = path.join(root, 'node_modules', '.bin', 'posthog-cli');
 	for (const args of uploadCommands(process.env, path.join(root, ASSETS_DIR))) {
-		const run = spawnSync(cli, args, { stdio: 'inherit', env: process.env });
+		const run = spawnSync(cli, args, { stdio: 'inherit', env: cliEnv(process.env) });
 		if (run.status !== 0) {
-			console.warn(`posthog-cli ${args.slice(0, 2).join(' ')} failed; deploying without uploaded source maps`);
+			console.warn(`posthog-cli ${args.slice(0, 2).join(' ')} failed (${failureReason(run)}); deploying without uploaded source maps`);
 			break;
 		}
 	}
