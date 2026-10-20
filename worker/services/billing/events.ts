@@ -9,13 +9,12 @@ import type { CreditLedgerService } from '../../database/services/CreditLedgerSe
 import type { SubscriptionRecord } from '../../database/schema';
 import { CHECKOUT_KIND_CREDITS, LIVE_SUBSCRIPTION_STATUSES, type BillingEventResult } from '../../../shared/types/billing';
 import { EXTRA_CREDITS, extraCreditsPriceCents, isExtraCreditsAmount } from '../../../shared/types/plans';
-import { createLogger } from '../../logger';
 import { generateId } from '../../utils/idGenerator';
 import type { PlatformAlert } from '../alerts/platform-alerts';
 import { isCheckoutSession } from '../payments/fulfill';
 import type { StripeCharge, StripeClient, StripeInvoice, StripeSubscriptionSchedule } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
-import type { BillingAccount } from './account';
+import { heldPeriodKey, type BillingAccount } from './account';
 import type { PlannedNotice } from './notices';
 import { addMonths } from './periods';
 import type { StripePriceIds } from './prices';
@@ -26,14 +25,18 @@ export type BillingEventOutcome = 'applied' | 'duplicate' | 'ignored' | 'refused
 export interface BillingEventDeps {
 	stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession'>;
 	store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent'>;
-	ledger: Pick<CreditLedgerService, 'purchaseBySession' | 'purchaseByPaymentIntent' | 'settle' | 'refreshPool'>;
+	ledger: Pick<CreditLedgerService, 'purchaseBySession' | 'purchaseByPaymentIntent' | 'settle'>;
 	priceIds: StripePriceIds | null;
-	/** The account's plan and credit period at `nowMs`, as the next charged step would see them. */
-	account(userId: string, nowMs: number): Promise<Pick<BillingAccount, 'billing' | 'period' | 'limits'>>;
+	/** The account's plan and credit period at `nowMs`, from its stored subscription row. */
+	account(userId: string, nowMs: number): Promise<EventAccount>;
+	/** The same, as it will be once `row` is written. */
+	accountWith(userId: string, row: SubscriptionRecord, nowMs: number): Promise<EventAccount>;
 	notify(userId: string, notices: readonly PlannedNotice[]): Promise<void>;
 	alert(alert: PlatformAlert): Promise<void>;
 	nowMs(): number;
 }
+
+type EventAccount = Pick<BillingAccount, 'billing' | 'period' | 'limits' | 'graceEndsAtMs'>;
 
 export interface SubscriptionTarget {
 	eventId: string;
@@ -43,8 +46,6 @@ export interface SubscriptionTarget {
 	expectedUserId: string | null;
 	invoice: StripeInvoice | null;
 }
-
-const logger = createLogger('BillingEvents');
 
 const isLive = (status: string): boolean => (LIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(status);
 
@@ -110,17 +111,10 @@ function poolMayChange(previous: SubscriptionRecord | null, next: SubscriptionRe
 	return previous?.stripeSubscriptionId === next.stripeSubscriptionId && previous.status === 'past_due' && (next.status === 'active' || next.status === 'trialing');
 }
 
-/**
- * The account's open period takes the pool its plan gives now, as the next step would store it. Best effort after the
- * event is recorded: the next charged step stores the same pool anyway.
- */
-async function refreshPool(deps: BillingEventDeps, userId: string, nowMs: number): Promise<void> {
-	try {
-		const account = await deps.account(userId, nowMs);
-		if (account.billing) await deps.ledger.refreshPool(userId, account.period, account.limits.aiCredits);
-	} catch (error) {
-		logger.error('Could not refresh the credit pool after a subscription change', { userId, error });
-	}
+/** The pool the account's open period takes once `next` is written, as the next charged step would store it. */
+async function poolWith(deps: BillingEventDeps, userId: string, next: SubscriptionRecord, nowMs: number): Promise<BillingEventInput['pool']> {
+	const account = await deps.accountWith(userId, next, nowMs);
+	return account.billing ? { periodKey: account.period.key, pool: account.limits.aiCredits } : null;
 }
 
 export async function applySubscription(deps: BillingEventDeps, input: SubscriptionTarget): Promise<BillingEventOutcome> {
@@ -166,10 +160,10 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	const planned = replacing ? [] : noticesFor(previous, next, { eventType: input.eventType, invoice: input.invoice });
 	const alreadySent = await deps.store.sentNoticeKeys(userId, planned.map((notice) => notice.key));
 	const notices = planned.filter((notice) => !alreadySent.has(notice.key));
-	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
+	const pool = poolMayChange(previous, next, input.eventType) ? await poolWith(deps, userId, next, now.getTime()) : null;
+	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
 	if (recorded === 'duplicate') return 'duplicate';
 	await deps.notify(userId, notices);
-	if (poolMayChange(previous, next, input.eventType)) await refreshPool(deps, userId, now.getTime());
 	return 'applied';
 }
 
@@ -232,7 +226,8 @@ export async function applyCreditRefund(deps: BillingEventDeps, input: { eventId
 		return 'ignored';
 	}
 	// A settle that races another run changes nothing, and the write below still counts from what's used when it lands.
-	await deps.ledger.settle(before.userId, now.getTime());
+	const account = await deps.account(before.userId, now.getTime());
+	await deps.ledger.settle(before.userId, now.getTime(), { holdPeriodKey: heldPeriodKey(account) });
 	const key = `credits_refunded:${charge.id}:${charge.amount_refunded}`;
 	const recorded = await recordOnce(deps, {
 		event: event('applied'),

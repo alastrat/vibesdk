@@ -70,8 +70,7 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 	if (isPaying(next.status) && (same === null || !isLive(same.status))) {
 		notices.push({ key: `plan_started:${subscriptionId}`, email: { kind: 'plan_started', plan: next.plan, renewsAt: periodEnd } });
 	}
-	if (previous !== null && same === null) return notices;
-
+	// Every payment gets its receipt, whatever the stored row was: a returning seller's first invoice can come before the new subscription's events.
 	const paid = eventType === 'invoice.paid' ? invoice : null;
 	if (paid && paid.amount_paid > 0) {
 		notices.push({
@@ -82,6 +81,9 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 	if (paid && paid.billing_reason === 'subscription_cycle') {
 		notices.push({ key: `credits_renewed:${subscriptionPeriod(next).key}`, email: { kind: 'credits_renewed', credits: PLAN_LIMITS[next.plan].aiCredits, renewsAt: periodEnd } });
 	}
+	// The rest compare the subscription with its own earlier state.
+	if (previous !== null && same === null) return notices;
+
 	if (same && same.plan === 'pro' && next.plan === 'premium') {
 		notices.push({ key: `plan_upgraded:${subscriptionId}:${seconds(next.currentPeriodStart)}`, email: { kind: 'plan_upgraded', plan: next.plan } });
 	}

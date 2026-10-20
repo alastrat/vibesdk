@@ -55,6 +55,26 @@ function env(extra: Record<string, unknown> = {}): Env {
 	});
 }
 
+/** The database, refusing any write made outside a batch, so a test can show an event's changes commit with the event. */
+function writesOnlyInBatches(): D1Database {
+	const real = new WeakMap<object, D1PreparedStatement>();
+	const wrap = (sql: string, statement: D1PreparedStatement): D1PreparedStatement => {
+		if (!/^\s*(insert|update|delete)\b/i.test(sql)) return statement;
+		const refuse = async (): Promise<never> => {
+			throw new Error(`A write outside a batch: ${sql}`);
+		};
+		const wrapper = { bind: (...values: unknown[]) => wrap(sql, statement.bind(...values)), run: refuse, all: refuse, raw: refuse, first: refuse };
+		real.set(wrapper, statement);
+		return wrapper as unknown as D1PreparedStatement;
+	};
+	const wrapped = {
+		prepare: (sql: string) => wrap(sql, db.prepare(sql)),
+		batch: (statements: D1PreparedStatement[]) => db.batch(statements.map((statement) => real.get(statement) ?? statement)),
+		exec: (query: string) => db.exec(query),
+	};
+	return wrapped as unknown as D1Database;
+}
+
 /** Stripe's API: the latest copy of each object by id. Tests change the map to move Stripe's state on. */
 function stripeServes(objects: Record<string, unknown>): Record<string, unknown> {
 	vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -242,6 +262,32 @@ describe('subscription webhooks', () => {
 		expect(await db.prepare("SELECT used FROM credit_purchases WHERE id = 'cp_hold'").first('used')).toBe(0);
 	});
 
+	it("writes a paid renewal's pool in the event's own batch, so a redelivery never finds the event without it", async () => {
+		const customer = await seller('u_atomic');
+		const start = Math.floor(Date.now() / 1000) - 2 * DAY;
+		const end = start + 30 * DAY;
+		await insertSubscription(db, { userId: 'u_atomic', stripeSubscriptionId: 'sub_u_atomic', status: 'past_due', currentPeriodStart: new Date(start * 1000), currentPeriodEnd: new Date(end * 1000) });
+		const period = { key: `sub:sub_u_atomic:${start}`, startMs: start * 1000, endMs: end * 1000 };
+		await new CreditLedgerService(env({ BILLING: 'on' })).recordUse({ userId: 'u_atomic', period, pool: 0, useKey: 'k_atomic', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date() });
+		const renewed = { id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: start, current_period_end: end };
+		stripeServes({ sub_u_atomic: subscription('u_atomic', customer, { items: { data: [renewed] } }) });
+		const paid = { id: 'in_atomic', customer, amount_paid: 4_900, currency: 'usd', hosted_invoice_url: null, number: 'EST-0008', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_atomic' } } };
+		expect(await deliver('evt_atomic', 'invoice.paid', paid, { BILLING: 'on', DB: writesOnlyInBatches() })).toBe(200);
+		expect(await resultOf('evt_atomic')).toBe('applied');
+		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_atomic'").first('pool')).toBe(20_000);
+	});
+
+	it("sends a returning seller's welcome and first receipt when the invoice arrives before the new subscription's events", async () => {
+		const customer = await seller('u_back');
+		await insertSubscription(db, { userId: 'u_back', stripeSubscriptionId: 'sub_old_back', status: 'canceled', currentPeriodStart: new Date((START - 60 * DAY) * 1000), currentPeriodEnd: new Date((START - 30 * DAY) * 1000) });
+		stripeServes({ sub_u_back: subscription('u_back', customer) });
+		const first = { id: 'in_back', customer, amount_paid: 4_900, currency: 'usd', hosted_invoice_url: null, number: 'EST-0009', billing_reason: 'subscription_create', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_back' } } };
+		await deliver('evt_back_paid', 'invoice.paid', first);
+		await deliver('evt_back_created', 'customer.subscription.created', { id: 'sub_u_back' });
+		expect(await rowOf('u_back')).toMatchObject({ id: 'sub_u_back', status: 'active' });
+		expect(subjects()).toEqual(['Welcome to Estori Pro', 'Your Estori receipt: $49.00']);
+	});
+
 	it('leaves the stored pool alone when a renewal fails, so usage from before the failure stays on the pool', async () => {
 		const customer = await seller('u_fail');
 		const start = Math.floor(Date.now() / 1000) - 2 * DAY;
@@ -326,9 +372,8 @@ describe('extra credit webhooks', () => {
 			ledger: {
 				purchaseBySession: (sessionId) => ledger.purchaseBySession(sessionId),
 				purchaseByPaymentIntent: (paymentIntentId) => ledger.purchaseByPaymentIntent(paymentIntentId),
-				refreshPool: (userId, refreshed, pool) => ledger.refreshPool(userId, refreshed, pool),
-				settle: async (userId, nowMs) => {
-					const settled = await ledger.settle(userId, nowMs);
+				settle: async (userId, nowMs, options) => {
+					const settled = await ledger.settle(userId, nowMs, options);
 					// Another run settles 1,000 more credits of overrun after the refund has read the purchase.
 					await use('k_race_2', 1_000);
 					await ledger.settle(userId, nowMs);

@@ -62,6 +62,28 @@ describe('billing customers and events', () => {
 		expect((await billing.subscriptionOf('u_two'))?.plan).toBe('pro');
 	});
 
+	it("refreshes an open period's pool in the event's batch, so neither is written without the other", async () => {
+		const billing = new BillingService(envWith(db));
+		await insertUser(db, 'u_pool');
+		await db.prepare("INSERT INTO credit_periods (user_id, period_key, period_start, period_end, pool, used) VALUES ('u_pool', 'sub:sub_pool:1', 1, 2, 0, 3000)").run();
+		const now = at('2026-10-19T00:00:00Z');
+		const input = (notices: Array<{ key: string; kind: 'receipt' }>) => ({
+			event: { id: 'evt_pool', type: 'invoice.paid', objectId: 'sub_pool', userId: 'u_pool', result: 'applied' as const },
+			row: row({ userId: 'u_pool', stripeSubscriptionId: 'sub_pool' }),
+			pool: { periodKey: 'sub:sub_pool:1', pool: 20_000 },
+			notices,
+			now,
+		});
+		const pool = () => db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_pool'").first('pool');
+		await billing.claimNotice('u_pool', 'receipt:in_pool', 'receipt', now);
+		await expect(billing.recordEvent(input([{ key: 'receipt:in_pool', kind: 'receipt' }]))).rejects.toThrow();
+		expect(await billing.eventSeen('evt_pool')).toBe(false);
+		expect(await pool()).toBe(0);
+		await billing.recordEvent(input([]));
+		expect(await billing.eventSeen('evt_pool')).toBe(true);
+		expect(await pool()).toBe(20_000);
+	});
+
 	it('records an extra-credit purchase with its event, once per Checkout session', async () => {
 		const billing = new BillingService(envWith(db));
 		const purchase = { id: 'cp_1', userId: 'u_pay', credits: 5_000, amountCents: 750, stripeCheckoutSessionId: 'cs_credits_1', stripePaymentIntentId: 'pi_credits_1', purchasedAt: at('2026-10-19T00:00:00Z'), expiresAt: at('2027-10-19T00:00:00Z') };

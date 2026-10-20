@@ -3,7 +3,9 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
+import { handleBillingEvent } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
+import { billingEventDepsFromEnv } from './wiring';
 
 let db: D1Database;
 const DAY = 86_400_000;
@@ -61,6 +63,34 @@ describe('the daily billing run', () => {
 		vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(paid));
 		await runDailyBilling(env(), now);
 		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_hold'").first('pool')).toBe(20_000);
+	});
+
+	it("takes nothing from purchases for a grace hold's usage, so the pool restored when the renewal is paid counts it once", async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		const p1 = { key: `sub:sub_held:${(now - 32 * DAY) / 1000}`, startMs: now - 32 * DAY, endMs: now - 2 * DAY };
+		const p2 = { key: `sub:sub_held:${(now - 2 * DAY) / 1000}`, startMs: now - 2 * DAY, endMs: now + 28 * DAY };
+		await insertUser(db, 'u_held');
+		await insertBillingCustomer(db, 'u_held', 'cus_held');
+		await insertSubscription(db, { userId: 'u_held', stripeSubscriptionId: 'sub_held', status: 'past_due', currentPeriodStart: new Date(p2.startMs), currentPeriodEnd: new Date(p2.endMs) });
+		await insertPurchase(db, { id: 'cp_held', userId: 'u_held', credits: 5_000, purchasedAt: new Date(now - 60 * DAY), expiresAt: new Date(now + 300 * DAY) });
+		const ledger = new CreditLedgerService(env());
+		await ledger.recordUse({ userId: 'u_held', period: p1, pool: 20_000, useKey: 'k_p1', credits: 1_000, source: 'think', model: 'm', usage: null, now: new Date(now - 10 * DAY) });
+		await ledger.recordUse({ userId: 'u_held', period: p2, pool: 0, useKey: 'k_p2', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date(now - DAY) });
+		const stripeSub = (status: string) => ({ id: 'sub_held', customer: 'cus_held', status, created: 1, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_held' }, schedule: null, items: { data: [{ id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: p2.startMs / 1000, current_period_end: p2.endMs / 1000 }] } });
+		const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(stripeSub('past_due')));
+		await runDailyBilling(env(), now);
+		const periods = () => db.prepare("SELECT period_key AS key, pool, settled, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_held' ORDER BY period_start").all();
+		expect((await periods()).results).toEqual([
+			{ key: p1.key, pool: 20_000, settled: 0, closed: 1 },
+			{ key: p2.key, pool: 0, settled: 0, closed: 0 },
+		]);
+		fetch.mockImplementation(async () => Response.json(stripeSub('active')));
+		const invoice = { id: 'in_held', customer: 'cus_held', amount_paid: 4_900, currency: 'usd', hosted_invoice_url: null, number: 'EST-0010', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_held' } } };
+		const deps = { ...billingEventDepsFromEnv(env()), nowMs: () => now + 3_600_000 };
+		expect(await handleBillingEvent(deps, { id: 'evt_held_paid', type: 'invoice.paid', data: { object: invoice } })).toBe('applied');
+		expect((await periods()).results[1]).toEqual({ key: p2.key, pool: 20_000, settled: 0, closed: 0 });
+		expect(await ledger.settle('u_held', now + DAY)).toBe('nothing');
+		expect(await db.prepare("SELECT used FROM credit_purchases WHERE id = 'cp_held'").first('used')).toBe(0);
 	});
 
 	it('settles overruns, closes ended periods, expires purchases and forgets old usage', async () => {

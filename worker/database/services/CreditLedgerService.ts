@@ -118,16 +118,17 @@ export class CreditLedgerService extends BaseService {
     /**
      * Takes the account's unsettled overruns from its purchases and closes ended periods. Purchases past their expiry but
      * not yet marked expired still pay for what was used before they went, so run this before `expirePurchases`.
-     * 'raced' means another run or a refund wrote first and this one changed nothing.
+     * 'raced' means another run or a refund wrote first and this one changed nothing. `holdPeriodKey` names the period
+     * of a renewal still unpaid, which gives nothing to settle until it ends.
      */
-    async settle(userId: string, nowMs: number): Promise<'settled' | 'nothing' | 'raced'> {
+    async settle(userId: string, nowMs: number, options: { holdPeriodKey?: string | null } = {}): Promise<'settled' | 'nothing' | 'raced'> {
         const periods = schema.creditPeriods;
         const purchases = schema.creditPurchases;
         const [periodRows, purchaseRows] = await this.database.batch([
             this.database.select().from(periods).where(and(eq(periods.userId, userId), isNull(periods.closedAt))),
             this.validPurchases(userId),
         ]);
-        const plan = planSettlement({ periods: periodRows.map(periodState), purchases: purchaseRows.map(purchaseState), nowMs });
+        const plan = planSettlement({ periods: periodRows.map(periodState), purchases: purchaseRows.map(purchaseState), nowMs, holdPeriodKey: options.holdPeriodKey });
 
         const unrefunded = this.noRemovalsSince(plan.purchases.map((entry) => entry.id), purchaseRows);
         const now = new Date(nowMs);
@@ -226,19 +227,6 @@ export class CreditLedgerService extends BaseService {
             .where(eq(schema.creditPurchases.stripeCheckoutSessionId, sessionId))
             .limit(1);
         return found ?? null;
-    }
-
-    /**
-     * Stores the pool the account's plan gives `period` now, as the next step would. A paid renewal ends the grace
-     * hold's pool of 0, so a settle before that step doesn't take the hold's usage from purchases. A period with no
-     * row yet needs nothing; a closed one keeps its pool.
-     */
-    async refreshPool(userId: string, period: LedgerPeriod, pool: number): Promise<void> {
-        const periods = schema.creditPeriods;
-        await this.database
-            .update(periods)
-            .set({ pool })
-            .where(and(eq(periods.userId, userId), eq(periods.periodKey, period.key), isNull(periods.closedAt)));
     }
 
     /** Accounts with a period that has ended but isn't closed, or a purchase past its expiry but not yet expired. */

@@ -3,7 +3,7 @@
 import { BillingService } from '../../database/services/BillingService';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { createLogger } from '../../logger';
-import { loadAccount } from './account';
+import { heldPeriodKey, loadAccount } from './account';
 import { applySubscription } from './events';
 import { billingAudience } from './flag';
 import { claimAndSendNotice, claimingMailFromEnv } from './notices';
@@ -31,7 +31,8 @@ export async function runDailyBilling(env: Env, nowMs: number): Promise<void> {
 	for (const userId of await ledger.usersToSettle(nowMs, SETTLE_PER_RUN)) {
 		try {
 			// A purchase pays for usage up to its expiry before it goes; a raced settle waits for tomorrow's run.
-			if ((await ledger.settle(userId, nowMs)) !== 'raced') await ledger.expirePurchases(userId, nowMs);
+			const holdPeriodKey = heldPeriodKey(await loadAccount(env, userId, nowMs));
+			if ((await ledger.settle(userId, nowMs, { holdPeriodKey })) !== 'raced') await ledger.expirePurchases(userId, nowMs);
 		} catch (error) {
 			logger.error('Could not settle credits', { userId, error });
 		}

@@ -14,6 +14,8 @@ export interface BillingEventInput {
     purchase?: typeof schema.creditPurchases.$inferInsert | null;
     /** A purchase's refund to date; its removed credits are worked out in the write, from what the purchase has used by then. */
     refund?: { purchaseId: string; refundedCents: number } | null;
+    /** The pool the account's open period takes with this event, such as a paid renewal ending a grace hold's pool of 0. */
+    pool?: { periodKey: string; pool: number } | null;
     notices?: ReadonlyArray<{ key: string; kind: BillingNoticeKind }>;
     now: Date;
 }
@@ -81,8 +83,8 @@ export class BillingService extends BaseService {
      * session, a notice) rolls the whole batch back and throws; the caller decides what that means.
      */
     async recordEvent(input: BillingEventInput): Promise<void> {
-        const { event, row, purchase, refund, notices = [], now } = input;
-        if (notices.length > 0 && event.userId === null) throw new Error(`Event ${event.id} has notices but no account`);
+        const { event, row, purchase, refund, pool, notices = [], now } = input;
+        if ((notices.length > 0 || pool) && event.userId === null) throw new Error(`Event ${event.id} has notices or a pool but no account`);
 
         const rest: BatchItem<'sqlite'>[] = [];
         if (row) {
@@ -121,6 +123,16 @@ export class BillingService extends BaseService {
                         removedCredits: sql`MAX(${purchases.removedCredits}, MIN(${unused}, CAST((${unused} * ${refund.refundedCents}) / ${purchases.amountCents} AS INTEGER)))`,
                     })
                     .where(and(eq(purchases.id, refund.purchaseId), lt(purchases.refundedCents, refund.refundedCents))),
+            );
+        }
+        if (pool && event.userId) {
+            // A period with no row yet needs nothing (its first step stores the pool); a closed one keeps its pool.
+            const periods = schema.creditPeriods;
+            rest.push(
+                this.database
+                    .update(periods)
+                    .set({ pool: pool.pool })
+                    .where(and(eq(periods.userId, event.userId), eq(periods.periodKey, pool.periodKey), isNull(periods.closedAt))),
             );
         }
         for (const notice of notices) {

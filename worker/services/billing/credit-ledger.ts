@@ -72,12 +72,14 @@ export function creditBalance(input: { current: PeriodState; open: readonly Peri
 
 /**
  * Takes each unclosed period's new overrun from the purchases, oldest period and oldest purchase first, and closes the
- * periods that ended by `nowMs`, forgiving what no purchase covered.
+ * periods that ended by `nowMs`, forgiving what no purchase covered. A held period (a renewal still unpaid, whose pool
+ * is 0 until it is) gives nothing until it ends: once paid, its pool covers that usage.
  */
-export function planSettlement(input: { periods: readonly PeriodState[]; purchases: readonly PurchaseState[]; nowMs: number }): Settlement {
+export function planSettlement(input: { periods: readonly PeriodState[]; purchases: readonly PurchaseState[]; nowMs: number; holdPeriodKey?: string | null }): Settlement {
 	const lots = [...input.purchases].sort((a, b) => a.purchasedAtMs - b.purchasedAtMs || a.id.localeCompare(b.id)).map((lot) => ({ lot, used: lot.used }));
 	const periods: Settlement['periods'] = [];
 	for (const period of [...input.periods].sort((a, b) => a.startMs - b.startMs)) {
+		if (period.key === input.holdPeriodKey && period.endMs > input.nowMs) continue;
 		let want = unsettledOverrun(period);
 		let taken = 0;
 		for (const entry of lots) {

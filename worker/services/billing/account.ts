@@ -34,6 +34,11 @@ export function graceEndsAt(subscription: SubscriptionRecord): number | null {
 	return subscription.status === 'past_due' ? subscription.currentPeriodStart.getTime() + GRACE_PERIOD_DAYS * DAY_MS : null;
 }
 
+/** The period of a renewal still unpaid, whose usage isn't settled from purchases while the hold lasts; else null. */
+export function heldPeriodKey(account: Pick<BillingAccount, 'period' | 'graceEndsAtMs'>): string | null {
+	return account.graceEndsAtMs !== null ? account.period.key : null;
+}
+
 /** The subscription while it still holds a plan (a failing payment's included), else null. */
 export function liveSubscription(subscription: SubscriptionRecord | null): SubscriptionRecord | null {
 	return subscription !== null && LIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) ? subscription : null;
@@ -71,7 +76,16 @@ export function planLimitsOf(resolved: Pick<ResolvedPlan, 'plan' | 'overrideLimi
 	return limitsFor({ billing: true, plan: resolved.plan, adminLimits: resolved.overrideLimits });
 }
 
-export async function loadAccount(env: Env, userId: string, nowMs: number = Date.now()): Promise<BillingAccount> {
+export function loadAccount(env: Env, userId: string, nowMs: number = Date.now()): Promise<BillingAccount> {
+	return resolveAccount(env, userId, nowMs, () => new BillingService(env).subscriptionOf(userId));
+}
+
+/** The account as it would be with `subscription` as its row: the webhook resolves a rebuilt row before writing it. */
+export function loadAccountWith(env: Env, userId: string, subscription: SubscriptionRecord | null, nowMs: number): Promise<BillingAccount> {
+	return resolveAccount(env, userId, nowMs, async () => subscription);
+}
+
+async function resolveAccount(env: Env, userId: string, nowMs: number, subscriptionOf: () => Promise<SubscriptionRecord | null>): Promise<BillingAccount> {
 	const billing = isBillingOn(env, userId);
 	if (!billing) {
 		const period = accountPeriod(null, nowMs);
@@ -88,7 +102,7 @@ export async function loadAccount(env: Env, userId: string, nowMs: number = Date
 		};
 	}
 	const [subscription, override, user] = await Promise.all([
-		new BillingService(env).subscriptionOf(userId),
+		subscriptionOf(),
 		new PlanAdminService(env).latestOverride(userId),
 		new UserService(env).findUser({ id: userId }),
 	]);

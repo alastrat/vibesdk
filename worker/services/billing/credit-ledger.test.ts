@@ -54,6 +54,14 @@ describe('planSettlement', () => {
 		expect(plan.periods).toEqual([{ key: 'acct:1', settledBefore: 0, settledAfter: 5_000, close: true, forgiven: 2_000 }]);
 		expect(planSettlement({ periods: [period({ used: 100 })], purchases: [], nowMs: 31 * DAY }).periods).toEqual([{ key: 'acct:1', settledBefore: 0, settledAfter: 0, close: true, forgiven: 0 }]);
 	});
+
+	it("takes nothing from a held period until it ends, while still settling and closing the others", () => {
+		const ended = period({ key: 'sub:s:1', startMs: -30 * DAY, endMs: 0, pool: 20_000, granted: 0, used: 1_000 });
+		const held = period({ key: 'sub:s:2', startMs: 0, endMs: 30 * DAY, pool: 0, granted: 0, used: 3_000 });
+		const plan = planSettlement({ periods: [ended, held], purchases: [purchase('a', 5_000, -40 * DAY)], nowMs: 2 * DAY, holdPeriodKey: 'sub:s:2' });
+		expect(plan).toEqual({ periods: [{ key: 'sub:s:1', settledBefore: 0, settledAfter: 0, close: true, forgiven: 0 }], purchases: [] });
+		expect(planSettlement({ periods: [held], purchases: [purchase('a', 5_000, -40 * DAY)], nowMs: 30 * DAY, holdPeriodKey: 'sub:s:2' }).purchases).toEqual([{ id: 'a', usedBefore: 0, usedAfter: 3_000 }]);
+	});
 });
 
 describe('credit alerts', () => {

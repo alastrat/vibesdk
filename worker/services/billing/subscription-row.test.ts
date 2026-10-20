@@ -82,6 +82,11 @@ describe('noticesFor', () => {
 		expect(keys(noticesFor(row(), row(), { eventType: 'invoice.paid', invoice: invoice('subscription_create', 0) }))).toEqual([]);
 	});
 
+	it("sends a returning seller's welcome and receipt while the stored row is still their ended subscription", () => {
+		const ended = row({ stripeSubscriptionId: 'sub_old', status: 'canceled' });
+		expect(keys(noticesFor(ended, row(), { eventType: 'invoice.paid', invoice: invoice('subscription_create') }))).toEqual(['plan_started:sub_1', 'receipt:in_1']);
+	});
+
 	it('says the credits renewed when a renewal invoice is paid', () => {
 		const renewed = row({ currentPeriodStart: new Date(END * 1000), currentPeriodEnd: new Date(NEXT_END * 1000) });
 		const notices = noticesFor(row(), renewed, { eventType: 'invoice.paid', invoice: invoice('subscription_cycle') });

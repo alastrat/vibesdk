@@ -7,7 +7,7 @@ import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 import { CATALOG_HEALTH_CRON } from '../catalog/health';
 import { CATALOG_SWEEP_CRON } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
-import { loadAccount } from './account';
+import { loadAccount, loadAccountWith } from './account';
 import type { BillingEventDeps } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
 import { billingMailFromEnv, sendBillingEmails } from './notices';
@@ -25,6 +25,7 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 		ledger: new CreditLedgerService(env),
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),
 		account: (userId, nowMs) => loadAccount(env, userId, nowMs),
+		accountWith: (userId, row, nowMs) => loadAccountWith(env, userId, row, nowMs),
 		notify: async (userId, notices) => {
 			await sendBillingEmails(mail, userId, notices);
 		},
