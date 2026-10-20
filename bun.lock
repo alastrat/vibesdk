@@ -102,6 +102,7 @@
         "@cloudflare/vitest-pool-workers": "^0.8.71",
         "@cloudflare/workers-types": "4.20251213.0",
         "@eslint/js": "^9.39.2",
+        "@posthog/cli": "0.18.10",
         "@tailwindcss/typography": "^0.5.19",
         "@tailwindcss/vite": "^4.1.18",
         "@types/jest": "^29.5.14",
@@ -712,6 +713,8 @@
     "@poppinss/exception": ["@poppinss/exception@1.2.3", "", {}, "sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw=="],
 
     "@posthog/browser-common": ["@posthog/browser-common@0.9.5", "", { "dependencies": { "@posthog/core": "^1.59.1", "@posthog/types": "^1.416.0" } }, "sha512-oXnBgZvM8UQ84IcBLfGP0WSGd9rA0PCGR37H8Pw0NszJRwxwbJnFXIUih0pvI/ze2eGmzkIEC9i3SwC+bMAgjQ=="],
+
+    "@posthog/cli": ["@posthog/cli@0.18.10", "", { "dependencies": { "detect-libc": "^2.1.2" }, "bin": { "posthog-cli": "run-posthog-cli.js" } }, "sha512-WFucXcIqUL35NkH4hVlch3TBSGRRAhjqvmh2/2z8sj+HsR7e+NUiG3QT5dy9Qs1C3hVe7uWkdNU6DKyKvONAXw=="],
 
     "@posthog/core": ["@posthog/core@1.59.1", "", { "dependencies": { "@posthog/types": "^1.416.0" } }, "sha512-P39YgzQVDh6oz6wAzQXEnoHgTYpM7gifonmVKq1scAJco79h31XmmNVurRq9tTmmyIrr1uX8FHT0riCsyfV9AQ=="],
 

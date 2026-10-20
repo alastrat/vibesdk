@@ -120,6 +120,11 @@ jobs:
           CLOUDFLARE_AI_GATEWAY_TOKEN: ${{ secrets.CLOUDFLARE_AI_GATEWAY_TOKEN }}
           GOOGLE_AI_STUDIO_API_KEY: ${{ secrets.GOOGLE_AI_STUDIO_API_KEY }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # Production only: uploads the browser's source maps to PostHog project 675096 during the build. Without the
+          # optional POSTHOG_CLI_API_KEY secret, or on staging, the maps are only deleted.
+          # The names are what the pinned @posthog/cli reads (scripts/posthog-sourcemaps.ts).
+          POSTHOG_CLI_API_KEY: ${{ secrets.POSTHOG_CLI_API_KEY }}
+          POSTHOG_CLI_PROJECT_ID: ${{ inputs.environment == 'production' && '675096' || '' }}
         run: bun scripts/deploy.ts
 
       - name: Smoke test
