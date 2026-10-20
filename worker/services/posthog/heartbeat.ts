@@ -32,39 +32,69 @@ export interface HeartbeatDeps {
 	timeoutMs?: number;
 }
 
-async function passes(check: () => Promise<boolean>, timeoutMs: number): Promise<boolean> {
+/**
+ * The work's answer, or `fallback` when it takes longer than `ms`, rejects or throws before it returns a promise.
+ * Nothing in a heartbeat may hang or throw, or the event that reports the failure is lost.
+ */
+async function withTimeout<T>(work: () => Promise<T>, ms: number, fallback: T): Promise<T> {
 	let timer: ReturnType<typeof setTimeout> | undefined;
-	const timeout = new Promise<boolean>((resolve) => {
-		timer = setTimeout(() => resolve(false), timeoutMs);
+	const timeout = new Promise<T>((resolve) => {
+		timer = setTimeout(() => resolve(fallback), ms);
 	});
 	try {
-		return await Promise.race([check().catch(() => false), timeout]);
+		return await Promise.race([(async () => work())().catch(() => fallback), timeout]);
 	} finally {
 		clearTimeout(timer);
 	}
+}
+
+/** A response whose body isn't read is cancelled, so the in-process handler isn't left streaming it. */
+function discardBody(response: Response): void {
+	response.body?.cancel().catch(() => undefined);
 }
 
 export async function runHeartbeatChecks(deps: HeartbeatDeps): Promise<ServerEventProperties<'heartbeat'>> {
 	const startedMs = deps.nowMs();
 	const timeoutMs = deps.timeoutMs ?? CHECK_TIMEOUT_MS;
 	const headers: Record<string, string> = deps.stagingKey ? { [STAGING_KEY_HEADER]: deps.stagingKey } : {};
+	const requestFor = (url: string) => new Request(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
 	const [appOk, databaseOk] = await Promise.all([
-		passes(async () => {
-			const response = await deps.fetchApp(new Request(`${deps.appOrigin}/api/health`, { headers }));
-			if (response.status !== 200) return false;
-			const body: unknown = await response.json();
-			return typeof body === 'object' && body !== null && (body as { status?: unknown }).status === 'ok';
-		}, timeoutMs),
-		passes(async () => {
-			await deps.queryDatabase();
-			return true;
-		}, timeoutMs),
+		withTimeout(
+			async () => {
+				const response = await deps.fetchApp(requestFor(`${deps.appOrigin}/api/health`));
+				if (response.status !== 200) {
+					discardBody(response);
+					return false;
+				}
+				const body: unknown = await response.json();
+				return typeof body === 'object' && body !== null && (body as { status?: unknown }).status === 'ok';
+			},
+			timeoutMs,
+			false,
+		),
+		withTimeout(
+			async () => {
+				await deps.queryDatabase();
+				return true;
+			},
+			timeoutMs,
+			false,
+		),
 	]);
 	let storesOk: boolean | null = null;
-	const slug = deps.storesDomain ? await deps.newestLiveSlug().catch(() => null) : null;
+	// The lookup reads the database the check above just found down, so it only runs when that check passed.
+	const slug = deps.storesDomain && databaseOk ? await withTimeout(() => deps.newestLiveSlug(), timeoutMs, null) : null;
 	if (slug && deps.storesDomain) {
 		const storeUrl = `${getProtocolForHost(deps.storesDomain)}://${slug}.${deps.storesDomain}/`;
-		storesOk = await passes(async () => (await deps.fetchApp(new Request(storeUrl, { headers }))).status < 500, timeoutMs);
+		storesOk = await withTimeout(
+			async () => {
+				const response = await deps.fetchApp(requestFor(storeUrl));
+				discardBody(response);
+				return response.status < 500;
+			},
+			timeoutMs,
+			false,
+		);
 	}
 	const failed = [...(appOk ? [] : ['app']), ...(databaseOk ? [] : ['database']), ...(storesOk === false ? ['stores'] : [])];
 	return { healthy: failed.length === 0, app_ok: appOk, database_ok: databaseOk, stores_ok: storesOk, failed, duration_ms: deps.nowMs() - startedMs };
