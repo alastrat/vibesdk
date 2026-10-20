@@ -3,8 +3,6 @@ import type { StripeCheckoutActionResult } from '@/lib/stripe/stripe-js';
 import {
 	CARD_FAILED_MESSAGE,
 	CARD_NOT_CHECKED_MESSAGE,
-	CARD_PATH,
-	CARD_RETURN_PATH,
 	canSaveNow,
 	cardModeOf,
 	cardPathOf,
@@ -48,7 +46,6 @@ describe('the card page address', () => {
 	});
 
 	it('writes the address of each mode, which cardModeOf reads back', () => {
-		expect(CARD_PATH).toBe('/settings/billing/card');
 		expect(cardPathOf('save')).toBe('/settings/billing/card');
 		expect(cardPathOf('pay')).toBe('/settings/billing/card?mode=pay');
 		const path = cardPathOf('pay');
@@ -56,7 +53,6 @@ describe('the card page address', () => {
 	});
 
 	it("names the page Stripe sends the seller back to, and reads the session from it", () => {
-		expect(CARD_RETURN_PATH).toBe('/settings/billing/card/return');
 		expect(cardReturnPathOf('cs_card_1')).toBe('/settings/billing/card/return?session_id=cs_card_1');
 		expect(sessionIdOfReturn('?session_id=cs_card_1')).toBe('cs_card_1');
 		expect(sessionIdOfReturn('')).toBeNull();

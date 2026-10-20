@@ -9,8 +9,9 @@
 import { BillingService, CreditLedgerService } from '../../database';
 import type { SubscriptionRecord } from '../../database/schema';
 import {
+	BILLING_CARD_RETURN_PATH,
+	BILLING_CHECKOUT_RETURN_PATH,
 	BILLING_HISTORY_LIMIT,
-	BILLING_PATH,
 	CHECKOUT_EXPIRED_MESSAGE,
 	CHECKOUT_KIND_CARD,
 	PAYMENTS_NOT_SET_UP_MESSAGE,
@@ -164,7 +165,7 @@ async function customerOf(deps: BillingActionDeps, stripe: BillingStripe, user: 
 
 /** Where Stripe sends the seller once a plan or credits payment is done; Stripe fills in the session id. */
 function checkoutReturnUrl(deps: BillingActionDeps): string {
-	return `${deps.baseUrl}${BILLING_PATH}/checkout/return?session_id={CHECKOUT_SESSION_ID}`;
+	return `${deps.baseUrl}${BILLING_CHECKOUT_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`;
 }
 
 /** The wording of a plan session, or the refusal for a promotion whose terms can't be stated exactly. */
@@ -207,7 +208,7 @@ function clientStart(session: StripeCheckoutSession, publishableKey: string, ord
 
 /** Where Stripe sends the seller once a new card is saved; Stripe fills in the session id. */
 function cardReturnUrl(deps: BillingActionDeps): string {
-	return `${deps.baseUrl}${BILLING_PATH}/card/return?session_id={CHECKOUT_SESSION_ID}`;
+	return `${deps.baseUrl}${BILLING_CARD_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`;
 }
 
 function endsOn(row: SubscriptionRecord): string {

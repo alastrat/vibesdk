@@ -32,8 +32,8 @@ describe('the billing page', () => {
 	it('is a signed-in page in the app, linked from settings only when billing is on', () => {
 		const routes = source('/src/routes.tsx');
 		const appRoutes = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
-		expect(appRoutes).toContain("path: 'settings/billing'");
-		expect(appRoutes.slice(appRoutes.indexOf("path: 'settings/billing'"), appRoutes.indexOf("path: 'settings/billing'") + 200)).toContain('<ProtectedRoute>');
+		expect(appRoutes).toContain('path: childPath(BILLING_PATH)');
+		expect(appRoutes.slice(appRoutes.indexOf('path: childPath(BILLING_PATH)'), appRoutes.indexOf('path: childPath(BILLING_PATH)') + 200)).toContain('<ProtectedRoute>');
 		const settings = source('/src/routes/settings/index.tsx');
 		expect(settings).toContain('billing.data?.enabled &&');
 		expect(settings).toContain('to={BILLING_PATH}');
@@ -72,9 +72,8 @@ describe('the billing page', () => {
 
 	it("takes a plan or an amount of extra credits to Estori's own checkout page, which opens the session itself", () => {
 		const hooks = source('/src/hooks/use-billing.ts');
-		expect(hooks).toContain('const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;');
-		expect(hooks).toContain('navigate(`${CHECKOUT_PATH}?plan=${plan}`)');
-		expect(hooks).toContain('navigate(`${CHECKOUT_PATH}?credits=${credits}`)');
+		expect(hooks).toContain('navigate(`${BILLING_CHECKOUT_PATH}?plan=${plan}`)');
+		expect(hooks).toContain('navigate(`${BILLING_CHECKOUT_PATH}?credits=${credits}`)');
 		expect(hooks).not.toContain('window.location');
 		expect(hooks).not.toContain('apiClient.startPlanCheckout');
 		expect(hooks).not.toContain('apiClient.buyCredits');
@@ -103,7 +102,7 @@ describe('the billing page', () => {
 		expect(page).toContain('<PaymentMethodCard card={view.card} />');
 		expect(page).toContain('<BillingHistory />');
 		const card = source('/src/components/billing/PaymentMethodCard.tsx');
-		expect(card).toContain('to={CARD_PATH}');
+		expect(card).toContain('to={BILLING_CARD_PATH}');
 		expect(card).toContain('Change card');
 		expect(card).toContain('cardLabelFor(card)');
 	});
@@ -161,12 +160,13 @@ describe('the billing page', () => {
 	it('has the card page and its return route in the app, signed in, after the billing page', () => {
 		const routes = source('/src/routes.tsx');
 		const appRoutes = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
-		for (const path of ['settings/billing/card', 'settings/billing/card/return']) {
-			const at = appRoutes.indexOf(`path: '${path}'`);
+		for (const path of ['BILLING_CARD_PATH', 'BILLING_CARD_RETURN_PATH']) {
+			const at = appRoutes.indexOf(`path: childPath(${path})`);
 			expect(at, path).toBeGreaterThan(-1);
 			expect(appRoutes.slice(at, at + 200), path).toContain('<ProtectedRoute>');
 		}
-		expect(appRoutes.indexOf("path: 'settings/billing'")).toBeLessThan(appRoutes.indexOf("path: 'settings/billing/card'"));
+		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeGreaterThan(-1);
+		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeLessThan(appRoutes.indexOf('path: childPath(BILLING_CARD_PATH)'));
 	});
 });
 

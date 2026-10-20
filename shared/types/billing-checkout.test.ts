@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { renewalDisclosure, renewalTermsPhrase, subscribeButtonText, subscriptionConsentText, type PromotionTerms } from './billing';
+import {
+	BILLING_CARD_PATH,
+	BILLING_CARD_RETURN_PATH,
+	BILLING_CHECKOUT_PATH,
+	BILLING_CHECKOUT_RETURN_PATH,
+	BILLING_PATH,
+	renewalDisclosure,
+	renewalTermsPhrase,
+	subscribeButtonText,
+	subscriptionConsentText,
+	type PromotionTerms,
+} from './billing';
 import { STRIPE_JS_URL } from './stripe';
 
 const half = (duration: PromotionTerms['duration'], months: number | null = null): PromotionTerms => ({ duration, durationInMonths: months, discountedCents: 2450 });
@@ -44,6 +55,16 @@ describe('the small print by the subscribe button', () => {
 		expect(renewalDisclosure('pro', { duration: 'once', durationInMonths: null, discountedCents: 0 })).toBe(
 			'Pro costs $0 today, then renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 		);
+	});
+});
+
+describe("billing's pages", () => {
+	it('live under the billing page, each with the return page Stripe sends the seller to', () => {
+		expect(BILLING_PATH).toBe('/settings/billing');
+		expect(BILLING_CHECKOUT_PATH).toBe('/settings/billing/checkout');
+		expect(BILLING_CHECKOUT_RETURN_PATH).toBe('/settings/billing/checkout/return');
+		expect(BILLING_CARD_PATH).toBe('/settings/billing/card');
+		expect(BILLING_CARD_RETURN_PATH).toBe('/settings/billing/card/return');
 	});
 });
 

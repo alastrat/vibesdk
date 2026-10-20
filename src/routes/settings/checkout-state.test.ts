@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { CHECKOUT_EXPIRED_MESSAGE, type CheckoutClientStart, type CheckoutStatusView } from '@/api-types';
+import { BILLING_CHECKOUT_PATH, CHECKOUT_EXPIRED_MESSAGE, type CheckoutClientStart, type CheckoutStatusView } from '@/api-types';
 import { singleFlight } from '@/lib/async';
 import {
-	CHECKOUT_PATH,
 	FORM_NOT_LOADED_MESSAGE,
 	PAYMENT_FAILED_MESSAGE,
 	canPay,
@@ -62,7 +61,7 @@ describe('the checkout request', () => {
 		expect(checkoutExpiredOf('?expired=0')).toBe(false);
 		expect(checkoutPathOf({ kind: 'plan', plan: 'pro' }, { expired: true })).toBe('/settings/billing/checkout?plan=pro&expired=1');
 		expect(checkoutPathOf(null, { expired: true })).toBe('/settings/billing/checkout?expired=1');
-		expect(checkoutPathOf(null)).toBe(CHECKOUT_PATH);
+		expect(checkoutPathOf(null)).toBe(BILLING_CHECKOUT_PATH);
 	});
 
 	it('reads the request the page kept, and refuses anything else', () => {

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { BILLING_PATH, type PaidPlanId } from '@/api-types';
+import { BILLING_CHECKOUT_PATH, BILLING_PATH, type PaidPlanId } from '@/api-types';
 import { useAuth } from '@/contexts/auth-context';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { singleFlight } from '@/lib/async';
@@ -17,9 +17,6 @@ export const CHANGE_FAILED_MESSAGE = "Couldn't change your plan. Try again in a 
 export const PAY_FAILED_MESSAGE = "Couldn't take the payment. Try again in a moment.";
 export const HISTORY_FAILED_MESSAGE = "Couldn't load your invoices";
 export const INVOICE_DOWNLOAD_FAILED_MESSAGE = "Couldn't download the invoice. Try again in a moment.";
-
-/** Estori's own checkout page, which opens the Stripe session itself when it loads. */
-const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
 
 /** The signed-in account's plan, credits and what it may do; `refetchInterval` polls while a payment is being confirmed. */
 export function useBilling({ refetchInterval = false }: { refetchInterval?: number | false } = {}) {
@@ -63,7 +60,7 @@ export function usePlanCheckout() {
 			navigate('/signup');
 			return;
 		}
-		navigate(`${CHECKOUT_PATH}?plan=${plan}`);
+		navigate(`${BILLING_CHECKOUT_PATH}?plan=${plan}`);
 	};
 
 	return { start };
@@ -91,10 +88,10 @@ export function usePlanChange() {
 	});
 }
 
-/** Takes the seller to the checkout page for an amount of extra credits. */
+/** Takes the seller to the checkout page for an amount of extra credits; the page opens the Stripe session itself. */
 export function useBuyCredits() {
 	const navigate = useNavigate();
-	return (credits: number) => navigate(`${CHECKOUT_PATH}?credits=${credits}`);
+	return (credits: number) => navigate(`${BILLING_CHECKOUT_PATH}?credits=${credits}`);
 }
 
 /** The account's last 24 invoices, newest first. */

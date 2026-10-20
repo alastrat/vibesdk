@@ -129,10 +129,11 @@ describe("estori's own card page", () => {
 		expect(back).toContain('<BackToBilling />');
 	});
 
-	it('keeps the card path and the return path the server knows', () => {
+	it('takes the card path and the return path from the ones the server and the router use, with no copy of its own', () => {
 		const state = source('/src/routes/settings/card-state.ts');
-		expect(state).toContain('export const CARD_PATH = `${BILLING_PATH}/card`;');
-		expect(state).toContain('export const CARD_RETURN_PATH = `${CARD_PATH}/return`;');
+		expect(state).toContain('BILLING_CARD_PATH');
+		expect(state).toContain('BILLING_CARD_RETURN_PATH');
+		expect(state).not.toMatch(/CARD_(RETURN_)?PATH = /);
 	});
 });
 

@@ -68,12 +68,14 @@ describe("estori's own checkout page", () => {
 	it('is a signed-in page next to the billing page, with its return route', () => {
 		const routes = source('/src/routes.tsx');
 		const appRoutes = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
-		for (const path of ['settings/billing/checkout', 'settings/billing/checkout/return']) {
-			const at = appRoutes.indexOf(`path: '${path}'`);
+		for (const path of ['BILLING_CHECKOUT_PATH', 'BILLING_CHECKOUT_RETURN_PATH']) {
+			const at = appRoutes.indexOf(`path: childPath(${path})`);
 			expect(at, path).toBeGreaterThan(-1);
 			expect(appRoutes.slice(at, at + 200), path).toContain('<ProtectedRoute>');
 		}
-		expect(appRoutes.indexOf("path: 'settings/billing'")).toBeLessThan(appRoutes.indexOf("path: 'settings/billing/checkout'"));
+		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeGreaterThan(-1);
+		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeLessThan(appRoutes.indexOf('path: childPath(BILLING_CHECKOUT_PATH)'));
+		expect(routes).not.toContain("'settings/billing");
 	});
 
 	it('opens one session per start, each with its own Stripe instance, and gives the form ten seconds to load', () => {
@@ -156,9 +158,12 @@ describe("estori's own checkout page", () => {
 		expect(hook).toContain("type: 'termsLoaded', sessionId");
 	});
 
-	it('keeps the two paths to the checkout page the same', () => {
-		expect(source('/src/hooks/use-billing.ts')).toContain('const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;');
-		expect(source(STATE)).toContain('export const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;');
+	it("takes the checkout page's path from the one the server and the router use, with no copy of its own", () => {
+		for (const path of ['/src/hooks/use-billing.ts', STATE]) {
+			expect(source(path), path).toContain('BILLING_CHECKOUT_PATH');
+			expect(source(path), path).not.toMatch(/CHECKOUT_PATH = /);
+			expect(source(path), path).not.toContain('/checkout`');
+		}
 	});
 
 	it('waits for the payment the way billing always has, keyed by the confirm mark', () => {

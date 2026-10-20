@@ -1,15 +1,10 @@
 /** The card page's decisions, with no React and no DOM: what was asked for, when saving is allowed and where each result leads. */
 
-import { BILLING_PATH, type CardSetupMode } from '@/api-types';
+import { BILLING_CARD_PATH, BILLING_CARD_RETURN_PATH, BILLING_PATH, type CardSetupMode } from '@/api-types';
 import type { SettledPayment } from '@/lib/stripe/next-action';
 import type { StripeSessionStatus } from '@/lib/stripe/session';
 import type { StripeCheckoutActionResult } from '@/lib/stripe/stripe-js';
 import { PAYMENT_FAILED_MESSAGE, refusalOf } from './checkout-state';
-
-export const CARD_PATH = `${BILLING_PATH}/card`;
-
-/** Where Stripe sends the seller after the card is saved; the server's setup session names the same path. */
-export const CARD_RETURN_PATH = `${CARD_PATH}/return`;
 
 export const CARD_FAILED_MESSAGE = "Couldn't open the card form. Try again in a moment.";
 export const CARD_EXPIRED_MESSAGE = 'This card form timed out.';
@@ -24,12 +19,15 @@ export function cardModeOf(search: string): CardSetupMode {
 
 /** The card page's address for a mode, which `cardModeOf` reads back. */
 export function cardPathOf(mode: CardSetupMode): string {
-	return mode === 'pay' ? `${CARD_PATH}?${new URLSearchParams({ mode })}` : CARD_PATH;
+	return mode === 'pay' ? `${BILLING_CARD_PATH}?${new URLSearchParams({ mode })}` : BILLING_CARD_PATH;
 }
 
-/** The return route's address for a saved card's session; the page goes straight there when its session is already complete. */
+/**
+ * The return route's address for a saved card's session, the page Stripe sends the seller to; the card page goes straight
+ * there when its session is already complete.
+ */
 export function cardReturnPathOf(sessionId: string): string {
-	return `${CARD_RETURN_PATH}?${new URLSearchParams({ session_id: sessionId })}`;
+	return `${BILLING_CARD_RETURN_PATH}?${new URLSearchParams({ session_id: sessionId })}`;
 }
 
 /** The session the return route was opened for, or null when the address names none. */

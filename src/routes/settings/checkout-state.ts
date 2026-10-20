@@ -1,6 +1,7 @@
 /** The checkout page's decisions, with no React and no DOM: what was asked for, when paying is allowed and where each result leads. */
 
 import {
+	BILLING_CHECKOUT_PATH,
 	BILLING_PATH,
 	CHECKOUT_EXPIRED_MESSAGE,
 	formatUsd,
@@ -13,8 +14,6 @@ import {
 	type PaidPlanId,
 } from '@/api-types';
 import type { StripeCheckoutActionResult } from '@/lib/stripe/stripe-js';
-
-export const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
 
 export const FORM_NOT_LOADED_MESSAGE = "The payment form didn't load. Check your connection and try again.";
 export const PAYMENT_FAILED_MESSAGE = "The payment didn't go through. Check your details and try again.";
@@ -45,7 +44,7 @@ export function checkoutPathOf(request: CheckoutRequest | null, options: { expir
 	if (request?.kind === 'credits') params.set('credits', String(request.credits));
 	if (options.expired) params.set('expired', '1');
 	const query = params.toString();
-	return query === '' ? CHECKOUT_PATH : `${CHECKOUT_PATH}?${query}`;
+	return query === '' ? BILLING_CHECKOUT_PATH : `${BILLING_CHECKOUT_PATH}?${query}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

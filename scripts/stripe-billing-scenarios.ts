@@ -5,7 +5,7 @@
  *        ESTORI_STAGING_KEY=... ESTORI_TEST_USER_ID=... bun scripts/stripe-billing-scenarios.ts [--only 1,2]
  */
 
-import { BILLING_PATH, CHECKOUT_KIND_CREDITS, type AdminBillingView } from '../shared/types/billing';
+import { BILLING_CHECKOUT_PATH, BILLING_CHECKOUT_RETURN_PATH, CHECKOUT_KIND_CREDITS, type AdminBillingView } from '../shared/types/billing';
 import { EXTRA_CREDITS, GRACE_PERIOD_DAYS, PLAN_LIMITS, type PaidPlanId } from '../shared/types/plans';
 import { DAY_MS } from '../worker/services/billing/periods';
 import type { StripePriceIds } from '../worker/services/billing/prices';
@@ -109,7 +109,7 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  */
 export function checkoutPageUrl(baseUrl: string, request: { plan: PaidPlanId } | { credits: number }): string {
 	const query = 'plan' in request ? `plan=${request.plan}` : `credits=${request.credits}`;
-	return `${baseUrl}${BILLING_PATH}/checkout?${query}`;
+	return `${baseUrl}${BILLING_CHECKOUT_PATH}?${query}`;
 }
 
 /** Reads until `done` accepts a value and answers it; gives up after `tries` reads, `delayMs` apart. */
@@ -397,7 +397,7 @@ async function expiredCheckout(ctx: Context): Promise<void> {
 		priceId: ctx.prices.credits,
 		userId: ctx.config.userId,
 		credits: EXTRA_CREDITS.minCredits,
-		returnUrl: `${ctx.config.baseUrl}/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
+		returnUrl: `${ctx.config.baseUrl}${BILLING_CHECKOUT_RETURN_PATH}?session_id={CHECKOUT_SESSION_ID}`,
 		nowMs: Date.now(),
 		idempotencyKey: keyFor(ctx, 'expired-checkout'),
 	});

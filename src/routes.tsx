@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { BILLING_CARD_PATH, BILLING_CARD_RETURN_PATH, BILLING_CHECKOUT_PATH, BILLING_CHECKOUT_RETURN_PATH, BILLING_PATH } from './api-types';
 
 import App from './App';
 import RootIndex, { AppShell } from './routes/root-index';
@@ -54,6 +55,9 @@ import VerifyEmailPage from './routes/auth/VerifyEmailPage';
 
 const PublicShell = () => <PublicLayout />;
 
+/** A child route's path from an app path: the router's child paths carry no leading slash. */
+const childPath = (path: string): string => path.replace(/^\//, '');
+
 const routes = [
 	{
 		path: '/',
@@ -84,7 +88,7 @@ const routes = [
 						),
 					},
 					{
-						path: 'settings/billing',
+						path: childPath(BILLING_PATH),
 						element: (
 							<ProtectedRoute>
 								<BillingPage />
@@ -92,7 +96,7 @@ const routes = [
 						),
 					},
 					{
-						path: 'settings/billing/checkout',
+						path: childPath(BILLING_CHECKOUT_PATH),
 						element: (
 							<ProtectedRoute>
 								<BillingCheckoutPage />
@@ -100,7 +104,7 @@ const routes = [
 						),
 					},
 					{
-						path: 'settings/billing/checkout/return',
+						path: childPath(BILLING_CHECKOUT_RETURN_PATH),
 						element: (
 							<ProtectedRoute>
 								<BillingCheckoutReturnPage />
@@ -108,7 +112,7 @@ const routes = [
 						),
 					},
 					{
-						path: 'settings/billing/card',
+						path: childPath(BILLING_CARD_PATH),
 						element: (
 							<ProtectedRoute>
 								<BillingCardPage />
@@ -116,7 +120,7 @@ const routes = [
 						),
 					},
 					{
-						path: 'settings/billing/card/return',
+						path: childPath(BILLING_CARD_RETURN_PATH),
 						element: (
 							<ProtectedRoute>
 								<BillingCardReturnPage />

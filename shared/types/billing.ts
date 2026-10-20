@@ -39,6 +39,14 @@ export type CreditUseSource = (typeof CREDIT_USE_SOURCES)[number];
 
 export const BILLING_PATH = '/settings/billing';
 
+/** Estori's own checkout page for a plan or extra credits, and where Stripe sends the seller once it is paid. */
+export const BILLING_CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
+export const BILLING_CHECKOUT_RETURN_PATH = `${BILLING_CHECKOUT_PATH}/return`;
+
+/** Estori's own page for a new card, and where Stripe sends the seller once it is saved. */
+export const BILLING_CARD_PATH = `${BILLING_PATH}/card`;
+export const BILLING_CARD_RETURN_PATH = `${BILLING_CARD_PATH}/return`;
+
 /** Marks a Checkout session as an extra-credits purchase rather than a subscription. */
 export const CHECKOUT_KIND_CREDITS = 'credits';
 
