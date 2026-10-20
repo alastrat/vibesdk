@@ -48,3 +48,10 @@ describe('payments query keys', () => {
 		expect(queryKeys.account.payments.status(null)).toEqual(queryKeys.account.payments.status(undefined));
 	});
 });
+
+describe('billing query key', () => {
+	it('keeps the account plan out of storage and under the account prefix, so signing out drops it', () => {
+		expect(queryKeys.billing()[0]).toBe(queryKeys.account.all[0]);
+		expect(persisted(queryKeys.billing())).toBe(false);
+	});
+});

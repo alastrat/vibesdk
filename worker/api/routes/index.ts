@@ -25,6 +25,7 @@ import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
 import { setupTicketRoutes } from './ticketRoutes';
 import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
+import { setupBillingRoutes } from './billingRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
@@ -112,6 +113,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);
+
+    // The seller's own plan and billing
+    setupBillingRoutes(app);
 
     // Usage limits and free tier routes
     setupLimitsRoutes(app);

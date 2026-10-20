@@ -3,7 +3,7 @@
 import { BillingService, PlanAdminService, UserService } from '../../database';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/schema';
-import type { BillingSource } from '../../../shared/types/billing';
+import { LIVE_SUBSCRIPTION_STATUSES, type BillingSource } from '../../../shared/types/billing';
 import { GRACE_PERIOD_DAYS, isPaidPlanId, limitsFor, planLimitOverridesFrom, type PlanAccount, type PlanId, type PlanLimitOverrides, type PlanLimits } from '../../../shared/types/plans';
 import type { CreditBalance, LedgerPeriod } from './credit-ledger';
 import { isBillingOn } from './flag';
@@ -32,6 +32,11 @@ const UNPAID_RENEWAL_LIMITS: PlanLimitOverrides = { aiCredits: 0 };
 /** When a failing payment stops holding the plan; null unless the subscription is past due. */
 export function graceEndsAt(subscription: SubscriptionRecord): number | null {
 	return subscription.status === 'past_due' ? subscription.currentPeriodStart.getTime() + GRACE_PERIOD_DAYS * DAY_MS : null;
+}
+
+/** The subscription while it still holds a plan (a failing payment's included), else null. */
+export function liveSubscription(subscription: SubscriptionRecord | null): SubscriptionRecord | null {
+	return subscription !== null && LIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) ? subscription : null;
 }
 
 function paysForItsPlan(subscription: SubscriptionRecord | null, nowMs: number): subscription is SubscriptionRecord {

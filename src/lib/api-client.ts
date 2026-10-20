@@ -124,6 +124,13 @@ import type{
 	StripeLinkData,
 	TemplateCategory,
 	AuthUser,
+	BillingChangeRequested,
+	BillingRedirect,
+	BillingView,
+	CheckoutStarted,
+	CreditsRequest,
+	PaidPlanId,
+	PlanRequest,
 } from '@/api-types';
 import {
 	RateLimitExceededError,
@@ -670,6 +677,42 @@ class ApiClient {
 	/** How often the seller is paid; returns their refreshed status. */
 	async setPayoutSchedule(choice: { interval: PayoutInterval; anchor: string }): Promise<ApiResponse<StripeConnectStatusData>> {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/payouts', { method: 'PUT', body: choice });
+	}
+
+	/** The signed-in account's plan, subscription, credits and what it may do. */
+	async getBilling(): Promise<ApiResponse<BillingView>> {
+		return this.request<BillingView>('/api/billing');
+	}
+
+	/** A Stripe Checkout for Pro or Premium; the page sends the seller to its URL. */
+	async startPlanCheckout(plan: PaidPlanId): Promise<ApiResponse<CheckoutStarted>> {
+		const body: PlanRequest = { plan };
+		return this.request<CheckoutStarted>('/api/billing/checkout', { method: 'POST', body });
+	}
+
+	/** Premium now, Pro at the renewal, or the current plan again to drop a pending move. */
+	async changePlan(plan: PaidPlanId): Promise<ApiResponse<BillingChangeRequested>> {
+		const body: PlanRequest = { plan };
+		return this.request<BillingChangeRequested>('/api/billing/change-plan', { method: 'POST', body });
+	}
+
+	async cancelPlan(): Promise<ApiResponse<BillingChangeRequested>> {
+		return this.request<BillingChangeRequested>('/api/billing/cancel', { method: 'POST' });
+	}
+
+	async resumePlan(): Promise<ApiResponse<BillingChangeRequested>> {
+		return this.request<BillingChangeRequested>('/api/billing/resume', { method: 'POST' });
+	}
+
+	/** Stripe's customer portal, for the card and invoices. */
+	async openBillingPortal(): Promise<ApiResponse<BillingRedirect>> {
+		return this.request<BillingRedirect>('/api/billing/portal', { method: 'POST' });
+	}
+
+	/** A Stripe Checkout for extra credits, Premium only. */
+	async buyCredits(credits: number): Promise<ApiResponse<CheckoutStarted>> {
+		const body: CreditsRequest = { credits };
+		return this.request<CheckoutStarted>('/api/billing/credits', { method: 'POST', body });
 	}
 
 	/** The seller's level, store limits and this week's use. */

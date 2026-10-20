@@ -4,6 +4,7 @@
 
 import { RateLimitError } from "../services/rate-limit/errors";
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
+import { PLAN_LIMIT_CODE, type PlanLimitRefusal } from 'shared/types/plans';
 /**
  * Standard response shape for all API endpoints
  */
@@ -21,6 +22,9 @@ export interface BaseErrorResponse {
         percentUsed: number;
     }>;
     hasUserToken?: boolean;
+    code?: string;
+    /** A plan limit the request reached, for the shared Upgrade dialog. */
+    planLimit?: PlanLimitRefusal;
 }
 
 export interface RateLimitErrorResponse extends BaseErrorResponse {
@@ -86,6 +90,24 @@ export function errorResponse(error: string | Error | SecurityError, statusCode 
 
     return new Response(JSON.stringify(responseBody), {
         status: statusCode,
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+}
+
+/**
+ * The answer to a request a plan limit refuses: 402 with the refusal under `error`, so every client finds its copy and
+ * next step in one place.
+ */
+export function planLimitResponse(refusal: PlanLimitRefusal): Response {
+    const responseBody: BaseApiResponse = {
+        success: false,
+        error: { message: refusal.message, name: 'PlanLimit', code: PLAN_LIMIT_CODE, planLimit: refusal },
+        message: refusal.message,
+    };
+    return new Response(JSON.stringify(responseBody), {
+        status: 402,
         headers: {
             'Content-Type': 'application/json'
         }

@@ -2,7 +2,8 @@
  * Base Controller Class
  */
 import { authMiddleware } from '../../middleware/auth/auth';
-import { successResponse, errorResponse } from '../responses';
+import { successResponse, errorResponse, planLimitResponse } from '../responses';
+import type { PlanLimitRefusal } from '../../../shared/types/plans';
 import { ControllerErrorHandler, ErrorHandler } from '../../utils/ErrorHandling';
 import { createLogger } from '../../logger';
 import { AuthUser } from '../../types/auth-types';
@@ -104,6 +105,13 @@ export abstract class BaseController {
     static createErrorResponse<T = never>(message: string | Error, statusCode: number = 500): ControllerResponse<ApiResponse<T>> {
         const response = errorResponse(message, statusCode) as ControllerResponse<ApiResponse<T>>;
         return response;
+    }
+
+    /**
+     * Create a typed 402 for a request a plan limit refuses
+     */
+    static createPlanLimitResponse<T = never>(refusal: PlanLimitRefusal): ControllerResponse<ApiResponse<T>> {
+        return planLimitResponse(refusal) as ControllerResponse<ApiResponse<T>>;
     }
 
     /**

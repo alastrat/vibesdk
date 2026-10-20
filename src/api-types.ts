@@ -264,6 +264,19 @@ export {
 	planLimitOverridesFrom,
 	planName,
 } from '../shared/types/plans.js';
+export type {
+	BillingChangeRequested,
+	BillingCreditsView,
+	BillingRedirect,
+	BillingSource,
+	BillingView,
+	CheckoutStarted,
+	CreditsRequest,
+	PlanRequest,
+	PurchaseView,
+	SubscriptionStatus,
+} from '../shared/types/billing.js';
+export { BILLING_NOT_OPEN_MESSAGE, BILLING_PATH, PLAN_LIMIT_ERROR_CODE } from '../shared/types/billing.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';

@@ -50,7 +50,7 @@ export interface Settlement {
 
 export type CreditAlert = 'credits_20' | 'credits_5';
 
-export function purchaseLeft(purchase: PurchaseState): number {
+export function purchaseLeft(purchase: Pick<PurchaseState, 'credits' | 'used' | 'removed'>): number {
 	return Math.max(0, purchase.credits - purchase.used - purchase.removed);
 }
 

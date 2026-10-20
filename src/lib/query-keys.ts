@@ -14,6 +14,8 @@ export const queryKeys = {
 	liveStore: (appId: string) => ['live-store', appId] as const,
 	/** A store's drafts and which one is being edited, for its owner. */
 	drafts: (appId: string) => ['drafts', appId] as const,
+	/** The signed-in account's plan and credits: under `account`, so it is never persisted and signing out drops it. */
+	billing: () => [...queryKeys.account.all, 'billing'] as const,
 	auth: {
 		all: ['auth'] as const,
 		session: () => [...queryKeys.auth.all, 'session'] as const,

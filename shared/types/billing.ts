@@ -1,6 +1,6 @@
 /** Billing and subscriptions (spec 2026-10-19): the statuses, notice kinds and copy shared by the worker and the app. */
 
-import { PLAN_PRICES_CENTS, formatUsd, planName, type PaidPlanId } from './plans';
+import { PLAN_PRICES_CENTS, formatUsd, planName, type PaidPlanId, type PlanId, type PlanLimits } from './plans';
 
 /** Stripe's subscription statuses. */
 export const SUBSCRIPTION_STATUSES = ['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused'] as const;
@@ -51,3 +51,70 @@ export function renewalDisclosure(plan: PaidPlanId): string {
 
 /** Shown above the pay button of an extra-credits checkout. */
 export const EXTRA_CREDITS_DISCLOSURE = 'Extra credits are used after your monthly credits and expire 12 months after purchase.';
+
+/** The answer to a billing action from an account outside the billing flag. */
+export const BILLING_NOT_OPEN_MESSAGE = "Plans aren't open for your account yet.";
+
+/** This period's AI credits on the billing page; `renewsAt` is when the period ends, in ms. */
+export interface BillingCreditsView {
+	pool: number;
+	granted: number;
+	used: number;
+	left: number;
+	/** Extra credits left once this period's overrun is paid from them. */
+	purchasedLeft: number;
+	available: number;
+	renewsAt: number;
+}
+
+/** An extra-credits purchase that still has credits left; times in ms. */
+export interface PurchaseView {
+	credits: number;
+	left: number;
+	purchasedAt: number;
+	expiresAt: number;
+}
+
+/** GET /api/billing: the account's plan, its subscription as Stripe last reported it, this period's credits, and what it may do. Times in ms. */
+export interface BillingView {
+	/** False while the account is outside the billing flag; nothing below is enforced then. */
+	enabled: boolean;
+	plan: PlanId;
+	source: BillingSource;
+	status: SubscriptionStatus | null;
+	periodStart: number;
+	periodEnd: number;
+	cancelAtPeriodEnd: boolean;
+	pendingPlan: PaidPlanId | null;
+	pendingPlanAt: number | null;
+	graceEndsAt: number | null;
+	paymentFailing: boolean;
+	credits: BillingCreditsView | null;
+	alert: 'credits_20' | 'credits_5' | null;
+	purchases: PurchaseView[];
+	limits: PlanLimits;
+	canManageBilling: boolean;
+	canBuyCredits: boolean;
+}
+
+export interface CheckoutStarted {
+	url: string;
+	sessionId: string;
+}
+
+export interface BillingRedirect {
+	url: string;
+}
+
+/** Stripe took the change; the page shows it once the webhook records it. */
+export interface BillingChangeRequested {
+	requested: true;
+}
+
+export interface PlanRequest {
+	plan: PaidPlanId;
+}
+
+export interface CreditsRequest {
+	credits: number;
+}
