@@ -261,9 +261,11 @@ export {
 	isExtraCreditsAmount,
 	isPaidPlanId,
 	isPlanLimitRefusal,
+	limitFeatures,
 	limitsFor,
 	planLimitOverridesFrom,
 	planName,
+	storeAllowance,
 } from '../shared/types/plans.js';
 export type {
 	BillingChangeRequested,

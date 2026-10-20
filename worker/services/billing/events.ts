@@ -273,6 +273,29 @@ export async function applyCreditRefund(deps: BillingEventDeps, input: { eventId
 	return 'applied';
 }
 
+/** Records a checkout as the seller returns from paying it, ahead of the webhook that carries the same payment. */
+export interface CheckoutReturnRecorder {
+	subscription(sessionId: string, subscriptionId: string, userId: string): Promise<void>;
+	credits(sessionId: string): Promise<void>;
+}
+
+/**
+ * Each return records under `return:{session}`, an id of its own, so the webhook's event isn't mistaken for it. The same
+ * payment then reaches applySubscription or applyCreditPurchase twice, and what each already did makes the second a
+ * no-op: a stored subscription row yields no new notices or events, and a purchase is unique by its session.
+ */
+export function checkoutReturnRecorders(deps: BillingEventDeps): CheckoutReturnRecorder {
+	const eventType = 'checkout.return';
+	return {
+		subscription: async (sessionId, subscriptionId, userId) => {
+			await applySubscription(deps, { eventId: `return:${sessionId}`, eventType, subscriptionId, expectedUserId: userId, invoice: null });
+		},
+		credits: async (sessionId) => {
+			await applyCreditPurchase(deps, { eventId: `return:${sessionId}`, eventType, sessionId });
+		},
+	};
+}
+
 /** Billing's answer to a platform event; null when the event isn't billing's, so the webhook's other handlers take it. */
 export async function handleBillingEvent(deps: BillingEventDeps, event: StripeEvent): Promise<BillingEventOutcome | null> {
 	const object = event.data.object;

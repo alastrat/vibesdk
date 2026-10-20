@@ -19,7 +19,7 @@ beforeAll(async () => {
 afterEach(() => vi.restoreAllMocks());
 
 function env(extra: Record<string, unknown> = {}): Env {
-	return envWith(db, { BILLING: 'on', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_PRICE_IDS: PRICES, CUSTOM_DOMAIN: 'estori.app', VibecoderStore: { get: async () => null }, ...extra });
+	return envWith(db, { BILLING: 'on', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_PUBLISHABLE_KEY: 'pk_test_fake', STRIPE_PRICE_IDS: PRICES, CUSTOM_DOMAIN: 'estori.app', VibecoderStore: { get: async () => null }, ...extra });
 }
 
 function context(userId: string): RouteContext {
@@ -48,14 +48,28 @@ describe('the billing endpoints', () => {
 		const stripe = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
 			const path = new URL(String(input)).pathname;
 			if (path === '/v1/customers') return Response.json({ id: 'cus_basic', email: null, metadata: null });
-			if (path === '/v1/checkout/sessions') return Response.json({ id: 'cs_9', url: 'https://checkout.stripe.com/c/cs_9' });
+			if (path === '/v1/checkout/sessions') return Response.json({ id: 'cs_9', url: null, client_secret: 'cs_9_secret_x' });
 			throw new Error(`unexpected ${path}`);
 		});
 		const response = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), {} as ExecutionContext, context('u_basic'));
-		expect((await response.json()).data).toEqual({ url: 'https://checkout.stripe.com/c/cs_9', sessionId: 'cs_9' });
+		expect((await response.json()).data).toMatchObject({
+			clientSecret: 'cs_9_secret_x',
+			publishableKey: 'pk_test_fake',
+			sessionId: 'cs_9',
+			order: { kind: 'plan', plan: 'pro', priceCents: 4_900 },
+			terms: { buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900 },
+		});
 		expect(stripe).toHaveBeenCalledTimes(2);
 		expect(await db.prepare("SELECT stripe_customer_id FROM billing_customers WHERE user_id = 'u_basic'").first()).toEqual({ stripe_customer_id: 'cus_basic' });
 		expect((await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), {} as ExecutionContext, context('u_paying'))).status).toBe(409);
+	});
+
+	it("answers 503 that payments aren't set up when the publishable key is missing, before asking Stripe", async () => {
+		const stripe = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Stripe must not be asked'));
+		const response = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env({ STRIPE_PUBLISHABLE_KEY: undefined }), {} as ExecutionContext, context('u_basic'));
+		expect(response.status).toBe(503);
+		expect((await response.json()).error.message).toBe("Payments aren't set up yet.");
+		expect(stripe).not.toHaveBeenCalled();
 	});
 
 	it('answers 402 plan_limit when Basic tries to buy credits, and 403 when billing is off for the account', async () => {

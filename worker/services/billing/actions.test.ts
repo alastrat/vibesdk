@@ -1,11 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { StripeApiError, type StripeCheckoutSession, type StripeSubscription } from '../payments/stripe-client';
+import { BILLING_CHECKOUT_EXPAND, StripeApiError, type StripeCheckoutSession, type StripeCoupon, type StripeSubscription } from '../payments/stripe-client';
 import { STRIPE_REQUEST_FAILED_MESSAGE } from '../payments/config';
-import { BILLING_MESSAGES, buyCredits, cancelPlan, changePlan, openPortal, resumePlan, startCheckout, type BillingActionDeps } from './actions';
+import { BILLING_MESSAGES, buyCredits, cancelPlan, changePlan, checkoutStatus, checkoutTerms, openPortal, recordCheckoutConsent, resumePlan, startCheckout, type BillingActionDeps } from './actions';
+import type { BillingConsentInput } from '../../database/services/BillingService';
 import type { CreditPurchaseRecord, SubscriptionRecord } from '../../database/schema';
 import type { BillingAccount } from './account';
 import { PLAN_LIMITS } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
+import { CHECKOUT_EXPIRED_MESSAGE, PAYMENTS_NOT_SET_UP_MESSAGE } from '../../../shared/types/billing';
+import { TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
 
 const USER = { id: 'u1', email: 'ana@example.test' };
 
@@ -45,7 +48,47 @@ function purchase(id: string): CreditPurchaseRecord {
 	return { id, userId: 'u1', credits: 12_000, amountCents: 1_800, stripeCheckoutSessionId: `cs_${id}`, stripePaymentIntentId: `pi_${id}`, purchasedAt: at, expiresAt: new Date('2027-10-19T14:00:00Z'), used: 0, refundedCents: 0, removedCredits: 0, expiredAt: null };
 }
 
-const SESSION: StripeCheckoutSession = { id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1', payment_status: 'unpaid', status: 'open', client_reference_id: 'u1', metadata: null, amount_total: null, currency: 'usd', payment_intent: null };
+/** What Stripe answers when a checkout is made: an Elements session, with no hosted page. */
+const SESSION: StripeCheckoutSession = { id: 'cs_1', url: null, client_secret: 'cs_1_secret_x', payment_status: 'unpaid', status: 'open', client_reference_id: 'u1', metadata: null, amount_total: null, currency: 'usd', payment_intent: null };
+
+const NO_CODE_CONSENT = 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.';
+
+/** A subscription checkout the seller has open, as Stripe returns it read back with its discounts. */
+const PLAN_SESSION: StripeCheckoutSession = {
+	id: 'cs_plan',
+	mode: 'subscription',
+	url: null,
+	client_secret: 'cs_plan_secret_x',
+	subscription: 'sub_9',
+	customer: 'cus_1',
+	payment_status: 'unpaid',
+	status: 'open',
+	client_reference_id: 'u1',
+	metadata: { estori_user_id: 'u1', plan: 'pro' },
+	amount_total: 4_900,
+	currency: 'usd',
+	payment_intent: null,
+	discounts: null,
+};
+
+const CREDITS_SESSION: StripeCheckoutSession = {
+	...PLAN_SESSION,
+	id: 'cs_credits',
+	mode: 'payment',
+	subscription: null,
+	metadata: { kind: 'credits', estori_user_id: 'u1', credits: '12000' },
+	amount_total: 1_800,
+	payment_intent: 'pi_1',
+};
+
+const coupon = (overrides: Partial<StripeCoupon> = {}): StripeCoupon => ({ id: 'half', duration: 'once', duration_in_months: null, ...overrides });
+
+/** The plan session with a promotion code applied: half off the first payment unless the coupon says otherwise. */
+const withCode = (overrides: Partial<StripeCoupon> = {}, session: StripeCheckoutSession = PLAN_SESSION): StripeCheckoutSession => ({
+	...session,
+	amount_total: 2_450,
+	discounts: [{ promotion_code: { id: 'promo_1', promotion: { type: 'coupon', coupon: coupon(overrides) } } }],
+});
 
 /**
  * `schedule` is a schedule Stripe has on the subscription, which a release drops unless it is `stuck`; `price` is the
@@ -63,10 +106,18 @@ function fake(
 		customerCard?: string | null;
 		purchases?: CreditPurchaseRecord[];
 		paused?: boolean;
+		/** The sessions Stripe has, by id; any other id is unknown to it. */
+		sessions?: StripeCheckoutSession[];
+		/** `null` is a deployment without Stripe's publishable key. */
+		publishableKey?: string | null;
+		recordFails?: boolean;
 	} = {},
 ) {
 	const calls: string[] = [];
 	const keys: string[] = [];
+	const expands: Array<readonly string[] | undefined> = [];
+	const consents: BillingConsentInput[] = [];
+	const recorded: string[] = [];
 	const deps: BillingActionDeps = {
 		stripe: {
 			createCustomer: async ({ userId }) => {
@@ -121,6 +172,13 @@ function fake(
 				calls.push(`portal:${customerId}`);
 				return { url: 'https://billing.stripe.com/p/1' };
 			},
+			retrieveCheckoutSession: async (id, expand) => {
+				calls.push(`session:${id}`);
+				expands.push(expand);
+				const found = state.sessions?.find((session) => session.id === id);
+				if (!found) throw new StripeApiError(`No such checkout.session: '${id}'`, 404, 'resource_missing', 'invalid_request_error');
+				return found;
+			},
 		},
 		store: {
 			customerOf: async () => state.customer ?? null,
@@ -133,17 +191,32 @@ function fake(
 		},
 		ledger: { purchasesOf: async () => state.purchases ?? [] },
 		priceIds: { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' },
+		publishableKey: state.publishableKey === undefined ? 'pk_test_1' : state.publishableKey,
+		consents: {
+			recordConsent: async (input) => void consents.push(input),
+			consentFor: async () => null,
+		},
+		record: {
+			subscription: async (sessionId, subscriptionId, userId) => {
+				if (state.recordFails) throw new Error('D1_ERROR: network connection lost');
+				recorded.push(`subscription:${sessionId}:${subscriptionId}:${userId}`);
+			},
+			credits: async (sessionId) => {
+				if (state.recordFails) throw new Error('D1_ERROR: network connection lost');
+				recorded.push(`credits:${sessionId}`);
+			},
+		},
 		baseUrl: 'https://estori.app',
 		nowMs: Date.parse('2026-10-19T15:00:00Z'),
 		checkoutPaused: vi.fn(async () => state.paused === true),
 	};
-	return { deps, calls, keys, state };
+	return { deps, calls, keys, expands, consents, recorded, state };
 }
 
 describe('starting a plan', () => {
 	it('makes the Stripe customer on the first checkout and reuses it after', async () => {
 		const { deps, calls } = fake();
-		expect(await startCheckout(deps, USER, 'pro')).toEqual({ ok: true, value: { url: 'https://checkout.stripe.com/c/cs_1', sessionId: 'cs_1' } });
+		expect(await startCheckout(deps, USER, 'pro')).toMatchObject({ ok: true, value: { sessionId: 'cs_1' } });
 		expect(await startCheckout(deps, USER, 'premium')).toMatchObject({ ok: true });
 		expect(calls).toEqual(['customer:u1', 'saved:cus_new', 'checkout:cus_new:price_pro', 'checkout:cus_new:price_premium']);
 	});
@@ -262,7 +335,7 @@ describe('cancelling, keeping the plan, the portal and extra credits', () => {
 
 	it('sells extra credits to Premium only, in amounts from 5,000 in thousands', async () => {
 		const premium = fake({ customer: 'cus_1' });
-		expect(await buyCredits(premium.deps, USER, account('premium'), 12_000)).toEqual({ ok: true, value: { url: 'https://checkout.stripe.com/c/cs_1', sessionId: 'cs_1' } });
+		expect(await buyCredits(premium.deps, USER, account('premium'), 12_000)).toMatchObject({ ok: true, value: { sessionId: 'cs_1' } });
 		expect(premium.calls).toEqual(['credits:cus_1:12000']);
 		expect(await buyCredits(fake().deps, USER, account('pro'), 12_000)).toMatchObject({ ok: false, status: 402, refusal: { limit: 'extraCredits', upgradeTo: 'premium' } });
 		for (const credits of [4_000, 5_500, 2_000_000, '5000']) expect(await buyCredits(fake().deps, USER, account('premium'), credits)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.creditsAmount });
@@ -323,5 +396,260 @@ describe('while billing checkout is paused', () => {
 		expect(await cancelPlan(fake({ paused: true, row: row() }).deps, 'u1')).toMatchObject({ ok: true });
 		expect(await resumePlan(fake({ paused: true, row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toMatchObject({ ok: true });
 		expect(await openPortal(fake({ paused: true, customer: 'cus_1' }).deps, 'u1')).toMatchObject({ ok: true });
+	});
+});
+
+describe('opening an embedded checkout', () => {
+	it('a plan checkout answers the client secret, the publishable key and the order', async () => {
+		const { deps } = fake();
+		expect(await startCheckout(deps, USER, 'pro')).toEqual({
+			ok: true,
+			value: {
+				clientSecret: 'cs_1_secret_x',
+				publishableKey: 'pk_test_1',
+				sessionId: 'cs_1',
+				order: {
+					kind: 'plan',
+					plan: 'pro',
+					priceCents: 4_900,
+					includes: ['20,000 AI credits a month', 'Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog'],
+				},
+				terms: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900 },
+			},
+		});
+		expect(await startCheckout(deps, USER, 'premium')).toMatchObject({ ok: true, value: { order: { plan: 'premium', priceCents: 19_900 }, terms: { buttonText: 'Subscribe: $199 a month', dueTodayCents: 19_900 } } });
+	});
+
+	it('a credits checkout answers no terms', async () => {
+		const { deps } = fake({ customer: 'cus_1' });
+		expect(await buyCredits(deps, USER, account('premium'), 5_000)).toEqual({
+			ok: true,
+			value: { clientSecret: 'cs_1_secret_x', publishableKey: 'pk_test_1', sessionId: 'cs_1', order: { kind: 'credits', credits: 5_000, amountCents: 750 }, terms: null },
+		});
+	});
+
+	it('sends Stripe the return page of its own, with the session id left for Stripe to fill in', async () => {
+		const returnUrls: string[] = [];
+		const { deps } = fake({ customer: 'cus_1' });
+		const stripe = deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		deps.stripe = {
+			...stripe,
+			createSubscriptionCheckoutSession: async (input) => {
+				returnUrls.push(input.returnUrl);
+				return SESSION;
+			},
+			createCreditsCheckoutSession: async (input) => {
+				returnUrls.push(input.returnUrl);
+				return SESSION;
+			},
+		};
+		await startCheckout(deps, USER, 'pro');
+		await buyCredits(deps, USER, account('premium'), 5_000);
+		expect(returnUrls).toEqual(Array(2).fill('https://estori.app/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}'));
+	});
+
+	it('without a publishable key the checkout answers 503 PAYMENTS_NOT_SET_UP_MESSAGE before asking stripe', async () => {
+		const plan = fake({ publishableKey: null });
+		const credits = fake({ publishableKey: null, customer: 'cus_1' });
+		expect(await startCheckout(plan.deps, USER, 'pro')).toEqual({ ok: false, status: 503, message: PAYMENTS_NOT_SET_UP_MESSAGE });
+		expect(await buyCredits(credits.deps, USER, account('premium'), 5_000)).toEqual({ ok: false, status: 503, message: PAYMENTS_NOT_SET_UP_MESSAGE });
+		expect([...plan.calls, ...credits.calls]).toEqual([]);
+	});
+
+	it('answers 502 when Stripe made a session without a client secret', async () => {
+		const warnings = quietWarnings();
+		const { deps } = fake({ customer: 'cus_1' });
+		const stripe = deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		deps.stripe = { ...stripe, createSubscriptionCheckoutSession: async () => ({ ...SESSION, client_secret: null }) };
+		expect(await startCheckout(deps, USER, 'pro')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('the terms of an open checkout', () => {
+	it('answers the wording of the session as Stripe reads it back, asking for its discounts', async () => {
+		const plain = fake({ sessions: [PLAN_SESSION] });
+		expect(await checkoutTerms(plain.deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900 } });
+		expect(plain.expands).toEqual([BILLING_CHECKOUT_EXPAND]);
+		const coded = fake({ sessions: [withCode({ duration: 'repeating', duration_in_months: 3 })] });
+		expect(await checkoutTerms(coded.deps, 'u1', 'cs_plan')).toEqual({
+			ok: true,
+			value: {
+				consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 a month for 3 months, then $49 a month, until I cancel.',
+				buttonText: 'Subscribe: $24.50 a month for 3 months, then $49 a month',
+				dueTodayCents: 2_450,
+			},
+		});
+	});
+
+	it("terms for a session that isn't the seller's answer 404", async () => {
+		const { deps } = fake({ sessions: [{ ...PLAN_SESSION, client_reference_id: 'u2' }] });
+		expect(await checkoutTerms(deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+	});
+
+	it('answers 404 for a session Stripe does not know, and for a session billing did not make', async () => {
+		const unknown = fake({ sessions: [] });
+		expect(await checkoutTerms(unknown.deps, 'u1', 'cs_gone')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		const store = fake({ sessions: [{ ...PLAN_SESSION, metadata: { checkout_id: 'chk_1' } }] });
+		expect(await checkoutTerms(store.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+	});
+
+	it('answers 400 for a missing or malformed session id, asking Stripe nothing', async () => {
+		const { deps, calls } = fake();
+		for (const id of [undefined, null, 42, '', 'sub_1', 'cs_a/../b', 'cs_ a']) {
+			expect(await checkoutTerms(deps, 'u1', id)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.noCheckout });
+		}
+		expect(calls).toEqual([]);
+	});
+
+	it('answers 400 for a credits checkout, which has no renewal, and for one that has closed', async () => {
+		const credits = fake({ sessions: [CREDITS_SESSION] });
+		expect(await checkoutTerms(credits.deps, 'u1', 'cs_credits')).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.noRenewalTerms });
+		const expired = fake({ sessions: [{ ...PLAN_SESSION, status: 'expired' }] });
+		expect(await checkoutTerms(expired.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 400, message: CHECKOUT_EXPIRED_MESSAGE });
+		const done = fake({ sessions: [{ ...PLAN_SESSION, status: 'complete', payment_status: 'paid' }] });
+		expect(await checkoutTerms(done.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.checkoutFinished });
+	});
+
+	it('answers 502 and warns, naming the coupon, for a repeating coupon without months', async () => {
+		const warnings = quietWarnings();
+		const broken = fake({ sessions: [withCode({ id: 'broken_coupon', duration: 'repeating', duration_in_months: null })] });
+		expect(await checkoutTerms(broken.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(1);
+		expect(JSON.stringify(warnings.mock.calls)).toContain('broken_coupon');
+	});
+
+	it('answers 503 without Stripe', async () => {
+		expect(await checkoutTerms({ ...fake().deps, stripe: null }, 'u1', 'cs_plan')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+	});
+
+	it('answers 502 when Stripe fails to read the session', async () => {
+		quietWarnings();
+		const { deps } = fake();
+		const stripe = deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		deps.stripe = { ...stripe, retrieveCheckoutSession: async () => Promise.reject(new StripeApiError('Something went wrong.', 500, null, 'api_error')) };
+		expect(await checkoutTerms(deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+	});
+});
+
+describe('agreeing to the terms before paying', () => {
+	const AGREED = { sessionId: 'cs_plan', termsVersion: TERMS_VERSION, consentText: NO_CODE_CONSENT };
+
+	it("consent is stored with the server's own wording", async () => {
+		const { deps, consents } = fake({ sessions: [PLAN_SESSION] });
+		expect(await recordCheckoutConsent(deps, 'u1', AGREED)).toEqual({ ok: true, value: { recorded: true } });
+		expect(consents).toEqual([{ sessionId: 'cs_plan', userId: 'u1', plan: 'pro', termsVersion: TERMS_VERSION, consentText: NO_CODE_CONSENT, now: new Date(deps.nowMs) }]);
+	});
+
+	it('stores the wording of a promotion code the seller applied, when the page shows the same', async () => {
+		const { deps, consents } = fake({ sessions: [withCode()] });
+		const shown = 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month, until I cancel.';
+		expect(await recordCheckoutConsent(deps, 'u1', { ...AGREED, consentText: shown })).toEqual({ ok: true, value: { recorded: true } });
+		expect(consents[0]?.consentText).toBe(shown);
+	});
+
+	it('consent with stale wording answers 409 and stores nothing', async () => {
+		const { deps, consents } = fake({ sessions: [withCode()] });
+		// The page still shows the price from before the code was applied.
+		expect(await recordCheckoutConsent(deps, 'u1', AGREED)).toEqual({ ok: false, status: 409, message: 'The price changed. Check it and agree again.' });
+		expect(consents).toEqual([]);
+	});
+
+	it('consent with an old terms version answers 400, asking Stripe nothing', async () => {
+		const { deps, consents, calls } = fake({ sessions: [PLAN_SESSION] });
+		expect(await recordCheckoutConsent(deps, 'u1', { ...AGREED, termsVersion: '2020-01-01' })).toEqual({ ok: false, status: 400, message: TERMS_OUTDATED_MESSAGE });
+		expect(consents).toEqual([]);
+		expect(calls).toEqual([]);
+	});
+
+	it('consent for a credits or expired session answers 400', async () => {
+		const credits = fake({ sessions: [CREDITS_SESSION] });
+		expect(await recordCheckoutConsent(credits.deps, 'u1', { ...AGREED, sessionId: 'cs_credits' })).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.noRenewalTerms });
+		const expired = fake({ sessions: [{ ...PLAN_SESSION, status: 'expired' }] });
+		expect(await recordCheckoutConsent(expired.deps, 'u1', AGREED)).toEqual({ ok: false, status: 400, message: CHECKOUT_EXPIRED_MESSAGE });
+		expect([...credits.consents, ...expired.consents]).toEqual([]);
+	});
+
+	it("never records consent for another seller's session, which answers 404 before anything is stored", async () => {
+		const { deps, consents } = fake({ sessions: [{ ...PLAN_SESSION, client_reference_id: 'u2' }] });
+		expect(await recordCheckoutConsent(deps, 'u1', AGREED)).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		expect(consents).toEqual([]);
+	});
+
+	it('answers 400 for a body without a session, a terms version and wording', async () => {
+		const { deps, calls, consents } = fake({ sessions: [PLAN_SESSION] });
+		for (const body of [undefined, null, 'agree', [], {}, { ...AGREED, sessionId: 7 }, { ...AGREED, termsVersion: null }, { ...AGREED, consentText: undefined }]) {
+			expect(await recordCheckoutConsent(deps, 'u1', body)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.consentRequest });
+		}
+		expect(calls).toEqual([]);
+		expect(consents).toEqual([]);
+	});
+
+	it('answers 502 and stores nothing for a promotion it cannot state exactly', async () => {
+		quietWarnings();
+		const { deps, consents } = fake({ sessions: [withCode({ duration: 'repeating', duration_in_months: null })] });
+		expect(await recordCheckoutConsent(deps, 'u1', AGREED)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(consents).toEqual([]);
+	});
+});
+
+describe('the status of a checkout', () => {
+	const paidPlan: StripeCheckoutSession = { ...PLAN_SESSION, status: 'complete', payment_status: 'paid' };
+	const paidCredits: StripeCheckoutSession = { ...CREDITS_SESSION, status: 'complete', payment_status: 'paid' };
+
+	it('answers where each session stands, recording nothing until it is paid', async () => {
+		const states: Array<[StripeCheckoutSession, string]> = [
+			[PLAN_SESSION, 'open'],
+			[{ ...PLAN_SESSION, status: 'expired' }, 'expired'],
+			[{ ...PLAN_SESSION, status: 'complete', payment_status: 'unpaid' }, 'processing'],
+		];
+		for (const [session, state] of states) {
+			const { deps, recorded } = fake({ sessions: [session] });
+			expect(await checkoutStatus(deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { state, kind: 'plan' } });
+			expect(recorded).toEqual([]);
+		}
+	});
+
+	it("records a paid plan's subscription for the signed-in seller, and a paid credits purchase", async () => {
+		const plan = fake({ sessions: [paidPlan] });
+		expect(await checkoutStatus(plan.deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { state: 'paid', kind: 'plan' } });
+		expect(plan.recorded).toEqual(['subscription:cs_plan:sub_9:u1']);
+		expect(plan.expands).toEqual([BILLING_CHECKOUT_EXPAND]);
+		const credits = fake({ sessions: [paidCredits] });
+		expect(await checkoutStatus(credits.deps, 'u1', 'cs_credits')).toEqual({ ok: true, value: { state: 'paid', kind: 'credits' } });
+		expect(credits.recorded).toEqual(['credits:cs_credits']);
+	});
+
+	it('still answers the state when recording fails, warning once, since the webhook records it too', async () => {
+		const warnings = quietWarnings();
+		const { deps, recorded } = fake({ sessions: [paidPlan], recordFails: true });
+		expect(await checkoutStatus(deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { state: 'paid', kind: 'plan' } });
+		expect(recorded).toEqual([]);
+		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+
+	it('records no subscription for a paid plan session that has none, and still answers paid', async () => {
+		const { deps, recorded } = fake({ sessions: [{ ...paidPlan, subscription: null }] });
+		expect(await checkoutStatus(deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { state: 'paid', kind: 'plan' } });
+		expect(recorded).toEqual([]);
+	});
+
+	it("answers 404 for another seller's session, and for one billing did not make, recording nothing", async () => {
+		const other = fake({ sessions: [{ ...paidPlan, client_reference_id: 'u2' }] });
+		expect(await checkoutStatus(other.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		const card = fake({ sessions: [{ ...paidPlan, mode: 'setup', metadata: { kind: 'card', estori_user_id: 'u1' } }] });
+		expect(await checkoutStatus(card.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		expect(await checkoutStatus(fake({ sessions: [] }).deps, 'u1', 'cs_gone')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		expect([...other.recorded, ...card.recorded]).toEqual([]);
+	});
+
+	it('answers 400 for a malformed session id, and 503 without Stripe', async () => {
+		const { deps, calls } = fake();
+		expect(await checkoutStatus(deps, 'u1', undefined)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.noCheckout });
+		expect(calls).toEqual([]);
+		expect(await checkoutStatus({ ...deps, stripe: null }, 'u1', 'cs_plan')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
 	});
 });

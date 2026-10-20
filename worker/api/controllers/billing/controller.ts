@@ -26,7 +26,7 @@ import {
 	type BillingChangeRequested,
 	type BillingRedirect,
 	type BillingView,
-	type CheckoutStarted,
+	type CheckoutClientStart,
 } from '../../../../shared/types/billing';
 
 type BillingAction<T> = (deps: BillingActionDeps, user: AuthUser) => Promise<BillingActionResult<T>>;
@@ -51,7 +51,7 @@ export class BillingController extends BaseController {
 		}
 	}
 
-	static async checkout(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<CheckoutStarted>>> {
+	static async checkout(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<CheckoutClientStart>>> {
 		return this.act(request, env, context, 'start a plan checkout', async (deps, user) => startCheckout(deps, user, await this.bodyField(request, 'plan')));
 	}
 
@@ -71,7 +71,7 @@ export class BillingController extends BaseController {
 		return this.act(request, env, context, 'open the billing portal', (deps, user) => openPortal(deps, user.id));
 	}
 
-	static async credits(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<CheckoutStarted>>> {
+	static async credits(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<CheckoutClientStart>>> {
 		return this.act(request, env, context, 'start a credits checkout', async (deps, user) =>
 			buyCredits(deps, user, await loadAccount(env, user.id), await this.bodyField(request, 'credits')),
 		);

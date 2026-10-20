@@ -135,6 +135,27 @@ export function formatBillingDate(ms: number): string {
 	return BILLING_DATE.format(ms);
 }
 
+/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. */
+export function storeAllowance(plan: PaidPlanId): string {
+	const { liveStores, newStoresPerDay } = PLAN_LIMITS[plan];
+	const parts: string[] = [];
+	if (liveStores !== null) parts.push(`Up to ${liveStores} live stores`);
+	if (newStoresPerDay !== null) parts.push(`${newStoresPerDay} new stores a day`);
+	return parts.join(', ');
+}
+
+/** A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. */
+export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId): string[] {
+	const limits = PLAN_LIMITS[plan];
+	const lines = [storeAllowance(plan)];
+	if (limits.ownDomainsPerLiveStore > 0) lines.push('Your own domain on each live store');
+	if (limits.supplierCatalog) lines.push('The supplier catalog');
+	if (limits.extraCredits) lines.push('Buy extra credits any time');
+	if (over === undefined) return lines;
+	const already = limitFeatures(over);
+	return lines.filter((line) => !already.includes(line));
+}
+
 export function extraCreditsPriceCents(credits: number): number {
 	return (credits / EXTRA_CREDITS.creditsPerUnit) * EXTRA_CREDITS.unitPriceCents;
 }

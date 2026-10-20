@@ -1,21 +1,38 @@
 /**
  * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, open
  * the customer portal and buy extra credits. Each asks Stripe and changes no row; the webhook records what Stripe did.
+ * A checkout opens as an embedded session on Estori's own page; agreeing to its terms is recorded before it is paid, and
+ * the seller's return may record the payment ahead of the webhook.
  */
 
 import { BillingService, CreditLedgerService } from '../../database';
 import type { SubscriptionRecord } from '../../database/schema';
-import { BILLING_PATH, type BillingChangeRequested, type BillingRedirect, type CheckoutStarted } from '../../../shared/types/billing';
-import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PlanLimitRefusal } from '../../../shared/types/plans';
+import {
+	BILLING_PATH,
+	CHECKOUT_EXPIRED_MESSAGE,
+	PAYMENTS_NOT_SET_UP_MESSAGE,
+	type BillingChangeRequested,
+	type BillingRedirect,
+	type CheckoutClientStart,
+	type CheckoutConsentRequest,
+	type CheckoutOrder,
+	type CheckoutStatusView,
+	type CheckoutTermsView,
+} from '../../../shared/types/billing';
+import { isCurrentTermsVersion, TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
+import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
 import { isFlagOn } from '../posthog/flags';
-import { idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
+import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
+import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
+import { checkoutReturnRecorders, type CheckoutReturnRecorder } from './events';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 import { cancelAtPeriodEndReleasingSchedule, pendingScheduleId, releaseSchedule } from './schedules';
+import { billingEventDepsFromEnv } from './wiring';
 
 const logger = createLogger('BillingActions');
 
@@ -29,6 +46,11 @@ export const BILLING_MESSAGES = {
 	notEnding: "Your plan isn't set to end.",
 	noCustomer: "You don't have billing details yet.",
 	creditsAmount: 'Pick 5,000 to 1,000,000 credits, in thousands.',
+	noCheckout: "We couldn't find that checkout.",
+	noRenewalTerms: 'Extra credits have no renewal to agree to.',
+	checkoutFinished: 'This checkout is already finished.',
+	consentRequest: 'Agree to the terms shown, then try again.',
+	priceChanged: 'The price changed. Check it and agree again.',
 } as const;
 
 export type BillingActionResult<T> =
@@ -49,6 +71,7 @@ export type BillingStripe = Pick<
 	| 'cancelAtPeriodEnd'
 	| 'resumeSubscription'
 	| 'createBillingPortalSession'
+	| 'retrieveCheckoutSession'
 >;
 
 export interface BillingActionDeps {
@@ -56,6 +79,11 @@ export interface BillingActionDeps {
 	store: Pick<BillingService, 'customerOf' | 'saveCustomer' | 'subscriptionOf'>;
 	ledger: Pick<CreditLedgerService, 'purchasesOf'>;
 	priceIds: StripePriceIds | null;
+	/** Stripe.js's key for the checkout page; null on a deployment that hasn't set one. */
+	publishableKey: string | null;
+	consents: Pick<BillingService, 'recordConsent' | 'consentFor'>;
+	/** Records a paid checkout on the seller's return, the way the webhook does. */
+	record: CheckoutReturnRecorder;
 	baseUrl: string;
 	nowMs: number;
 	/** The billing-checkout pause for this seller: it refuses a plan checkout, a plan change and extra credits. */
@@ -129,18 +157,40 @@ function checkoutReturnUrl(deps: BillingActionDeps): string {
 	return `${deps.baseUrl}${BILLING_PATH}/checkout/return?session_id={CHECKOUT_SESSION_ID}`;
 }
 
-function checkoutStarted(session: StripeCheckoutSession): BillingActionResult<CheckoutStarted> {
-	return session.url ? ok({ url: session.url, sessionId: session.id }) : STRIPE_FAILED;
+/** The wording of a plan session, or the refusal for a promotion whose terms can't be stated exactly. */
+function termsOf(plan: PaidPlanId, session: StripeCheckoutSession): BillingActionResult<CheckoutTermsView> {
+	try {
+		return ok(termsViewOf(plan, session));
+	} catch (error) {
+		if (!(error instanceof UnreadablePromotionError)) throw error;
+		logger.warn('A checkout was refused because its promotion can not be stated exactly', { sessionId: session.id, couponId: error.couponId, message: error.message });
+		return STRIPE_FAILED;
+	}
+}
+
+/** What the checkout page starts from; `terms` is null for extra credits, which have no renewal. */
+function clientStart(session: StripeCheckoutSession, publishableKey: string, order: CheckoutOrder, terms: CheckoutTermsView | null): BillingActionResult<CheckoutClientStart> {
+	if (!session.client_secret) {
+		logger.warn('Stripe made a checkout session without a client secret', { sessionId: session.id });
+		return STRIPE_FAILED;
+	}
+	return ok({ clientSecret: session.client_secret, publishableKey, sessionId: session.id, order, terms });
 }
 
 function endsOn(row: SubscriptionRecord): string {
 	return formatBillingDate(row.currentPeriodEnd.getTime());
 }
 
-export async function startCheckout(deps: BillingActionDeps, user: { id: string; email: string }, plan: unknown): Promise<BillingActionResult<CheckoutStarted>> {
+/**
+ * Opens an embedded checkout for Pro or Premium. A repeat within the client's bucket gets the same session back as it was
+ * made, with no promotion code; `checkoutTerms` answers the wording of the session as it stands.
+ */
+export async function startCheckout(deps: BillingActionDeps, user: { id: string; email: string }, plan: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
 	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
+	const { publishableKey } = deps;
+	if (!publishableKey) return fail(503, PAYMENTS_NOT_SET_UP_MESSAGE);
 	if (!isPaidPlanId(plan)) return fail(400, BILLING_MESSAGES.pickPlan);
 	if (liveSubscription(await deps.store.subscriptionOf(user.id))) return fail(409, BILLING_MESSAGES.alreadyPaying);
 	return askStripe(async () => {
@@ -153,7 +203,8 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 			returnUrl: checkoutReturnUrl(deps),
 			nowMs: deps.nowMs,
 		});
-		return checkoutStarted(session);
+		const terms = termsOf(plan, session);
+		return terms.ok ? clientStart(session, publishableKey, planOrder(plan), terms.value) : terms;
 	});
 }
 
@@ -247,10 +298,12 @@ export async function openPortal(deps: BillingActionDeps, userId: string): Promi
 }
 
 /** A checkout for extra credits, at the price from the server's table; the plan and the amount are checked before Stripe is asked. */
-export async function buyCredits(deps: BillingActionDeps, user: { id: string; email: string }, account: BillingAccount, credits: unknown): Promise<BillingActionResult<CheckoutStarted>> {
+export async function buyCredits(deps: BillingActionDeps, user: { id: string; email: string }, account: BillingAccount, credits: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
 	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
+	const { publishableKey } = deps;
+	if (!publishableKey) return fail(503, PAYMENTS_NOT_SET_UP_MESSAGE);
 	const refusal = assertWithinLimit(account, 'extraCredits');
 	if (refusal) return { ok: false, status: 402, refusal };
 	if (!isExtraCreditsAmount(credits)) return fail(400, BILLING_MESSAGES.creditsAmount);
@@ -268,16 +321,110 @@ export async function buyCredits(deps: BillingActionDeps, user: { id: string; em
 			nowMs: deps.nowMs,
 			idempotencyKey: idempotencyKey(deps, 'credits', user.id, [String(credits), newest]),
 		});
-		return checkoutStarted(session);
+		return clientStart(session, publishableKey, creditsOrder(credits), null);
 	});
 }
 
+const SESSION_ID = /^cs_[A-Za-z0-9_]+$/;
+
+interface OwnCheckout {
+	session: StripeCheckoutSession;
+	sold: NonNullable<ReturnType<typeof billingSessionOf>>;
+}
+
+/** A billing session of this seller's, read back from Stripe with its discounts; one that isn't theirs reads as missing. */
+async function ownCheckout(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<OwnCheckout>> {
+	const { stripe } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) return fail(400, BILLING_MESSAGES.noCheckout);
+	return askStripe(async () => {
+		let session: StripeCheckoutSession;
+		try {
+			session = await stripe.retrieveCheckoutSession(sessionId, BILLING_CHECKOUT_EXPAND);
+		} catch (error) {
+			if (error instanceof StripeApiError && error.status === 404) return fail(404, BILLING_MESSAGES.noCheckout);
+			throw error;
+		}
+		const sold = billingSessionOf(session);
+		// Other sessions on the Stripe account, a paid-site purchase among them, can carry this seller's id as their reference; only billing's own are answered.
+		if (!sold || session.client_reference_id !== userId) return fail(404, BILLING_MESSAGES.noCheckout);
+		return ok({ session, sold });
+	});
+}
+
+/** The seller's own subscription checkout that can still be paid. */
+async function openPlanCheckout(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<{ session: StripeCheckoutSession; plan: PaidPlanId }>> {
+	const own = await ownCheckout(deps, userId, sessionId);
+	if (!own.ok) return own;
+	const { session, sold } = own.value;
+	if (sold.kind !== 'plan') return fail(400, BILLING_MESSAGES.noRenewalTerms);
+	const state = sessionStateOf(session);
+	if (state === 'expired') return fail(400, CHECKOUT_EXPIRED_MESSAGE);
+	if (state !== 'open') return fail(400, BILLING_MESSAGES.checkoutFinished);
+	return ok({ session, plan: sold.plan });
+}
+
+/** The consent sentence, button and first payment of the seller's open subscription checkout, as Stripe has it now. */
+export async function checkoutTerms(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<CheckoutTermsView>> {
+	const open = await openPlanCheckout(deps, userId, sessionId);
+	return open.ok ? termsOf(open.value.plan, open.value.session) : open;
+}
+
+function consentRequestOf(body: unknown): CheckoutConsentRequest | null {
+	if (typeof body !== 'object' || body === null) return null;
+	const { sessionId, termsVersion, consentText } = body as Record<string, unknown>;
+	return typeof sessionId === 'string' && typeof termsVersion === 'string' && typeof consentText === 'string' ? { sessionId, termsVersion, consentText } : null;
+}
+
+/**
+ * Keeps the seller's agreement before they pay. The wording they saw must be the server's own for the session as it
+ * stands, so a price changed by a promotion code since is refused; what's stored is the server's wording, under the
+ * signed-in account. The page confirms the payment only after this answers.
+ */
+export async function recordCheckoutConsent(deps: BillingActionDeps, userId: string, body: unknown): Promise<BillingActionResult<{ recorded: true }>> {
+	const request = consentRequestOf(body);
+	if (!request) return fail(400, BILLING_MESSAGES.consentRequest);
+	if (!isCurrentTermsVersion(request.termsVersion)) return fail(400, TERMS_OUTDATED_MESSAGE);
+	const open = await openPlanCheckout(deps, userId, request.sessionId);
+	if (!open.ok) return open;
+	const { session, plan } = open.value;
+	const terms = termsOf(plan, session);
+	if (!terms.ok) return terms;
+	if (request.consentText !== terms.value.consentText) return fail(409, BILLING_MESSAGES.priceChanged);
+	await deps.consents.recordConsent({ sessionId: session.id, userId, plan, termsVersion: TERMS_VERSION, consentText: terms.value.consentText, now: new Date(deps.nowMs) });
+	return ok({ recorded: true });
+}
+
+/** Where the seller's checkout stands. Once it's paid the return records it, so the page needn't wait for the webhook. */
+export async function checkoutStatus(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<CheckoutStatusView>> {
+	const own = await ownCheckout(deps, userId, sessionId);
+	if (!own.ok) return own;
+	const { session, sold } = own.value;
+	const state = sessionStateOf(session);
+	if (state === 'paid') await recordReturn(deps, userId, session, sold.kind);
+	return ok({ state, kind: sold.kind });
+}
+
+/** Best effort: the webhook records the same payment, so a failure here only delays the page. */
+async function recordReturn(deps: BillingActionDeps, userId: string, session: StripeCheckoutSession, kind: OwnCheckout['sold']['kind']): Promise<void> {
+	try {
+		if (kind === 'credits') await deps.record.credits(session.id);
+		else if (typeof session.subscription === 'string') await deps.record.subscription(session.id, session.subscription, userId);
+	} catch (error) {
+		logger.warn("Could not record a paid checkout on the seller's return; the webhook will", { sessionId: session.id, error });
+	}
+}
+
 export function billingActionDepsFromEnv(env: Env, request: Request): BillingActionDeps {
+	const billing = new BillingService(env);
 	return {
 		stripe: stripeFromEnv(env),
-		store: new BillingService(env),
+		store: billing,
+		consents: billing,
 		ledger: new CreditLedgerService(env),
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),
+		publishableKey: env.STRIPE_PUBLISHABLE_KEY || null,
+		record: checkoutReturnRecorders(billingEventDepsFromEnv(env)),
 		baseUrl: appBaseUrl(env, request),
 		nowMs: Date.now(),
 		checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId),
