@@ -34,8 +34,10 @@ const MINUTE_MS = 60_000;
 const MAX_FINGERPRINTS = 500;
 /** A real frame line is far shorter; the frame pattern backtracks, so longer lines are skipped rather than read. */
 const MAX_FRAME_LINE_CHARS = 1_000;
-/** What is sent of a message, and so what the scrubber and the fingerprint ever read. */
+/** What is sent of a message. */
 const MAX_TEXT_CHARS = 2_000;
+/** Read past the cut, and dropped from the end when the read itself stopped short; more than any address the pattern matches. */
+const SCRUB_MARGIN_CHARS = 512;
 const FRAME_LINE = /^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?\s*$/;
 /** Bounded runs, so reading a long text without an address stays linear. */
 const EMAIL = /[^\s@<>()"',;:]{1,64}@[^\s@<>()"',;:]{1,255}\.[a-z]{2,}/gi;
@@ -46,8 +48,22 @@ export function scrubEmails(text: string): string {
 	return text.replace(ENCODED_AT, '@').replace(EMAIL, '[email]');
 }
 
+/** Bounds the text a fingerprint keeps; it is never sent, so it needs no scrubbing. */
 function clip(text: string): string {
 	return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text;
+}
+
+/**
+ * A message as it is sent: scrubbed, then cut to MAX_TEXT_CHARS. Scrubbing reads MAX_TEXT_CHARS plus a margin, so an
+ * address that straddles the cut is whole when it is scrubbed. When even that read stopped short of the text's end, the
+ * last margin of the scrubbed result is dropped too: an address split by the read's own end would stay there, and the
+ * scrubbing can have shrunk the text so that this end is now inside the cut.
+ */
+function sendableText(text: string): string {
+	const window = text.slice(0, MAX_TEXT_CHARS + SCRUB_MARGIN_CHARS);
+	const scrubbed = scrubEmails(window);
+	if (window.length === text.length) return scrubbed.slice(0, MAX_TEXT_CHARS);
+	return scrubbed.slice(0, Math.max(0, Math.min(MAX_TEXT_CHARS, scrubbed.length - SCRUB_MARGIN_CHARS)));
 }
 
 /** V8 stack lines as PostHog's raw frames: oldest call first, the throwing frame last. */
@@ -80,12 +96,12 @@ export function exceptionProperties(input: ServerErrorInput): Record<string, Eve
 	const error = input.error;
 	return {
 		component: input.component,
-		log_message: scrubEmails(clip(input.message)),
+		log_message: sendableText(input.message),
 		$exception_level: 'error',
 		$exception_list: [
 			{
 				type: error?.name || 'Error',
-				value: scrubEmails(clip(error?.message || input.message)),
+				value: sendableText(error?.message || input.message),
 				mechanism: { handled: true, synthetic: error === undefined },
 				stacktrace: { type: 'raw', frames: parseStack(error?.stack) },
 			},

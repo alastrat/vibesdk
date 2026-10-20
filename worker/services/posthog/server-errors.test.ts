@@ -65,6 +65,40 @@ describe('exception events', () => {
 		expect(exception.value.length).toBeLessThanOrEqual(2_000);
 	});
 
+	describe('an address near the end of a long message', () => {
+		/** Both texts that are sent for a message: the log line, and the exception value. */
+		function sentTexts(message: string): string[] {
+			const properties = exceptionProperties({ component: 'Cut', message, error: new Error(message) });
+			const [exception] = properties.$exception_list as { value: string }[];
+			return [String(properties.log_message), exception.value];
+		}
+
+		function expectNoAddress(message: string): void {
+			for (const text of sentTexts(message)) {
+				expect(text).not.toContain('ana');
+				expect(text).not.toContain('garcia');
+				expect(text.length).toBeLessThanOrEqual(2_000);
+			}
+		}
+
+		it('is removed when it ends just past the 2,000 character cut', () => {
+			expectNoAddress('x '.repeat(998) + 'ana.garcia@example.com');
+		});
+
+		it('is removed when it straddles the cut', () => {
+			expectNoAddress('x '.repeat(995) + 'ana.garcia@example.com');
+		});
+
+		it('is removed wherever it falls around the cut and the end of the scrubbed window', () => {
+			for (let offset = 1_900; offset <= 2_700; offset += 3) expectNoAddress(`${'y'.repeat(offset)} ana.garcia@example.com tail`);
+		});
+
+		it('is removed from a long list of addresses, which shrinks as it is scrubbed', () => {
+			expectNoAddress('ana.garcia@example.com '.repeat(200));
+			expectNoAddress(`${'x '.repeat(500)}${'ana.garcia@example.com '.repeat(200)}`);
+		});
+	});
+
 	it('skips an absurdly long stack line instead of reading it', () => {
 		expect(parseStack(`Error: x\n    at ${'a ('.repeat(30_000)}`)).toEqual([]);
 	}, 250);
