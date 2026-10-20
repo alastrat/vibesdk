@@ -9,6 +9,14 @@ import { errorResponse } from '../api/responses';
 const logger = createLogger('ErrorHandling');
 
 /**
+ * The logger's arguments for a failure: the original Error when there is one, so its stack reaches error tracking. It
+ * goes after the context, which the logger would otherwise take for the error if it had a name or message of its own.
+ */
+function failureLogArgs(error: unknown, context?: Record<string, unknown>): unknown[] {
+    return error instanceof Error ? [{ ...context }, error] : [{ error: 'Unknown error', ...context }];
+}
+
+/**
  * Standard error types for the application
  */
 export enum AppErrorType {
@@ -43,21 +51,35 @@ export class AppError extends Error {
 export class ErrorHandler {
     
     /**
-     * Handle and log error with context
+     * Handle and log error with context. A failure on our side (status 500 and up) is logged as an error, which also
+     * reports it; a request refused for what it asked (validation, security, usage limits) is only a warning.
      */
     static handleError(
         error: unknown, 
         operation: string, 
         context?: Record<string, any>
     ): AppError {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        
-        logger.error(`Error during ${operation}`, {
-            error: errorMessage,
-            stack: error instanceof Error ? error.stack : undefined,
-            ...context
-        });
+        const appError = ErrorHandler.toAppError(error, operation, context);
+        const message = `Error during ${operation}`;
 
+        if (appError.statusCode >= 500) {
+            logger.error(message, ...failureLogArgs(error, context));
+        } else {
+            logger.warn(message, {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                ...context
+            });
+        }
+
+        return appError;
+    }
+
+    private static toAppError(
+        error: unknown,
+        operation: string,
+        context?: Record<string, any>
+    ): AppError {
         // Convert SecurityError to AppError
         if (error instanceof SecurityError) {
             return new AppError(
@@ -274,10 +296,7 @@ export class ControllerErrorHandler {
         error: unknown, 
         context?: Record<string, any>
     ): never {
-        logger.error(`External service error: ${serviceName}`, {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            ...context
-        });
+        logger.error(`External service error: ${serviceName}`, ...failureLogArgs(error, context));
         
         throw ErrorFactory.externalServiceError(serviceName, context);
     }

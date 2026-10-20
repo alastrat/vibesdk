@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ErrorReporter, errorFingerprint, exceptionProperties, parseStack, reportServerError, scrubEmails } from './server-errors';
 import type { CaptureInput } from './client';
 
@@ -48,6 +48,27 @@ describe('exception events', () => {
 		expect(scrubEmails('From <ana+shop@example.co.uk>, to "x@y.io"')).toBe('From <[email]>, to "[email]"');
 	});
 
+	it('removes URL-encoded email addresses too', () => {
+		expect(scrubEmails('contact ana%40example.com now')).toBe('contact [email] now');
+		expect(scrubEmails('?email=bob.smith%40example.org&x=1')).not.toContain('bob');
+	});
+
+	// A Worker's clock stands still while code runs, so speed is held by the test's own time limit.
+	it('reads a long run of text without an address in no time', () => {
+		expect(scrubEmails('a'.repeat(100_000))).toHaveLength(100_000);
+	}, 250);
+
+	it('sends at most 2,000 characters of the message and of the log line', () => {
+		const properties = exceptionProperties({ component: 'Big', message: 'm'.repeat(100_000), error: new Error('e'.repeat(100_000)) });
+		expect(String(properties.log_message).length).toBeLessThanOrEqual(2_000);
+		const [exception] = properties.$exception_list as { value: string }[];
+		expect(exception.value.length).toBeLessThanOrEqual(2_000);
+	});
+
+	it('skips an absurdly long stack line instead of reading it', () => {
+		expect(parseStack(`Error: x\n    at ${'a ('.repeat(30_000)}`)).toEqual([]);
+	}, 250);
+
 	it('treats errors that differ only in ids and numbers as one', () => {
 		const a = errorFingerprint({ component: 'Runner', message: 'step failed', error: new Error('Order ord_8f3a9c21d0 failed after 3 attempts') });
 		const b = errorFingerprint({ component: 'Runner', message: 'step failed', error: new Error('Order ord_1b2c3d4e5f failed after 4 attempts') });
@@ -57,6 +78,16 @@ describe('exception events', () => {
 });
 
 describe('the error reporter', () => {
+	let warn: ReturnType<typeof vi.spyOn>;
+
+	beforeEach(() => {
+		warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	function reporter(send: (input: CaptureInput) => void = () => undefined) {
 		let now = 0;
 		const sent: CaptureInput[] = [];
@@ -101,6 +132,21 @@ describe('the error reporter', () => {
 			throw new Error('PostHog client broke');
 		});
 		expect(() => errors.report({ component: 'A', message: 'b' })).not.toThrow();
+	});
+
+	it('warns on the console, once, however often reporting fails', () => {
+		const { errors } = reporter(() => {
+			throw new Error('PostHog client broke');
+		});
+		for (let i = 0; i < 5; i++) errors.report({ component: `Failing${i}`, message: 'b' });
+		expect(warn).toHaveBeenCalledTimes(1);
+		expect(JSON.parse(String(warn.mock.calls[0][0]))).toMatchObject({ level: 'warn', component: 'PostHog', error: 'PostHog client broke' });
+	});
+
+	it('stays quiet when nothing fails', () => {
+		const { errors } = reporter();
+		errors.report({ component: 'Fine', message: 'b' });
+		expect(warn).not.toHaveBeenCalled();
 	});
 
 	it('is a quiet no-op without a project key', () => {

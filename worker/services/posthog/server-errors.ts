@@ -32,18 +32,29 @@ export const ERRORS_PER_MINUTE = 30;
 export const REPEAT_WINDOW_MS = 60_000;
 const MINUTE_MS = 60_000;
 const MAX_FINGERPRINTS = 500;
+/** A real frame line is far shorter; the frame pattern backtracks, so longer lines are skipped rather than read. */
+const MAX_FRAME_LINE_CHARS = 1_000;
+/** What is sent of a message, and so what the scrubber and the fingerprint ever read. */
+const MAX_TEXT_CHARS = 2_000;
 const FRAME_LINE = /^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?\s*$/;
-const EMAIL = /[^\s@<>()"',;:]+@[^\s@<>()"',;:]+\.[a-z]{2,}/gi;
+/** Bounded runs, so reading a long text without an address stays linear. */
+const EMAIL = /[^\s@<>()"',;:]{1,64}@[^\s@<>()"',;:]{1,255}\.[a-z]{2,}/gi;
+const ENCODED_AT = /%40/gi;
 
 export function scrubEmails(text: string): string {
-	return text.replace(EMAIL, '[email]');
+	// An address in a URL is encoded, so its @ is decoded first, which keeps the scrubbing to one linear pattern.
+	return text.replace(ENCODED_AT, '@').replace(EMAIL, '[email]');
+}
+
+function clip(text: string): string {
+	return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text;
 }
 
 /** V8 stack lines as PostHog's raw frames: oldest call first, the throwing frame last. */
 export function parseStack(stack: string | undefined): ExceptionFrame[] {
 	const frames: ExceptionFrame[] = [];
 	for (const line of (stack ?? '').split('\n')) {
-		const match = FRAME_LINE.exec(line);
+		const match = line.length > MAX_FRAME_LINE_CHARS ? null : FRAME_LINE.exec(line);
 		if (!match) continue;
 		const [, fn, filename, lineno, colno] = match;
 		frames.push({
@@ -61,7 +72,7 @@ export function parseStack(stack: string | undefined): ExceptionFrame[] {
 
 /** Errors that differ only in ids and numbers share a fingerprint. */
 export function errorFingerprint(input: ServerErrorInput): string {
-	const value = (input.error?.message || input.message).replace(/\b\w*\d\w*\b/g, '#');
+	const value = clip(input.error?.message || input.message).replace(/\b\w*\d\w*\b/g, '#');
 	return `${input.component}|${input.error?.name || 'Error'}|${value}`;
 }
 
@@ -69,12 +80,12 @@ export function exceptionProperties(input: ServerErrorInput): Record<string, Eve
 	const error = input.error;
 	return {
 		component: input.component,
-		log_message: scrubEmails(input.message),
+		log_message: scrubEmails(clip(input.message)),
 		$exception_level: 'error',
 		$exception_list: [
 			{
 				type: error?.name || 'Error',
-				value: scrubEmails(error?.message || input.message),
+				value: scrubEmails(clip(error?.message || input.message)),
 				mechanism: { handled: true, synthetic: error === undefined },
 				stacktrace: { type: 'raw', frames: parseStack(error?.stack) },
 			},
@@ -86,6 +97,7 @@ export class ErrorReporter {
 	private readonly lastSent = new Map<string, number>();
 	private windowStartMs = Number.NEGATIVE_INFINITY;
 	private sentInWindow = 0;
+	private warned = false;
 
 	constructor(
 		private readonly send: (input: CaptureInput) => void,
@@ -108,9 +120,17 @@ export class ErrorReporter {
 			if (this.lastSent.size >= MAX_FINGERPRINTS) this.lastSent.clear();
 			this.lastSent.set(fingerprint, now);
 			this.send({ event: '$exception', distinctId: SYSTEM_DISTINCT_ID, personless: true, properties: exceptionProperties(input) });
-		} catch {
-			// Reporting an error must never raise one.
+		} catch (error) {
+			// Reporting an error must never raise one. A console warning, not a logged error, which would report again.
+			this.warnOnce(error);
 		}
+	}
+
+	private warnOnce(error: unknown): void {
+		if (this.warned) return;
+		this.warned = true;
+		const reason = error instanceof Error ? error.message : String(error);
+		console.warn(JSON.stringify({ level: 'warn', component: 'PostHog', msg: 'Could not report a server error; further failures are not logged', error: reason }));
 	}
 }
 
