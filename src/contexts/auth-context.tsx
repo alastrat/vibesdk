@@ -27,6 +27,7 @@ import type {
 	LoginResponseData,
 	ProfileResponseData,
 	SessionResponse,
+	SessionTelemetry,
 } from '../api-types';
 
 /**
@@ -40,6 +41,7 @@ interface CachedAuthSession {
 	sessionId: string;
 	/** ISO string; null when the endpoint does not report an expiry. */
 	expiresAt: string | null;
+	telemetry: SessionTelemetry | null;
 }
 
 interface AuthContextType {
@@ -49,6 +51,8 @@ interface AuthContextType {
 	isAuthenticated: boolean;
 	isLoading: boolean;
 	error: string | null;
+	/** Client flags and the analytics setting; null when signed out. */
+	telemetry: SessionTelemetry | null;
 
 	// Auth provider configuration
 	authProviders: AuthProvidersResponseData['providers'] | null;
@@ -113,6 +117,7 @@ function buildSessionFromProfile(
 		sessionId: data.sessionId || data.user.id,
 		// Profile endpoint does not report expiry.
 		expiresAt: null,
+		telemetry: data.telemetry ?? null,
 	};
 }
 
@@ -124,6 +129,7 @@ function buildSessionFromLogin(data: SessionResponse): CachedAuthSession {
 		expiresAt: data.expiresAt
 			? new Date(data.expiresAt).toISOString()
 			: null,
+		telemetry: data.telemetry ?? null,
 	};
 }
 
@@ -229,6 +235,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 	const cachedSession = sessionQuery.data ?? null;
 	const user = cachedSession?.user ?? null;
+	const telemetry = cachedSession?.telemetry ?? null;
 
 	// Derived here (not cached) so the fabricated expiry cannot churn identities.
 	const session = useMemo<AuthSession | null>(() => {
@@ -433,6 +440,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			isAuthenticated: !!user,
 			isLoading,
 			error,
+			telemetry,
 			authProviders: providers?.providers ?? null,
 			hasOAuth: providers?.hasOAuth ?? false,
 			requiresEmailAuth: providers?.requiresEmailAuth ?? true,
@@ -451,6 +459,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			session,
 			isLoading,
 			error,
+			telemetry,
 			providers,
 			login,
 			loginWithEmail,

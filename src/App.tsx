@@ -14,6 +14,7 @@ import { Toasty } from '@cloudflare/kumo';
 import { createQueryClient, queryPersistOptions } from './lib/query-client';
 import { useAppsQuerySync } from './hooks/use-apps';
 import { AppLinkProvider } from './components/providers/app-link-provider';
+import { PostHogSync } from './components/analytics/PostHogSync';
 
 function AppsQuerySync() {
 	useAppsQuerySync();
@@ -33,6 +34,7 @@ export default function App() {
 					<FeatureProvider>
 						<AuthProvider>
 							<AppsQuerySync />
+							<PostHogSync />
 							<LimitsProvider>
 								<AuthModalProvider>
 									<Toasty>

@@ -42,6 +42,7 @@ export const queryKeys = {
 	platform: {
 		all: ['platform'] as const,
 		plan: () => [...queryKeys.platform.all, 'plan'] as const,
+		telemetry: () => [...queryKeys.platform.all, 'telemetry'] as const,
 	},
 	account: {
 		all: ['account'] as const,

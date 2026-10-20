@@ -57,6 +57,7 @@ import type{
 	PlatformStatusData,
 	RateLimitError,
 	CapabilitiesData,
+	TelemetryConfigData,
 	VaultConfigResponse,
 	VaultStatusResponse,
 	ListAppTablesResponse,
@@ -533,6 +534,11 @@ class ApiClient {
 	 */
 	async getCapabilities(noToast: boolean = true): Promise<ApiResponse<CapabilitiesData>> {
 		return this.request<CapabilitiesData>('/api/capabilities', undefined, noToast);
+	}
+
+	/** Visitors' replay pause, and the local opt-in token; quiet, since the app works without it. */
+	async getTelemetryConfig(): Promise<ApiResponse<TelemetryConfigData>> {
+		return this.request<TelemetryConfigData>('/api/telemetry/config', undefined, true);
 	}
 
 	// ===============================
