@@ -10,6 +10,8 @@ beforeAll(async () => {
 	db = await migratedD1();
 	await insertUser(db, 'u_sub', { createdAt: new Date('2026-03-12T09:00:00Z') });
 	await insertUser(db, 'u_basic', { createdAt: new Date('2026-03-12T09:00:00Z') });
+	await insertUser(db, 'u_late', { createdAt: new Date('2026-03-12T09:00:00Z') });
+	await insertSubscription(db, { userId: 'u_late', stripeSubscriptionId: 'sub_late', status: 'past_due', plan: 'pro', currentPeriodStart: new Date('2026-10-17T10:00:00Z'), currentPeriodEnd: new Date('2026-11-17T10:00:00Z') });
 	await insertSubscription(db, { userId: 'u_sub', stripeSubscriptionId: 'sub_1', status: 'active', plan: 'premium', currentPeriodStart: new Date('2026-10-05T10:00:00Z'), currentPeriodEnd: new Date('2026-11-05T10:00:00Z') });
 });
 
@@ -18,6 +20,13 @@ describe('loadAccount', () => {
 		const account = await loadAccount(envWith(db, { BILLING: 'on' }), 'u_sub', NOW);
 		expect(account).toMatchObject({ billing: true, plan: 'premium', source: 'subscription', creditsResetAt: Date.parse('2026-11-05T10:00:00Z'), limits: { aiCredits: 100_000, liveStores: 10, extraCredits: true } });
 		expect(account.period.key).toBe(`sub:sub_1:${Date.parse('2026-10-05T10:00:00Z') / 1000}`);
+	});
+
+	it('keeps a late payer on its plan with no monthly credits until the renewal is paid', async () => {
+		const env = envWith(db, { BILLING: 'on' });
+		const account = await loadAccount(env, 'u_late', NOW);
+		expect(account).toMatchObject({ plan: 'pro', source: 'subscription', graceEndsAtMs: Date.parse('2026-10-24T10:00:00Z'), limits: { aiCredits: 0, liveStores: 3, supplierCatalog: true } });
+		expect(await loadCredits(env, account)).toMatchObject({ pool: 0, poolLeft: 0, left: 0 });
 	});
 
 	it("gives Basic its month from the sign-up date and reads its credits from the ledger", async () => {

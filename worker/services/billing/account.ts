@@ -4,7 +4,7 @@ import { BillingService, PlanAdminService, UserService } from '../../database';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/schema';
 import type { BillingSource } from '../../../shared/types/billing';
-import { GRACE_PERIOD_DAYS, isPaidPlanId, limitsFor, planLimitOverridesFrom, type PlanAccount, type PlanId, type PlanLimitOverrides } from '../../../shared/types/plans';
+import { GRACE_PERIOD_DAYS, isPaidPlanId, limitsFor, planLimitOverridesFrom, type PlanAccount, type PlanId, type PlanLimitOverrides, type PlanLimits } from '../../../shared/types/plans';
 import type { CreditBalance, LedgerPeriod } from './credit-ledger';
 import { isBillingOn } from './flag';
 import { DAY_MS, accountPeriod, subscriptionPeriod } from './periods';
@@ -14,6 +14,7 @@ export interface ResolvedPlan {
 	source: BillingSource;
 	period: LedgerPeriod;
 	graceEndsAtMs: number | null;
+	/** Limits set over the plan's row: an admin's, or the credit hold of a subscription whose renewal is unpaid. */
 	overrideLimits: PlanLimitOverrides | null;
 }
 
@@ -24,6 +25,9 @@ export interface BillingAccount extends PlanAccount {
 	graceEndsAtMs: number | null;
 	subscription: SubscriptionRecord | null;
 }
+
+/** A renewal's credits come when its invoice is paid, so an unpaid one keeps the plan's features but none of its monthly pool. */
+const UNPAID_RENEWAL_LIMITS: PlanLimitOverrides = { aiCredits: 0 };
 
 /** When a failing payment stops holding the plan; null unless the subscription is past due. */
 export function graceEndsAt(subscription: SubscriptionRecord): number | null {
@@ -53,8 +57,13 @@ export function resolvePlan(input: { subscription: SubscriptionRecord | null; ov
 	if (override?.plan && (override.until === null || override.until.getTime() > nowMs)) {
 		return { plan: override.plan, source: 'override', period, graceEndsAtMs, overrideLimits: overrideLimitsOf(override) };
 	}
-	if (paying) return { plan: paying.plan, source: 'subscription', period, graceEndsAtMs, overrideLimits: null };
+	if (paying) return { plan: paying.plan, source: 'subscription', period, graceEndsAtMs, overrideLimits: graceEndsAtMs === null ? null : UNPAID_RENEWAL_LIMITS };
 	return { plan: 'basic', source: 'free', period, graceEndsAtMs: null, overrideLimits: null };
+}
+
+/** The limits a resolved plan runs on. */
+export function planLimitsOf(resolved: Pick<ResolvedPlan, 'plan' | 'overrideLimits'>): PlanLimits {
+	return limitsFor({ billing: true, plan: resolved.plan, adminLimits: resolved.overrideLimits });
 }
 
 export async function loadAccount(env: Env, userId: string, nowMs: number = Date.now()): Promise<BillingAccount> {
@@ -78,16 +87,16 @@ export async function loadAccount(env: Env, userId: string, nowMs: number = Date
 		new PlanAdminService(env).latestOverride(userId),
 		new UserService(env).findUser({ id: userId }),
 	]);
-	const { plan, source, period, graceEndsAtMs, overrideLimits } = resolvePlan({ subscription, override, signupMs: user?.createdAt?.getTime() ?? null, nowMs });
+	const resolved = resolvePlan({ subscription, override, signupMs: user?.createdAt?.getTime() ?? null, nowMs });
 	return {
 		billing,
 		userId,
-		plan,
-		limits: limitsFor({ billing, plan, adminLimits: overrideLimits }),
-		creditsResetAt: period.endMs,
-		source,
-		period,
-		graceEndsAtMs,
+		plan: resolved.plan,
+		limits: planLimitsOf(resolved),
+		creditsResetAt: resolved.period.endMs,
+		source: resolved.source,
+		period: resolved.period,
+		graceEndsAtMs: resolved.graceEndsAtMs,
 		subscription,
 	};
 }

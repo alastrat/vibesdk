@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { graceEndsAt, resolvePlan } from './account';
+import { graceEndsAt, planLimitsOf, resolvePlan } from './account';
 import { isBillingOn } from './flag';
 import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/schema';
+import { PLAN_LIMITS } from '../../../shared/types/plans';
 
 const NOW = Date.parse('2026-10-19T15:00:00Z');
 const SIGNUP = Date.parse('2026-03-12T09:00:00Z');
@@ -50,6 +51,25 @@ describe('resolvePlan', () => {
 		for (const status of ['unpaid', 'canceled', 'incomplete', 'incomplete_expired', 'paused'] as const) {
 			expect(resolvePlan({ subscription: sub({ status }), override: null, signupMs: SIGNUP, nowMs: NOW }).plan).toBe('basic');
 		}
+	});
+
+	it('keeps the paid plan but holds its credit pool at 0 while a renewal is unpaid, until it is paid on the same period', () => {
+		const start = new Date('2026-10-12T15:00:00Z');
+		for (const plan of ['pro', 'premium'] as const) {
+			const held = resolvePlan({ subscription: sub({ status: 'past_due', plan, currentPeriodStart: start }), override: null, signupMs: SIGNUP, nowMs: NOW - 1 });
+			expect(held).toMatchObject({ plan, source: 'subscription', overrideLimits: { aiCredits: 0 } });
+			expect(planLimitsOf(held)).toEqual({ ...PLAN_LIMITS[plan], aiCredits: 0 });
+			const paid = resolvePlan({ subscription: sub({ status: 'active', plan, currentPeriodStart: start }), override: null, signupMs: SIGNUP, nowMs: NOW - 1 });
+			expect(paid.period).toEqual(held.period);
+			expect(paid.overrideLimits).toBeNull();
+			expect(planLimitsOf(paid)).toEqual(PLAN_LIMITS[plan]);
+		}
+	});
+
+	it('gives Basic its full pool once the grace is over, and leaves an admin override its own limits', () => {
+		const pastDue = sub({ status: 'past_due', currentPeriodStart: new Date('2026-10-12T15:00:00Z') });
+		expect(planLimitsOf(resolvePlan({ subscription: pastDue, override: null, signupMs: SIGNUP, nowMs: NOW }))).toEqual(PLAN_LIMITS.basic);
+		expect(planLimitsOf(resolvePlan({ subscription: pastDue, override: override(), signupMs: SIGNUP, nowMs: NOW - 1 })).aiCredits).toBe(500_000);
 	});
 
 	it('lets an admin override win until it ends or is cleared, on the Stripe period when there is one', () => {
