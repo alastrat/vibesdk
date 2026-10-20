@@ -134,7 +134,8 @@ export const CONTENT_STEPS = ['Request early access.', 'Choose merchants and pro
 
 export const COMING_SOON_ANSWER = "A capability we're building. It isn't part of Estori until it launches, and its details may change before then.";
 
-export const FREE_PLAN_ANSWER = 'Building and editing stores is free within daily limits. Paid plans are coming soon.';
+/** Plan-neutral: true whether paid plans are on sale or not. */
+export const FREE_PLAN_ANSWER = 'Building and editing stores is free on Basic, within its limits. See the pricing page for what each plan includes.';
 
 export const PAYMENTS_ANSWER = 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.';
 
