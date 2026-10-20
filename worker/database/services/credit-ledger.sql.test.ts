@@ -22,6 +22,24 @@ async function purchaseUsed(id: string): Promise<unknown> {
 	return (await db.prepare('SELECT used FROM credit_purchases WHERE id = ?').bind(id).first())?.used;
 }
 
+/** The database, running `between` just before its `nth` batch: another writer landing between a read batch and the write batch after it. */
+function writingBeforeBatch(nth: number, between: () => Promise<unknown>): D1Database {
+	let batches = 0;
+	return new Proxy(db, {
+		get(target, property) {
+			if (property === 'batch') {
+				return async (statements: D1PreparedStatement[]) => {
+					batches += 1;
+					if (batches === nth) await between();
+					return target.batch(statements);
+				};
+			}
+			const value: unknown = Reflect.get(target, property, target);
+			return typeof value === 'function' ? value.bind(target) : value;
+		},
+	});
+}
+
 describe('the credit ledger', () => {
 	it('charges a step once however often it is recorded', async () => {
 		const ledger = new CreditLedgerService(envWith(db));
@@ -56,6 +74,21 @@ describe('the credit ledger', () => {
 		expect([await purchaseUsed('cp_s_old'), await purchaseUsed('cp_s_new')]).toEqual([2_000, 1_000]);
 		expect(await ledger.settle('u_settle', START + 2 * DAY)).toBe('nothing');
 		expect((await ledger.readBalance('u_settle', PERIOD, 5_000)).purchasedLeft).toBe(4_000);
+	});
+
+	it('changes nothing when a refund lands between reading the purchases and settling them', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await insertUser(db, 'u_refund');
+		await insertPurchase(db, { id: 'cp_r', userId: 'u_refund', credits: 5_000, purchasedAt: new Date(START - DAY), expiresAt: new Date(START + 364 * DAY) });
+		await ledger.recordUse(use('u_refund', 'k1', 8_000));
+		const refund = () => db.prepare('UPDATE credit_purchases SET refunded_cents = 750, removed_credits = 5000 WHERE id = ?').bind('cp_r').run();
+		const racing = new CreditLedgerService(envWith(writingBeforeBatch(2, refund)));
+		expect(await racing.settle('u_refund', PERIOD.endMs + 1)).toBe('raced');
+		expect(await db.prepare("SELECT used, removed_credits FROM credit_purchases WHERE id = 'cp_r'").first()).toEqual({ used: 0, removed_credits: 5_000 });
+		expect(await db.prepare("SELECT settled, forgiven, closed_at FROM credit_periods WHERE user_id = 'u_refund'").first()).toEqual({ settled: 0, forgiven: 0, closed_at: null });
+		// The next run sees the refund, so nothing is left to take and the whole overrun is forgiven.
+		expect(await ledger.settle('u_refund', PERIOD.endMs + 1)).toBe('settled');
+		expect(await db.prepare("SELECT settled, forgiven, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_refund'").first()).toEqual({ settled: 0, forgiven: 3_000, closed: 1 });
 	});
 
 	it('takes usage from a purchase before it expires, then drops what is left of it', async () => {

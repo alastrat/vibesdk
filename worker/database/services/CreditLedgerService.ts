@@ -3,7 +3,8 @@
  * records its key, and settling compares and sets every row it changes, from one consistent read.
  */
 
-import { and, asc, eq, isNull, lt, lte, ne, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, lt, lte, ne, sql, type SQL } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/sqlite-core';
 import type { BatchItem } from 'drizzle-orm/batch';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
@@ -117,7 +118,7 @@ export class CreditLedgerService extends BaseService {
     /**
      * Takes the account's unsettled overruns from its purchases and closes ended periods. Purchases past their expiry but
      * not yet marked expired still pay for what was used before they went, so run this before `expirePurchases`.
-     * 'raced' means another run wrote first and this one changed nothing.
+     * 'raced' means another run or a refund wrote first and this one changed nothing.
      */
     async settle(userId: string, nowMs: number): Promise<'settled' | 'nothing' | 'raced'> {
         const periods = schema.creditPeriods;
@@ -128,13 +129,14 @@ export class CreditLedgerService extends BaseService {
         ]);
         const plan = planSettlement({ periods: periodRows.map(periodState), purchases: purchaseRows.map(purchaseState), nowMs });
 
+        const unrefunded = this.noRemovalsSince(plan.purchases.map((entry) => entry.id), purchaseRows);
         const now = new Date(nowMs);
         const writes = [
             ...plan.purchases.map((entry) =>
                 this.database
                     .update(purchases)
                     .set({ used: entry.usedAfter })
-                    .where(and(eq(purchases.id, entry.id), eq(purchases.used, entry.usedBefore))),
+                    .where(and(eq(purchases.id, entry.id), eq(purchases.used, entry.usedBefore), unrefunded)),
             ),
             ...plan.periods.map((entry) =>
                 this.database
@@ -150,6 +152,7 @@ export class CreditLedgerService extends BaseService {
                             eq(periods.periodKey, entry.key),
                             eq(periods.settled, entry.settledBefore),
                             isNull(periods.closedAt),
+                            unrefunded,
                         ),
                     ),
             ),
@@ -257,6 +260,17 @@ export class CreditLedgerService extends BaseService {
             .insert(schema.creditPeriods)
             .values({ userId, periodKey: period.key, periodStart: new Date(period.startMs), periodEnd: new Date(period.endMs), pool })
             .onConflictDoNothing();
+    }
+
+    /**
+     * Holds while nothing was removed from the purchases a settlement takes from since `seen` was read. Settling never
+     * changes removed credits and refunds only add to them, so an unchanged sum means no refund landed in between.
+     */
+    private noRemovalsSince(ids: readonly string[], seen: readonly schema.CreditPurchaseRecord[]): SQL | undefined {
+        if (ids.length === 0) return undefined;
+        const removedSeen = seen.filter((row) => ids.includes(row.id)).reduce((sum, row) => sum + row.removedCredits, 0);
+        const check = alias(schema.creditPurchases, 'removal_check');
+        return sql`(SELECT COALESCE(SUM(${check.removedCredits}), 0) FROM ${schema.creditPurchases} AS ${check} WHERE ${inArray(check.id, [...ids])}) = ${removedSeen}`;
     }
 
     private validPurchases(userId: string) {
