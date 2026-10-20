@@ -1,13 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PLAN_LIMITS } from '../shared/types/plans';
+import { CsrfService } from '../worker/services/csrf/CsrfService';
 import { BILLING_LOOKUP_KEYS } from './stripe-billing-setup';
 import { SCENARIOS, readScenarioConfig, runScenarios, waitFor, type Timing } from './stripe-billing-scenarios';
 
-const ENV = { STRIPE_SECRET_KEY: 'sk_test_fake', ESTORI_BASE_URL: 'https://staging.estori.app', ESTORI_ADMIN_COOKIE: 'session=abc', ESTORI_STAGING_KEY: 'gate', ESTORI_TEST_USER_ID: 'u_test' };
+/** An admin's Cookie header as the browser sends it: the session, and the CSRF cookie the app set. */
+const ADMIN_COOKIE = `session=abc; csrf-token=${encodeURIComponent(JSON.stringify({ token: 'tok_1', timestamp: Date.now() }))}`;
+const ENV = { STRIPE_SECRET_KEY: 'sk_test_fake', ESTORI_BASE_URL: 'https://staging.estori.app', ESTORI_ADMIN_COOKIE: ADMIN_COOKIE, ESTORI_STAGING_KEY: 'gate', ESTORI_TEST_USER_ID: 'u_test' };
 
 describe('the Stripe billing scenarios', () => {
 	it('runs only in test mode, against the account it is given', () => {
-		expect(readScenarioConfig(ENV)).toEqual({ stripeKey: 'sk_test_fake', baseUrl: 'https://staging.estori.app', adminCookie: 'session=abc', stagingKey: 'gate', userId: 'u_test' });
+		expect(readScenarioConfig(ENV)).toEqual({ stripeKey: 'sk_test_fake', baseUrl: 'https://staging.estori.app', adminCookie: ADMIN_COOKIE, csrfToken: 'tok_1', stagingKey: 'gate', userId: 'u_test' });
 		expect(() => readScenarioConfig({ ...ENV, STRIPE_SECRET_KEY: 'sk_live_fake' })).toThrow('Run the scenarios with a test key only.');
 		expect(() => readScenarioConfig({ ...ENV, ESTORI_TEST_USER_ID: undefined })).toThrow('Set ESTORI_TEST_USER_ID');
 	});
@@ -20,6 +23,11 @@ describe('the Stripe billing scenarios', () => {
 		});
 		expect(() => readScenarioConfig({ ...ENV, STRIPE_SECRET_KEY: undefined })).toThrow('Set STRIPE_SECRET_KEY');
 		expect(() => readScenarioConfig({ ...ENV, ESTORI_ADMIN_COOKIE: '' })).toThrow('Set ESTORI_ADMIN_COOKIE');
+	});
+
+	it("takes the CSRF token from the admin cookie, in the app's format or a plain value, and refuses a cookie without one", () => {
+		expect(readScenarioConfig({ ...ENV, ESTORI_ADMIN_COOKIE: 'csrf-token=plain_1;session=abc' }).csrfToken).toBe('plain_1');
+		expect(() => readScenarioConfig({ ...ENV, ESTORI_ADMIN_COOKIE: 'session=abc' })).toThrow('ESTORI_ADMIN_COOKIE has no csrf-token cookie');
 	});
 
 	it("covers the spec's ten scenarios and a cancel after a scheduled move, with 3-D Secure by eye", () => {
@@ -192,6 +200,10 @@ function serve(world: FakeWorld): { estoriCalls: Array<{ method: string; path: s
 			return Response.json(answer);
 		}
 		estoriCalls.push({ method, path: url.pathname, headers, body: String(init?.body ?? '') });
+		// The app's own double-submit check, as its middleware runs it on every write.
+		if (method !== 'GET' && !CsrfService.validateDoubleSubmitToken(new Request(url, { method, headers }))) {
+			return Response.json({ success: false, error: { message: 'CSRF validation failed' } }, { status: 403 });
+		}
 		return Response.json({ success: true, data: world.view() });
 	});
 	return { estoriCalls };
@@ -223,7 +235,8 @@ describe('running the scenarios', () => {
 		expect(preparing.map((call) => `${call.method} ${call.path}`)).toEqual(['PUT /api/admin/users/u_test/stripe-customer', 'PUT /api/admin/users/u_test/plan']);
 		expect(JSON.parse(preparing[0].body)).toEqual({ stripeCustomerId: 'cus_1' });
 		expect(JSON.parse(preparing[1].body)).toEqual({ plan: null, reason: 'Billing scenarios' });
-		expect(estoriCalls.every((call) => call.headers.get('Cookie') === 'session=abc' && call.headers.get('x-estori-staging-key') === 'gate')).toBe(true);
+		expect(estoriCalls.every((call) => call.headers.get('Cookie') === ADMIN_COOKIE && call.headers.get('x-estori-staging-key') === 'gate')).toBe(true);
+		expect(estoriCalls.map((call) => `${call.method} ${call.headers.get('X-CSRF-Token')}`)).toEqual(estoriCalls.map((call) => (call.method === 'GET' ? 'GET null' : `${call.method} tok_1`)));
 		expect(world.calls.at(-2)).toBe('DELETE /subscriptions/sub_1');
 		expect(world.clockDeleted).toBe(true);
 	});

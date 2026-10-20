@@ -7,7 +7,7 @@ Run before a release that touches billing, and before turning `BILLING` on in a 
 1. Staging's `STRIPE_PRICE_IDS` comes from `bun scripts/stripe-billing-setup.ts --mode test`, and the test key is staging's `STRIPE_SECRET_KEY`.
 2. The platform webhook endpoint receives the billing events (the "Billing" steps in `docs/estori/launch-checklist.md`).
 3. A staging account is set aside as the test account. It has no live subscription, and its id is in staging's `BILLING_USER_IDS` (or `BILLING=on`).
-4. Your own admin session: copy the `Cookie` header of a signed-in admin request on staging from the browser's devtools. Never paste it, or the keys below, into chat or a commit.
+4. Your own admin session: copy the `Cookie` header of a signed-in admin request on staging from the browser's devtools. It must include the `csrf-token` cookie: the script sends that token back as `X-CSRF-Token` on every write, as the app does. The token lasts two hours, so copy the header again for a later run. Never paste it, or the keys below, into chat or a commit.
 
 ## Part one: the Stripe scenarios
 

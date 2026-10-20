@@ -29,6 +29,8 @@ export interface ScenarioConfig {
 	stripeKey: string;
 	baseUrl: string;
 	adminCookie: string;
+	/** The CSRF cookie's token, sent back as X-CSRF-Token on every write (the app checks the two match). */
+	csrfToken: string;
 	stagingKey: string | null;
 	userId: string;
 }
@@ -65,14 +67,35 @@ function required(env: Record<string, string | undefined>, name: string): string
 	return value;
 }
 
+/** The token in a Cookie header's csrf-token cookie: the app stores it as JSON with its issue time, an older one as itself. */
+function csrfTokenOf(cookieHeader: string): string | null {
+	for (const pair of cookieHeader.split(';')) {
+		const separator = pair.indexOf('=');
+		if (separator < 0 || pair.slice(0, separator).trim() !== 'csrf-token') continue;
+		const value = decodeURIComponent(pair.slice(separator + 1).trim());
+		try {
+			const parsed: unknown = JSON.parse(value);
+			if (typeof parsed === 'object' && parsed !== null && 'token' in parsed && typeof parsed.token === 'string') return parsed.token;
+		} catch {
+			// Not JSON: the older plain format.
+		}
+		return value || null;
+	}
+	return null;
+}
+
 /** The run's settings from the environment; a live Stripe key is refused before anything else. */
 export function readScenarioConfig(env: Record<string, string | undefined>): ScenarioConfig {
 	const stripeKey = required(env, 'STRIPE_SECRET_KEY');
 	if (modeOfKey(stripeKey) !== 'test') throw new Error('Run the scenarios with a test key only.');
+	const adminCookie = required(env, 'ESTORI_ADMIN_COOKIE');
+	const csrfToken = csrfTokenOf(adminCookie);
+	if (!csrfToken) throw new Error('ESTORI_ADMIN_COOKIE has no csrf-token cookie. Copy the Cookie header again from a signed-in admin page.');
 	return {
 		stripeKey,
 		baseUrl: required(env, 'ESTORI_BASE_URL').replace(/\/+$/, ''),
-		adminCookie: required(env, 'ESTORI_ADMIN_COOKIE'),
+		adminCookie,
+		csrfToken,
 		stagingKey: env.ESTORI_STAGING_KEY || null,
 		userId: required(env, 'ESTORI_TEST_USER_ID'),
 	};
@@ -103,6 +126,7 @@ async function estoriCall<T>(config: ScenarioConfig, method: 'GET' | 'PUT', path
 		method,
 		headers: {
 			Cookie: config.adminCookie,
+			...(method === 'GET' ? {} : { 'X-CSRF-Token': config.csrfToken }),
 			...(config.stagingKey ? { 'x-estori-staging-key': config.stagingKey } : {}),
 			...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
 		},
