@@ -7,7 +7,7 @@ import { isForbiddenError } from '@/lib/security-error';
 
 const SOURCE_NOTES: Partial<Record<AdminFlagsData['source'], string>> = {
 	off: "PostHog isn't set up on this deployment, so its flags are off. Billing's own switches and any overrides still apply.",
-	defaults: "PostHog didn't answer, so every flag is off: nothing is rolled out or paused.",
+	defaults: "PostHog didn't answer, so its flags are off for now. Billing's own switches and any overrides still apply.",
 };
 
 export default function AdminFlagsPage() {
@@ -63,7 +63,7 @@ function Flags({ data }: { data: AdminFlagsData }) {
 					) : null}
 				</p>
 				{sourceNote ? <p>{sourceNote}</p> : null}
-				<p className="text-sm">Every flag is off unless PostHog turns it on. Pause something by raising its pause flag to 100%.</p>
+				<p className="text-sm">Flags are off unless PostHog turns them on; billing's own switches and any overrides still apply. Pause something by raising its pause flag to 100%.</p>
 				{rolloutsHidden ? <p className="text-sm">Rollouts show once a PostHog personal API key is added.</p> : null}
 			</div>
 			<div className="overflow-x-auto">
