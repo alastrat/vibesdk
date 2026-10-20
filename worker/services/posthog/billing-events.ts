@@ -49,7 +49,7 @@ export function subscriptionEventsFor(input: { previous: SubscriptionState | nul
 	if (startedBefore && LIVE_STATUSES.has(next.status) && previous.plan !== next.plan) {
 		events.push({ name: 'subscription_changed', properties: { from_plan: previous.plan, to_plan: next.plan, direction: planDirection(previous.plan, next.plan) } });
 	}
-	if (same && next.status === 'canceled' && previous.status !== 'canceled') {
+	if (startedBefore && next.status === 'canceled' && previous.status !== 'canceled') {
 		events.push({ name: 'subscription_cancelled', properties: { plan: next.plan, reason: cancelReasonOf(previous) } });
 	}
 	if (failedAttempt !== null && next.status === 'past_due') {

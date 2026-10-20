@@ -36,6 +36,9 @@ describe('subscription events', () => {
 			{ name: 'subscription_cancelled', properties: { plan: 'pro', reason: 'seller' } },
 		]);
 		expect(events(sub({ status: 'canceled' }), sub({ status: 'canceled' }))).toEqual([]);
+		// A subscription that never started has no start event to end, so cancelling it sends nothing.
+		expect(events(sub({ status: 'incomplete' }), sub({ status: 'canceled' }))).toEqual([]);
+		expect(events(sub({ status: 'past_due' }), sub({ status: 'canceled' }))).toEqual([{ name: 'subscription_cancelled', properties: { plan: 'pro', reason: 'payment_failed' } }]);
 		expect(cancelReasonOf(sub({ status: 'past_due' }))).toBe('payment_failed');
 		expect(cancelReasonOf(sub({ status: 'unpaid' }))).toBe('payment_failed');
 		// Sellers can only cancel at the period's end, so an immediate cancel came from an admin or the Stripe Dashboard.
