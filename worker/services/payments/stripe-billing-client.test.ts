@@ -89,6 +89,25 @@ describe('Stripe billing calls', () => {
 		expect(calls[0].params.some((param) => param.startsWith('allow_promotion_codes'))).toBe(false);
 	});
 
+	it('sends the same checkout twice within a key bucket, closing at least 30 minutes after either call', async () => {
+		const nineMinutes = 9 * 60_000;
+		const lastMoment = NOW + 600_000 - 1;
+		const expiresAt = (params: string[]) => Number(params.find((param) => param.startsWith('expires_at='))?.split('=')[1]);
+		const subscription = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1' });
+		const credits = recordingFetch({ id: 'cs_c', url: 'https://checkout.stripe.com/c/cs_c' });
+		for (const nowMs of [NOW, NOW + nineMinutes, lastMoment]) {
+			await subscription.client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_pro', userId: 'u1', plan: 'pro', successUrl: 'https://estori.app/s', cancelUrl: 'https://estori.app/c', nowMs });
+			await credits.client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, successUrl: 'https://estori.app/s', cancelUrl: 'https://estori.app/c', nowMs, idempotencyKey: 'billing-credits-u1-5000-none-1' });
+		}
+		for (const { calls } of [subscription, credits]) {
+			expect(new Set(calls.map((call) => call.key)).size).toBe(1);
+			expect(calls[1].params).toEqual(calls[0].params);
+			expect(calls[2].params).toEqual(calls[0].params);
+			expect(expiresAt(calls[0].params) - Math.floor(lastMoment / 1000)).toBeGreaterThanOrEqual(30 * 60);
+			expect(expiresAt(calls[0].params) - Math.floor(NOW / 1000)).toBeLessThanOrEqual(24 * 60 * 60);
+		}
+	});
+
 	it('reads a customer, with its default payment method', async () => {
 		const { calls, client } = recordingFetch({ id: 'cus_1', email: null, metadata: null, invoice_settings: { default_payment_method: 'pm_1' } });
 		expect((await client.retrieveCustomer('cus_1')).invoice_settings?.default_payment_method).toBe('pm_1');

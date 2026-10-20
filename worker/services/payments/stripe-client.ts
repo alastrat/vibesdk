@@ -237,7 +237,10 @@ export interface CreditsCheckoutInput {
 	successUrl: string;
 	cancelUrl: string;
 	nowMs: number;
-	/** The caller's key: it must change once a purchase is recorded, or a second purchase of the same amount replays the paid session. */
+	/**
+	 * The caller's key: it must change once a purchase is recorded, or a second purchase of the same amount replays the paid
+	 * session, and rotate with `idempotencyBucket(nowMs)`, which also sets the session's expiry.
+	 */
 	idempotencyKey: string;
 }
 
@@ -380,8 +383,16 @@ interface StripeErrorBody {
 	error?: { message?: string; type?: string; code?: string };
 }
 
-function idempotencyBucket(nowMs: number): number {
+export function idempotencyBucket(nowMs: number): number {
 	return Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS);
+}
+
+/**
+ * A plan or credits checkout closes 35 minutes after its key's bucket ends: every request under one key sends the same
+ * expiry (Stripe refuses a key replayed with other parameters), and each session stays open 35 to 45 minutes.
+ */
+function billingCheckoutExpiresAt(nowMs: number): number {
+	return (idempotencyBucket(nowMs) + 1) * (IDEMPOTENCY_BUCKET_MS / 1000) + CHECKOUT_SESSION_TTL_SECONDS;
 }
 
 function priceIdOf(price: string | StripePrice): string {
@@ -596,7 +607,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					custom_text: { submit: { message: renewalDisclosure(input.plan) } },
 					success_url: input.successUrl,
 					cancel_url: input.cancelUrl,
-					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
+					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
 				`billing-checkout-${input.userId}-${input.plan}-${idempotencyBucket(input.nowMs)}`,
 			),
@@ -616,7 +627,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					custom_text: { submit: { message: EXTRA_CREDITS_DISCLOSURE } },
 					success_url: input.successUrl,
 					cancel_url: input.cancelUrl,
-					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
+					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
 				input.idempotencyKey,
 			);

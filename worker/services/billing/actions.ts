@@ -10,7 +10,7 @@ import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanI
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
-import { IDEMPOTENCY_BUCKET_MS, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
+import { idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 
@@ -79,7 +79,7 @@ function configured(deps: BillingActionDeps): Configured | null {
  * between (cancel, keep, cancel again; a new card after a decline; a second purchase) is not served the first's answer.
  */
 function idempotencyKey(deps: BillingActionDeps, action: string, userId: string, state: readonly string[]): string {
-	return ['billing', action, userId, ...state, String(Math.floor(deps.nowMs / IDEMPOTENCY_BUCKET_MS))].join('-');
+	return ['billing', action, userId, ...state, String(idempotencyBucket(deps.nowMs))].join('-');
 }
 
 /** The subscription row's version: the webhook rebuilds the row, so it moves with every change Stripe confirms. */
