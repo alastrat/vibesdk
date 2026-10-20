@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { PLAN_LIMITS } from '../shared/types/plans';
+import { EXTRA_CREDITS, PLAN_LIMITS } from '../shared/types/plans';
+import { checkoutPathOf } from '../src/routes/settings/checkout-state';
 import { CsrfService } from '../worker/services/csrf/CsrfService';
 import { BILLING_LOOKUP_KEYS } from './stripe-billing-setup';
-import { SCENARIOS, readScenarioConfig, runScenarios, waitFor, type Timing } from './stripe-billing-scenarios';
+import { SCENARIOS, checkoutPageUrl, readScenarioConfig, runScenarios, waitFor, type Timing } from './stripe-billing-scenarios';
 
 /** An admin's Cookie header as the browser sends it: the session, and the CSRF cookie the app set. */
 const ADMIN_COOKIE = `session=abc; csrf-token=${encodeURIComponent(JSON.stringify({ token: 'tok_1', timestamp: Date.now() }))}`;
@@ -33,6 +34,13 @@ describe('the Stripe billing scenarios', () => {
 	it("covers the spec's ten scenarios and a cancel after a scheduled move, with 3-D Secure by eye", () => {
 		expect(SCENARIOS.map((scenario) => scenario.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 		expect(SCENARIOS.filter((scenario) => scenario.byEye).map((scenario) => scenario.id)).toEqual([6]);
+	});
+
+	it("addresses Estori's own checkout page, in the form the page itself reads back, for a plan and for extra credits", () => {
+		expect(checkoutPageUrl('https://staging.estori.app', { plan: 'pro' })).toBe('https://staging.estori.app/settings/billing/checkout?plan=pro');
+		expect(checkoutPageUrl('https://staging.estori.app', { credits: EXTRA_CREDITS.minCredits })).toBe(`https://staging.estori.app/settings/billing/checkout?credits=${EXTRA_CREDITS.minCredits}`);
+		expect(checkoutPageUrl('https://staging.estori.app', { plan: 'premium' })).toBe(`https://staging.estori.app${checkoutPathOf({ kind: 'plan', plan: 'premium' })}`);
+		expect(checkoutPageUrl('https://staging.estori.app', { credits: 12_000 })).toBe(`https://staging.estori.app${checkoutPathOf({ kind: 'credits', credits: 12_000 })}`);
 	});
 
 	it('waits for the webhook to land, and gives up after its tries', async () => {
@@ -262,6 +270,28 @@ describe('running the scenarios', () => {
 		expect(world.calls.slice(release)).toContain('POST /subscriptions/sub_1');
 		expect(world.plan).toBe('pro');
 		expect(world.cancelAtPeriodEnd).toBe(true);
+	});
+
+	it("sends a person to Estori's own checkout page for the steps Stripe confirms only through Stripe.js", async () => {
+		const world = new FakeWorld();
+		serve(world);
+		const lines: string[] = [];
+		expect(await runScenarios(CONFIG, new Set([6]), (line) => lines.push(line), FAST)).toBe(true);
+		expect(lines).toHaveLength(1);
+		expect(lines[0]).toContain('BY EYE 6 3-D Secure at checkout');
+		expect(lines[0]).toContain('https://staging.estori.app/settings/billing/checkout?plan=pro');
+		expect(lines[0]).toContain('4000 0025 0000 3155');
+	});
+
+	it('prints the checkout address for the extra credits to buy, then waits for the purchase', async () => {
+		const world = new FakeWorld();
+		serve(world);
+		const lines: string[] = [];
+		expect(await runScenarios(CONFIG, new Set([10]), (line) => lines.push(line), FAST)).toBe(false);
+		expect(lines[0]).toContain(`https://staging.estori.app/settings/billing/checkout?credits=${EXTRA_CREDITS.minCredits}`);
+		expect(lines[0]).toContain('4242 4242 4242 4242');
+		expect(lines[1]).toBe('FAIL 10 Extra credits bought, then refunded: No purchase of extra credits showed up');
+		expect(world.clockDeleted).toBe(true);
 	});
 
 	it('reports what Estori showed instead of what was expected, still cleans up, and fails the run', async () => {

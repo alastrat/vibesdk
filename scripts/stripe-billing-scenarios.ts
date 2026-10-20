@@ -5,8 +5,8 @@
  *        ESTORI_STAGING_KEY=... ESTORI_TEST_USER_ID=... bun scripts/stripe-billing-scenarios.ts [--only 1,2]
  */
 
-import { CHECKOUT_KIND_CREDITS, type AdminBillingView } from '../shared/types/billing';
-import { EXTRA_CREDITS, GRACE_PERIOD_DAYS, PLAN_LIMITS } from '../shared/types/plans';
+import { BILLING_PATH, CHECKOUT_KIND_CREDITS, type AdminBillingView } from '../shared/types/billing';
+import { EXTRA_CREDITS, GRACE_PERIOD_DAYS, PLAN_LIMITS, type PaidPlanId } from '../shared/types/plans';
 import { DAY_MS } from '../worker/services/billing/periods';
 import type { StripePriceIds } from '../worker/services/billing/prices';
 import { cancelAtPeriodEndReleasingSchedule } from '../worker/services/billing/schedules';
@@ -102,6 +102,15 @@ export function readScenarioConfig(env: Record<string, string | undefined>): Sce
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Estori's own checkout page for a plan or an amount of extra credits. Stripe confirms an Elements Checkout Session
+ * only through Stripe.js, with no server-side call, so a step that pays one needs a person at this address.
+ */
+export function checkoutPageUrl(baseUrl: string, request: { plan: PaidPlanId } | { credits: number }): string {
+	const query = 'plan' in request ? `plan=${request.plan}` : `credits=${request.credits}`;
+	return `${baseUrl}${BILLING_PATH}/checkout?${query}`;
+}
 
 /** Reads until `done` accepts a value and answers it; gives up after `tries` reads, `delayMs` apart. */
 export async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, options: WaitOptions = DEFAULT_WAIT): Promise<T> {
@@ -408,7 +417,8 @@ async function extraCredits(ctx: Context): Promise<void> {
 	await ensurePremium(ctx);
 	const base = (await viewOf(ctx)).credits?.purchasedLeft ?? 0;
 	const bought = base + EXTRA_CREDITS.minCredits;
-	ctx.say(`Sign in as the test account and buy ${EXTRA_CREDITS.minCredits.toLocaleString('en-US')} extra credits at ${ctx.config.baseUrl}/settings/billing with 4242 4242 4242 4242. Waiting up to 5 minutes.`);
+	const checkoutUrl = checkoutPageUrl(ctx.config.baseUrl, { credits: EXTRA_CREDITS.minCredits });
+	ctx.say(`Sign in as the test account, open ${checkoutUrl} and pay with 4242 4242 4242 4242. Stripe confirms an Elements session only from Stripe.js, so this step needs a browser. Waiting up to 5 minutes.`);
 	try {
 		await waitFor(() => viewOf(ctx), (view) => (view.credits?.purchasedLeft ?? 0) >= bought, ctx.timing.purchase);
 	} catch {
@@ -424,8 +434,8 @@ async function extraCredits(ctx: Context): Promise<void> {
 
 type ScenarioDefinition = { id: number; name: string } & (
 	| { byEye: false; run: Runner }
-	/** What a person checks for a scenario that can't be scripted. */
-	| { byEye: true; reminder: string }
+	/** What a person checks for a scenario that can't be scripted, written for the Estori at `baseUrl`. */
+	| { byEye: true; reminder: (baseUrl: string) => string }
 );
 
 const DEFINITIONS: readonly ScenarioDefinition[] = [
@@ -434,7 +444,12 @@ const DEFINITIONS: readonly ScenarioDefinition[] = [
 	{ id: 3, name: 'Pro to Premium mid-period', byEye: false, run: moveToPremium },
 	{ id: 4, name: 'Premium to Pro at renewal', byEye: false, run: premiumToProAtRenewal },
 	{ id: 5, name: 'Failed renewal, grace, new card', byEye: false, run: failedRenewal },
-	{ id: 6, name: '3-D Secure at checkout', byEye: true, reminder: 'after the run, subscribe to Pro on the billing page with 4000 0025 0000 3155 and complete the 3-D Secure challenge.' },
+	{
+		id: 6,
+		name: '3-D Secure at checkout',
+		byEye: true,
+		reminder: (baseUrl) => `after the run, sign in as the test account, open ${checkoutPageUrl(baseUrl, { plan: 'pro' })}, pay with 4000 0025 0000 3155 and complete the 3-D Secure challenge.`,
+	},
 	{ id: 7, name: 'Cancel at the period end', byEye: false, run: cancelAtPeriodEnd },
 	{ id: 8, name: 'Resume before the end', byEye: false, run: resumeBeforeEnd },
 	{ id: 9, name: 'An expired checkout', byEye: false, run: expiredCheckout },
@@ -510,7 +525,7 @@ export async function runScenarios(config: ScenarioConfig, only: ReadonlySet<num
 		for (const scenario of DEFINITIONS) {
 			if (only && !only.has(scenario.id)) continue;
 			if (scenario.byEye) {
-				say(`BY EYE ${scenario.id} ${scenario.name}: ${scenario.reminder}`);
+				say(`BY EYE ${scenario.id} ${scenario.name}: ${scenario.reminder(config.baseUrl)}`);
 				continue;
 			}
 			try {
