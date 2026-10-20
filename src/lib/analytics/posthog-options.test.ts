@@ -3,7 +3,7 @@ import type { BeforeSendFn, CaptureResult } from 'posthog-js';
 import { globalPrivacyControl, maskReplayAttribute, posthogInitOptions, replayPausedOn, scrubEvent, withoutQuery } from './posthog-options';
 
 describe('posthog-js options', () => {
-	it('talks to /ingest, records layouts and clicks but no page text, input values, images or iframes, and asks PostHog for no flags', () => {
+	it('talks to /ingest, keeps its cookie on estori.app alone, records layouts and clicks but no page text, input values, images or iframes, and asks PostHog for no flags', () => {
 		expect(posthogInitOptions({ environment: 'prod', gpc: false, optedOut: false, replay: true })).toEqual({
 			api_host: '/ingest',
 			ui_host: 'https://us.posthog.com',
@@ -27,6 +27,7 @@ describe('posthog-js options', () => {
 				recordBody: false,
 			},
 			before_send: expect.any(Function),
+			cross_subdomain_cookie: false,
 			opt_out_capturing_by_default: false,
 		});
 	});

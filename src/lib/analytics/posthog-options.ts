@@ -145,6 +145,8 @@ export function posthogInitOptions(state: AnalyticsState): Partial<PostHogConfig
 			recordBody: false,
 		},
 		before_send: taggedScrubber(state.environment),
+		// The cookie holds the user id; on `.estori.app` it would reach every preview, which runs generated code.
+		cross_subdomain_cookie: false,
 		opt_out_capturing_by_default: state.gpc || state.optedOut,
 	};
 }
