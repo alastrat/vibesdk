@@ -1,7 +1,7 @@
 /** What billing shows of a Stripe invoice and of the card a subscription renews on, and the one way a default card is set. */
 
 import type { CardOnFile, InvoiceView } from '../../../shared/types/billing';
-import type { StripeClient, StripeInvoice } from '../payments/stripe-client';
+import type { StripeClient, StripeInvoice, StripePaymentMethodRef, StripeSubscription } from '../payments/stripe-client';
 
 /** The history lists this many invoices, newest first. */
 export const HISTORY_LIMIT = 24;
@@ -33,12 +33,39 @@ export function historyOf(invoices: readonly StripeInvoice[]): InvoiceView[] {
 	return invoices.flatMap((invoice) => invoiceView(invoice) ?? []);
 }
 
-/** The customer's default card, as the display fields Stripe reports; null when there is none or it isn't a card. */
-export async function cardOnFile(stripe: Pick<StripeClient, 'retrieveCustomer' | 'retrievePaymentMethod'>, customerId: string): Promise<CardOnFile | null> {
+function paymentMethodId(ref: StripePaymentMethodRef | null | undefined): string | null {
+	if (!ref) return null;
+	return typeof ref === 'string' ? ref : ref.id;
+}
+
+/**
+ * The payment method Stripe charges a customer's invoices with: the subscription's own default, else the customer's.
+ * Subscription Checkout stores the card on the subscription, so the customer's default alone can be empty. Null with neither.
+ */
+export async function chargedPaymentMethod(
+	stripe: Pick<StripeClient, 'retrieveCustomer'>,
+	customerId: string,
+	subscription: Pick<StripeSubscription, 'default_payment_method'> | null,
+): Promise<string | null> {
+	const own = paymentMethodId(subscription?.default_payment_method);
+	if (own) return own;
 	const customer = await stripe.retrieveCustomer(customerId);
-	const reference = customer.invoice_settings?.default_payment_method;
-	if (!reference) return null;
-	const { card } = await stripe.retrievePaymentMethod(typeof reference === 'string' ? reference : reference.id);
+	return paymentMethodId(customer.invoice_settings?.default_payment_method);
+}
+
+/**
+ * The card Stripe charges, as the display fields it reports: the live subscription's default when `subscriptionId` names
+ * one, else the customer's. Null when there is no card, or the payment method isn't one.
+ */
+export async function cardOnFile(
+	stripe: Pick<StripeClient, 'retrieveCustomer' | 'retrieveSubscription' | 'retrievePaymentMethod'>,
+	customerId: string,
+	subscriptionId: string | null,
+): Promise<CardOnFile | null> {
+	const subscription = subscriptionId === null ? null : await stripe.retrieveSubscription(subscriptionId);
+	const cardId = await chargedPaymentMethod(stripe, customerId, subscription);
+	if (!cardId) return null;
+	const { card } = await stripe.retrievePaymentMethod(cardId);
 	return card && { brand: card.brand, last4: card.last4, expMonth: card.exp_month, expYear: card.exp_year };
 }
 

@@ -32,11 +32,11 @@ import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
 import { isFlagOn } from '../posthog/flags';
-import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeInvoice, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
+import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeInvoice } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
 import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
 import { checkoutReturnRecorders, type CheckoutReturnRecorder } from './events';
-import { HISTORY_LIMIT, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
+import { HISTORY_LIMIT, chargedPaymentMethod, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 import { cancelAtPeriodEndReleasingSchedule, pendingScheduleId, releaseSchedule } from './schedules';
 import { billingEventDepsFromEnv } from './wiring';
@@ -135,19 +135,6 @@ function idempotencyKey(deps: BillingActionDeps, action: string, userId: string,
 /** The subscription row's version: the webhook rebuilds the row, so it moves with every change Stripe confirms. */
 function rowVersion(row: SubscriptionRecord): string {
 	return String(Math.floor(row.updatedAt.getTime() / 1000));
-}
-
-function paymentMethodId(ref: StripePaymentMethodRef | null | undefined): string | null {
-	if (!ref) return null;
-	return typeof ref === 'string' ? ref : ref.id;
-}
-
-/** The payment method Stripe charges the subscription's invoices with: its own default, else the customer's; null with neither. */
-async function chargedPaymentMethod(stripe: BillingStripe, subscription: StripeSubscription): Promise<string | null> {
-	const own = paymentMethodId(subscription.default_payment_method);
-	if (own) return own;
-	const customer = await stripe.retrieveCustomer(subscription.customer);
-	return paymentMethodId(customer.invoice_settings?.default_payment_method);
 }
 
 /** Stripe's answer for a card it couldn't charge, for any other refusal, or the error itself when it isn't Stripe's. */
@@ -275,7 +262,7 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 			subscription = released;
 		}
 		// Keyed on the card too: a retry after a decline and a new card in Manage billing must reach Stripe again, not replay the 402.
-		const card = (await chargedPaymentMethod(stripe, subscription)) ?? 'none';
+		const card = (await chargedPaymentMethod(stripe, subscription.customer, subscription)) ?? 'none';
 		const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, card, rowVersion(row)]);
 		await stripe.changeSubscriptionPrice({ subscription, priceId: priceIds.premium, idempotencyKey: idempotency });
 		return ok(REQUESTED);
@@ -468,14 +455,15 @@ export async function startCardSetup(deps: BillingActionDeps, user: { id: string
 	if (!isCardSetupMode(mode)) return fail(400, BILLING_MESSAGES.cardMode);
 	const customerId = await deps.store.customerOf(user.id);
 	if (!customerId) return fail(404, BILLING_MESSAGES.noCustomer);
+	const live = liveSubscription(await deps.store.subscriptionOf(user.id));
 	return askStripe(async () => {
-		// The card they have now is part of the session's key: a finished setup changes it, so the next setup is a new session, not the finished one replayed.
-		const customer = await stripe.retrieveCustomer(customerId);
+		// The card Stripe charges now is part of the session's key: a finished setup changes it, so the next setup is a new session, not the finished one replayed.
+		const subscription = live ? await stripe.retrieveSubscription(live.stripeSubscriptionId) : null;
 		const session = await stripe.createCardSetupSession({
 			customerId,
 			userId: user.id,
 			mode,
-			afterCardId: paymentMethodId(customer.invoice_settings?.default_payment_method),
+			afterCardId: await chargedPaymentMethod(stripe, customerId, subscription),
 			returnUrl: cardReturnUrl(deps),
 			nowMs: deps.nowMs,
 		});
@@ -548,7 +536,7 @@ async function payNewestOpenInvoice(
 	const open = invoices.find((invoice) => invoice.status === 'open' && invoiceSubscriptionId(invoice) === subscription.stripeSubscriptionId);
 	if (!open) return ok(NOTHING_DUE);
 	// Keyed on the card charged: a retry after a decline with another card must reach Stripe, not replay the decline.
-	const card = paymentMethod ?? (await chargedPaymentMethod(stripe, await stripe.retrieveSubscription(subscription.stripeSubscriptionId)));
+	const card = paymentMethod ?? (await chargedPaymentMethod(stripe, customerId, await stripe.retrieveSubscription(subscription.stripeSubscriptionId)));
 	try {
 		const paid = await stripe.payInvoice(open.id, card, idempotencyKey(deps, 'pay-invoice', userId, [open.id, card ?? 'none']));
 		if (paid.status === 'paid') return ok(PAID);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StripeClient, StripeInvoice, StripePaymentMethod } from '../payments/stripe-client';
-import { cardOnFile, historyOf, invoiceSubscriptionId, invoiceView, setDefaultCard } from './invoices';
+import { cardOnFile, chargedPaymentMethod, historyOf, invoiceSubscriptionId, invoiceView, setDefaultCard } from './invoices';
 
 function invoice(overrides: Partial<StripeInvoice> = {}): StripeInvoice {
 	return {
@@ -57,42 +57,94 @@ describe('the subscription an invoice belongs to', () => {
 	});
 });
 
-type CardReads = Pick<StripeClient, 'retrieveCustomer' | 'retrievePaymentMethod'>;
+type CardReads = Pick<StripeClient, 'retrieveCustomer' | 'retrieveSubscription' | 'retrievePaymentMethod'>;
 
-function cardReads(customerDefault: string | { id: string } | null | undefined, method: StripePaymentMethod | null): { stripe: CardReads; calls: string[] } {
+type CardRef = string | { id: string } | null;
+
+/** Stripe as `cardOnFile` reads it: the customer's and the subscription's default cards, and the cards each payment method id names. */
+function cardReads(state: { customer?: CardRef; subscription?: CardRef; cards?: Record<string, NonNullable<StripePaymentMethod['card']>> }): { stripe: CardReads; calls: string[] } {
 	const calls: string[] = [];
 	const stripe: CardReads = {
 		retrieveCustomer: async (id) => {
 			calls.push(`customer:${id}`);
-			return { id, email: null, metadata: null, invoice_settings: customerDefault === undefined ? undefined : { default_payment_method: customerDefault } };
+			return { id, email: null, metadata: null, invoice_settings: state.customer === undefined ? undefined : { default_payment_method: state.customer } };
+		},
+		retrieveSubscription: async (id) => {
+			calls.push(`subscription:${id}`);
+			return {
+				id,
+				customer: 'cus_1',
+				status: 'active',
+				created: 1,
+				cancel_at_period_end: false,
+				cancel_at: null,
+				metadata: null,
+				items: { data: [] },
+				schedule: null,
+				default_payment_method: state.subscription ?? null,
+			};
 		},
 		retrievePaymentMethod: async (id) => {
 			calls.push(`method:${id}`);
-			return method ?? { id, card: null };
+			return { id, card: state.cards?.[id] ?? null };
 		},
 	};
 	return { stripe, calls };
 }
 
+const VISA = { brand: 'visa', last4: '4242', exp_month: 8, exp_year: 2028 };
+const MASTERCARD = { brand: 'mastercard', last4: '4444', exp_month: 1, exp_year: 2030 };
+
 describe('the card on file', () => {
-	it('reads the card on file from the default payment method', async () => {
-		const { stripe, calls } = cardReads('pm_1', { id: 'pm_1', card: { brand: 'visa', last4: '4242', exp_month: 8, exp_year: 2028 } });
-		expect(await cardOnFile(stripe, 'cus_1')).toEqual({ brand: 'visa', last4: '4242', expMonth: 8, expYear: 2028 });
+	it("reads the card on file from the customer's default payment method when there is no subscription", async () => {
+		const { stripe, calls } = cardReads({ customer: 'pm_1', cards: { pm_1: VISA } });
+		expect(await cardOnFile(stripe, 'cus_1', null)).toEqual({ brand: 'visa', last4: '4242', expMonth: 8, expYear: 2028 });
 		expect(calls).toEqual(['customer:cus_1', 'method:pm_1']);
 	});
 
-	it('reads a default payment method that Stripe sent as an object', async () => {
-		const { stripe, calls } = cardReads({ id: 'pm_2' }, { id: 'pm_2', card: { brand: 'mastercard', last4: '4444', exp_month: 1, exp_year: 2030 } });
-		expect(await cardOnFile(stripe, 'cus_1')).toMatchObject({ brand: 'mastercard', last4: '4444' });
-		expect(calls).toEqual(['customer:cus_1', 'method:pm_2']);
+	it("the card on file comes from the subscription's default when the customer has none", async () => {
+		const { stripe, calls } = cardReads({ customer: null, subscription: 'pm_sub', cards: { pm_sub: MASTERCARD } });
+		expect(await cardOnFile(stripe, 'cus_1', 'sub_1')).toEqual({ brand: 'mastercard', last4: '4444', expMonth: 1, expYear: 2030 });
+		expect(calls).toEqual(['subscription:sub_1', 'method:pm_sub']);
 	});
 
-	it('is null without a default payment method, and for one that is not a card', async () => {
-		const none = cardReads(null, null);
-		expect(await cardOnFile(none.stripe, 'cus_1')).toBeNull();
-		expect(none.calls).toEqual(['customer:cus_1']);
-		expect(await cardOnFile(cardReads(undefined, null).stripe, 'cus_1')).toBeNull();
-		expect(await cardOnFile(cardReads('pm_3', { id: 'pm_3', card: null }).stripe, 'cus_1')).toBeNull();
+	it("the customer's default is used when the subscription has none", async () => {
+		const { stripe, calls } = cardReads({ customer: 'pm_cus', subscription: null, cards: { pm_cus: VISA } });
+		expect(await cardOnFile(stripe, 'cus_1', 'sub_1')).toMatchObject({ brand: 'visa', last4: '4242' });
+		expect(calls).toEqual(['subscription:sub_1', 'customer:cus_1', 'method:pm_cus']);
+	});
+
+	it("prefers the subscription's own card, the one Stripe charges, over the customer's", async () => {
+		const { stripe, calls } = cardReads({ customer: 'pm_cus', subscription: 'pm_sub', cards: { pm_cus: VISA, pm_sub: MASTERCARD } });
+		expect(await cardOnFile(stripe, 'cus_1', 'sub_1')).toMatchObject({ brand: 'mastercard' });
+		expect(calls).toEqual(['subscription:sub_1', 'method:pm_sub']);
+	});
+
+	it('reads defaults that Stripe sent as objects', async () => {
+		const fromSubscription = cardReads({ subscription: { id: 'pm_a' }, cards: { pm_a: MASTERCARD } });
+		expect(await cardOnFile(fromSubscription.stripe, 'cus_1', 'sub_1')).toMatchObject({ last4: '4444' });
+		const fromCustomer = cardReads({ customer: { id: 'pm_b' }, cards: { pm_b: VISA } });
+		expect(await cardOnFile(fromCustomer.stripe, 'cus_1', null)).toMatchObject({ last4: '4242' });
+		expect(fromCustomer.calls).toEqual(['customer:cus_1', 'method:pm_b']);
+	});
+
+	it('is null with no default anywhere, and for one that is not a card', async () => {
+		const none = cardReads({ customer: null, subscription: null });
+		expect(await cardOnFile(none.stripe, 'cus_1', 'sub_1')).toBeNull();
+		expect(none.calls).toEqual(['subscription:sub_1', 'customer:cus_1']);
+		expect(await cardOnFile(cardReads({}).stripe, 'cus_1', null)).toBeNull();
+		expect(await cardOnFile(cardReads({ customer: 'pm_3' }).stripe, 'cus_1', null)).toBeNull();
+	});
+});
+
+describe('the card Stripe charges', () => {
+	it("is the subscription's own default, else the customer's, else none", async () => {
+		const both = cardReads({ customer: 'pm_cus' });
+		expect(await chargedPaymentMethod(both.stripe, 'cus_1', { default_payment_method: 'pm_sub' })).toBe('pm_sub');
+		expect(both.calls).toEqual([]);
+		expect(await chargedPaymentMethod(both.stripe, 'cus_1', { default_payment_method: null })).toBe('pm_cus');
+		expect(await chargedPaymentMethod(both.stripe, 'cus_1', null)).toBe('pm_cus');
+		expect(await chargedPaymentMethod(cardReads({}).stripe, 'cus_1', null)).toBeNull();
 	});
 });
 

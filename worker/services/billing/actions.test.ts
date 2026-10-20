@@ -782,6 +782,29 @@ describe('starting a card setup', () => {
 		expect(asObject.calls).toEqual(['card-session:cus_1:save:pm_obj']);
 	});
 
+	it("starts from the card Stripe charges: the live subscription's default, else the customer's, else none", async () => {
+		const own = fake({ customer: 'cus_1', row: row(), customerCard: 'pm_cus' });
+		await startCardSetup(own.deps, USER, 'save');
+		expect(own.calls).toEqual(['read:sub_1', 'card-session:cus_1:save:pm_1']);
+		const customerDefault = fake({ customer: 'cus_1', row: row(), card: null, customerCard: 'pm_9' });
+		await startCardSetup(customerDefault.deps, USER, 'save');
+		expect(customerDefault.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'card-session:cus_1:save:pm_9']);
+		const nothing = fake({ customer: 'cus_1', row: row(), card: null });
+		await startCardSetup(nothing.deps, USER, 'save');
+		expect(nothing.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'card-session:cus_1:save:none']);
+	});
+
+	it('names the new card in the next session once a setup changed the default, and ignores a subscription that has ended', async () => {
+		const { deps, calls, state } = fake({ customer: 'cus_1', row: row() });
+		await startCardSetup(deps, USER, 'save');
+		state.card = 'pm_new';
+		await startCardSetup(deps, USER, 'save');
+		expect(calls.filter((call) => call.startsWith('card-session:'))).toEqual(['card-session:cus_1:save:pm_1', 'card-session:cus_1:save:pm_new']);
+		const ended = fake({ customer: 'cus_1', row: row({ status: 'canceled' }), customerCard: 'pm_cus' });
+		await startCardSetup(ended.deps, USER, 'save');
+		expect(ended.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:pm_cus']);
+	});
+
 	it('answers 400 for any mode but save or pay, asking Stripe nothing', async () => {
 		const { deps, calls } = fake({ customer: 'cus_1' });
 		for (const mode of ['change', '', 'PAY', null, undefined, 1]) {
