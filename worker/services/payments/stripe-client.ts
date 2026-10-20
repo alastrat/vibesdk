@@ -273,7 +273,12 @@ export interface StripeCharge {
 	amount_refunded: number;
 }
 
-export interface SubscriptionCheckoutInput {
+/** A session Stripe closed before its key's bucket ended, which a new one replaces; see `replacementKey`. */
+interface Replacing {
+	replaces?: string | null;
+}
+
+export interface SubscriptionCheckoutInput extends Replacing {
 	customerId: string;
 	priceId: string;
 	userId: string;
@@ -283,7 +288,7 @@ export interface SubscriptionCheckoutInput {
 	nowMs: number;
 }
 
-export interface CreditsCheckoutInput {
+export interface CreditsCheckoutInput extends Replacing {
 	customerId: string;
 	priceId: string;
 	userId: string;
@@ -297,7 +302,7 @@ export interface CreditsCheckoutInput {
 	idempotencyKey: string;
 }
 
-export interface CardSetupInput {
+export interface CardSetupInput extends Replacing {
 	customerId: string;
 	userId: string;
 	mode: CardSetupMode;
@@ -478,6 +483,14 @@ export function idempotencyBucket(nowMs: number): number {
  */
 function billingCheckoutExpiresAt(nowMs: number): number {
 	return (idempotencyBucket(nowMs) + 1) * (IDEMPOTENCY_BUCKET_MS / 1000) + CHECKOUT_SESSION_TTL_SECONDS;
+}
+
+/**
+ * The key of a session made in place of `replaces`: Stripe replays a key's first session within its bucket, even one it
+ * has since closed, so the new one is keyed on the closed one, and a repeat of the same start shares it.
+ */
+function replacementKey(key: string, replaces: string | null | undefined): string {
+	return replaces ? `${key}-retry-${replaces}` : key;
 }
 
 function isStripeUrl(url: string): boolean {
@@ -702,7 +715,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
-				`billing-checkout-${input.userId}-${input.plan}-${idempotencyBucket(input.nowMs)}`,
+				replacementKey(`billing-checkout-${input.userId}-${input.plan}-${idempotencyBucket(input.nowMs)}`, input.replaces),
 			),
 		createCreditsCheckoutSession: (input) => {
 			const metadata = { kind: CHECKOUT_KIND_CREDITS, estori_user_id: input.userId, credits: String(input.credits) };
@@ -723,7 +736,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
-				input.idempotencyKey,
+				replacementKey(input.idempotencyKey, input.replaces),
 			);
 		},
 		// The session's metadata names the seller and whether a failed invoice is paid with the new card.
@@ -741,7 +754,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
-				`billing-card-${input.userId}-${input.mode}-${input.afterCardId ?? 'none'}-${idempotencyBucket(input.nowMs)}`,
+				replacementKey(`billing-card-${input.userId}-${input.mode}-${input.afterCardId ?? 'none'}-${idempotencyBucket(input.nowMs)}`, input.replaces),
 			),
 		// Each key names the payment method, which a card setup creates new every time, so a retry replays and a later change is
 		// a new request. It rotates with the bucket, so a failure Stripe saved under it is retried in the next one.

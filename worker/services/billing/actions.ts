@@ -183,6 +183,20 @@ function clientSecretOf(session: StripeCheckoutSession): string | null {
 	return null;
 }
 
+/**
+ * A session the start just made, as Stripe has it now with its discounts, and the client secret it was made with. Within
+ * a bucket the key answers its first session as Stripe made it, so the session is read back: a code applied since shows
+ * in its terms, and one Stripe closed since (only an early expiry can be) is replaced once under a key naming it.
+ */
+async function currentSession(stripe: BillingStripe, create: (replaces: string | null) => Promise<StripeCheckoutSession>): Promise<StripeCheckoutSession> {
+	const read = async (made: StripeCheckoutSession): Promise<StripeCheckoutSession> => ({
+		...(await stripe.retrieveCheckoutSession(made.id, BILLING_CHECKOUT_EXPAND)),
+		client_secret: made.client_secret,
+	});
+	const first = await read(await create(null));
+	return first.status === 'expired' ? read(await create(first.id)) : first;
+}
+
 /** What the checkout page starts from; `terms` is null for extra credits, which have no renewal. */
 function clientStart(session: StripeCheckoutSession, publishableKey: string, order: CheckoutOrder, terms: CheckoutTermsView | null): BillingActionResult<CheckoutClientStart> {
 	const clientSecret = clientSecretOf(session);
@@ -199,8 +213,8 @@ function endsOn(row: SubscriptionRecord): string {
 }
 
 /**
- * Opens an embedded checkout for Pro or Premium. A repeat within the client's bucket gets the same session back as it was
- * made, with no promotion code; `checkoutTerms` answers the wording of the session as it stands.
+ * Opens an embedded checkout for Pro or Premium. A repeat within the client's bucket gets the same session back, worded
+ * with any promotion code applied to it since; `checkoutTerms` answers the same wording later.
  */
 export async function startCheckout(deps: BillingActionDeps, user: { id: string; email: string }, plan: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
 	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
@@ -212,14 +226,17 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 	if (liveSubscription(await deps.store.subscriptionOf(user.id))) return fail(409, BILLING_MESSAGES.alreadyPaying);
 	return askStripe(async () => {
 		const customerId = await customerOf(deps, setup.stripe, user);
-		const session = await setup.stripe.createSubscriptionCheckoutSession({
-			customerId,
-			priceId: setup.priceIds[plan],
-			userId: user.id,
-			plan,
-			returnUrl: checkoutReturnUrl(deps),
-			nowMs: deps.nowMs,
-		});
+		const session = await currentSession(setup.stripe, (replaces) =>
+			setup.stripe.createSubscriptionCheckoutSession({
+				customerId,
+				priceId: setup.priceIds[plan],
+				userId: user.id,
+				plan,
+				returnUrl: checkoutReturnUrl(deps),
+				nowMs: deps.nowMs,
+				replaces,
+			}),
+		);
 		const terms = termsOf(plan, session);
 		return terms.ok ? clientStart(session, publishableKey, planOrder(plan), terms.value) : terms;
 	});
@@ -317,15 +334,18 @@ export async function buyCredits(deps: BillingActionDeps, user: { id: string; em
 		const purchases = await deps.ledger.purchasesOf(user.id);
 		const newest = purchases.at(-1)?.id ?? 'none';
 		const customerId = await customerOf(deps, setup.stripe, user);
-		const session = await setup.stripe.createCreditsCheckoutSession({
-			customerId,
-			priceId: setup.priceIds.credits,
-			userId: user.id,
-			credits,
-			returnUrl: checkoutReturnUrl(deps),
-			nowMs: deps.nowMs,
-			idempotencyKey: idempotencyKey(deps, 'credits', user.id, [String(credits), newest]),
-		});
+		const session = await currentSession(setup.stripe, (replaces) =>
+			setup.stripe.createCreditsCheckoutSession({
+				customerId,
+				priceId: setup.priceIds.credits,
+				userId: user.id,
+				credits,
+				returnUrl: checkoutReturnUrl(deps),
+				nowMs: deps.nowMs,
+				idempotencyKey: idempotencyKey(deps, 'credits', user.id, [String(credits), newest]),
+				replaces,
+			}),
+		);
 		return clientStart(session, publishableKey, creditsOrder(credits), null);
 	});
 }
@@ -458,14 +478,11 @@ export async function startCardSetup(deps: BillingActionDeps, user: { id: string
 	return askStripe(async () => {
 		// The card Stripe charges now is part of the session's key: a finished setup changes it, so the next setup is a new session, not the finished one replayed.
 		const subscription = live ? await stripe.retrieveSubscription(live.stripeSubscriptionId) : null;
-		const session = await stripe.createCardSetupSession({
-			customerId,
-			userId: user.id,
-			mode,
-			afterCardId: await chargedPaymentMethod(stripe, customerId, subscription),
-			returnUrl: cardReturnUrl(deps),
-			nowMs: deps.nowMs,
-		});
+		const afterCardId = await chargedPaymentMethod(stripe, customerId, subscription);
+		// A setup finished but not yet returned from is kept: the card page sends it to the return route.
+		const session = await currentSession(stripe, (replaces) =>
+			stripe.createCardSetupSession({ customerId, userId: user.id, mode, afterCardId, returnUrl: cardReturnUrl(deps), nowMs: deps.nowMs, replaces }),
+		);
 		const clientSecret = clientSecretOf(session);
 		return clientSecret ? ok({ clientSecret, publishableKey, sessionId: session.id, mode }) : STRIPE_FAILED;
 	});

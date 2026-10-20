@@ -159,6 +159,20 @@ describe('Stripe billing calls', () => {
 		expect(card.calls[0].params.some((param) => param.startsWith('adaptive_pricing'))).toBe(false);
 	});
 
+	it('makes a session in place of one Stripe closed early under a key that names the closed one, the same for a repeat', async () => {
+		const subscription = recordingFetch({ id: 'cs_2' });
+		const credits = recordingFetch({ id: 'cs_c2' });
+		const card = recordingFetch({ id: 'cs_card2' });
+		for (let press = 0; press < 2; press++) {
+			await subscription.client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_pro', userId: 'u1', plan: 'pro', returnUrl: 'https://estori.app/r', nowMs: NOW, replaces: 'cs_1' });
+			await credits.client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, returnUrl: 'https://estori.app/r', nowMs: NOW, idempotencyKey: 'billing-credits-u1-5000-none-1', replaces: 'cs_c1' });
+			await card.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', afterCardId: null, returnUrl: 'https://estori.app/r', nowMs: NOW, replaces: 'cs_card1' });
+		}
+		expect(subscription.calls.map((call) => call.key)).toEqual(Array(2).fill(`billing-checkout-u1-pro-${BUCKET}-retry-cs_1`));
+		expect(credits.calls.map((call) => call.key)).toEqual(Array(2).fill('billing-credits-u1-5000-none-1-retry-cs_c1'));
+		expect(card.calls.map((call) => call.key)).toEqual(Array(2).fill(`billing-card-u1-save-none-${BUCKET}-retry-cs_card1`));
+	});
+
 	it('sends the same checkout twice within a key bucket, closing at least 30 minutes after either call', async () => {
 		const nineMinutes = 9 * 60_000;
 		const lastMoment = NOW + 600_000 - 1;

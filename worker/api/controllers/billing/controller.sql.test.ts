@@ -89,7 +89,8 @@ describe('the billing endpoints', () => {
 		const stripe = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
 			const path = new URL(String(input)).pathname;
 			if (path === '/v1/customers') return Response.json({ id: 'cus_basic', email: null, metadata: null });
-			if (path === '/v1/checkout/sessions') return Response.json({ id: 'cs_9', url: null, client_secret: 'cs_9_secret_x' });
+			if (path === '/v1/checkout/sessions') return Response.json({ id: 'cs_9', url: null, client_secret: 'cs_9_secret_x', status: 'open', amount_total: 4_900, discounts: [] });
+			if (path === '/v1/checkout/sessions/cs_9') return Response.json({ id: 'cs_9', url: null, status: 'open', amount_total: 4_900, discounts: [] });
 			throw new Error(`unexpected ${path}`);
 		});
 		const response = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), {} as ExecutionContext, context('u_basic'));
@@ -100,7 +101,8 @@ describe('the billing endpoints', () => {
 			order: { kind: 'plan', plan: 'pro', priceCents: 4_900 },
 			terms: { buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900 },
 		});
-		expect(stripe).toHaveBeenCalledTimes(2);
+		// The customer, the session, and the session read back as it stands.
+		expect(stripe).toHaveBeenCalledTimes(3);
 		expect(await db.prepare("SELECT stripe_customer_id FROM billing_customers WHERE user_id = 'u_basic'").first()).toEqual({ stripe_customer_id: 'cus_basic' });
 		expect((await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), {} as ExecutionContext, context('u_paying'))).status).toBe(409);
 	});

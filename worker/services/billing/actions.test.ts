@@ -122,7 +122,7 @@ function fake(
 		customerCard?: string | null;
 		purchases?: CreditPurchaseRecord[];
 		paused?: boolean;
-		/** The sessions Stripe has, by id; any other id is unknown to it. */
+		/** The sessions Stripe has, by id, as they stand now; a session made is added unless Stripe already has its id. */
 		sessions?: StripeCheckoutSession[];
 		/** `null` is a deployment without Stripe's publishable key. */
 		publishableKey?: string | null;
@@ -141,6 +141,14 @@ function fake(
 	const returnUrls: string[] = [];
 	const consents: BillingConsentInput[] = [];
 	const recorded: string[] = [];
+	/** What a create answers: the session as made, which Stripe keeps from then on. A replacement gets an id of its own. */
+	const made = (session: StripeCheckoutSession, replaces: string | null | undefined): StripeCheckoutSession => {
+		const answer = replaces ? { ...session, id: `${session.id}_after_${replaces}` } : session;
+		state.sessions ??= [];
+		if (!state.sessions.some((known) => known.id === answer.id)) state.sessions.push(answer);
+		return answer;
+	};
+	const replacing = (replaces: string | null | undefined): string => (replaces ? `:replacing-${replaces}` : '');
 	const deps: BillingActionDeps = {
 		stripe: {
 			createCustomer: async ({ userId }) => {
@@ -152,13 +160,13 @@ function fake(
 				return { id, email: null, metadata: null, invoice_settings: { default_payment_method: state.customerCard ?? null } };
 			},
 			createSubscriptionCheckoutSession: async (input) => {
-				calls.push(`checkout:${input.customerId}:${input.priceId}`);
-				return SESSION;
+				calls.push(`checkout:${input.customerId}:${input.priceId}${replacing(input.replaces)}`);
+				return made(SESSION, input.replaces);
 			},
 			createCreditsCheckoutSession: async (input) => {
-				calls.push(`credits:${input.customerId}:${input.credits}`);
+				calls.push(`credits:${input.customerId}:${input.credits}${replacing(input.replaces)}`);
 				keys.push(input.idempotencyKey);
-				return SESSION;
+				return made(SESSION, input.replaces);
 			},
 			retrieveSubscription: async (id) => {
 				calls.push(`read:${id}`);
@@ -199,9 +207,9 @@ function fake(
 				return found;
 			},
 			createCardSetupSession: async (input) => {
-				calls.push(`card-session:${input.customerId}:${input.mode}:${input.afterCardId ?? 'none'}`);
+				calls.push(`card-session:${input.customerId}:${input.mode}:${input.afterCardId ?? 'none'}${replacing(input.replaces)}`);
 				returnUrls.push(input.returnUrl);
-				return { ...SESSION, id: 'cs_card', mode: 'setup', client_secret: 'cs_card_secret_x' };
+				return made({ ...SESSION, id: 'cs_card', mode: 'setup', client_secret: 'cs_card_secret_x' }, input.replaces);
 			},
 			setDefaultPaymentMethod: async ({ customerId, subscriptionId, paymentMethodId }) => {
 				calls.push(`default-card:${customerId}:${subscriptionId ?? 'none'}:${paymentMethodId}`);
@@ -268,7 +276,7 @@ describe('starting a plan', () => {
 		const { deps, calls } = fake();
 		expect(await startCheckout(deps, USER, 'pro')).toMatchObject({ ok: true, value: { sessionId: 'cs_1' } });
 		expect(await startCheckout(deps, USER, 'premium')).toMatchObject({ ok: true });
-		expect(calls).toEqual(['customer:u1', 'saved:cus_new', 'checkout:cus_new:price_pro', 'checkout:cus_new:price_premium']);
+		expect(calls).toEqual(['customer:u1', 'saved:cus_new', 'checkout:cus_new:price_pro', 'session:cs_1', 'checkout:cus_new:price_premium', 'session:cs_1']);
 	});
 
 	it('refuses a second subscription, an unknown plan and a deployment without prices', async () => {
@@ -384,7 +392,7 @@ describe('cancelling, keeping the plan and extra credits', () => {
 	it('sells extra credits to Premium only, in amounts from 5,000 in thousands', async () => {
 		const premium = fake({ customer: 'cus_1' });
 		expect(await buyCredits(premium.deps, USER, account('premium'), 12_000)).toMatchObject({ ok: true, value: { sessionId: 'cs_1' } });
-		expect(premium.calls).toEqual(['credits:cus_1:12000']);
+		expect(premium.calls).toEqual(['credits:cus_1:12000', 'session:cs_1']);
 		expect(await buyCredits(fake().deps, USER, account('pro'), 12_000)).toMatchObject({ ok: false, status: 402, refusal: { limit: 'extraCredits', upgradeTo: 'premium' } });
 		for (const credits of [4_000, 5_500, 2_000_000, '5000']) expect(await buyCredits(fake().deps, USER, account('premium'), credits)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.creditsAmount });
 	});
@@ -477,7 +485,7 @@ describe('opening an embedded checkout', () => {
 
 	it('sends Stripe the return page of its own, with the session id left for Stripe to fill in', async () => {
 		const returnUrls: string[] = [];
-		const { deps } = fake({ customer: 'cus_1' });
+		const { deps } = fake({ customer: 'cus_1', sessions: [SESSION] });
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = {
@@ -506,12 +514,55 @@ describe('opening an embedded checkout', () => {
 
 	it('answers 502 when Stripe made a session without a client secret', async () => {
 		const warnings = quietWarnings();
-		const { deps } = fake({ customer: 'cus_1' });
+		const { deps } = fake({ customer: 'cus_1', sessions: [SESSION] });
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, createSubscriptionCheckoutSession: async () => ({ ...SESSION, client_secret: null }) };
 		expect(await startCheckout(deps, USER, 'pro')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
 		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('starting again within a key bucket', () => {
+	it('a start that Stripe answers with a session it has since closed gets a new session, keyed on the closed one, the same on a repeat', async () => {
+		const plan = fake({ sessions: [{ ...SESSION, status: 'expired' }] });
+		for (let press = 0; press < 2; press++) {
+			expect(await startCheckout(plan.deps, USER, 'pro'), `press ${press}`).toMatchObject({ ok: true, value: { sessionId: 'cs_1_after_cs_1', clientSecret: 'cs_1_secret_x' } });
+		}
+		expect(plan.calls.slice(2, 6)).toEqual(['checkout:cus_new:price_pro', 'session:cs_1', 'checkout:cus_new:price_pro:replacing-cs_1', 'session:cs_1_after_cs_1']);
+		expect(plan.expands).toEqual(Array(4).fill(BILLING_CHECKOUT_EXPAND));
+
+		const credits = fake({ customer: 'cus_1', sessions: [{ ...SESSION, status: 'expired' }] });
+		expect(await buyCredits(credits.deps, USER, account('premium'), 12_000)).toMatchObject({ ok: true, value: { sessionId: 'cs_1_after_cs_1' } });
+		expect(credits.calls).toEqual(['credits:cus_1:12000', 'session:cs_1', 'credits:cus_1:12000:replacing-cs_1', 'session:cs_1_after_cs_1']);
+		expect(credits.keys[1]).toBe(credits.keys[0]);
+
+		const card = fake({ customer: 'cus_1', sessions: [{ ...SESSION, id: 'cs_card', mode: 'setup', status: 'expired' }] });
+		expect(await startCardSetup(card.deps, USER, 'save')).toMatchObject({ ok: true, value: { sessionId: 'cs_card_after_cs_card', clientSecret: 'cs_card_secret_x' } });
+		expect(card.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:none', 'session:cs_card', 'card-session:cus_1:save:none:replacing-cs_card', 'session:cs_card_after_cs_card']);
+	});
+
+	it('keeps a session that is still open or already finished, since a finished card setup is completed from the card page', async () => {
+		const open = fake({ customer: 'cus_1', sessions: [SESSION] });
+		expect(await startCheckout(open.deps, USER, 'pro')).toMatchObject({ ok: true, value: { sessionId: 'cs_1' } });
+		const saved = fake({ customer: 'cus_1', sessions: [{ ...SESSION, id: 'cs_card', mode: 'setup', status: 'complete', payment_status: 'no_payment_required' }] });
+		expect(await startCardSetup(saved.deps, USER, 'save')).toMatchObject({ ok: true, value: { sessionId: 'cs_card' } });
+		expect([...open.calls, ...saved.calls].some((call) => call.includes('replacing'))).toBe(false);
+	});
+
+	it('answers the terms of an open session as it stands now, with the code the seller applied before reloading', async () => {
+		const { deps } = fake({ customer: 'cus_1', sessions: [withCode({}, { ...PLAN_SESSION, id: 'cs_1' })] });
+		expect(await startCheckout(deps, USER, 'pro')).toMatchObject({
+			ok: true,
+			value: {
+				sessionId: 'cs_1',
+				terms: {
+					consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month, until I cancel.',
+					buttonText: 'Subscribe: $24.50 today, then $49 a month',
+					dueTodayCents: 2_450,
+				},
+			},
+		});
 	});
 });
 
@@ -758,32 +809,32 @@ describe('starting a card setup', () => {
 	it("opens a setup session for the seller's customer, with the page to come back to, started from the card they have now", async () => {
 		const { deps, calls, returnUrls } = fake({ customer: 'cus_1', customerCard: 'pm_old' });
 		expect(await startCardSetup(deps, USER, 'pay')).toEqual({ ok: true, value: { clientSecret: 'cs_card_secret_x', publishableKey: 'pk_test_1', sessionId: 'cs_card', mode: 'pay' } });
-		expect(calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:pay:pm_old']);
+		expect(calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:pay:pm_old', 'session:cs_card']);
 		expect(returnUrls).toEqual(['https://estori.app/settings/billing/card/return?session_id={CHECKOUT_SESSION_ID}']);
 	});
 
 	it('names no earlier card only when the customer has none, and reads one Stripe sent as an object', async () => {
 		const none = fake({ customer: 'cus_1' });
 		await startCardSetup(none.deps, USER, 'save');
-		expect(none.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:none']);
+		expect(none.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:none', 'session:cs_card']);
 		const asObject = fake({ customer: 'cus_1' });
 		const stripe = asObject.deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		asObject.deps.stripe = { ...stripe, retrieveCustomer: async (id) => ({ id, email: null, metadata: null, invoice_settings: { default_payment_method: { id: 'pm_obj' } } }) };
 		await startCardSetup(asObject.deps, USER, 'save');
-		expect(asObject.calls).toEqual(['card-session:cus_1:save:pm_obj']);
+		expect(asObject.calls).toEqual(['card-session:cus_1:save:pm_obj', 'session:cs_card']);
 	});
 
 	it("starts from the card Stripe charges: the live subscription's default, else the customer's, else none", async () => {
 		const own = fake({ customer: 'cus_1', row: row(), customerCard: 'pm_cus' });
 		await startCardSetup(own.deps, USER, 'save');
-		expect(own.calls).toEqual(['read:sub_1', 'card-session:cus_1:save:pm_1']);
+		expect(own.calls).toEqual(['read:sub_1', 'card-session:cus_1:save:pm_1', 'session:cs_card']);
 		const customerDefault = fake({ customer: 'cus_1', row: row(), card: null, customerCard: 'pm_9' });
 		await startCardSetup(customerDefault.deps, USER, 'save');
-		expect(customerDefault.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'card-session:cus_1:save:pm_9']);
+		expect(customerDefault.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'card-session:cus_1:save:pm_9', 'session:cs_card']);
 		const nothing = fake({ customer: 'cus_1', row: row(), card: null });
 		await startCardSetup(nothing.deps, USER, 'save');
-		expect(nothing.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'card-session:cus_1:save:none']);
+		expect(nothing.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'card-session:cus_1:save:none', 'session:cs_card']);
 	});
 
 	it('names the new card in the next session once a setup changed the default, and ignores a subscription that has ended', async () => {
@@ -794,7 +845,7 @@ describe('starting a card setup', () => {
 		expect(calls.filter((call) => call.startsWith('card-session:'))).toEqual(['card-session:cus_1:save:pm_1', 'card-session:cus_1:save:pm_new']);
 		const ended = fake({ customer: 'cus_1', row: row({ status: 'canceled' }), customerCard: 'pm_cus' });
 		await startCardSetup(ended.deps, USER, 'save');
-		expect(ended.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:pm_cus']);
+		expect(ended.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:pm_cus', 'session:cs_card']);
 	});
 
 	it('answers 400 for any mode but save or pay, asking Stripe nothing', async () => {
@@ -814,7 +865,7 @@ describe('starting a card setup', () => {
 
 	it('answers 502 and warns when Stripe made a session without a client secret', async () => {
 		const warnings = quietWarnings();
-		const { deps } = fake({ customer: 'cus_1' });
+		const { deps } = fake({ customer: 'cus_1', sessions: [SESSION] });
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, createCardSetupSession: async () => ({ ...SESSION, client_secret: null }) };
