@@ -79,6 +79,11 @@ export type PublishDraftResult =
   | { commitHash: string; storeManifest: string | null; draftId: string; draftName: string }
   | { error: string }
 
+export interface PublishDraftOptions {
+  /** The account's plan lacks the catalog: refuse a version selling catalog products the live store doesn't. */
+  refuseNewCatalogProducts?: boolean
+}
+
 /** What the Go live panel needs: the draft being edited, and the draft the live store came from. */
 export interface PublishContext {
   active: { id: string; name: string; tip: string | null }

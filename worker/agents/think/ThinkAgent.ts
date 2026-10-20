@@ -368,7 +368,7 @@ export class ThinkAgent extends Think<Env> {
 				}),
 			}),
 			// Estori's catalog, for stores that sell catalog products.
-			...createCatalogTools(catalogToolDepsFromEnv(this.env)),
+			...createCatalogTools(catalogToolDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
 			...createPaymentsSetupTool(paymentsSetupDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
 			// Set the project's short display title (host observes the output).
 			set_title: createSetTitleTool(),

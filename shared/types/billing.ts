@@ -44,6 +44,9 @@ export const CHECKOUT_KIND_CREDITS = 'credits';
 
 export const PLAN_LIMIT_ERROR_CODE = 'PLAN_LIMIT';
 
+/** SpaceDO's answer to a publish that adds catalog products for an account without the catalog. Mirrored in space/src/space/store-manifest.ts. */
+export const NEW_CATALOG_PRODUCTS_ERROR = 'This version adds catalog products, which need Pro or Premium.';
+
 /** Shown above the pay button of a subscription checkout; the Terms say the same. */
 export function renewalDisclosure(plan: PaidPlanId): string {
 	return `${planName(plan)} renews every month at ${formatUsd(PLAN_PRICES_CENTS[plan])} until you cancel. Cancel any time in Estori; it ends at the end of the period.`;

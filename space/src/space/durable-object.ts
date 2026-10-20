@@ -45,8 +45,10 @@ import {
   type DraftSummary,
   type DraftsSnapshot,
   type PublishContext,
+  type PublishDraftOptions,
   type PublishDraftResult,
 } from "./drafts-store"
+import { NEW_CATALOG_PRODUCTS_ERROR, newCatalogVariantIds } from "./store-manifest"
 import {
   branchTip,
   cancelMerge,
@@ -751,6 +753,10 @@ export class SpaceDO extends DurableObject<Env> {
   /** The deployed branch's `estori-store.json` as committed, which prices checkout in previews. */
   async getStoreManifest(branch: string): Promise<{ commitHash: string; manifest: string | null } | null> {
     await this.ensureInit()
+    return this.readStoreManifest(branch)
+  }
+
+  private readStoreManifest(branch: string): { commitHash: string; manifest: string | null } | null {
     const row = this.ctx.storage.sql
       .exec("SELECT commit_hash, store_manifest FROM deployments WHERE branch = ?", branch)
       .toArray()[0]
@@ -898,8 +904,11 @@ export class SpaceDO extends DurableObject<Env> {
     })
   }
 
-  /** Publishes the draft's build (the checked-out draft by default), deploying its latest version first. */
-  async publishDraft(id?: string): Promise<PublishDraftResult> {
+  /**
+   * Publishes the draft's build (the checked-out draft by default), deploying its latest version first. Catalog
+   * products already live keep selling, so only ones the live version doesn't have are refused.
+   */
+  async publishDraft(id?: string, options: PublishDraftOptions = {}): Promise<PublishDraftResult> {
     await this.ensureInit()
     return this.withDraftLock(async () => {
       const sql = this.ctx.storage.sql
@@ -915,6 +924,11 @@ export class SpaceDO extends DurableObject<Env> {
       if (this.readDeployment(draft.branch)?.commitHash !== tip) {
         const deployed = (await this.deploy(draft.branch)) as { error?: unknown }
         if (deployed.error) return { error: "This draft's preview doesn't build. Fix it before publishing." }
+      }
+      if (options.refuseNewCatalogProducts) {
+        const draftManifest = this.readStoreManifest(draft.branch)?.manifest ?? null
+        const liveManifest = this.readStoreManifest(LIVE_BRANCH)?.manifest ?? null
+        if (newCatalogVariantIds(draftManifest, liveManifest).length > 0) return { error: NEW_CATALOG_PRODUCTS_ERROR }
       }
       const published = publishLiveDeployment(sql, Date.now(), draft.branch)
       if (!published) return { error: "Deploy the store's preview before publishing it." }

@@ -18,9 +18,13 @@ export type {
   DraftSummary,
   DraftsSnapshot,
   PublishContext,
+  PublishDraftOptions,
   PublishDraftResult,
 } from "./space/drafts-store"
 export type { BringInOutcome, MergeState } from "./space/draft-git"
+
+// ── Store manifest ───────────────────────────────────────────────
+export { catalogVariantIdsOf } from "./space/store-manifest"
 
 // ── Environment bindings type ────────────────────────────────────
 export type { Env } from "./env"

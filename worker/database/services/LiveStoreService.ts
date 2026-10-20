@@ -1,6 +1,6 @@
 /** D1 reads and writes for live stores: each store's address, its published version, and the seller's own domain. */
 
-import { and, asc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { and, asc, count, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { isUniqueViolation } from './unique-violation';
@@ -81,6 +81,17 @@ export class LiveStoreService extends BaseService {
         return 'published';
     }
 
+    /** The account's stores that are live now; an offline store doesn't count. */
+    async liveCountOf(userId: string): Promise<number> {
+        const row = await this.database
+            .select({ live: count() })
+            .from(schema.liveStores)
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
+            .where(and(eq(schema.apps.userId, userId), eq(schema.liveStores.status, 'live')))
+            .get();
+        return row?.live ?? 0;
+    }
+
     async setOffline(appId: string, now: Date): Promise<void> {
         await this.database.update(schema.liveStores).set({ status: 'offline', updatedAt: now }).where(eq(schema.liveStores.appId, appId));
     }
@@ -111,6 +122,12 @@ export class LiveStoreService extends BaseService {
     async domainOfApp(appId: string): Promise<StoreDomainRow | null> {
         const row = await this.database.select().from(schema.storeDomains).where(eq(schema.storeDomains.appId, appId)).get();
         return row ? { ...row, records: recordsOf(row.records) } : null;
+    }
+
+    /** The store's own domains in any state: a pending claim holds a place too. */
+    async domainCountOf(appId: string): Promise<number> {
+        const row = await this.database.select({ domains: count() }).from(schema.storeDomains).where(eq(schema.storeDomains.appId, appId)).get();
+        return row?.domains ?? 0;
     }
 
     /** The claim on a hostname, in any state. */

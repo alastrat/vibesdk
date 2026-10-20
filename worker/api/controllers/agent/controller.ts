@@ -29,6 +29,8 @@ import { getTemplateImportantFiles } from 'worker/services/sandbox/utils';
 import { hasTicketParam } from '../../../middleware/auth/ticketAuth';
 import { checkUsageAndBalance, getUserGateway, unlimitedUsage } from '../../../services/rate-limit/usageChecker';
 import { checkCreditsBeforeTurn } from '../../../services/billing/metering';
+import { loadAccount } from '../../../services/billing/account';
+import { checkStoreStart, storeStartDepsFromEnv } from '../../../services/billing/store-limits';
 import { readTokenCookie } from '../../../utils/oauthCookie';
 import { UsageLimitExceededError } from 'shared/types/errors';
 
@@ -111,16 +113,21 @@ export class CodingAgentController extends BaseController {
             }
             const credits = await checkCreditsBeforeTurn(env, user.id);
             if (credits.billing && credits.refusal) return CodingAgentController.createPlanLimitResponse(credits.refusal);
-            try {
-                await RateLimitService.enforceAppCreationRateLimit(env, context.config.security.rateLimit, user, request);
-            } catch (error) {
-                if (error instanceof Error) {
-                    return CodingAgentController.createErrorResponse(error, 429);
-                } else {
-                    this.logger.error('Unknown error in enforceAppCreationRateLimit', error);
-                    return CodingAgentController.createErrorResponse(JSON.stringify(error), 429);
+            if (!credits.billing) {
+                try {
+                    await RateLimitService.enforceAppCreationRateLimit(env, context.config.security.rateLimit, user, request);
+                } catch (error) {
+                    if (error instanceof Error) {
+                        return CodingAgentController.createErrorResponse(error, 429);
+                    } else {
+                        this.logger.error('Unknown error in enforceAppCreationRateLimit', error);
+                        return CodingAgentController.createErrorResponse(JSON.stringify(error), 429);
+                    }
                 }
             }
+            // With billing on the plan's store limits replace the rate limit above; either way the store is counted.
+            const storeRefusal = await checkStoreStart(storeStartDepsFromEnv(env, user, request, context.config.security.rateLimit), await loadAccount(env, user.id));
+            if (storeRefusal) return CodingAgentController.createPlanLimitResponse(storeRefusal);
 
             const agentId = generateId();
             const modelConfigService = new ModelConfigService(env);

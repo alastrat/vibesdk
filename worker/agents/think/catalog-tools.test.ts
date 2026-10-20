@@ -17,6 +17,7 @@ const PRODUCT: CatalogProductView = {
 const tools = createCatalogTools({
 	search: async () => [PRODUCT],
 	get: async (productId) => (productId === 'cp_1' ? PRODUCT : null),
+	catalogRefusal: async () => null,
 });
 
 type Executable = { execute?: (input: unknown, options: unknown) => unknown };
@@ -56,6 +57,15 @@ describe('the catalog tools', () => {
 		const description = `${tools.search_catalog.description} ${tools.get_catalog_product.description}`;
 		for (const phrase of ['estori-store.json', 'catalogVariantId', 'minimumRetailPriceCents']) expect(description).toContain(phrase);
 	});
+
+	it("tell the AI, in the seller's words, that catalog products need Pro or Premium", async () => {
+		const refusal = { code: 'plan_limit' as const, limit: 'supplierCatalog' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' };
+		const basic = createCatalogTools({ search: async () => [PRODUCT], get: async () => PRODUCT, catalogRefusal: async () => refusal });
+		for (const output of [await run(basic.search_catalog, {}), await run(basic.get_catalog_product, { productId: 'cp_1' })]) {
+			expect(JSON.parse(output).notice).toBe(`${refusal.message} Tell the seller this before adding a catalog product to their store.`);
+		}
+		expect(JSON.parse(await run(tools.search_catalog, {})).notice).toBeUndefined();
+	});
 });
 
 const agentSources = import.meta.glob<string>('/worker/agents/think/ThinkAgent.ts', { query: '?raw', import: 'default', eager: true });
@@ -63,6 +73,6 @@ const agentSources = import.meta.glob<string>('/worker/agents/think/ThinkAgent.t
 describe('the agent', () => {
 	it('registers the catalog tools', () => {
 		const agent = Object.values(agentSources)[0] ?? '';
-		expect(agent).toContain('...createCatalogTools(catalogToolDepsFromEnv(this.env))');
+		expect(agent).toContain('...createCatalogTools(catalogToolDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null))');
 	});
 });
