@@ -16,7 +16,7 @@ You're responsible for your account. Keep your password secure, give accurate in
 
 Estori lets you describe a website, mainly an online store, and uses AI to build, edit, preview and host it. You can publish sites to Discover, start new sites from published ones, and buy and sell sites.
 
-The Service includes daily limits on how many sites you can create and how much AI you can use. The current limits are shown on our [pricing page](/pricing). We may change the limits and the features of the Service, and we'll try to give notice of changes that reduce what you can do.
+Plans set how many sites you can create and how many AI credits you get. See section 11 and our [pricing page](/pricing). We may change the limits and the features of the Service, and we'll try to give notice of changes that reduce what you can do.
 
 Generated stores show a catalog, cart, checkout flow and order records. They don't process real payments unless and until we announce that feature.
 
@@ -92,7 +92,7 @@ This section applies when a store you build on Estori takes payments from shoppe
 
 ## 11. Plans, AI credits and extra credits
 
-Estori has a free plan, Basic, and paid plans, Pro and Premium, at the prices on our pricing page when you subscribe. Paid plans are billed in US dollars to your card through Stripe, and renew automatically every month until you cancel. You can cancel any time from your billing page in Estori. Cancelling takes effect at the end of the period you paid for; until then you keep your plan. Moving from Pro to Premium takes effect at once, and we charge the difference for the rest of the period. Moving from Premium to Pro takes effect at the next renewal. There are no refunds for part of a period or for a move to Pro.
+Estori has a free plan, Basic, and paid plans, Pro and Premium, at the prices on our pricing page when you subscribe. Paid plans are billed in US dollars to your card through Stripe, and renew automatically every month until you cancel. You can cancel any time from your billing page in Estori. Cancelling takes effect at the end of the period you paid for; until then you keep your plan. Moving from Pro to Premium takes effect at once, and we charge the difference for the rest of the period. Moving from Premium to Pro takes effect at the next renewal. There are no refunds for part of a period or for a move to Pro. If a renewal payment fails, your plan's features continue for 7 days while we retry the payment; that period's AI credits start once the payment goes through, and your account moves to Basic if it still isn't paid.
 
 Each plan includes AI credits for each period. Credits pay for the AI's work: each step the AI takes is charged from the AI's real usage, at the price of the model you choose. Monthly credits don't carry over to the next period. Credits have no cash value and can't be transferred or exchanged for money.
 

@@ -119,9 +119,14 @@ describe('legal documents', () => {
 			'Extra credits are used after your monthly credits and expire 12 months after purchase',
 			'non-refundable, except when you were charged twice or your account could not use them',
 			"at least 30 days' notice",
+			"If a renewal payment fails, your plan's features continue for 7 days while we retry the payment",
+			"that period's AI credits start once the payment goes through",
+			"your account moves to Basic if it still isn't paid",
 		]) {
 			expect(terms).toContain(promise);
 		}
+		expect(terms).toContain('Plans set how many sites you can create and how many AI credits you get. See section 11');
+		expect(terms).not.toContain('daily limits');
 		expect(terms).not.toContain('Purchases are one-time payments');
 		expect(terms).toContain('A paid site is a one-time payment in US dollars');
 		const refunds = LEGAL_DOCUMENTS.refunds.body;
