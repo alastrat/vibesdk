@@ -58,6 +58,12 @@ declare namespace Cloudflare {
 		STRIPE_PUBLISHABLE_KEY?: string;
 		// Signing secret of the Connect webhook endpoint: events on sellers' accounts, such as payout.paid.
 		STRIPE_CONNECT_WEBHOOK_SECRET?: string;
+		// "on" turns plans, billing and plan limits on for everyone.
+		BILLING?: string;
+		// Comma-separated user ids that get billing while BILLING isn't "on": the owner-only phase.
+		BILLING_USER_IDS?: string;
+		// JSON {"pro":"price_...","premium":"price_...","credits":"price_..."}, in the Stripe key's mode.
+		STRIPE_PRICE_IDS?: string;
 		CATALOG_ORDER_RUNNER: DurableObjectNamespace<import('../services/catalog/CatalogOrderRunner').CatalogOrderRunner>;
 	}
 }
