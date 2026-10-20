@@ -109,9 +109,9 @@ describe('Stripe billing calls', () => {
 
 	it('a card setup session is a setup-mode elements session', async () => {
 		const { calls, client } = recordingFetch({ id: 'cs_card', url: null, client_secret: 'cs_card_secret_x' });
-		const session = await client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'pay', returnUrl: 'https://estori.app/settings/billing/card/return?session_id={CHECKOUT_SESSION_ID}', nowMs: NOW });
+		const session = await client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'pay', afterCardId: 'pm_old', returnUrl: 'https://estori.app/settings/billing/card/return?session_id={CHECKOUT_SESSION_ID}', nowMs: NOW });
 		expect(session.client_secret).toBe('cs_card_secret_x');
-		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/checkout/sessions', method: 'POST', key: `billing-card-u1-pay-${BUCKET}` });
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/checkout/sessions', method: 'POST', key: `billing-card-u1-pay-pm_old-${BUCKET}` });
 		expect(calls[0].params).toEqual(
 			expect.arrayContaining([
 				'mode=setup',
@@ -127,9 +127,19 @@ describe('Stripe billing calls', () => {
 			]),
 		);
 		const saved = recordingFetch({ id: 'cs_card2' });
-		await saved.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', returnUrl: 'https://estori.app/r', nowMs: NOW });
-		expect(saved.calls[0].key).toBe(`billing-card-u1-save-${BUCKET}`);
+		await saved.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', afterCardId: null, returnUrl: 'https://estori.app/r', nowMs: NOW });
+		expect(saved.calls[0].key).toBe(`billing-card-u1-save-none-${BUCKET}`);
 		expect(saved.calls[0].params).toContain('metadata[card_mode]=save');
+	});
+
+	it('a card setup after the default card changed is a new session, and one before it is the same session', async () => {
+		const { calls, client } = recordingFetch({ id: 'cs_card' });
+		const setup = (afterCardId: string | null, nowMs = NOW) => client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'pay', afterCardId, returnUrl: 'https://estori.app/r', nowMs });
+		await setup('pm_1');
+		await setup('pm_1', NOW + 60_000);
+		await setup('pm_2');
+		await setup(null);
+		expect(calls.map((call) => call.key)).toEqual([`billing-card-u1-pay-pm_1-${BUCKET}`, `billing-card-u1-pay-pm_1-${BUCKET}`, `billing-card-u1-pay-pm_2-${BUCKET}`, `billing-card-u1-pay-none-${BUCKET}`]);
 	});
 
 	it('sends the same checkout twice within a key bucket, closing at least 30 minutes after either call', async () => {
@@ -142,7 +152,7 @@ describe('Stripe billing calls', () => {
 		for (const nowMs of [NOW, NOW + nineMinutes, lastMoment]) {
 			await subscription.client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_pro', userId: 'u1', plan: 'pro', returnUrl: 'https://estori.app/r', nowMs });
 			await credits.client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, returnUrl: 'https://estori.app/r', nowMs, idempotencyKey: 'billing-credits-u1-5000-none-1' });
-			await card.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', returnUrl: 'https://estori.app/r', nowMs });
+			await card.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', afterCardId: 'pm_old', returnUrl: 'https://estori.app/r', nowMs });
 		}
 		for (const { calls } of [subscription, credits, card]) {
 			expect(new Set(calls.map((call) => call.key)).size).toBe(1);

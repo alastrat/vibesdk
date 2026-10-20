@@ -292,6 +292,11 @@ export interface CardSetupInput {
 	customerId: string;
 	userId: string;
 	mode: CardSetupMode;
+	/**
+	 * The customer's default payment method when the setup starts. A finished setup changes it, so the next setup gets a new
+	 * session instead of the finished one replayed, while a retry of an unfinished setup shares its session.
+	 */
+	afterCardId: string | null;
 	returnUrl: string;
 	nowMs: number;
 }
@@ -725,7 +730,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
-				`billing-card-${input.userId}-${input.mode}-${idempotencyBucket(input.nowMs)}`,
+				`billing-card-${input.userId}-${input.mode}-${input.afterCardId ?? 'none'}-${idempotencyBucket(input.nowMs)}`,
 			),
 		// Each key names the payment method, which a card setup creates new every time, so a retry replays and a later change is a new request.
 		setDefaultPaymentMethod: async ({ customerId, subscriptionId, paymentMethodId }) => {
