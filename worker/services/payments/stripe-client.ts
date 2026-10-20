@@ -411,7 +411,6 @@ export interface StripeClient {
 	releaseSubscriptionSchedule(scheduleId: string): Promise<void>;
 	cancelAtPeriodEnd(subscriptionId: string, idempotencyKey: string): Promise<StripeSubscription>;
 	resumeSubscription(subscription: StripeSubscription, idempotencyKey: string): Promise<StripeSubscription>;
-	createBillingPortalSession(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -837,7 +836,5 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				subscription.cancel_at !== null && !subscription.cancel_at_period_end ? { cancel_at: '' } : { cancel_at_period_end: false },
 				idempotencyKey,
 			),
-		createBillingPortalSession: ({ customerId, returnUrl }) =>
-			request<{ url: string }>('POST', '/billing_portal/sessions', { customer: customerId, return_url: returnUrl }),
 	};
 }

@@ -258,7 +258,7 @@ export function clampExtraCredits(credits: number): number {
 export interface BillingBanner {
 	tone: 'warning' | 'info';
 	message: string;
-	action: UpgradeAction | { kind: 'portal'; label: string };
+	action: UpgradeAction;
 }
 
 /** The app-wide banner: a failed payment first, then a credits warning with the plan's next step; null when there's nothing to say. */
@@ -269,7 +269,7 @@ export function billingBannerFor(view: BillingView | undefined): BillingBanner |
 			view.graceEndsAt !== null
 				? `Your last payment didn't go through. Update your card by ${formatBillingDate(view.graceEndsAt)} to keep ${planName(view.plan)}.`
 				: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.";
-		return { tone: 'warning', message, action: { kind: 'portal', label: 'Update card' } };
+		return { tone: 'warning', message, action: { kind: 'none' } };
 	}
 	if (view.alert === null || view.credits === null) return null;
 	const { credits, limits } = view;

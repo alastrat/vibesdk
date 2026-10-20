@@ -11,7 +11,6 @@ import {
 	checkoutTerms,
 	completeCardSetup,
 	invoicePdf,
-	openPortal,
 	payOpenInvoice,
 	recordCheckoutConsent,
 	resumePlan,
@@ -192,10 +191,6 @@ function fake(
 				calls.push(`resume:${subscription.id}`);
 				return subscription;
 			},
-			createBillingPortalSession: async ({ customerId }) => {
-				calls.push(`portal:${customerId}`);
-				return { url: 'https://billing.stripe.com/p/1' };
-			},
 			retrieveCheckoutSession: async (id, expand) => {
 				calls.push(`session:${id}`);
 				expands.push(expand);
@@ -355,7 +350,7 @@ describe('moving between Pro and Premium', () => {
 	});
 });
 
-describe('cancelling, keeping the plan, the portal and extra credits', () => {
+describe('cancelling, keeping the plan and extra credits', () => {
 	it('drops a pending change before cancelling at the period end, and refuses a second cancel', async () => {
 		const warnings = quietWarnings();
 		const { deps, calls } = fake({ row: row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }), schedule: 'sub_sched_1' });
@@ -379,13 +374,11 @@ describe('cancelling, keeping the plan, the portal and extra credits', () => {
 		expect(unscheduled.calls).toEqual(['read:sub_1', 'cancel:sub_1']);
 	});
 
-	it('keeps the plan only when it was set to end, and opens the portal once there are billing details', async () => {
+	it('keeps the plan only when it was set to end', async () => {
 		expect(await resumePlan(fake({ row: row() }).deps, 'u1')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.notEnding });
 		const ending = fake({ row: row({ cancelAtPeriodEnd: true }) });
 		expect(await resumePlan(ending.deps, 'u1')).toMatchObject({ ok: true });
 		expect(ending.calls).toEqual(['read:sub_1', 'resume:sub_1']);
-		expect(await openPortal(fake().deps, 'u1')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCustomer });
-		expect(await openPortal(fake({ customer: 'cus_1' }).deps, 'u1')).toEqual({ ok: true, value: { url: 'https://billing.stripe.com/p/1' } });
 	});
 
 	it('sells extra credits to Premium only, in amounts from 5,000 in thousands', async () => {
@@ -447,10 +440,9 @@ describe('while billing checkout is paused', () => {
 		expect(other.calls).toEqual([]);
 	});
 
-	it('keeps cancelling, undoing a cancel and the billing portal open', async () => {
+	it('keeps cancelling and undoing a cancel open', async () => {
 		expect(await cancelPlan(fake({ paused: true, row: row() }).deps, 'u1')).toMatchObject({ ok: true });
 		expect(await resumePlan(fake({ paused: true, row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toMatchObject({ ok: true });
-		expect(await openPortal(fake({ paused: true, customer: 'cus_1' }).deps, 'u1')).toMatchObject({ ok: true });
 	});
 });
 

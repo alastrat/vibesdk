@@ -33,8 +33,8 @@ describe('billing while checkout is paused', () => {
 		for (const call of ['scheduleSubscriptionPrice', 'changeSubscriptionPrice']) expect(body.indexOf(call), call).toBeGreaterThan(pause);
 	});
 
-	it('keeps cancelling, undoing a cancel and the billing portal open', () => {
-		for (const name of ['cancelPlan', 'resumePlan', 'openPortal']) expect(action(name), name).not.toContain('checkoutPaused');
+	it('keeps cancelling and undoing a cancel open', () => {
+		for (const name of ['cancelPlan', 'resumePlan']) expect(action(name), name).not.toContain('checkoutPaused');
 	});
 
 	it('keeps changing the card, paying a failed invoice, the history and the invoice PDFs open', () => {

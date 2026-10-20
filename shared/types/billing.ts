@@ -221,15 +221,6 @@ export interface BillingView {
 	card: CardOnFile | null;
 }
 
-export interface CheckoutStarted {
-	url: string;
-	sessionId: string;
-}
-
-export interface BillingRedirect {
-	url: string;
-}
-
 /** Stripe took the change; the page shows it once the webhook records it. */
 export interface BillingChangeRequested {
 	requested: true;

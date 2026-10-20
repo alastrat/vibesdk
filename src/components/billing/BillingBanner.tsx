@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { Button, buttonVariants } from '@cloudflare/kumo';
+import { buttonVariants } from '@cloudflare/kumo';
 import { InfoIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
-import { useBilling, useBillingPortal } from '@/hooks/use-billing';
+import { useBilling } from '@/hooks/use-billing';
 import { cn } from '@/lib/utils';
 import { bannerKeyFor, billingBannerFor, type BillingBanner as Notice } from '@/routes/settings/billing-view';
 import { PlanButton } from './PlanButton';
@@ -29,14 +29,7 @@ function rememberDismissed(key: string): void {
 }
 
 function NoticeAction({ action }: { action: Notice['action'] }) {
-	const portal = useBillingPortal();
 	switch (action.kind) {
-		case 'portal':
-			return (
-				<Button variant="secondary" size="sm" loading={portal.isPending} onClick={portal.open}>
-					{action.label}
-				</Button>
-			);
 		case 'checkout':
 			return <PlanButton plan={action.plan} variant="blue" className="px-3 py-1 text-xs" />;
 		case 'link':

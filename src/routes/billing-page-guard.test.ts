@@ -7,7 +7,11 @@ const sources = import.meta.glob<string>(
 		'/src/routes/settings/billing.tsx',
 		'/src/components/layout/app-layout.tsx',
 		'/src/components/billing/PlanButton.tsx',
+		'/src/components/billing/BillingBanner.tsx',
+		'/src/components/billing/UpgradeDialog.tsx',
 		'/src/hooks/use-billing.ts',
+		'/src/lib/api-client.ts',
+		'/src/routes/settings/billing-view.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -58,6 +62,55 @@ describe('the billing page', () => {
 		const checkout = source('/src/hooks/use-billing.ts');
 		expect(checkout).toContain('setIntendedUrl(`${BILLING_PATH}?plan=${plan}`)');
 		expect(checkout).toContain("navigate('/signup')");
-		expect(checkout).toContain('apiClient.startPlanCheckout(plan)');
+	});
+
+	it("takes a plan or an amount of extra credits to Estori's own checkout page, which opens the session itself", () => {
+		const hooks = source('/src/hooks/use-billing.ts');
+		expect(hooks).toContain('const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;');
+		expect(hooks).toContain('navigate(`${CHECKOUT_PATH}?plan=${plan}`)');
+		expect(hooks).toContain('navigate(`${CHECKOUT_PATH}?credits=${credits}`)');
+		expect(hooks).not.toContain('window.location');
+		expect(hooks).not.toContain('apiClient.startPlanCheckout');
+		expect(hooks).not.toContain('apiClient.buyCredits');
+		expect(source('/src/routes/settings/billing.tsx')).not.toContain('window.location');
+		const dialog = source('/src/components/billing/UpgradeDialog.tsx');
+		expect(dialog).toContain('usePlanCheckout()');
+		expect(dialog).not.toContain('window.location');
+		expect(dialog).not.toContain('apiClient');
+	});
+
+	it("has no way into Stripe's billing portal", () => {
+		for (const path of ['/src/routes/settings/billing.tsx', '/src/routes/settings/billing-view.ts', '/src/components/billing/BillingBanner.tsx', '/src/hooks/use-billing.ts', '/src/lib/api-client.ts']) {
+			expect(source(path), path).not.toMatch(/portal/i);
+		}
+		expect(source('/src/routes/settings/billing.tsx')).not.toContain('Manage billing');
+	});
+});
+
+describe('the billing calls of the API client', () => {
+	const client = source('/src/lib/api-client.ts');
+	const billing = client.slice(client.indexOf('async getBilling('), client.indexOf('async getSellerLimits('));
+
+	it('reaches each billing route through the one request that sends the CSRF token with a write', () => {
+		for (const call of [
+			"this.request<CheckoutClientStart>('/api/billing/checkout', { method: 'POST', body })",
+			"this.request<CheckoutClientStart>('/api/billing/credits', { method: 'POST', body })",
+			'this.request<CheckoutTermsView>(`/api/billing/checkout/terms?${new URLSearchParams({ session_id: sessionId })}`)',
+			"this.request<{ recorded: true }>('/api/billing/checkout/consent', { method: 'POST', body })",
+			'this.request<CheckoutStatusView>(`/api/billing/checkout/status?${new URLSearchParams({ session_id: sessionId })}`)',
+			"this.request<CardSetupStart>('/api/billing/card', { method: 'POST', body: { mode } })",
+			"this.request<InvoicePaymentResult>('/api/billing/card/complete', { method: 'POST', body: { sessionId } })",
+			"this.request<InvoicePaymentResult>('/api/billing/invoices/pay', { method: 'POST' })",
+			"this.request<InvoiceView[]>('/api/billing/history')",
+		]) {
+			expect(billing, call).toContain(call);
+		}
+		expect(billing).not.toContain('fetch(');
+	});
+
+	it("gives an invoice's PDF as a path on Estori for a link, never Stripe's address", () => {
+		expect(billing).toContain('invoicePdfUrl(invoiceId: string): string {');
+		expect(billing).toContain('return `${this.baseUrl}/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`;');
+		expect(billing).not.toContain('stripe.com');
 	});
 });

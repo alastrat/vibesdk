@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
 import { Badge, Banner, Button, Empty, Input, LayerCard, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
-import { CheckCircleIcon, CoinsIcon, CreditCardIcon, InfoIcon, MinusIcon, PlusIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { CheckCircleIcon, CoinsIcon, InfoIcon, MinusIcon, PlusIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
 	BILLING_NOT_OPEN_MESSAGE,
 	EXTRA_CREDITS,
@@ -19,17 +19,7 @@ import {
 } from '@/api-types';
 import { pageTitle } from '@/brand';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import {
-	CHANGE_FAILED_MESSAGE,
-	CHECKOUT_FAILED_MESSAGE,
-	showBillingError,
-	useBilling,
-	useBillingPortal,
-	useBuyCredits,
-	usePlanChange,
-	usePlanCheckout,
-	type PlanChange,
-} from '@/hooks/use-billing';
+import { CHANGE_FAILED_MESSAGE, showBillingError, useBilling, useBuyCredits, usePlanChange, usePlanCheckout, type PlanChange } from '@/hooks/use-billing';
 import { EXTRA_CREDITS_PRICE, limitFeatures } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 import {
@@ -109,7 +99,6 @@ function SectionTitle({ icon, children }: { icon: ReactNode; children: ReactNode
 }
 
 function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => void }) {
-	const portal = useBillingPortal();
 	const paymentNote = paymentNoteFor(view);
 	const renewal = renewalLineFor(view);
 	return (
@@ -126,11 +115,6 @@ function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => vo
 							{renewal && <p className="text-sm text-kumo-subtle">{renewal}</p>}
 						</div>
 						<div className="flex flex-wrap gap-2">
-							{view.canManageBilling && (
-								<Button variant="secondary" icon={<CreditCardIcon />} loading={portal.isPending} onClick={portal.open}>
-									Manage billing
-								</Button>
-							)}
 							{canCancel(view) && (
 								<Button variant="secondary-destructive" onClick={onCancel}>
 									Cancel plan
@@ -138,20 +122,7 @@ function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => vo
 							)}
 						</div>
 					</div>
-					{paymentNote && (
-						<Banner
-							variant="alert"
-							icon={<WarningCircleIcon />}
-							description={paymentNote}
-							action={
-								view.canManageBilling ? (
-									<Banner.Action loading={portal.isPending} onClick={portal.open}>
-										Update card
-									</Banner.Action>
-								) : undefined
-							}
-						/>
-					)}
+					{paymentNote && <Banner variant="alert" icon={<WarningCircleIcon />} description={paymentNote} />}
 				</div>
 			</LayerCard.Primary>
 		</LayerCard>
@@ -294,16 +265,11 @@ function CreditsStepper({ value, onChange }: { value: number; onChange: (credits
 
 function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingView; premium: PlanChoice | undefined; busy: boolean; disabled: boolean; onAct: (choice: PlanChoice) => void }) {
 	const [credits, setCredits] = useState<number>(EXTRA_CREDITS.minCredits);
-	const buy = useBuyCredits();
-	const buying = buy.isPending || buy.isSuccess;
-	const purchase = () =>
-		buy.mutate(credits, {
-			onSuccess: ({ url }) => {
-				keepBaseline(checkoutBaselineOf(view));
-				window.location.href = url;
-			},
-			onError: (failure) => showBillingError(failure, CHECKOUT_FAILED_MESSAGE),
-		});
+	const buyCredits = useBuyCredits();
+	const purchase = () => {
+		keepBaseline(checkoutBaselineOf(view));
+		buyCredits(credits);
+	};
 
 	return (
 		<LayerCard id="extra-credits" className="scroll-mt-4">
@@ -317,7 +283,7 @@ function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingV
 						<div className="flex flex-wrap items-center gap-4">
 							<CreditsStepper value={credits} onChange={setCredits} />
 							<p className="text-lg font-medium text-kumo-default">{formatUsd(extraCreditsPriceCents(credits))}</p>
-							<Button variant="primary" loading={buying} disabled={disabled} onClick={purchase}>
+							<Button variant="primary" disabled={disabled} onClick={purchase}>
 								Buy credits
 							</Button>
 						</div>
@@ -443,7 +409,7 @@ export default function BillingPage() {
 		setRequested(null);
 		if (!view.enabled) return;
 		const choice = planChoicesFor(view).find((entry) => entry.plan === requested);
-		if (choice?.action === 'checkout') void checkout.start(choice.plan);
+		if (choice?.action === 'checkout') checkout.start(choice.plan);
 		else if (choice?.action === 'upgrade' || choice?.action === 'downgrade') setConfirm(choice.action);
 	}, [requested, view, billing.isFetching, checkout]);
 
@@ -466,7 +432,7 @@ export default function BillingPage() {
 	const act = (choice: PlanChoice) => {
 		switch (choice.action) {
 			case 'checkout':
-				void checkout.start(choice.plan);
+				checkout.start(choice.plan);
 				return;
 			case 'upgrade':
 			case 'downgrade':
@@ -485,13 +451,12 @@ export default function BillingPage() {
 	};
 
 	const busyFor = (choice: PlanChoice): boolean => {
-		if (choice.action === 'checkout') return checkout.pending === choice.plan;
 		if (!planChange.isPending) return false;
 		if (choice.action === 'resume') return planChange.variables?.kind === 'resume';
 		return choice.action === 'cancel-change' && planChange.variables?.kind === 'change';
 	};
 	// One request at a time, and nothing new while the last payment or change is still on its way.
-	const busy = confirming || planChange.isPending || checkout.pending !== null;
+	const busy = confirming || planChange.isPending;
 	const choices = view ? planChoicesFor(view) : [];
 	const premium = choices.find((entry) => entry.plan === 'premium');
 

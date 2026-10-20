@@ -1,9 +1,9 @@
 /**
- * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, open
- * the customer portal, buy extra credits, change their card, pay a failed renewal and read their invoices. Each asks
- * Stripe and changes no row; the webhook records what Stripe did. A checkout opens as an embedded session on Estori's
- * own page; agreeing to its terms is recorded before it is paid, and the seller's return may record the payment ahead of
- * the webhook. Changing the card, paying an invoice and the history never check the billing-checkout pause.
+ * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, buy
+ * extra credits, change their card, pay a failed renewal and read their invoices. Each asks Stripe and changes no row;
+ * the webhook records what Stripe did. A checkout opens as an embedded session on Estori's own page; agreeing to its
+ * terms is recorded before it is paid, and the seller's return may record the payment ahead of the webhook. Changing
+ * the card, paying an invoice and the history never check the billing-checkout pause.
  */
 
 import { BillingService, CreditLedgerService } from '../../database';
@@ -14,7 +14,6 @@ import {
 	CHECKOUT_KIND_CARD,
 	PAYMENTS_NOT_SET_UP_MESSAGE,
 	type BillingChangeRequested,
-	type BillingRedirect,
 	type CardSetupMode,
 	type CardSetupStart,
 	type CheckoutClientStart,
@@ -81,7 +80,6 @@ export type BillingStripe = Pick<
 	| 'releaseSubscriptionSchedule'
 	| 'cancelAtPeriodEnd'
 	| 'resumeSubscription'
-	| 'createBillingPortalSession'
 	| 'retrieveCheckoutSession'
 	| 'createCardSetupSession'
 	| 'setDefaultPaymentMethod'
@@ -300,18 +298,6 @@ export async function resumePlan(deps: BillingActionDeps, userId: string): Promi
 		const subscription = await stripe.retrieveSubscription(row.stripeSubscriptionId);
 		await stripe.resumeSubscription(subscription, idempotencyKey(deps, 'resume', userId, [rowVersion(row)]));
 		return ok(REQUESTED);
-	});
-}
-
-/** Stripe's customer portal, for the card and invoices; it returns to the billing page. */
-export async function openPortal(deps: BillingActionDeps, userId: string): Promise<BillingActionResult<BillingRedirect>> {
-	const setup = configured(deps);
-	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
-	const customerId = await deps.store.customerOf(userId);
-	if (!customerId) return fail(404, BILLING_MESSAGES.noCustomer);
-	return askStripe(async () => {
-		const portal = await setup.stripe.createBillingPortalSession({ customerId, returnUrl: `${deps.baseUrl}${BILLING_PATH}` });
-		return ok({ url: portal.url });
 	});
 }
 

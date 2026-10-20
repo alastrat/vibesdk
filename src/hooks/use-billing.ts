@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -11,7 +10,9 @@ import { usePublicPlan } from './use-public-plan';
 
 export const CHECKOUT_FAILED_MESSAGE = "Couldn't open the checkout. Try again in a moment.";
 export const CHANGE_FAILED_MESSAGE = "Couldn't change your plan. Try again in a moment.";
-const PORTAL_FAILED_MESSAGE = "Couldn't open billing. Try again in a moment.";
+
+/** Estori's own checkout page, which opens the Stripe session itself when it loads. */
+const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
 
 /** The signed-in account's plan, credits and what it may do; `refetchInterval` polls while a payment is being confirmed. */
 export function useBilling({ refetchInterval = false }: { refetchInterval?: number | false } = {}) {
@@ -42,37 +43,23 @@ export function showBillingError(failure: unknown, fallback: string): void {
 }
 
 /**
- * Starts Pro or Premium at Stripe. Signed-out buyers sign up first and come back to the plan they chose; an account
- * already paying goes to its billing page, which says what to do instead. `pending` is the plan being opened.
+ * Takes the seller to the checkout page for Pro or Premium. Signed-out buyers sign up first and come back to the plan they
+ * chose; an account already paying is sent back to its billing page by the checkout page, which says what to do instead.
  */
 export function usePlanCheckout() {
 	const { isAuthenticated, setIntendedUrl } = useAuth();
 	const navigate = useNavigate();
-	const queryClient = useQueryClient();
-	const [pending, setPending] = useState<PaidPlanId | null>(null);
 
-	const start = async (plan: PaidPlanId) => {
+	const start = (plan: PaidPlanId) => {
 		if (!isAuthenticated) {
 			setIntendedUrl(`${BILLING_PATH}?plan=${plan}`);
 			navigate('/signup');
 			return;
 		}
-		setPending(plan);
-		try {
-			const { url } = await unwrap(apiClient.startPlanCheckout(plan), CHECKOUT_FAILED_MESSAGE);
-			window.location.href = url;
-		} catch (failure) {
-			setPending(null);
-			if (failure instanceof ApiError && failure.status === 409) {
-				void queryClient.invalidateQueries({ queryKey: queryKeys.billing() });
-				navigate(`${BILLING_PATH}?plan=${plan}`);
-				return;
-			}
-			showBillingError(failure, CHECKOUT_FAILED_MESSAGE);
-		}
+		navigate(`${CHECKOUT_PATH}?plan=${plan}`);
 	};
 
-	return { start, pending };
+	return { start };
 }
 
 export type PlanChange = { kind: 'change'; plan: PaidPlanId } | { kind: 'cancel' } | { kind: 'resume' };
@@ -97,21 +84,8 @@ export function usePlanChange() {
 	});
 }
 
-/** Stripe's customer portal, for the card and invoices. The button stays busy until the browser leaves. */
-export function useBillingPortal() {
-	const portal = useMutation({
-		mutationFn: () => unwrap(apiClient.openBillingPortal(), PORTAL_FAILED_MESSAGE),
-		onSuccess: ({ url }) => {
-			window.location.href = url;
-		},
-		onError: (failure) => showBillingError(failure, PORTAL_FAILED_MESSAGE),
-	});
-	return { open: () => portal.mutate(), isPending: portal.isPending || portal.isSuccess };
-}
-
-/** A Stripe checkout for extra credits; the caller sends the browser to its URL. */
+/** Takes the seller to the checkout page for an amount of extra credits. */
 export function useBuyCredits() {
-	return useMutation({
-		mutationFn: (credits: number) => unwrap(apiClient.buyCredits(credits), CHECKOUT_FAILED_MESSAGE),
-	});
+	const navigate = useNavigate();
+	return (credits: number) => navigate(`${CHECKOUT_PATH}?credits=${credits}`);
 }

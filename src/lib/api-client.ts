@@ -128,10 +128,16 @@ import type{
 	TemplateCategory,
 	AuthUser,
 	BillingChangeRequested,
-	BillingRedirect,
 	BillingView,
-	CheckoutStarted,
+	CardSetupMode,
+	CardSetupStart,
+	CheckoutClientStart,
+	CheckoutConsentRequest,
+	CheckoutStatusView,
+	CheckoutTermsView,
 	CreditsRequest,
+	InvoicePaymentResult,
+	InvoiceView,
 	PaidPlanId,
 	PlanLimitRefusal,
 	PlanRequest,
@@ -718,10 +724,31 @@ class ApiClient {
 		return this.request<BillingView>('/api/billing');
 	}
 
-	/** A Stripe Checkout for Pro or Premium; the page sends the seller to its URL. */
-	async startPlanCheckout(plan: PaidPlanId): Promise<ApiResponse<CheckoutStarted>> {
+	/** Opens an embedded checkout for Pro or Premium; the answer carries what Stripe.js starts the form with. */
+	async startPlanCheckout(plan: PaidPlanId): Promise<ApiResponse<CheckoutClientStart>> {
 		const body: PlanRequest = { plan };
-		return this.request<CheckoutStarted>('/api/billing/checkout', { method: 'POST', body });
+		return this.request<CheckoutClientStart>('/api/billing/checkout', { method: 'POST', body });
+	}
+
+	/** Opens an embedded checkout for extra credits, Premium only. */
+	async buyCredits(credits: number): Promise<ApiResponse<CheckoutClientStart>> {
+		const body: CreditsRequest = { credits };
+		return this.request<CheckoutClientStart>('/api/billing/credits', { method: 'POST', body });
+	}
+
+	/** The consent sentence, button and first payment of the seller's open subscription checkout, as Stripe has it now. */
+	async getCheckoutTerms(sessionId: string): Promise<ApiResponse<CheckoutTermsView>> {
+		return this.request<CheckoutTermsView>(`/api/billing/checkout/terms?${new URLSearchParams({ session_id: sessionId })}`);
+	}
+
+	/** Keeps the seller's agreement to the terms shown, before the payment is confirmed. */
+	async recordCheckoutConsent(body: CheckoutConsentRequest): Promise<ApiResponse<{ recorded: true }>> {
+		return this.request<{ recorded: true }>('/api/billing/checkout/consent', { method: 'POST', body });
+	}
+
+	/** Where the seller's checkout stands; once it is paid the server has recorded it. */
+	async getCheckoutStatus(sessionId: string): Promise<ApiResponse<CheckoutStatusView>> {
+		return this.request<CheckoutStatusView>(`/api/billing/checkout/status?${new URLSearchParams({ session_id: sessionId })}`);
 	}
 
 	/** Premium now, Pro at the renewal, or the current plan again to drop a pending move. */
@@ -738,15 +765,29 @@ class ApiClient {
 		return this.request<BillingChangeRequested>('/api/billing/resume', { method: 'POST' });
 	}
 
-	/** Stripe's customer portal, for the card and invoices. */
-	async openBillingPortal(): Promise<ApiResponse<BillingRedirect>> {
-		return this.request<BillingRedirect>('/api/billing/portal', { method: 'POST' });
+	/** Opens the form for a new card; `pay` also pays the failed invoice with it once it is saved. */
+	async startCardSetup(mode: CardSetupMode): Promise<ApiResponse<CardSetupStart>> {
+		return this.request<CardSetupStart>('/api/billing/card', { method: 'POST', body: { mode } });
 	}
 
-	/** A Stripe Checkout for extra credits, Premium only. */
-	async buyCredits(credits: number): Promise<ApiResponse<CheckoutStarted>> {
-		const body: CreditsRequest = { credits };
-		return this.request<CheckoutStarted>('/api/billing/credits', { method: 'POST', body });
+	/** Makes the card the seller just saved their default, and in `pay` mode pays the failed invoice with it. */
+	async completeCardSetup(sessionId: string): Promise<ApiResponse<InvoicePaymentResult>> {
+		return this.request<InvoicePaymentResult>('/api/billing/card/complete', { method: 'POST', body: { sessionId } });
+	}
+
+	/** Pays the failed invoice with the card on file. */
+	async payOpenInvoice(): Promise<ApiResponse<InvoicePaymentResult>> {
+		return this.request<InvoicePaymentResult>('/api/billing/invoices/pay', { method: 'POST' });
+	}
+
+	/** The seller's last 24 invoices, newest first. */
+	async getBillingHistory(): Promise<ApiResponse<InvoiceView[]>> {
+		return this.request<InvoiceView[]>('/api/billing/history');
+	}
+
+	/** Where an invoice's PDF downloads from, for an anchor's `href`; the server streams it, so Stripe's address never reaches the page. */
+	invoicePdfUrl(invoiceId: string): string {
+		return `${this.baseUrl}/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`;
 	}
 
 	/** The seller's level, store limits and this week's use. */

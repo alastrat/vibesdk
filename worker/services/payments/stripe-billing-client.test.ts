@@ -240,15 +240,18 @@ describe('Stripe billing calls', () => {
 		expect(calls.map((call) => call.params)).toEqual([['cancel_at_period_end=true'], ['cancel_at_period_end=false'], ['cancel_at=']]);
 	});
 
-	it("releases a schedule, treats one already released as done, and opens Stripe's portal", async () => {
+	it('releases a schedule, and treats one already released as done', async () => {
 		const released = recordingFetch(SCHEDULE);
 		await released.client.releaseSubscriptionSchedule('sub_sched_1');
 		expect(released.calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscription_schedules/sub_sched_1/release', method: 'POST' });
 		const gone = recordingFetch({ error: { message: 'already released', type: 'invalid_request_error' } }, 400);
 		await expect(gone.client.releaseSubscriptionSchedule('sub_sched_1')).resolves.toBeUndefined();
-		const portal = recordingFetch({ url: 'https://billing.stripe.com/p/session/1' });
-		expect(await portal.client.createBillingPortalSession({ customerId: 'cus_1', returnUrl: 'https://estori.app/settings/billing' })).toEqual({ url: 'https://billing.stripe.com/p/session/1' });
-		expect(portal.calls[0].params).toEqual(['customer=cus_1', 'return_url=https://estori.app/settings/billing']);
+	});
+
+	it("has no call for Stripe's Billing Portal, whose pages Estori's own replace", () => {
+		const { client } = recordingFetch({});
+		// @ts-expect-error The client no longer opens a Billing Portal session.
+		expect(client.createBillingPortalSession).toBeUndefined();
 	});
 
 	it('reads a checkout session with the objects billing needs expanded, and without expands when none are asked for', async () => {

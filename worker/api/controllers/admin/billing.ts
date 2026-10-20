@@ -104,7 +104,8 @@ async function adminBillingView(env: Env, userId: string): Promise<AdminBillingV
 		ledger.grantsOf(userId, account.period.key),
 	]);
 	return {
-		...billingView(account, credits, purchases, customer !== null),
+		// An admin's read leaves the card to Stripe's dashboard, which `stripeCustomerUrl` opens.
+		...billingView(account, credits, purchases, customer !== null, null),
 		userId,
 		override: activeOverride(override, nowMs),
 		grants: grants.map((grant) => ({ credits: grant.credits, reason: grant.reason, createdAt: grant.createdAt.getTime() })),

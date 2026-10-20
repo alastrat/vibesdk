@@ -103,7 +103,7 @@ describe('the billing page', () => {
 	});
 
 	it('puts a failed payment, then a credit warning, in the banner, with the next step for the plan', () => {
-		expect(billingBannerFor(view('pro', { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5 }))).toEqual({ tone: 'warning', message: "Your last payment didn't go through. Update your card by November 5 to keep Pro.", action: { kind: 'portal', label: 'Update card' } });
+		expect(billingBannerFor(view('pro', { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5 }))).toEqual({ tone: 'warning', message: "Your last payment didn't go through. Update your card by November 5 to keep Pro.", action: { kind: 'none' } });
 		const low = { ...view('basic').credits!, used: 4_000, left: 1_000 };
 		expect(billingBannerFor(view('basic', { alert: 'credits_20', credits: low }))).toEqual({ tone: 'info', message: 'You have 1,000 AI credits left until November 5.', action: { kind: 'checkout', plan: 'pro', label: 'Get Pro' } });
 		expect(billingBannerFor(view('premium', { alert: 'credits_5' }))?.action).toEqual({ kind: 'link', to: '/settings/billing#extra-credits', label: 'Buy credits' });
@@ -118,7 +118,7 @@ describe('the billing page, beyond the plan cards', () => {
 		expect(paymentNoteFor(grace)).toBe("Your last payment didn't go through. Pro's features keep working until November 5, and this month's AI credits start once the payment goes through.");
 		const ended = view('basic', { source: 'free', status: 'past_due', paymentFailing: true });
 		expect(paymentNoteFor(ended)).toBe("Your last payment didn't go through, so your account is on Basic until it's paid.");
-		expect(billingBannerFor(ended)).toEqual({ tone: 'warning', message: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.", action: { kind: 'portal', label: 'Update card' } });
+		expect(billingBannerFor(ended)).toEqual({ tone: 'warning', message: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.", action: { kind: 'none' } });
 		expect(actions(planChoicesFor(ended))).toEqual(['pro:none', 'premium:none']);
 		expect(paymentNoteFor(view('pro'))).toBeNull();
 	});
