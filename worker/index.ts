@@ -378,7 +378,14 @@ async function handleFetch(request: Request, env: Env, ctx: ExecutionContext): P
 /** Every request and scheduled run happens in the request scope, so analytics sends after the response. */
 const worker = {
 	fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-		return runInRequestScope(ctx, () => handleFetch(request, env, ctx));
+		return runInRequestScope(ctx, async () => {
+			try {
+				return await handleFetch(request, env, ctx);
+			} catch (error) {
+				logger.error('Unhandled request error', error, { path: new URL(request.url).pathname });
+				throw error;
+			}
+		});
 	},
 	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
 		runInRequestScope(ctx, () => {

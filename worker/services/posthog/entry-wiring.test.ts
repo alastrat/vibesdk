@@ -35,4 +35,10 @@ describe('the Worker entry and the request scope', () => {
 		expect(main.indexOf('if (isIngestPath(pathname))')).toBeLessThan(main.indexOf('return servePublicSite('));
 		expect(index).toContain('return proxyPostHog(request, env);');
 	});
+
+	it('logs a request error no handler caught, then rethrows it', () => {
+		const fetchHandler = index.slice(index.indexOf('fetch(request: Request, env: Env, ctx: ExecutionContext)'));
+		expect(fetchHandler).toContain("logger.error('Unhandled request error'");
+		expect(fetchHandler).toContain('throw error;');
+	});
 });
