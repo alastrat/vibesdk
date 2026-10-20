@@ -30,12 +30,9 @@ import { getUserConfigurableSettings } from '../../config';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
-import { loadAccount } from '../../services/billing/account';
-import type { LedgerPeriod } from '../../services/billing/credit-ledger';
 import { isBillingOn } from '../../services/billing/flag';
-import { chargeStep, meteringDepsFromEnv } from '../../services/billing/metering';
+import { chargeStep, loadTurnAccount, meteringDepsFromEnv, type TurnAccount } from '../../services/billing/metering';
 import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
-import type { PlanId } from '../../../shared/types/plans';
 import { resolveThinkModel, type TokenPrices } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
@@ -57,11 +54,11 @@ interface TurnPricing {
 }
 
 /**
- * How a turn is metered: charged to the credit ledger (billing on), counted by the old daily counter (billing off), or
- * neither when the metering lookup failed.
+ * How a turn is metered: charged to the credit ledger (billing on; `account` is null until it loads), counted by the old
+ * daily counter (billing off), or neither when the daily lookup failed.
  */
 type TurnUsage =
-	| (TurnPricing & { mode: 'credits'; userId: string; plan: PlanId; period: LedgerPeriod; pool: number })
+	| (TurnPricing & { mode: 'credits'; userId: string; account: TurnAccount | null })
 	| (TurnPricing & { mode: 'daily'; config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number })
 	| (TurnPricing & { mode: 'unmetered' });
 
@@ -309,21 +306,19 @@ export class ThinkAgent extends Think<Env> {
 		const model = resolveThinkModel(turnModelId);
 		const pricing: TurnPricing = { turnId: crypto.randomUUID(), model: model.id, prices: model.prices, typical: model.creditsPerStep };
 		this.turnUsage = { ...pricing, mode: 'unmetered' };
-		if (config) {
+		if (config && isBillingOn(this.env, config.userId)) {
+			// A billed turn is billed even if its account doesn't load now: each step loads it again.
+			this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, account: await loadTurnAccount(this.env, config.userId) };
+		} else if (config) {
 			try {
-				if (isBillingOn(this.env, config.userId)) {
-					const account = await loadAccount(this.env, config.userId);
-					this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, plan: account.plan, period: account.period, pool: account.limits.aiCredits };
-				} else {
-					const userConfig = await getUserConfigurableSettings(this.env, config.userId);
-					this.turnUsage = {
-						...pricing,
-						mode: 'daily',
-						config: userConfig.security.rateLimit,
-						hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
-						creditCost: model.config.creditCost,
-					};
-				}
+				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
+				this.turnUsage = {
+					...pricing,
+					mode: 'daily',
+					config: userConfig.security.rateLimit,
+					hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
+					creditCost: model.config.creditCost,
+				};
 			} catch (error) {
 				console.warn('Failed to resolve Think credit metering configuration', error);
 			}
@@ -418,7 +413,8 @@ export class ThinkAgent extends Think<Env> {
 
 	/**
 	 * Prices the step just finished from the tokens it used and adds it to the turn's total. With billing on it is also
-	 * charged to the ledger; a failed record is retried, and never fails the turn.
+	 * charged to the ledger, loading the account first if the turn started without it; a failed record is retried, and
+	 * never fails the turn.
 	 */
 	override async onStepFinish(ctx: StepContext): Promise<void> {
 		const usage = this.turnUsage;
@@ -427,11 +423,14 @@ export class ThinkAgent extends Think<Env> {
 		const credits = stepCredits(usage.prices, stepUsage, usage.typical);
 		this.turnCredits += credits;
 		if (usage.mode !== 'credits') return;
+		usage.account ??= await loadTurnAccount(this.env, usage.userId);
+		if (!usage.account) {
+			console.error('A billed step was not charged: its account could not be loaded', { userId: usage.userId, turnId: usage.turnId, step: ctx.stepNumber, credits });
+			return;
+		}
 		await chargeStep(meteringDepsFromEnv(this.env), {
 			userId: usage.userId,
-			period: usage.period,
-			pool: usage.pool,
-			plan: usage.plan,
+			...usage.account,
 			useKey: `${this.name}:${usage.turnId}:${ctx.stepNumber}`,
 			credits,
 			source: 'think',

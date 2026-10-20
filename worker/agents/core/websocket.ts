@@ -337,8 +337,9 @@ export async function handleWebSocketMessage(
 /**
  * Runs the checks for a new prompt. Sends the limit popup or error and
  * returns false when the user may not prompt. With billing on, the account's
- * credits decide; the Cloudflare usage check runs only while billing is off,
- * since the build always runs on Estori's gateway.
+ * credits come first; a Think app then needs nothing more, since it always
+ * runs on Estori's gateway, while older builders that use the seller's own
+ * Cloudflare account keep the usage check.
  */
 async function ensureCanPrompt(
     agent: CodeGeneratorAgent,
@@ -351,8 +352,7 @@ async function ensureCanPrompt(
         const userId = agent.state.metadata.userId;
 
         const credits = await creditCheck(env, userId);
-        if (credits.billing) {
-            if (!credits.refusal) return true;
+        if (credits.billing && credits.refusal) {
             logger.warn('Prompt refused by the credit check', { userId, plan: credits.refusal.plan });
             sendToConnection(connection, WebSocketMessageResponses.ERROR, {
                 error: credits.refusal.message,
@@ -362,6 +362,7 @@ async function ensureCanPrompt(
             });
             return false;
         }
+        if (credits.billing && agent.state.behaviorType === 'think') return true;
 
         // The encrypted blob was captured from the HttpOnly cookie at WS
         // upgrade time (see codingAgent.onConnect) and stored in DO state.

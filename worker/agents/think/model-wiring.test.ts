@@ -65,6 +65,20 @@ describe('think model wiring', () => {
 		expect(agent).toMatch(/turnCreditsUsed\(\): number \{\s*return this\.turnCredits;\s*\}/);
 	});
 
+	it('never leaves a billed turn free when its account fails to load: it retries, then loads again at each step', () => {
+		const agent = source('/worker/agents/think/ThinkAgent.ts');
+		const beforeTurn = agent.slice(agent.indexOf('override async beforeTurn('), agent.indexOf('override getSkills('));
+		const onStepFinish = agent.slice(agent.indexOf('override async onStepFinish('), agent.indexOf('turnCreditsUsed(): number'));
+		// The billed mode is set whether or not the account loads, outside the daily lookup's try.
+		const billed = beforeTurn.indexOf("mode: 'credits', userId: config.userId, account: await loadTurnAccount(this.env, config.userId)");
+		expect(billed).toBeGreaterThan(-1);
+		expect(billed).toBeLessThan(beforeTurn.indexOf('try {'));
+		const reload = onStepFinish.indexOf('usage.account ??= await loadTurnAccount(this.env, usage.userId);');
+		expect(reload).toBeGreaterThan(onStepFinish.indexOf("if (usage.mode !== 'credits') return;"));
+		expect(reload).toBeLessThan(onStepFinish.indexOf('await chargeStep('));
+		expect(onStepFinish).toMatch(/console\.error\('A billed step was not charged[^']*', \{ userId: usage\.userId/);
+	});
+
 	it('checks credits before a new store starts, and charges older AI calls through billing when it is on', () => {
 		const controller = source('/worker/api/controllers/agent/controller.ts');
 		const credit = controller.indexOf('checkCreditsBeforeTurn(env, user.id)');

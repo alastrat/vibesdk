@@ -31,7 +31,15 @@ export interface MeteringDeps {
 	now(): Date;
 }
 
-const RECORD_TRIES = 3;
+/** Where a billed turn's steps go: the account's plan, credit period and pool. */
+export interface TurnAccount {
+	plan: PlanId;
+	period: LedgerPeriod;
+	pool: number;
+}
+
+/** A passing D1 error shouldn't lose a charge, so each billing read or write is tried this many times. */
+const TRIES = 3;
 
 /** While a renewal is unpaid its pool is 0, so running out means the card needs fixing, not a bigger plan. */
 const PAYMENT_FAILED_MESSAGE = "Your last payment didn't go through, so this month's AI credits haven't started. Update your card in Manage billing to keep building.";
@@ -55,22 +63,41 @@ export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = D
 	return { billing: true, refusal: creditRefusal(account, await loadCredits(env, account)) };
 }
 
+async function withTries<T>(attempt: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
+	let error: unknown = null;
+	for (let tries = 0; tries < TRIES; tries += 1) {
+		try {
+			return { ok: true, value: await attempt() };
+		} catch (caught) {
+			error = caught;
+		}
+	}
+	return { ok: false, error };
+}
+
 /** Records a charged step with the same key up to three times, then checks the warnings. Never throws. */
 export async function chargeStep(deps: MeteringDeps, charge: StepCharge): Promise<PeriodState | null> {
-	let failure: unknown = null;
-	for (let attempt = 0; attempt < RECORD_TRIES; attempt += 1) {
-		let state: PeriodState;
-		try {
-			state = await deps.ledger.recordUse({ ...charge, now: deps.now() });
-		} catch (error) {
-			failure = error;
-			continue;
-		}
-		await noticeCreditUse(deps.notices, { userId: charge.userId, plan: charge.plan, period: charge.period, pool: charge.pool, state });
-		return state;
+	const recorded = await withTries(() => deps.ledger.recordUse({ ...charge, now: deps.now() }));
+	if (!recorded.ok) {
+		logger.error('A charged step could not be recorded', { userId: charge.userId, useKey: charge.useKey, credits: charge.credits, error: recorded.error });
+		return null;
 	}
-	logger.error('A charged step could not be recorded', { userId: charge.userId, useKey: charge.useKey, credits: charge.credits, error: failure });
-	return null;
+	await noticeCreditUse(deps.notices, { userId: charge.userId, plan: charge.plan, period: charge.period, pool: charge.pool, state: recorded.value });
+	return recorded.value;
+}
+
+/**
+ * The account a billed turn or call charges, loaded up to three times so a passing D1 error doesn't make it free. Null,
+ * logged with the user, only when every try failed; a turn tries again at its next step. Never throws.
+ */
+export async function loadTurnAccount(env: Env, userId: string, load: typeof loadAccount = loadAccount): Promise<TurnAccount | null> {
+	const loaded = await withTries(() => load(env, userId));
+	if (!loaded.ok) {
+		logger.error('Could not load the account to charge AI credits to', { userId, error: loaded.error });
+		return null;
+	}
+	const account = loaded.value;
+	return { plan: account.plan, period: account.period, pool: account.limits.aiCredits };
 }
 
 export function meteringDepsFromEnv(env: Env): MeteringDeps {
@@ -85,21 +112,19 @@ export async function chargeLegacyCall(env: Env, input: { userId: string; model:
 	if (!isBillingOn(env, input.userId)) return false;
 	const credits = legacyCallCredits(input.creditCost);
 	if (credits <= 0) return true;
-	try {
-		const account = await loadAccount(env, input.userId);
-		await chargeStep(meteringDepsFromEnv(env), {
-			userId: input.userId,
-			period: account.period,
-			pool: account.limits.aiCredits,
-			plan: account.plan,
-			useKey: `infer:${input.userId}:${crypto.randomUUID()}`,
-			credits,
-			source: 'infer',
-			model: input.model,
-			usage: null,
-		});
-	} catch (error) {
-		logger.error('Could not charge an AI call', { userId: input.userId, model: input.model, credits, error });
+	const account = await loadTurnAccount(env, input.userId);
+	if (!account) {
+		logger.error('An AI call was not charged', { userId: input.userId, model: input.model, credits });
+		return true;
 	}
+	await chargeStep(meteringDepsFromEnv(env), {
+		userId: input.userId,
+		...account,
+		useKey: `infer:${input.userId}:${crypto.randomUUID()}`,
+		credits,
+		source: 'infer',
+		model: input.model,
+		usage: null,
+	});
 	return true;
 }

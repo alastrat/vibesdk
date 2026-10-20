@@ -1,10 +1,10 @@
 /** The credit check before a turn, and charging steps, on real SQL. */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { loadAccount } from './account';
-import { chargeLegacyCall, chargeStep, checkCreditsBeforeTurn, type MeteringDeps } from './metering';
+import { chargeLegacyCall, chargeStep, checkCreditsBeforeTurn, loadTurnAccount, type MeteringDeps } from './metering';
 
 let db: D1Database;
 const NOW = Date.parse('2026-10-19T15:00:00Z');
@@ -13,6 +13,8 @@ const DAY = 86_400_000;
 beforeAll(async () => {
 	db = await migratedD1();
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 const on = () => envWith(db, { BILLING: 'on' });
 
@@ -87,6 +89,32 @@ describe('chargeStep', () => {
 		expect((await chargeStep(deps, charge))?.used).toBe(165);
 		expect((await chargeStep(deps, charge))?.used).toBe(165);
 		expect(await db.prepare("SELECT credits, input_tokens, output_tokens FROM credit_uses WHERE use_key = 'agent:turn:1'").first()).toEqual({ credits: 165, input_tokens: 40_000, output_tokens: 3_000 });
+	});
+});
+
+describe('loadTurnAccount', () => {
+	it('loads the account a billed turn charges after a passing failure, so the turn is never free', async () => {
+		await insertUser(db, 'u_turn', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		let failures = 2;
+		const flaky: typeof loadAccount = async (env, userId, nowMs) => {
+			if (failures-- > 0) throw new Error('D1_ERROR: network connection lost');
+			return loadAccount(env, userId, nowMs ?? NOW);
+		};
+		const account = await loadTurnAccount(on(), 'u_turn', flaky);
+		expect(account).toMatchObject({ plan: 'basic', pool: 5_000, period: { key: (await loadAccount(on(), 'u_turn', NOW)).period.key } });
+	});
+
+	it('answers null and logs the account at error level once every try fails', async () => {
+		const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		let tries = 0;
+		const down: typeof loadAccount = async () => {
+			tries += 1;
+			throw new Error('D1_ERROR: network connection lost');
+		};
+		expect(await loadTurnAccount(on(), 'u_down', down)).toBeNull();
+		expect(tries).toBe(3);
+		expect(errorLog).toHaveBeenCalledTimes(1);
+		expect(JSON.stringify(errorLog.mock.calls[0])).toContain('u_down');
 	});
 });
 

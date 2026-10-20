@@ -29,17 +29,21 @@ function creditCheck(order: string[], result: Awaited<ReturnType<typeof checkCre
 
 const REFUSAL = { code: 'plan_limit' as const, limit: 'aiCredits' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: "You've used this month's free AI credits. They refill on November 12, or get Pro for 20,000 a month." };
 
-function fakes(behavior: FakeBehavior, calls: string[] = []) {
+function fakes(behavior: FakeBehavior, calls: string[] = [], behaviorType: 'think' | 'phasic' = 'think') {
 	const sent: Array<{ type: string; error?: string; code?: string; showAsPopup?: boolean }> = [];
 	const connection = { id: 'c1', url: 'wss://estori.app/ws', send: (data: string) => sent.push(JSON.parse(data)) } as unknown as Connection;
 	const agent = {
 		getBehavior: () => behavior,
-		state: { metadata: { userId: 'u1' } },
+		state: { metadata: { userId: 'u1' }, behaviorType },
 		env: {},
 		setState: () => undefined,
 		handleUserInput: async (message: string) => void calls.push(`input:${message}`),
 	} as unknown as CodeGeneratorAgent;
 	return { sent, calls, connection, agent };
+}
+
+function userSuggestion(message: string): string {
+	return JSON.stringify({ type: 'user_suggestion', message });
 }
 
 function setModel(modelId: string | undefined, resume?: boolean): string {
@@ -121,5 +125,14 @@ describe('the credit check before a turn', () => {
 		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: null }));
 		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: false }));
 		expect(order).toEqual(['credit-check', `input:${RESUME_BUILD_MESSAGE}`, 'credit-check', 'usage-check', `input:${RESUME_BUILD_MESSAGE}`]);
+	});
+
+	it("keeps the old usage check for an older builder's app while billing is on, after the credit check", async () => {
+		const order: string[] = [];
+		const { agent, connection, sent } = fakes({}, order, 'phasic');
+		await handleWebSocketMessage(agent, connection, userSuggestion('Add a cart'), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: null }));
+		await handleWebSocketMessage(agent, connection, userSuggestion('Add a cart'), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: REFUSAL }));
+		expect(order).toEqual(['credit-check', 'usage-check', 'input:Add a cart', 'credit-check']);
+		expect(sent).toEqual([{ type: 'error', error: REFUSAL.message, code: 'PLAN_LIMIT', planLimit: REFUSAL, showAsPopup: true }]);
 	});
 });
