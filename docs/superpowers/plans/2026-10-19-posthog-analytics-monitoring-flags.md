@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Estori sends product analytics, session replays and errors to PostHog. It alerts on outages, errors and AI cost, and evaluates feature flags from a typed registry.
+**Goal:** Estori sends product analytics, session replays and errors to PostHog. It alerts on outages, errors and AI cost, and evaluates feature flags from a typed registry, including pause flags for features already shipped.
 
 **Architecture:**
 - **Worker code** lives in `worker/services/posthog/`, one module per concern:
@@ -16,7 +16,12 @@
   - the heartbeat.
 - **Two registries in shared code,** used by the Worker and the app: the event catalog (`shared/types/analytics-events.ts`) and the flag registry (`shared/types/feature-flags.ts`).
 - **The browser** loads posthog-js through `estori.app/ingest`. It gets its client flags and the analytics setting with the signed-in session.
-- **Nothing is sent without `POSTHOG_PROJECT_KEY`,** and every flag is then off: nothing rolled out, nothing paused, billing on its own switches. Each task is safe to merge before the owner sets PostHog up.
+- **One PostHog project, production only.** The owner set it up on 2026-10-19: "Estori production", id `675096`, with its settings, replay triggers and all 11 flags at 0%.
+  - Its token is public and write-only, so there are no secrets. It lives in `wrangler.estori.jsonc` as a plain var for the server, and in a committed hostname map for the browser.
+- **Everywhere else, PostHog is inert.** Staging, local development and tests have no token, so nothing is captured, and flags are their defaults plus `FEATURE_FLAG_OVERRIDES`.
+  - Every flag defaults off, so nothing is rolled out or paused, and billing runs on its own switches.
+  - A developer can opt in locally with the production token. PostHog's test-account filter and the replay URL triggers keep that out of production numbers.
+- **Cloudflare Web Analytics** already counts page views on every estori.app host. It needs no code, only the privacy policy.
 
 **Tech Stack:** Cloudflare Workers (`node:async_hooks` AsyncLocalStorage under `nodejs_compat`, `env` from `cloudflare:workers`), Hono, D1 via Drizzle, Durable Objects (ThinkAgent, CodeGeneratorAgent), React 19, TanStack Query, posthog-js, `@posthog/cli`, vitest-pool-workers.
 
@@ -24,17 +29,19 @@
 
 **When:** implement after store drafts and billing merge into main.
 - **From store drafts,** the plan assumes `worker/agents/think/draft-tools.ts`, `worker/api/controllers/drafts/controller.ts` and `src/components/drafts/DraftSwitcher.tsx`.
-- **From billing** (`docs/superpowers/plans/2026-10-19-billing-subscriptions.md`), it assumes:
-  - `worker/services/billing/` with `flag.ts` (`isBillingOn`), `account.ts` (`loadAccount`, `resolvePlan`), `gates.ts`, `events.ts`, `credit-notices.ts` and `wiring.ts`;
-  - `BillingService` and `PlanAdminService`;
+- **From billing** (`docs/superpowers/plans/2026-10-19-billing-subscriptions.md`, revised in parallel), the plan names billing's code points by their role. Its plans are `basic | pro | premium | enterprise`, with no tiers. The roles:
+  - the billing switch (`isBillingOn`);
+  - the plan resolution from the subscription and override tables;
+  - the account loader, the prompt gate and the per-step credit charge;
+  - the subscription event handler, the credit top-up handler and the credit notices;
   - the billing and limits controllers.
-- **If a billing name differs** from what a task says, follow billing's code and keep the task's behaviour.
+- **Billing's merged code decides the names.** Where a task names one of billing's functions or files, follow billing's merged code and keep the task's behaviour.
 - Branch `feat/posthog` from that main.
 
 **Two pull requests.**
-- **Pull request 1:** Tasks 1–17.
-- **Task 18** runs on staging, after pull request 1 merges and the owner finishes the PostHog setup (spec section 16).
-- **Pull request 2:** Task 19, which removes Sentry.
+- **Pull request 1:** Tasks 1–18.
+- **Task 19** verifies on localhost with the opt-in production token, before pull request 1 merges. After the owner deploys production, it runs a production smoke check.
+- **Pull request 2:** Task 20, which removes Sentry.
 
 ## Global Constraints
 
@@ -47,6 +54,10 @@
   - assets `us-assets.i.posthog.com`;
   - UI `https://us.posthog.com`.
   - The browser's `api_host` is `/ingest`.
+- **The production project:** id `675096`, token `phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC`. The token is public and write-only.
+  - **The server** reads it from `POSTHOG_PROJECT_KEY`, and the id from `POSTHOG_PROJECT_ID`. Both are plain vars in `wrangler.estori.jsonc`, and in no other wrangler config.
+  - **The browser** maps `estori.app` to it in `src/lib/analytics/posthog-projects.ts`. Any other host gets no token.
+  - No GitHub variable or Worker secret is needed for capture or flags.
 - **Never to PostHog:** an email address, a name, a username or an avatar. This covers event properties, person properties and exceptions.
   - Worker exceptions replace emails with `[email]`.
   - Worker exceptions never send the logger's structured data.
@@ -59,10 +70,11 @@
   - Worker errors: one event per minute per fingerprint, 30 a minute per isolate.
 - **No logger in the logger's path:** `config.ts`, `client.ts`, `request-scope.ts` and `server-errors.ts` in `worker/services/posthog/` never import `worker/logger`, because the logger imports them. They report their own trouble with `console.warn`.
 - **Names come from the registries only:** event names and properties from `shared/types/analytics-events.ts`, flag keys from `shared/types/feature-flags.ts`.
-- **Every flag defaults off.** Flags only ever turn something on (`billing`) or pause something (the `-paused` flags).
+- **Every flag defaults off.** Flags only ever turn something on (`billing`) or pause something (the ten `-paused` flags).
   - Pausing is a pause flag at 100%.
   - A missing, disabled or errored flag, or PostHog down, rolls nothing out and pauses nothing.
   - `billing` is also on with `BILLING=on`, or for a user in `BILLING_USER_IDS`.
+  - **Pause flags are enforced on the server.** The browser only hides buttons where that's cheap. A pause refuses new work with a plain message, and work already running finishes.
 - **No D1 migration.** The analytics setting lives in `users.preferences` JSON.
 - **Commits:** subjects are lowercase after the type. Every commit ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Never commit:**
@@ -76,13 +88,13 @@
   - Type-check with `bun run typecheck`.
 - **Before each pull request:** `npx eslint .`, `bun run typecheck`, `bun run build`, `bun run bundle:check` and `bun run test` (sharded).
 - **Don't merge a pull request.** The owner merges.
-- **Secrets:** never print a PostHog key in chat or logs. Never read `.dev.vars` aloud.
+- **Secrets:** the project token isn't one. An optional personal API key (`POSTHOG_PERSONAL_API_KEY`, or the CLI's key) is. Never print it, and never read `.dev.vars` aloud.
 
 ## Review Focus
 
 1. **No request scope.** Controller tests pass `{}` as the `ExecutionContext`, and Durable Objects have no request.
    - **Expect:** capture, flags and error reports never throw, and still send from Durable Objects.
-   - **Guarded by:** the request-scope tests in Task 2, and the `{}` context in Task 6's and Task 11's controller tests.
+   - **Guarded by:** the request-scope tests in Task 2, and the `{}` context in Task 6's and Task 12's controller tests.
 2. **A path that tries to leave PostHog,** such as `/ingest//attacker.example/collect` or an encoded variant.
    - **Expect:** the proxy only ever calls PostHog's two hosts.
    - **Guarded by:** "never leaves PostHog" in Task 3.
@@ -95,6 +107,12 @@
 5. **Two people on one browser:** A signs out and B signs in without a reload.
    - **Expect:** B's events never join A's PostHog person.
    - **Guarded by:** the reset-before-identify guard in Task 7.
+6. **A pause flag raised to 100% mid-work:** a turn running, a publish in flight, a provider sign-in that finds an existing account, a checkout paid just before.
+   - **Expect:** new work is refused with the pause message before any write or outside call; what's running finishes; existing accounts sign in; paid checkouts are still recorded.
+   - **Guarded by:** the pause tests in Tasks 9 and 10.
+7. **A developer opted in on localhost** with the production token.
+   - **Expect:** local events carry `$host` localhost and `environment: dev`, so the test-account filter hides them; no replay is recorded; staging and previews never load posthog-js.
+   - **Guarded by:** Task 2's config test, Task 7's project map test, and Task 19's localhost check.
 
 ---
 
@@ -107,7 +125,10 @@
 - Modify `src/api-types.ts`: re-export the three.
 
 **Interfaces:**
-- **Consumes:** `StoreMode` from `shared/types/store-payments.ts`, `SellerLevel` from `shared/types/seller-levels.ts`.
+- **Consumes:**
+  - `StoreMode` from `shared/types/store-payments.ts`;
+  - `SellerLevel` from `shared/types/seller-levels.ts`;
+  - billing's `PlanId` (`basic | pro | premium | enterprise`) from `shared/types/plans.ts`, or wherever billing's merged code exports it.
 - **Produces:**
   - `analytics-events.ts`:
     - `SYSTEM_DISTINCT_ID = 'estori-system'`, `OPTED_OUT_DISTINCT_ID = 'opted-out'`;
@@ -115,8 +136,8 @@
     - `SignInMethod`, `PersonProperties`;
     - `ServerEventCatalog`, `ServerEventName`, `ServerEventProperties<N>`, `BillingEventName`;
     - `ServerEventDefinition { description; subject; costFields? }`, `SERVER_EVENTS`, `SERVER_EVENT_NAMES`.
-  - `feature-flags.ts`: `FlagKind = 'rollout' | 'pause'`, `FlagDefinition`, `FEATURE_FLAGS`, `FlagKey`, `FlagValues`, `ClientFlagKey`, `ClientFlagValues`, `FLAG_KEYS`, `isFlagKey(value: string): value is FlagKey`, `defaultFlagValues(): FlagValues`, `clientFlagValues(values: FlagValues): ClientFlagValues`.
-  - `telemetry.ts`: `PostHogBrowserConfig`, `TelemetryConfigData`, `SessionTelemetry`, `AnalyticsOptOutSource`, `AnalyticsPreferenceData`, `GPC_ANALYTICS_MESSAGE`, `AdminFlagRow`, `AdminFlagsData`.
+  - `feature-flags.ts`: `FlagKind = 'rollout' | 'pause'`, `FlagDefinition`, `FEATURE_FLAGS` (11 flags), `FlagKey`, `FlagValues`, `ClientFlagKey`, `ClientFlagValues`, `FLAG_KEYS`, `isFlagKey(value: string): value is FlagKey`, `defaultFlagValues(): FlagValues`, `clientFlagValues(values: FlagValues): ClientFlagValues`.
+  - `telemetry.ts`: `TelemetryConfigData`, `SessionTelemetry`, `AnalyticsOptOutSource`, `AnalyticsPreferenceData`, `GPC_ANALYTICS_MESSAGE`, `AdminFlagRow`, `AdminFlagsData`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -134,9 +155,17 @@ describe('the server event catalog', () => {
 		}
 	});
 
-	it('holds the billing events by the names the billing spec uses', () => {
+	it('holds the seven billing events by the names the billing spec uses', () => {
 		expect(SERVER_EVENT_NAMES).toEqual(
-			expect.arrayContaining(['subscription_started', 'subscription_changed', 'subscription_cancelled', 'subscription_payment_failed', 'credits_limit_reached']),
+			expect.arrayContaining([
+				'subscription_started',
+				'subscription_changed',
+				'subscription_cancelled',
+				'subscription_payment_failed',
+				'credits_purchased',
+				'credits_low',
+				'credits_limit_reached',
+			]),
 		);
 	});
 
@@ -169,9 +198,23 @@ describe('amount bands', () => {
 import { describe, expect, it } from 'vitest';
 import { FEATURE_FLAGS, FLAG_KEYS, clientFlagValues, defaultFlagValues, isFlagKey } from './feature-flags';
 
+const ALL_KEYS = [
+	'billing',
+	'store-drafts-paused',
+	'live-store-payments-paused',
+	'catalog-paused',
+	'session-replay-paused',
+	'ai-builds-paused',
+	'signups-paused',
+	'store-publishing-paused',
+	'custom-domains-paused',
+	'template-sales-paused',
+	'billing-checkout-paused',
+] as const;
+
 describe('the flag registry', () => {
-	it('holds billing and the four pause flags, keys in kebab case', () => {
-		expect(FLAG_KEYS).toEqual(['billing', 'store-drafts-paused', 'live-store-payments-paused', 'catalog-paused', 'session-replay-paused']);
+	it('holds the eleven flags the production project has, keys in kebab case', () => {
+		expect(FLAG_KEYS).toEqual([...ALL_KEYS]);
 		for (const key of FLAG_KEYS) expect(key).toMatch(/^[a-z]+(-[a-z]+)*$/);
 	});
 
@@ -181,18 +224,19 @@ describe('the flag registry', () => {
 	});
 
 	it('defaults every flag off, so a missing, disabled or errored flag changes nothing', () => {
-		expect(defaultFlagValues()).toEqual({
-			billing: false,
-			'store-drafts-paused': false,
-			'live-store-payments-paused': false,
-			'catalog-paused': false,
-			'session-replay-paused': false,
-		});
+		expect(defaultFlagValues()).toEqual(Object.fromEntries(ALL_KEYS.map((key) => [key, false])));
 	});
 
-	it('sends only client-visible flags to the browser', () => {
-		const all = { billing: true, 'store-drafts-paused': true, 'live-store-payments-paused': true, 'catalog-paused': true, 'session-replay-paused': true };
-		expect(clientFlagValues(all)).toEqual({ billing: true, 'store-drafts-paused': true, 'catalog-paused': true, 'session-replay-paused': true });
+	it('sends the browser only the flags it shows or hides something for', () => {
+		const all = Object.fromEntries(ALL_KEYS.map((key) => [key, true])) as Record<(typeof ALL_KEYS)[number], boolean>;
+		expect(Object.keys(clientFlagValues(all))).toEqual([
+			'billing',
+			'store-drafts-paused',
+			'catalog-paused',
+			'session-replay-paused',
+			'store-publishing-paused',
+			'custom-domains-paused',
+		]);
 	});
 
 	it('recognizes registry keys only', () => {
@@ -217,6 +261,7 @@ Expected: FAIL, "Failed to resolve import ./analytics-events" and "./feature-fla
  * PostHog's JSON properties.
  */
 
+import type { PlanId } from './plans';
 import type { SellerLevel } from './seller-levels';
 import type { StoreMode } from './store-payments';
 
@@ -241,10 +286,8 @@ export type SignInMethod = 'password' | 'google' | 'github' | 'cloudflare';
 
 /** What Estori keeps on each person in PostHog. */
 export type PersonProperties = {
-	/** The account's plan from billing's plan resolution: basic, premium or enterprise. */
-	plan: string;
-	/** Premium's credit tier, 1 to 4; null on other plans. */
-	tier: number | null;
+	/** The account's plan, as billing resolves it. */
+	plan: PlanId;
 	seller_level: 'none' | SellerLevel;
 	/** YYYY-MM-DD, UTC; set once. */
 	signup_date: string;
@@ -262,7 +305,11 @@ export type ServerEventCatalog = {
 		first_build: boolean;
 		outcome: 'completed' | 'failed';
 		steps: number;
-		/** Every Think build runs on Estori's gateway, so every credit is Estori's cost. */
+		/**
+		 * The credits billing charged for the turn's steps: real token cost times billing's CREDIT_MARGIN (1.5), at its
+		 * CREDIT_USD ($0.001) a credit. Every Think build runs on Estori's gateway, so Estori's cost is
+		 * credits_used / 1.5 * $0.001.
+		 */
 		credits_used: number;
 		duration_ms: number;
 	};
@@ -279,11 +326,13 @@ export type ServerEventCatalog = {
 	};
 	catalog_order_placed: { app_id: string; item_count: number };
 	template_sold: { listing_id: string; price_cents: number; platform_fee_cents: number };
-	subscription_started: { tier: number };
-	subscription_changed: { from_tier: number; to_tier: number; direction: 'up' | 'down' };
-	subscription_cancelled: { tier: number | null; reason: 'seller' | 'payment_failed' | 'admin' };
-	subscription_payment_failed: { tier: number | null; attempt: number };
-	credits_limit_reached: { plan: string; tier: number | null; threshold: 80 | 100 };
+	subscription_started: { plan: PlanId };
+	subscription_changed: { from_plan: PlanId; to_plan: PlanId; direction: 'up' | 'down' };
+	subscription_cancelled: { plan: PlanId; reason: 'seller' | 'payment_failed' | 'admin' };
+	subscription_payment_failed: { plan: PlanId; attempt: number };
+	credits_purchased: { credits: number; amount_cents: number };
+	credits_low: { plan: PlanId; threshold: 20 | 5 };
+	credits_limit_reached: { plan: PlanId };
 	heartbeat: {
 		healthy: boolean;
 		app_ok: boolean;
@@ -297,7 +346,14 @@ export type ServerEventCatalog = {
 
 export type ServerEventName = keyof ServerEventCatalog;
 export type ServerEventProperties<N extends ServerEventName> = ServerEventCatalog[N];
-export type BillingEventName = 'subscription_started' | 'subscription_changed' | 'subscription_cancelled' | 'subscription_payment_failed' | 'credits_limit_reached';
+export type BillingEventName =
+	| 'subscription_started'
+	| 'subscription_changed'
+	| 'subscription_cancelled'
+	| 'subscription_payment_failed'
+	| 'credits_purchased'
+	| 'credits_low'
+	| 'credits_limit_reached';
 
 export interface ServerEventDefinition {
 	description: string;
@@ -311,32 +367,35 @@ export const SERVER_EVENTS: Readonly<Record<ServerEventName, ServerEventDefiniti
 	email_confirmed: { description: 'A confirmation link confirmed the account email.', subject: 'person' },
 	signed_in: { description: 'A sign-in to an existing account.', subject: 'person' },
 	build_started: { description: 'The AI started a turn on a store.', subject: 'person' },
-	build_finished: { description: 'An AI turn ended, with its steps and credits.', subject: 'person', costFields: ['credits_used'] },
+	build_finished: { description: 'An AI turn ended, with its steps and the credits billing charged.', subject: 'person', costFields: ['credits_used'] },
 	store_published: { description: 'A store was published to its live address.', subject: 'person' },
 	store_unpublished: { description: 'A live store was taken offline.', subject: 'person' },
 	payments_ready: { description: "The seller's Stripe account can take store payments.", subject: 'person' },
 	sale_completed: { description: 'A store order was recorded, once per order.', subject: 'person' },
 	catalog_order_placed: { description: "A paid order's catalog lines went to the supplier flow.", subject: 'person' },
 	template_sold: { description: "A paid site's sale was recorded.", subject: 'person' },
-	subscription_started: { description: 'Premium started, from the checkout-completed webhook.', subject: 'person' },
-	subscription_changed: { description: "Premium's tier changed, from the subscription-updated webhook.", subject: 'person' },
-	subscription_cancelled: { description: 'Premium ended: cancelled by the seller, after failed payments, or by an admin.', subject: 'person' },
-	subscription_payment_failed: { description: 'A Premium renewal payment failed, from the invoice-failed webhook.', subject: 'person' },
-	credits_limit_reached: { description: "A monthly credit pool reached 80% or 100%, alongside billing's notice.", subject: 'person' },
+	subscription_started: { description: 'A paid plan started, from the checkout-completed webhook.', subject: 'person' },
+	subscription_changed: { description: 'The paid plan changed up or down, from the subscription-updated webhook.', subject: 'person' },
+	subscription_cancelled: { description: 'A paid plan ended: cancelled by the seller, after failed payments, or by an admin.', subject: 'person' },
+	subscription_payment_failed: { description: 'A renewal payment failed, from the invoice-failed webhook.', subject: 'person' },
+	credits_purchased: { description: 'A credit top-up was paid, from its checkout-completed webhook.', subject: 'person' },
+	credits_low: { description: "The credits left fell to 20% or 5%, alongside billing's notice.", subject: 'person' },
+	credits_limit_reached: { description: "The credits ran out, alongside billing's notice.", subject: 'person' },
 	heartbeat: { description: 'The 15-minute health check of the app, database and stores.', subject: 'system' },
 };
 
 export const SERVER_EVENT_NAMES = Object.keys(SERVER_EVENTS) as ServerEventName[];
 ```
 
-- [ ] **Step 4: Write `shared/types/feature-flags.ts`** (exact copy)
+- [ ] **Step 4: Write `shared/types/feature-flags.ts`** (exact copy; the keys are the production project's flags)
 
 ```ts
 /**
  * Product rollouts and pauses, evaluated in PostHog (worker/services/posthog/flags.ts). Secrets and infrastructure
  * toggles stay env vars. Every flag defaults off: a flag only ever turns something on or pauses something. PostHog
  * leaves disabled flags out of its answer, so a missing, disabled or errored flag, or a PostHog outage, changes
- * nothing. Pausing means the pause flag at 100%.
+ * nothing. Pausing means the pause flag at 100%. Pauses are enforced on the server; the browser sees a pause flag
+ * only where it hides something.
  */
 
 export type FlagKind = 'rollout' | 'pause';
@@ -366,6 +425,16 @@ export const FEATURE_FLAGS = {
 		clientVisible: true,
 	},
 	'session-replay-paused': { description: 'Pauses session replay in the browser.', kind: 'pause', clientVisible: true },
+	'ai-builds-paused': { description: 'Pauses new AI turns everywhere they start. Running turns finish; stores keep working.', kind: 'pause', clientVisible: false },
+	'signups-paused': { description: 'Pauses new accounts, by email or a provider. Existing accounts sign in.', kind: 'pause', clientVisible: false },
+	'store-publishing-paused': { description: 'Pauses Go live and republishing. Live stores keep serving.', kind: 'pause', clientVisible: true },
+	'custom-domains-paused': { description: 'Pauses connecting a new own domain. Connected domains keep working.', kind: 'pause', clientVisible: true },
+	'template-sales-paused': { description: 'Pauses buying paid templates. Free templates still work.', kind: 'pause', clientVisible: false },
+	'billing-checkout-paused': {
+		description: 'Pauses billing checkout, plan changes and credit top-ups. Existing subscriptions keep working.',
+		kind: 'pause',
+		clientVisible: false,
+	},
 } as const satisfies Record<string, FlagDefinition>;
 
 export type FlagKey = keyof typeof FEATURE_FLAGS;
@@ -397,19 +466,12 @@ export function clientFlagValues(values: FlagValues): ClientFlagValues {
 
 import type { ClientFlagValues, FlagKey, FlagKind } from './feature-flags';
 
-/** What posthog-js needs; `apiHost` is Estori's own `/ingest` proxy. */
-export interface PostHogBrowserConfig {
-	projectKey: string;
-	apiHost: string;
-	uiHost: string;
-	environment: string;
-}
-
-/** `GET /api/telemetry/config`. A null `posthog` means analytics is off on this deployment. */
+/** `GET /api/telemetry/config`. The browser's project token comes from a committed hostname map, not from here. */
 export interface TelemetryConfigData {
-	posthog: PostHogBrowserConfig | null;
 	/** `session-replay-paused` for visitors who aren't signed in. */
 	replayPaused: boolean;
+	/** Local development only: the token a developer set in `.dev.vars` to opt in. Null everywhere else. */
+	localProjectKey: string | null;
 }
 
 /** Sent with the signed-in session, so flag-dependent UI renders once. */
@@ -435,17 +497,22 @@ export interface AdminFlagRow {
 	description: string;
 	kind: FlagKind;
 	clientVisible: boolean;
+	/** The flag's value for the signed-in admin. */
 	value: boolean;
 	/** PostHog answered for this flag; false means it's off. */
 	inPostHog: boolean;
+	/** The flag's rollout in PostHog; null without the optional personal API key. 0 when the flag is disabled. */
+	rolloutPercent: number | null;
 }
 
-/** `GET /api/admin/flags`: every registry flag, evaluated for one user. */
+/** `GET /api/admin/flags`: every registry flag, evaluated for the admin asking. */
 export interface AdminFlagsData {
 	userId: string;
-	/** posthog: PostHog answered; defaults: it didn't, so every flag is off; off: no project key on this deployment. */
+	/** posthog: PostHog answered; defaults: it didn't, so every flag is off; off: no project token on this deployment. */
 	source: 'posthog' | 'defaults' | 'off';
 	flags: AdminFlagRow[];
+	/** The project's flags page in PostHog, where flags are edited; null without a project. */
+	posthogFlagsUrl: string | null;
 }
 ```
 
@@ -460,7 +527,6 @@ export type {
 	AdminFlagsData,
 	AnalyticsOptOutSource,
 	AnalyticsPreferenceData,
-	PostHogBrowserConfig,
 	SessionTelemetry,
 	TelemetryConfigData,
 } from '../shared/types/telemetry.js';
@@ -479,7 +545,7 @@ Expected: no errors.
 
 ```bash
 git add shared/types/analytics-events.ts shared/types/analytics-events.test.ts shared/types/feature-flags.ts shared/types/feature-flags.test.ts shared/types/telemetry.ts src/api-types.ts
-git commit -m "feat(analytics): the server event catalog and the feature flag registry, every flag off by default
+git commit -m "feat(analytics): the server event catalog and the eleven feature flags, every flag off by default
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -493,9 +559,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `client.ts` (test `client.test.ts`);
   - `analytics.ts` (test `analytics.test.ts`);
   - `import-guard.test.ts`;
-  - `entry-wiring.test.ts`.
+  - `entry-wiring.test.ts`;
+  - `wrangler-config.test.ts`.
 - Create `worker/database/services/AnalyticsPersonService.ts`. Test: `worker/database/services/analytics-person.sql.test.ts`. Export it from `worker/database/index.ts`.
 - Modify `worker/index.ts`: run `fetch` and `scheduled` in the request scope.
+- Modify `wrangler.estori.jsonc`: the production project's token and id, as plain vars.
 - Modify `worker/types/env.d.ts` and `.dev.vars.example`.
 
 **Interfaces:**
@@ -503,9 +571,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - **Produces:**
   - `config.ts`:
     - `POSTHOG_INGEST_HOST`, `POSTHOG_ASSET_HOST`, `POSTHOG_UI_ORIGIN`, `INGEST_PATH`;
-    - `PostHogConfig { projectKey; environment; release }`;
+    - `PostHogConfig { projectKey; projectId; environment; release; host }`;
     - `posthogConfig(env): PostHogConfig | null`;
-    - `browserConfig(config): PostHogBrowserConfig | null`.
+    - `posthogFlagsUrl(config): string | null`, the project's flags page.
   - `request-scope.ts`: `runInRequestScope<T>(ctx: { waitUntil?: ... } | undefined, run: () => T): T`, `keepAlive(work: Promise<unknown>): void`.
   - `client.ts`:
     - `EventValue`, `CaptureInput { event; distinctId; properties; personless?; anonymousCost? }`;
@@ -528,31 +596,33 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { browserConfig, posthogConfig } from './config';
+import { posthogConfig, posthogFlagsUrl } from './config';
 
 describe('PostHog config', () => {
-	it('is off without a project key, so local development and tests send nothing', () => {
-		expect(posthogConfig({ ENVIRONMENT: 'dev' })).toBeNull();
+	it('is off without a project token, as on staging, in local development and in tests', () => {
+		expect(posthogConfig({ ENVIRONMENT: 'staging', CUSTOM_DOMAIN: 'staging.estori.app' })).toBeNull();
 		expect(posthogConfig({ POSTHOG_PROJECT_KEY: '   ', ENVIRONMENT: 'prod' })).toBeNull();
 	});
 
-	it('names the environment and the Worker version', () => {
-		expect(posthogConfig({ POSTHOG_PROJECT_KEY: ' phc_abc ', ENVIRONMENT: 'staging', CF_VERSION_METADATA: { id: 'ver-1' } })).toEqual({
+	it('names the project, the environment, the Worker version and the host, which keeps local opt-in out of production numbers', () => {
+		expect(
+			posthogConfig({ POSTHOG_PROJECT_KEY: ' phc_abc ', POSTHOG_PROJECT_ID: '675096', ENVIRONMENT: 'prod', CUSTOM_DOMAIN: 'estori.app', CF_VERSION_METADATA: { id: 'ver-1' } }),
+		).toEqual({ projectKey: 'phc_abc', projectId: '675096', environment: 'prod', release: 'ver-1', host: 'estori.app' });
+		expect(posthogConfig({ POSTHOG_PROJECT_KEY: 'phc_abc', CUSTOM_DOMAIN: 'localhost' })).toEqual({
 			projectKey: 'phc_abc',
-			environment: 'staging',
-			release: 'ver-1',
+			projectId: null,
+			environment: 'dev',
+			release: null,
+			host: 'localhost',
 		});
-		expect(posthogConfig({ POSTHOG_PROJECT_KEY: 'phc_abc' })).toEqual({ projectKey: 'phc_abc', environment: 'dev', release: null });
 	});
 
-	it('gives the browser the key, the /ingest proxy and the US UI host', () => {
-		expect(browserConfig(posthogConfig({ POSTHOG_PROJECT_KEY: 'phc_abc', ENVIRONMENT: 'prod' }))).toEqual({
-			projectKey: 'phc_abc',
-			apiHost: '/ingest',
-			uiHost: 'https://us.posthog.com',
-			environment: 'prod',
-		});
-		expect(browserConfig(null)).toBeNull();
+	it("links to the project's flags in PostHog", () => {
+		expect(posthogFlagsUrl(posthogConfig({ POSTHOG_PROJECT_KEY: 'phc_abc', POSTHOG_PROJECT_ID: '675096', CUSTOM_DOMAIN: 'estori.app' }))).toBe(
+			'https://us.posthog.com/project/675096/feature_flags',
+		);
+		expect(posthogFlagsUrl(posthogConfig({ POSTHOG_PROJECT_KEY: 'phc_abc', CUSTOM_DOMAIN: 'localhost' }))).toBeNull();
+		expect(posthogFlagsUrl(null)).toBeNull();
 	});
 });
 ```
@@ -595,7 +665,7 @@ import { describe, expect, it } from 'vitest';
 import { PostHogClient, MAX_QUEUED_EVENTS } from './client';
 import type { PostHogConfig } from './config';
 
-const CONFIG: PostHogConfig = { projectKey: 'phc_test', environment: 'staging', release: 'ver-1' };
+const CONFIG: PostHogConfig = { projectKey: 'phc_test', projectId: '675096', environment: 'prod', release: 'ver-1', host: 'estori.app' };
 const NOW = new Date('2026-10-19T12:00:00.000Z');
 
 type SentBatch = { api_key: string; batch: Array<{ event: string; distinct_id: string; timestamp: string; properties: Record<string, unknown> }> };
@@ -628,7 +698,7 @@ function harness(options: {
 }
 
 describe('the PostHog capture client', () => {
-	it('sends events captured together as one batch, after the response, with the environment and release', async () => {
+	it('sends events captured together as one batch, after the response, with the environment, release and host', async () => {
 		const { client, requests, settle } = harness();
 		client.capture({ event: 'store_published', distinctId: 'user_1', properties: { app_id: 'app_1' } });
 		client.capture({ event: 'store_unpublished', distinctId: 'user_1', properties: { app_id: 'app_2' } });
@@ -642,7 +712,7 @@ describe('the PostHog capture client', () => {
 			event: 'store_published',
 			distinct_id: 'user_1',
 			timestamp: '2026-10-19T12:00:00.000Z',
-			properties: { app_id: 'app_1', environment: 'staging', release: 'ver-1', $lib: 'estori-worker' },
+			properties: { app_id: 'app_1', environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker' },
 		});
 	});
 
@@ -671,8 +741,8 @@ describe('the PostHog capture client', () => {
 		client.capture({ event: 'build_finished', distinctId: 'user_1', properties: build, anonymousCost: { credits_used: 12 } });
 		await settle();
 		expect(requests[0].body.batch.map((event) => [event.distinct_id, event.properties])).toEqual([
-			['opted-out', { credits_used: 12, environment: 'staging', release: 'ver-1', $lib: 'estori-worker', $process_person_profile: false }],
-			['user_1', { ...build, environment: 'staging', release: 'ver-1', $lib: 'estori-worker' }],
+			['opted-out', { credits_used: 12, environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker', $process_person_profile: false }],
+			['user_1', { ...build, environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker' }],
 		]);
 	});
 
@@ -885,9 +955,11 @@ Expected: FAIL. The new modules don't exist, and `worker/index.ts` has no `runIn
 - [ ] **Step 3: Write `worker/services/posthog/config.ts`**
 
 ```ts
-/** Where PostHog lives and whether this deployment talks to it. Never imports the logger: the logger imports this. */
-
-import type { PostHogBrowserConfig } from '../../../shared/types/telemetry';
+/**
+ * Where PostHog lives and whether this deployment talks to it. Only production has a project token (a plain var in
+ * wrangler.estori.jsonc); without one, nothing is sent and every flag is off. Never imports the logger: the logger
+ * imports this.
+ */
 
 export const POSTHOG_INGEST_HOST = 'us.i.posthog.com';
 export const POSTHOG_ASSET_HOST = 'us-assets.i.posthog.com';
@@ -896,23 +968,44 @@ export const POSTHOG_UI_ORIGIN = 'https://us.posthog.com';
 export const INGEST_PATH = '/ingest';
 
 export interface PostHogConfig {
+	/** The project's token: public and write-only. */
 	projectKey: string;
+	/** The project's id, for links to it; null when not set. */
+	projectId: string | null;
 	environment: string;
 	/** The Worker version, on every server event. */
 	release: string | null;
+	/**
+	 * `$host` on every server event. PostHog's test-account filter excludes localhost, so a developer who opts in
+	 * locally never counts in production numbers.
+	 */
+	host: string;
 }
 
-type ConfigEnv = { POSTHOG_PROJECT_KEY?: string; ENVIRONMENT?: string; CF_VERSION_METADATA?: { id: string } };
+type ConfigEnv = {
+	POSTHOG_PROJECT_KEY?: string;
+	POSTHOG_PROJECT_ID?: string;
+	ENVIRONMENT?: string;
+	CUSTOM_DOMAIN?: string;
+	CF_VERSION_METADATA?: { id: string };
+};
 
-/** Null without a project key: nothing is sent, and every flag is off. */
+/** Null without a project token: nothing is sent, and every flag is off. */
 export function posthogConfig(env: ConfigEnv): PostHogConfig | null {
 	const projectKey = env.POSTHOG_PROJECT_KEY?.trim();
 	if (!projectKey) return null;
-	return { projectKey, environment: env.ENVIRONMENT || 'dev', release: env.CF_VERSION_METADATA?.id ?? null };
+	return {
+		projectKey,
+		projectId: env.POSTHOG_PROJECT_ID?.trim() || null,
+		environment: env.ENVIRONMENT || 'dev',
+		release: env.CF_VERSION_METADATA?.id ?? null,
+		host: env.CUSTOM_DOMAIN || 'localhost',
+	};
 }
 
-export function browserConfig(config: PostHogConfig | null): PostHogBrowserConfig | null {
-	return config ? { projectKey: config.projectKey, apiHost: INGEST_PATH, uiHost: POSTHOG_UI_ORIGIN, environment: config.environment } : null;
+/** Where flags are edited: the project's flags page in PostHog. */
+export function posthogFlagsUrl(config: PostHogConfig | null): string | null {
+	return config?.projectId ? `${POSTHOG_UI_ORIGIN}/project/${config.projectId}/feature_flags` : null;
 }
 ```
 
@@ -1062,6 +1155,7 @@ function batchEvent(event: QueuedEvent, config: PostHogConfig) {
 			...event.properties,
 			environment: config.environment,
 			...(config.release ? { release: config.release } : {}),
+			$host: config.host,
 			$lib: 'estori-worker',
 			...(event.personless ? { $process_person_profile: false } : {}),
 		},
@@ -1197,11 +1291,43 @@ const worker = {
 
 - [ ] **Step 9: Declare the vars.**
 
+In `wrangler.estori.jsonc`, add to `vars`, after `ENVIRONMENT`. No other wrangler config gets them:
+
+```jsonc
+		// PostHog's production project: the token is public and write-only, so it's a plain var, not a secret.
+		"POSTHOG_PROJECT_KEY": "phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC",
+		"POSTHOG_PROJECT_ID": "675096"
+```
+
+`worker/services/posthog/wrangler-config.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+const configs = import.meta.glob<string>(['/wrangler.estori.jsonc', '/wrangler.estori-staging.jsonc'], { query: '?raw', import: 'default', eager: true });
+
+describe('the PostHog project per environment', () => {
+	it("gives production the project's public token and id as plain vars", () => {
+		const production = configs['/wrangler.estori.jsonc'] ?? '';
+		expect(production).toContain('"POSTHOG_PROJECT_KEY": "phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC"');
+		expect(production).toContain('"POSTHOG_PROJECT_ID": "675096"');
+	});
+
+	it('gives staging none, so PostHog is inert there', () => {
+		expect(configs['/wrangler.estori-staging.jsonc']).not.toContain('POSTHOG_PROJECT_KEY');
+	});
+});
+```
+
 In `worker/types/env.d.ts`, after `STRIPE_CONNECT_WEBHOOK_SECRET`:
 
 ```ts
-		// PostHog's project key for this environment; unset, nothing is sent and every flag is off.
+		// PostHog's public, write-only project token; set only in wrangler.estori.jsonc. Unset, nothing is sent and every flag is off.
 		POSTHOG_PROJECT_KEY?: string;
+		// The project's id, for links to it in PostHog.
+		POSTHOG_PROJECT_ID?: string;
+		// Optional, a secret: a personal API key that lets the flags admin page show each flag's rollout.
+		POSTHOG_PERSONAL_API_KEY?: string;
 		// Outside production only: flag values that win over PostHog, such as "billing=on,catalog-paused=on".
 		FEATURE_FLAG_OVERRIDES?: string;
 ```
@@ -1209,7 +1335,8 @@ In `worker/types/env.d.ts`, after `STRIPE_CONNECT_WEBHOOK_SECRET`:
 In `.dev.vars.example`, under `# Feature flags`:
 
 ```
-# PostHog: unset, local development sends nothing. Use the staging project's key to try analytics locally.
+# PostHog: unset, local development sends nothing. To try analytics locally, set the production token from
+# wrangler.estori.jsonc; events carry $host localhost, which PostHog's test-account filter keeps out of production numbers.
 #POSTHOG_PROJECT_KEY=""
 # Flag values for local development, e.g. "billing=on,catalog-paused=on"; production ignores them.
 #FEATURE_FLAG_OVERRIDES=""
@@ -1226,7 +1353,7 @@ Expected: no errors.
 - [ ] **Step 11: Commit**
 
 ```bash
-git add worker/services/posthog worker/database/services/AnalyticsPersonService.ts worker/database/services/analytics-person.sql.test.ts worker/database/index.ts worker/index.ts worker/types/env.d.ts .dev.vars.example
+git add worker/services/posthog worker/database/services/AnalyticsPersonService.ts worker/database/services/analytics-person.sql.test.ts worker/database/index.ts worker/index.ts wrangler.estori.jsonc worker/types/env.d.ts .dev.vars.example
 git commit -m "feat(analytics): a batching posthog capture client that sends after the response and skips people who opted out
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -1861,7 +1988,7 @@ In `worker/logger/core.ts`:
 	}
 ```
 
-Sentry's line stays until Task 19. It is a no-op today.
+Sentry's line stays until Task 20. It is a no-op today.
 
 - [ ] **Step 5: Write `worker/api/unhandled-error.ts`**
 
@@ -1923,21 +2050,25 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Files:**
 - Create `worker/services/posthog/flags.ts`. Test: `worker/services/posthog/flags.test.ts`.
-- Create `worker/services/posthog/person.ts` with `accountPlanOf`. Test: `worker/services/posthog/account-plan.sql.test.ts`. Task 10 adds to the module.
+- Create `worker/services/posthog/person.ts` with `planOf`. Test: `worker/services/posthog/account-plan.sql.test.ts`. Task 11 adds to the module.
 
 **Interfaces:**
 - **Consumes:**
   - Task 1's registry; `posthogConfig` and `POSTHOG_INGEST_HOST` from Task 2;
-  - billing (merged first): `isBillingOn(env, userId)` from `worker/services/billing/flag.ts`; `resolvePlan` from `worker/services/billing/account.ts`; `BillingService.subscriptionOf` and `PlanAdminService.latestOverride`.
+  - billing (merged first), by role; billing's merged code decides the names:
+    - the billing switch, `isBillingOn(env, userId)`, reading `BILLING` and `BILLING_USER_IDS`;
+    - the plan resolution, `resolvePlan({ subscription, override, signupMs, nowMs })`, which applies the 7-day grace and the latest override and answers its `plan`;
+    - the two rows it reads: the account's subscription row and its latest plan override (`BillingService.subscriptionOf`, `PlanAdminService.latestOverride` in billing's plan);
+    - `PlanId` from `shared/types/plans.ts`.
 - **Produces:**
   - constants: `FLAG_CACHE_MS = 60_000`, `FLAG_FAILURE_CACHE_MS = 10_000`, `FLAG_TIMEOUT_MS = 1_500`, `FLAGS_URL`, `ANONYMOUS_FLAG_SUBJECT = 'anonymous-visitor'`;
-  - `FlagSubject { distinctId: string; plan(): Promise<string> }`, the plan read only when PostHog is asked;
+  - `FlagSubject { distinctId: string; plan(): Promise<PlanId | 'none'> }`, the plan read only when PostHog is asked;
   - `FlagEvaluation { values: FlagValues; source: 'posthog' | 'defaults' | 'off'; inPostHog: FlagKey[] }`;
   - `FlagEvaluator` with `evaluate(subject): Promise<FlagEvaluation>`;
   - `parseFlagOverrides(text?)`, `flagOverridesOf(env)`, `readFlagsAnswer(body)`;
   - `flagsFor(env: Env, userId: string | null): Promise<FlagEvaluation>`, with `billing` also on when `isBillingOn(env, userId)`;
   - `isFlagOn(env: Env, key: FlagKey, userId: string | null): Promise<boolean>`;
-  - in `person.ts`: `AccountPlan { plan: string; tier: number | null }` and `accountPlanOf(env: Env, userId: string | null): Promise<AccountPlan>`.
+  - in `person.ts`: `planOf(env: Env, userId: string): Promise<PlanId>`. There are no tiers; a visitor's plan is `'none'`, set in `flagsFor`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1945,13 +2076,14 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```ts
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FlagKey, FlagValues } from '../../../shared/types/feature-flags';
+import { defaultFlagValues, type FlagKey, type FlagValues } from '../../../shared/types/feature-flags';
 import { FlagEvaluator, flagOverridesOf, flagsFor, isFlagOn, parseFlagOverrides, type FlagSubject } from './flags';
 import type { PostHogConfig } from './config';
 
-const CONFIG: PostHogConfig = { projectKey: 'phc_test', environment: 'prod', release: null };
+const CONFIG: PostHogConfig = { projectKey: 'phc_test', projectId: '675096', environment: 'prod', release: null, host: 'estori.app' };
 const USER: FlagSubject = { distinctId: 'user_1', plan: async () => 'basic' };
-const OFF: FlagValues = { billing: false, 'store-drafts-paused': false, 'live-store-payments-paused': false, 'catalog-paused': false, 'session-replay-paused': false };
+/** All 11 flags off; Task 1's test pins the registry. */
+const OFF: FlagValues = defaultFlagValues();
 
 function flagsAnswer(flags: Partial<Record<FlagKey, boolean>>, errorsWhileComputingFlags = false): Response {
 	return Response.json({
@@ -2034,7 +2166,7 @@ describe('server flag evaluation', () => {
 		expect(Date.now() - started).toBeLessThan(1_000);
 	});
 
-	it('answers every flag off without a project key, asking nobody', async () => {
+	it('answers every flag off without a project token, as on staging and locally, asking nobody', async () => {
 		const fetcher = vi.fn<typeof fetch>();
 		const flags = new FlagEvaluator({ config: null, fetcher, nowMs: () => 0, overrides: {} });
 		expect(await flags.evaluate(USER)).toEqual({ values: OFF, source: 'off', inPostHog: [] });
@@ -2045,17 +2177,27 @@ describe('server flag evaluation', () => {
 		const { flags } = evaluator(async () => flagsAnswer({ billing: false }), { billing: true, 'catalog-paused': true });
 		expect((await flags.evaluate(USER)).values).toEqual({ ...OFF, billing: true, 'catalog-paused': true });
 	});
+
+	it('applies overrides without a project token too, which is how staging and local development pause something', async () => {
+		const flags = new FlagEvaluator({ config: null, fetcher: vi.fn<typeof fetch>(), nowMs: () => 0, overrides: { 'ai-builds-paused': true } });
+		expect(await flags.evaluate(USER)).toEqual({ values: { ...OFF, 'ai-builds-paused': true }, source: 'off', inPostHog: [] });
+	});
 });
 
 describe('flag overrides', () => {
 	it('reads on and off pairs, ignoring unknown keys and values', () => {
-		expect(parseFlagOverrides('billing=on, catalog-paused=on,nope=on,store-drafts-paused=maybe,')).toEqual({ billing: true, 'catalog-paused': true });
+		expect(parseFlagOverrides('billing=on, catalog-paused=on,nope=on,store-drafts-paused=maybe,signups-paused=off,')).toEqual({
+			billing: true,
+			'catalog-paused': true,
+			'signups-paused': false,
+		});
 		expect(parseFlagOverrides(undefined)).toEqual({});
 	});
 
 	it('applies outside production only', () => {
 		expect(flagOverridesOf({ ENVIRONMENT: 'prod', FEATURE_FLAG_OVERRIDES: 'billing=on' })).toEqual({});
 		expect(flagOverridesOf({ ENVIRONMENT: 'staging', FEATURE_FLAG_OVERRIDES: 'billing=on' })).toEqual({ billing: true });
+		expect(flagOverridesOf({ ENVIRONMENT: 'dev', FEATURE_FLAG_OVERRIDES: 'ai-builds-paused=on' })).toEqual({ 'ai-builds-paused': true });
 	});
 });
 
@@ -2102,7 +2244,7 @@ describe('the billing flag', () => {
 import { beforeAll, describe, expect, it } from 'vitest';
 import { envWith, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { PlanAdminService } from '../../database/services/PlanAdminService';
-import { accountPlanOf } from './person';
+import { planOf } from './person';
 
 let db: D1Database;
 
@@ -2113,15 +2255,15 @@ beforeAll(async () => {
 
 describe("an account's plan", () => {
 	it('is Basic with no subscription or override, and what billing resolves otherwise', async () => {
-		expect(await accountPlanOf(envWith(db), 'plan_1')).toEqual({ plan: 'basic', tier: null });
-		await new PlanAdminService(envWith(db)).addOverride({ userId: 'plan_2', plan: 'premium', tier: 2, limits: {}, until: null, adminUserId: 'plan_admin', reason: 'Partner', now: new Date() });
-		expect(await accountPlanOf(envWith(db), 'plan_2')).toEqual({ plan: 'premium', tier: 2 });
+		expect(await planOf(envWith(db), 'plan_1')).toBe('basic');
+		// Billing's override writer, as its admin page uses it; follow billing's merged signature.
+		await new PlanAdminService(envWith(db)).addOverride({ userId: 'plan_2', plan: 'enterprise', limits: {}, until: null, adminUserId: 'plan_admin', reason: 'Partner', now: new Date() });
+		expect(await planOf(envWith(db), 'plan_2')).toBe('enterprise');
 	});
 
-	it("is none for a visitor, and Basic when billing's tables can't be read", async () => {
-		expect(await accountPlanOf(envWith(db), null)).toEqual({ plan: 'none', tier: null });
+	it("is Basic when billing's tables can't be read", async () => {
 		const broken = envWith({ prepare: () => { throw new Error('D1 down'); } } as unknown as D1Database);
-		expect(await accountPlanOf(broken, 'plan_1')).toEqual({ plan: 'basic', tier: null });
+		expect(await planOf(broken, 'plan_1')).toBe('basic');
 	});
 });
 ```
@@ -2136,33 +2278,30 @@ Expected: FAIL, "Failed to resolve import ./flags" and "./person".
 ```ts
 /** What flags and person properties know about an account's plan. */
 
+import type { PlanId } from '../../../shared/types/plans';
 import { BillingService } from '../../database/services/BillingService';
 import { PlanAdminService } from '../../database/services/PlanAdminService';
 import { resolvePlan } from '../billing/account';
 
-export interface AccountPlan {
-	plan: string;
-	tier: number | null;
-}
-
 /**
- * The plan billing resolves from the subscription and any admin override. It reads the tables directly, not through
- * `loadAccount`, because `loadAccount` asks the billing flag, which asks this. A visitor has none; a read that fails
- * answers Basic.
+ * The plan billing's plan resolution gives from the subscription row, the grace period and the latest admin override.
+ * It reads those rows itself, not through the account loader, because the account loader asks the billing flag, which
+ * asks this. A read that fails answers Basic.
  */
-export async function accountPlanOf(env: Env, userId: string | null): Promise<AccountPlan> {
-	if (!userId) return { plan: 'none', tier: null };
+export async function planOf(env: Env, userId: string): Promise<PlanId> {
 	try {
 		const [subscription, override] = await Promise.all([new BillingService(env).subscriptionOf(userId), new PlanAdminService(env).latestOverride(userId)]);
-		const resolved = resolvePlan({ subscription, override, nowMs: Date.now() });
-		return { plan: resolved.plan, tier: resolved.tier };
+		// The plan doesn't depend on the sign-up date; only the period does, which isn't needed here.
+		return resolvePlan({ subscription, override, signupMs: null, nowMs: Date.now() }).plan;
 	} catch {
-		return { plan: 'basic', tier: null };
+		return 'basic';
 	}
 }
 ```
 
-`person.ts` and billing's `account.ts` import each other through `flags.ts` once Task 9 moves `loadAccount` onto `isFlagOn`. Each side uses the other only inside functions, so the cycle is safe. Never call either at module top level.
+The imports above use the names in billing's plan. If billing's merged code names the subscription read, the override read or the plan resolution differently, use those, and keep `planOf`'s answers.
+
+`person.ts` and billing's account loader import each other through `flags.ts` once Task 9 moves the loader onto `isFlagOn`. Each side uses the other only inside functions, so the cycle is safe. Never call either at module top level.
 
 - [ ] **Step 4: Write `worker/services/posthog/flags.ts`**
 
@@ -2176,9 +2315,10 @@ export async function accountPlanOf(env: Env, userId: string | null): Promise<Ac
  */
 
 import { FLAG_KEYS, defaultFlagValues, isFlagKey, type FlagKey, type FlagValues } from '../../../shared/types/feature-flags';
+import type { PlanId } from '../../../shared/types/plans';
 import { isBillingOn } from '../billing/flag';
 import { POSTHOG_INGEST_HOST, posthogConfig, type PostHogConfig } from './config';
-import { accountPlanOf } from './person';
+import { planOf } from './person';
 
 export const FLAG_CACHE_MS = 60_000;
 export const FLAG_FAILURE_CACHE_MS = 10_000;
@@ -2191,7 +2331,7 @@ const MAX_CACHED_SUBJECTS = 1_000;
 export interface FlagSubject {
 	distinctId: string;
 	/** Read only when PostHog is asked, so a cached answer costs no plan lookup. */
-	plan(): Promise<string>;
+	plan(): Promise<PlanId | 'none'>;
 }
 
 export interface FlagEvaluation {
@@ -2310,7 +2450,7 @@ function evaluatorFor(env: Env): FlagEvaluator {
 export async function flagsFor(env: Env, userId: string | null): Promise<FlagEvaluation> {
 	let evaluation: FlagEvaluation;
 	try {
-		evaluation = await evaluatorFor(env).evaluate({ distinctId: userId ?? ANONYMOUS_FLAG_SUBJECT, plan: async () => (await accountPlanOf(env, userId)).plan });
+		evaluation = await evaluatorFor(env).evaluate({ distinctId: userId ?? ANONYMOUS_FLAG_SUBJECT, plan: async () => (userId ? planOf(env, userId) : 'none') });
 	} catch {
 		evaluation = { values: { ...defaultFlagValues(), ...flagOverridesOf(env) }, source: 'defaults', inPostHog: [] };
 	}
@@ -2354,7 +2494,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `gpcSignal(request: Request): boolean`;
   - `honorAnalyticsChoice(env: Env, request: Request, userId: string): Promise<boolean>`, which answers whether analytics is off and stores a GPC signal;
   - `sessionTelemetry(env: Env, request: Request, userId: string): Promise<SessionTelemetry>`;
-  - `TelemetryController.config` at `GET /api/telemetry/config` (public);
+  - `TelemetryController.config` at `GET /api/telemetry/config` (public), answering `TelemetryConfigData { replayPaused, localProjectKey }`;
   - `SessionResponse.telemetry?` and `ProfileResponseData.telemetry`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2379,7 +2519,14 @@ beforeAll(async () => {
 describe('session telemetry', () => {
 	it('carries the client flags, and analytics on, for a new user', async () => {
 		expect(await sessionTelemetry(envWith(db, { ENVIRONMENT: 'dev' }), get(), 'tel_1')).toEqual({
-			flags: { billing: false, 'store-drafts-paused': false, 'catalog-paused': false, 'session-replay-paused': false },
+			flags: {
+				billing: false,
+				'store-drafts-paused': false,
+				'catalog-paused': false,
+				'session-replay-paused': false,
+				'store-publishing-paused': false,
+				'custom-domains-paused': false,
+			},
 			analyticsOptOut: false,
 		});
 	});
@@ -2422,20 +2569,23 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
+const config = (env: Record<string, string>) => TelemetryController.config(request, env as unknown as Env, {} as ExecutionContext, {} as RouteContext);
+
 describe('the telemetry config', () => {
-	it('gives the browser nothing to load without a project key, with replay not paused', async () => {
-		const response = await TelemetryController.config(request, { ENVIRONMENT: 'dev' } as unknown as Env, {} as ExecutionContext, {} as RouteContext);
-		expect(await response.json()).toMatchObject({ success: true, data: { posthog: null, replayPaused: false } });
+	it('gives no token and no replay pause without a project token, as on staging and in tests', async () => {
+		const response = await config({ ENVIRONMENT: 'staging' });
+		expect(await response.json()).toMatchObject({ success: true, data: { replayPaused: false, localProjectKey: null } });
 	});
 
-	it("gives the browser the key, the proxy path, the UI host and the visitors' replay pause", async () => {
+	it("gives the visitors' replay pause, and no token in production, where the browser's own map has it", async () => {
 		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ flags: { 'session-replay-paused': { key: 'session-replay-paused', enabled: true } } })));
-		const env = { POSTHOG_PROJECT_KEY: 'phc_config', ENVIRONMENT: 'staging' } as unknown as Env;
-		const response = await TelemetryController.config(request, env, {} as ExecutionContext, {} as RouteContext);
-		expect((await response.json()).data).toEqual({
-			posthog: { projectKey: 'phc_config', apiHost: '/ingest', uiHost: 'https://us.posthog.com', environment: 'staging' },
-			replayPaused: true,
-		});
+		const response = await config({ POSTHOG_PROJECT_KEY: 'phc_config', ENVIRONMENT: 'prod' });
+		expect((await response.json()).data).toEqual({ replayPaused: true, localProjectKey: null });
+	});
+
+	it('gives local development the token a developer opted in with', async () => {
+		vi.stubGlobal('fetch', vi.fn(async () => Response.json({ flags: {} })));
+		expect((await (await config({ POSTHOG_PROJECT_KEY: 'phc_local' })).json()).data).toEqual({ replayPaused: false, localProjectKey: 'phc_local' });
 	});
 });
 ```
@@ -2526,14 +2676,21 @@ import { BaseController } from '../baseController';
 import type { RouteContext } from '../../types/route-context';
 import type { ApiResponse, ControllerResponse } from '../types';
 import type { TelemetryConfigData } from '../../../../shared/types/telemetry';
-import { browserConfig, posthogConfig } from '../../../services/posthog/config';
+import { posthogConfig } from '../../../services/posthog/config';
 import { flagsFor } from '../../../services/posthog/flags';
 
 export class TelemetryController extends BaseController {
-	/** GET /api/telemetry/config: what the browser needs to load PostHog, and whether replay is paused for visitors who aren't signed in. */
+	/**
+	 * GET /api/telemetry/config: whether replay is paused for visitors who aren't signed in, and, in local development
+	 * only, the token a developer opted in with. On estori.app the browser takes the token from its own map.
+	 */
 	static async config(_request: Request, env: Env, _ctx: ExecutionContext, _context: RouteContext): Promise<ControllerResponse<ApiResponse<TelemetryConfigData>>> {
 		const { values } = await flagsFor(env, null);
-		return this.createSuccessResponse({ posthog: browserConfig(posthogConfig(env)), replayPaused: values['session-replay-paused'] });
+		const config = posthogConfig(env);
+		return this.createSuccessResponse({
+			replayPaused: values['session-replay-paused'],
+			localProjectKey: config?.environment === 'dev' ? config.projectKey : null,
+		});
 	}
 }
 ```
@@ -2631,6 +2788,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:**
 - Add the dependency: `bun add posthog-js`.
 - Create:
+  - `src/lib/analytics/posthog-projects.ts` (test `src/lib/analytics/posthog-projects.test.ts`), the committed map from hostname to project token;
   - `src/lib/analytics/posthog-options.ts` (test `src/lib/analytics/posthog-options.test.ts`);
   - `src/lib/analytics/posthog-browser.ts`;
   - `src/components/analytics/PostHogSync.tsx`;
@@ -2646,13 +2804,18 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - **Consumes:**
   - `TelemetryConfigData`, `SessionTelemetry` and `ClientFlagKey` from `@/api-types`;
-  - `GET /api/telemetry/config` and `ProfileResponseData.telemetry` from Task 6.
+  - `GET /api/telemetry/config` and `ProfileResponseData.telemetry` from Task 6;
+  - `INGEST_PATH` and `POSTHOG_UI_ORIGIN` from Task 2, in a test only, to keep the browser's copies in step.
 - **Produces:**
+  - `posthog-projects.ts`:
+    - `POSTHOG_PROJECTS: Readonly<Record<string, string>>`, which maps `estori.app` to the production token;
+    - `POSTHOG_API_HOST = '/ingest'`, `POSTHOG_UI_HOST = 'https://us.posthog.com'`;
+    - `posthogTokenFor(hostname: string, localProjectKey: string | null): string | null`. Localhost gets the opt-in token the server gives it; any other host not in the map gets none.
   - `REPLAY_PAUSED_PATHS = ['/orders', '/emails', '/profile', '/settings', '/admin']`, which covers `/settings/billing` and the payments setup page (`/profile?tab=paid`);
   - `replayPausedOn(pathname): boolean`;
   - `withoutQuery(url): string`, `stripUrlQueries(event: CaptureResult | null): CaptureResult | null`;
   - `AnalyticsState { gpc; optedOut; replay }`;
-  - `posthogInitOptions(config, state): Partial<PostHogConfig>`;
+  - `posthogInitOptions(state): Partial<PostHogConfig>`;
   - `globalPrivacyControl(nav): boolean`;
   - `captureBrowserException(error: unknown): void` and `applyAnalyticsChoice(optedOut: boolean): void`;
   - `useFlag(key: ClientFlagKey): boolean`, off unless the session says on;
@@ -2662,6 +2825,40 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Write the failing tests**
 
+`src/lib/analytics/posthog-projects.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { INGEST_PATH, POSTHOG_UI_ORIGIN } from '../../../worker/services/posthog/config';
+import { POSTHOG_API_HOST, POSTHOG_PROJECTS, POSTHOG_UI_HOST, posthogTokenFor } from './posthog-projects';
+
+const PRODUCTION = 'phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC';
+
+describe('the PostHog project for this page', () => {
+	it('is the production project on estori.app only', () => {
+		expect(POSTHOG_PROJECTS).toEqual({ 'estori.app': PRODUCTION });
+		expect(posthogTokenFor('estori.app', null)).toBe(PRODUCTION);
+		expect(posthogTokenFor('estori.app', 'phc_local')).toBe(PRODUCTION);
+	});
+
+	it('is none on staging, previews, stores and any other host', () => {
+		for (const host of ['staging.estori.app', 'preview.estori.app', 'teashop.estori.app', 'www.estori.app', 'example.com']) {
+			expect(posthogTokenFor(host, 'phc_local'), host).toBeNull();
+		}
+	});
+
+	it('is the opt-in token on localhost, and none without it', () => {
+		for (const host of ['localhost', '127.0.0.1', '[::1]']) expect(posthogTokenFor(host, 'phc_local'), host).toBe('phc_local');
+		expect(posthogTokenFor('localhost', null)).toBeNull();
+	});
+
+	it("talks to the Worker's proxy and links to the US UI, as the server does", () => {
+		expect(POSTHOG_API_HOST).toBe(INGEST_PATH);
+		expect(POSTHOG_UI_HOST).toBe(POSTHOG_UI_ORIGIN);
+	});
+});
+```
+
 `src/lib/analytics/posthog-options.test.ts`:
 
 ```ts
@@ -2669,11 +2866,9 @@ import { describe, expect, it } from 'vitest';
 import type { CaptureResult } from 'posthog-js';
 import { globalPrivacyControl, posthogInitOptions, replayPausedOn, stripUrlQueries, withoutQuery } from './posthog-options';
 
-const CONFIG = { projectKey: 'phc_test', apiHost: '/ingest', uiHost: 'https://us.posthog.com', environment: 'prod' };
-
 describe('posthog-js options', () => {
-	it('talks to /ingest, records layouts and clicks but no page text, no input values and no iframe, and asks PostHog for no flags', () => {
-		expect(posthogInitOptions(CONFIG, { gpc: false, optedOut: false, replay: true })).toEqual({
+	it('talks to /ingest, records layouts and clicks but no page text, input values, images or iframes, and asks PostHog for no flags', () => {
+		expect(posthogInitOptions({ gpc: false, optedOut: false, replay: true })).toEqual({
 			api_host: '/ingest',
 			ui_host: 'https://us.posthog.com',
 			person_profiles: 'identified_only',
@@ -2686,16 +2881,17 @@ describe('posthog-js options', () => {
 			advanced_disable_feature_flags: true,
 			disable_surveys: true,
 			disable_session_recording: false,
-			session_recording: { maskAllInputs: true, maskTextSelector: '*', blockSelector: 'iframe' },
+			enable_recording_console_log: false,
+			session_recording: { maskAllInputs: true, maskTextSelector: '*', blockSelector: 'img, iframe', recordHeaders: false, recordBody: false },
 			before_send: stripUrlQueries,
 			opt_out_capturing_by_default: false,
 		});
 	});
 
 	it('starts opted out under GPC or the account setting, and without replay when it is paused', () => {
-		expect(posthogInitOptions(CONFIG, { gpc: true, optedOut: false, replay: true }).opt_out_capturing_by_default).toBe(true);
-		expect(posthogInitOptions(CONFIG, { gpc: false, optedOut: true, replay: true }).opt_out_capturing_by_default).toBe(true);
-		expect(posthogInitOptions(CONFIG, { gpc: false, optedOut: false, replay: false }).disable_session_recording).toBe(true);
+		expect(posthogInitOptions({ gpc: true, optedOut: false, replay: true }).opt_out_capturing_by_default).toBe(true);
+		expect(posthogInitOptions({ gpc: false, optedOut: true, replay: true }).opt_out_capturing_by_default).toBe(true);
+		expect(posthogInitOptions({ gpc: false, optedOut: false, replay: false }).disable_session_recording).toBe(true);
 	});
 
 	it('pauses replay on orders, emails, profile and payments setup, settings and billing, and admin pages only', () => {
@@ -2756,6 +2952,11 @@ function source(path: string): string {
 describe('PostHog in the browser', () => {
 	const sync = source('/src/components/analytics/PostHogSync.tsx');
 
+	it("loads only with this host's token, so staging, previews and stores never load it", () => {
+		expect(sync).toContain('posthogTokenFor(window.location.hostname, config.data?.localProjectKey ?? null)');
+		expect(sync).toContain('if (loaded.current || !token || !ready) return;');
+	});
+
 	it('identifies people by user id only, never by email, name or username', () => {
 		expect(sync).toContain('posthog.identify(userId)');
 		expect(sync).not.toMatch(/email|displayName|username/);
@@ -2797,17 +2998,52 @@ describe('PostHog in the browser', () => {
 - [ ] **Step 2: Run them to verify they fail**
 
 Run: `rtk proxy bun run test -- src/lib/analytics src/components/analytics`
-Expected: FAIL. `./posthog-options` doesn't resolve, and the sources don't exist.
+Expected: FAIL. `./posthog-projects` and `./posthog-options` don't resolve, and the sources don't exist.
 
 - [ ] **Step 3: Add posthog-js.** Run `bun add posthog-js`, then `bun run typecheck`. The next steps use `capture_pageview: 'history_change'`, `capture_exceptions` and `before_send`. If the type check rejects any of them, the installed version is too old: install the latest.
 
 posthog-js from npm lazy-loads `recorder.js` and its exception-capture script from `<api_host>/static`, that is `/ingest/static`, through Task 3's proxy. So the app's CSP needs no PostHog host.
 
-- [ ] **Step 4: Write `src/lib/analytics/posthog-options.ts`**
+**The project's remote settings.** The owner's settings reach posthog-js as its remote config, which `advanced_disable_feature_flags` doesn't turn off:
+- replay's two trigger groups: 20% of sessions on `https://estori.app/`, and every session with an error there;
+- "Total privacy" masking;
+- exception autocapture, web vitals, heatmaps and dead clicks;
+- network timings without headers or bodies, and no console logs.
+
+The local options below repeat the privacy settings, so a change in PostHog's UI can't loosen them. They leave sampling, triggers, web vitals, heatmaps and dead clicks to the project. Task 19 checks that a replay and a web vitals event arrive.
+
+- [ ] **Step 4: Write `src/lib/analytics/posthog-projects.ts`**
+
+```ts
+/**
+ * Which PostHog project a page reports to, by hostname. Project tokens are public and write-only, so they're committed.
+ * Only production has a project; staging, previews, stores and any other host get none, and posthog-js never loads
+ * there. A developer can opt in on localhost: the server hands over the token from .dev.vars (TelemetryConfigData).
+ */
+
+export const POSTHOG_PROJECTS: Readonly<Record<string, string>> = {
+	// "Estori production", project 675096, set up 2026-10-19.
+	'estori.app': 'phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC',
+};
+
+/** posthog-js talks to the Worker's same-origin proxy (INGEST_PATH in worker/services/posthog/config.ts). */
+export const POSTHOG_API_HOST = '/ingest';
+/** PostHog's US UI, for links to replays and the toolbar (POSTHOG_UI_ORIGIN on the server). */
+export const POSTHOG_UI_HOST = 'https://us.posthog.com';
+
+const LOCAL_HOSTS: ReadonlySet<string> = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+export function posthogTokenFor(hostname: string, localProjectKey: string | null): string | null {
+	if (LOCAL_HOSTS.has(hostname)) return localProjectKey;
+	return Object.hasOwn(POSTHOG_PROJECTS, hostname) ? POSTHOG_PROJECTS[hostname] : null;
+}
+```
+
+- [ ] **Step 5: Write `src/lib/analytics/posthog-options.ts`**
 
 ```ts
 import type { CaptureResult, PostHogConfig } from 'posthog-js';
-import type { PostHogBrowserConfig } from '@/api-types';
+import { POSTHOG_API_HOST, POSTHOG_UI_HOST } from './posthog-projects';
 
 /**
  * Recording stops on these paths and below them: orders, shopper emails, the profile with its payments setup
@@ -2866,10 +3102,10 @@ export interface AnalyticsState {
 	replay: boolean;
 }
 
-export function posthogInitOptions(config: PostHogBrowserConfig, state: AnalyticsState): Partial<PostHogConfig> {
+export function posthogInitOptions(state: AnalyticsState): Partial<PostHogConfig> {
 	return {
-		api_host: config.apiHost,
-		ui_host: config.uiHost,
+		api_host: POSTHOG_API_HOST,
+		ui_host: POSTHOG_UI_HOST,
 		person_profiles: 'identified_only',
 		capture_pageview: 'history_change',
 		capture_pageleave: 'if_capture_pageview',
@@ -2881,9 +3117,10 @@ export function posthogInitOptions(config: PostHogBrowserConfig, state: Analytic
 		advanced_disable_feature_flags: true,
 		disable_surveys: true,
 		disable_session_recording: !state.replay,
-		// Layouts and clicks, not what's written: all text and inputs masked. Every iframe is blocked, since the
-		// editor's preview carries a signed preview token in its address.
-		session_recording: { maskAllInputs: true, maskTextSelector: '*', blockSelector: 'iframe' },
+		enable_recording_console_log: false,
+		// Layouts and clicks, not what's written: all text and inputs masked, images blocked, and no request headers or
+		// bodies. Every iframe is blocked, since the editor's preview carries a signed preview token in its address.
+		session_recording: { maskAllInputs: true, maskTextSelector: '*', blockSelector: 'img, iframe', recordHeaders: false, recordBody: false },
 		before_send: stripUrlQueries,
 		opt_out_capturing_by_default: state.gpc || state.optedOut,
 	};
@@ -2895,9 +3132,11 @@ export function globalPrivacyControl(nav: Navigator & { globalPrivacyControl?: b
 }
 ```
 
-If the type check says `session_recording` has no `blockSelector` in the installed version, use its `blockClass` instead. Then give both preview iframes in `src/routes/chat/components/preview-iframe.tsx` that class. Do the same for the iframes in `src/components/site-page/DevicePreview.tsx` and `src/routes/emails/template-editor.tsx`, and change the test to match.
+**If the type check rejects an option:**
+- **`blockSelector`:** use `blockClass` instead. Give that class to both preview iframes in `src/routes/chat/components/preview-iframe.tsx`, to the iframes in `src/components/site-page/DevicePreview.tsx` and `src/routes/emails/template-editor.tsx`, and to every `<img>` through a shared class. Change the test to match.
+- **`recordHeaders` or `recordBody`:** drop it and its test line. The project's remote setting already leaves headers and bodies out.
 
-- [ ] **Step 5: Write `src/lib/analytics/posthog-browser.ts`**
+- [ ] **Step 6: Write `src/lib/analytics/posthog-browser.ts`**
 
 ```ts
 import posthog from 'posthog-js';
@@ -2916,18 +3155,18 @@ export function applyAnalyticsChoice(optedOut: boolean): void {
 }
 ```
 
-- [ ] **Step 6: Carry the telemetry in the session** (`src/contexts/auth-context.tsx`)
+- [ ] **Step 7: Carry the telemetry in the session** (`src/contexts/auth-context.tsx`)
 1. Import `SessionTelemetry` from `'../api-types'`.
 2. Add `telemetry: SessionTelemetry | null;` to `CachedAuthSession` and to `AuthContextType`. Document it on `AuthContextType` as "Client flags and the analytics setting; null when signed out".
 3. In `buildSessionFromProfile` and in `buildSessionFromLogin`, add `telemetry: data.telemetry ?? null,`.
 4. In the provider, add `const telemetry = cachedSession?.telemetry ?? null;`. Put `telemetry` in the context value and in its `useMemo` dependencies.
 
-- [ ] **Step 7: Write the hooks and the API call**
+- [ ] **Step 8: Write the hooks and the API call**
 - **`src/lib/query-keys.ts`:** add `telemetry: () => [...queryKeys.platform.all, 'telemetry'] as const,` under `platform`.
 - **`src/lib/api-client.ts`:** add, near `getCapabilities`:
 
 ```ts
-	/** PostHog's config for this deployment; quiet, since the app works without it. */
+	/** Visitors' replay pause, and the local opt-in token; quiet, since the app works without it. */
 	async getTelemetryConfig(): Promise<ApiResponse<TelemetryConfigData>> {
 		return this.request<TelemetryConfigData>('/api/telemetry/config', undefined, true);
 	}
@@ -2941,7 +3180,7 @@ import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 
-/** PostHog's config for this deployment; the same for every viewer. */
+/** Visitors' replay pause and the local opt-in token; the same for every viewer. */
 export function useTelemetryConfig() {
 	return useQuery({
 		queryKey: queryKeys.platform.telemetry(),
@@ -2965,7 +3204,7 @@ export function useFlag(key: ClientFlagKey): boolean {
 }
 ```
 
-- [ ] **Step 8: Write `src/components/analytics/PostHogSync.tsx`**
+- [ ] **Step 9: Write `src/components/analytics/PostHogSync.tsx`**
 
 ```tsx
 import { useEffect, useRef } from 'react';
@@ -2974,15 +3213,21 @@ import posthog from 'posthog-js';
 import { useAuth } from '@/contexts/auth-context';
 import { useTelemetryConfig } from '@/hooks/use-telemetry';
 import { globalPrivacyControl, posthogInitOptions, replayPausedOn } from '@/lib/analytics/posthog-options';
+import { posthogTokenFor } from '@/lib/analytics/posthog-projects';
 
-/** Loads PostHog once the config and the session are known, then keeps its identity, consent and replay in step. */
+/**
+ * Loads PostHog on a host with a project token, once the config and the session are known, then keeps its identity,
+ * consent and replay in step. Elsewhere it does nothing.
+ */
 export function PostHogSync() {
 	const config = useTelemetryConfig();
 	const { user, telemetry, isLoading } = useAuth();
 	const { pathname } = useLocation();
 	const loaded = useRef(false);
 	const identifiedAs = useRef<string | null>(null);
-	const posthogConfig = config.data?.posthog ?? null;
+	const token = posthogTokenFor(window.location.hostname, config.data?.localProjectKey ?? null);
+	// A failed config call still loads PostHog on estori.app, with replay not paused for visitors.
+	const ready = !config.isPending && !isLoading;
 	const gpc = globalPrivacyControl(navigator);
 	const optedOut = gpc || (telemetry?.analyticsOptOut ?? false);
 	const replayPaused = user ? (telemetry?.flags['session-replay-paused'] ?? false) : (config.data?.replayPaused ?? false);
@@ -2990,10 +3235,10 @@ export function PostHogSync() {
 	const userId = user?.id ?? null;
 
 	useEffect(() => {
-		if (loaded.current || !posthogConfig || isLoading) return;
-		posthog.init(posthogConfig.projectKey, posthogInitOptions(posthogConfig, { gpc, optedOut, replay: replay && !replayPausedOn(window.location.pathname) }));
+		if (loaded.current || !token || !ready) return;
+		posthog.init(token, posthogInitOptions({ gpc, optedOut, replay: replay && !replayPausedOn(window.location.pathname) }));
 		loaded.current = true;
-	}, [posthogConfig, isLoading, gpc, optedOut, replay]);
+	}, [token, ready, gpc, optedOut, replay]);
 
 	useEffect(() => {
 		if (!loaded.current || userId === identifiedAs.current) return;
@@ -3001,33 +3246,33 @@ export function PostHogSync() {
 		if (identifiedAs.current !== null) posthog.reset();
 		if (userId) posthog.identify(userId);
 		identifiedAs.current = userId;
-	}, [userId, posthogConfig, isLoading]);
+	}, [userId, token, ready]);
 
 	useEffect(() => {
 		if (!loaded.current) return;
 		if (optedOut) posthog.opt_out_capturing();
 		else if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
-	}, [optedOut, posthogConfig, isLoading]);
+	}, [optedOut, token, ready]);
 
 	useEffect(() => {
 		if (!loaded.current || optedOut) return;
 		if (!replay || replayPausedOn(pathname)) posthog.stopSessionRecording();
 		// Without arguments, starting again obeys the project's sampling and triggers.
 		else if (!posthog.sessionRecordingStarted()) posthog.startSessionRecording();
-	}, [pathname, replay, optedOut, posthogConfig, isLoading]);
+	}, [pathname, replay, optedOut, token, ready]);
 
 	return null;
 }
 ```
 
-- [ ] **Step 9: Mount it and report boundary errors**
+- [ ] **Step 10: Mount it and report boundary errors**
 - **`src/App.tsx`:** render `<PostHogSync />` right after `<AppsQuerySync />`, inside `<AuthProvider>`.
 - **`src/components/ErrorBoundary.tsx`:**
   1. Import `captureBrowserException` from `@/lib/analytics/posthog-browser`.
   2. Pass `onError={(error) => captureBrowserException(error)}` to `<Sentry.ErrorBoundary>`.
-  3. Task 19 replaces the Sentry boundary.
+  3. Task 20 replaces the Sentry boundary.
 
-- [ ] **Step 10: Run the tests to verify they pass**
+- [ ] **Step 11: Run the tests to verify they pass**
 
 Run: `rtk proxy bun run test -- src/lib/analytics src/components/analytics src/lib/query-keys.test.ts`
 Expected: PASS.
@@ -3035,11 +3280,11 @@ Expected: PASS.
 Run: `bun run typecheck && npx eslint src/components/analytics src/lib/analytics src/hooks/use-flag.ts src/hooks/use-telemetry.ts src/contexts/auth-context.tsx`
 Expected: no errors.
 
-- [ ] **Step 11: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
 git add package.json bun.lock src/lib/analytics src/components/analytics src/hooks/use-flag.ts src/hooks/use-telemetry.ts src/contexts/auth-context.tsx src/App.tsx src/lib/api-client.ts src/lib/query-keys.ts src/components/ErrorBoundary.tsx
-git commit -m "feat(analytics): posthog-js on estori.app with pageviews, text-free replay, query-free urls and flags from the session
+git commit -m "feat(analytics): posthog-js on estori.app only, with pageviews, text-free replay, query-free urls and flags from the session
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -3340,7 +3585,12 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `worker/agents/think/draft-tools.ts` and `draft-tools.test.ts`: `store-drafts-paused` in `create_draft`;
   - `worker/agents/think/ThinkAgent.ts`: pass the checks in;
   - `worker/api/controllers/drafts/controller.ts` and `controller.test.ts`: `store-drafts-paused` on `POST`;
-  - billing's flag checks, which move from `isBillingOn` to the `billing` flag: `worker/services/billing/account.ts` (`loadAccount`), `worker/services/billing/gates.ts` (`checkPromptPlan`), `worker/api/controllers/billing/controller.ts` (every `POST`) and `worker/api/controllers/limits/controller.ts` (`getPublicPlan`);
+  - billing's flag checks, which move from `isBillingOn` to the `billing` flag. By role, with their paths in billing's plan:
+    - the account loader, `worker/services/billing/account.ts` (`loadAccount`);
+    - the prompt gate, `worker/services/billing/gates.ts` (`checkPromptPlan`);
+    - the billing controller, `worker/api/controllers/billing/controller.ts` (every `POST`);
+    - the limits controller's public plan, `worker/api/controllers/limits/controller.ts` (`getPublicPlan`);
+    - and any other place billing's merged code calls `isBillingOn`;
   - `shared/types/drafts.ts`: `STORE_DRAFTS_PAUSED_MESSAGE`;
   - `shared/types/catalog.ts`: `CATALOG_PAUSED_MESSAGE`.
 - **Browser:**
@@ -3438,12 +3688,12 @@ In `worker/api/controllers/drafts/controller.test.ts`:
 
 ```ts
 describe('starting a draft while drafts are paused', () => {
-	it('is refused with 403 before the agent is asked', async () => {
+	it('is refused with 503 before the agent is asked', async () => {
 		const { DraftsController } = await import('./controller');
 		const env = { SPACE_DO: { idFromName: (name: string) => name, get: () => ({ listDrafts: async () => SNAPSHOT }) } } as unknown as Env;
 		const request = new Request('https://estori.app/api/stores/app_1/drafts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Sale' }) });
 		const response = await DraftsController.create(request, env, {} as ExecutionContext, { pathParams: { id: 'app_1' }, user: { id: 'seller_1' } } as unknown as RouteContext);
-		expect(response.status).toBe(403);
+		expect(response.status).toBe(503);
 		expect((await response.json()).error.message).toBe(STORE_DRAFTS_PAUSED_MESSAGE);
 		expect(isFlagOn).toHaveBeenCalledWith(env, 'store-drafts-paused', 'seller_1');
 		expect(getAgentStub).not.toHaveBeenCalled();
@@ -3479,23 +3729,29 @@ describe('real payments on live stores', () => {
 import { describe, expect, it } from 'vitest';
 
 /** Billing's checks read the billing flag, which keeps BILLING and BILLING_USER_IDS and adds PostHog's targeting. */
-const sources = import.meta.glob<string>(
-	[
-		'/worker/services/billing/account.ts',
-		'/worker/services/billing/gates.ts',
-		'/worker/api/controllers/billing/controller.ts',
-		'/worker/api/controllers/limits/controller.ts',
-	],
-	{ query: '?raw', import: 'default', eager: true },
-);
+const worker = import.meta.glob<string>(['/worker/**/*.ts', '!/worker/**/*.test.ts'], { query: '?raw', import: 'default', eager: true });
+
+/** The billing switch itself, and the flag that ORs it in. */
+const SWITCH_READERS = ['/worker/services/billing/flag.ts', '/worker/services/posthog/flags.ts'];
+
+/** Billing's checks by role, at their paths in billing's plan. If billing's merged code moved one, use its path. */
+const BILLING_CHECKS = [
+	'/worker/services/billing/account.ts', // the account loader
+	'/worker/services/billing/gates.ts', // the prompt gate
+	'/worker/api/controllers/billing/controller.ts', // the billing controller
+	'/worker/api/controllers/limits/controller.ts', // the limits controller's public plan
+];
 
 describe("billing's flag checks", () => {
-	it("read the billing flag, never billing's env switches directly", () => {
-		expect(Object.keys(sources)).toHaveLength(4);
-		for (const [path, text] of Object.entries(sources)) {
-			expect(text, path).not.toContain('isBillingOn(');
-			expect(text, path).toContain("isFlagOn(env, 'billing', ");
-		}
+	it('read the billing flag', () => {
+		for (const path of BILLING_CHECKS) expect(worker[path], path).toContain("isFlagOn(env, 'billing', ");
+	});
+
+	it("never read billing's env switches directly anywhere else in the Worker", () => {
+		const readers = Object.entries(worker)
+			.filter(([, text]) => text.includes('isBillingOn('))
+			.map(([path]) => path);
+		expect(readers.sort()).toEqual([...SWITCH_READERS].sort());
 	});
 });
 ```
@@ -3610,14 +3866,14 @@ async function livePaymentsOn(env: Env, sellerUserId: string): Promise<boolean> 
 ```ts
 		return this.respond(env, context.pathParams.id, async (_space, appId) => {
 			if ('error' in parsed) return { error: parsed.error, status: 400 };
-			if (await isFlagOn(env, 'store-drafts-paused', context.user?.id ?? null)) return { error: STORE_DRAFTS_PAUSED_MESSAGE, status: 403 };
+			if (await isFlagOn(env, 'store-drafts-paused', context.user?.id ?? null)) return { error: STORE_DRAFTS_PAUSED_MESSAGE, status: 503 };
 			return (await getAgentStub(env, appId)).createDraft(parsed.name, parsed.from);
 		});
 ```
 
-**Billing's checks.** Each `isBillingOn(env, X)` becomes `(await isFlagOn(env, 'billing', X))`, importing `isFlagOn` from `worker/services/posthog/flags`. That covers `loadAccount`'s "billing off" branch, `checkPromptPlan`'s first line, the billing controller's `POST` guard and `getPublicPlan`'s `billing` field. All four are already async.
-- **Billing's behaviour without PostHog** stays as it was: the flag answers billing's own switches when no project key is set. With a key, PostHog can add accounts but never remove one.
-- **What stays:** `isBillingOn` remains in `worker/services/billing/flag.ts` and its test; `flags.ts` uses it. Then run `grep -rn "isBillingOn(" worker`: it must list only those three files.
+**Billing's checks.** Each `isBillingOn(env, X)` becomes `(await isFlagOn(env, 'billing', X))`, importing `isFlagOn` from `worker/services/posthog/flags`. In billing's plan that covers the account loader's "billing off" branch, the prompt gate's first line, the billing controller's `POST` guard and the public plan's `billing` field, all already async. Billing's merged code may call the switch in more places; change those too.
+- **Billing's behaviour without PostHog** stays as it was: the flag answers billing's own switches when no project token is set, as on staging and locally. With the token, PostHog can add accounts but never remove one.
+- **What stays:** `isBillingOn` remains in `worker/services/billing/flag.ts` and its test; `flags.ts` uses it. The wiring test fails if any other Worker file still calls it.
 
 - [ ] **Step 5: Pause in the browser**
 - **`DraftSwitcher.tsx`:**
@@ -3659,7 +3915,484 @@ git commit -m "feat(flags): pause flags for live store payments, the catalog and
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 10: Account and build events
+### Task 10: Pauses for shipped features
+
+**Files:**
+- Create `shared/types/pauses.ts`: the six refusal messages, two codes and `SignupsPausedError`. Re-export it from `src/api-types.ts`.
+- **`ai-builds-paused`:**
+  - `worker/agents/core/websocket.ts` and `websocket.test.ts`;
+  - `worker/api/controllers/agent/controller.ts`, with the new guard test `worker/api/controllers/agent/ai-builds-pause-wiring.test.ts`.
+- **`signups-paused`:**
+  - `worker/database/services/AuthService.ts`, with the new test `worker/database/services/signups-paused.test.ts` and new cases in `oauth-autolink.test.ts`;
+  - `worker/api/controllers/auth/controller.ts` (the provider callback's redirect) and `src/hooks/use-oauth-error-toast.ts`, with the new guard test `worker/api/controllers/auth/signups-pause-wiring.test.ts`.
+- **`store-publishing-paused` and `custom-domains-paused`:**
+  - `worker/api/controllers/liveStores/controller.ts` and `controller.sql.test.ts`;
+  - `src/components/live-store/GoLiveDialog.tsx` and `go-live-guard.test.ts`.
+- **`template-sales-paused`:** `worker/api/controllers/publishing/controller.ts` (`purchase`), with the new guard test `worker/api/controllers/publishing/template-sales-pause-wiring.test.ts`.
+- **`billing-checkout-paused`:** billing's actions for a plan checkout, a plan change and extra credits, behind `POST /api/billing/checkout`, `/change-plan` and `/credits`. In billing's plan they are `startCheckout`, `changePlan` and `buyCredits` in `worker/services/billing/actions.ts`, with their deps from `billingActionDepsFromEnv`; follow billing's merged names. New guard test: `worker/services/billing/checkout-pause-wiring.test.ts`.
+
+**Interfaces:**
+- **Consumes:** `isFlagOn` from Task 5; `useFlag` from Task 7; the six flags from Task 1's registry.
+- **Produces** (`shared/types/pauses.ts`):
+  - `AI_BUILDS_PAUSED_MESSAGE = 'Building is paused for a few minutes. Your stores keep working.'` and `AI_BUILDS_PAUSED_CODE = 'AI_BUILDS_PAUSED'`;
+  - `SIGNUPS_PAUSED_MESSAGE = 'Sign-ups are paused for a moment. Please try again soon.'`, `SIGNUPS_PAUSED_ERROR_CODE = 'signups_paused'` and `class SignupsPausedError extends SecurityError`, status 503;
+  - `STORE_PUBLISHING_PAUSED_MESSAGE = 'Publishing is paused for a few minutes. Your live store keeps working.'`;
+  - `CUSTOM_DOMAINS_PAUSED_MESSAGE = 'Connecting a new domain is paused right now. Domains already connected keep working.'`;
+  - `TEMPLATE_SALES_PAUSED_MESSAGE = 'Buying paid templates is paused right now. Free templates still work.'`;
+  - `BILLING_CHECKOUT_PAUSED_MESSAGE = 'Plan changes and credit purchases are paused for a few minutes. Your current plan keeps working.'`.
+
+**Every pause works the same way:**
+- **The server decides.** The check is the handler's first step, before any write and before any call to Stripe, SpaceDO, the agent or the AI. Only `store-publishing-paused` and `custom-domains-paused` are client-visible, so only the Go live panel hides anything.
+- **It refuses new work only:**
+  - HTTP answers 503 with the message;
+  - the editor's WebSocket sends an error popup;
+  - provider sign-in comes back to `/?error=signups_paused`.
+- **What exists keeps working:**
+  - running turns finish;
+  - existing accounts sign in;
+  - live stores keep serving and can be taken offline;
+  - connected domains stay, and can still be checked and removed;
+  - free templates still start stores;
+  - subscriptions keep renewing, and the billing portal and cancelling stay open.
+- **The subject** is the signed-in user. Sign-ups have no account yet, so they ask for the shared anonymous subject; a pause at 100% reaches it.
+- **Tests turn a pause on** with `FEATURE_FLAG_OVERRIDES` (honored outside production), so they run the real flag path without mocking it.
+
+- [ ] **Step 1: Write the failing tests**
+
+**`worker/agents/core/websocket.test.ts`:**
+1. Import `vi` with the other vitest names, and `AI_BUILDS_PAUSED_CODE` and `AI_BUILDS_PAUSED_MESSAGE` from `'../../../shared/types/pauses'`.
+2. Add `generateAllFiles?: () => Promise<void>;` and `isCodeGenerating?: () => boolean;` to `FakeBehavior`.
+3. `fakes` takes a third argument, `env: Record<string, string> = {}`, and the fake agent uses it in place of `env: {}`.
+4. Add:
+
+```ts
+describe('while AI builds are paused', () => {
+	const PAUSED = { FEATURE_FLAG_OVERRIDES: 'ai-builds-paused=on' };
+	const NOTICE = { type: 'error', error: AI_BUILDS_PAUSED_MESSAGE, code: AI_BUILDS_PAUSED_CODE, showAsPopup: true };
+	const suggestion = JSON.stringify({ type: 'user_suggestion', message: 'Add a sale banner' });
+
+	it('refuses a new message with the notice, before the usage check and the AI', async () => {
+		const order: string[] = [];
+		const { agent, connection, sent } = fakes({}, order, PAUSED);
+		await handleWebSocketMessage(agent, connection, suggestion, recordingCheck(order, { allowed: true }));
+		expect(order).toEqual([]);
+		expect(sent).toEqual([NOTICE]);
+	});
+
+	it('switches the model but does not resume the build', async () => {
+		const switched: string[] = [];
+		const { agent, connection, sent, calls } = fakes({ setModel: async (id) => void switched.push(id) }, [], PAUSED);
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), allowAll);
+		expect(switched).toEqual(['anthropic/claude-opus-5-5']);
+		expect(calls).toEqual([]);
+		expect(sent).toEqual([NOTICE]);
+	});
+
+	it.each(['generate_all', 'resume_generation'])('refuses %s without starting a build', async (type) => {
+		const generateAllFiles = vi.fn(async () => undefined);
+		const { agent, connection, sent } = fakes({ generateAllFiles, isCodeGenerating: () => false }, [], PAUSED);
+		await handleWebSocketMessage(agent, connection, JSON.stringify({ type }), allowAll);
+		expect(generateAllFiles).not.toHaveBeenCalled();
+		expect(sent).toEqual([NOTICE]);
+	});
+
+	it('lets a new message through once the pause is off', async () => {
+		const { agent, connection, sent, calls } = fakes({}, [], { FEATURE_FLAG_OVERRIDES: 'ai-builds-paused=off' });
+		await handleWebSocketMessage(agent, connection, suggestion, allowAll);
+		expect(calls).toEqual(['input:Add a sale banner']);
+		expect(sent).toEqual([]);
+	});
+});
+```
+
+**`worker/api/controllers/agent/ai-builds-pause-wiring.test.ts`:**
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+const sources = import.meta.glob<string>(['/worker/api/controllers/agent/controller.ts'], { query: '?raw', import: 'default', eager: true });
+const controller = sources['/worker/api/controllers/agent/controller.ts'] ?? '';
+
+function method(signature: string): string {
+	const start = controller.indexOf(signature);
+	if (start === -1) throw new Error(`Method not found: ${signature}`);
+	const next = controller.indexOf('\n    static ', start + signature.length);
+	return controller.slice(start, next === -1 ? undefined : next);
+}
+
+describe('starting a new store while AI builds are paused', () => {
+	it('is refused before rate limits, the usage check or the agent', () => {
+		const start = method('static async startCodeGeneration(');
+		const pause = start.indexOf("await isFlagOn(env, 'ai-builds-paused', context.user?.id ?? null)");
+		expect(pause).toBeGreaterThan(-1);
+		expect(start).toContain('createErrorResponse(AI_BUILDS_PAUSED_MESSAGE, 503)');
+		for (const later of ['enforceAppCreationRateLimit(', 'checkUsageAndBalance(', 'getAgentStub(']) {
+			expect(start.indexOf(later), later).toBeGreaterThan(pause);
+		}
+	});
+});
+```
+
+**`worker/database/services/signups-paused.test.ts`:**
+
+```ts
+/** Email sign-up while sign-ups are paused: refused before any account exists. */
+import { describe, expect, it } from 'vitest';
+import { TERMS_VERSION } from '../../../shared/types/legal';
+import { SIGNUPS_PAUSED_MESSAGE, SignupsPausedError } from '../../../shared/types/pauses';
+import { AuthService } from './AuthService';
+import { recordingD1 } from '../test-support/recording-d1';
+import { writes } from '../test-support/recorded-statements';
+
+const SIGN_UP = { email: 'new@example.test', password: 'A-new-Passw0rd-for-Estori', name: 'New Person', acceptedTermsVersion: TERMS_VERSION };
+const REQUEST = new Request('http://localhost/api/auth/register', { method: 'POST', headers: { 'CF-Connecting-IP': '203.0.113.9' } });
+
+describe('email sign-up while sign-ups are paused', () => {
+	it('is refused with the pause message, and no account or session is created', async () => {
+		const { d1, statements } = recordingD1(() => []);
+		const env = { DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', FEATURE_FLAG_OVERRIDES: 'signups-paused=on' } as unknown as Env;
+		const error = await new AuthService(env).register(SIGN_UP, REQUEST, null, 'https://estori.app').catch((caught: unknown) => caught);
+		expect(error).toBeInstanceOf(SignupsPausedError);
+		expect(error).toMatchObject({ message: SIGNUPS_PAUSED_MESSAGE, statusCode: 503 });
+		expect(writes(statements, 'insert', 'users')).toEqual([]);
+		expect(writes(statements, 'insert', 'sessions')).toEqual([]);
+	});
+});
+```
+
+**`worker/database/services/oauth-autolink.test.ts`:**
+1. `signIn` takes `(provider: OAuthProvider, account: Row | undefined, extraEnv: Record<string, string> = {})`, and spreads `extraEnv` into its env.
+2. Import `SignupsPausedError` from `'../../../shared/types/pauses'`, and add:
+
+```ts
+describe('provider sign-in while sign-ups are paused', () => {
+	const PAUSED = { FEATURE_FLAG_OVERRIDES: 'signups-paused=on' };
+
+	it('refuses a new account, creating no user, identity or session', async () => {
+		const { statements, run } = signIn('google', undefined, PAUSED);
+		await expect(run).rejects.toBeInstanceOf(SignupsPausedError);
+		expect(writes(statements, 'insert', 'users')).toEqual([]);
+		expect(writes(statements, 'insert', 'user_oauth_identities')).toEqual([]);
+		expect(createSession).not.toHaveBeenCalled();
+	});
+
+	it('still signs in an existing account', async () => {
+		const { run } = signIn('google', existingAccount(1), PAUSED);
+		expect((await run).id).toBe('user-1');
+		expect(createSession).toHaveBeenCalledOnce();
+	});
+});
+```
+
+**`worker/api/controllers/auth/signups-pause-wiring.test.ts`:**
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+const sources = import.meta.glob<string>(['/worker/api/controllers/auth/controller.ts', '/src/hooks/use-oauth-error-toast.ts'], { query: '?raw', import: 'default', eager: true });
+
+describe('a provider sign-in refused while sign-ups are paused', () => {
+	it('comes back to the home page with its own error code', () => {
+		const auth = sources['/worker/api/controllers/auth/controller.ts'] ?? '';
+		expect(auth).toContain('error instanceof SignupsPausedError');
+		expect(auth).toContain('? SIGNUPS_PAUSED_ERROR_CODE');
+	});
+
+	it('shows the pause message there', () => {
+		expect(sources['/src/hooks/use-oauth-error-toast.ts']).toContain('[SIGNUPS_PAUSED_ERROR_CODE]: SIGNUPS_PAUSED_MESSAGE');
+	});
+});
+```
+
+**`worker/api/controllers/liveStores/controller.sql.test.ts`:** import `LiveStoreService` from `'../../../database/services/LiveStoreService'`, and `CUSTOM_DOMAINS_PAUSED_MESSAGE` and `STORE_PUBLISHING_PAUSED_MESSAGE` from `'../../../../shared/types/pauses'`. Then add:
+
+```ts
+describe('while publishing or new domains are paused', () => {
+	const owner = (appId: string) => ({ pathParams: { id: appId }, user: { id: 'seller_1' } }) as unknown as RouteContext;
+	const envPausing = (pauses: string, namespace: unknown) =>
+		envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace, FEATURE_FLAG_OVERRIDES: pauses });
+	const post = (path: string, body: unknown) => new Request(`https://estori.app${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+	beforeEach(() => {
+		calls.length = 0;
+		agentFailure.mode = 'none';
+	});
+
+	it('refuses Go live and republishing, publishing nothing and asking no agent', async () => {
+		const { namespace, published } = spaces();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('store-publishing-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(await response.json())).toContain(STORE_PUBLISHING_PAUSED_MESSAGE);
+		expect(published).toEqual([]);
+		expect(calls).toEqual([]);
+	});
+
+	it('refuses connecting a new domain, storing nothing', async () => {
+		const { namespace } = spaces();
+		const env = envPausing('custom-domains-paused=on', namespace);
+		const response = await LiveStoreController.addDomain(post('/api/stores/app_tea/live/domain', { hostname: 'shop.northwind.example' }), env, {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(await response.json())).toContain(CUSTOM_DOMAINS_PAUSED_MESSAGE);
+		expect(await new LiveStoreService(env).domainOfApp('app_tea')).toBeNull();
+	});
+
+	it('still publishes while only new domains are paused', async () => {
+		const { namespace, published } = spaces();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('custom-domains-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(200);
+		expect(published).toEqual(['app_tea']);
+	});
+});
+```
+
+**`src/components/live-store/go-live-guard.test.ts`,** add:
+
+```ts
+	it('holds publishing and new domains while they are paused, and keeps the rest of the panel', () => {
+		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
+		expect(dialog).toContain("const publishingPaused = useFlag('store-publishing-paused');");
+		expect(dialog).toMatch(/disabled=\{publishingPaused \|\| problem !== null/);
+		expect(dialog).toContain('{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}');
+		expect(dialog).toContain("const domainsPaused = useFlag('custom-domains-paused');");
+		expect(dialog).toContain('{view.domainsAvailable && !view.domain && !domainsPaused && (');
+		expect(dialog).toContain('{CUSTOM_DOMAINS_PAUSED_MESSAGE}');
+		expect(dialog).toContain('Take offline');
+	});
+```
+
+**`worker/api/controllers/publishing/template-sales-pause-wiring.test.ts`:**
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+const sources = import.meta.glob<string>(['/worker/api/controllers/publishing/controller.ts'], { query: '?raw', import: 'default', eager: true });
+const controller = sources['/worker/api/controllers/publishing/controller.ts'] ?? '';
+
+describe('buying a paid template while template sales are paused', () => {
+	it('is refused before Stripe is asked anything', () => {
+		const start = controller.indexOf('static async purchase(');
+		const purchase = controller.slice(start, controller.indexOf('\n    static ', start + 1));
+		const pause = purchase.indexOf("await isFlagOn(env, 'template-sales-paused', context.user?.id ?? null)");
+		expect(pause).toBeGreaterThan(-1);
+		expect(purchase).toContain('createErrorResponse<SiteCheckoutData>(TEMPLATE_SALES_PAUSED_MESSAGE, 503)');
+		for (const later of ['stripeFromEnv(env)', 'readySellerAccount(', 'createCheckoutSession(']) expect(purchase.indexOf(later), later).toBeGreaterThan(pause);
+	});
+
+	it('leaves free templates and confirming a finished purchase alone', () => {
+		expect(controller.match(/template-sales-paused/g)).toHaveLength(1);
+	});
+});
+```
+
+**`worker/services/billing/checkout-pause-wiring.test.ts`.** The action names are the ones in billing's plan; use billing's merged names.
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+const sources = import.meta.glob<string>(['/worker/services/billing/actions.ts'], { query: '?raw', import: 'default', eager: true });
+const actions = sources['/worker/services/billing/actions.ts'] ?? '';
+
+function action(name: string): string {
+	const signature = `export async function ${name}(`;
+	const start = actions.indexOf(signature);
+	if (start === -1) throw new Error(`Action not found: ${name}`);
+	const next = actions.indexOf('\nexport ', start + signature.length);
+	return actions.slice(start, next === -1 ? undefined : next);
+}
+
+const PAUSE = 'await deps.checkoutPaused(';
+
+describe('billing while checkout is paused', () => {
+	it('refuses a plan checkout, a plan change and extra credits first, before Stripe or the ledger is asked', () => {
+		for (const name of ['startCheckout', 'changePlan', 'buyCredits']) {
+			const body = action(name);
+			expect(body, name).toContain(PAUSE);
+			expect(body, name).toContain('{ ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE }');
+			expect(body.indexOf('await '), name).toBe(body.indexOf(PAUSE));
+		}
+	});
+
+	it('keeps cancelling, undoing a cancel and the billing portal open', () => {
+		for (const name of ['cancelPlan', 'resumePlan', 'openPortal']) expect(action(name), name).not.toContain('checkoutPaused');
+	});
+
+	it('asks the pause flag for the signed-in seller', () => {
+		expect(actions).toContain("checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId)");
+	});
+});
+```
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `rtk proxy bun run test -- worker/agents/core/websocket.test.ts worker/api/controllers/agent/ai-builds-pause-wiring.test.ts worker/database/services/signups-paused.test.ts worker/database/services/oauth-autolink.test.ts`
+Expected: FAIL. `shared/types/pauses` doesn't resolve, and nothing checks the flags.
+
+Run: `rtk proxy bun run test -- worker/api/controllers/auth/signups-pause-wiring.test.ts worker/api/controllers/liveStores src/components/live-store worker/api/controllers/publishing/template-sales-pause-wiring.test.ts worker/services/billing/checkout-pause-wiring.test.ts`
+Expected: FAIL, for the same reasons.
+
+- [ ] **Step 3: Write `shared/types/pauses.ts`**
+
+```ts
+/**
+ * What a seller or visitor reads while a shipped feature is paused by its pause flag (shared/types/feature-flags.ts).
+ * A pause refuses new work only; work already running finishes, and what exists keeps working.
+ */
+
+import { SecurityError, SecurityErrorType } from './errors';
+
+export const AI_BUILDS_PAUSED_MESSAGE = 'Building is paused for a few minutes. Your stores keep working.';
+/** The editor's WebSocket error code for a refused turn; it shows as a popup. */
+export const AI_BUILDS_PAUSED_CODE = 'AI_BUILDS_PAUSED';
+
+export const SIGNUPS_PAUSED_MESSAGE = 'Sign-ups are paused for a moment. Please try again soon.';
+/** The `?error=` code a provider sign-in comes back with when it would have created an account. */
+export const SIGNUPS_PAUSED_ERROR_CODE = 'signups_paused';
+
+export const STORE_PUBLISHING_PAUSED_MESSAGE = 'Publishing is paused for a few minutes. Your live store keeps working.';
+export const CUSTOM_DOMAINS_PAUSED_MESSAGE = 'Connecting a new domain is paused right now. Domains already connected keep working.';
+export const TEMPLATE_SALES_PAUSED_MESSAGE = 'Buying paid templates is paused right now. Free templates still work.';
+export const BILLING_CHECKOUT_PAUSED_MESSAGE = 'Plan changes and credit purchases are paused for a few minutes. Your current plan keeps working.';
+
+/** A new account refused while sign-ups are paused; existing accounts still sign in. */
+export class SignupsPausedError extends SecurityError {
+	constructor() {
+		super(SecurityErrorType.FORBIDDEN, SIGNUPS_PAUSED_MESSAGE, 503);
+		this.name = 'SignupsPausedError';
+	}
+}
+```
+
+In `src/api-types.ts`, add `export * from '../shared/types/pauses';` beside the other shared re-exports.
+
+- [ ] **Step 4: Pause AI builds**
+
+**`worker/agents/core/websocket.ts`:**
+1. Import `isFlagOn` from `'../../services/posthog/flags'`, and `AI_BUILDS_PAUSED_CODE` and `AI_BUILDS_PAUSED_MESSAGE` from `'../../../shared/types/pauses'`.
+2. Add, beside `ensureCanPrompt`:
+
+```ts
+/** While AI builds are paused, tells the user and answers true. A turn already running finishes. */
+async function refuseWhileBuildsPaused(agent: CodeGeneratorAgent, connection: Connection): Promise<boolean> {
+    if (!(await isFlagOn(agent.env, 'ai-builds-paused', agent.state.metadata.userId ?? null))) return false;
+    sendToConnection(connection, WebSocketMessageResponses.ERROR, { error: AI_BUILDS_PAUSED_MESSAGE, code: AI_BUILDS_PAUSED_CODE, showAsPopup: true });
+    return true;
+}
+```
+
+3. In `ensureCanPrompt`, before its `try`: `if (await refuseWhileBuildsPaused(agent, connection)) return false;`. That covers new messages and resuming after a model switch, before the usage check.
+4. In the `GENERATE_ALL` and `RESUME_GENERATION` cases, first: `if (await refuseWhileBuildsPaused(agent, connection)) return;`, before `shouldBeGenerating` is set.
+
+The editor already shows an `error` with `showAsPopup` as a toast, so the browser needs no change.
+
+**`worker/api/controllers/agent/controller.ts`:** import `isFlagOn` from `'../../../services/posthog/flags'` and `AI_BUILDS_PAUSED_MESSAGE` from `'shared/types/pauses'`. In `startCodeGeneration`, right after the prompt-size check:
+
+```ts
+            if (await isFlagOn(env, 'ai-builds-paused', context.user?.id ?? null)) {
+                return CodingAgentController.createErrorResponse(AI_BUILDS_PAUSED_MESSAGE, 503);
+            }
+```
+
+- [ ] **Step 5: Pause sign-ups**
+
+**`worker/database/services/AuthService.ts`:** import `isFlagOn` from `'../../services/posthog/flags'` and `SignupsPausedError` from `'shared/types/pauses'`. Then:
+- **In `register`,** right before `// Hash password`, so every check above still answers as usual:
+
+```ts
+            // Only a new account is refused.
+            if (await isFlagOn(this.env, 'signups-paused', null)) throw new SignupsPausedError();
+```
+
+- **In `findOrCreateOAuthUser`,** right before `return this.createOAuthUser(provider, oauthUserInfo);`:
+
+```ts
+        // A provider sign-in that would create an account is refused; one that finds or claims an account isn't.
+        if (await isFlagOn(this.env, 'signups-paused', null)) throw new SignupsPausedError();
+```
+
+Both callers already rethrow a `SecurityError`, so `register` answers 503 with the message through `AuthController.register`.
+
+**`worker/api/controllers/auth/controller.ts`:** import `SIGNUPS_PAUSED_ERROR_CODE` and `SignupsPausedError` from `'shared/types/pauses'`. In `handleOAuthCallback`'s `catch`:
+
+```ts
+            const reason = error instanceof SignupsPausedError
+                ? SIGNUPS_PAUSED_ERROR_CODE
+                : error instanceof SecurityError && error.statusCode === 409
+                    ? 'email_exists'
+                    : 'auth_failed';
+```
+
+**`src/hooks/use-oauth-error-toast.ts`:** import `SIGNUPS_PAUSED_ERROR_CODE` and `SIGNUPS_PAUSED_MESSAGE` from `@/api-types`, and add `[SIGNUPS_PAUSED_ERROR_CODE]: SIGNUPS_PAUSED_MESSAGE,` to `messages`.
+
+- [ ] **Step 6: Pause publishing and new domains**
+
+**`worker/api/controllers/liveStores/controller.ts`:** import `isFlagOn` from `'../../../services/posthog/flags'`, and `CUSTOM_DOMAINS_PAUSED_MESSAGE` and `STORE_PUBLISHING_PAUSED_MESSAGE` from `'../../../../shared/types/pauses'`.
+- **In `publish`,** first inside the `try`:
+
+```ts
+            if (await isFlagOn(env, 'store-publishing-paused', context.user?.id ?? null)) {
+                return this.createErrorResponse<LiveStoreView>(STORE_PUBLISHING_PAUSED_MESSAGE, 503);
+            }
+```
+
+- **In `addDomain`,** the same with `'custom-domains-paused'` and `CUSTOM_DOMAINS_PAUSED_MESSAGE`.
+- `offline`, `checkDomain` and `removeDomain` don't change.
+
+**`src/components/live-store/GoLiveDialog.tsx`:** import `useFlag` from `@/hooks/use-flag`, and the two messages from `@/api-types`.
+- **In `GoLiveBody`:**
+  1. Add `const publishingPaused = useFlag('store-publishing-paused');` with the other hooks, before the early return.
+  2. The publish button's `disabled` becomes `publishingPaused || problem !== null || action.disabled || publish.isPending`.
+  3. Above the buttons, add `{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}`.
+- **In `DomainSection`:**
+  1. Add `const domainsPaused = useFlag('custom-domains-paused');`.
+  2. The form's condition becomes `{view.domainsAvailable && !view.domain && !domainsPaused && (`.
+  3. Add `{view.domainsAvailable && !view.domain && domainsPaused && <p className="text-sm text-kumo-subtle">{CUSTOM_DOMAINS_PAUSED_MESSAGE}</p>}`.
+
+- [ ] **Step 7: Pause template sales and billing checkout**
+
+**`PublishingController.purchase`:** import `isFlagOn` from `'../../../services/posthog/flags'` and `TEMPLATE_SALES_PAUSED_MESSAGE` from `'shared/types/pauses'`. Make the pause the first line inside the `try`, before `stripeFromEnv(env)`:
+
+```ts
+            if (await isFlagOn(env, 'template-sales-paused', context.user?.id ?? null)) {
+                return PublishingController.createErrorResponse<SiteCheckoutData>(TEMPLATE_SALES_PAUSED_MESSAGE, 503);
+            }
+```
+
+Free templates never reach `purchase`, and `confirmPurchase` still records a purchase paid before the pause.
+
+**Billing's actions** (`worker/services/billing/actions.ts` in billing's plan):
+1. Add `checkoutPaused(userId: string): Promise<boolean>` to `BillingActionDeps`.
+2. In `billingActionDepsFromEnv`, add `checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId),`. Import `isFlagOn` from `'../posthog/flags'` and `BILLING_CHECKOUT_PAUSED_MESSAGE` from `'../../../shared/types/pauses'`.
+3. Make the pause the first `await` of `startCheckout`, `changePlan` and `buyCredits`, using the action's own user id:
+
+```ts
+	if (await deps.checkoutPaused(userId)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
+```
+
+4. Give every fake `BillingActionDeps` in billing's `actions.test.ts` `checkoutPaused: async () => false`.
+
+`BillingActionResult` already has a 503 failure, so the billing controller and page show the message without changes. Cancelling, undoing a cancel, the portal and the webhook don't change, so a checkout paid before the pause is still recorded.
+
+- [ ] **Step 8: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- worker/agents/core/websocket.test.ts worker/api/controllers/agent worker/database/services/signups-paused.test.ts worker/database/services/oauth-autolink.test.ts worker/database/services/email-confirmation.test.ts`
+Expected: PASS, the existing sign-up and editor tests included.
+
+Run: `rtk proxy bun run test -- worker/api/controllers/auth worker/api/controllers/liveStores src/components/live-store worker/api/controllers/publishing worker/services/billing/actions.test.ts worker/services/billing/checkout-pause-wiring.test.ts`
+Expected: PASS.
+
+Run: `bun run typecheck`
+Expected: no errors.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add shared/types/pauses.ts src/api-types.ts worker/agents/core/websocket.ts worker/agents/core/websocket.test.ts worker/api/controllers/agent/controller.ts worker/api/controllers/agent/ai-builds-pause-wiring.test.ts worker/database/services/AuthService.ts worker/database/services/signups-paused.test.ts worker/database/services/oauth-autolink.test.ts worker/api/controllers/auth/controller.ts worker/api/controllers/auth/signups-pause-wiring.test.ts src/hooks/use-oauth-error-toast.ts worker/api/controllers/liveStores/controller.ts worker/api/controllers/liveStores/controller.sql.test.ts src/components/live-store/GoLiveDialog.tsx src/components/live-store/go-live-guard.test.ts worker/api/controllers/publishing/controller.ts worker/api/controllers/publishing/template-sales-pause-wiring.test.ts worker/services/billing/actions.ts worker/services/billing/actions.test.ts worker/services/billing/checkout-pause-wiring.test.ts
+git commit -m "feat(flags): pause flags for ai builds, sign-ups, publishing, new domains, template sales and billing checkout
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 11: Account and build events
 
 **Files:**
 - **Person properties:**
@@ -3668,7 +4401,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - test `worker/services/posthog/person.sql.test.ts`.
 - **Build events:**
   - create `worker/agents/think/build-events.ts`, tested in `worker/agents/think/build-events.test.ts`;
-  - modify `worker/agents/think/ThinkAgent.ts` (the turn meter, `getTurnUsage`);
+  - modify `worker/agents/think/ThinkAgent.ts` (the step count, `getTurnUsage`);
   - modify `worker/agents/core/behaviors/think.ts` (`runPrompt`, `ThinkAgentStub`);
   - test `worker/agents/think/build-events-wiring.test.ts`.
 - **Accounts:**
@@ -3679,12 +4412,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - **Consumes:**
   - `serverAnalytics`, `PersonUpdate` and `AnalyticsPersonService`, from Task 2;
-  - `accountPlanOf`, from Task 5;
-  - `sessionTelemetry` and `honorAnalyticsChoice`, from Task 6.
+  - `planOf`, from Task 5;
+  - `sessionTelemetry` and `honorAnalyticsChoice`, from Task 6;
+  - billing's per-turn credit total: `ThinkAgent.turnCreditsUsed()` in billing's plan, the sum of the credits its per-step charge took this turn (real token cost × 1.5, at $0.001 a credit).
 - **Produces:**
   - `AnalyticsPersonService.personFacts(userId)`, answering `{ createdAt: Date | null; sellerLevel: SellerLevel | null; hasLiveStore: boolean } | null`;
   - `personUpdateOf(env: Env, userId: string): Promise<PersonUpdate>`, which never throws;
-  - `TurnUsage { steps; credits }`, `turnUsageOf(meter)`;
+  - `TurnUsage { steps; credits }`;
   - `buildStartedProperties(input)`, `buildFinishedProperties(input)`;
   - `ThinkAgent.getTurnUsage(): Promise<TurnUsage | null>`;
   - `AuthService.verifyEmail(token): Promise<string>`;
@@ -3709,7 +4443,7 @@ beforeAll(async () => {
 });
 
 describe('person properties', () => {
-	it('sets the plan and tier, the seller level and whether a store is live, and the signup date once', async () => {
+	it('sets the plan, the seller level and whether a store is live, and the signup date once', async () => {
 		await db.prepare(`UPDATE users SET created_at = ? WHERE id = 'per_1'`).bind(Date.UTC(2026, 9, 19, 15) / 1000).run();
 		await db.prepare(`INSERT INTO stripe_connect_accounts (user_id, stripe_account_id, seller_level) VALUES ('per_1', 'acct_per_1', 'established')`).run();
 		await insertApp(db, { id: 'app_per', userId: 'per_1' });
@@ -3717,13 +4451,13 @@ describe('person properties', () => {
 			.prepare(`INSERT INTO live_stores (app_id, slug, status, published_commit, published_at, created_at, updated_at) VALUES ('app_per', 'per-store', 'live', 'c0ffee', 1, 1, 1)`)
 			.run();
 		expect(await personUpdateOf(envWith(db), 'per_1')).toEqual({
-			set: { plan: 'basic', tier: null, seller_level: 'established', has_live_store: true },
+			set: { plan: 'basic', seller_level: 'established', has_live_store: true },
 			setOnce: { signup_date: '2026-10-19' },
 		});
 	});
 
 	it('reads a new account as Basic, not a seller and without a live store; an unreadable creation time sets no date', async () => {
-		expect(await personUpdateOf(envWith(db), 'per_2')).toEqual({ set: { plan: 'basic', tier: null, seller_level: 'none', has_live_store: false } });
+		expect(await personUpdateOf(envWith(db), 'per_2')).toEqual({ set: { plan: 'basic', seller_level: 'none', has_live_store: false } });
 	});
 
 	it('answers nothing for an unknown user or a database that fails', async () => {
@@ -3738,23 +4472,22 @@ describe('person properties', () => {
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { buildFinishedProperties, buildStartedProperties, turnUsageOf } from './build-events';
+import { buildFinishedProperties, buildStartedProperties } from './build-events';
 
 describe('build events', () => {
 	it('start with the app, the model and whether it is the first build', () => {
 		expect(buildStartedProperties({ appId: 'app_1', model: 'gemini-3.6-flash', firstBuild: true })).toEqual({ app_id: 'app_1', model: 'gemini-3.6-flash', first_build: true });
 	});
 
-	it("finish with the outcome, the steps, credits at the turn's model price and the duration", () => {
-		const usage = turnUsageOf({ steps: 7, creditCost: 1.2 });
-		expect(usage).toEqual({ steps: 7, credits: 8.4 });
+	it('finish with the outcome, the steps, the credits billing charged for them and the duration', () => {
+		const usage = { steps: 7, credits: 112 };
 		expect(buildFinishedProperties({ appId: 'app_1', model: 'gemini-3.6-flash', firstBuild: false, completed: true, usage, startedAtMs: 1_000, nowMs: 61_000 })).toEqual({
 			app_id: 'app_1',
 			model: 'gemini-3.6-flash',
 			first_build: false,
 			outcome: 'completed',
 			steps: 7,
-			credits_used: 8.4,
+			credits_used: 112,
 			duration_ms: 60_000,
 		});
 	});
@@ -3799,10 +4532,11 @@ describe('build analytics wiring', () => {
 	const agent = source('/worker/agents/think/ThinkAgent.ts');
 	const host = source('/worker/agents/core/behaviors/think.ts');
 
-	it('counts every step of a turn and answers the usage to the host', () => {
-		expect(between(agent, 'override async beforeTurn(', 'override getSkills(')).toContain('this.turnMeter = null;');
-		expect(between(agent, 'override async beforeStep(', 'if (ctx.stepNumber')).toContain('this.turnMeter.steps += 1;');
+	it("counts every step of a turn and answers its steps and billing's charged credits to the host", () => {
+		expect(between(agent, 'override async beforeTurn(', 'override getSkills(')).toContain('this.turnSteps = 0;');
+		expect(between(agent, 'override async beforeStep(', 'if (ctx.stepNumber')).toContain('this.turnSteps += 1;');
 		expect(agent).toContain('async getTurnUsage(): Promise<TurnUsage | null>');
+		expect(agent).toContain('credits: this.turnCreditsUsed()');
 	});
 
 	it('sends build_started before the turn, and build_finished after it, failed or not', () => {
@@ -3964,8 +4698,8 @@ export async function personUpdateOf(env: Env, userId: string): Promise<PersonUp
 	try {
 		const facts = await new AnalyticsPersonService(env).personFacts(userId);
 		if (!facts) return {};
-		const { plan, tier } = await accountPlanOf(env, userId);
-		const update: PersonUpdate = { set: { plan, tier, seller_level: facts.sellerLevel ?? 'none', has_live_store: facts.hasLiveStore } };
+		const plan = await planOf(env, userId);
+		const update: PersonUpdate = { set: { plan, seller_level: facts.sellerLevel ?? 'none', has_live_store: facts.hasLiveStore } };
 		if (facts.createdAt) update.setOnce = { signup_date: facts.createdAt.toISOString().slice(0, 10) };
 		return update;
 	} catch {
@@ -3984,16 +4718,13 @@ export async function personUpdateOf(env: Env, userId: string): Promise<PersonUp
 import type { ServerEventProperties } from '../../../shared/types/analytics-events';
 
 /**
- * One turn's usage, from ThinkAgent: its steps, priced at the turn's model credit cost. Think always runs on Estori's
- * gateway (behaviors/think.ts configureThinkAgent), so every credit is Estori's cost.
+ * One turn's usage, from ThinkAgent: its steps, and the credits billing charged for them (real token cost × 1.5, at
+ * $0.001 a credit). Think always runs on Estori's gateway (behaviors/think.ts configureThinkAgent), so Estori's cost is
+ * credits / 1.5 × $0.001.
  */
 export interface TurnUsage {
 	steps: number;
 	credits: number;
-}
-
-export function turnUsageOf(meter: { steps: number; creditCost: number }): TurnUsage {
-	return { steps: meter.steps, credits: Math.round(meter.steps * meter.creditCost * 100) / 100 };
 }
 
 export function buildStartedProperties(input: { appId: string; model: string; firstBuild: boolean }): ServerEventProperties<'build_started'> {
@@ -4021,26 +4752,27 @@ export function buildFinishedProperties(input: {
 }
 ```
 
-**`ThinkAgent.ts`:** import `turnUsageOf` and `type TurnUsage` from `./build-events`. Then:
+**`ThinkAgent.ts`:** import `type TurnUsage` from `./build-events`. Then:
 1. Add the field:
 
 ```ts
-	/** The current turn's steps and their price; the host reads it when the turn ends (getTurnUsage). */
-	private turnMeter: { steps: number; creditCost: number } | null = null;
+	/** The current turn's steps; the host reads them when the turn ends (getTurnUsage). Null before any turn. */
+	private turnSteps: number | null = null;
 ```
 
-2. In `beforeTurn` (as billing left it):
-   - set `this.turnMeter = null;` beside `this.turnUsage = null;`;
-   - inside `if (config)`, right after `creditCost` is resolved, set `this.turnMeter = { steps: 0, creditCost };`. The meter doesn't depend on billing's metering setup, so a turn whose setup fails still reports its steps.
-3. At the top of `beforeStep`, add `if (this.turnMeter) this.turnMeter.steps += 1;`.
+2. At the top of `beforeTurn`, set `this.turnSteps = 0;`. The count doesn't depend on billing's setup, so a turn whose setup fails still reports its steps.
+3. At the top of `beforeStep`, add `if (this.turnSteps !== null) this.turnSteps += 1;`.
 4. Add the RPC:
 
 ```ts
-	/** RPC for the host: the turn's steps and credits, read when the turn ends. */
+	/** RPC for the host: the turn's steps, and the credits billing's per-step charge took for them. */
 	async getTurnUsage(): Promise<TurnUsage | null> {
-		return this.turnMeter ? turnUsageOf(this.turnMeter) : null;
+		return this.turnSteps === null ? null : { steps: this.turnSteps, credits: this.turnCreditsUsed() };
 	}
 ```
+
+**Billing's merged code decides two things here.** - If its per-turn total is async, await it.
+- If it charges only accounts inside the `billing` flag, add billing's `stepCredits` for each finished step, where billing's per-step charge runs. Then `credits_used` is real-cost credits for every account.
 
 **`core/behaviors/think.ts`:** import `serverAnalytics` from `worker/services/posthog/analytics`, and `buildStartedProperties`, `buildFinishedProperties` and `type TurnUsage` from `../../think/build-events`. Then:
 1. Add `getTurnUsage: () => Promise<TurnUsage | null>;` to `ThinkAgentStub`.
@@ -4124,7 +4856,7 @@ git commit -m "feat(analytics): account and build events, with credits per build
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 11: Store and money events
+### Task 12: Store and money events
 
 **Files:**
 - Create `worker/services/posthog/commerce-events.ts`. Test: `worker/services/posthog/commerce-events.test.ts`.
@@ -4134,7 +4866,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - Modify `worker/api/controllers/liveStores/controller.ts` and `controller.sql.test.ts`.
 
 **Interfaces:**
-- **Consumes:** `serverAnalytics` from Task 2; `personUpdateOf` from Task 10; `amountBand` from Task 1; `MAIN_DRAFT_ID` from `shared/types/drafts.ts`.
+- **Consumes:** `serverAnalytics` from Task 2; `personUpdateOf` from Task 11; `amountBand` from Task 1; `MAIN_DRAFT_ID` from `shared/types/drafts.ts`.
 - **Produces:**
   - `saleCompletedProperties(order: NewStoreOrder, firstSale: boolean)`;
   - `catalogOrderPlacedProperties(paid: PaidCatalogCheckout)`;
@@ -4483,262 +5215,304 @@ git commit -m "feat(analytics): publish, payments ready, sale, catalog order and
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 12: Billing events
+### Task 13: Billing events
 
-Billing merged before this plan and sends no analytics. This task adds its five events at billing's own points, named in the billing plan (`docs/superpowers/plans/2026-10-19-billing-subscriptions.md`, Tasks 4, 5, 7 and 8). Each goes out only after billing records the thing that triggers it the first time, so Stripe's retries never count twice.
+Billing merged before this plan and sends no analytics. This task adds its seven events at billing's own code points, named here by role (`docs/superpowers/plans/2026-10-19-billing-subscriptions.md`). Billing's merged code decides the names. Each event goes out only after billing records what triggered it the first time, so Stripe's retries never count twice.
 
 **Files:**
 - Create `worker/services/posthog/billing-events.ts`. Test: `worker/services/posthog/billing-events.test.ts`.
-- Modify billing's code:
-  - `worker/services/billing/events.ts`: `BillingEventDeps` gains `track`; `applySubscription` calls it after `recordEvent`;
-  - `worker/services/billing/wiring.ts`: `billingEventDepsFromEnv` provides `track`;
-  - `worker/services/billing/credit-notices.ts`: `CreditNoticeDeps` gains `reached`; `noticeCreditUse` calls it when the notice is sent; `creditNoticeDepsFromEnv` provides it;
-  - `worker/services/payments/stripe-client.ts`: `StripeInvoice` gains `attempt_count?: number`, which Stripe's invoice object carries.
-- Test: `worker/services/billing/events-analytics.test.ts`. Billing's existing fakes of `BillingEventDeps` and `CreditNoticeDeps` get a no-op `track` and `reached`.
+- Modify billing's code, by role:
+  - **the subscription event handler** (the webhook step that rebuilds a subscription row from Stripe and records the event in `billing_events`): its deps gain `track`, called after the record;
+  - **the credit top-up handler** (the webhook step that records an extra-credits purchase): calls `track` after the purchase is recorded;
+  - **the credit notices** (where billing claims the `credits_20` and `credits_5` notices): send `credits_low` when the claim is new;
+  - **the prompt gate** (where a turn is refused because no credits are left): sends `credits_limit_reached`;
+  - **their env wiring**, which provides `track` through `trackBilling`.
+- If billing's Stripe invoice type lacks it, add `attempt_count?: number` ("How many times Stripe has tried to collect this invoice").
+- Tests:
+  - `worker/services/billing/events-analytics.test.ts`, on the subscription event handler;
+  - the guard test `worker/services/billing/billing-analytics-wiring.test.ts`;
+  - billing's existing fakes of the handlers' deps get a no-op `track`.
 
 **Interfaces:**
 - **Consumes:**
-  - from billing: `applySubscription(deps, input)`, `BillingEventDeps`, `noticeCreditUse(deps, use, claimedHere)`, `CreditNoticeDeps`, `CreditUse`, `claimAndSendNotice`, `SubscriptionRecord`, `StripeSubscription`, `StripeInvoice`;
-  - `serverAnalytics` (Task 2), `accountPlanOf` (Task 5), `personUpdateOf` (Task 10).
+  - from billing: `PLAN_IDS` and `PlanId` (`shared/types/plans.ts`); its subscription row, which fits `SubscriptionState`; the four code points above;
+  - `serverAnalytics` (Task 2), `personUpdateOf` (Task 11), and Task 1's `BillingEventName`.
 - **Produces:**
-  - `BillingAnalyticsEvent`, a union of `{ name; properties }` over the five billing events;
-  - `subscriptionEventsFor(input: { previous: SubscriptionRecord | null; next: SubscriptionRecord; eventType: string; invoice: StripeInvoice | null }): BillingAnalyticsEvent[]`;
-  - `cancelReasonOf(previous: SubscriptionRecord | null): 'seller' | 'payment_failed' | 'admin'`;
-  - `BillingEventDeps.track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>`, which never throws;
-  - `CreditNoticeDeps.reached(use: CreditUse, threshold: 80 | 100): Promise<void>`, which never throws.
+  - `BillingAnalyticsEvent`, a union of `{ name; properties }` over the seven billing events;
+  - `SubscriptionState { stripeSubscriptionId: string; status: string; plan: PlanId; cancelAtPeriodEnd: boolean }`;
+  - `subscriptionEventsFor(input: { previous: SubscriptionState | null; next: SubscriptionState; failedAttempt: number | null }): BillingAnalyticsEvent[]`;
+  - `cancelReasonOf(previous: SubscriptionState | null): 'seller' | 'payment_failed' | 'admin'`;
+  - `planDirection(from: PlanId, to: PlanId): 'up' | 'down'`;
+  - `trackBilling(env: Env, userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>`, which never throws;
+  - the handlers' deps gain `track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>`.
+
+**When each event is sent:**
+
+| Event | Billing's code point | When |
+|---|---|---|
+| `subscription_started` | subscription event handler | the first recorded event that stores the subscription as live (`active` or `trialing`), normally `checkout.session.completed` |
+| `subscription_changed` | subscription event handler | the first recorded event that stores a different plan on the same live subscription; a downgrade counts when it takes effect at renewal |
+| `subscription_cancelled` | subscription event handler | the first recorded event that stores the subscription as `canceled` |
+| `subscription_payment_failed` | subscription event handler | `invoice.payment_failed`, with Stripe's `attempt_count` |
+| `credits_purchased` | credit top-up handler | the purchase is recorded the first time |
+| `credits_low` | credit notices | the `credits_20` or `credits_5` claim is new: once per period and threshold |
+| `credits_limit_reached` | prompt gate | a turn is refused because no credits are left |
 
 - [ ] **Step 1: Write the failing tests**
 
 `worker/services/posthog/billing-events.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest';
-import { cancelReasonOf, subscriptionEventsFor } from './billing-events';
-import type { SubscriptionRecord } from '../../database/schema';
-import type { StripeInvoice } from '../payments/stripe-client';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-function record(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
-	return { userId: 'u1', stripeSubscriptionId: 'sub_1', status: 'active', tier: 3, cancelAtPeriodEnd: false, ...overrides } as SubscriptionRecord;
+const captured = vi.hoisted((): unknown[][] => []);
+vi.mock('./analytics', () => ({ serverAnalytics: () => ({ capture: (...args: unknown[]) => void captured.push(args) }) }));
+vi.mock('./person', () => ({ personUpdateOf: async () => ({ set: { plan: 'premium' } }) }));
+
+import type { SubscriptionState } from './billing-events';
+
+const { cancelReasonOf, planDirection, subscriptionEventsFor, trackBilling } = await import('./billing-events');
+
+function sub(overrides: Partial<SubscriptionState> = {}): SubscriptionState {
+	return { stripeSubscriptionId: 'sub_1', status: 'active', plan: 'pro', cancelAtPeriodEnd: false, ...overrides };
 }
 
-const failedInvoice = { id: 'in_2', amount_paid: 0, attempt_count: 2 } as StripeInvoice;
+const events = (previous: SubscriptionState | null, next: SubscriptionState, failedAttempt: number | null = null) => subscriptionEventsFor({ previous, next, failedAttempt });
 
-describe('billing events', () => {
-	it('starts Premium from a completed checkout only, with its tier', () => {
-		expect(subscriptionEventsFor({ previous: null, next: record(), eventType: 'checkout.session.completed', invoice: null })).toEqual([{ name: 'subscription_started', properties: { tier: 3 } }]);
-		expect(subscriptionEventsFor({ previous: null, next: record(), eventType: 'customer.subscription.created', invoice: null })).toEqual([]);
-		expect(subscriptionEventsFor({ previous: null, next: record({ status: 'incomplete' }), eventType: 'checkout.session.completed', invoice: null })).toEqual([]);
+describe('subscription events', () => {
+	it('start a plan on the first event that stores it live, whichever event that is', () => {
+		expect(events(null, sub())).toEqual([{ name: 'subscription_started', properties: { plan: 'pro' } }]);
+		expect(events(sub({ status: 'incomplete' }), sub({ plan: 'premium' }))).toEqual([{ name: 'subscription_started', properties: { plan: 'premium' } }]);
+		expect(events(sub({ stripeSubscriptionId: 'sub_0', status: 'canceled' }), sub())).toEqual([{ name: 'subscription_started', properties: { plan: 'pro' } }]);
+		expect(events(null, sub({ status: 'incomplete' }))).toEqual([]);
+		expect(events(sub(), sub())).toEqual([]);
+		// A failed card paid later is the same plan going on, not a new one.
+		expect(events(sub({ status: 'past_due' }), sub())).toEqual([]);
 	});
 
-	it('records a tier change once, on the update that first stores the new tier, up or down', () => {
-		expect(subscriptionEventsFor({ previous: record({ tier: 1 }), next: record({ tier: 3 }), eventType: 'customer.subscription.updated', invoice: null })).toEqual([
-			{ name: 'subscription_changed', properties: { from_tier: 1, to_tier: 3, direction: 'up' } },
-		]);
-		expect(subscriptionEventsFor({ previous: record({ tier: 4 }), next: record({ tier: 2 }), eventType: 'customer.subscription.updated', invoice: null })[0]).toMatchObject({ properties: { direction: 'down' } });
-		expect(subscriptionEventsFor({ previous: record(), next: record(), eventType: 'customer.subscription.updated', invoice: null })).toEqual([]);
-		expect(subscriptionEventsFor({ previous: record({ stripeSubscriptionId: 'sub_0', tier: 1 }), next: record(), eventType: 'customer.subscription.updated', invoice: null })).toEqual([]);
+	it('change plans once, when the new plan is stored, up or down', () => {
+		expect(events(sub(), sub({ plan: 'premium' }))).toEqual([{ name: 'subscription_changed', properties: { from_plan: 'pro', to_plan: 'premium', direction: 'up' } }]);
+		expect(events(sub({ plan: 'premium' }), sub())).toEqual([{ name: 'subscription_changed', properties: { from_plan: 'premium', to_plan: 'pro', direction: 'down' } }]);
+		expect(planDirection('basic', 'enterprise')).toBe('up');
 	});
 
-	it('records the end of Premium once, with why it ended', () => {
-		expect(subscriptionEventsFor({ previous: record({ cancelAtPeriodEnd: true }), next: record({ status: 'canceled', cancelAtPeriodEnd: true }), eventType: 'customer.subscription.deleted', invoice: null })).toEqual([
-			{ name: 'subscription_cancelled', properties: { tier: 3, reason: 'seller' } },
+	it('end a plan once, with why it ended', () => {
+		expect(events(sub({ cancelAtPeriodEnd: true }), sub({ status: 'canceled', cancelAtPeriodEnd: true }))).toEqual([
+			{ name: 'subscription_cancelled', properties: { plan: 'pro', reason: 'seller' } },
 		]);
-		expect(subscriptionEventsFor({ previous: record({ status: 'canceled' }), next: record({ status: 'canceled' }), eventType: 'repair', invoice: null })).toEqual([]);
-		expect(cancelReasonOf(record({ status: 'past_due' }))).toBe('payment_failed');
-		expect(cancelReasonOf(record({ status: 'unpaid' }))).toBe('payment_failed');
-		expect(cancelReasonOf(record({ cancelAtPeriodEnd: true }))).toBe('seller');
+		expect(events(sub({ status: 'canceled' }), sub({ status: 'canceled' }))).toEqual([]);
+		expect(cancelReasonOf(sub({ status: 'past_due' }))).toBe('payment_failed');
+		expect(cancelReasonOf(sub({ status: 'unpaid' }))).toBe('payment_failed');
 		// Sellers can only cancel at the period's end, so an immediate cancel came from an admin or the Stripe Dashboard.
-		expect(cancelReasonOf(record())).toBe('admin');
+		expect(cancelReasonOf(sub())).toBe('admin');
 	});
 
-	it("records a failed renewal with Stripe's attempt number", () => {
-		expect(subscriptionEventsFor({ previous: record(), next: record({ status: 'past_due' }), eventType: 'invoice.payment_failed', invoice: failedInvoice })).toEqual([
-			{ name: 'subscription_payment_failed', properties: { tier: 3, attempt: 2 } },
+	it("record a failed renewal with Stripe's attempt number", () => {
+		expect(events(sub(), sub({ status: 'past_due' }), 2)).toEqual([{ name: 'subscription_payment_failed', properties: { plan: 'pro', attempt: 2 } }]);
+	});
+});
+
+describe('sending billing events', () => {
+	beforeEach(() => {
+		captured.length = 0;
+	});
+
+	it("sends each event about the account, with its person properties read after billing's write", async () => {
+		await trackBilling({} as Env, 'u1', [
+			{ name: 'credits_purchased', properties: { credits: 5_000, amount_cents: 750 } },
+			{ name: 'credits_low', properties: { plan: 'premium', threshold: 20 } },
 		]);
-		expect(subscriptionEventsFor({ previous: record(), next: record(), eventType: 'invoice.payment_failed', invoice: { ...failedInvoice, attempt_count: undefined } })[0]).toMatchObject({ properties: { attempt: 1 } });
+		expect(captured).toEqual([
+			['credits_purchased', 'u1', { credits: 5_000, amount_cents: 750 }, { set: { plan: 'premium' } }],
+			['credits_low', 'u1', { plan: 'premium', threshold: 20 }, { set: { plan: 'premium' } }],
+		]);
+	});
+
+	it('reads nothing when there is nothing to send', async () => {
+		await trackBilling({} as Env, 'u1', []);
+		expect(captured).toEqual([]);
 	});
 });
 ```
 
-`worker/services/billing/events-analytics.test.ts`:
+`worker/services/billing/events-analytics.test.ts` runs billing's subscription event handler with fakes. Billing's webhook task wasn't written when this plan was revised, so this test is given by its assertions. Build its fakes from billing's own webhook test for that handler: its deps, a Stripe subscription for the Pro price, and a store that remembers recorded event ids. Add a `track` that records its calls. Two cases:
 
 ```ts
-/** Billing's events reach PostHog only after billing_events records the Stripe event the first time. */
-import { describe, expect, it } from 'vitest';
-import { applySubscription, type BillingEventDeps } from './events';
-import type { BillingAnalyticsEvent } from '../posthog/billing-events';
-import type { StripeSubscription } from '../payments/stripe-client';
-
-const NOW = Date.parse('2026-10-19T15:00:00Z');
-const START = Date.parse('2026-10-05T10:00:00Z') / 1000;
-const END = Date.parse('2026-11-05T10:00:00Z') / 1000;
-const SUBSCRIPTION = {
-	id: 'sub_1',
-	customer: 'cus_1',
-	status: 'active',
-	created: START,
-	cancel_at_period_end: false,
-	cancel_at: null,
-	metadata: { estori_user_id: 'u1' },
-	schedule: null,
-	items: { data: [{ id: 'si_1', price: { id: 'price_t3' }, current_period_start: START, current_period_end: END }] },
-} as StripeSubscription;
-const TARGET = { subscriptionId: 'sub_1', expectedUserId: 'u1', invoice: null };
-
-function harness(options: { failRecord?: boolean } = {}) {
-	const recorded = new Set<string>();
-	const tracked: Array<[string, BillingAnalyticsEvent[]]> = [];
-	const deps: BillingEventDeps = {
-		stripe: { retrieveSubscription: async () => SUBSCRIPTION },
-		store: {
-			eventSeen: async (eventId) => recorded.has(eventId),
-			userOfCustomer: async () => 'u1',
-			subscriptionOf: async () => null,
-			sentNoticeKeys: async () => new Set<string>(),
-			recordEvent: async (input) => {
-				if (options.failRecord) throw new Error('D1 batch failed');
-				recorded.add(input.event.id);
-			},
-		},
-		tierOf: (price) => (price.id === 'price_t3' ? 3 : null),
-		notify: async () => undefined,
-		alert: async () => undefined,
-		track: async (userId, events) => {
-			tracked.push([userId, [...events]]);
-		},
-		nowMs: () => NOW,
-	};
-	return { deps, tracked };
-}
-
 describe('billing events to PostHog', () => {
 	it('sends subscription_started once for a completed checkout, and nothing on the retry', async () => {
-		const { deps, tracked } = harness();
-		expect(await applySubscription(deps, { eventId: 'evt_1', eventType: 'checkout.session.completed', ...TARGET })).toBe('applied');
-		expect(await applySubscription(deps, { eventId: 'evt_1', eventType: 'checkout.session.completed', ...TARGET })).toBe('duplicate');
-		expect(tracked).toEqual([['u1', [{ name: 'subscription_started', properties: { tier: 3 } }]]]);
+		// First delivery: applied, and one track call for the account with [{ name: 'subscription_started', properties: { plan: 'pro' } }].
+		// Same event id again: billing answers its duplicate result, and track isn't called again.
 	});
 
 	it('sends nothing when the event fails to record, so the retry is the one that counts', async () => {
-		const { deps, tracked } = harness({ failRecord: true });
-		await expect(applySubscription(deps, { eventId: 'evt_2', eventType: 'checkout.session.completed', ...TARGET })).rejects.toThrow('D1 batch failed');
-		expect(tracked).toEqual([]);
+		// The store's record step throws: the handler rejects, and track is never called.
 	});
 });
 ```
 
-Adjust the fake's shapes to billing's actual `BillingEventDeps` and `StripeSubscription` if they differ. Keep the two assertions.
+Write both in full against billing's merged handler and fakes; keep these assertions.
 
-In billing's `credit-notices` test, add one case for each outcome:
-- `reached` is called with `(use, 80)` when `claimAndSendNotice` answers `'sent'` for `credits_80`, and with `100` for `credits_100`;
-- it isn't called when the answer is `'already-sent'` or `'not-sent'`.
+`worker/services/billing/billing-analytics-wiring.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+
+/** Billing's events come from billing's own code points; this finds each by what it sends. */
+const billing = import.meta.glob<string>(['/worker/services/billing/**/*.ts', '!/worker/services/billing/**/*.test.ts'], { query: '?raw', import: 'default', eager: true });
+
+/** The billing sources that contain `marker`, joined; fails when none does. */
+function sourcesSending(marker: string): string {
+	const found = Object.values(billing).filter((text) => text.includes(marker));
+	expect(found.length, marker).toBeGreaterThan(0);
+	return found.join('\n');
+}
+
+describe("billing's events, at billing's code points", () => {
+	it('the subscription event handler builds its events from the stored and rebuilt rows', () => {
+		expect(sourcesSending('subscriptionEventsFor(')).toContain('deps.track(');
+	});
+
+	it('the credit top-up handler sends credits_purchased', () => {
+		expect(sourcesSending("name: 'credits_purchased'")).toContain('deps.track(');
+	});
+
+	it('the credit notices send credits_low only for a new claim', () => {
+		expect(sourcesSending("name: 'credits_low'")).toContain("!== 'already-sent'");
+	});
+
+	it('the prompt gate sends credits_limit_reached when it refuses for credits', () => {
+		expect(sourcesSending("name: 'credits_limit_reached'")).toContain('trackBilling(');
+	});
+
+	it('the env wiring sends through trackBilling', () => {
+		sourcesSending('track: (userId, events) => trackBilling(env, userId, events)');
+	});
+});
+```
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `rtk proxy bun run test -- worker/services/posthog/billing-events.test.ts worker/services/billing/events-analytics.test.ts worker/services/billing`
-Expected: FAIL. `./billing-events` doesn't resolve, and `BillingEventDeps` has no `track`.
+Run: `rtk proxy bun run test -- worker/services/posthog/billing-events.test.ts worker/services/billing/events-analytics.test.ts worker/services/billing/billing-analytics-wiring.test.ts`
+Expected: FAIL. `./billing-events` doesn't resolve, and billing's deps have no `track`.
 
 - [ ] **Step 3: Write `worker/services/posthog/billing-events.ts`**
 
 ```ts
 /**
- * Billing's five events, from the subscription rows billing writes. Billing calls these only after it records the
- * Stripe event the first time, so a retry never counts twice.
+ * Billing's seven events, sent from billing's own code points. Billing calls these only after it records what
+ * triggered them the first time, so Stripe's retries never count twice.
  */
 
 import type { BillingEventName, ServerEventProperties } from '../../../shared/types/analytics-events';
-import type { SubscriptionRecord } from '../../database/schema';
-import type { StripeInvoice } from '../payments/stripe-client';
+import { PLAN_IDS, type PlanId } from '../../../shared/types/plans';
+import { serverAnalytics } from './analytics';
+import { personUpdateOf } from './person';
 
 export type BillingAnalyticsEvent = { [N in BillingEventName]: { name: N; properties: ServerEventProperties<N> } }[BillingEventName];
 
+/** What these events read from billing's subscription row; the row fits it as it is. */
+export interface SubscriptionState {
+	stripeSubscriptionId: string;
+	status: string;
+	plan: PlanId;
+	cancelAtPeriodEnd: boolean;
+}
+
 const LIVE_STATUSES: ReadonlySet<string> = new Set(['active', 'trialing']);
+/** A subscription in these has never been paid for. */
+const NEVER_STARTED: ReadonlySet<string> = new Set(['incomplete', 'incomplete_expired']);
+
+export function planDirection(from: PlanId, to: PlanId): 'up' | 'down' {
+	return PLAN_IDS.indexOf(to) > PLAN_IDS.indexOf(from) ? 'up' : 'down';
+}
 
 /** Sellers can only cancel at the period's end; an immediate cancel came from an admin or the Stripe Dashboard. */
-export function cancelReasonOf(previous: SubscriptionRecord | null): 'seller' | 'payment_failed' | 'admin' {
+export function cancelReasonOf(previous: SubscriptionState | null): 'seller' | 'payment_failed' | 'admin' {
 	if (previous?.status === 'past_due' || previous?.status === 'unpaid') return 'payment_failed';
 	if (previous?.cancelAtPeriodEnd) return 'seller';
 	return 'admin';
 }
 
-export function subscriptionEventsFor(input: {
-	previous: SubscriptionRecord | null;
-	next: SubscriptionRecord;
-	eventType: string;
-	invoice: StripeInvoice | null;
-}): BillingAnalyticsEvent[] {
-	const { previous, next, eventType, invoice } = input;
+/**
+ * The events in one recorded Stripe event, from the row billing had and the row it just stored. Whichever event first
+ * stores a change sends it, so Stripe's order doesn't matter. `failedAttempt` is set for invoice.payment_failed only.
+ */
+export function subscriptionEventsFor(input: { previous: SubscriptionState | null; next: SubscriptionState; failedAttempt: number | null }): BillingAnalyticsEvent[] {
+	const { previous, next, failedAttempt } = input;
 	const events: BillingAnalyticsEvent[] = [];
-	const live = LIVE_STATUSES.has(next.status);
-	if (eventType === 'checkout.session.completed' && live && next.tier !== null) {
-		events.push({ name: 'subscription_started', properties: { tier: next.tier } });
+	const same = previous !== null && previous.stripeSubscriptionId === next.stripeSubscriptionId;
+	const startedBefore = same && !NEVER_STARTED.has(previous.status);
+	if (LIVE_STATUSES.has(next.status) && !startedBefore) {
+		events.push({ name: 'subscription_started', properties: { plan: next.plan } });
 	}
-	// Whichever event first stores the new tier sends it, normally customer.subscription.updated.
-	const sameSubscription = previous !== null && previous.stripeSubscriptionId === next.stripeSubscriptionId;
-	if (sameSubscription && live && previous.tier !== null && next.tier !== null && previous.tier !== next.tier) {
-		events.push({ name: 'subscription_changed', properties: { from_tier: previous.tier, to_tier: next.tier, direction: next.tier > previous.tier ? 'up' : 'down' } });
+	if (startedBefore && LIVE_STATUSES.has(next.status) && previous.plan !== next.plan) {
+		events.push({ name: 'subscription_changed', properties: { from_plan: previous.plan, to_plan: next.plan, direction: planDirection(previous.plan, next.plan) } });
 	}
-	if (next.status === 'canceled' && previous?.status !== 'canceled') {
-		events.push({ name: 'subscription_cancelled', properties: { tier: next.tier ?? previous?.tier ?? null, reason: cancelReasonOf(previous) } });
+	if (same && next.status === 'canceled' && previous.status !== 'canceled') {
+		events.push({ name: 'subscription_cancelled', properties: { plan: next.plan, reason: cancelReasonOf(previous) } });
 	}
-	if (eventType === 'invoice.payment_failed' && invoice) {
-		events.push({ name: 'subscription_payment_failed', properties: { tier: next.tier, attempt: invoice.attempt_count ?? 1 } });
+	if (failedAttempt !== null) {
+		events.push({ name: 'subscription_payment_failed', properties: { plan: next.plan, attempt: failedAttempt } });
 	}
 	return events;
 }
+
+/** Sends billing's events about one account, with its person properties read after billing's write. Never throws. */
+export async function trackBilling(env: Env, userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void> {
+	if (events.length === 0) return;
+	try {
+		const analytics = serverAnalytics(env);
+		const person = await personUpdateOf(env, userId);
+		for (const event of events) analytics.capture(event.name, userId, event.properties, person);
+	} catch {
+		// Analytics never fails a webhook or a turn; serverAnalytics and personUpdateOf don't throw, this is a backstop.
+	}
+}
 ```
 
-- [ ] **Step 4: Wire it into billing**
+- [ ] **Step 4: Wire it into billing's code points**
 
-**`worker/services/billing/events.ts`:**
-1. Add to `BillingEventDeps`: `track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>`.
-2. In `applySubscription`, right after step 8's `recordEvent(...)` succeeds and before `deps.notify(...)`:
+**The subscription event handler:**
+1. Its deps gain `track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>`.
+2. Right after the step that records the Stripe event in `billing_events` succeeds, and before its notices are sent:
 
 ```ts
-	await deps.track(claimed, subscriptionEventsFor({ previous: stored, next: incoming, eventType, invoice }));
+	await deps.track(userId, subscriptionEventsFor({ previous: stored, next: rebuilt, failedAttempt: eventType === 'invoice.payment_failed' ? (invoice?.attempt_count ?? 1) : null }));
 ```
 
-   The `'duplicate'`, `'ignored'` and `'refused'` paths never reach it, and a failed `recordEvent` throws before it.
+   Use the handler's own names for the account, the stored row, the rebuilt row and the invoice. Its duplicate, ignored and refused paths never reach it, and a failed record throws before it.
 
-**`worker/services/billing/wiring.ts`,** in `billingEventDepsFromEnv`:
+**The credit top-up handler,** right after the purchase is recorded the first time:
 
 ```ts
-		// Plan and tier come from the row just written, so the person shows the new plan.
-		track: async (userId, events) => {
-			if (events.length === 0) return;
-			const analytics = serverAnalytics(env);
-			const person = await personUpdateOf(env, userId);
-			for (const event of events) analytics.capture(event.name, userId, event.properties, person);
-		},
+	await deps.track(userId, [{ name: 'credits_purchased', properties: { credits: purchase.credits, amount_cents: purchase.amountCents } }]);
 ```
 
-**`worker/services/billing/credit-notices.ts`:**
-1. Add `reached(use: CreditUse, threshold: 80 | 100): Promise<void>` to `CreditNoticeDeps`.
-2. In `noticeCreditUse`, keep `claimAndSendNotice`'s answer, and send the event with the notice:
+**Their env wiring:** `track: (userId, events) => trackBilling(env, userId, events),`.
+
+**The credit notices,** where billing claims `credits_20` or `credits_5` with `claimAndSendNotice`:
 
 ```ts
-	const outcome = await claimAndSendNotice(deps, use.userId, { key, email: { kind, credits: use.limit, renewsAt: use.renewsAt } });
-	// Sent once per period and threshold: the notice's claim in billing_notices keeps it to one.
-	if (outcome === 'sent') await deps.reached(use, kind === 'credits_100' ? 100 : 80);
+	const outcome = await claimAndSendNotice(deps, userId, notice);
+	// The claim keeps it to once per period and threshold, whether or not the email went out.
+	if (outcome !== 'already-sent') await trackBilling(env, userId, [{ name: 'credits_low', properties: { plan, threshold: kind === 'credits_5' ? 5 : 20 } }]);
 ```
 
-3. In `creditNoticeDepsFromEnv`, add:
+If that code has no `env`, give its deps a `track` like the handlers'.
+
+**The prompt gate,** where `assertWithinLimit(account, 'aiCredits', …)` answers a refusal and the turn is refused:
 
 ```ts
-		reached: async (use, threshold) => {
-			const { plan, tier } = await accountPlanOf(env, use.userId);
-			serverAnalytics(env).capture('credits_limit_reached', use.userId, { plan, tier, threshold }, await personUpdateOf(env, use.userId));
-		},
+		await trackBilling(env, account.userId, [{ name: 'credits_limit_reached', properties: { plan: account.plan } }]);
 ```
-
-**`worker/services/payments/stripe-client.ts`:** add `attempt_count?: number;` to `StripeInvoice`, with the comment "How many times Stripe has tried to collect this invoice".
-
-`serverAnalytics`, `personUpdateOf` and `accountPlanOf` never throw, so `track` and `reached` never fail a webhook or a turn.
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `rtk proxy bun run test -- worker/services/posthog/billing-events.test.ts worker/services/billing/events-analytics.test.ts worker/services/billing worker/api/controllers/payments`
-Expected: PASS, billing's webhook and repair tests included.
+Run: `rtk proxy bun run test -- worker/services/posthog/billing-events.test.ts worker/services/billing/events-analytics.test.ts worker/services/billing/billing-analytics-wiring.test.ts`
+Expected: PASS.
+
+Run: `rtk proxy bun run test -- worker/services/billing worker/api/controllers/payments`
+Expected: PASS, billing's webhook, ledger and gate tests included.
 
 Run: `bun run typecheck`
 Expected: no errors.
@@ -4752,15 +5526,16 @@ git commit -m "feat(analytics): billing's subscription and credit events, sent o
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 13: The heartbeat
+### Task 14: The heartbeat, and the dashboards and alerts doc
 
 **Files:**
 - Create `worker/services/posthog/heartbeat.ts`. Test: `worker/services/posthog/heartbeat.test.ts`.
 - Modify `worker/database/services/LiveStoreService.ts` (`newestLiveSlug`) and `worker/database/services/live-stores.sql.test.ts`.
 - Modify `worker/index.ts` (`scheduled`) and `worker/services/posthog/entry-wiring.test.ts`.
+- Create `docs/estori/posthog-dashboards.md`, from the spec's section 8.
 
 **Interfaces:**
-- **Consumes:** `serverAnalytics` from Task 2; `SYSTEM_DISTINCT_ID` from Task 1; `storeHostConfig` from `worker/services/live-stores/hosts.ts`.
+- **Consumes:** `serverAnalytics` and `posthogConfig` from Task 2; `SYSTEM_DISTINCT_ID` from Task 1; `storeHostConfig` from `worker/services/live-stores/hosts.ts`.
 - **Produces:**
   - `HEARTBEAT_CRON = '*/15 * * * *'`, `CHECK_TIMEOUT_MS = 10_000`;
   - `HeartbeatDeps`;
@@ -4774,7 +5549,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { HEARTBEAT_CRON, runHeartbeatChecks, type HeartbeatDeps } from './heartbeat';
+import { HEARTBEAT_CRON, runHeartbeat, runHeartbeatChecks, type HeartbeatDeps } from './heartbeat';
 
 function deps(overrides: Partial<HeartbeatDeps> = {}): HeartbeatDeps & { requests: Request[] } {
 	const requests: Request[] = [];
@@ -4821,17 +5596,28 @@ describe('the heartbeat checks', () => {
 		expect((await runHeartbeatChecks(deps({ newestLiveSlug: async () => null }))).stores_ok).toBeNull();
 	});
 
-	it("sends staging's key, so the gate lets the in-process checks through", async () => {
+	it("sends staging's key, so the gate lets the in-process checks through once staging has a project", async () => {
 		const run = deps({ stagingKey: 'staging-key' });
 		await runHeartbeatChecks(run);
 		expect(run.requests.every((request) => request.headers.get('x-estori-staging-key') === 'staging-key')).toBe(true);
 	});
 });
 
+describe('the heartbeat without a project token', () => {
+	it('checks nothing, as on staging and locally, where nothing would be sent', async () => {
+		const requests: Request[] = [];
+		await runHeartbeat(HEARTBEAT_CRON, { ENVIRONMENT: 'staging' } as unknown as Env, async (request) => {
+			requests.push(request);
+			return new Response('ok');
+		});
+		expect(requests).toEqual([]);
+	});
+});
+
 const configs = import.meta.glob<string>(['/wrangler.estori.jsonc', '/wrangler.estori-staging.jsonc'], { query: '?raw', import: 'default', eager: true });
 
 describe('the heartbeat cron', () => {
-	it('is a cron both Estori environments schedule', () => {
+	it('is a cron both Estori environments schedule, so a staging project only needs its token', () => {
 		expect(Object.keys(configs)).toHaveLength(2);
 		for (const [path, text] of Object.entries(configs)) expect(text, path).toContain(`"${HEARTBEAT_CRON}"`);
 	});
@@ -4867,6 +5653,7 @@ import { createLogger } from '../../logger';
 import { getProtocolForHost } from '../../utils/urls';
 import { storeHostConfig } from '../live-stores/hosts';
 import { serverAnalytics } from './analytics';
+import { posthogConfig } from './config';
 
 export const HEARTBEAT_CRON = '*/15 * * * *';
 export const CHECK_TIMEOUT_MS = 10_000;
@@ -4925,8 +5712,9 @@ export async function runHeartbeatChecks(deps: HeartbeatDeps): Promise<ServerEve
 	return { healthy: failed.length === 0, app_ok: appOk, database_ok: databaseOk, stores_ok: storesOk, failed, duration_ms: deps.nowMs() - startedMs };
 }
 
+/** Runs only where there's a project to send to: production, or staging once it has a project. */
 export async function runHeartbeat(cron: string, env: Env, fetchApp: (request: Request) => Promise<Response>): Promise<void> {
-	if (cron !== HEARTBEAT_CRON) return;
+	if (cron !== HEARTBEAT_CRON || !posthogConfig(env)) return;
 	const properties = await runHeartbeatChecks({
 		fetchApp,
 		queryDatabase: async () => {
@@ -4976,16 +5764,31 @@ In `worker/index.ts`:
 Run: `rtk proxy bun run test -- worker/services/posthog/heartbeat.test.ts worker/services/posthog/entry-wiring.test.ts worker/database/services/live-stores.sql.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Write `docs/estori/posthog-dashboards.md`**
+
+The dashboards and alerts are built by hand in PostHog's UI once events flow; the owner's coordinator builds them at launch. This file is their build sheet. Its parts, in order:
+1. **The title,** "PostHog dashboards and alerts", then:
+   - the project, "Estori production" (id 675096, `https://us.posthog.com/project/675096`);
+   - "Turn on 'Filter out internal and test users' in every insight. It leaves out localhost, 127.0.0.1 and staging.estori.app."
+2. **The dashboards:** the spec's section 8 "Dashboards" list as it is: each dashboard with its insights, events, filters and breakdowns.
+3. **The alerts:** the spec's section 8 "Alerts" table as it is (alert, insight, condition, check interval). Recipients: the owner's email, unless the owner names others.
+4. **AI cost:** the formula from the spec's section 8: Estori's cost is credits ÷ 1.5 × $0.001, so the budget of 150,000 credits a day is about $100.
+5. **The last line:** "Source: docs/superpowers/specs/2026-10-19-posthog-analytics-monitoring-flags-design.md, section 8. Change both together."
+
+Copy the definitions word for word: the spec is reviewed, and this file must match it.
+
+- [ ] **Step 7: Commit**
 
 ```bash
-git add worker/services/posthog/heartbeat.ts worker/services/posthog/heartbeat.test.ts worker/services/posthog/entry-wiring.test.ts worker/database/services/LiveStoreService.ts worker/database/services/live-stores.sql.test.ts worker/index.ts
-git commit -m "feat(monitoring): a 15 minute heartbeat that checks the app, database and a live store from inside the worker
+git add worker/services/posthog/heartbeat.ts worker/services/posthog/heartbeat.test.ts worker/services/posthog/entry-wiring.test.ts worker/database/services/LiveStoreService.ts worker/database/services/live-stores.sql.test.ts worker/index.ts docs/estori/posthog-dashboards.md
+git commit -m "feat(monitoring): a 15 minute heartbeat that checks the app, database and a live store, and the dashboards build sheet
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 14: Source maps from CI
+### Task 15: Source maps from CI
+
+Production deploys upload the browser's source maps once the owner adds a personal API key as a secret (spec section 16, optional). Until then, and on staging and locally, the build only deletes the maps.
 
 **Files:**
 - Add the dev dependency, pinned to an exact version: `bun add -d -E @posthog/cli`.
@@ -5109,14 +5912,17 @@ if (process.argv?.[1]?.endsWith('posthog-sourcemaps.ts')) {
 	},
 ```
 
-- **`.github/workflows/deploy-estori-reusable.yml`:** add to the "Deploy via deploy script" step's `env`. The GitHub names stay as the owner sets them (spec section 16), mapped onto the CLI's own:
+- **`.github/workflows/deploy-estori-reusable.yml`:** add to the "Deploy via deploy script" step's `env`, mapped onto the CLI's own names:
 
 ```yaml
-          # Uploads the browser's source maps to PostHog during the build; without them the maps are only deleted.
+          # Production only: uploads the browser's source maps to PostHog project 675096 during the build. Without the
+          # optional POSTHOG_CLI_API_KEY secret, or on staging, the maps are only deleted.
           # The left side is what the pinned @posthog/cli reads (scripts/posthog-sourcemaps.ts).
           POSTHOG_CLI_TOKEN: ${{ secrets.POSTHOG_CLI_API_KEY }}
-          POSTHOG_CLI_ENV_ID: ${{ vars.POSTHOG_CLI_PROJECT_ID }}
+          POSTHOG_CLI_ENV_ID: ${{ inputs.environment == 'production' && '675096' || '' }}
 ```
+
+The project id is public, so it's written here, not kept as a variable. The secret is a personal API key, so it lives only in the production GitHub environment.
 
 - [ ] **Step 5: Verify**
 
@@ -5127,7 +5933,7 @@ Run: `npx vite build && ls dist/client/assets/*.js.map | head -3`
 Expected: map files are listed. The client build makes them, and the JS has no `sourceMappingURL` comment (`grep -L sourceMappingURL dist/client/assets/*.js` lists every JS file).
 
 Run: `bun run build && find dist -name '*.map' | wc -l`
-Expected: `0`. The script deleted them, and printed "Source maps: deleted N from dist/client".
+Expected: `0`. With no CLI credentials set, the script skipped the upload, deleted the maps, and printed "Source maps: deleted N from dist/client".
 
 Then check the Worker bundle under `dist/` (not `dist/client`) is not minified. Function names should read as in the source, which is what makes Worker stacks readable without maps (spec section 7). If it is minified, stop and report it.
 
@@ -5140,40 +5946,83 @@ git commit -m "build(errors): upload hidden browser source maps to posthog from 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 15: The flags admin page and the flag sync script
+### Task 16: The flags admin page and the flag sync script
+
+The page works without any PostHog key: it shows the registry, each flag's value for the signed-in admin (the public `/flags` call), and a link to the project's flags in PostHog. With the optional `POSTHOG_PERSONAL_API_KEY` secret, it also shows each flag's rollout.
 
 **Files:**
+- Create `worker/services/posthog/flag-rollouts.ts`. Test: `worker/services/posthog/flag-rollouts.test.ts`.
 - Modify `worker/api/controllers/telemetry/controller.ts` (`adminFlags`, `adminFlagRows`) and `worker/api/routes/telemetryRoutes.ts` (`GET /api/admin/flags`, admin only). Test: `worker/api/controllers/telemetry/admin-flags.test.ts`.
 - Create `src/routes/admin/flags.tsx`. Modify `src/routes.tsx`, `src/hooks/use-telemetry.ts`, `src/lib/api-client.ts` and `src/lib/query-keys.ts`. Test: `src/routes/admin-flags-guard.test.ts`.
 - Create `scripts/posthog-sync-flags.ts`. Test: `scripts/posthog-sync-flags.test.ts`.
 
 **Interfaces:**
-- **Consumes:** `flagsFor` and `FlagEvaluation` from Task 5; `AdminFlagsData` and `AdminFlagRow` from Task 1.
+- **Consumes:** `flagsFor` and `FlagEvaluation` from Task 5; `posthogConfig`, `posthogFlagsUrl` and `POSTHOG_UI_ORIGIN` from Task 2; `AdminFlagsData` and `AdminFlagRow` from Task 1.
 - **Produces:**
-  - `adminFlagRows(evaluation: FlagEvaluation): AdminFlagRow[]`;
+  - `ROLLOUT_TIMEOUT_MS = 3_000`;
+  - `rolloutsFrom(body: unknown): Partial<Record<FlagKey, number>>`;
+  - `flagRollouts(env: Env, fetcher: typeof fetch): Promise<Partial<Record<FlagKey, number>> | null>`, null without the personal key or when PostHog fails; never throws;
+  - `adminFlagRows(evaluation: FlagEvaluation, rollouts: Partial<Record<FlagKey, number>> | null): AdminFlagRow[]`;
   - `TelemetryController.adminFlags`;
-  - `apiClient.getAdminFlags(userId: string | null)`;
-  - `useAdminFlags(userId: string | null)`;
-  - `queryKeys.account.adminFlags(userId)`;
+  - `apiClient.getAdminFlags()`, `useAdminFlags()`, `queryKeys.account.adminFlags()`;
   - `flagsToCreate(existingKeys: ReadonlySet<string>): NewPostHogFlag[]`.
 
 - [ ] **Step 1: Write the failing tests**
+
+`worker/services/posthog/flag-rollouts.test.ts`:
+
+```ts
+import { describe, expect, it, vi } from 'vitest';
+import { flagRollouts, rolloutsFrom } from './flag-rollouts';
+
+const list = {
+	results: [
+		{ key: 'billing', active: true, filters: { groups: [{ properties: [], rollout_percentage: 10 }] } },
+		{ key: 'catalog-paused', active: true, filters: { groups: [{ properties: [], rollout_percentage: null }] } },
+		{ key: 'signups-paused', active: false, filters: { groups: [{ properties: [], rollout_percentage: 100 }] } },
+		{ key: 'store-drafts-paused', active: true, filters: { groups: [{ properties: [{ key: 'plan' }], rollout_percentage: 0 }, { properties: [], rollout_percentage: 25 }] } },
+		{ key: 'not-ours', active: true, filters: { groups: [{ properties: [], rollout_percentage: 50 }] } },
+	],
+};
+
+describe("flags' rollouts from PostHog", () => {
+	it("reads each registry flag's largest rollout: no percentage means everyone, and a disabled flag is 0", () => {
+		expect(rolloutsFrom(list)).toEqual({ billing: 10, 'catalog-paused': 100, 'signups-paused': 0, 'store-drafts-paused': 25 });
+		expect(rolloutsFrom({ nope: true })).toEqual({});
+	});
+
+	it("asks PostHog's API with the personal key, for the project", async () => {
+		const fetcher = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json(list));
+		const env = { POSTHOG_PROJECT_KEY: 'phc_x', POSTHOG_PROJECT_ID: '675096', POSTHOG_PERSONAL_API_KEY: 'phx_key' } as unknown as Env;
+		expect(await flagRollouts(env, fetcher)).toMatchObject({ billing: 10 });
+		const [url, init] = fetcher.mock.calls[0] ?? [];
+		expect(String(url)).toBe('https://us.posthog.com/api/projects/675096/feature_flags/?limit=200');
+		expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer phx_key');
+	});
+
+	it('answers null without the personal key, asking nobody, and when PostHog fails', async () => {
+		const fetcher = vi.fn<typeof fetch>();
+		expect(await flagRollouts({ POSTHOG_PROJECT_KEY: 'phc_x', POSTHOG_PROJECT_ID: '675096' } as unknown as Env, fetcher)).toBeNull();
+		expect(fetcher).not.toHaveBeenCalled();
+		const failing = async () => new Response('denied', { status: 403 });
+		expect(await flagRollouts({ POSTHOG_PROJECT_KEY: 'phc_x', POSTHOG_PROJECT_ID: '675096', POSTHOG_PERSONAL_API_KEY: 'phx_key' } as unknown as Env, failing)).toBeNull();
+	});
+});
+```
 
 `worker/api/controllers/telemetry/admin-flags.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
+import { defaultFlagValues } from '../../../../shared/types/feature-flags';
 import { TelemetryController, adminFlagRows } from './controller';
 import type { RouteContext } from '../../types/route-context';
 
 describe('the flags admin view', () => {
-	it('lists every registry flag with its value and whether PostHog answered for it', () => {
-		const rows = adminFlagRows({
-			values: { billing: true, 'store-drafts-paused': false, 'live-store-payments-paused': false, 'catalog-paused': true, 'session-replay-paused': false },
-			source: 'posthog',
-			inPostHog: ['billing', 'catalog-paused'],
-		});
-		expect(rows.map((row) => row.key)).toEqual(['billing', 'store-drafts-paused', 'live-store-payments-paused', 'catalog-paused', 'session-replay-paused']);
+	it('lists every registry flag with its value, whether PostHog answered for it, and its rollout when known', () => {
+		const evaluation = { values: { ...defaultFlagValues(), billing: true, 'catalog-paused': true }, source: 'posthog' as const, inPostHog: ['billing' as const, 'catalog-paused' as const] };
+		const rows = adminFlagRows(evaluation, { billing: 10, 'catalog-paused': 100 });
+		expect(rows).toHaveLength(11);
 		expect(rows[0]).toEqual({
 			key: 'billing',
 			description: 'Plans, subscriptions and the billing page. Also on with BILLING=on, or for a user in BILLING_USER_IDS.',
@@ -5181,17 +6030,16 @@ describe('the flags admin view', () => {
 			clientVisible: true,
 			value: true,
 			inPostHog: true,
+			rolloutPercent: 10,
 		});
-		expect(rows[2]).toMatchObject({ key: 'live-store-payments-paused', kind: 'pause', clientVisible: false, value: false, inPostHog: false });
-		expect(rows[3]).toMatchObject({ key: 'catalog-paused', kind: 'pause', value: true, inPostHog: true });
+		expect(rows.find((row) => row.key === 'ai-builds-paused')).toMatchObject({ kind: 'pause', clientVisible: false, value: false, inPostHog: false, rolloutPercent: null });
+		expect(adminFlagRows(evaluation, null).every((row) => row.rolloutPercent === null)).toBe(true);
 	});
 
-	it("evaluates for the user asked about, or the admin, and says when PostHog isn't set up", async () => {
-		const context = { user: { id: 'admin_1' }, queryParams: new URLSearchParams('userId=%20seller_9%20') } as unknown as RouteContext;
-		const response = await TelemetryController.adminFlags(new Request('https://estori.app/api/admin/flags?userId=seller_9'), { ENVIRONMENT: 'dev' } as unknown as Env, {} as ExecutionContext, context);
-		expect((await response.json()).data).toMatchObject({ userId: 'seller_9', source: 'off' });
-		const mine = await TelemetryController.adminFlags(new Request('https://estori.app/api/admin/flags'), { ENVIRONMENT: 'dev' } as unknown as Env, {} as ExecutionContext, { user: { id: 'admin_1' }, queryParams: new URLSearchParams() } as unknown as RouteContext);
-		expect((await mine.json()).data.userId).toBe('admin_1');
+	it("evaluates for the admin asking, and links to the project's flags", async () => {
+		const context = { user: { id: 'admin_1' } } as unknown as RouteContext;
+		const local = await TelemetryController.adminFlags(new Request('https://estori.app/api/admin/flags'), { ENVIRONMENT: 'staging' } as unknown as Env, {} as ExecutionContext, context);
+		expect((await local.json()).data).toMatchObject({ userId: 'admin_1', source: 'off', posthogFlagsUrl: null });
 	});
 });
 ```
@@ -5200,17 +6048,14 @@ describe('the flags admin view', () => {
 
 ```ts
 import { describe, expect, it } from 'vitest';
+import { FLAG_KEYS } from '../shared/types/feature-flags';
 import { flagsToCreate } from './posthog-sync-flags';
 
 describe('syncing flags to PostHog', () => {
 	it('creates only the missing flags, every one at 0%, so nothing is rolled out or paused until someone raises it', () => {
 		const created = flagsToCreate(new Set(['billing', 'some-other-flag']));
-		expect(created.map((flag) => [flag.key, flag.filters.groups[0].rollout_percentage])).toEqual([
-			['store-drafts-paused', 0],
-			['live-store-payments-paused', 0],
-			['catalog-paused', 0],
-			['session-replay-paused', 0],
-		]);
+		expect(created.map((flag) => flag.key)).toEqual(FLAG_KEYS.filter((key) => key !== 'billing'));
+		expect(created.every((flag) => flag.filters.groups[0]?.rollout_percentage === 0)).toBe(true);
 		expect(created[0]).toEqual({
 			key: 'store-drafts-paused',
 			name: 'Pauses starting new drafts of a store. Drafts that exist keep working.',
@@ -5220,7 +6065,7 @@ describe('syncing flags to PostHog', () => {
 	});
 
 	it('creates nothing when every flag exists', () => {
-		expect(flagsToCreate(new Set(['billing', 'store-drafts-paused', 'live-store-payments-paused', 'catalog-paused', 'session-replay-paused']))).toEqual([]);
+		expect(flagsToCreate(new Set(FLAG_KEYS))).toEqual([]);
 	});
 });
 ```
@@ -5241,26 +6086,75 @@ describe('the flags admin page', () => {
 
 	it('shows values only, and sends edits to PostHog', () => {
 		expect(page).toContain('Change flags in PostHog.');
+		expect(page).toContain('href={data.posthogFlagsUrl}');
 		expect(page).not.toMatch(/useMutation|onCheckedChange/);
 	});
 
-	it("says when every flag is off, and why", () => {
+	it('says when every flag is off, and why, and when rollouts are hidden', () => {
 		expect(page).toContain("PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused.");
 		expect(page).toContain("PostHog didn't answer, so every flag is off: nothing is rolled out or paused.");
+		expect(page).toContain('Rollouts show once a PostHog personal API key is added.');
 	});
 });
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `rtk proxy bun run test -- worker/api/controllers/telemetry/admin-flags.test.ts scripts/posthog-sync-flags.test.ts src/routes/admin-flags-guard.test.ts`
-Expected: FAIL. `adminFlagRows`, the script and the page don't exist yet.
+Run: `rtk proxy bun run test -- worker/services/posthog/flag-rollouts.test.ts worker/api/controllers/telemetry/admin-flags.test.ts scripts/posthog-sync-flags.test.ts src/routes/admin-flags-guard.test.ts`
+Expected: FAIL. The rollouts module, `adminFlagRows`, the script and the page don't exist yet.
 
-- [ ] **Step 3: The endpoint.** In the telemetry controller:
+- [ ] **Step 3: Write `worker/services/posthog/flag-rollouts.ts`**
 
 ```ts
-/** Every registry flag beside its live value. */
-export function adminFlagRows(evaluation: FlagEvaluation): AdminFlagRow[] {
+/**
+ * Each flag's rollout, from PostHog's management API, for the flags admin page. It needs the optional
+ * POSTHOG_PERSONAL_API_KEY secret; without it, or when PostHog fails, the page shows values only. Never throws.
+ */
+
+import { isFlagKey, type FlagKey } from '../../../shared/types/feature-flags';
+import { POSTHOG_UI_ORIGIN, posthogConfig } from './config';
+
+export const ROLLOUT_TIMEOUT_MS = 3_000;
+
+type Rollouts = Partial<Record<FlagKey, number>>;
+
+/**
+ * The largest share any of a flag's conditions rolls out to. A condition without a percentage reaches everyone it
+ * matches; a disabled flag reaches no one.
+ */
+export function rolloutsFrom(body: unknown): Rollouts {
+	const results = (body as { results?: unknown } | null)?.results;
+	if (!Array.isArray(results)) return {};
+	const rollouts: Rollouts = {};
+	for (const flag of results as Array<{ key?: unknown; active?: unknown; filters?: { groups?: Array<{ rollout_percentage?: unknown }> } }>) {
+		if (typeof flag.key !== 'string' || !isFlagKey(flag.key)) continue;
+		const shares = (flag.filters?.groups ?? []).map((group) => (typeof group.rollout_percentage === 'number' ? group.rollout_percentage : 100));
+		rollouts[flag.key] = flag.active === true ? Math.max(0, ...shares) : 0;
+	}
+	return rollouts;
+}
+
+export async function flagRollouts(env: Env, fetcher: typeof fetch): Promise<Rollouts | null> {
+	const apiKey = env.POSTHOG_PERSONAL_API_KEY?.trim();
+	const projectId = posthogConfig(env)?.projectId;
+	if (!apiKey || !projectId) return null;
+	try {
+		const response = await fetcher(`${POSTHOG_UI_ORIGIN}/api/projects/${encodeURIComponent(projectId)}/feature_flags/?limit=200`, {
+			headers: { Authorization: `Bearer ${apiKey}` },
+			signal: AbortSignal.timeout(ROLLOUT_TIMEOUT_MS),
+		});
+		return response.ok ? rolloutsFrom(await response.json()) : null;
+	} catch {
+		return null;
+	}
+}
+```
+
+- [ ] **Step 4: The endpoint.** In the telemetry controller, import `FEATURE_FLAGS`, `FLAG_KEYS` and `type FlagKey`, `flagRollouts`, and `posthogFlagsUrl`:
+
+```ts
+/** Every registry flag beside its live value, and its rollout when the personal key is set. */
+export function adminFlagRows(evaluation: FlagEvaluation, rollouts: Partial<Record<FlagKey, number>> | null): AdminFlagRow[] {
 	return FLAG_KEYS.map((key) => ({
 		key,
 		description: FEATURE_FLAGS[key].description,
@@ -5268,17 +6162,23 @@ export function adminFlagRows(evaluation: FlagEvaluation): AdminFlagRow[] {
 		clientVisible: FEATURE_FLAGS[key].clientVisible,
 		value: evaluation.values[key],
 		inPostHog: evaluation.inPostHog.includes(key),
+		rolloutPercent: rollouts ? (rollouts[key] ?? 0) : null,
 	}));
 }
 ```
 
 ```ts
-	/** GET /api/admin/flags?userId=: every flag's live value for that user, or for the admin asking. Read-only. */
+	/** GET /api/admin/flags: every flag's value for the admin asking, its rollout when known, and where to change it. Read-only. */
 	static async adminFlags(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AdminFlagsData>>> {
-		const userId = context.queryParams.get('userId')?.trim().slice(0, 64) || context.user?.id;
+		const userId = context.user?.id;
 		if (!userId) return this.createErrorResponse<AdminFlagsData>('Unauthorized', 401);
-		const evaluation = await flagsFor(env, userId);
-		return this.createSuccessResponse({ userId, source: evaluation.source, flags: adminFlagRows(evaluation) });
+		const [evaluation, rollouts] = await Promise.all([flagsFor(env, userId), flagRollouts(env, (input, init) => fetch(input, init))]);
+		return this.createSuccessResponse({
+			userId,
+			source: evaluation.source,
+			flags: adminFlagRows(evaluation, rollouts),
+			posthogFlagsUrl: posthogFlagsUrl(posthogConfig(env)),
+		});
 	}
 ```
 
@@ -5288,32 +6188,31 @@ In `telemetryRoutes.ts`:
     app.get('/api/admin/flags', setAuthLevel(AuthConfig.admin), adaptController(TelemetryController, TelemetryController.adminFlags));
 ```
 
-- [ ] **Step 4: The page**
+- [ ] **Step 5: The page**
 
 - **`src/lib/query-keys.ts`,** under `account`:
 
 ```ts
-		/** The flags admin view, per user looked up: never persisted. */
-		adminFlags: (userId: string | null) => [...queryKeys.account.all, 'admin-flags', userId ?? 'me'] as const,
+		/** The flags admin view for the signed-in admin: never persisted. */
+		adminFlags: () => [...queryKeys.account.all, 'admin-flags'] as const,
 ```
 
 - **`src/lib/api-client.ts`:**
 
 ```ts
-	/** Every flag's live value for a user, or for the admin; quiet because non-admins get 403. */
-	async getAdminFlags(userId: string | null): Promise<ApiResponse<AdminFlagsData>> {
-		const query = userId ? `?userId=${encodeURIComponent(userId)}` : '';
-		return this.request<AdminFlagsData>(`/api/admin/flags${query}`, {}, true);
+	/** Every flag's value for the signed-in admin; quiet because non-admins get 403. */
+	async getAdminFlags(): Promise<ApiResponse<AdminFlagsData>> {
+		return this.request<AdminFlagsData>('/api/admin/flags', {}, true);
 	}
 ```
 
 - **`src/hooks/use-telemetry.ts`:**
 
 ```ts
-export function useAdminFlags(userId: string | null) {
+export function useAdminFlags() {
 	return useQuery({
-		queryKey: queryKeys.account.adminFlags(userId),
-		queryFn: () => unwrap(apiClient.getAdminFlags(userId), "Couldn't load flags"),
+		queryKey: queryKeys.account.adminFlags(),
+		queryFn: () => unwrap(apiClient.getAdminFlags(), "Couldn't load flags"),
 		retry: false,
 	});
 }
@@ -5322,17 +6221,18 @@ export function useAdminFlags(userId: string | null) {
 - **`src/routes/admin/flags.tsx`:** follow `src/routes/admin/early-access.tsx` for the layout, `<title>`, loading and the 403 "Admins only" state. The page has:
   - a "Reviews" link back;
   - the heading "Feature flags";
-  - the intro "Each flag's live value for one user. Change flags in PostHog.";
-  - a form with an `Input` (placeholder "User id, or blank for you") and a "Show flags" `Button`. Submitting sets the user id, trimmed, or `null` when blank.
-  - When `data.source` is `'off'`, the line "PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused."
-  - When it is `'defaults'`, the line "PostHog didn't answer, so every flag is off: nothing is rolled out or paused."
-  - The note "Every flag is off unless PostHog turns it on. Pause something by raising its pause flag to 100%."
-  - A table with the caption "Feature flags for {data.userId}" and these columns:
+  - the intro "Each flag's value for you. Change flags in PostHog.", and when `data.posthogFlagsUrl` is set, an "Open flags in PostHog" link (`href={data.posthogFlagsUrl}`, new tab, `rel="noopener noreferrer"`);
+  - when `data.source` is `'off'`, the line "PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused.";
+  - when it is `'defaults'`, the line "PostHog didn't answer, so every flag is off: nothing is rolled out or paused.";
+  - the note "Every flag is off unless PostHog turns it on. Pause something by raising its pause flag to 100%.";
+  - when every row's `rolloutPercent` is null, the note "Rollouts show once a PostHog personal API key is added.";
+  - a table with the caption "Feature flags for you" and these columns:
     - Flag (the key, in `font-mono`);
     - What it does (the description);
     - Kind ("Rollout" or "Pause");
     - In the browser ("Yes" or "No");
     - Value: "On" or "Off" for a rollout, "Paused" or "Not paused" for a pause flag;
+    - Rollout: `{rolloutPercent}%`, or "Not shown" when null;
     - In PostHog ("Yes", or "No, so off").
 - **`src/routes.tsx`:** import the page, and add after the `admin/catalog-orders/:id` route:
 
@@ -5347,13 +6247,15 @@ export function useAdminFlags(userId: string | null) {
 					},
 ```
 
-- [ ] **Step 5: Write `scripts/posthog-sync-flags.ts`**
+- [ ] **Step 6: Write `scripts/posthog-sync-flags.ts`**
+
+The production project already has all 11 flags, created by hand on 2026-10-19. The script is for a new project, such as a staging one, and for flags added to the registry later. The owner runs it with their own personal API key; it's never in CI.
 
 ```ts
 /**
  * Creates the registry's flags that a PostHog project lacks, every one at 0%: nothing rolled out, nothing paused.
  * Pausing means raising a pause flag to 100% in PostHog. Existing flags are never changed; edits happen in PostHog.
- * Run once per project:
+ * Run by the owner, once per new project or new flag, with their own personal API key:
  *   POSTHOG_PERSONAL_API_KEY=... POSTHOG_PROJECT_ID=... bun scripts/posthog-sync-flags.ts
  */
 
@@ -5390,7 +6292,7 @@ async function main(): Promise<void> {
 	for (const flag of flagsToCreate(existing)) {
 		const created = await fetch(flagsUrl, { method: 'POST', headers, body: JSON.stringify(flag) });
 		if (!created.ok) throw new Error(`Creating ${flag.key} failed: ${created.status} ${await created.text()}`);
-		console.log(`Created ${flag.key} at ${flag.filters.groups[0].rollout_percentage}%`);
+		console.log(`Created ${flag.key} at ${flag.filters.groups[0]?.rollout_percentage ?? 0}%`);
 	}
 	console.log(`Already in PostHog, left as they are: ${[...existing].filter(isFlagKey).join(', ') || 'none'}`);
 }
@@ -5404,24 +6306,24 @@ if (process.argv?.[1]?.endsWith('posthog-sync-flags.ts')) {
 }
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [ ] **Step 7: Run the tests to verify they pass**
 
-Run: `rtk proxy bun run test -- worker/api/controllers/telemetry scripts/posthog-sync-flags.test.ts src/routes/admin-flags-guard.test.ts`
+Run: `rtk proxy bun run test -- worker/services/posthog/flag-rollouts.test.ts worker/api/controllers/telemetry scripts/posthog-sync-flags.test.ts src/routes/admin-flags-guard.test.ts`
 Expected: PASS.
 
 Run: `bun run typecheck`
 Expected: no errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add worker/api/controllers/telemetry worker/api/routes/telemetryRoutes.ts src/routes/admin/flags.tsx src/routes.tsx src/routes/admin-flags-guard.test.ts src/hooks/use-telemetry.ts src/lib/api-client.ts src/lib/query-keys.ts scripts/posthog-sync-flags.ts scripts/posthog-sync-flags.test.ts
-git commit -m "feat(flags): a read-only flags page for admins and a script that creates missing flags in posthog
+git add worker/services/posthog/flag-rollouts.ts worker/services/posthog/flag-rollouts.test.ts worker/api/controllers/telemetry worker/api/routes/telemetryRoutes.ts src/routes/admin/flags.tsx src/routes.tsx src/routes/admin-flags-guard.test.ts src/hooks/use-telemetry.ts src/lib/api-client.ts src/lib/query-keys.ts scripts/posthog-sync-flags.ts scripts/posthog-sync-flags.test.ts
+git commit -m "feat(flags): a read-only flags page for admins, rollouts with an optional key, and a script that creates missing flags
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 16: The privacy policy
+### Task 17: The privacy policy
 
 **Files:**
 - Modify `src/content/legal/privacy.md`.
@@ -5429,22 +6331,26 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - **Consumes:** nothing.
-- **Produces:** the policy text below. It is exact copy, fixed by spec section 10. The version stays `2026-10-16`, so nobody is asked to agree again.
+- **Produces:** the policy text below. It is exact copy, fixed by spec section 10. The version stays as billing left it, so nobody is asked to agree again.
 
 - [ ] **Step 1: Write the failing test.** Add to `legal-documents.test.ts`:
 
 ```ts
-	it('names PostHog for analytics, says no email or name goes to it, and how to turn it off', () => {
+	it('names PostHog and Cloudflare Web Analytics, says no email or name goes to PostHog, and how to turn analytics off', () => {
 		const privacy = LEGAL_DOCUMENTS.privacy.body;
 		expect(privacy).toContain('**Usage information.**');
 		expect(privacy).toContain("We record layouts and clicks, not what's written on the page or what you type.");
 		expect(privacy).toContain('without the part of the address after a question mark');
-		expect(privacy).toContain('**PostHog** (hosted in the United States)');
+		expect(privacy).toContain('**Page view counts.**');
+		expect(privacy).toContain('Cloudflare Web Analytics counts page views');
+		expect(privacy).toContain('previews and stores served on estori.app addresses');
+		expect(privacy).toContain('**PostHog** (hosted in the United States): product analytics, session recordings and error reports');
 		expect(privacy).toContain("We don't send it your email address or name.");
+		expect(privacy).toContain('page view counts through Cloudflare Web Analytics, which uses no cookies');
 		expect(privacy).toContain("We use PostHog's analytics cookie and browser storage on estori.app");
 		expect(privacy).toContain("We don't use advertising cookies.");
 		expect(privacy).not.toContain("We don't use advertising or analytics cookies.");
-		expect(privacy).toContain("Stores built with Estori don't load Estori's analytics.");
+		expect(privacy).toContain("Stores built with Estori don't load PostHog.");
 		expect(privacy).toContain('You can turn analytics off at any time with the Analytics setting in Settings.');
 		expect(privacy).toContain('we still count the AI credits your builds use, without anything that identifies you');
 		expect(privacy).toContain('Global Privacy Control');
@@ -5462,13 +6368,17 @@ Expected: FAIL on the first missing phrase.
 2. **Section 1:** after the "**Site views.**" paragraph, add:
 
 ```markdown
-**Usage information.** On estori.app we collect the pages you view, without the part of the address after a question mark, where you click, your device and browser, your approximate location (country and region, from your IP address), errors the Service runs into, and recordings of some sessions. We record layouts and clicks, not what's written on the page or what you type. Recordings skip your orders, shopper emails, profile and payments setup, settings and billing, and admin pages, and they never show the preview of your store. We link this to your account by its id, never by your email address or name. Section 4 says how to turn it off.
+**Usage information.** On estori.app we collect the pages you view, without the part of the address after a question mark, where you click, your device and browser, your approximate location (country and region, from your IP address), errors the Service runs into, and recordings of some sessions. We record layouts and clicks, not what's written on the page or what you type, and recordings show no images. Recordings skip your orders, shopper emails, profile and payments setup, settings and billing, and admin pages, and they never show the preview of your store. We link this to your account by its id, never by your email address or name. Section 4 says how to turn it off.
+
+**Page view counts.** Cloudflare Web Analytics counts page views on Estori's pages, previews and stores served on estori.app addresses, with the page, the referring site, and the visitor's browser, device and country. It uses no cookies and doesn't identify visitors.
 ```
 
-3. **Section 3:** after the Cloudflare bullet, add:
+3. **Section 3:**
+   - in the Cloudflare bullet, change "and operational logs." to "operational logs, and page view counts through Cloudflare Web Analytics, which uses no cookies.";
+   - after the Cloudflare bullet, add:
 
 ```markdown
-- **PostHog** (hosted in the United States): product analytics, session recordings, error reports and feature flags for estori.app. PostHog receives the usage information in section 1, linked to your account's id. We don't send it your email address or name.
+- **PostHog** (hosted in the United States): product analytics, session recordings and error reports for estori.app, and the switches that turn parts of the Service on or pause them. PostHog receives the usage information in section 1, linked to your account's id. We don't send it your email address or name.
 ```
 
 4. **Section 4:**
@@ -5476,7 +6386,7 @@ Expected: FAIL on the first missing phrase.
    - replace the last sentence, "We don't use advertising or analytics cookies.", with:
 
 ```markdown
-We use PostHog's analytics cookie and browser storage on estori.app to measure how the Service is used, as section 1 describes. We don't use advertising cookies. To turn analytics off, use the Analytics setting in Settings, or turn on Global Privacy Control in your browser. Stores built with Estori don't load Estori's analytics.
+We use PostHog's analytics cookie and browser storage on estori.app to measure how the Service is used, as section 1 describes. Cloudflare Web Analytics uses no cookies. We don't use advertising cookies. To turn analytics off, use the Analytics setting in Settings, or turn on Global Privacy Control in your browser. Stores built with Estori don't load PostHog.
 ```
 
 5. **Section 6:** after "You can update your account information in Settings.", add:
@@ -5494,38 +6404,33 @@ Expected: PASS.
 
 ```bash
 git add src/content/legal/privacy.md src/content/legal/legal-documents.test.ts
-git commit -m "docs(legal): the privacy policy names posthog, what it gets, and how to turn analytics off
+git commit -m "docs(legal): the privacy policy names posthog and cloudflare web analytics, and how to turn analytics off
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 17: Local check, CI steps and pull request 1
+### Task 18: Local check, CI steps and pull request 1
 
 **Files:** none new. Fix whatever the checks find, each fix with its own failing test first.
 
 - [ ] **Step 1: Restart the dev server on port 8100.** Run it the way this checkout always runs it. Sign in to localhost with the test account from `.superpowers/realtest/local-accounts.md`. Never paste its password into chat.
 
-- [ ] **Step 2: Without a PostHog key** (the default):
-  - `curl -s localhost:8100/api/telemetry/config` answers `"posthog":null` and `"replayPaused":false`.
-  - The browser's network panel shows no request to `/ingest`. The app works as before: drafts, the catalog and checkout behave as on main, since nothing is paused.
+- [ ] **Step 2: Without a PostHog token** (the default):
+  - `curl -s localhost:8100/api/telemetry/config` answers `"replayPaused":false` and `"localProjectKey":null`.
+  - The browser's network panel shows no request to `/ingest`. The app works as before: drafts, the catalog, publishing, domains and checkout behave as on main, since nothing is paused.
   - Settings shows the Analytics card, and the switch saves. With the browser's GPC on, the card says so and the switch is disabled.
-  - `/admin/flags`, as the admin, says "PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused."
-  - **Billing's switches:** with `BILLING=on` in `.dev.vars`, `/admin/flags` shows `billing` on; with only your user id in `BILLING_USER_IDS`, it's on for you and off for another id.
-  - **Pausing drafts:** with `FEATURE_FLAG_OVERRIDES="store-drafts-paused=on"` in `.dev.vars` and the server restarted:
-    - a store with only Main shows no draft switcher;
-    - a store with more drafts shows the switcher without "New draft";
-    - `POST /api/stores/:id/drafts` answers 403.
-  - **Pausing the catalog:** with `catalog-paused=on`, the sidebar has no Catalog link, `/catalog` says "The catalog is paused", and the AI's catalog search answers that it is paused.
+  - `/admin/flags`, as the admin, lists 11 flags and says "PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused." Rollouts say "Not shown", and there's no PostHog link.
+  - **Billing's switches:** with `BILLING=on` in `.dev.vars`, `/admin/flags` shows `billing` on; with only your user id in `BILLING_USER_IDS`, it's on for you.
 
-- [ ] **Step 3: With the staging project's key** (only if the owner gave one):
-  1. Set `POSTHOG_PROJECT_KEY` in `.dev.vars`. Never print it, never paste it.
-  2. Restart.
-  3. Check:
-     - `/ingest/e/` and `/ingest/static/...` answer 200, `recorder.js` included;
-     - the request headers PostHog would see carry no cookie;
-     - a pageview and a sign-in appear in the staging project's activity, with `environment: dev`;
-     - opening `/reset-password?token=anything` sends a pageview whose `$current_url` ends at `/reset-password`.
-  4. Remove the key afterwards.
+- [ ] **Step 3: Each pause, through `FEATURE_FLAG_OVERRIDES`.** Set one pause at a time in `.dev.vars` (for example `FEATURE_FLAG_OVERRIDES="store-drafts-paused=on"`), restart, check, then remove it:
+  - **`store-drafts-paused`:** a store with only Main shows no draft switcher; a store with more drafts shows it without "New draft"; `POST /api/stores/:id/drafts` answers 503.
+  - **`catalog-paused`:** the sidebar has no Catalog link, `/catalog` says "The catalog is paused", and the AI's catalog search answers that it is paused.
+  - **`ai-builds-paused`:** a new message in the editor shows "Building is paused for a few minutes. Your stores keep working." as a popup, and starting a new store from the home page shows the same.
+  - **`signups-paused`:** signing up with a new email shows "Sign-ups are paused for a moment. Please try again soon."; signing in with the test account works.
+  - **`store-publishing-paused`:** the Go live panel's publish button is disabled with the pause note, and "Take offline" still works.
+  - **`custom-domains-paused`:** the Go live panel shows the pause note in place of the domain form.
+  - **`template-sales-paused`:** buying a paid template answers the pause message; starting from a free one works.
+  - **`billing-checkout-paused`,** with billing on: "Get Pro" answers the pause message, and "Manage billing" still opens.
 
 - [ ] **Step 4: The CI steps**
 
@@ -5559,68 +6464,75 @@ Expected: all pass. Report the shard totals.
      - what was built;
      - the spec's section 15 table, by link;
      - the owner steps, spec section 16;
-     - that nothing is sent and every flag is off until `POSTHOG_PROJECT_KEY` is set, and billing keeps `BILLING` and `BILLING_USER_IDS`;
+     - that production sends to project 675096 once deployed, and staging and local development send nothing and evaluate every flag off;
+     - that billing keeps `BILLING` and `BILLING_USER_IDS`;
      - the local check results and the test totals.
   3. End the description with "Generated with [Claude Code](https://claude.com/claude-code)".
-  4. Don't merge.
+  4. Don't merge. Task 19's localhost part runs before the owner merges.
 
-### Task 18: Staging verification
+### Task 19: Localhost verification, then a production smoke check
 
-**Preconditions:**
-- Pull request 1 is merged, so main deployed to staging.
-- The owner finished spec section 16 steps 1–7 for the staging project, including the flag sync and the session replay trigger groups.
+**Part 1 runs before pull request 1 merges,** on `feat/posthog` on localhost, opted in with the production token. Local events reach project 675096 as test traffic: the test-account filter hides them from every insight. The flag steps change production flags, which production ignores until it runs this code, so finish Part 1 before the owner deploys.
+
+**Part 2 runs after the owner merges and deploys production.**
 
 **Files:** none. Record each result for pull request 2's description. A failure gets a fix with a failing test first, in its own pull request.
 
-- [ ] **Step 1: Events.** Unlock `https://staging.estori.app` with the staging key. With the owner, in a fresh browser profile:
-  1. Sign up with a new address on the allowlisted domain.
-  2. Start a store.
-  3. Publish it.
-  4. In the staging project's activity, check that each of these arrives with the new user's id and `environment: staging`:
-     - `$pageview`s;
+- [ ] **Step 1: Opt in.** The token is public, so it can be written here. Append it to `.dev.vars` without reading the file, then restart the dev server:
+
+```bash
+printf '\nPOSTHOG_PROJECT_KEY="phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC"\n' >> .dev.vars
+```
+
+Then `curl -s localhost:8100/api/telemetry/config` answers `"localProjectKey":"phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC"`.
+
+- [ ] **Step 2: Events as test traffic.** In a fresh browser profile on localhost:
+  1. Check `/ingest/static/array.js` and `recorder.js` answer 200, and that no request to PostHog carries a cookie.
+  2. Sign up with a new address, start a store and publish it.
+  3. In the project's activity, with "Filter out internal and test users" off, check each of these arrives with the new user's id and `environment: dev`:
+     - `$pageview`s, with `$host` `localhost:8100`;
      - `account_created`, with `method: password`;
-     - `build_started` and `build_finished`, with `credits_used` above 0 and `steps`;
+     - `build_started` and `build_finished`, with `steps`, and `credits_used` above 0 when billing charges the step;
      - `store_published`, with `first_publish: true`.
-  5. Open the person: `plan`, `tier`, `seller_level`, `has_live_store` and `signup_date` are set, and there is no email or name.
-  6. Every event's `$current_url` has no query. Open `/chat/new?query=test` and check its pageview ends at `/chat/new`.
-  7. **Billing,** when billing is on for the test account on staging:
-     - buy Premium tier 1 in Stripe test mode: one `subscription_started` with `tier: 1`, and the person's `plan` becomes `premium`;
-     - resend the checkout event from the Stripe Dashboard: no second `subscription_started`.
+  4. Turn the filter on: every one of them disappears. If browser events with `localhost:8100` stay, the filter matches the host exactly. Report it: the filter needs `$host` to match the regex `^(localhost|127\.0\.0\.1)(:\d+)?$`, a change in PostHog's project settings.
+  5. Open the person: `plan`, `seller_level`, `has_live_store` and `signup_date` are set, with no email and no name.
+  6. Open `/reset-password?token=anything` and `/chat/new?query=test`: their pageviews end at `/reset-password` and `/chat/new`.
+  7. No replay is recorded: both trigger groups match `https://estori.app/` only.
+  8. Run `setTimeout(() => { throw new Error('posthog local check') })` in the console: the `$exception` arrives.
+  9. **Billing,** when billing and Stripe test mode run locally (the local Stripe listener): buy Pro, and one `subscription_started` with `plan: pro` arrives. Resend the event with the Stripe CLI, and no second one arrives.
 
-- [ ] **Step 2: Replay.**
-  1. Raise the 20% trigger group to 100% for this check.
-  2. Type into the build box, chat with the AI, open Orders, then open Settings.
-  3. The replay shows layouts and clicks only:
-     - no page text and no typed text;
-     - the preview is a blocked box;
-     - nothing from `/orders` or `/settings`.
-  4. In the replay's page addresses there's no query.
-  5. Put the group back to 20%.
+- [ ] **Step 3: Flags toggled in PostHog, seen locally.** In project 675096's feature flags:
+  1. Raise `catalog-paused` to 100%. Within a minute, after a reload, the Catalog link is gone and `/catalog` says it is paused.
+  2. Disable the flag, not just lower it. Within a minute the catalog is back: a disabled flag pauses nothing.
+  3. Raise `ai-builds-paused` to 100%: a new message shows the pause popup. A turn already running finishes.
+  4. Put both back to active at 0%, and check all 11 flags are active at 0%.
+  5. `/admin/flags` shows `source: posthog` values and the "Open flags in PostHog" link.
 
-- [ ] **Step 3: Errors.**
-  1. In the browser console on staging, run `setTimeout(() => { throw new Error('posthog staging check') })`. The exception arrives in error tracking, its stack pointing at a source file name from `src/`, not a minified chunk.
-  2. In the Cloudflare dashboard, open `estori-staging`'s Workers Logs and filter to `level: error` since the deploy. Each distinct error has a `$exception` in PostHog with the same `component`, at most one a minute. If no error was logged, record "no Worker error observed"; Task 4's tests cover the path.
-
-- [ ] **Step 4: A pause flag.**
-  1. Raise `catalog-paused` to 100% in the staging project.
-  2. Within a minute, after a reload, the Catalog link is gone, `/catalog` says it is paused, and the AI's catalog search answers paused.
-  3. Disable the flag in PostHog, not just lower it. Within a minute the catalog is back: a disabled flag pauses nothing.
-  4. Put it back to active at 0%.
-
-- [ ] **Step 5: An alert.**
-  1. In the "Heartbeat missing" alert, raise the threshold to "less than 100".
-  2. Wait for its next hourly check. The owner gets the email.
-  3. Put it back to 2.
-
-- [ ] **Step 6: The setting.**
+- [ ] **Step 4: The setting.**
   1. Turn analytics off in Settings.
   2. Ask the AI for a change, then publish again.
   3. No new event arrives for that user, from the browser or the server.
   4. The one exception: `build_finished` arrives under `opted-out` with only `credits_used`, and no person.
 
-### Task 19: Remove Sentry (pull request 2)
+- [ ] **Step 5: Opt out again.** Remove the line without reading the file, then restart:
 
-**Preconditions:** Task 18 passed. Branch `chore/remove-sentry` from main.
+```bash
+sed -i '' '/^POSTHOG_PROJECT_KEY="phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC"$/d' .dev.vars
+```
+
+- [ ] **Step 6: Production smoke check,** after the owner deploys. Use the owner's signed-in browser.
+  1. `https://estori.app/ingest/static/array.js` answers 200.
+  2. A `$pageview` from `estori.app` arrives in project 675096 with `environment: prod`, with the test-account filter on.
+  3. Signing in sends `signed_in`, and the person has `plan`.
+  4. A `$web_vitals` event arrives after a page load.
+  5. Within 15 minutes a `heartbeat` arrives with `healthy: true`.
+  6. `/admin/flags` shows 11 flags with `source: posthog`, every one off, and the PostHog link.
+  7. `curl -sI https://estori.app/assets/<any JS file>.map` answers 404: no source map is served.
+  8. Any replay recorded shows layouts and clicks only: no page text, no typed text, no images, and the preview as a blocked box.
+
+### Task 20: Remove Sentry (pull request 2)
+
+**Preconditions:** both parts of Task 19 passed: the localhost verification and the production smoke check. Branch `chore/remove-sentry` from main.
 
 **Files:**
 - **Delete:**
@@ -5769,7 +6681,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 Run: `rtk proxy bun run test -- worker/services/posthog worker/services/csrf worker/services/rate-limit worker/database worker/logger`
 Expected: PASS.
 
-Then run the CI steps from Task 17 Step 4. Expected: all pass.
+Then run the CI steps from Task 18 Step 4. Expected: all pass.
 
 - [ ] **Step 5: Commit**
 
@@ -5781,6 +6693,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 - [ ] **Step 6: Open pull request 2 into `main`.**
-  - The description lists what was removed and Task 18's results, one line each.
+  - The description lists what was removed and Task 19's results, one line each.
   - End it with "Generated with [Claude Code](https://claude.com/claude-code)".
   - Don't merge.

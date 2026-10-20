@@ -2,52 +2,42 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Sellers buy Premium by card and manage it from Estori. Every plan's limits live in one shared table and are enforced where they matter. Estori's records and emails follow Stripe.
+**Goal:** Sellers buy Pro or Premium by card and manage it from Estori, Premium sellers buy extra credits, every AI step is charged from its real cost, and every plan's limits live in one shared table, enforced where they matter.
 
 **Architecture:**
-- **One limits table.** `shared/types/plans.ts` holds `PLAN_LIMITS`, the pure `limitsFor` and `assertWithinLimit`, and the `plan_limit` refusal. The Worker, the pricing page and the AI's tools all read it.
-- **The account's plan** comes from D1: the `subscriptions` row (Stripe's state), the 7-day grace, the latest `plan_overrides` row and this period's `credit_grants`. Basic's numbers and the per-user KV overrides still come from the live configuration. `loadAccount(env, userId)` puts it together.
-- **Stripe is the source of truth.** The webhook re-reads the subscription from Stripe's API on every billing event. It records the event, the rebuilt row and the notices to send in one D1 batch. A daily job re-reads suspicious rows the same way. Billing API calls only ask Stripe for changes; the page polls until the webhook lands.
-- **Credits** stay counted per step in `DORateLimitStore`. Basic keeps today's daily bucket. Premium and Enterprise get one bucket per billing period, keyed by its start. One plan check runs before every turn and every new store.
-- **Everything new is behind the `billing` flag** (`BILLING=on`, or `BILLING_USER_IDS`). With the flag off, `limitsFor` returns today's Basic and no new limit is enforced.
+- **One limits table.** `shared/types/plans.ts` holds the plans, their prices, `PLAN_LIMITS`, the pure `limitsFor` and `assertWithinLimit`, and the `plan_limit` refusal. The Worker, the pricing page and the AI's tools all read it.
+- **Credits follow real cost.** The Think model table carries each model's list prices. After every step, ThinkAgent turns the step's reported tokens into credits with `stepCredits`: ceil(cost × 1.5 ÷ $0.001), in integer arithmetic.
+- **A D1 credit ledger.** `credit_periods` (pool, grants, credits used, overrun settled), `credit_uses` (one row per charged step, keyed, so a retry charges nothing) and `credit_purchases`. Every write is one D1 batch. The balance is computed from rows, so it's exact and survives restarts. A daily run settles overruns against purchases (oldest first), closes ended periods and expires purchases.
+- **The account's plan** comes from D1: the `subscriptions` row (Stripe's state), the 7-day grace, and the latest `plan_overrides` row. Its period is the Stripe period, or monthly from the sign-up date. `loadAccount(env, userId)` puts it together.
+- **Stripe is the source of truth.** The webhook re-reads subscriptions and extra-credit sessions from Stripe's API, then records the event, the rebuilt row or purchase, and the notices to send in one D1 batch. Billing API calls only ask Stripe for changes; the page polls until the webhook lands.
+- **Everything new is behind the `billing` flag** (`BILLING=on`, or `BILLING_USER_IDS`). With the flag off, nothing new is enforced and steps are counted exactly as today.
 
-**Tech Stack:** Cloudflare Workers, D1 with drizzle, Durable Objects (`DORateLimitStore`, `ThinkAgent`, SpaceDO), the Stripe REST API `2026-03-25.dahlia` over fetch (no SDK), Hono, React 19, TanStack Query, vitest-pool-workers.
+**Tech Stack:** Cloudflare Workers, D1 with drizzle, Durable Objects (`DORateLimitStore`, `ThinkAgent`, SpaceDO), the AI SDK step usage from `@cloudflare/think`, the Stripe REST API `2026-03-25.dahlia` over fetch (no SDK), Hono, React 19, TanStack Query, vitest-pool-workers.
 
-**Spec:** `docs/superpowers/specs/2026-10-19-billing-subscriptions-design.md`
+**Spec:** `docs/superpowers/specs/2026-10-19-billing-subscriptions-design.md` (approved by the owner with corrections on 2026-10-19)
 
 ## Rulings against the spec
 
-Each keeps the spec's intent. Each gets a `Ruling:` line in the ledger at Task 1.
-
-1. **Rows are rebuilt from the subscription as Stripe's API returns it, not from the copy inside the event.**
-   - **Why:** event payloads use the webhook endpoint's API version, and since `2025-03-31.basil` the period fields moved to `items.data[]` and an invoice's subscription moved to `parent.subscription_details`. Invoice events carry no subscription at all. The store webhook already re-reads sessions through the API for the same reason. A fresh read also converges on Stripe's latest state whatever order events arrive in.
-   - **Cost if wrong:** one Stripe read per billing event. While Stripe is unreachable the webhook answers 500 and Stripe retries.
-2. **The webhook also handles `subscription_schedule.created`, `.updated`, `.released` and `.canceled`.** Owner step 5 gains these four events.
-   - **Why:** a downgrade is a schedule. Stripe may not send `customer.subscription.updated` when a schedule is attached or released, so without these events the page would never show, or clear, a pending downgrade.
-   - **Cost if wrong:** four more event types that each cost one Stripe read.
-3. **Scenario 6 (3-D Secure at checkout) is a by-eye step, not part of `scripts/stripe-billing-scenarios.ts`.**
-   - **Why:** it needs Stripe's hosted Checkout page in a browser. Test clocks also attach only to customers created with them, so the script links a test-clock customer to the test account through a test-mode-only admin endpoint (Task 11). It reads the plan "at" the clock's time through the admin billing read, because Estori's own clock doesn't move with the test clock.
-   - **Cost if wrong:** 3-D Secure at checkout needs a person before each release. The other eight scenarios run unattended.
+None. The three rulings of the first draft are now part of the spec:
+- subscription rows are rebuilt from Stripe's API, not from the event's copy (section 4);
+- the webhook handles the four `subscription_schedule` events (section 4 and owner step 5);
+- 3-D Secure at checkout is a by-eye scenario (section 12).
 
 ## Choices the spec leaves open
 
-Made here, one line each. Task 1's ledger records them too.
+Made here, one line each. Task 1's ledger records them.
 
-1. **Monthly pools without a subscription** (Enterprise, or a comp with no paid subscription) run on the UTC calendar month.
-2. **Enterprise without custom limits** starts at Premium's largest numbers: 200,000 credits, 25 new stores a day, 10 live stores, a domain per live store, the catalog.
-3. **Per-user KV credit overrides** (`user_config:<id>` `llmCalls`) apply only to a daily allowance. A monthly pool ignores them. New-store overrides apply on every plan.
-4. **Upgrades use `payment_behavior: 'error_if_incomplete'`.** A declined card refuses the upgrade with a message, so nothing changes until Stripe has the money.
-5. **Cancelling a pending downgrade** is choosing the current pool again on the billing page. It releases the schedule.
-6. **Cancelling with a pending downgrade** releases the schedule first.
-7. **Every billing email is deduped through `billing_notices`**, not just the credit warnings. Keys: one per subscription, invoice or period, as Task 7 lists.
-8. **"Premium ending"** is sent when the cancel is recorded and names the last day. **"Premium ended"** is sent when the subscription is deleted.
-9. **The payment-failed email** is sent once per invoice, not once per retry.
-10. **The grace period** ends 7 days after the start of the period whose renewal failed: `current_period_start + 7 days`.
-11. **A $0 invoice** (a full promotion code) sends no receipt.
-12. **A second live subscription for one account** (two checkouts in two tabs) is refused, and an alert tells the team to refund it. The first one stays.
-13. **`subscriptions` gains two columns** beyond the spec's list: `stripe_schedule_id`, so a pending downgrade can be released, and `stripe_created_at`, so a newer subscription can replace an ended one.
-14. **The enforcement notice** goes to every account that has at least one app. An admin endpoint sends it in batches, and `scripts/billing-enforcement-notice.ts` drives the batches.
-15. **Task order:** emails (Task 5) come before the billing API and the webhook, which send them. The shared Upgrade dialog arrives with credits (Task 8), its first user.
+1. **Ledger keys.** A period is keyed `sub:{subscriptionId}:{startSeconds}` for a subscription and `acct:{startSeconds}` otherwise, so a Basic month and a Stripe period that start on the same second never share a row. A step is keyed `{agent name}:{turn id}:{step number}`.
+2. **Settling is compare-and-set.** One batch reads the unclosed periods and valid purchases; a second writes each changed row only if it still holds the value read. Two runs can't take the same overrun twice.
+3. **Alerts read the full balance only when the pool is low.** Credits left over credits available can't fall to 20% while the pool alone is above 20%, so most steps skip the extra read.
+4. **The older `infer` calls** charge `ceil(creditCost × 17)` credits a call, because Sonnet's old flat 8 matches its typical 136. They charge before the call, as today, and don't refuse.
+5. **Steps are recorded with up to 3 tries**, with the same key, so a passing D1 error neither loses nor doubles a step.
+6. **The lifetime store counter** is reserved with one conditional `UPDATE … RETURNING`, so two starts can't both take Basic's last place. The migration backfills it from today's apps.
+7. **Billing-off accounts** keep today's metering (`enforceLLMCallsRateLimit` with the model's flat `creditCost` into the daily Durable Object counter).
+8. **ThinkAgent exposes `turnCreditsUsed()`** (the sum of the turn's charged credits), for the PostHog change's `build_finished.credits_used`.
+9. **Task order:** emails (Task 7) come before the billing API and the webhook, which send them. The shared Upgrade dialog arrives with credits (Task 10), its first user.
+10. **Test clocks need a linked customer.** Checkout can't put a customer on a test clock, so the scenarios script makes one and links it through a test-mode-only admin endpoint (Task 13).
+11. **The enforcement notice goes out from the hourly run,** 100 accounts an hour, from `BILLING_ENFORCEMENT_FROM` until that day. Only the Worker can send through the Email binding (Task 15).
 
 ## Global Constraints
 
@@ -55,26 +45,43 @@ Made here, one line each. Task 1's ledger records them too.
 - **Anti-goals (spec section 1):**
   - a downgrade or a failed card never takes a live store offline, stops its checkout, or removes its domain;
   - Estori's records follow Stripe: no row changes until Stripe confirms;
-  - no overage billing and no automatic tier jumps.
-- **Plans:** `{ plan: 'basic' | 'premium' | 'enterprise', tier: 1 | 2 | 3 | 4 | null }`. Tiers: 20,000 credits for $99, 50,000 for $199, 100,000 for $349, 200,000 for $599, billed monthly.
+  - nothing is billed after the fact; extra credits are bought upfront, and plans never change by themselves.
+- **Plans:** `plan: 'basic' | 'pro' | 'premium' | 'enterprise'`, no tiers. Pro is $49 and Premium $199 a month.
 - **Limits (spec section 3):**
-  - **Basic:** credits and new stores a day come from the live configuration (200 and 3 by default); 1 live store; no own domains; no supplier catalog.
-  - **Premium:** the tier's monthly pool; 25 new stores a day; 10 live stores; 1 own domain per live store; the catalog.
-  - **Enterprise:** set per account.
+  - **Basic:** 5,000 credits a month; 3 stores in the account's lifetime; 1 live store; no own domains; no catalog; no extra credits.
+  - **Pro:** 20,000 credits; 10 new stores a day; 3 live stores; 1 own domain per live store; the catalog.
+  - **Premium:** 100,000 credits; 25 new stores a day; 10 live stores; 1 own domain per live store; the catalog; extra credits.
+  - **Enterprise:** per account, starting at Premium's numbers.
   - **Drafts:** 5 per store on every plan.
-- **Limits are worked out in this order, later steps winning:** the plan's row; the tier's pool; the per-user KV overrides; the admin plan override. Grants add to the credit limit last.
-- **Grace:** `past_due` stays Premium for 7 days, then Basic while Stripe keeps retrying. A successful payment restores Premium.
-- **Prices come only from `STRIPE_PREMIUM_PRICE_IDS`** (JSON, tier to price id), never from the browser. Every Stripe call goes through `createStripeClient`, which pins `Stripe-Version: 2026-03-25.dahlia`.
-- **Billing emails** come from Estori through `createEmailSender`, so staging's "[Staging] " prefix and recipient allowlist apply. Stripe's own customer emails stay off.
-- **Flag:** `BILLING=on` turns billing on for everyone. `BILLING_USER_IDS` (comma-separated) turns it on for those accounts while `BILLING` isn't `on`. With the flag off, nothing new is enforced and the pricing page keeps "coming soon".
+- **Limits are worked out in this order, later steps winning:** the plan's row, then the admin plan override. Grants add to the period's credits.
+- **Credits:**
+  - a step costs `ceil(list-price cost × 1.5 ÷ $0.001)`, from its reported input, output (reasoning included) and cache tokens;
+  - list prices per 1M tokens: Sonnet 5.5 $2 in, $10 out; Opus 5.5 $4, $20; Gemini 3.6 and 3.8 Flash $0.75, $3.75;
+  - typical steps: Sonnet 136, Opus 445, Flash 16 credits, shown as "about N credits per step";
+  - credits are used in this order: pool and grants, then purchases, oldest first;
+  - a turn needs some credit left to start; a started turn always finishes, and all its usage is recorded.
+- **Extra credits:** Premium only; $1.50 per 1,000; 5,000 to 1,000,000 in steps of 1,000; they carry over and expire 12 months after purchase.
+- **Periods:** Pro and Premium follow the Stripe period. Basic, and Enterprise without a subscription, run monthly from the sign-up date in UTC, clamped to the month's last day.
+- **Grace:** `past_due` keeps the plan for 7 days, then Basic while Stripe keeps retrying. A successful payment restores it.
+- **Prices come only from `STRIPE_PRICE_IDS`** (JSON `{ pro, premium, credits }`), never from the browser. Every Stripe call goes through `createStripeClient`, which pins `Stripe-Version: 2026-03-25.dahlia`.
+- **Billing emails** come from Estori through `createEmailSender`, so staging's "[Staging] " prefix and recipient allowlist apply. Running out of credits sends no email.
+- **Flag:** `BILLING=on` turns billing on for everyone. `BILLING_USER_IDS` (comma-separated) turns it on for those accounts while `BILLING` isn't `on`. With the flag off, nothing new is enforced, KV rate-limit overrides still apply, and the pricing page keeps "coming soon" on Pro and Premium.
+- **No analytics here.** Billing ships before PostHog and sends nothing. The PostHog change adds billing's events (spec section 11) at these points, after `billing_events` records the Stripe event:
+  - `applySubscription` (Task 9), for the subscription events;
+  - `applyCreditPurchase` (Task 9), for `credits_purchased`;
+  - `noticeCreditUse` (Task 10), for `credits_low`;
+  - the refusal from `checkCreditsBeforeTurn` (Task 10), for `credits_limit_reached`.
 - **Refusals** are HTTP 402 with `error: { code: 'plan_limit', planLimit: { code, limit, plan, upgradeTo, message } }`. Over WebSocket they are `{ type: 'error', code: 'PLAN_LIMIT', planLimit }`. Their copy is built once, in `assertWithinLimit`.
 - **Seller copy:**
   - follows `src/routes/copy-rules.ts`, so no supplier or AI assistant names (saying "the AI" is fine);
-  - says "AI credits", "credit pool", "Premium", "Basic";
-  - never says "subscription schedule" or "proration".
+  - says "AI credits", "extra credits", "Pro", "Premium", "Basic";
+  - never says "subscription schedule", "proration" or "tokens".
 - **Admin endpoints** use `AuthConfig.admin` (`isPlatformAdmin`) and write an `audit_logs` row in the same batch as their change.
 - **Migrations:** one drizzle migration, generated with `bun run db:generate -- --name billing`. It takes the next free number (0029 on this branch, unless another branch merged one first).
-- **Never read `.dev.vars`.** To try billing locally, the person running it adds `BILLING`, `STRIPE_PREMIUM_PRICE_IDS` and the test keys there themselves.
+- **Never read `.dev.vars`.** To try billing locally, the person running it adds `BILLING`, `STRIPE_PRICE_IDS` and the test keys there themselves.
+- **Branch:** work on `feat/billing`.
+  - Cut it from `main` once store drafts (PR #25) has merged. Tasks 1 and 11 build on its drafts code (`shared/types/drafts.ts`, SpaceDO's `publishDraft`).
+  - Until then, cut it from `feat/store-drafts`, and rebase onto `main` after #25 merges.
 - **Commits:** subjects are lowercase after the type. Every commit ends with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 - **Never commit:**
   - `.dev.vars` or `bun.lockb`;
@@ -84,43 +91,44 @@ Made here, one line each. Task 1's ledger records them too.
 - **Tests:**
   - Run from the repo root, as `rtk proxy bun run test -- <files>`.
   - Run a few files at a time: many files at once exhausts ports.
+  - Each test's D1 writes roll back after it; shared rows go in `beforeAll`.
   - Type-check with `bun run typecheck`.
 - **Before the PR:** `npx eslint .`, `bun run typecheck`, `bun run build`, `bun run bundle:check`, and `bun run test` (sharded).
 - **Don't merge the PR.** The owner merges.
 
 ## Review Focus
 
-1. **Webhook deliveries that repeat, arrive out of order, or come from another subscription.** This covers a retry, `updated` before `created`, a late event from an ended subscription, and a second paid subscription from two checkout tabs.
+1. **The credit ledger under retries and concurrency.** Cases: a step recorded twice, two stores building at once for one account, two settling runs, a purchase expiring mid-period, a refund after part of a purchase was used.
+   - **Expect:**
+     - the balance is exact to the credit;
+     - no overrun is taken twice;
+     - an expiring purchase pays for usage before its expiry;
+     - a refund removes only unused credits.
+   - **Guarded by:** the ledger tests in Task 4.
+2. **Webhook deliveries that repeat, arrive out of order, or come from another subscription.** This covers a retry, `updated` before `created`, a late event from an ended subscription, a second paid subscription from two checkout tabs, and a repeated extra-credit session.
    - **Expect:**
      - the row ends at Stripe's latest state;
-     - each email goes once;
-     - a late event from an ended subscription changes nothing;
+     - each purchase and each email is recorded once;
      - a second live subscription is refused and alerted, and the first is kept.
-   - **Guarded by:** the duplicate, out-of-order, late-event and second-subscription tests in Task 7.
-2. **An account over its plan after a downgrade or a failed card,** for example 3 live stores on Basic with catalog products in them.
+   - **Guarded by:** the webhook tests in Task 9.
+3. **An account over its plan after a downgrade or a failed card,** for example 3 live stores and 12 stores on Basic, with catalog products live.
    - **Expect:**
-     - every store keeps serving;
-     - republishing a live store always works, including its existing catalog products;
+     - every store keeps serving, and republishing a live store always works;
      - publishing a store that isn't live is refused;
+     - starting a store is refused;
      - a version that adds a new catalog product is refused.
-   - **Guarded by:** the republish, new-store and catalog tests in Task 9.
-3. **Credits at the boundary.** Cases: a turn that starts just under the limit, the next turn, many steps past 80%, and a ThinkAgent restart mid-period.
+   - **Guarded by:** the store and publish tests in Task 11.
+4. **Periods and the grace clock.** Cases: a Basic account made on January 31, the renewal emails, day 6 and day 8 of a failed renewal, and a payment on day 9.
    - **Expect:**
-     - the started turn finishes;
-     - the next turn is refused;
-     - each warning email goes once per period.
-   - **Guarded by:** the meter tests in Task 3 and the notice tests in Task 8.
-4. **The grace clock.** Cases: day 6 and day 8 of a failed renewal, a payment on day 9, and a tier change while `past_due`.
-   - **Expect:**
-     - Premium on day 6, Basic on day 8;
-     - Premium again as soon as the payment lands;
-     - the tier change refused with "Update your card".
-   - **Guarded by:** the grace tests in Task 3 and Task 7, and the past-due refusal in Task 6.
+     - Basic renews on February 28, then March 31;
+     - one renewal email per period;
+     - the plan on day 6, Basic on day 8, the plan again once paid.
+   - **Guarded by:** the period tests in Task 5 and the jobs and grace tests in Task 9.
 5. **The flag.** Cases: `BILLING` off with or without the account in `BILLING_USER_IDS`, spaces and empty entries in the list, and signed-out visitors.
    - **Expect:**
-     - accounts outside the flag see exactly today's behavior: no new refusals, the same credit bucket, "coming soon" on pricing;
+     - accounts outside the flag see exactly today's behavior: no new refusals, today's daily counter, "coming soon" on pricing;
      - accounts inside it see billing.
-   - **Guarded by:** the flag tests in Task 3, the flag-off WebSocket test in Task 8, the flag-off publish test in Task 9, and the pricing guard in Task 10.
+   - **Guarded by:** the flag tests in Task 5, the flag-off tests in Tasks 10 and 11, and the pricing guard in Task 12.
 
 ---
 
@@ -131,38 +139,39 @@ Made here, one line each. Task 1's ledger records them too.
 - Modify:
   - `shared/types/drafts.ts` (add `DRAFT_LIMIT`);
   - `src/api-types.ts` (re-export);
-  - `src/lib/plans.ts`;
-  - `src/components/pricing/PlanCards.tsx`.
+  - `src/lib/plans.ts`.
 - Test:
   - `shared/types/plans.test.ts`;
-  - `src/lib/plans.test.ts`;
-  - `src/routes/pricing-guard.test.ts`.
+  - `src/lib/plans.test.ts`.
 
 **Interfaces:**
-- **Consumes:** `DRAFT_LIMIT` (added here).
+- **Consumes:** nothing.
 - **Produces** (all from `shared/types/plans.ts`, re-exported through `@/api-types`):
   - constants:
-    - `PLAN_IDS`, `PREMIUM_TIER_NUMBERS`, `PREMIUM_TIERS`, `PLAN_LIMITS`;
+    - `PLAN_IDS = ['basic', 'pro', 'premium', 'enterprise']`, `PAID_PLAN_IDS = ['pro', 'premium']`;
+    - `PLAN_PRICES_CENTS: Record<PaidPlanId, number>`;
+    - `PLAN_LIMITS: Record<PlanId, PlanLimits>`;
+    - `EXTRA_CREDITS = { creditsPerUnit: 1_000, unitPriceCents: 150, minCredits: 5_000, maxCredits: 1_000_000, monthsValid: 12 }`;
     - `PLAN_LIMIT_CODE = 'plan_limit'`, `GRACE_PERIOD_DAYS = 7`.
   - types:
-    - `PlanId`, `PremiumTierNumber`, `PremiumTier { tier; credits; priceCents }`;
-    - `CreditsWindow = 'day' | 'period'`;
-    - `PlanLimits { aiCredits: number; aiCreditsWindow: CreditsWindow; newStoresPerDay: number; liveStores: number | null; ownDomainsPerLiveStore: number; supplierCatalog: boolean; draftsPerStore: number }`;
-    - `PlanLimitKey = 'aiCredits' | 'newStoresPerDay' | 'liveStores' | 'ownDomainsPerLiveStore' | 'supplierCatalog'`;
+    - `PlanId`, `PaidPlanId`;
+    - `PlanLimits { aiCredits: number; storesLifetime: number | null; newStoresPerDay: number | null; liveStores: number | null; ownDomainsPerLiveStore: number; supplierCatalog: boolean; extraCredits: boolean; draftsPerStore: number }` (null means no limit);
+    - `PlanLimitKey = 'aiCredits' | 'storesLifetime' | 'newStoresPerDay' | 'liveStores' | 'ownDomainsPerLiveStore' | 'supplierCatalog' | 'extraCredits'`;
     - `PlanLimitOverrides` (the admin's partial limits);
-    - `PlanAccountInput`;
-    - `PlanAccount { billing: boolean; plan: PlanId; tier: PremiumTierNumber | null; limits: PlanLimits; creditsResetAt: number }`;
-    - `PlanLimitRefusal { code: 'plan_limit'; limit: PlanLimitKey; plan: PlanId; upgradeTo: 'premium' | 'enterprise' | null; message: string }`.
+    - `PlanAccountInput { billing: boolean; plan: PlanId; adminLimits: PlanLimitOverrides | null }`;
+    - `PlanAccount { billing: boolean; plan: PlanId; limits: PlanLimits; creditsResetAt: number }`;
+    - `PlanLimitRefusal { code: 'plan_limit'; limit: PlanLimitKey; plan: PlanId; upgradeTo: 'pro' | 'premium' | 'enterprise' | 'credits' | null; message: string }`.
   - functions:
-    - `premiumTier(tier): PremiumTier`, `isPremiumTierNumber(value: unknown): value is PremiumTierNumber`;
+    - `isPaidPlanId(value: unknown): value is PaidPlanId`, `planName(plan: PlanId): string`;
+    - `extraCreditsPriceCents(credits: number): number`, `isExtraCreditsAmount(value: unknown): value is number`;
     - `limitsFor(input: PlanAccountInput): PlanLimits`;
-    - `assertWithinLimit(account: PlanAccount, key: PlanLimitKey, current?: number): PlanLimitRefusal | null`;
+    - `assertWithinLimit(account: PlanAccount, key: PlanLimitKey, current?: number): PlanLimitRefusal | null`. For `aiCredits`, `current` is the pool minus the credits left, so it refuses once nothing is left.
     - `isPlanLimitRefusal(value: unknown): value is PlanLimitRefusal`;
     - `planLimitOverridesFrom(value: unknown): PlanLimitOverrides | null`;
     - `formatBillingDate(ms: number): string` ("November 19", UTC);
-    - `formatUsd(cents: number): string` (moved here from `src/lib/plans.ts`, which re-exports it).
+    - `formatUsd(cents: number): string`, `formatCredits(credits: number): string`. Both move here from `src/lib/plans.ts`, which re-exports them.
 
-- [ ] **Step 1: Ledger the rulings and choices.** Write the three rulings from "Rulings against the spec" and the fifteen choices from "Choices the spec leaves open" into the ledger, one `Ruling:` or `Choice:` line each.
+- [ ] **Step 1: Ledger the choices.** Write the eleven choices from "Choices the spec leaves open" into the ledger, one `Choice:` line each.
 
 - [ ] **Step 2: Write the failing test** `shared/types/plans.test.ts`:
 
@@ -170,139 +179,112 @@ Made here, one line each. Task 1's ledger records them too.
 import { describe, expect, it } from 'vitest';
 import { DRAFT_LIMIT } from './drafts';
 import {
+	EXTRA_CREDITS,
 	PLAN_LIMITS,
-	PREMIUM_TIERS,
+	PLAN_PRICES_CENTS,
 	assertWithinLimit,
+	extraCreditsPriceCents,
 	formatBillingDate,
+	isExtraCreditsAmount,
 	isPlanLimitRefusal,
 	limitsFor,
 	planLimitOverridesFrom,
-	premiumTier,
 	type PlanAccount,
 	type PlanAccountInput,
 } from './plans';
 
-const RENEWAL = Date.UTC(2026, 10, 19);
-
-function input(overrides: Partial<PlanAccountInput> = {}): PlanAccountInput {
-	return { billing: true, plan: 'basic', tier: null, basic: { aiCreditsPerDay: 200, newStoresPerDay: 3 }, userOverrides: {}, adminLimits: null, grantedCredits: 0, ...overrides };
-}
+const RESET = Date.UTC(2026, 10, 19);
 
 function account(overrides: Partial<PlanAccountInput> = {}): PlanAccount {
-	const values = input(overrides);
-	return { billing: values.billing, plan: values.plan, tier: values.tier, limits: limitsFor(values), creditsResetAt: RENEWAL };
+	const input: PlanAccountInput = { billing: true, plan: 'basic', adminLimits: null, ...overrides };
+	return { billing: input.billing, plan: input.plan, limits: limitsFor(input), creditsResetAt: RESET };
 }
 
+const PREMIUM_ROW = { aiCredits: 100_000, storesLifetime: null, newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, extraCredits: true, draftsPerStore: 5 };
+
 describe('the plan table', () => {
-	it('sells the four Premium pools the pricing page shows', () => {
-		expect(PREMIUM_TIERS).toEqual([
-			{ tier: 1, credits: 20_000, priceCents: 9_900 },
-			{ tier: 2, credits: 50_000, priceCents: 19_900 },
-			{ tier: 3, credits: 100_000, priceCents: 34_900 },
-			{ tier: 4, credits: 200_000, priceCents: 59_900 },
-		]);
-		expect(premiumTier(3).credits).toBe(100_000);
+	it("holds the owner's plans, prices and limits", () => {
+		expect(PLAN_PRICES_CENTS).toEqual({ pro: 4_900, premium: 19_900 });
+		expect(PLAN_LIMITS).toEqual({
+			basic: { aiCredits: 5_000, storesLifetime: 3, newStoresPerDay: null, liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, extraCredits: false, draftsPerStore: 5 },
+			pro: { aiCredits: 20_000, storesLifetime: null, newStoresPerDay: 10, liveStores: 3, ownDomainsPerLiveStore: 1, supplierCatalog: true, extraCredits: false, draftsPerStore: 5 },
+			premium: PREMIUM_ROW,
+			enterprise: PREMIUM_ROW,
+		});
+		expect(DRAFT_LIMIT).toBe(5);
 	});
 
-	it('keeps 5 drafts per store on every plan', () => {
-		expect(DRAFT_LIMIT).toBe(5);
-		for (const plan of ['basic', 'premium', 'enterprise'] as const) expect(PLAN_LIMITS[plan].draftsPerStore).toBe(DRAFT_LIMIT);
+	it('sells extra credits from 5,000 to 1,000,000 in steps of 1,000, at $1.50 per 1,000', () => {
+		expect(EXTRA_CREDITS).toEqual({ creditsPerUnit: 1_000, unitPriceCents: 150, minCredits: 5_000, maxCredits: 1_000_000, monthsValid: 12 });
+		expect(extraCreditsPriceCents(5_000)).toBe(750);
+		expect(extraCreditsPriceCents(12_000)).toBe(1_800);
+		for (const amount of [5_000, 6_000, 1_000_000]) expect(isExtraCreditsAmount(amount)).toBe(true);
+		for (const amount of [4_000, 5_500, 1_001_000, '5000', 5_000.5, null]) expect(isExtraCreditsAmount(amount)).toBe(false);
 	});
 });
 
 describe('limitsFor', () => {
-	it('gives Basic the live daily numbers, 1 live store, no own domains and no catalog', () => {
-		expect(limitsFor(input())).toEqual({ aiCredits: 200, aiCreditsWindow: 'day', newStoresPerDay: 3, liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, draftsPerStore: 5 });
-		expect(limitsFor(input({ basic: { aiCreditsPerDay: 500, newStoresPerDay: 5 } }))).toMatchObject({ aiCredits: 500, newStoresPerDay: 5 });
+	it("gives each plan its row, and an admin override wins", () => {
+		expect(limitsFor({ billing: true, plan: 'pro', adminLimits: null })).toEqual(PLAN_LIMITS.pro);
+		expect(limitsFor({ billing: true, plan: 'enterprise', adminLimits: { aiCredits: 1_000_000, liveStores: 50 } })).toMatchObject({ aiCredits: 1_000_000, liveStores: 50, newStoresPerDay: 25 });
+		expect(limitsFor({ billing: true, plan: 'basic', adminLimits: { storesLifetime: null } }).storesLifetime).toBeNull();
 	});
 
-	it("gives Premium the tier's monthly pool, 25 new stores a day, 10 live stores, a domain each and the catalog", () => {
-		expect(limitsFor(input({ plan: 'premium', tier: 2 }))).toEqual({ aiCredits: 50_000, aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, draftsPerStore: 5 });
-		for (const tier of PREMIUM_TIERS) expect(limitsFor(input({ plan: 'premium', tier: tier.tier })).aiCredits).toBe(tier.credits);
-	});
-
-	it("starts Enterprise at Premium's largest numbers until an admin sets its own", () => {
-		expect(limitsFor(input({ plan: 'enterprise' }))).toMatchObject({ aiCredits: 200_000, aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, supplierCatalog: true });
-		expect(limitsFor(input({ plan: 'enterprise', adminLimits: { aiCredits: 1_000_000, liveStores: 50 } }))).toMatchObject({ aiCredits: 1_000_000, liveStores: 50 });
-	});
-
-	it("applies the account's own KV overrides, but keeps a daily credit override off a monthly pool", () => {
-		expect(limitsFor(input({ userOverrides: { newStoresPerDay: 1000, aiCreditsPerDay: 900 } }))).toMatchObject({ newStoresPerDay: 1000, aiCredits: 900 });
-		expect(limitsFor(input({ plan: 'premium', tier: 1, userOverrides: { newStoresPerDay: 1000, aiCreditsPerDay: 900 } }))).toMatchObject({ newStoresPerDay: 1000, aiCredits: 20_000 });
-	});
-
-	it('lets an admin override win over the KV override, and adds grants last', () => {
-		const limits = limitsFor(input({ plan: 'premium', tier: 1, userOverrides: { newStoresPerDay: 1000 }, adminLimits: { newStoresPerDay: 40, supplierCatalog: false }, grantedCredits: 5_000 }));
-		expect(limits).toMatchObject({ newStoresPerDay: 40, supplierCatalog: false, aiCredits: 25_000 });
-	});
-
-	it("returns today's Basic for everyone while billing is off: no live-store, domain or catalog limit, and no grants", () => {
-		expect(limitsFor(input({ billing: false, plan: 'premium', tier: 4, grantedCredits: 5_000, userOverrides: { newStoresPerDay: 1000 } }))).toEqual({
-			aiCredits: 200,
-			aiCreditsWindow: 'day',
-			newStoresPerDay: 1000,
-			liveStores: null,
-			ownDomainsPerLiveStore: 1,
-			supplierCatalog: true,
-			draftsPerStore: 5,
-		});
+	it('enforces nothing new while billing is off', () => {
+		expect(limitsFor({ billing: false, plan: 'premium', adminLimits: { liveStores: 2 } })).toEqual({ ...PLAN_LIMITS.basic, storesLifetime: null, liveStores: null, ownDomainsPerLiveStore: 1, supplierCatalog: true });
 	});
 });
 
 describe('assertWithinLimit', () => {
-	it('allows Basic below each limit and refuses at and above it, with the copy from the spec', () => {
+	it('refuses Basic at each limit with the copy from the spec, pointing at the next plan that lifts it', () => {
 		const basic = account();
-		expect(assertWithinLimit(basic, 'aiCredits', 199)).toBeNull();
-		for (const used of [200, 260]) {
-			expect(assertWithinLimit(basic, 'aiCredits', used)).toEqual({
-				code: 'plan_limit',
-				limit: 'aiCredits',
-				plan: 'basic',
-				upgradeTo: 'premium',
-				message: "You've used today's free AI credits. They reset at midnight UTC, or get Premium for a monthly pool.",
-			});
-		}
-		expect(assertWithinLimit(basic, 'liveStores', 0)).toBeNull();
-		expect(assertWithinLimit(basic, 'liveStores', 1)?.message).toBe('Basic includes 1 live store. Get Premium for up to 10.');
-		expect(assertWithinLimit(basic, 'newStoresPerDay', 2)).toBeNull();
-		expect(assertWithinLimit(basic, 'newStoresPerDay', 3)?.message).toBe("You've started 3 new stores today. Start more tomorrow, or get Premium for up to 25 a day.");
-		expect(assertWithinLimit(basic, 'ownDomainsPerLiveStore', 0)?.message).toBe('Own domains come with Premium.');
-		expect(assertWithinLimit(basic, 'supplierCatalog')?.message).toBe('Adding catalog products to your store comes with Premium. Products already live keep selling.');
+		expect(assertWithinLimit(basic, 'aiCredits', 4_999)).toBeNull();
+		expect(assertWithinLimit(basic, 'aiCredits', 5_000)).toEqual({
+			code: 'plan_limit',
+			limit: 'aiCredits',
+			plan: 'basic',
+			upgradeTo: 'pro',
+			message: "You've used this month's free AI credits. They refill on November 19, or get Pro for 20,000 a month.",
+		});
+		expect(assertWithinLimit(basic, 'storesLifetime', 2)).toBeNull();
+		expect(assertWithinLimit(basic, 'storesLifetime', 3)).toMatchObject({ upgradeTo: 'pro', message: "Basic includes 3 stores, counting ones you've deleted. Get Pro to start up to 10 a day." });
+		expect(assertWithinLimit(basic, 'newStoresPerDay', 99)).toBeNull();
+		expect(assertWithinLimit(basic, 'liveStores', 1)).toMatchObject({ upgradeTo: 'pro', message: 'Basic includes 1 live store. Get Pro for up to 3, or Premium for up to 10.' });
+		expect(assertWithinLimit(basic, 'ownDomainsPerLiveStore', 0)).toMatchObject({ upgradeTo: 'pro', message: 'Own domains come with Pro and Premium.' });
+		expect(assertWithinLimit(basic, 'supplierCatalog')).toMatchObject({ upgradeTo: 'pro', message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' });
+		expect(assertWithinLimit(basic, 'extraCredits')).toMatchObject({ upgradeTo: 'premium', message: 'Buying extra credits comes with Premium.' });
 	});
 
-	it('tells Premium when its pool refills, and points the largest pool and other limits at Enterprise', () => {
-		const premium = account({ plan: 'premium', tier: 2 });
-		expect(assertWithinLimit(premium, 'aiCredits', 49_999)).toBeNull();
-		expect(assertWithinLimit(premium, 'aiCredits', 50_000)).toMatchObject({ plan: 'premium', upgradeTo: 'premium', message: "You've used this month's credits. Move to a bigger pool now, or wait until November 19." });
-		expect(assertWithinLimit(account({ plan: 'premium', tier: 4 }), 'aiCredits', 200_000)).toMatchObject({ upgradeTo: 'enterprise', message: "You've used this month's credits. Talk to us about a bigger pool, or wait until November 19." });
+	it('points Pro at Premium, Premium at extra credits or Enterprise, and Enterprise nowhere', () => {
+		const pro = account({ plan: 'pro' });
+		expect(assertWithinLimit(pro, 'aiCredits', 20_000)).toMatchObject({ upgradeTo: 'premium', message: "You've used this month's AI credits. They refill on November 19, or move to Premium for 100,000 a month." });
+		expect(assertWithinLimit(pro, 'newStoresPerDay', 10)).toMatchObject({ upgradeTo: 'premium', message: "You've started 10 new stores today. Start more tomorrow, or move to Premium for up to 25 a day." });
+		expect(assertWithinLimit(pro, 'liveStores', 3)).toMatchObject({ upgradeTo: 'premium', message: 'Pro includes 3 live stores. Move to Premium for up to 10.' });
+		expect(assertWithinLimit(pro, 'supplierCatalog')).toBeNull();
+		const premium = account({ plan: 'premium' });
+		expect(assertWithinLimit(premium, 'aiCredits', 100_000)).toMatchObject({ upgradeTo: 'credits', message: "You've used this month's AI credits. Buy more credits now, or wait until November 19." });
+		expect(assertWithinLimit(premium, 'newStoresPerDay', 25)).toMatchObject({ upgradeTo: 'enterprise', message: "You've started 25 new stores today. Start more tomorrow, or talk to us about Enterprise." });
 		expect(assertWithinLimit(premium, 'liveStores', 10)).toMatchObject({ upgradeTo: 'enterprise', message: 'Premium includes 10 live stores. Talk to us about Enterprise for more.' });
-		expect(assertWithinLimit(premium, 'newStoresPerDay', 25)?.message).toBe("You've started 25 new stores today. Start more tomorrow, or talk to us about Enterprise.");
-		expect(assertWithinLimit(premium, 'supplierCatalog')).toBeNull();
-		expect(assertWithinLimit(premium, 'ownDomainsPerLiveStore', 0)).toBeNull();
-	});
-
-	it('offers Enterprise accounts no upgrade', () => {
+		expect(assertWithinLimit(premium, 'extraCredits')).toBeNull();
 		expect(assertWithinLimit(account({ plan: 'enterprise', adminLimits: { liveStores: 3 } }), 'liveStores', 3)).toMatchObject({ upgradeTo: null, message: 'Enterprise includes 3 live stores. Talk to us to raise it.' });
+		expect(assertWithinLimit(account({ plan: 'enterprise' }), 'aiCredits', 100_000)).toMatchObject({ upgradeTo: null, message: "You've used this month's AI credits. Talk to us about more, or wait until November 19." });
 	});
 
-	it('refuses nothing while billing is off', () => {
+	it('refuses nothing while billing is off, and recognizes a refusal that crossed the network', () => {
 		const off = account({ billing: false });
-		expect(assertWithinLimit(off, 'aiCredits', 10_000)).toBeNull();
-		expect(assertWithinLimit(off, 'liveStores', 50)).toBeNull();
-		expect(assertWithinLimit(off, 'supplierCatalog')).toBeNull();
-	});
-
-	it('recognizes a refusal that crossed the network, and nothing else', () => {
+		for (const key of ['aiCredits', 'storesLifetime', 'liveStores', 'supplierCatalog', 'extraCredits'] as const) expect(assertWithinLimit(off, key, 1_000_000)).toBeNull();
 		expect(isPlanLimitRefusal(JSON.parse(JSON.stringify(assertWithinLimit(account(), 'supplierCatalog'))))).toBe(true);
-		for (const value of [null, 'plan_limit', { code: 'plan_limit', limit: 'nope', plan: 'basic', upgradeTo: null, message: 'x' }]) expect(isPlanLimitRefusal(value)).toBe(false);
+		for (const value of [null, 'plan_limit', { code: 'plan_limit', limit: 'nope', plan: 'basic', upgradeTo: null, message: 'x' }, { code: 'plan_limit', limit: 'liveStores', plan: 'gold', upgradeTo: null, message: 'x' }]) {
+			expect(isPlanLimitRefusal(value)).toBe(false);
+		}
 	});
 });
 
 describe('admin limit overrides', () => {
-	it('reads only known limits within range', () => {
-		expect(planLimitOverridesFrom({ aiCredits: 300_000, liveStores: 25, supplierCatalog: true })).toEqual({ aiCredits: 300_000, liveStores: 25, supplierCatalog: true });
+	it('reads only known limits within range, with null lifting a store cap', () => {
+		expect(planLimitOverridesFrom({ aiCredits: 300_000, liveStores: 25, storesLifetime: null, extraCredits: true })).toEqual({ aiCredits: 300_000, liveStores: 25, storesLifetime: null, extraCredits: true });
 		expect(planLimitOverridesFrom({})).toEqual({});
-		for (const bad of [{ aiCredits: 0 }, { liveStores: 1.5 }, { supplierCatalog: 'yes' }, { draftsPerStore: 9 }, { ownDomainsPerLiveStore: 2 }, { toString: 1 }, 'x', null, []]) {
+		for (const bad of [{ aiCredits: 0 }, { liveStores: 1.5 }, { supplierCatalog: 'yes' }, { draftsPerStore: 9 }, { ownDomainsPerLiveStore: 2 }, { liveStores: null }, { toString: 1 }, 'x', null, []]) {
 			expect(planLimitOverridesFrom(bad)).toBeNull();
 		}
 	});
@@ -320,227 +302,325 @@ describe('formatBillingDate', () => {
 Run: `rtk proxy bun run test -- shared/types/plans.test.ts`
 Expected: FAIL, "Failed to resolve import ./plans".
 
-- [ ] **Step 4: Implement `shared/types/plans.ts`**
+- [ ] **Step 4: Implement `shared/types/plans.ts`.** First add `export const DRAFT_LIMIT = 5;` to `shared/types/drafts.ts`, commented "Drafts per store, counting Main. Mirrors DRAFT_LIMIT in space/src/space/drafts-store.ts."
 
-Add `export const DRAFT_LIMIT = 5;` to `shared/types/drafts.ts`, with the comment "Drafts per store, counting Main. Mirrors DRAFT_LIMIT in space/src/space/drafts-store.ts."
+The types and tables are as Interfaces and the test give them. Enterprise's row is a copy of Premium's.
 
-```ts
-/** Every plan's limits, defined once: the Worker enforces them, the pricing page shows them, admins override them. Pure. */
+**`limitsFor(input)`:**
+- Billing off: `{ ...PLAN_LIMITS.basic, storesLifetime: null, liveStores: null, ownDomainsPerLiveStore: 1, supplierCatalog: true }`. Credits aren't read while billing is off; today's daily counter applies.
+- Billing on: `{ ...PLAN_LIMITS[input.plan], ...input.adminLimits }`.
 
-import { DRAFT_LIMIT } from './drafts';
+**`assertWithinLimit(account, key, current = 0)`:**
+- returns null when `!account.billing`;
+- `supplierCatalog` and `extraCredits` are reached when false;
+- the other keys are reached when the limit isn't null and `current >= limit`.
 
-export const PLAN_IDS = ['basic', 'premium', 'enterprise'] as const;
-export type PlanId = (typeof PLAN_IDS)[number];
+**`upgradeTo`:**
+- `aiCredits` on Premium is `'credits'`;
+- anything on Enterprise is null;
+- on Premium, every other key is `'enterprise'`;
+- otherwise it's the first plan after the account's, in `PLAN_IDS` order, whose `PLAN_LIMITS` value lifts the limit: a true flag, a null cap, or a bigger number.
 
-export const PREMIUM_TIER_NUMBERS = [1, 2, 3, 4] as const;
-export type PremiumTierNumber = (typeof PREMIUM_TIER_NUMBERS)[number];
+**Messages,** keyed on plan and limit, numbers from `PLAN_LIMITS` through `formatCredits`. `count(n, noun)` writes "1 live store" and "3 stores". Dates use `formatBillingDate(account.creditsResetAt)`. The cases the test doesn't pin:
+- `storesLifetime` on a plan other than Basic: "Your plan includes {n} stores. Talk to us to raise it.";
+- `newStoresPerDay` on Enterprise: "You've started {n} new stores today. Start more tomorrow.";
+- `ownDomainsPerLiveStore` on a plan other than Basic: "Own domains aren't on your plan. Talk to us to add them.";
+- `supplierCatalog` on a plan other than Basic: the Basic sentence;
+- `liveStores` on Enterprise: "Enterprise includes {n} live stores. Talk to us to raise it." (in the test).
 
-/** A Premium credit pool and its monthly price. */
-export interface PremiumTier {
-	tier: PremiumTierNumber;
-	credits: number;
-	priceCents: number;
-}
+**`planLimitOverridesFrom`:**
+- a plain object whose own keys are known, checked with `Object.hasOwn`;
+- `aiCredits` an integer from 1 to 100,000,000;
+- `storesLifetime` null or an integer from 0 to 100,000;
+- `newStoresPerDay` null or an integer from 1 to 10,000;
+- `liveStores` an integer from 0 to 10,000;
+- `ownDomainsPerLiveStore` 0 or 1;
+- `supplierCatalog` and `extraCredits` booleans.
 
-/** Premium's monthly pools, smallest first. Bigger pools cost less per credit. */
-export const PREMIUM_TIERS: readonly PremiumTier[] = [
-	{ tier: 1, credits: 20_000, priceCents: 9_900 },
-	{ tier: 2, credits: 50_000, priceCents: 19_900 },
-	{ tier: 3, credits: 100_000, priceCents: 34_900 },
-	{ tier: 4, credits: 200_000, priceCents: 59_900 },
-];
-
-export function isPremiumTierNumber(value: unknown): value is PremiumTierNumber {
-	return (PREMIUM_TIER_NUMBERS as readonly unknown[]).includes(value);
-}
-
-export function premiumTier(tier: PremiumTierNumber): PremiumTier {
-	const found = PREMIUM_TIERS.find((entry) => entry.tier === tier);
-	if (!found) throw new Error(`Unknown Premium tier: ${tier}`);
-	return found;
-}
-
-/** A UTC day on Basic; the billing period (or calendar month) on a monthly pool. */
-export type CreditsWindow = 'day' | 'period';
-
-export interface PlanLimits {
-	/** AI credits per window, grants included. */
-	aiCredits: number;
-	aiCreditsWindow: CreditsWindow;
-	newStoresPerDay: number;
-	/** Published stores at once; null means no limit (billing off). */
-	liveStores: number | null;
-	ownDomainsPerLiveStore: number;
-	supplierCatalog: boolean;
-	draftsPerStore: number;
-}
-
-export type PlanLimitKey = 'aiCredits' | 'newStoresPerDay' | 'liveStores' | 'ownDomainsPerLiveStore' | 'supplierCatalog';
-
-/** The custom limits an admin plan override may set. */
-export interface PlanLimitOverrides {
-	aiCredits?: number;
-	newStoresPerDay?: number;
-	liveStores?: number;
-	ownDomainsPerLiveStore?: number;
-	supplierCatalog?: boolean;
-}
-
-interface PlanRow {
-	/** 'live' reads Basic's daily allowance from the live configuration; 'tier' reads the Premium tier's pool. */
-	aiCredits: number | 'live' | 'tier';
-	aiCreditsWindow: CreditsWindow;
-	/** 'live' reads Basic's new stores a day from the live configuration. */
-	newStoresPerDay: number | 'live';
-	liveStores: number;
-	ownDomainsPerLiveStore: number;
-	supplierCatalog: boolean;
-	draftsPerStore: number;
-}
-
-export const PLAN_LIMITS: Readonly<Record<PlanId, PlanRow>> = {
-	basic: { aiCredits: 'live', aiCreditsWindow: 'day', newStoresPerDay: 'live', liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, draftsPerStore: DRAFT_LIMIT },
-	premium: { aiCredits: 'tier', aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, draftsPerStore: DRAFT_LIMIT },
-	enterprise: { aiCredits: 200_000, aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, draftsPerStore: DRAFT_LIMIT },
-};
-
-export const PLAN_LIMIT_CODE = 'plan_limit';
-export const GRACE_PERIOD_DAYS = 7;
-
-export interface PlanAccountInput {
-	billing: boolean;
-	plan: PlanId;
-	tier: PremiumTierNumber | null;
-	/** Basic's live numbers: code defaults plus the global KV overrides. */
-	basic: { aiCreditsPerDay: number; newStoresPerDay: number };
-	/** The account's own `user_config:<id>` rate-limit overrides, when set. */
-	userOverrides: { aiCreditsPerDay?: number; newStoresPerDay?: number };
-	adminLimits: PlanLimitOverrides | null;
-	/** Credits Estori added to the current window. */
-	grantedCredits: number;
-}
-
-export interface PlanAccount {
-	billing: boolean;
-	plan: PlanId;
-	tier: PremiumTierNumber | null;
-	limits: PlanLimits;
-	/** When the credits window resets: the next UTC midnight on Basic, the period's end otherwise. */
-	creditsResetAt: number;
-}
-
-export interface PlanLimitRefusal {
-	code: typeof PLAN_LIMIT_CODE;
-	limit: PlanLimitKey;
-	plan: PlanId;
-	/** The plan that lifts the limit; null when none does. */
-	upgradeTo: 'premium' | 'enterprise' | null;
-	message: string;
-}
-```
-
-Then:
-- **`limitsFor(input)`:**
-  - Billing off: return Basic's live numbers, with the KV overrides for both credits and new stores, `liveStores: null`, `ownDomainsPerLiveStore: 1`, `supplierCatalog: true`, `draftsPerStore: DRAFT_LIMIT`. No grants.
-  - Billing on, in the order of Global Constraints:
-    1. resolve the row's `'live'` from `input.basic` and `'tier'` from `premiumTier(input.tier ?? 1)`;
-    2. apply `userOverrides.newStoresPerDay`;
-    3. apply `userOverrides.aiCreditsPerDay` only when the window is `'day'`;
-    4. spread `adminLimits`;
-    5. add `grantedCredits` to `aiCredits`.
-- **`assertWithinLimit`:**
-  - returns null when `!account.billing`;
-  - `supplierCatalog` is reached when it's false;
-  - `liveStores` when not null and `current >= limit`;
-  - the other keys when `current >= limit`;
-  - `current` defaults to 0.
-- **`upgradeTo`:**
-  - Basic: `'premium'`;
-  - Premium credits below tier 4: `'premium'`;
-  - Premium otherwise: `'enterprise'`;
-  - Enterprise: null.
-- **Messages,** exactly as the test pins:
-  - `count(n, noun)` writes "1 live store" and "3 new stores";
-  - the plan names are "Basic", "Premium", "Enterprise";
-  - the Premium credit dates use `formatBillingDate(account.creditsResetAt)`.
-- **`formatBillingDate`:** `new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })`.
-- **`formatUsd`:** move the function body from `src/lib/plans.ts` unchanged.
-- **`planLimitOverridesFrom`:**
-  - accepts only a plain object whose own keys are known;
-  - ranges: `aiCredits` 1 to 10,000,000, `newStoresPerDay` 1 to 10,000, `liveStores` 0 to 10,000, `ownDomainsPerLiveStore` 0 or 1, and `supplierCatalog` a boolean;
-  - use `Object.hasOwn` against the ranges table, as `parseSellerLimitsOverride` does.
-- **`isPlanLimitRefusal`:** checks `code`, a known `limit`, a known `plan`, a string `message` and an allowed `upgradeTo`.
+**The rest:**
+- `formatBillingDate` uses `new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' })`;
+- `formatUsd` and `formatCredits` move unchanged from `src/lib/plans.ts`;
+- `planName` answers "Basic", "Pro", "Premium" or "Enterprise".
 
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `rtk proxy bun run test -- shared/types/plans.test.ts`
-Expected: PASS (15 tests).
+Expected: PASS (9 tests).
 
-- [ ] **Step 6: Point the pricing code at the table.** In `src/api-types.ts`, next to the `PublicPlanLimits` re-export, add:
-
-```ts
-export type { CreditsWindow, PlanAccount, PlanId, PlanLimitKey, PlanLimitOverrides, PlanLimitRefusal, PlanLimits, PremiumTier, PremiumTierNumber } from '../shared/types/plans.js';
-export { GRACE_PERIOD_DAYS, PLAN_IDS, PLAN_LIMITS, PLAN_LIMIT_CODE, PREMIUM_TIERS, PREMIUM_TIER_NUMBERS, formatBillingDate, formatUsd, isPlanLimitRefusal, isPremiumTierNumber, premiumTier } from '../shared/types/plans.js';
-export { DRAFT_LIMIT } from '../shared/types/drafts.js';
-```
-
-In `src/lib/plans.ts`:
-- **Types:** `PlanId`, `PremiumTier` and `PREMIUM_TIERS` re-export the shared ones. `formatUsd` re-exports the shared one. Delete the local definitions.
-- **`CATALOG_PLANS`:** becomes `{ basic: PLAN_LIMITS.basic.supplierCatalog, premium: PLAN_LIMITS.premium.supplierCatalog, enterprise: PLAN_LIMITS.enterprise.supplierCatalog }`.
-- **New store-builder rows,** after "Live preview on desktop and phone":
+- [ ] **Step 6: Point `src/lib/plans.ts` at the table.**
+- In `src/api-types.ts`, re-export the types and functions above, and `DRAFT_LIMIT`.
+- In `src/lib/plans.ts`:
+  - `PlanId`, `formatUsd` and `formatCredits` re-export the shared ones;
+  - `PLANS` lists Basic, Pro, Premium and Enterprise, with Pro's tagline "More credits and live stores for sellers growing a few stores.";
+  - delete `PremiumTier`, `PREMIUM_TIERS` and `premiumTierFor`. Their users change in Tasks 2 and 12; until then, `bun run typecheck` names them;
+  - `PAID` becomes `{ basic: false, pro: true, premium: true, enterprise: true }`, and `ENTERPRISE` gains `pro: false`;
+  - `CATALOG_PLANS` reads `PLAN_LIMITS[plan].supplierCatalog` for each plan;
+  - every `ALL` and `onEveryPlan` cell gains `pro`.
+- Add store-builder rows after "Live preview on desktop and phone":
 
 ```ts
-		{ label: 'Live stores at once', cells: { basic: String(PLAN_LIMITS.basic.liveStores), premium: String(PLAN_LIMITS.premium.liveStores), enterprise: 'Custom' } },
-		{ label: 'Your own domain', cells: { basic: false, premium: 'One per live store', enterprise: 'One per live store' } },
+		{ label: 'Stores', cells: { basic: `${PLAN_LIMITS.basic.storesLifetime}`, pro: `${PLAN_LIMITS.pro.newStoresPerDay} new a day`, premium: `${PLAN_LIMITS.premium.newStoresPerDay} new a day`, enterprise: 'Custom' } },
+		{ label: 'Live stores at once', cells: { basic: String(PLAN_LIMITS.basic.liveStores), pro: String(PLAN_LIMITS.pro.liveStores), premium: String(PLAN_LIMITS.premium.liveStores), enterprise: 'Custom' } },
+		{ label: 'Your own domain', cells: { basic: false, pro: 'One per live store', premium: 'One per live store', enterprise: 'One per live store' } },
+		{ label: 'Extra AI credits', cells: { basic: false, pro: false, premium: '$1.50 per 1,000', enterprise: true } },
 ```
 
-In `PlanCards.tsx`, add two `Feature`s to `PremiumPlan`'s list, after "Everything in Basic":
-
-```tsx
-				<Feature>Up to {PLAN_LIMITS.premium.liveStores} live stores, each on your own domain</Feature>
-				<Feature capability="product-catalog">Curated supplier catalog</Feature>
-```
-
-- [ ] **Step 7: Update the pricing tests.** In `src/lib/plans.test.ts`:
-- change `expect(PREMIUM_TIERS[0]).toEqual({ credits: 20_000, priceCents: 9_900 })` to include `tier: 1`;
-- add:
+- [ ] **Step 7: Update `src/lib/plans.test.ts`.**
+- Every `toEqual` over a cells object gains its `pro` value: `true` for `ALL`, the same text for `onEveryPlan`, and `true` for `PAID`.
+- `PLANS.map((plan) => plan.id)` is `['basic', 'pro', 'premium', 'enterprise']`.
+- Delete the `PREMIUM_TIERS` and `premiumTierFor` tests.
+- Add:
 
 ```ts
-	it('takes the live-store and catalog cells from the shared limits table', () => {
+	it('takes the store, live-store, domain, catalog and extra-credit cells from the shared limits table', () => {
 		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
-		expect(builder?.rows.find((row) => row.label === 'Live stores at once')?.cells).toEqual({ basic: '1', premium: '10', enterprise: 'Custom' });
-		expect(PLAN_COMPARISON.find((section) => section.capability === 'product-catalog')?.rows[0]?.cells).toEqual({ basic: false, premium: true, enterprise: true });
-	});
-```
-
-In `src/routes/pricing-guard.test.ts`, add:
-
-```ts
-	it("states Premium's live stores from the shared limits table, never typed in", () => {
-		const cards = source(CARDS);
-		expect(cards).toContain('PLAN_LIMITS.premium.liveStores');
-		expect(cards).not.toMatch(/\b10 live stores\b/);
+		const cells = (label: string) => builder?.rows.find((row) => row.label === label)?.cells;
+		expect(cells('Stores')).toEqual({ basic: '3', pro: '10 new a day', premium: '25 new a day', enterprise: 'Custom' });
+		expect(cells('Live stores at once')).toEqual({ basic: '1', pro: '3', premium: '10', enterprise: 'Custom' });
+		expect(cells('Extra AI credits')).toEqual({ basic: false, pro: false, premium: '$1.50 per 1,000', enterprise: true });
+		expect(PLAN_COMPARISON.find((section) => section.capability === 'product-catalog')?.rows[0]?.cells).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
 	});
 ```
 
 - [ ] **Step 8: Run the tests**
 
-Run: `rtk proxy bun run test -- shared/types/plans.test.ts src/lib/plans.test.ts src/routes/pricing-guard.test.ts`
+Run: `rtk proxy bun run test -- shared/types/plans.test.ts src/lib/plans.test.ts`
 Expected: PASS.
 
 Run: `bun run typecheck`
-Expected: no errors.
+Expected: errors only in `src/lib/credits.ts`, `src/components/pricing/*` and `src/lib/contact.ts`, which still read Premium tiers. Tasks 2 and 12 fix them.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add shared/types/plans.ts shared/types/plans.test.ts shared/types/drafts.ts src/api-types.ts src/lib/plans.ts src/lib/plans.test.ts src/components/pricing/PlanCards.tsx src/routes/pricing-guard.test.ts
-git commit -m "feat(billing): one table of plan limits, with the refusal and its copy, read by the pricing page
+git add shared/types/plans.ts shared/types/plans.test.ts shared/types/drafts.ts src/api-types.ts src/lib/plans.ts src/lib/plans.test.ts
+git commit -m "feat(billing): one table of plans, prices and limits, with the refusal and its copy
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 2: Billing tables and their services
+### Task 2: Model prices, step credits and the per-step copy
+
+**Files:**
+- Create:
+  - `worker/services/billing/step-credits.ts`;
+  - `worker/agents/think/model-prices.test.ts`.
+- Modify:
+  - worker: `worker/agents/think/model-config.ts`, `worker/agents/core/features/types.ts`;
+  - frontend: `src/hooks/use-model-rates.ts`, `src/utils/credit-change.ts`, `src/components/ModelUnavailableNotice.tsx`, `src/components/pricing/CreditsExplainer.tsx`, `src/components/pricing/Calculator.tsx` (the model list only), `src/lib/credits.ts` (comments and the recommendation).
+- Test:
+  - `worker/services/billing/step-credits.test.ts`;
+  - `worker/agents/think/model-prices.test.ts`;
+  - `src/utils/credit-change.test.ts`;
+  - `src/lib/credits.test.ts`.
+
+**Interfaces:**
+- **Consumes:** `PLAN_LIMITS`, `EXTRA_CREDITS` (Task 1).
+- **Produces:**
+  - `model-config.ts`:
+    - `TokenPrices { inputUsd: number; outputUsd: number; cacheReadUsd: number; cacheWriteUsd: number }`, each per 1M tokens;
+    - `ThinkModel` gains `prices: TokenPrices`, `creditsPerStep: number` (typical) and `pricesReviewBy: string | null`.
+  - `ThinkModelOption.creditCost` is renamed `creditsPerStep` (typical credits per step).
+  - `step-credits.ts`:
+    - `CREDIT_USD = 0.001`, `CREDIT_MARGIN = 1.5`, `LEGACY_CREDIT_FACTOR = 17`;
+    - `StepUsage { inputTokens?: number; noCacheInputTokens?: number; cacheReadTokens?: number; cacheWriteTokens?: number; outputTokens?: number; textTokens?: number; reasoningTokens?: number }`;
+    - `stepUsageFrom(usage: LanguageModelUsage | undefined): StepUsage | null`;
+    - `stepCredits(prices: TokenPrices, usage: StepUsage | null, typical: number): number`;
+    - `legacyCallCredits(creditCost: number): number`.
+  - `src/lib/credits.ts`: `Recommendation = { plan: 'basic' } | { plan: 'pro' } | { plan: 'premium'; extraCredits: number } | { plan: 'enterprise' }`, `recommendPlan(credits: number, basicCredits?: number): Recommendation`, `ENTERPRISE_FROM_CREDITS = 500_000`. `basicCredits` defaults to Basic's monthly credits; with billing off, the calculator passes today's daily allowance times `DAYS_PER_MONTH`.
+  - `describeCreditChange(current, next)` writes "about N credits per step".
+
+- [ ] **Step 1: Write the failing worker tests.** `worker/services/billing/step-credits.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { legacyCallCredits, stepCredits, stepUsageFrom } from './step-credits';
+
+const SONNET = { inputUsd: 2, outputUsd: 10, cacheReadUsd: 0.2, cacheWriteUsd: 2.5 };
+const OPUS = { inputUsd: 4, outputUsd: 20, cacheReadUsd: 0.4, cacheWriteUsd: 5 };
+const FLASH = { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 };
+
+describe('stepCredits', () => {
+	it("charges a step's list-price cost times 1.5, in credits of $0.001, rounded up", () => {
+		// $0.08 + $0.03 = $0.11, × 1.5 = $0.165: exactly 165 credits, not 166.
+		expect(stepCredits(SONNET, { inputTokens: 40_000, outputTokens: 3_000 }, 136)).toBe(165);
+		// $0.015 + $0.00375 = $0.01875, × 1.5 = $0.028125: 29 credits.
+		expect(stepCredits(FLASH, { inputTokens: 20_000, outputTokens: 1_000 }, 16)).toBe(29);
+		expect(stepCredits(SONNET, { inputTokens: 1, outputTokens: 0 }, 136)).toBe(1);
+	});
+
+	it('prices cache reads and writes apart from fresh input, and counts reasoning as output', () => {
+		// 10k fresh × $4 + 50k read × $0.40 + 2k written × $5 + 4k out × $20 = $0.15, × 1.5 = 225 credits.
+		expect(stepCredits(OPUS, { inputTokens: 62_000, cacheReadTokens: 50_000, cacheWriteTokens: 2_000, outputTokens: 4_000 }, 445)).toBe(225);
+		expect(stepCredits(OPUS, { inputTokens: 62_000, noCacheInputTokens: 10_000, cacheReadTokens: 50_000, cacheWriteTokens: 2_000, textTokens: 1_000, reasoningTokens: 3_000 }, 445)).toBe(225);
+	});
+
+	it("charges the model's typical step when the provider reports no usage", () => {
+		expect(stepCredits(SONNET, null, 136)).toBe(136);
+		expect(stepCredits(SONNET, {}, 136)).toBe(136);
+	});
+
+	it("reads the AI SDK's step usage", () => {
+		expect(
+			stepUsageFrom({
+				inputTokens: 62_000,
+				inputTokenDetails: { noCacheTokens: 10_000, cacheReadTokens: 50_000, cacheWriteTokens: 2_000 },
+				outputTokens: 4_000,
+				outputTokenDetails: { textTokens: 1_000, reasoningTokens: 3_000 },
+				totalTokens: 66_000,
+			}),
+		).toEqual({ inputTokens: 62_000, noCacheInputTokens: 10_000, cacheReadTokens: 50_000, cacheWriteTokens: 2_000, outputTokens: 4_000, textTokens: 1_000, reasoningTokens: 3_000 });
+		expect(stepUsageFrom(undefined)).toBeNull();
+	});
+
+	it("converts an older call's flat cost to the new unit, as Sonnet's 8 became its typical 136", () => {
+		expect(legacyCallCredits(8)).toBe(136);
+		expect(legacyCallCredits(1.2)).toBe(21);
+		expect(legacyCallCredits(0)).toBe(0);
+	});
+});
+```
+
+Build the `stepUsageFrom` argument with the exact `LanguageModelUsage` shape from the installed `ai` package. If its type has more required fields, add them with `undefined`.
+
+`worker/agents/think/model-prices.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { THINK_MODELS, thinkModelOptions } from './model-config';
+
+describe('the Think model prices', () => {
+	it('pins each model to its list prices per 1M tokens and its typical credits per step', () => {
+		expect(THINK_MODELS.map((model) => [model.id, model.prices, model.creditsPerStep, model.pricesReviewBy])).toEqual([
+			['google-ai-studio/gemini-3.6-flash', { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 }, 16, '2026-12-31'],
+			['google-ai-studio/gemini-3.8-flash', { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 }, 16, '2026-12-31'],
+			['anthropic/claude-sonnet-5-5', { inputUsd: 2, outputUsd: 10, cacheReadUsd: 0.2, cacheWriteUsd: 2.5 }, 136, null],
+			['anthropic/claude-opus-5-5', { inputUsd: 4, outputUsd: 20, cacheReadUsd: 0.4, cacheWriteUsd: 5 }, 445, null],
+		]);
+	});
+
+	it('publishes the typical credits per step to the pricing page and the model picker', () => {
+		expect(thinkModelOptions().map((option) => [option.id, option.creditsPerStep])).toEqual(THINK_MODELS.map((model) => [model.id, model.creditsPerStep]));
+	});
+});
+```
+
+- [ ] **Step 2: Write the failing frontend tests.** Replace the expectations in `src/utils/credit-change.test.ts` with:
+
+```ts
+	it('describes a change between models in typical credits per step', () => {
+		expect(describeCreditChange(16, 136)).toBe('about 136 credits per step instead of about 16 (about 8.5x)');
+		expect(describeCreditChange(136, 16)).toBe('about 16 credits per step instead of about 136 (about 88% cheaper)');
+		expect(describeCreditChange(136, 136)).toBe('about 136 credits per step');
+	});
+```
+
+In `src/lib/credits.test.ts`, replace the recommendation tests with:
+
+```ts
+	it('recommends the smallest plan whose monthly credits cover the need, then Premium with extra credits, then Enterprise', () => {
+		expect(recommendPlan(0)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(5_000)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(5_001)).toEqual({ plan: 'pro' });
+		expect(recommendPlan(20_000)).toEqual({ plan: 'pro' });
+		expect(recommendPlan(100_000)).toEqual({ plan: 'premium', extraCredits: 0 });
+		// Extra credits come in thousands, at least 5,000.
+		expect(recommendPlan(101_200)).toEqual({ plan: 'premium', extraCredits: 5_000 });
+		expect(recommendPlan(112_300)).toEqual({ plan: 'premium', extraCredits: 13_000 });
+		expect(recommendPlan(500_000)).toEqual({ plan: 'premium', extraCredits: 400_000 });
+		expect(recommendPlan(500_001)).toEqual({ plan: 'enterprise' });
+		// With billing off, Basic is today's daily allowance over a month.
+		expect(recommendPlan(5_500, 6_000)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(6_001, 6_000)).toEqual({ plan: 'pro' });
+	});
+```
+
+Change any test that builds a `ThinkModelOption` to use `creditsPerStep`.
+
+- [ ] **Step 3: Run them to verify they fail**
+
+Run: `rtk proxy bun run test -- worker/services/billing/step-credits.test.ts worker/agents/think/model-prices.test.ts src/utils/credit-change.test.ts src/lib/credits.test.ts`
+Expected: FAIL, missing modules and fields.
+
+- [ ] **Step 4: Implement `step-credits.ts`**
+
+```ts
+/**
+ * Credits from a step's real cost: ceil(list-price cost × 1.5 ÷ $0.001). Prices are turned into whole units of $0.0001
+ * per 1M tokens, so the arithmetic is exact: credits = ceil(Σ tokens × units × 15 ÷ 10^8).
+ */
+
+export const CREDIT_USD = 0.001;
+export const CREDIT_MARGIN = 1.5;
+/** Older paths charged a flat cost per call; Sonnet's 8 matches its typical 136 credits a step. */
+export const LEGACY_CREDIT_FACTOR = 17;
+
+const UNITS_PER_USD = 10_000;
+/** units × tokens × 15 ÷ 10^8 = (units ÷ 10^4 $) × (tokens ÷ 10^6) × 1.5 ÷ $0.001. */
+const CREDIT_DIVISOR = 100_000_000;
+const MARGIN_NUMERATOR = 15;
+
+const units = (usd: number): number => Math.round(usd * UNITS_PER_USD);
+const count = (value: number | undefined): number => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0);
+
+export function stepCredits(prices: TokenPrices, usage: StepUsage | null, typical: number): number {
+	if (!usage || (usage.inputTokens === undefined && usage.outputTokens === undefined && usage.textTokens === undefined)) return typical;
+	const cacheRead = count(usage.cacheReadTokens);
+	const cacheWrite = count(usage.cacheWriteTokens);
+	const fresh = usage.noCacheInputTokens !== undefined ? count(usage.noCacheInputTokens) : Math.max(0, count(usage.inputTokens) - cacheRead - cacheWrite);
+	const output = usage.outputTokens !== undefined ? count(usage.outputTokens) : count(usage.textTokens) + count(usage.reasoningTokens);
+	const total =
+		fresh * units(prices.inputUsd) + cacheRead * units(prices.cacheReadUsd) + cacheWrite * units(prices.cacheWriteUsd) + output * units(prices.outputUsd);
+	return Math.floor((total * MARGIN_NUMERATOR + CREDIT_DIVISOR - 1) / CREDIT_DIVISOR);
+}
+```
+
+- **`stepUsageFrom`** copies `inputTokens`, `inputTokenDetails.noCacheTokens`, `cacheReadTokens`, `cacheWriteTokens`, `outputTokens` and `outputTokenDetails.textTokens`, `reasoningTokens`, leaving out undefined ones. It answers null for undefined usage.
+- **`legacyCallCredits(creditCost)`** is `Math.ceil(creditCost * LEGACY_CREDIT_FACTOR)`.
+- Import `TokenPrices` as a type from `../../agents/think/model-config`.
+
+- [ ] **Step 5: The model table.** In `model-config.ts`:
+- Replace the old "Credits: $0.25 per 1M input tokens" comment with "List prices per 1M tokens, from 589 AI Gateway log rows (2026-10-19). Cache reads cost 10% of input on Anthropic and 25% on Gemini; Anthropic cache writes cost 125%. Gemini Flash input is promotional through 2026-12-31: review its prices then."
+- Give each model the `prices`, `creditsPerStep` and `pricesReviewBy` the test pins.
+- Keep `config.creditCost`: billing-off metering still uses it.
+- `thinkModelOptions()` publishes `creditsPerStep: model.creditsPerStep`.
+- In `features/types.ts`, `ThinkModelOption.creditCost` becomes `creditsPerStep: number`, documented "Typical credits per step, from measured usage; each step is charged from its real cost."
+
+- [ ] **Step 6: The frontend copy.**
+- **`credit-change.ts`:** writes the strings the test pins, still rounding the ratio to one decimal and the saving to a whole percent.
+- **`use-model-rates.ts`:** `rates` maps `model.creditsPerStep`, and its comment says "typical credits per step".
+- **`ModelUnavailableNotice.tsx`:** passes `failed.creditsPerStep` and `alternative.creditsPerStep`.
+- **`Calculator.tsx`:** reads `model?.creditsPerStep ?? 0`, and each model option says "about {entry.creditsPerStep} credits per step".
+- **`CreditsExplainer.tsx`:** the footnote becomes "Estimates. Each AI step is charged from the work it does, at the price of the model you pick; bigger stores and longer requests take more steps."
+- **`src/lib/credits.ts`:**
+  - the header comment says the builder charges each step from its real cost, and the steps are priced at each model's typical credits per step;
+  - keep `DAYS_PER_MONTH`: with billing off, the calculator still prices Basic from today's daily allowance;
+  - `recommendPlan(credits, basicCredits = PLAN_LIMITS.basic.aiCredits)`, using `PLAN_LIMITS` and `EXTRA_CREDITS`, answers:
+    - Basic up to `basicCredits`;
+    - Pro up to Pro's;
+    - Premium with `extraCredits: 0` up to Premium's;
+    - Premium with extra credits (the shortfall rounded up to 1,000, at least `EXTRA_CREDITS.minCredits`) up to `ENTERPRISE_FROM_CREDITS`;
+    - Enterprise above that.
+  - Calculator's use of the recommendation changes in Task 12.
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- worker/services/billing/step-credits.test.ts worker/agents/think/model-prices.test.ts src/utils/credit-change.test.ts src/lib/credits.test.ts`
+Expected: PASS.
+
+Run: `bun run typecheck`
+Expected: errors only in `src/components/pricing/Calculator.tsx`, `PlanCards.tsx`, `ComparePlans.tsx` and `src/lib/contact.ts`, which Task 12 rewrites.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add worker/services/billing/step-credits.ts worker/services/billing/step-credits.test.ts worker/agents/think/model-config.ts worker/agents/think/model-prices.test.ts worker/agents/core/features/types.ts src/hooks/use-model-rates.ts src/utils/credit-change.ts src/utils/credit-change.test.ts src/components/ModelUnavailableNotice.tsx src/components/pricing/CreditsExplainer.tsx src/components/pricing/Calculator.tsx src/lib/credits.ts src/lib/credits.test.ts
+git commit -m "feat(billing): price each model per token, charge a step from its real cost, and say about how many credits a step takes
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 3: Billing tables and their services
 
 **Files:**
 - Create:
@@ -550,49 +630,61 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `worker/database/services/unique-violation.ts`;
   - the generated migration `migrations/00NN_billing.sql` and its snapshot.
 - Modify:
-  - `worker/database/schema.ts`;
-  - `worker/database/index.ts`;
+  - `worker/database/schema.ts`, `worker/database/index.ts`;
   - `worker/database/services/LiveStoreService.ts` (use the extracted `isUniqueViolation`);
   - `worker/database/test-support/real-d1.ts`.
 - Test: `worker/database/services/billing.sql.test.ts`.
 
 **Interfaces:**
-- **Consumes:** `PlanId`, `PremiumTierNumber`, `PlanLimitOverrides` (Task 1).
+- **Consumes:** `PLAN_IDS`, `PAID_PLAN_IDS`, `PlanId`, `PaidPlanId`, `PlanLimitOverrides` (Task 1).
 - **Produces:**
   - `shared/types/billing.ts`:
     - status lists: `SUBSCRIPTION_STATUSES` and `SubscriptionStatus`; `LIVE_SUBSCRIPTION_STATUSES = ['active', 'trialing', 'past_due']`; `BILLING_EVENT_RESULTS = ['applied', 'ignored', 'refused']` and `BillingEventResult`;
-    - notice kinds: `BILLING_NOTICE_KINDS = ['premium_started', 'receipt', 'tier_upgraded', 'downgrade_scheduled', 'payment_failed', 'premium_ending', 'premium_ended', 'credits_80', 'credits_100', 'enforcement_notice']` and `BillingNoticeKind`;
-    - paths and codes: `BILLING_PATH = '/settings/billing'`; `PREMIUM_CHECKOUT_KIND = 'estori_premium'`; `PLAN_LIMIT_ERROR_CODE = 'PLAN_LIMIT'`;
-    - `renewalDisclosure(priceCents: number): string`, plus the view types Task 6 fills in.
-  - Schema tables `billingCustomers`, `subscriptions`, `billingEvents`, `billingNotices`, `planOverrides`, `creditGrants`, with the types `SubscriptionRecord`, `PlanOverrideRecord` and `CreditGrantRecord`.
+    - notice kinds: `BILLING_NOTICE_KINDS = ['plan_started', 'receipt', 'plan_upgraded', 'downgrade_scheduled', 'payment_failed', 'plan_ending', 'plan_ended', 'credits_renewed', 'credits_20', 'credits_5', 'credits_receipt', 'credits_refunded', 'enforcement_notice']` and `BillingNoticeKind`;
+    - `CREDIT_USE_SOURCES = ['think', 'infer']`;
+    - paths and codes: `BILLING_PATH = '/settings/billing'`; `CHECKOUT_KIND_CREDITS = 'credits'`; `PLAN_LIMIT_ERROR_CODE = 'PLAN_LIMIT'`;
+    - copy: `renewalDisclosure(plan: PaidPlanId): string`, `EXTRA_CREDITS_DISCLOSURE`.
+    - Task 8 adds the view types.
+  - Schema tables, each with its `$inferSelect` type:
+    - `billingCustomers`;
+    - `subscriptions` (`SubscriptionRecord`);
+    - `billingEvents`, `billingNotices`;
+    - `planOverrides` (`PlanOverrideRecord`);
+    - `creditGrants` (`CreditGrantRecord`);
+    - `accountStoreCounts`;
+    - `creditPeriods` (`CreditPeriodRecord`), `creditUses`, `creditPurchases` (`CreditPurchaseRecord`).
   - `BillingService`:
     - customers: `customerOf(userId)`, `userOfCustomer(stripeCustomerId)`, `saveCustomer(userId, stripeCustomerId, now): Promise<string>`;
-    - subscriptions: `subscriptionOf(userId): Promise<SubscriptionRecord | null>`;
+    - subscriptions: `subscriptionOf(userId): Promise<SubscriptionRecord | null>`, `subscriptionsToRepair(nowMs)`;
     - events: `eventSeen(eventId)`, `recordEvent(input: BillingEventInput): Promise<void>` (it throws when any key in the batch already exists);
     - notices: `sentNoticeKeys(userId, keys): Promise<Set<string>>`, `claimNotice(userId, key, kind, now): Promise<boolean>`;
-    - repair: `subscriptionsToRepair(nowMs): Promise<SubscriptionRecord[]>`.
-  - `PlanAdminService`:
-    - overrides: `latestOverride(userId)`, `addOverride(input: PlanOverrideInput)`;
-    - grants: `grantedCredits(userId, periodStart: Date): Promise<number>`, `grantsOf(userId, periodStart)`, `addGrant(input: CreditGrantInput)`.
-  - Test helpers: `insertSubscription(db, row)`, `insertBillingCustomer(db, userId, stripeCustomerId)`.
+    - stores: `reserveStore(userId: string, cap: number | null, now: Date): Promise<{ reserved: boolean; started: number }>`.
+  - `PlanAdminService`: `latestOverride(userId)`, `addOverride(input: PlanOverrideInput)`.
+  - Test helpers:
+    - `insertUser(db, id, options?: { createdAt?: Date; emailVerified?: boolean })`, extended;
+    - `insertSubscription(db, row)`;
+    - `insertBillingCustomer(db, userId, stripeCustomerId)`;
+    - `insertPurchase(db, row)`.
 
 - [ ] **Step 1: Write the failing test** `worker/database/services/billing.sql.test.ts`:
 
 ```ts
-/** The billing tables on real SQL: customers kept once, events written all-or-nothing, notices claimed once, overrides audited. */
+/** The billing tables on real SQL: customers kept once, events written all-or-nothing, notices claimed once, Basic's store places reserved atomically. */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { envWith, insertSubscription, insertUser, migratedD1 } from '../test-support/real-d1';
+import { envWith, insertApp, insertSubscription, insertUser, migratedD1 } from '../test-support/real-d1';
 import { BillingService } from './BillingService';
 import { PlanAdminService } from './PlanAdminService';
 import type { SubscriptionRecord } from '../schema';
+
+const migrationSql = import.meta.glob<string>('/migrations/*_billing.sql', { query: '?raw', import: 'default', eager: true });
 
 let db: D1Database;
 const at = (iso: string) => new Date(iso);
 
 beforeAll(async () => {
 	db = await migratedD1();
-	for (const id of ['u_pay', 'u_two', 'u_admin', 'u_due', 'u_fresh', 'u_ending']) await insertUser(db, id);
+	for (const id of ['u_pay', 'u_two', 'u_admin', 'u_due', 'u_fresh', 'u_ending', 'u_stores', 'u_old']) await insertUser(db, id);
 });
 
 function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
@@ -600,12 +692,12 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 		userId: 'u_two',
 		stripeSubscriptionId: 'sub_two',
 		status: 'active',
-		tier: 1,
+		plan: 'pro',
 		currentPeriodStart: at('2026-10-01T00:00:00Z'),
 		currentPeriodEnd: at('2026-11-01T00:00:00Z'),
 		cancelAtPeriodEnd: false,
-		pendingTier: null,
-		pendingTierAt: null,
+		pendingPlan: null,
+		pendingPlanAt: null,
 		stripeScheduleId: null,
 		stripeCreatedAt: at('2026-10-01T00:00:00Z'),
 		updatedAt: at('2026-10-01T00:00:05Z'),
@@ -613,55 +705,46 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 	};
 }
 
-describe('billing customers', () => {
+describe('billing customers and events', () => {
 	it('keeps the first Stripe customer an account gets, and finds the account from it', async () => {
 		const billing = new BillingService(envWith(db));
 		expect(await billing.saveCustomer('u_pay', 'cus_first', at('2026-10-19T00:00:00Z'))).toBe('cus_first');
 		expect(await billing.saveCustomer('u_pay', 'cus_second', at('2026-10-19T00:01:00Z'))).toBe('cus_first');
-		expect(await billing.customerOf('u_pay')).toBe('cus_first');
 		expect(await billing.userOfCustomer('cus_first')).toBe('u_pay');
 		expect(await billing.userOfCustomer('cus_second')).toBeNull();
 	});
-});
 
-describe('billing events', () => {
 	it('writes an event with its row and notices together, and refuses the same event twice', async () => {
 		const billing = new BillingService(envWith(db));
-		const input = {
-			event: { id: 'evt_a', type: 'customer.subscription.created', objectId: 'sub_two', userId: 'u_two', result: 'applied' as const },
-			row: row(),
-			notices: [{ key: 'premium_started:sub_two', kind: 'premium_started' as const }],
-			now: at('2026-10-01T00:00:05Z'),
-		};
+		const input = { event: { id: 'evt_a', type: 'customer.subscription.created', objectId: 'sub_two', userId: 'u_two', result: 'applied' as const }, row: row(), notices: [{ key: 'plan_started:sub_two', kind: 'plan_started' as const }], now: at('2026-10-01T00:00:05Z') };
 		await billing.recordEvent(input);
 		expect(await billing.eventSeen('evt_a')).toBe(true);
-		expect(await billing.subscriptionOf('u_two')).toMatchObject({ stripeSubscriptionId: 'sub_two', status: 'active', tier: 1 });
-		expect(await billing.sentNoticeKeys('u_two', ['premium_started:sub_two', 'receipt:in_1'])).toEqual(new Set(['premium_started:sub_two']));
+		expect(await billing.subscriptionOf('u_two')).toMatchObject({ stripeSubscriptionId: 'sub_two', status: 'active', plan: 'pro' });
+		expect(await billing.sentNoticeKeys('u_two', ['plan_started:sub_two', 'receipt:in_1'])).toEqual(new Set(['plan_started:sub_two']));
 		await expect(billing.recordEvent(input)).rejects.toThrow();
 	});
 
 	it('writes nothing when a notice is already recorded, so the event can be retried', async () => {
 		const billing = new BillingService(envWith(db));
-		const notices = [{ key: 'premium_started:sub_two', kind: 'premium_started' as const }];
+		const notices = [{ key: 'plan_started:sub_two', kind: 'plan_started' as const }];
 		await billing.recordEvent({ event: { id: 'evt_a2', type: 'customer.subscription.created', objectId: 'sub_two', userId: 'u_two', result: 'applied' }, row: row(), notices, now: at('2026-10-01T00:00:05Z') });
-		await expect(
-			billing.recordEvent({ event: { id: 'evt_b', type: 'customer.subscription.updated', objectId: 'sub_two', userId: 'u_two', result: 'applied' }, row: row({ tier: 3 }), notices, now: at('2026-10-02T00:00:00Z') }),
-		).rejects.toThrow();
+		await expect(billing.recordEvent({ event: { id: 'evt_b', type: 'customer.subscription.updated', objectId: 'sub_two', userId: 'u_two', result: 'applied' }, row: row({ plan: 'premium' }), notices, now: at('2026-10-02T00:00:00Z') })).rejects.toThrow();
 		expect(await billing.eventSeen('evt_b')).toBe(false);
-		expect((await billing.subscriptionOf('u_two'))?.tier).toBe(1);
+		expect((await billing.subscriptionOf('u_two'))?.plan).toBe('pro');
 	});
 
-	it('records an ignored event without writing a row', async () => {
+	it('records an extra-credit purchase with its event, once per Checkout session', async () => {
 		const billing = new BillingService(envWith(db));
-		await billing.recordEvent({ event: { id: 'evt_c', type: 'invoice.paid', objectId: 'in_9', userId: null, result: 'ignored' }, row: null, notices: [], now: at('2026-10-03T00:00:00Z') });
-		expect(await billing.eventSeen('evt_c')).toBe(true);
-		expect(await billing.subscriptionOf('u_two')).toBeNull();
+		const purchase = { id: 'cp_1', userId: 'u_pay', credits: 5_000, amountCents: 750, stripeCheckoutSessionId: 'cs_credits_1', stripePaymentIntentId: 'pi_credits_1', purchasedAt: at('2026-10-19T00:00:00Z'), expiresAt: at('2027-10-19T00:00:00Z') };
+		await billing.recordEvent({ event: { id: 'evt_c1', type: 'checkout.session.completed', objectId: 'cs_credits_1', userId: 'u_pay', result: 'applied' }, purchase, now: at('2026-10-19T00:00:00Z') });
+		expect(await db.prepare("SELECT credits, used, refunded_cents FROM credit_purchases WHERE id = 'cp_1'").first()).toEqual({ credits: 5_000, used: 0, refunded_cents: 0 });
+		await expect(billing.recordEvent({ event: { id: 'evt_c2', type: 'checkout.session.completed', objectId: 'cs_credits_1', userId: 'u_pay', result: 'applied' }, purchase: { ...purchase, id: 'cp_2' }, now: at('2026-10-19T00:00:00Z') })).rejects.toThrow();
 	});
 
 	it('claims a notice once', async () => {
 		const billing = new BillingService(envWith(db));
-		expect(await billing.claimNotice('u_two', 'credits_80:1790812800', 'credits_80', at('2026-10-10T00:00:00Z'))).toBe(true);
-		expect(await billing.claimNotice('u_two', 'credits_80:1790812800', 'credits_80', at('2026-10-11T00:00:00Z'))).toBe(false);
+		expect(await billing.claimNotice('u_two', 'credits_20:acct:1790812800', 'credits_20', at('2026-10-10T00:00:00Z'))).toBe(true);
+		expect(await billing.claimNotice('u_two', 'credits_20:acct:1790812800', 'credits_20', at('2026-10-11T00:00:00Z'))).toBe(false);
 	});
 
 	it('lists subscriptions to re-read: past due for over a day, or set to end and past their end', async () => {
@@ -673,201 +756,139 @@ describe('billing events', () => {
 	});
 });
 
-describe('plan overrides and credit grants', () => {
-	it('reads the latest override, and writes each one with an audit entry naming the admin', async () => {
-		const admin = new PlanAdminService(envWith(db));
-		await admin.addOverride({ userId: 'u_pay', plan: 'enterprise', tier: null, limits: { aiCredits: 500_000 }, until: null, adminUserId: 'u_admin', reason: 'Signed Enterprise contract', now: at('2026-10-19T00:00:00Z') });
-		await admin.addOverride({ userId: 'u_pay', plan: null, tier: null, limits: {}, until: null, adminUserId: 'u_admin', reason: 'Contract ended', now: at('2026-10-20T00:00:00Z') });
-		expect(await admin.latestOverride('u_pay')).toMatchObject({ plan: null, reason: 'Contract ended' });
-		const audits = await db.prepare("SELECT user_id, entity_type, entity_id, action FROM audit_logs WHERE entity_id = 'u_pay' ORDER BY created_at").all();
-		expect(audits.results).toEqual([
-			{ user_id: 'u_admin', entity_type: 'billing_plan', entity_id: 'u_pay', action: 'plan_override' },
-			{ user_id: 'u_admin', entity_type: 'billing_plan', entity_id: 'u_pay', action: 'plan_override' },
-		]);
+describe("Basic's lifetime stores", () => {
+	it('reserves a place only under the cap, even when several starts race, and always counts without a cap', async () => {
+		const billing = new BillingService(envWith(db));
+		const now = at('2026-10-19T00:00:00Z');
+		const results = await Promise.all([1, 2, 3, 4, 5].map(() => billing.reserveStore('u_stores', 3, now)));
+		expect(results.filter((result) => result.reserved)).toHaveLength(3);
+		expect(await billing.reserveStore('u_stores', 3, now)).toEqual({ reserved: false, started: 3 });
+		expect(await billing.reserveStore('u_stores', null, now)).toEqual({ reserved: true, started: 4 });
 	});
 
-	it('sums the grants of one period only', async () => {
+	it("backfills the counter from each account's stores when the migration runs", async () => {
+		const backfill = Object.values(migrationSql)[0]?.split('--> statement-breakpoint').map((part) => part.trim()).find((part) => part.startsWith('INSERT INTO `account_store_counts`'));
+		expect(backfill).toBeDefined();
+		for (const id of ['app_old_1', 'app_old_2']) await insertApp(db, { id, userId: 'u_old' });
+		await db.prepare("DELETE FROM account_store_counts WHERE user_id = 'u_old'").run();
+		await db.prepare(backfill ?? '').run();
+		expect(await db.prepare("SELECT stores_started FROM account_store_counts WHERE user_id = 'u_old'").first()).toEqual({ stores_started: 2 });
+	});
+});
+
+describe('plan overrides', () => {
+	it('reads the latest override, and writes each one with an audit entry naming the admin', async () => {
 		const admin = new PlanAdminService(envWith(db));
-		const october = at('2026-10-01T00:00:00Z');
-		await admin.addGrant({ userId: 'u_two', credits: 5_000, periodStart: october, adminUserId: 'u_admin', reason: 'Launch partner', now: at('2026-10-05T00:00:00Z') });
-		await admin.addGrant({ userId: 'u_two', credits: 1_000, periodStart: october, adminUserId: 'u_admin', reason: 'Support case', now: at('2026-10-06T00:00:00Z') });
-		await admin.addGrant({ userId: 'u_two', credits: 9_000, periodStart: at('2026-09-01T00:00:00Z'), adminUserId: 'u_admin', reason: 'Last month', now: at('2026-09-05T00:00:00Z') });
-		expect(await admin.grantedCredits('u_two', october)).toBe(6_000);
-		expect((await admin.grantsOf('u_two', october)).map((grant) => grant.credits)).toEqual([5_000, 1_000]);
-		const audit = await db.prepare("SELECT action FROM audit_logs WHERE entity_id = 'u_two' AND entity_type = 'credit_grant'").all();
-		expect(audit.results).toHaveLength(3);
+		await admin.addOverride({ userId: 'u_pay', plan: 'enterprise', limits: { aiCredits: 500_000 }, until: null, adminUserId: 'u_admin', reason: 'Signed Enterprise contract', now: at('2026-10-19T00:00:00Z') });
+		await admin.addOverride({ userId: 'u_pay', plan: null, limits: {}, until: null, adminUserId: 'u_admin', reason: 'Contract ended', now: at('2026-10-20T00:00:00Z') });
+		expect(await admin.latestOverride('u_pay')).toMatchObject({ plan: null, reason: 'Contract ended' });
+		const audits = await db.prepare("SELECT user_id, entity_type, action FROM audit_logs WHERE entity_id = 'u_pay' ORDER BY created_at").all();
+		expect(audits.results).toEqual([
+			{ user_id: 'u_admin', entity_type: 'billing_plan', action: 'plan_override' },
+			{ user_id: 'u_admin', entity_type: 'billing_plan', action: 'plan_override' },
+		]);
 	});
 });
 ```
+
+The backfill test runs the backfill on `u_old`, whose two apps the test inserts; the other accounts' counts come from the backfill too, which the test doesn't read.
 
 - [ ] **Step 2: Run it to verify it fails**
 
 Run: `rtk proxy bun run test -- worker/database/services/billing.sql.test.ts`
 Expected: FAIL, "Failed to resolve import ./BillingService".
 
-- [ ] **Step 3: Add `shared/types/billing.ts`** with the constants and types from Interfaces. The disclosure copy is fixed by spec section 10a:
+- [ ] **Step 3: `shared/types/billing.ts`.** The constants and types from Interfaces, and:
 
 ```ts
-/** Shown above the pay button at checkout; the Terms say the same. */
-export function renewalDisclosure(priceCents: number): string {
-	return `Premium renews every month at ${formatUsd(priceCents)} until you cancel. Cancel any time in Estori; it ends at the end of the period.`;
+/** Shown above the pay button of a subscription checkout; the Terms say the same. */
+export function renewalDisclosure(plan: PaidPlanId): string {
+	return `${planName(plan)} renews every month at ${formatUsd(PLAN_PRICES_CENTS[plan])} until you cancel. Cancel any time in Estori; it ends at the end of the period.`;
 }
+
+/** Shown above the pay button of an extra-credits checkout. */
+export const EXTRA_CREDITS_DISCLOSURE = 'Extra credits are used after your monthly credits and expire 12 months after purchase.';
 ```
 
-- [ ] **Step 4: Add the tables to `worker/database/schema.ts`.** Put them after `shopperEmails`. Import the enums from `shared/types/billing` and `shared/types/plans`.
+- [ ] **Step 4: The tables in `worker/database/schema.ts`,** after `shopperEmails`. Timestamps use `mode: 'timestamp'`. Enums come from `shared/types/billing` and `shared/types/plans`.
 
-```ts
-/** The Stripe customer Estori bills for Premium: one per account, on the platform account. */
-export const billingCustomers = sqliteTable('billing_customers', {
-    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
-    stripeCustomerId: text('stripe_customer_id').notNull().unique(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-});
+| Table | Columns | Keys and indexes |
+| --- | --- | --- |
+| `billing_customers` | `user_id` → users (cascade), `stripe_customer_id`, `created_at` | PK `user_id`; `stripe_customer_id` unique |
+| `subscriptions` | `user_id` → users (cascade), `stripe_subscription_id`, `status` (enum), `plan` (`pro`/`premium`), `current_period_start`, `current_period_end`, `cancel_at_period_end` (bool, default false), `pending_plan` (nullable enum), `pending_plan_at`, `stripe_schedule_id`, `stripe_created_at`, `updated_at` | PK `user_id`; `stripe_subscription_id` unique; index `status` |
+| `billing_events` | `stripe_event_id`, `type`, `object_id`, `user_id`, `result` (enum), `received_at` | PK `stripe_event_id` |
+| `billing_notices` | `user_id` → users (cascade), `notice_key`, `kind` (enum), `sent_at` | PK (`user_id`, `notice_key`) |
+| `plan_overrides` | `id`, `user_id` → users (cascade), `plan` (nullable enum; null ends the override), `limits` (JSON text, default `'{}'`), `until`, `admin_user_id`, `reason`, `created_at` | PK `id`; index (`user_id`, `created_at`) |
+| `credit_grants` | `id`, `user_id` → users (cascade), `credits`, `period_key`, `admin_user_id`, `reason`, `created_at` | PK `id`; index (`user_id`, `period_key`) |
+| `account_store_counts` | `user_id` → users (cascade), `stores_started` (default 0), `updated_at` | PK `user_id` |
+| `credit_periods` | `user_id` → users (cascade), `period_key`, `period_start`, `period_end`, `pool`, `granted` (default 0), `used` (default 0), `settled` (default 0), `forgiven` (default 0), `closed_at` | PK (`user_id`, `period_key`); index (`closed_at`, `period_end`) |
+| `credit_uses` | `use_key`, `user_id`, `period_key`, `credits`, `source` (enum), `model`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` (nullable), `created_at` | PK `use_key`; index (`user_id`, `created_at`) |
+| `credit_purchases` | `id`, `user_id` → users (cascade), `credits`, `amount_cents`, `stripe_checkout_session_id`, `stripe_payment_intent_id`, `purchased_at`, `expires_at`, `used` (default 0), `refunded_cents` (default 0), `removed_credits` (default 0), `expired_at` | PK `id`; `stripe_checkout_session_id` unique; indexes `stripe_payment_intent_id`, (`user_id`, `purchased_at`), (`expired_at`, `expires_at`) |
 
-/** An account's Premium subscription as Stripe last had it; one row per account, rebuilt on every billing event. */
-export const subscriptions = sqliteTable('subscriptions', {
-    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
-    stripeSubscriptionId: text('stripe_subscription_id').notNull().unique(),
-    status: text('status', { enum: SUBSCRIPTION_STATUSES }).notNull(),
-    tier: integer('tier').notNull(),
-    currentPeriodStart: integer('current_period_start', { mode: 'timestamp' }).notNull(),
-    currentPeriodEnd: integer('current_period_end', { mode: 'timestamp' }).notNull(),
-    cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).notNull().default(false),
-    pendingTier: integer('pending_tier'),
-    pendingTierAt: integer('pending_tier_at', { mode: 'timestamp' }),
-    /** The schedule holding a pending downgrade; releasing it cancels the downgrade. */
-    stripeScheduleId: text('stripe_schedule_id'),
-    /** When Stripe created the subscription: a newer one replaces an ended one, never a live one. */
-    stripeCreatedAt: integer('stripe_created_at', { mode: 'timestamp' }).notNull(),
-    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
-}, (table) => ({
-    statusIdx: index('subscriptions_status_idx').on(table.status),
-}));
+Give each table a one-line comment saying what a row is. For `credit_periods`, also say that `used` counts every charged credit and `settled` the overrun already taken from purchases.
 
-/** Each Stripe event Estori handled, recorded in the same batch as what it changed, so a retry is a no-op. */
-export const billingEvents = sqliteTable('billing_events', {
-    stripeEventId: text('stripe_event_id').primaryKey(),
-    type: text('type').notNull(),
-    objectId: text('object_id'),
-    userId: text('user_id'),
-    result: text('result', { enum: BILLING_EVENT_RESULTS }).notNull(),
-    receivedAt: integer('received_at', { mode: 'timestamp' }).notNull(),
-});
-
-/** Billing emails already sent: one row per account and notice key, such as a subscription, an invoice or a period. */
-export const billingNotices = sqliteTable('billing_notices', {
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    noticeKey: text('notice_key').notNull(),
-    kind: text('kind', { enum: BILLING_NOTICE_KINDS }).notNull(),
-    sentAt: integer('sent_at', { mode: 'timestamp' }).notNull(),
-}, (table) => ({
-    pk: primaryKey({ columns: [table.userId, table.noticeKey] }),
-}));
-
-/** Admin plan overrides, newest first wins; a row with no plan ends the override. */
-export const planOverrides = sqliteTable('plan_overrides', {
-    id: text('id').primaryKey(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    plan: text('plan', { enum: PLAN_IDS }),
-    tier: integer('tier'),
-    /** JSON `PlanLimitOverrides`. */
-    limits: text('limits').notNull().default('{}'),
-    until: integer('until', { mode: 'timestamp' }),
-    adminUserId: text('admin_user_id').notNull(),
-    reason: text('reason').notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-}, (table) => ({
-    userCreatedIdx: index('plan_overrides_user_created_idx').on(table.userId, table.createdAt),
-}));
-
-/** Credits Estori added to one credit window of an account ("Added by Estori"). */
-export const creditGrants = sqliteTable('credit_grants', {
-    id: text('id').primaryKey(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-    credits: integer('credits').notNull(),
-    periodStart: integer('period_start', { mode: 'timestamp' }).notNull(),
-    adminUserId: text('admin_user_id').notNull(),
-    reason: text('reason').notNull(),
-    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-}, (table) => ({
-    userPeriodIdx: index('credit_grants_user_period_idx').on(table.userId, table.periodStart),
-}));
-
-export type SubscriptionRecord = typeof subscriptions.$inferSelect;
-export type PlanOverrideRecord = typeof planOverrides.$inferSelect;
-export type CreditGrantRecord = typeof creditGrants.$inferSelect;
-```
-
-- [ ] **Step 5: Generate the migration**
+- [ ] **Step 5: Generate the migration and add the backfill**
 
 Run: `bun run db:generate -- --name billing`
-Expected: a new `migrations/00NN_billing.sql` with six `CREATE TABLE` statements and the three indexes, plus its snapshot and journal entry. Read the SQL. It must create nothing else, and must not alter existing tables.
+Expected: a new `migrations/00NN_billing.sql` creating the ten tables and their indexes, with its snapshot and journal entry. It must alter no existing table.
+
+Append to the generated SQL:
+
+```sql
+--> statement-breakpoint
+INSERT INTO `account_store_counts` (`user_id`, `stores_started`, `updated_at`) SELECT `user_id`, COUNT(*), unixepoch() FROM `apps` WHERE `user_id` IS NOT NULL GROUP BY `user_id` ON CONFLICT (`user_id`) DO UPDATE SET `stores_started` = excluded.`stores_started`;
+```
 
 - [ ] **Step 6: Implement the services.**
 
-**Unique violations:**
-- Move `isUniqueViolation` from `LiveStoreService.ts` into `worker/database/services/unique-violation.ts`, exported.
-- Import it back into `LiveStoreService`.
+**Unique violations:** move `isUniqueViolation` from `LiveStoreService.ts` into `unique-violation.ts`, exported, and import it back.
 
 **`BillingService extends BaseService`:**
 - **`saveCustomer`:** inserts with `onConflictDoNothing()`, then reads back the kept id. It throws if none was stored.
-- **`sentNoticeKeys`:** returns an empty set for no keys. Otherwise it selects with `inArray`.
 - **`recordEvent(input)`** builds one `this.database.batch([eventInsert, ...rest])`. Type `rest` as `BatchItem<'sqlite'>[]` from `drizzle-orm/batch`. The batch holds:
   - the `billing_events` insert;
-  - when `row` is set, an upsert of `subscriptions` on `userId` that sets every other column;
-  - one plain `billing_notices` insert per notice, for `row.userId`, or `event.userId` when no row is written.
-  - It doesn't catch anything: a duplicate key anywhere rolls the whole batch back and throws, and the caller decides.
-- **`claimNotice`:** inserts with `onConflictDoNothing().returning({ key: billingNotices.noticeKey })`. It's true when a row came back.
-- **`subscriptionsToRepair(nowMs)`** selects:
-  - `status = 'past_due'` with `current_period_start <= now - 1 day`;
-  - or `cancel_at_period_end = 1` with `current_period_end <= now` and a status in `LIVE_SUBSCRIPTION_STATUSES`.
+  - `row`, when set: a `subscriptions` upsert on `userId` setting every other column;
+  - `purchase`, when set: a plain `credit_purchases` insert;
+  - `refund`, when set: `UPDATE credit_purchases SET refunded_cents = :cents, removed_credits = :removed WHERE id = :id AND refunded_cents < :cents`;
+  - one plain `billing_notices` insert per notice, for the event's user.
+  - It doesn't catch: a duplicate key anywhere rolls the batch back and throws, and the caller decides.
 
 ```ts
 export interface BillingEventInput {
 	event: { id: string; type: string; objectId: string | null; userId: string | null; result: BillingEventResult };
-	/** The subscription row as Stripe now has it; null records the event alone. */
-	row: SubscriptionRecord | null;
-	notices: ReadonlyArray<{ key: string; kind: BillingNoticeKind }>;
+	row?: SubscriptionRecord | null;
+	purchase?: typeof schema.creditPurchases.$inferInsert | null;
+	refund?: { purchaseId: string; refundedCents: number; removedCredits: number } | null;
+	notices?: ReadonlyArray<{ key: string; kind: BillingNoticeKind }>;
 	now: Date;
 }
 ```
 
-**`PlanAdminService extends BaseService`:**
+**Notices and repair:**
+- **`claimNotice`:** inserts with `onConflictDoNothing().returning({ key: billingNotices.noticeKey })`. It's true when a row came back.
+- **`sentNoticeKeys`:** returns an empty set for no keys. Otherwise it selects with `inArray`.
+- **`subscriptionsToRepair(nowMs)`** selects:
+  - `status = 'past_due'` with `current_period_start <= now - 1 day`;
+  - or `cancel_at_period_end = 1` with `current_period_end <= now` and a live status.
 
-```ts
-export interface PlanOverrideInput {
-	userId: string;
-	plan: PlanId | null;
-	tier: PremiumTierNumber | null;
-	limits: PlanLimitOverrides;
-	until: Date | null;
-	adminUserId: string;
-	reason: string;
-	now: Date;
-}
+**`reserveStore(userId, cap, now)`** is one batch:
+1. `INSERT INTO account_store_counts (user_id, stores_started, updated_at) VALUES (?, 0, ?) ON CONFLICT DO NOTHING`;
+2. `UPDATE account_store_counts SET stores_started = stores_started + 1, updated_at = ? WHERE user_id = ? AND (? IS NULL OR stores_started < ?) RETURNING stores_started`;
+3. `SELECT stores_started FROM account_store_counts WHERE user_id = ?`.
 
-export interface CreditGrantInput {
-	userId: string;
-	credits: number;
-	periodStart: Date;
-	adminUserId: string;
-	reason: string;
-	now: Date;
-}
-```
+It answers `{ reserved: the UPDATE returned a row, started: the SELECT's value }`.
 
-- **`addOverride`** batches two rows:
-  - the override, with `id: generateId()` and `limits: JSON.stringify(input.limits)`;
-  - an `audit_logs` row with `{ id: generateId(), userId: adminUserId, entityType: 'billing_plan', entityId: input.userId, action: 'plan_override', newValues: { plan, tier, limits, until, reason }, createdAt: now }`.
-- **`addGrant`** does the same with `entityType: 'credit_grant'` and `action: 'credit_grant'`.
-- **`latestOverride`** orders by `createdAt` descending, with limit 1.
-- **`grantedCredits`** uses ``sql<number>`coalesce(sum(${creditGrants.credits}), 0)` ``.
-- **`grantsOf`** orders by `createdAt`.
-- Export both services from `worker/database/index.ts`.
+**`PlanAdminService.addOverride`** batches two rows:
+- the override, with `id: generateId()` and `limits: JSON.stringify(input.limits)`;
+- an `audit_logs` row with `{ id: generateId(), userId: adminUserId, entityType: 'billing_plan', entityId: input.userId, action: 'plan_override', newValues: { plan, limits, until, reason }, createdAt: now }`.
+
+`latestOverride` orders by `createdAt` descending, limit 1. Export both services from `worker/database/index.ts`.
 
 **Test helpers** in `real-d1.ts`:
-- `insertSubscription(db, { userId, stripeSubscriptionId, status, tier?, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd? })` writes seconds, `tier ?? 1`, and `stripe_created_at = updated_at = currentPeriodStart`;
-- `insertBillingCustomer(db, userId, stripeCustomerId)` writes `created_at = 0`.
+- `insertUser` gains `options?: { createdAt?: Date; emailVerified?: boolean }`, written as seconds and 0/1;
+- `insertSubscription(db, { userId, stripeSubscriptionId, status, plan?, currentPeriodStart, currentPeriodEnd, cancelAtPeriodEnd? })` writes seconds, `plan ?? 'pro'`, and `stripe_created_at = updated_at = currentPeriodStart`;
+- `insertBillingCustomer(db, userId, stripeCustomerId)`;
+- `insertPurchase(db, { id, userId, credits, amountCents?, purchasedAt, expiresAt, used?, sessionId?, paymentIntentId? })`, with `amountCents` defaulting to `credits / 1000 * 150`.
 
 - [ ] **Step 7: Run the tests**
 
@@ -875,76 +896,430 @@ Run: `rtk proxy bun run test -- worker/database/services/billing.sql.test.ts wor
 Expected: PASS.
 
 Run: `bun run typecheck`
-Expected: no errors.
+Expected: no new errors.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add shared/types/billing.ts worker/database/schema.ts worker/database/index.ts worker/database/services/BillingService.ts worker/database/services/PlanAdminService.ts worker/database/services/unique-violation.ts worker/database/services/LiveStoreService.ts worker/database/services/billing.sql.test.ts worker/database/test-support/real-d1.ts migrations/
-git commit -m "feat(billing): tables for customers, subscriptions, events, notices, plan overrides and credit grants
+git commit -m "feat(billing): tables for customers, subscriptions, events, notices, overrides, store counts and the credit ledger
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 3: The account's plan, the flag and the credit meter
+### Task 4: The credit ledger
+
+**Files:**
+- Create:
+  - `worker/services/billing/credit-ledger.ts` (pure);
+  - `worker/database/services/CreditLedgerService.ts`.
+- Modify `worker/database/index.ts`.
+- Test:
+  - `worker/services/billing/credit-ledger.test.ts`;
+  - `worker/database/services/credit-ledger.sql.test.ts`.
+
+**Why D1 and not a Durable Object.** The ledger must be exact to the credit, take each step once however often it's retried, hold purchases for a year, and survive restarts.
+- `DORateLimitStore` rewrites its whole bucket map on every increment, has no per-step key, and drops buckets after its window.
+- A new SQLite Durable Object would need a class migration in every Wrangler config, `wrangler.jsonc` included, which this branch can't commit.
+- D1 already holds billing's other tables, and a batch is one transaction.
+
+**How it stays exact:**
+- a step's credits are added only if its key isn't in `credit_uses`, in the same batch that inserts the key;
+- settling compares and sets every row it changes, from one consistent read;
+- refunds and expiries settle first, so a purchase pays for what was used before it went.
+
+**Interfaces:**
+- **Consumes:** the tables from Task 3; `StepUsage` (Task 2).
+- **Produces:**
+  - `credit-ledger.ts`:
+    - `LedgerPeriod { key: string; startMs: number; endMs: number }`;
+    - `PeriodState { key: string; startMs: number; endMs: number; pool: number; granted: number; used: number; settled: number; closed: boolean }`;
+    - `PurchaseState { id: string; credits: number; used: number; removed: number; purchasedAtMs: number; expiresAtMs: number }`;
+    - `purchaseLeft(purchase: PurchaseState): number`, `unsettledOverrun(period: PeriodState): number`;
+    - `CreditBalance { pool: number; granted: number; used: number; poolLeft: number; purchasedLeft: number; left: number; available: number }`;
+    - `creditBalance(input: { current: PeriodState; open: readonly PeriodState[]; purchases: readonly PurchaseState[] }): CreditBalance`;
+    - `Settlement { periods: Array<{ key: string; settledBefore: number; settledAfter: number; close: boolean; forgiven: number }>; purchases: Array<{ id: string; usedBefore: number; usedAfter: number }> }`;
+    - `planSettlement(input: { periods: readonly PeriodState[]; purchases: readonly PurchaseState[]; nowMs: number }): Settlement`;
+    - `CreditAlert = 'credits_20' | 'credits_5'`, `creditAlertDue(balance: CreditBalance): CreditAlert | null`;
+    - `alertsMayBeDue(period: PeriodState): boolean`;
+    - `creditAlertKey(alert: CreditAlert, periodKey: string): string`.
+  - `CreditLedgerService extends BaseService`:
+    - `RecordUseInput { userId: string; period: LedgerPeriod; pool: number; useKey: string; credits: number; source: 'think' | 'infer'; model: string; usage: StepUsage | null; now: Date }`;
+    - `recordUse(input): Promise<PeriodState>`;
+    - `readBalance(userId, period: LedgerPeriod, pool: number): Promise<CreditBalance>`;
+    - `settle(userId: string, nowMs: number): Promise<'settled' | 'nothing' | 'raced'>`;
+    - `addGrant(input: { userId; period: LedgerPeriod; pool: number; credits: number; adminUserId: string; reason: string; now: Date }): Promise<void>`;
+    - `grantsOf(userId, periodKey): Promise<CreditGrantRecord[]>`;
+    - `purchasesOf(userId): Promise<CreditPurchaseRecord[]>` (not expired, oldest first);
+    - `purchaseByPaymentIntent(paymentIntentId): Promise<CreditPurchaseRecord | null>`;
+    - `usersToSettle(nowMs: number, limit: number): Promise<string[]>`;
+    - `expirePurchases(userId: string, nowMs: number): Promise<number>`;
+    - `pruneUses(beforeMs: number): Promise<void>`.
+
+- [ ] **Step 1: Write the failing pure test** `worker/services/billing/credit-ledger.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { alertsMayBeDue, creditAlertDue, creditBalance, planSettlement, type PeriodState, type PurchaseState } from './credit-ledger';
+
+const DAY = 86_400_000;
+
+function period(overrides: Partial<PeriodState> = {}): PeriodState {
+	return { key: 'acct:1', startMs: 0, endMs: 30 * DAY, pool: 5_000, granted: 1_000, used: 0, settled: 0, closed: false, ...overrides };
+}
+
+function purchase(id: string, credits: number, purchasedAtMs: number, overrides: Partial<PurchaseState> = {}): PurchaseState {
+	return { id, credits, used: 0, removed: 0, purchasedAtMs, expiresAtMs: purchasedAtMs + 365 * DAY, ...overrides };
+}
+
+describe('creditBalance', () => {
+	it('spends the pool and grants first, then purchases', () => {
+		expect(creditBalance({ current: period({ used: 2_000 }), open: [], purchases: [purchase('a', 5_000, 1)] })).toEqual({ pool: 5_000, granted: 1_000, used: 2_000, poolLeft: 4_000, purchasedLeft: 5_000, left: 9_000, available: 11_000 });
+		expect(creditBalance({ current: period({ used: 8_000 }), open: [], purchases: [purchase('a', 5_000, 1)] })).toMatchObject({ poolLeft: 0, purchasedLeft: 3_000, left: 3_000 });
+	});
+
+	it('counts an older unclosed overrun against purchases, and never goes below nothing left', () => {
+		const older = period({ key: 'acct:0', used: 9_000, settled: 1_000 });
+		expect(creditBalance({ current: period({ key: 'acct:1', used: 1_000 }), open: [older], purchases: [purchase('a', 5_000, 1, { used: 1_000 })] })).toMatchObject({ poolLeft: 5_000, purchasedLeft: 2_000, left: 7_000 });
+		expect(creditBalance({ current: period({ used: 20_000 }), open: [], purchases: [purchase('a', 5_000, 1)] })).toMatchObject({ purchasedLeft: -9_000, left: 0 });
+	});
+
+	it("leaves out a refund's removed credits", () => {
+		expect(creditBalance({ current: period(), open: [], purchases: [purchase('a', 5_000, 1, { used: 1_000, removed: 4_000 })] }).purchasedLeft).toBe(0);
+	});
+});
+
+describe('planSettlement', () => {
+	it('takes each overrun from the oldest purchase first, and only what is new', () => {
+		const plan = planSettlement({
+			periods: [period({ used: 9_000, settled: 1_000 })],
+			purchases: [purchase('new', 5_000, 20), purchase('old', 2_000, 10, { used: 1_000 })],
+			nowMs: 5 * DAY,
+		});
+		expect(plan).toEqual({
+			periods: [{ key: 'acct:1', settledBefore: 1_000, settledAfter: 3_000, close: false, forgiven: 0 }],
+			purchases: [
+				{ id: 'old', usedBefore: 1_000, usedAfter: 2_000 },
+				{ id: 'new', usedBefore: 0, usedAfter: 1_000 },
+			],
+		});
+		expect(planSettlement({ periods: [period({ used: 9_000, settled: 3_000 })], purchases: [], nowMs: 5 * DAY })).toEqual({ periods: [], purchases: [] });
+	});
+
+	it('closes an ended period and forgives what no purchase covers', () => {
+		const plan = planSettlement({ periods: [period({ used: 13_000 })], purchases: [purchase('a', 5_000, 1)], nowMs: 31 * DAY });
+		expect(plan.periods).toEqual([{ key: 'acct:1', settledBefore: 0, settledAfter: 5_000, close: true, forgiven: 2_000 }]);
+		expect(planSettlement({ periods: [period({ used: 100 })], purchases: [], nowMs: 31 * DAY }).periods).toEqual([{ key: 'acct:1', settledBefore: 0, settledAfter: 0, close: true, forgiven: 0 }]);
+	});
+});
+
+describe('credit alerts', () => {
+	it('fall due at 20% and 5% of everything available this period, the deeper one first', () => {
+		const at = (used: number) => creditAlertDue(creditBalance({ current: period({ pool: 10_000, granted: 0, used }), open: [], purchases: [] }));
+		expect(at(7_999)).toBeNull();
+		expect(at(8_000)).toBe('credits_20');
+		expect(at(9_500)).toBe('credits_5');
+		expect(at(10_000)).toBe('credits_5');
+		expect(alertsMayBeDue(period({ pool: 10_000, granted: 0, used: 7_000 }))).toBe(false);
+		expect(alertsMayBeDue(period({ pool: 10_000, granted: 0, used: 8_000 }))).toBe(true);
+	});
+});
+```
+
+- [ ] **Step 2: Write the failing real-D1 test** `worker/database/services/credit-ledger.sql.test.ts`:
+
+```ts
+/** The credit ledger on real SQL: each step charged once, concurrent steps all counted, overruns settled once, expiries and closes in order. */
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { envWith, insertPurchase, insertUser, migratedD1 } from '../test-support/real-d1';
+import { CreditLedgerService, type RecordUseInput } from './CreditLedgerService';
+
+let db: D1Database;
+const DAY = 86_400_000;
+const START = Date.parse('2026-10-05T00:00:00Z');
+const PERIOD = { key: `acct:${START / 1000}`, startMs: START, endMs: START + 31 * DAY };
+
+beforeAll(async () => {
+	db = await migratedD1();
+	for (const id of ['u_once', 'u_race', 'u_buy', 'u_settle', 'u_expire', 'u_close', 'u_late']) await insertUser(db, id);
+});
+
+function use(userId: string, useKey: string, credits: number, overrides: Partial<RecordUseInput> = {}): RecordUseInput {
+	return { userId, period: PERIOD, pool: 5_000, useKey, credits, source: 'think', model: 'anthropic/claude-sonnet-5-5', usage: { inputTokens: 40_000, outputTokens: 3_000 }, now: new Date(START + DAY), ...overrides };
+}
+
+async function purchaseUsed(id: string): Promise<unknown> {
+	return (await db.prepare('SELECT used FROM credit_purchases WHERE id = ?').bind(id).first())?.used;
+}
+
+describe('the credit ledger', () => {
+	it('charges a step once however often it is recorded', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await ledger.recordUse(use('u_once', 'agent:turn:1', 165));
+		const again = await ledger.recordUse(use('u_once', 'agent:turn:1', 165));
+		expect(again.used).toBe(165);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_uses WHERE user_id = 'u_once'").first()).toEqual({ n: 1 });
+	});
+
+	it('counts every step when two stores build at once', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await Promise.all(Array.from({ length: 10 }, (_, index) => ledger.recordUse(use('u_race', `store-${index % 2}:turn:${index}`, 100))));
+		expect((await ledger.readBalance('u_race', PERIOD, 5_000)).used).toBe(1_000);
+	});
+
+	it('spends the pool and grants first, then purchases, and reads it back exactly', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await ledger.addGrant({ userId: 'u_buy', period: PERIOD, pool: 5_000, credits: 1_000, adminUserId: 'u_once', reason: 'Partner', now: new Date(START) });
+		await insertPurchase(db, { id: 'cp_buy_old', userId: 'u_buy', credits: 5_000, purchasedAt: new Date(START - 10 * DAY), expiresAt: new Date(START + 355 * DAY) });
+		await ledger.recordUse(use('u_buy', 'k1', 8_000));
+		expect(await ledger.readBalance('u_buy', PERIOD, 5_000)).toEqual({ pool: 5_000, granted: 1_000, used: 8_000, poolLeft: 0, purchasedLeft: 3_000, left: 3_000, available: 11_000 });
+	});
+
+	it('settles an overrun once, oldest purchase first, even when two runs race', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await insertPurchase(db, { id: 'cp_s_new', userId: 'u_settle', credits: 5_000, purchasedAt: new Date(START - DAY), expiresAt: new Date(START + 364 * DAY) });
+		await insertPurchase(db, { id: 'cp_s_old', userId: 'u_settle', credits: 2_000, purchasedAt: new Date(START - 5 * DAY), expiresAt: new Date(START + 360 * DAY) });
+		await ledger.recordUse(use('u_settle', 'k1', 8_000));
+		const results = await Promise.all([ledger.settle('u_settle', START + 2 * DAY), ledger.settle('u_settle', START + 2 * DAY)]);
+		// The second run either lost the race or came after; either way it took nothing.
+		expect(results.filter((result) => result === 'settled')).toHaveLength(1);
+		expect([await purchaseUsed('cp_s_old'), await purchaseUsed('cp_s_new')]).toEqual([2_000, 1_000]);
+		expect(await ledger.settle('u_settle', START + 2 * DAY)).toBe('nothing');
+		expect((await ledger.readBalance('u_settle', PERIOD, 5_000)).purchasedLeft).toBe(4_000);
+	});
+
+	it('takes usage from a purchase before it expires, then drops what is left of it', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await insertPurchase(db, { id: 'cp_e_old', userId: 'u_expire', credits: 5_000, purchasedAt: new Date(START - 360 * DAY), expiresAt: new Date(START + 5 * DAY) });
+		await insertPurchase(db, { id: 'cp_e_new', userId: 'u_expire', credits: 5_000, purchasedAt: new Date(START - DAY), expiresAt: new Date(START + 364 * DAY) });
+		await ledger.recordUse(use('u_expire', 'k1', 8_000));
+		expect(await ledger.usersToSettle(START + 6 * DAY, 100)).toContain('u_expire');
+		await ledger.settle('u_expire', START + 6 * DAY);
+		expect(await ledger.expirePurchases('u_expire', START + 6 * DAY)).toBe(1);
+		expect([await purchaseUsed('cp_e_old'), await purchaseUsed('cp_e_new')]).toEqual([3_000, 0]);
+		expect((await ledger.readBalance('u_expire', PERIOD, 5_000)).purchasedLeft).toBe(5_000);
+	});
+
+	it('closes an ended period, forgiving what no purchase covers, so the next period starts clean', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await insertPurchase(db, { id: 'cp_c', userId: 'u_close', credits: 5_000, purchasedAt: new Date(START - DAY), expiresAt: new Date(START + 364 * DAY) });
+		await ledger.recordUse(use('u_close', 'k1', 12_000));
+		await ledger.settle('u_close', PERIOD.endMs + 1);
+		expect(await db.prepare("SELECT settled, forgiven, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_close'").first()).toEqual({ settled: 5_000, forgiven: 2_000, closed: 1 });
+		const next = { key: `acct:${PERIOD.endMs / 1000}`, startMs: PERIOD.endMs, endMs: PERIOD.endMs + 30 * DAY };
+		expect(await ledger.readBalance('u_close', next, 5_000)).toMatchObject({ used: 0, poolLeft: 5_000, purchasedLeft: 0, left: 5_000 });
+	});
+
+	it('logs a step that arrives after its period closed without charging it', async () => {
+		const ledger = new CreditLedgerService(envWith(db));
+		await ledger.recordUse(use('u_late', 'k1', 100));
+		await ledger.settle('u_late', PERIOD.endMs + 1);
+		expect((await ledger.recordUse(use('u_late', 'k2', 100))).used).toBe(100);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_uses WHERE user_id = 'u_late'").first()).toEqual({ n: 2 });
+	});
+});
+```
+
+In the race test, the second run either reads before the first writes, and its guarded batch changes nothing (`'raced'`), or reads after and finds nothing to take (`'nothing'`). Either way the purchases are charged once.
+
+- [ ] **Step 3: Run them to verify they fail**
+
+Run: `rtk proxy bun run test -- worker/services/billing/credit-ledger.test.ts worker/database/services/credit-ledger.sql.test.ts`
+Expected: FAIL, failed imports.
+
+- [ ] **Step 4: Implement `credit-ledger.ts`**
+
+```ts
+/** The credit ledger's arithmetic, pure: what's left, what an overrun takes from purchases, and when alerts fall due. */
+
+export function purchaseLeft(purchase: PurchaseState): number {
+	return Math.max(0, purchase.credits - purchase.used - purchase.removed);
+}
+
+/** Credits used past the pool and grants that no purchase has paid for yet. */
+export function unsettledOverrun(period: PeriodState): number {
+	return Math.max(0, Math.max(0, period.used - period.pool - period.granted) - period.settled);
+}
+
+export function creditBalance(input: { current: PeriodState; open: readonly PeriodState[]; purchases: readonly PurchaseState[] }): CreditBalance {
+	const { current } = input;
+	const poolLeft = Math.max(0, current.pool + current.granted - current.used);
+	const owed = [current, ...input.open].reduce((sum, period) => sum + unsettledOverrun(period), 0);
+	const purchasedLeft = input.purchases.reduce((sum, purchase) => sum + purchaseLeft(purchase), 0) - owed;
+	const left = poolLeft + Math.max(0, purchasedLeft);
+	return { pool: current.pool, granted: current.granted, used: current.used, poolLeft, purchasedLeft, left, available: current.used + left };
+}
+
+export function planSettlement(input: { periods: readonly PeriodState[]; purchases: readonly PurchaseState[]; nowMs: number }): Settlement {
+	const lots = [...input.purchases].sort((a, b) => a.purchasedAtMs - b.purchasedAtMs || a.id.localeCompare(b.id)).map((lot) => ({ lot, used: lot.used }));
+	const periods: Settlement['periods'] = [];
+	for (const period of [...input.periods].sort((a, b) => a.startMs - b.startMs)) {
+		let want = unsettledOverrun(period);
+		let taken = 0;
+		for (const entry of lots) {
+			if (want === 0) break;
+			const take = Math.min(want, purchaseLeft({ ...entry.lot, used: entry.used }));
+			entry.used += take;
+			taken += take;
+			want -= take;
+		}
+		const close = period.endMs <= input.nowMs;
+		if (taken > 0 || close) periods.push({ key: period.key, settledBefore: period.settled, settledAfter: period.settled + taken, close, forgiven: close ? want : 0 });
+	}
+	const purchases = lots.filter((entry) => entry.used !== entry.lot.used).map((entry) => ({ id: entry.lot.id, usedBefore: entry.lot.used, usedAfter: entry.used }));
+	return { periods, purchases };
+}
+```
+
+**Alerts:**
+- `creditAlertDue` answers null when `available <= 0`, `'credits_5'` when `left * 100 <= 5 * available`, `'credits_20'` when `left * 100 <= 20 * available`, else null.
+- `alertsMayBeDue(period)` is true when `pool + granted <= 0` or `(pool + granted - used) * 100 <= 20 * (pool + granted)`. Credits left over credits available can't be lower than the pool's own share, so a pool above 20% needs no purchase read.
+- `creditAlertKey(alert, periodKey)` is `${alert}:${periodKey}`.
+
+- [ ] **Step 5: Implement `CreditLedgerService`.**
+
+**`recordUse(input)`** is one batch:
+1. `INSERT INTO credit_periods (user_id, period_key, period_start, period_end, pool) VALUES (…) ON CONFLICT DO NOTHING`;
+2. `UPDATE credit_periods SET used = used + :credits, pool = :pool WHERE user_id = :user AND period_key = :key AND closed_at IS NULL AND NOT EXISTS (SELECT 1 FROM credit_uses WHERE use_key = :useKey)`, written with drizzle's `update` and a ``sql`NOT EXISTS (…)` `` condition;
+3. `INSERT INTO credit_uses (…) VALUES (…) ON CONFLICT (use_key) DO NOTHING`, carrying the token counts from `usage`;
+4. `SELECT` the period row.
+
+It answers the row as a `PeriodState`.
+
+**`readBalance(userId, period, pool)`:**
+- one batch reads the period row, the user's other unclosed rows, and their purchases with `expired_at IS NULL`;
+- answers `creditBalance` with `current` being the row, or `{ …period, pool, granted: 0, used: 0, settled: 0, closed: false }`, and the passed `pool` either way.
+
+**`settle(userId, nowMs)`:**
+1. One batch reads the unclosed periods and the valid purchases.
+2. `planSettlement`. An empty plan answers `'nothing'`.
+3. One batch writes the plan with compare-and-set guards:
+   - each purchase: `UPDATE credit_purchases SET used = :after WHERE id = :id AND used = :before`;
+   - each period: `UPDATE credit_periods SET settled = :after, forgiven = forgiven + :forgiven, closed_at = :closedAt WHERE user_id = ? AND period_key = ? AND settled = :before AND closed_at IS NULL`, where `closedAt` is now when `close`, else unchanged.
+4. Answer `'settled'` when every statement changed one row (`meta.changes`), `'raced'` when none did.
+
+A mix can't happen: both reads saw one snapshot, so either the other run wrote first and every guard fails, or it didn't and every guard holds. Log an error if it ever does.
+
+**Grants, purchases and housekeeping:**
+- **`addGrant`** is one batch:
+  - the `credit_grants` row (`period_key` = `period.key`);
+  - the period row insert-if-missing;
+  - `UPDATE credit_periods SET granted = granted + :credits`;
+  - an `audit_logs` row `{ entityType: 'credit_grant', entityId: userId, action: 'credit_grant', userId: adminUserId, newValues: { credits, periodKey, reason } }`.
+- **`usersToSettle(nowMs, limit)`:** distinct user ids with a period `closed_at IS NULL AND period_end <= now`, or a purchase `expired_at IS NULL AND expires_at <= now`.
+- **`expirePurchases(userId, nowMs)`:** sets `expired_at = now` on the user's purchases with `expires_at <= now AND expired_at IS NULL`, and answers the count.
+- **`pruneUses(beforeMs)`:** deletes `credit_uses` older than that.
+- **`purchasesOf`, `purchaseByPaymentIntent` and `grantsOf`** are plain selects.
+
+- [ ] **Step 6: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- worker/services/billing/credit-ledger.test.ts worker/database/services/credit-ledger.sql.test.ts`
+Expected: PASS.
+
+Run: `bun run typecheck`
+Expected: no new errors.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add worker/services/billing/credit-ledger.ts worker/services/billing/credit-ledger.test.ts worker/database/services/CreditLedgerService.ts worker/database/services/credit-ledger.sql.test.ts worker/database/index.ts
+git commit -m "feat(billing): a d1 credit ledger that charges each step once and settles overruns against purchases exactly
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 5: The account's plan, its period, and the flag
 
 **Files:**
 - Create:
   - `worker/services/billing/flag.ts`;
-  - `worker/services/billing/account.ts`;
-  - `worker/services/billing/credits.ts`.
+  - `worker/services/billing/periods.ts`;
+  - `worker/services/billing/account.ts`.
 - Modify:
   - `worker/types/env.d.ts`;
-  - `shared/types/billing.ts` (add `BillingSource`).
+  - `shared/types/billing.ts` (`BillingSource`).
 - Test:
+  - `worker/services/billing/periods.test.ts`;
   - `worker/services/billing/account.test.ts`;
-  - `worker/services/billing/account.sql.test.ts`;
-  - `worker/services/billing/credits.test.ts`.
+  - `worker/services/billing/account.sql.test.ts`.
 
 **Interfaces:**
 - **Consumes:**
-  - from Task 1: `limitsFor`, `PlanAccount`, `PlanAccountInput`, `planLimitOverridesFrom`, `GRACE_PERIOD_DAYS`, `isPremiumTierNumber`;
-  - from Task 2: `BillingService.subscriptionOf`, `PlanAdminService.latestOverride`, `PlanAdminService.grantedCredits`, `SubscriptionRecord`, `PlanOverrideRecord`;
-  - existing: `getGlobalConfigurableSettings`, `publicPlanFromSettings`, `RateLimitService.buildRateLimitKey`, `DORateLimitStore`.
+  - from Task 1: `limitsFor`, `PlanAccount`, `planLimitOverridesFrom`, `GRACE_PERIOD_DAYS`, `isPaidPlanId`;
+  - from Task 3: `BillingService.subscriptionOf`, `PlanAdminService.latestOverride`, `SubscriptionRecord`, `PlanOverrideRecord`;
+  - from Task 4: `CreditLedgerService.readBalance`, `LedgerPeriod`, `CreditBalance`;
+  - existing: `UserService.findUser`.
 - **Produces:**
   - `isBillingOn(env: { BILLING?: string; BILLING_USER_IDS?: string }, userId: string | null): boolean`;
-  - `BillingSource = 'free' | 'subscription' | 'override'` (in `shared/types/billing.ts`);
-  - from `account.ts`:
-    - time helpers: `DAY_MS`, `utcDayStart(ms)`, `utcMonthBounds(ms): { startMs; endMs }`;
-    - `graceEndsAt(subscription: Pick<SubscriptionRecord, 'status' | 'currentPeriodStart'>): number | null`;
-    - `ResolvedPlan { plan; tier; source: BillingSource; periodStartMs; periodEndMs; graceEndsAtMs: number | null; overrideLimits: PlanLimitOverrides | null }`;
-    - `resolvePlan(input: { subscription: SubscriptionRecord | null; override: PlanOverrideRecord | null; nowMs: number }): ResolvedPlan`;
-    - `userLimitOverrides(stored: string | null): PlanAccountInput['userOverrides']`;
-    - `BillingAccount extends PlanAccount { userId; source; periodStartMs; periodEndMs; graceEndsAtMs; grantedCredits; subscription: SubscriptionRecord | null }`;
+  - `BillingSource = 'free' | 'subscription' | 'override'`;
+  - `periods.ts`:
+    - `DAY_MS`;
+    - `anniversaryPeriod(signupMs: number | null, nowMs: number): { startMs: number; endMs: number }`;
+    - `accountPeriod(signupMs: number | null, nowMs: number): LedgerPeriod` (key `acct:{startSeconds}`);
+    - `subscriptionPeriod(subscription: Pick<SubscriptionRecord, 'stripeSubscriptionId' | 'currentPeriodStart' | 'currentPeriodEnd'>): LedgerPeriod` (key `sub:{id}:{startSeconds}`).
+  - `account.ts`:
+    - `graceEndsAt(subscription): number | null`;
+    - `ResolvedPlan { plan: PlanId; source: BillingSource; period: LedgerPeriod; graceEndsAtMs: number | null; overrideLimits: PlanLimitOverrides | null }`;
+    - `resolvePlan(input: { subscription: SubscriptionRecord | null; override: PlanOverrideRecord | null; signupMs: number | null; nowMs: number }): ResolvedPlan`;
+    - `BillingAccount extends PlanAccount { userId: string; source: BillingSource; period: LedgerPeriod; graceEndsAtMs: number | null; subscription: SubscriptionRecord | null }`;
     - `loadAccount(env: Env, userId: string, nowMs?: number): Promise<BillingAccount>`;
-  - from `credits.ts`:
-    - `PERIOD_BUCKET_WINDOW_SECONDS = 32 days`, `PERIOD_BUCKET_SIZE_SECONDS = 3600`;
-    - `CreditBucket { key: string; window: CreditsWindow; config: DORateLimitConfig }`;
-    - `creditBucketFor(account: Pick<BillingAccount, 'userId' | 'limits' | 'periodStartMs'>, llmCalls: LLMCallsRateLimitConfig): CreditBucket`;
-    - `creditsUsed(env: Env, bucket: CreditBucket): Promise<number>`;
-    - `recordCredits(env: Env, bucket: CreditBucket, cost: number): Promise<number>` (credits used after the step).
+    - `loadCredits(env: Env, account: BillingAccount): Promise<CreditBalance>`.
+  - Env: `BILLING?`, `BILLING_USER_IDS?`, `STRIPE_PRICE_IDS?`.
 
-- [ ] **Step 1: Write the failing pure tests.** `worker/services/billing/account.test.ts`:
+- [ ] **Step 1: Write the failing tests.** `worker/services/billing/periods.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { graceEndsAt, resolvePlan, userLimitOverrides } from './account';
+import { accountPeriod, anniversaryPeriod, subscriptionPeriod } from './periods';
+
+const utc = (iso: string) => Date.parse(iso);
+
+describe('periods', () => {
+	it("renews Basic monthly from the sign-up date, clamping the day to a short month's last day", () => {
+		const signup = utc('2026-01-31T10:00:00Z');
+		expect(anniversaryPeriod(signup, utc('2026-02-15T00:00:00Z'))).toEqual({ startMs: utc('2026-01-31T00:00:00Z'), endMs: utc('2026-02-28T00:00:00Z') });
+		expect(anniversaryPeriod(signup, utc('2026-02-28T12:00:00Z'))).toEqual({ startMs: utc('2026-02-28T00:00:00Z'), endMs: utc('2026-03-31T00:00:00Z') });
+		expect(anniversaryPeriod(signup, utc('2026-04-01T00:00:00Z'))).toEqual({ startMs: utc('2026-03-31T00:00:00Z'), endMs: utc('2026-04-30T00:00:00Z') });
+		expect(anniversaryPeriod(utc('2028-01-29T00:00:00Z'), utc('2028-03-01T00:00:00Z'))).toEqual({ startMs: utc('2028-02-29T00:00:00Z'), endMs: utc('2028-03-29T00:00:00Z') });
+		expect(anniversaryPeriod(utc('2026-03-15T08:00:00Z'), utc('2026-03-20T00:00:00Z'))).toEqual({ startMs: utc('2026-03-15T00:00:00Z'), endMs: utc('2026-04-15T00:00:00Z') });
+	});
+
+	it('renews on the 1st without a readable sign-up date', () => {
+		expect(anniversaryPeriod(null, utc('2026-10-19T15:00:00Z'))).toEqual({ startMs: utc('2026-10-01T00:00:00Z'), endMs: utc('2026-11-01T00:00:00Z') });
+		expect(anniversaryPeriod(Number.NaN, utc('2026-10-19T15:00:00Z')).startMs).toBe(utc('2026-10-01T00:00:00Z'));
+	});
+
+	it('keys a Basic month and a Stripe period apart, even when they start on the same second', () => {
+		const start = utc('2026-10-05T00:00:00Z');
+		expect(accountPeriod(start, start + 1).key).toBe(`acct:${start / 1000}`);
+		expect(subscriptionPeriod({ stripeSubscriptionId: 'sub_1', currentPeriodStart: new Date(start), currentPeriodEnd: new Date(utc('2026-11-05T00:00:00Z')) })).toEqual({ key: `sub:sub_1:${start / 1000}`, startMs: start, endMs: utc('2026-11-05T00:00:00Z') });
+	});
+});
+```
+
+`worker/services/billing/account.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { graceEndsAt, resolvePlan } from './account';
 import { isBillingOn } from './flag';
 import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/schema';
 
 const NOW = Date.parse('2026-10-19T15:00:00Z');
+const SIGNUP = Date.parse('2026-03-12T09:00:00Z');
 
 function sub(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 	return {
 		userId: 'u1',
 		stripeSubscriptionId: 'sub_1',
 		status: 'active',
-		tier: 2,
+		plan: 'pro',
 		currentPeriodStart: new Date('2026-10-05T10:00:00Z'),
 		currentPeriodEnd: new Date('2026-11-05T10:00:00Z'),
 		cancelAtPeriodEnd: false,
-		pendingTier: null,
-		pendingTierAt: null,
+		pendingPlan: null,
+		pendingPlanAt: null,
 		stripeScheduleId: null,
 		stripeCreatedAt: new Date('2026-09-05T10:00:00Z'),
 		updatedAt: new Date('2026-10-05T10:00:00Z'),
@@ -953,64 +1328,38 @@ function sub(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 }
 
 function override(overrides: Partial<PlanOverrideRecord> = {}): PlanOverrideRecord {
-	return { id: 'po_1', userId: 'u1', plan: 'enterprise', tier: null, limits: '{"aiCredits":500000}', until: null, adminUserId: 'u_admin', reason: 'Contract', createdAt: new Date('2026-10-01T00:00:00Z'), ...overrides };
+	return { id: 'po_1', userId: 'u1', plan: 'enterprise', limits: '{"aiCredits":500000}', until: null, adminUserId: 'u_admin', reason: 'Contract', createdAt: new Date('2026-10-01T00:00:00Z'), ...overrides };
 }
 
+const SUB_PERIOD = { key: `sub:sub_1:${Date.parse('2026-10-05T10:00:00Z') / 1000}`, startMs: Date.parse('2026-10-05T10:00:00Z'), endMs: Date.parse('2026-11-05T10:00:00Z') };
+const BASIC_PERIOD = { key: `acct:${Date.parse('2026-10-12T00:00:00Z') / 1000}`, startMs: Date.parse('2026-10-12T00:00:00Z'), endMs: Date.parse('2026-11-12T00:00:00Z') };
+
 describe('resolvePlan', () => {
-	it('is Basic over the UTC day without a subscription', () => {
-		expect(resolvePlan({ subscription: null, override: null, nowMs: NOW })).toEqual({
-			plan: 'basic',
-			tier: null,
-			source: 'free',
-			periodStartMs: Date.parse('2026-10-19T00:00:00Z'),
-			periodEndMs: Date.parse('2026-10-20T00:00:00Z'),
-			graceEndsAtMs: null,
-			overrideLimits: null,
-		});
+	it('is Basic on its sign-up month without a subscription', () => {
+		expect(resolvePlan({ subscription: null, override: null, signupMs: SIGNUP, nowMs: NOW })).toEqual({ plan: 'basic', source: 'free', period: BASIC_PERIOD, graceEndsAtMs: null, overrideLimits: null });
 	});
 
-	it('is Premium at the tier over the billing period while active or trialing', () => {
+	it("is the subscription's plan over the Stripe period while active or trialing", () => {
 		for (const status of ['active', 'trialing'] as const) {
-			expect(resolvePlan({ subscription: sub({ status }), override: null, nowMs: NOW })).toMatchObject({
-				plan: 'premium',
-				tier: 2,
-				source: 'subscription',
-				periodStartMs: Date.parse('2026-10-05T10:00:00Z'),
-				periodEndMs: Date.parse('2026-11-05T10:00:00Z'),
-			});
+			expect(resolvePlan({ subscription: sub({ status, plan: 'premium' }), override: null, signupMs: SIGNUP, nowMs: NOW })).toMatchObject({ plan: 'premium', source: 'subscription', period: SUB_PERIOD });
 		}
 	});
 
-	it('keeps Premium for 7 days of a failed renewal, then Basic', () => {
+	it('keeps the plan for 7 days of a failed renewal, then Basic on its sign-up month', () => {
 		const pastDue = sub({ status: 'past_due', currentPeriodStart: new Date('2026-10-12T15:00:00Z') });
 		expect(graceEndsAt(pastDue)).toBe(Date.parse('2026-10-19T15:00:00Z'));
-		expect(resolvePlan({ subscription: pastDue, override: null, nowMs: Date.parse('2026-10-19T14:59:59Z') })).toMatchObject({ plan: 'premium', graceEndsAtMs: Date.parse('2026-10-19T15:00:00Z') });
-		expect(resolvePlan({ subscription: pastDue, override: null, nowMs: Date.parse('2026-10-19T15:00:00Z') })).toMatchObject({ plan: 'basic', source: 'free' });
-		expect(graceEndsAt(sub())).toBeNull();
-	});
-
-	it('is Basic for every ended or unpaid status', () => {
+		expect(resolvePlan({ subscription: pastDue, override: null, signupMs: SIGNUP, nowMs: NOW - 1 })).toMatchObject({ plan: 'pro', graceEndsAtMs: NOW });
+		expect(resolvePlan({ subscription: pastDue, override: null, signupMs: SIGNUP, nowMs: NOW })).toMatchObject({ plan: 'basic', source: 'free', period: BASIC_PERIOD });
 		for (const status of ['unpaid', 'canceled', 'incomplete', 'incomplete_expired', 'paused'] as const) {
-			expect(resolvePlan({ subscription: sub({ status }), override: null, nowMs: NOW }).plan).toBe('basic');
+			expect(resolvePlan({ subscription: sub({ status }), override: null, signupMs: SIGNUP, nowMs: NOW }).plan).toBe('basic');
 		}
 	});
 
-	it('lets an admin override win until it ends or is cleared', () => {
-		expect(resolvePlan({ subscription: sub(), override: override(), nowMs: NOW })).toMatchObject({ plan: 'enterprise', source: 'override', overrideLimits: { aiCredits: 500_000 }, periodStartMs: Date.parse('2026-10-05T10:00:00Z') });
-		expect(resolvePlan({ subscription: null, override: override(), nowMs: NOW })).toMatchObject({ periodStartMs: Date.parse('2026-10-01T00:00:00Z'), periodEndMs: Date.parse('2026-11-01T00:00:00Z') });
-		expect(resolvePlan({ subscription: null, override: override({ plan: 'premium', tier: 3 }), nowMs: NOW })).toMatchObject({ plan: 'premium', tier: 3 });
-		expect(resolvePlan({ subscription: sub(), override: override({ until: new Date(NOW - 1) }), nowMs: NOW }).source).toBe('subscription');
-		expect(resolvePlan({ subscription: null, override: override({ plan: null }), nowMs: NOW }).plan).toBe('basic');
-	});
-});
-
-describe("the account's own KV overrides", () => {
-	it('reads new stores a day and daily credits from user_config, and nothing from an unreadable entry', () => {
-		expect(userLimitOverrides(JSON.stringify({ security: { rateLimit: { appCreation: { limit: 1000, dailyLimit: 1000 }, llmCalls: { limit: 900 } } } }))).toEqual({ newStoresPerDay: 1000, aiCreditsPerDay: 900 });
-		expect(userLimitOverrides(JSON.stringify({ security: { rateLimit: { appCreation: { limit: 1000, dailyLimit: 50 } } } }))).toEqual({ newStoresPerDay: 50 });
-		expect(userLimitOverrides(JSON.stringify({ sellerLimits: { pinnedLevel: 'new' } }))).toEqual({});
-		expect(userLimitOverrides(null)).toEqual({});
-		expect(userLimitOverrides('{not json')).toEqual({});
+	it('lets an admin override win until it ends or is cleared, on the Stripe period when there is one', () => {
+		expect(resolvePlan({ subscription: sub(), override: override(), signupMs: SIGNUP, nowMs: NOW })).toMatchObject({ plan: 'enterprise', source: 'override', overrideLimits: { aiCredits: 500_000 }, period: SUB_PERIOD });
+		expect(resolvePlan({ subscription: null, override: override({ plan: 'premium' }), signupMs: SIGNUP, nowMs: NOW })).toMatchObject({ plan: 'premium', period: BASIC_PERIOD });
+		expect(resolvePlan({ subscription: sub(), override: override({ until: new Date(NOW - 1) }), signupMs: SIGNUP, nowMs: NOW }).source).toBe('subscription');
+		expect(resolvePlan({ subscription: null, override: override({ plan: null }), signupMs: SIGNUP, nowMs: NOW }).plan).toBe('basic');
 	});
 });
 
@@ -1027,258 +1376,131 @@ describe('the billing flag', () => {
 });
 ```
 
-`worker/services/billing/credits.test.ts`:
+`worker/services/billing/account.sql.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_RATE_LIMIT_SETTINGS } from '../rate-limit/config';
-import { PERIOD_BUCKET_WINDOW_SECONDS, creditBucketFor, creditsUsed, recordCredits } from './credits';
-import type { PlanLimits } from '../../../shared/types/plans';
-
-const LLM = DEFAULT_RATE_LIMIT_SETTINGS.llmCalls;
-const OCTOBER = Date.parse('2026-10-05T10:00:00Z');
-
-function limits(overrides: Partial<PlanLimits>): PlanLimits {
-	return { aiCredits: 200, aiCreditsWindow: 'day', newStoresPerDay: 3, liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, draftsPerStore: 5, ...overrides };
-}
-
-/** A counter per key that stops counting at its limit, as DORateLimitStore does. */
-function fakeCounters(): Env {
-	const counts = new Map<string, number>();
-	const stub = {
-		increment: async (key: string, config: { limit: number }, by: number) => {
-			const count = counts.get(key) ?? 0;
-			if (count >= config.limit) return { success: false, remainingLimit: 0 };
-			counts.set(key, count + by);
-			return { success: true, remainingLimit: Math.max(0, config.limit - count - by) };
-		},
-		getRemainingLimit: async (key: string, config: { limit: number }) => Math.max(0, config.limit - (counts.get(key) ?? 0)),
-	};
-	return { DORateLimitStore: { getByName: () => stub } } as unknown as Env;
-}
-
-describe('credit buckets', () => {
-	it("meters Basic in today's daily bucket, as before billing", () => {
-		const bucket = creditBucketFor({ userId: 'u1', limits: limits({ aiCredits: 250 }), periodStartMs: Date.parse('2026-10-19T00:00:00Z') }, LLM);
-		expect(bucket.key).toBe('platform:llmCalls:user:u1');
-		expect(bucket.window).toBe('day');
-		expect(bucket.config).toMatchObject({ limit: 250, calendarDaily: true, period: 86_400 });
-	});
-
-	it('gives a monthly pool one bucket per period: a renewal starts fresh, an upgrade keeps what was used', () => {
-		const pool = (aiCredits: number, periodStartMs: number) => creditBucketFor({ userId: 'u1', limits: limits({ aiCredits, aiCreditsWindow: 'period' }), periodStartMs }, LLM);
-		const october = pool(20_000, OCTOBER);
-		const upgraded = pool(100_000, OCTOBER);
-		expect(october.key).toBe(`plan:credits:user:u1:${OCTOBER / 1000}`);
-		expect(october.config).toMatchObject({ limit: 20_000, period: PERIOD_BUCKET_WINDOW_SECONDS, bucketSize: 3600 });
-		expect(upgraded.key).toBe(october.key);
-		expect(upgraded.config.limit).toBe(100_000);
-		expect(pool(20_000, Date.parse('2026-11-05T10:00:00Z')).key).not.toBe(october.key);
-	});
-
-	it('counts a step that starts under the limit in full, then counts nothing more', async () => {
-		const env = fakeCounters();
-		const bucket = creditBucketFor({ userId: 'u1', limits: limits({ aiCredits: 20 }), periodStartMs: 0 }, LLM);
-		expect(await recordCredits(env, bucket, 8)).toBe(8);
-		expect(await recordCredits(env, bucket, 8)).toBe(16);
-		expect(await recordCredits(env, bucket, 8)).toBe(20);
-		expect(await recordCredits(env, bucket, 8)).toBe(20);
-		expect(await creditsUsed(env, bucket)).toBe(20);
-	});
-
-	it('reads nothing used, and records nothing, when the counter fails', async () => {
-		const env = { DORateLimitStore: { getByName: () => { throw new Error('counter unavailable'); } } } as unknown as Env;
-		const bucket = creditBucketFor({ userId: 'u1', limits: limits({}), periodStartMs: 0 }, LLM);
-		expect(await creditsUsed(env, bucket)).toBe(0);
-		expect(await recordCredits(env, bucket, 8)).toBe(0);
-	});
-});
-```
-
-- [ ] **Step 2: Write the failing real-D1 test** `worker/services/billing/account.sql.test.ts`:
-
-```ts
-/** loadAccount on real SQL with the KV entries stood in: the plan, its period, grants, and the flag. */
-
 import { beforeAll, describe, expect, it } from 'vitest';
 import { envWith, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
-import { PlanAdminService } from '../../database/services/PlanAdminService';
-import { loadAccount } from './account';
+import { CreditLedgerService } from '../../database/services/CreditLedgerService';
+import { loadAccount, loadCredits } from './account';
 
 const NOW = Date.parse('2026-10-19T15:00:00Z');
 let db: D1Database;
 
-/** KV with only the owner's raised new-store override. */
-const kv = { get: async (key: string) => (key === 'user_config:u_sub' ? JSON.stringify({ security: { rateLimit: { appCreation: { limit: 1000 } } } }) : null) };
-
 beforeAll(async () => {
 	db = await migratedD1();
-	await insertUser(db, 'u_sub');
-	await insertUser(db, 'u_admin');
-	await insertSubscription(db, { userId: 'u_sub', stripeSubscriptionId: 'sub_1', status: 'active', tier: 2, currentPeriodStart: new Date('2026-10-05T10:00:00Z'), currentPeriodEnd: new Date('2026-11-05T10:00:00Z') });
-	await new PlanAdminService(envWith(db)).addGrant({ userId: 'u_sub', credits: 5_000, periodStart: new Date('2026-10-05T10:00:00Z'), adminUserId: 'u_admin', reason: 'Partner', now: new Date(NOW) });
+	await insertUser(db, 'u_sub', { createdAt: new Date('2026-03-12T09:00:00Z') });
+	await insertUser(db, 'u_basic', { createdAt: new Date('2026-03-12T09:00:00Z') });
+	await insertSubscription(db, { userId: 'u_sub', stripeSubscriptionId: 'sub_1', status: 'active', plan: 'premium', currentPeriodStart: new Date('2026-10-05T10:00:00Z'), currentPeriodEnd: new Date('2026-11-05T10:00:00Z') });
 });
 
 describe('loadAccount', () => {
-	it("resolves a subscriber's pool with this period's grants and their KV override", async () => {
-		const account = await loadAccount(envWith(db, { BILLING: 'on', VibecoderStore: kv }), 'u_sub', NOW);
-		expect(account).toMatchObject({
-			billing: true,
-			plan: 'premium',
-			tier: 2,
-			source: 'subscription',
-			grantedCredits: 5_000,
-			periodStartMs: Date.parse('2026-10-05T10:00:00Z'),
-			creditsResetAt: Date.parse('2026-11-05T10:00:00Z'),
-			limits: { aiCredits: 55_000, aiCreditsWindow: 'period', newStoresPerDay: 1000, liveStores: 10, supplierCatalog: true },
-		});
+	it("resolves a subscriber's plan, limits and Stripe period", async () => {
+		const account = await loadAccount(envWith(db, { BILLING: 'on' }), 'u_sub', NOW);
+		expect(account).toMatchObject({ billing: true, plan: 'premium', source: 'subscription', creditsResetAt: Date.parse('2026-11-05T10:00:00Z'), limits: { aiCredits: 100_000, liveStores: 10, extraCredits: true } });
+		expect(account.period.key).toBe(`sub:sub_1:${Date.parse('2026-10-05T10:00:00Z') / 1000}`);
 	});
 
-	it("treats everyone as today's Basic while billing is off, without reading the billing tables", async () => {
-		const account = await loadAccount(envWith(db, { VibecoderStore: kv }), 'u_sub', NOW);
-		expect(account).toMatchObject({ billing: false, plan: 'basic', source: 'free', subscription: null, grantedCredits: 0, limits: { aiCredits: 200, aiCreditsWindow: 'day', newStoresPerDay: 1000, liveStores: null, supplierCatalog: true } });
+	it("gives Basic its month from the sign-up date and reads its credits from the ledger", async () => {
+		const env = envWith(db, { BILLING: 'on' });
+		const account = await loadAccount(env, 'u_basic', NOW);
+		expect(account).toMatchObject({ plan: 'basic', limits: { aiCredits: 5_000, storesLifetime: 3 }, period: { startMs: Date.parse('2026-10-12T00:00:00Z'), endMs: Date.parse('2026-11-12T00:00:00Z') } });
+		await new CreditLedgerService(env).recordUse({ userId: 'u_basic', period: account.period, pool: 5_000, useKey: 'k1', credits: 1_200, source: 'think', model: 'm', usage: null, now: new Date(NOW) });
+		expect(await loadCredits(env, account)).toMatchObject({ used: 1_200, left: 3_800 });
 	});
 
-	it('turns billing on only for the listed accounts', async () => {
-		expect((await loadAccount(envWith(db, { BILLING_USER_IDS: 'someone-else', VibecoderStore: kv }), 'u_sub', NOW)).billing).toBe(false);
-		expect((await loadAccount(envWith(db, { BILLING_USER_IDS: 'someone-else, u_sub', VibecoderStore: kv }), 'u_sub', NOW)).plan).toBe('premium');
+	it("treats everyone as today's Basic while billing is off, without reading the billing tables, and honors the user list", async () => {
+		expect(await loadAccount(envWith(db), 'u_sub', NOW)).toMatchObject({ billing: false, plan: 'basic', source: 'free', subscription: null, limits: { liveStores: null, supplierCatalog: true } });
+		expect((await loadAccount(envWith(db, { BILLING_USER_IDS: 'someone-else, u_sub' }), 'u_sub', NOW)).plan).toBe('premium');
 	});
 });
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [ ] **Step 2: Run them to verify they fail**
 
-Run: `rtk proxy bun run test -- worker/services/billing/account.test.ts worker/services/billing/credits.test.ts worker/services/billing/account.sql.test.ts`
-Expected: FAIL, "Failed to resolve import ./account" and "./credits".
+Run: `rtk proxy bun run test -- worker/services/billing/periods.test.ts worker/services/billing/account.test.ts worker/services/billing/account.sql.test.ts`
+Expected: FAIL, failed imports.
 
-- [ ] **Step 4: Declare the environment.** In `worker/types/env.d.ts`, after `STRIPE_CONNECT_WEBHOOK_SECRET`:
+- [ ] **Step 3: Declare the environment.** In `worker/types/env.d.ts`, after `STRIPE_CONNECT_WEBHOOK_SECRET`:
 
 ```ts
-		// "on" turns Premium billing and plan limits on for everyone.
+		// "on" turns plans, billing and plan limits on for everyone.
 		BILLING?: string;
 		// Comma-separated user ids that get billing while BILLING isn't "on": the owner-only phase.
 		BILLING_USER_IDS?: string;
-		// JSON {"1":"price_...","2":"price_...","3":"price_...","4":"price_..."}: each Premium tier's price, in the Stripe key's mode.
-		STRIPE_PREMIUM_PRICE_IDS?: string;
+		// JSON {"pro":"price_...","premium":"price_...","credits":"price_..."}, in the Stripe key's mode.
+		STRIPE_PRICE_IDS?: string;
 ```
 
-- [ ] **Step 5: Implement `flag.ts`.** `BILLING` compares trimmed and lowercased to `'on'`. `BILLING_USER_IDS` splits on commas, trims and drops empty entries. A null or empty user id is never listed.
+- [ ] **Step 4: Implement `flag.ts` and `periods.ts`.**
 
-- [ ] **Step 6: Implement `account.ts`**
+**`isBillingOn`:**
+- `BILLING`, trimmed and lowercased, equals `'on'`;
+- or `BILLING_USER_IDS` lists the user: it's split on commas, trimmed, with empty entries dropped;
+- a null or empty user id is never listed.
+
+**`anniversaryPeriod(signupMs, nowMs)`:**
+- `day` is the sign-up's UTC day of the month, or 1 when `signupMs` is null or not finite;
+- a month's start is `Date.UTC(year, month, Math.min(day, daysIn(year, month)))`;
+- the period is the latest start at or before now, ending at the next month's start.
 
 ```ts
-/** Which plan an account is on and what it may use: its subscription, the grace period, admin overrides and grants. */
+const daysIn = (year: number, month: number): number => new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 
-export const DAY_MS = 24 * 60 * 60 * 1000;
-
-export function utcDayStart(ms: number): number {
-	return Math.floor(ms / DAY_MS) * DAY_MS;
-}
-
-export function utcMonthBounds(ms: number): { startMs: number; endMs: number } {
-	const day = new Date(ms);
-	return { startMs: Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1), endMs: Date.UTC(day.getUTCFullYear(), day.getUTCMonth() + 1, 1) };
-}
-
-/** A failed renewal keeps Premium until 7 days after the period it couldn't pay for began. */
-export function graceEndsAt(subscription: Pick<SubscriptionRecord, 'status' | 'currentPeriodStart'>): number | null {
-	return subscription.status === 'past_due' ? subscription.currentPeriodStart.getTime() + GRACE_PERIOD_DAYS * DAY_MS : null;
-}
-
-function paysForPremium(subscription: SubscriptionRecord, nowMs: number): boolean {
-	if (!isPremiumTierNumber(subscription.tier)) return false;
-	if (subscription.status === 'active' || subscription.status === 'trialing') return true;
-	const grace = graceEndsAt(subscription);
-	return grace !== null && nowMs < grace;
-}
-
-export function resolvePlan(input: { subscription: SubscriptionRecord | null; override: PlanOverrideRecord | null; nowMs: number }): ResolvedPlan {
-	const { subscription, override, nowMs } = input;
-	const paying = subscription && paysForPremium(subscription, nowMs) ? subscription : null;
-	const graceEndsAtMs = paying ? graceEndsAt(paying) : null;
-	const day = { periodStartMs: utcDayStart(nowMs), periodEndMs: utcDayStart(nowMs) + DAY_MS };
-	const billingPeriod = paying ? { periodStartMs: paying.currentPeriodStart.getTime(), periodEndMs: paying.currentPeriodEnd.getTime() } : null;
-	const active = override && override.plan !== null && (override.until === null || override.until.getTime() > nowMs) ? override : null;
-	if (active && active.plan !== null) {
-		const month = utcMonthBounds(nowMs);
-		const period = active.plan === 'basic' ? day : billingPeriod ?? { periodStartMs: month.startMs, periodEndMs: month.endMs };
-		const tier = active.plan !== 'premium' ? null : isPremiumTierNumber(active.tier) ? active.tier : paying && isPremiumTierNumber(paying.tier) ? paying.tier : 1;
-		let stored: unknown = null;
-		try {
-			stored = JSON.parse(active.limits);
-		} catch {
-			stored = null;
-		}
-		return { plan: active.plan, tier, source: 'override', ...period, graceEndsAtMs, overrideLimits: planLimitOverridesFrom(stored) };
-	}
-	if (paying && billingPeriod && isPremiumTierNumber(paying.tier)) {
-		return { plan: 'premium', tier: paying.tier, source: 'subscription', ...billingPeriod, graceEndsAtMs, overrideLimits: null };
-	}
-	return { plan: 'basic', tier: null, source: 'free', ...day, graceEndsAtMs: null, overrideLimits: null };
+export function anniversaryPeriod(signupMs: number | null, nowMs: number): { startMs: number; endMs: number } {
+	const day = signupMs !== null && Number.isFinite(signupMs) ? new Date(signupMs).getUTCDate() : 1;
+	const startOf = (year: number, month: number): number => Date.UTC(year, month, Math.min(day, daysIn(year, month)));
+	const now = new Date(nowMs);
+	const year = now.getUTCFullYear();
+	const month = now.getUTCMonth();
+	const thisMonth = startOf(year, month);
+	return thisMonth <= nowMs ? { startMs: thisMonth, endMs: startOf(year, month + 1) } : { startMs: startOf(year, month - 1), endMs: thisMonth };
 }
 ```
 
-**`userLimitOverrides(stored)`:**
-- Parse the JSON and read `security.rateLimit.appCreation.limit`, `security.rateLimit.appCreation.dailyLimit` and `security.rateLimit.llmCalls.limit`.
-- `newStoresPerDay` is the smaller of the non-negative integers present.
-- `aiCreditsPerDay` is `llmCalls.limit` when it's a non-negative integer.
-- Bad JSON gives `{}`.
+`Date.UTC` rolls month -1 and 12 into the neighbouring years, and `daysIn` gets the same rolled month.
+
+**Keys:** `accountPeriod` and `subscriptionPeriod` add the keys from Interfaces.
+
+- [ ] **Step 5: Implement `account.ts`.**
+
+**`graceEndsAt(subscription)`:** `currentPeriodStart + GRACE_PERIOD_DAYS` days when `past_due`, else null.
+
+**A subscription pays for its plan** when `isPaidPlanId(plan)` and the status is `active` or `trialing`, or `past_due` before its grace ends.
+
+**An override is active** when its plan isn't null and `until` is null or later than now. Its limits come from `planLimitOverridesFrom(JSON.parse(limits))`, with a JSON error reading as null.
+
+**`resolvePlan`:**
+- **With an active override:** the override's plan, `source: 'override'`, and the paying subscription's period, or else the anniversary period.
+- **Else with a paying subscription:** its plan, `source: 'subscription'`, its period and its grace end.
+- **Else:** Basic, `source: 'free'`, the anniversary period.
 
 **`loadAccount(env, userId, nowMs = Date.now())`:**
-1. **Basic's live numbers:** read `getGlobalConfigurableSettings(env)` and the account's `user_config:{userId}` KV entry together. Pass `publicPlanFromSettings(settings.security.rateLimit)` through, falling back to `DEFAULT_RATE_LIMIT_SETTINGS.llmCalls.limit` and `.appCreation.limit` when a value is null.
-2. **Billing off** (`!isBillingOn(env, userId)`): return Basic over the UTC day, without touching D1. That's `subscription: null`, `grantedCredits: 0`, and `limits: limitsFor({ billing: false, ... })`.
-3. **Billing on:** read `new BillingService(env).subscriptionOf(userId)` and `new PlanAdminService(env).latestOverride(userId)` together. Call `resolvePlan`, then `grantedCredits(userId, new Date(resolved.periodStartMs))`, then `limitsFor` with the resolved plan, tier, `overrideLimits` and grants.
-4. **Return** `{ billing, userId, plan, tier, limits, creditsResetAt: periodEndMs, source, periodStartMs, periodEndMs, graceEndsAtMs, grantedCredits, subscription }`.
+1. **Billing off** (`!isBillingOn(env, userId)`): answer Basic with `limitsFor({ billing: false, … })`, `source: 'free'` and `subscription: null`, without reading any billing table. The period is `accountPeriod(null, nowMs)`; it's unused.
+2. **Billing on:** read `new BillingService(env).subscriptionOf(userId)`, `new PlanAdminService(env).latestOverride(userId)` and `new UserService(env).findUser({ id: userId })` together. The sign-up time is `user.createdAt?.getTime() ?? null`.
+3. `resolvePlan`, then `limitsFor({ billing: true, plan, adminLimits: overrideLimits })`.
+4. Answer `{ billing, userId, plan, limits, creditsResetAt: period.endMs, source, period, graceEndsAtMs, subscription }`.
 
-- [ ] **Step 7: Implement `credits.ts`**
+**`loadCredits(env, account)`:** `new CreditLedgerService(env).readBalance(account.userId, account.period, account.limits.aiCredits)`.
 
-```ts
-/** The AI credit meter: Basic's daily bucket as before billing, or one bucket per billing period for a monthly pool. */
+- [ ] **Step 6: Run the tests to verify they pass**
 
-/** Longer than any month, so one key's window covers its whole period; a new period is a new key. */
-export const PERIOD_BUCKET_WINDOW_SECONDS = 32 * 24 * 60 * 60;
-/** Hourly buckets keep a month's window to 768 reads. */
-export const PERIOD_BUCKET_SIZE_SECONDS = 60 * 60;
-
-export function creditBucketFor(account: Pick<BillingAccount, 'userId' | 'limits' | 'periodStartMs'>, llmCalls: LLMCallsRateLimitConfig): CreditBucket {
-	if (account.limits.aiCreditsWindow === 'day') {
-		return { key: RateLimitService.buildRateLimitKey(RateLimitType.LLM_CALLS, `user:${account.userId}`), window: 'day', config: { ...llmCalls, limit: account.limits.aiCredits } };
-	}
-	return {
-		key: `plan:credits:user:${account.userId}:${Math.floor(account.periodStartMs / 1000)}`,
-		window: 'period',
-		config: { enabled: true, store: RateLimitStore.DURABLE_OBJECT, limit: account.limits.aiCredits, period: PERIOD_BUCKET_WINDOW_SECONDS, bucketSize: PERIOD_BUCKET_SIZE_SECONDS },
-	};
-}
-```
-
-**`creditsUsed`:**
-- Call `env.DORateLimitStore.getByName(bucket.key).getRemainingLimit(bucket.key, { limit, period, bucketSize, dailyLimit, calendarDaily })` and answer `max(0, limit - remaining)`.
-- On any error, log it and answer 0. The counter fails open, as `RateLimitService` does.
-
-**`recordCredits`:**
-- Return 0 when `!bucket.config.enabled` or `cost <= 0`.
-- Otherwise `increment(bucket.key, sameConfig, cost)`. Answer `limit - (remainingLimit ?? 0)` on success, and `limit` when the store refused.
-- On error, log it and answer 0.
-
-- [ ] **Step 8: Run the tests to verify they pass**
-
-Run: `rtk proxy bun run test -- worker/services/billing/account.test.ts worker/services/billing/credits.test.ts worker/services/billing/account.sql.test.ts`
-Expected: PASS (14 tests).
+Run: `rtk proxy bun run test -- worker/services/billing/periods.test.ts worker/services/billing/account.test.ts worker/services/billing/account.sql.test.ts`
+Expected: PASS (11 tests).
 
 Run: `bun run typecheck`
-Expected: no errors.
+Expected: no new errors.
 
-- [ ] **Step 9: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add worker/services/billing/flag.ts worker/services/billing/account.ts worker/services/billing/credits.ts worker/services/billing/account.test.ts worker/services/billing/account.sql.test.ts worker/services/billing/credits.test.ts worker/types/env.d.ts shared/types/billing.ts
-git commit -m "feat(billing): resolve an account's plan with grace, overrides and grants, behind the billing flag, and meter credits per period
+git add worker/services/billing/flag.ts worker/services/billing/periods.ts worker/services/billing/periods.test.ts worker/services/billing/account.ts worker/services/billing/account.test.ts worker/services/billing/account.sql.test.ts worker/types/env.d.ts shared/types/billing.ts
+git commit -m "feat(billing): resolve an account's plan and period from its subscription, grace and overrides, behind the billing flag
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 4: Stripe billing calls and the price setup script
+### Task 6: Stripe billing calls and the setup script
 
 **Files:**
 - Create:
@@ -1292,8 +1514,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - **Consumes:**
-  - from Task 1: `PremiumTierNumber`, `isPremiumTierNumber`, `PREMIUM_TIERS`;
-  - from Task 2: `renewalDisclosure`, `PREMIUM_CHECKOUT_KIND`, `SubscriptionStatus`;
+  - from Task 1: `PaidPlanId`, `isPaidPlanId`, `PLAN_PRICES_CENTS`, `EXTRA_CREDITS`;
+  - from Task 3: `renewalDisclosure`, `EXTRA_CREDITS_DISCLOSURE`, `CHECKOUT_KIND_CREDITS`, `SubscriptionStatus`;
   - existing: `encodeForm`, `STRIPE_API_VERSION`, `StripeApiError`.
 - **Produces**, in `stripe-client.ts`:
   - exported constant: `IDEMPOTENCY_BUCKET_MS` (now exported, value unchanged);
@@ -1305,12 +1527,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     - `StripeSchedulePhase { start_date: number; end_date: number | null; items: Array<{ price: string | StripePrice; quantity?: number }>; discounts?: StripeDiscountRef[] }`;
     - `StripeSubscriptionSchedule { id; status: string; subscription: string | null; released_subscription?: string | null; current_phase: { start_date: number; end_date: number } | null; phases: StripeSchedulePhase[] }`;
     - `StripeSubscription { id; customer: string; status: SubscriptionStatus; created: number; cancel_at_period_end: boolean; cancel_at: number | null; metadata: Record<string, string> | null; items: { data: StripeSubscriptionItem[] }; schedule: string | StripeSubscriptionSchedule | null }`;
-    - `StripeInvoice { id; customer: string | null; amount_paid: number; currency: string; hosted_invoice_url: string | null; number: string | null; billing_reason: string | null; parent: { type: string; subscription_details?: { subscription: string } | null } | null }`;
-    - `SubscriptionCheckoutInput { customerId; priceId; userId; tier: PremiumTierNumber; priceCents; successUrl; cancelUrl; nowMs }`;
+    - `StripeInvoice { id; customer: string | null; amount_paid: number; currency: string; hosted_invoice_url: string | null; number: string | null; billing_reason: string | null; attempt_count?: number; parent: { type: string; subscription_details?: { subscription: string } | null } | null }`;
+    - `StripeCharge { id; payment_intent: string | null; amount: number; amount_refunded: number }`;
   - `StripeCheckoutSession` gains `mode?: 'payment' | 'subscription' | 'setup'`, `subscription?: string | null` and `customer?: string | null`;
   - new `StripeClient` methods:
     - `createCustomer(input: { userId: string; email: string }): Promise<StripeCustomer>`;
-    - `createSubscriptionCheckoutSession(input: SubscriptionCheckoutInput): Promise<StripeCheckoutSession>`;
+    - `createSubscriptionCheckoutSession(input: { customerId; priceId; userId; plan: PaidPlanId; successUrl; cancelUrl; nowMs }): Promise<StripeCheckoutSession>`;
+    - `createCreditsCheckoutSession(input: { customerId; priceId; userId; credits: number; successUrl; cancelUrl; nowMs }): Promise<StripeCheckoutSession>`;
     - `retrieveSubscription(subscriptionId: string): Promise<StripeSubscription>` (the schedule expanded);
     - `changeSubscriptionPrice(input: { subscription: StripeSubscription; priceId: string; idempotencyKey: string }): Promise<StripeSubscription>`;
     - `scheduleSubscriptionPrice(input: { subscription: StripeSubscription; priceId: string; idempotencyKey: string }): Promise<StripeSubscriptionSchedule>`;
@@ -1319,13 +1542,13 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
     - `resumeSubscription(subscription: StripeSubscription, idempotencyKey: string): Promise<StripeSubscription>`;
     - `createBillingPortalSession(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>`.
   - `prices.ts`:
-    - `PremiumPriceIds = Readonly<Record<PremiumTierNumber, string>>`;
-    - `premiumPriceIds(value: string | undefined): PremiumPriceIds | null`;
-    - `tierOfPrice(price: Pick<StripePrice, 'id' | 'metadata'>, ids: PremiumPriceIds | null): PremiumTierNumber | null`.
+    - `StripePriceIds { pro: string; premium: string; credits: string }`;
+    - `stripePriceIds(value: string | undefined): StripePriceIds | null`;
+    - `planOfPrice(price: Pick<StripePrice, 'id' | 'metadata'>, ids: StripePriceIds | null): PaidPlanId | null`.
   - `scripts/stripe-billing-setup.ts`:
-    - `PREMIUM_PRODUCT_ID = 'estori_premium'`;
-    - `premiumLookupKey(tier): string` (`estori_premium_tier_<n>`);
-    - `setUpPremium(input: { secretKey: string; mode: 'test' | 'live'; fetchImpl: typeof fetch }): Promise<BillingSetupResult>`, where `BillingSetupResult { mode; productId; priceIds: Record<PremiumTierNumber, string>; portalProblems: string[] }`.
+    - `BILLING_PRODUCTS` (ids `estori_pro`, `estori_premium`, `estori_credits`);
+    - `BILLING_LOOKUP_KEYS = { pro: 'estori_pro_monthly', premium: 'estori_premium_monthly', credits: 'estori_credits_1000' }`;
+    - `setUpBilling(input: { secretKey: string; mode: 'test' | 'live'; fetchImpl: typeof fetch }): Promise<{ mode: 'test' | 'live'; priceIds: StripePriceIds; portalProblems: string[] }>`.
 
 - [ ] **Step 1: Write the failing client test** `worker/services/payments/stripe-billing-client.test.ts`:
 
@@ -1344,6 +1567,9 @@ function recordingFetch(body: unknown, status = 200) {
 	return { calls, client: createStripeClient('sk_test_fake', fakeFetch) };
 }
 
+const NOW = 1_800_000_000_000;
+const BUCKET = Math.floor(NOW / 600_000);
+
 const SUBSCRIPTION: StripeSubscription = {
 	id: 'sub_1',
 	customer: 'cus_1',
@@ -1352,7 +1578,7 @@ const SUBSCRIPTION: StripeSubscription = {
 	cancel_at_period_end: false,
 	cancel_at: null,
 	metadata: { estori_user_id: 'u1' },
-	items: { data: [{ id: 'si_1', price: { id: 'price_t3', metadata: { estori_tier: '3' } }, current_period_start: 100, current_period_end: 200 }] },
+	items: { data: [{ id: 'si_1', price: { id: 'price_premium', metadata: { estori_plan: 'premium' } }, current_period_start: 100, current_period_end: 200 }] },
 	schedule: null,
 };
 
@@ -1361,10 +1587,10 @@ const SCHEDULE = {
 	status: 'active',
 	subscription: 'sub_1',
 	current_phase: { start_date: 100, end_date: 200 },
-	phases: [{ start_date: 100, end_date: 200, items: [{ price: 'price_t3', quantity: 1 }], discounts: [{ coupon: null, discount: 'di_1', promotion_code: 'promo_1' }] }],
+	phases: [{ start_date: 100, end_date: 200, items: [{ price: 'price_premium', quantity: 1 }], discounts: [{ coupon: null, discount: 'di_1', promotion_code: 'promo_1' }] }],
 };
 
-describe('Premium billing calls', () => {
+describe('Stripe billing calls', () => {
 	it('creates one customer per account, carrying the account id', async () => {
 		const { calls, client } = recordingFetch({ id: 'cus_1', email: 'ana@example.test', metadata: { estori_user_id: 'u1' } });
 		await client.createCustomer({ userId: 'u1', email: 'ana@example.test' });
@@ -1372,31 +1598,50 @@ describe('Premium billing calls', () => {
 		expect(calls[0].params).toEqual(['email=ana@example.test', 'metadata[estori_user_id]=u1']);
 	});
 
-	it('opens a card-only subscription checkout for the tier price, with codes, the terms agreement and the renewal disclosure', async () => {
+	it("opens a card-only subscription checkout for the plan's price, with codes, the terms agreement and the renewal disclosure", async () => {
 		const { calls, client } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1' });
-		const nowMs = 1_800_000_000_000;
-		await client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_t2', userId: 'u1', tier: 2, priceCents: 19_900, successUrl: 'https://estori.app/settings/billing?checkout=success', cancelUrl: 'https://estori.app/settings/billing?checkout=cancelled', nowMs });
-		expect(calls[0].url).toBe('https://api.stripe.com/v1/checkout/sessions');
-		expect(calls[0].key).toBe(`billing-checkout-u1-2-${Math.floor(nowMs / 600_000)}`);
+		await client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_premium', userId: 'u1', plan: 'premium', successUrl: 'https://estori.app/settings/billing?checkout=success', cancelUrl: 'https://estori.app/settings/billing?checkout=cancelled', nowMs: NOW });
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/checkout/sessions', key: `billing-checkout-u1-premium-${BUCKET}` });
 		expect(calls[0].params).toEqual(
 			expect.arrayContaining([
 				'mode=subscription',
 				'customer=cus_1',
 				'client_reference_id=u1',
-				'line_items[0][price]=price_t2',
+				'line_items[0][price]=price_premium',
 				'line_items[0][quantity]=1',
 				'payment_method_types[0]=card',
 				'allow_promotion_codes=true',
 				'subscription_data[metadata][estori_user_id]=u1',
-				'metadata[kind]=estori_premium',
 				'metadata[estori_user_id]=u1',
-				'metadata[tier]=2',
+				'metadata[plan]=premium',
 				'consent_collection[terms_of_service]=required',
 				'custom_text[submit][message]=Premium renews every month at $199 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 				'success_url=https://estori.app/settings/billing?checkout=success',
-				'cancel_url=https://estori.app/settings/billing?checkout=cancelled',
 			]),
 		);
+	});
+
+	it('opens a one-time checkout for extra credits, a line per 1,000 credits, tagged on the session and the payment', async () => {
+		const { calls, client } = recordingFetch({ id: 'cs_c', url: 'https://checkout.stripe.com/c/cs_c' });
+		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 12_000, successUrl: 'https://estori.app/settings/billing?credits=success', cancelUrl: 'https://estori.app/settings/billing', nowMs: NOW });
+		expect(calls[0].key).toBe(`billing-credits-u1-12000-${BUCKET}`);
+		expect(calls[0].params).toEqual(
+			expect.arrayContaining([
+				'mode=payment',
+				'customer=cus_1',
+				'client_reference_id=u1',
+				'line_items[0][price]=price_credits',
+				'line_items[0][quantity]=12',
+				'payment_method_types[0]=card',
+				'metadata[kind]=credits',
+				'metadata[estori_user_id]=u1',
+				'metadata[credits]=12000',
+				'payment_intent_data[metadata][kind]=credits',
+				'payment_intent_data[metadata][estori_user_id]=u1',
+				'custom_text[submit][message]=Extra credits are used after your monthly credits and expire 12 months after purchase.',
+			]),
+		);
+		expect(calls[0].params.some((param) => param.startsWith('allow_promotion_codes'))).toBe(false);
 	});
 
 	it('reads a subscription with its schedule', async () => {
@@ -1405,28 +1650,28 @@ describe('Premium billing calls', () => {
 		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscriptions/sub_1?expand%5B0%5D=schedule', method: 'GET' });
 	});
 
-	it('upgrades now, prorated and charged, and refuses rather than leave an unpaid upgrade', async () => {
+	it('moves to Premium now, prorated and charged, and refuses rather than leave an unpaid change', async () => {
 		const { calls, client } = recordingFetch(SUBSCRIPTION);
-		await client.changeSubscriptionPrice({ subscription: SUBSCRIPTION, priceId: 'price_t4', idempotencyKey: 'billing-tier-u1-4-1' });
-		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscriptions/sub_1', key: 'billing-tier-u1-4-1' });
-		expect(calls[0].params).toEqual(['items[0][id]=si_1', 'items[0][price]=price_t4', 'proration_behavior=always_invoice', 'payment_behavior=error_if_incomplete', 'expand[0]=schedule']);
+		await client.changeSubscriptionPrice({ subscription: SUBSCRIPTION, priceId: 'price_premium', idempotencyKey: 'billing-plan-u1-premium-1' });
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscriptions/sub_1', key: 'billing-plan-u1-premium-1' });
+		expect(calls[0].params).toEqual(['items[0][id]=si_1', 'items[0][price]=price_premium', 'proration_behavior=always_invoice', 'payment_behavior=error_if_incomplete', 'expand[0]=schedule']);
 	});
 
-	it('schedules a downgrade for the renewal, keeping the discount and charging no proration', async () => {
+	it('schedules the move to Pro for the renewal, keeping the discount and charging no proration', async () => {
 		const { calls, client } = recordingFetch(SCHEDULE);
-		await client.scheduleSubscriptionPrice({ subscription: SUBSCRIPTION, priceId: 'price_t2', idempotencyKey: 'billing-tier-u1-2-1' });
-		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscription_schedules', key: 'billing-tier-u1-2-1-create' });
+		await client.scheduleSubscriptionPrice({ subscription: SUBSCRIPTION, priceId: 'price_pro', idempotencyKey: 'billing-plan-u1-pro-1' });
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscription_schedules', key: 'billing-plan-u1-pro-1-create' });
 		expect(calls[0].params).toEqual(['from_subscription=sub_1']);
-		expect(calls[1]).toMatchObject({ url: 'https://api.stripe.com/v1/subscription_schedules/sub_sched_1', key: 'billing-tier-u1-2-1-phases' });
+		expect(calls[1]).toMatchObject({ url: 'https://api.stripe.com/v1/subscription_schedules/sub_sched_1', key: 'billing-plan-u1-pro-1-phases' });
 		expect(calls[1].params).toEqual([
 			'end_behavior=release',
 			'proration_behavior=none',
-			'phases[0][items][0][price]=price_t3',
+			'phases[0][items][0][price]=price_premium',
 			'phases[0][items][0][quantity]=1',
 			'phases[0][start_date]=100',
 			'phases[0][end_date]=200',
 			'phases[0][discounts][0][discount]=di_1',
-			'phases[1][items][0][price]=price_t2',
+			'phases[1][items][0][price]=price_pro',
 			'phases[1][items][0][quantity]=1',
 			'phases[1][duration][interval]=month',
 			'phases[1][duration][interval_count]=1',
@@ -1437,7 +1682,7 @@ describe('Premium billing calls', () => {
 
 	it('reuses a schedule already on the subscription', async () => {
 		const { calls, client } = recordingFetch(SCHEDULE);
-		await client.scheduleSubscriptionPrice({ subscription: { ...SUBSCRIPTION, schedule: 'sub_sched_1' }, priceId: 'price_t2', idempotencyKey: 'k' });
+		await client.scheduleSubscriptionPrice({ subscription: { ...SUBSCRIPTION, schedule: 'sub_sched_1' }, priceId: 'price_pro', idempotencyKey: 'k' });
 		expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual(['GET https://api.stripe.com/v1/subscription_schedules/sub_sched_1', 'POST https://api.stripe.com/v1/subscription_schedules/sub_sched_1']);
 	});
 
@@ -1449,18 +1694,15 @@ describe('Premium billing calls', () => {
 		expect(calls.map((call) => call.params)).toEqual([['cancel_at_period_end=true'], ['cancel_at_period_end=false'], ['cancel_at=']]);
 	});
 
-	it('releases a schedule, and treats one already released as done', async () => {
+	it("releases a schedule, treats one already released as done, and opens Stripe's portal", async () => {
 		const released = recordingFetch(SCHEDULE);
 		await released.client.releaseSubscriptionSchedule('sub_sched_1');
 		expect(released.calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscription_schedules/sub_sched_1/release', method: 'POST' });
 		const gone = recordingFetch({ error: { message: 'already released', type: 'invalid_request_error' } }, 400);
 		await expect(gone.client.releaseSubscriptionSchedule('sub_sched_1')).resolves.toBeUndefined();
-	});
-
-	it("opens Stripe's customer portal for the customer", async () => {
-		const { calls, client } = recordingFetch({ url: 'https://billing.stripe.com/p/session/1' });
-		expect(await client.createBillingPortalSession({ customerId: 'cus_1', returnUrl: 'https://estori.app/settings/billing' })).toEqual({ url: 'https://billing.stripe.com/p/session/1' });
-		expect(calls[0].params).toEqual(['customer=cus_1', 'return_url=https://estori.app/settings/billing']);
+		const portal = recordingFetch({ url: 'https://billing.stripe.com/p/session/1' });
+		expect(await portal.client.createBillingPortalSession({ customerId: 'cus_1', returnUrl: 'https://estori.app/settings/billing' })).toEqual({ url: 'https://billing.stripe.com/p/session/1' });
+		expect(portal.calls[0].params).toEqual(['customer=cus_1', 'return_url=https://estori.app/settings/billing']);
 	});
 });
 ```
@@ -1469,20 +1711,22 @@ describe('Premium billing calls', () => {
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { premiumPriceIds, tierOfPrice } from './prices';
+import { planOfPrice, stripePriceIds } from './prices';
 
-describe('Premium prices', () => {
-	it('reads the four price ids, and nothing from an incomplete or malformed value', () => {
-		expect(premiumPriceIds('{"1":"price_a","2":"price_b","3":"price_c","4":"price_d"}')).toEqual({ 1: 'price_a', 2: 'price_b', 3: 'price_c', 4: 'price_d' });
-		for (const bad of [undefined, '', 'nope', '{"1":"price_a"}', '{"1":"price_a","2":"price_b","3":"price_c","4":"prod_d"}', '[]']) expect(premiumPriceIds(bad)).toBeNull();
+const IDS_JSON = '{"pro":"price_p","premium":"price_m","credits":"price_c"}';
+
+describe('Stripe prices', () => {
+	it('reads the three price ids, and nothing from an incomplete or malformed value', () => {
+		expect(stripePriceIds(IDS_JSON)).toEqual({ pro: 'price_p', premium: 'price_m', credits: 'price_c' });
+		for (const bad of [undefined, '', 'nope', '{"pro":"price_p"}', '{"pro":"price_p","premium":"price_m","credits":"prod_c"}', '[]']) expect(stripePriceIds(bad)).toBeNull();
 	});
 
-	it("finds a price's tier from the configured ids, then from its metadata", () => {
-		const ids = premiumPriceIds('{"1":"price_a","2":"price_b","3":"price_c","4":"price_d"}');
-		expect(tierOfPrice({ id: 'price_c', metadata: null }, ids)).toBe(3);
-		expect(tierOfPrice({ id: 'price_old', metadata: { estori_tier: '2' } }, ids)).toBe(2);
-		expect(tierOfPrice({ id: 'price_x', metadata: { estori_tier: '9' } }, ids)).toBeNull();
-		expect(tierOfPrice({ id: 'price_x', metadata: null }, null)).toBeNull();
+	it("finds a price's plan from the configured ids, then from its metadata", () => {
+		const ids = stripePriceIds(IDS_JSON);
+		expect(planOfPrice({ id: 'price_m', metadata: null }, ids)).toBe('premium');
+		expect(planOfPrice({ id: 'price_old', metadata: { estori_plan: 'pro' } }, ids)).toBe('pro');
+		expect(planOfPrice({ id: 'price_c', metadata: null }, ids)).toBeNull();
+		expect(planOfPrice({ id: 'price_x', metadata: { estori_plan: 'gold' } }, ids)).toBeNull();
 	});
 });
 ```
@@ -1491,7 +1735,7 @@ describe('Premium prices', () => {
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { PREMIUM_PRODUCT_ID, premiumLookupKey, setUpPremium } from './stripe-billing-setup';
+import { BILLING_LOOKUP_KEYS, setUpBilling } from './stripe-billing-setup';
 
 type Route = (body: URLSearchParams) => Response;
 
@@ -1500,8 +1744,8 @@ function stripe(routes: Record<string, Route>) {
 	const fetchImpl: typeof fetch = async (input, init) => {
 		const url = new URL(String(input));
 		const key = `${init?.method ?? 'GET'} ${url.pathname}`;
-		seen.push(`${key}${url.search}`);
-		const route = routes[key];
+		seen.push(key);
+		const route = routes[key] ?? routes[`${init?.method ?? 'GET'} ${url.pathname.replace(/\/[^/]+$/, '/:id')}`];
 		if (!route) throw new Error(`unexpected ${key}`);
 		return route(new URLSearchParams(String(init?.body ?? '')));
 	};
@@ -1510,44 +1754,49 @@ function stripe(routes: Record<string, Route>) {
 
 const PORTAL_OK = () => Response.json({ data: [{ id: 'bpc_1', features: { subscription_update: { enabled: false }, subscription_cancel: { enabled: true, mode: 'at_period_end' }, payment_method_update: { enabled: true }, invoice_history: { enabled: true } } }] });
 
-describe('setUpPremium', () => {
-	it('creates the product and four monthly prices, tagged with their tier, on a first run', async () => {
-		let next = 0;
-		const { fetchImpl, seen } = stripe({
-			[`GET /v1/products/${PREMIUM_PRODUCT_ID}`]: () => Response.json({ error: { code: 'resource_missing', message: 'No such product' } }, { status: 404 }),
+describe('setUpBilling', () => {
+	it('creates the three products and their prices, tagged, on a first run', async () => {
+		const created: Array<Record<string, string | null>> = [];
+		const { fetchImpl } = stripe({
+			'GET /v1/products/:id': () => Response.json({ error: { code: 'resource_missing', message: 'No such product' } }, { status: 404 }),
 			'POST /v1/products': (body) => Response.json({ id: body.get('id') }),
 			'GET /v1/prices': () => Response.json({ data: [] }),
 			'POST /v1/prices': (body) => {
-				expect(body.get('recurring[interval]')).toBe('month');
-				expect(body.get('currency')).toBe('usd');
-				expect(body.get('metadata[estori_tier]')).toBe(String(next + 1));
-				expect(body.get('lookup_key')).toBe(premiumLookupKey((next + 1) as 1 | 2 | 3 | 4));
-				return Response.json({ id: `price_${++next}` });
+				created.push({ lookup: body.get('lookup_key'), amount: body.get('unit_amount'), interval: body.get('recurring[interval]'), plan: body.get('metadata[estori_plan]'), kind: body.get('metadata[estori_kind]'), product: body.get('product') });
+				return Response.json({ id: `price_${created.length}` });
 			},
 			'GET /v1/billing_portal/configurations': PORTAL_OK,
 		});
-		const result = await setUpPremium({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
-		expect(result).toEqual({ mode: 'test', productId: 'estori_premium', priceIds: { 1: 'price_1', 2: 'price_2', 3: 'price_3', 4: 'price_4' }, portalProblems: [] });
-		expect(seen.filter((call) => call.startsWith('POST /v1/prices'))).toHaveLength(4);
+		const result = await setUpBilling({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
+		expect(result).toEqual({ mode: 'test', priceIds: { pro: 'price_1', premium: 'price_2', credits: 'price_3' }, portalProblems: [] });
+		expect(created).toEqual([
+			{ lookup: BILLING_LOOKUP_KEYS.pro, amount: '4900', interval: 'month', plan: 'pro', kind: null, product: 'estori_pro' },
+			{ lookup: BILLING_LOOKUP_KEYS.premium, amount: '19900', interval: 'month', plan: 'premium', kind: null, product: 'estori_premium' },
+			{ lookup: BILLING_LOOKUP_KEYS.credits, amount: '150', interval: null, plan: null, kind: 'credits', product: 'estori_credits' },
+		]);
 	});
 
 	it('reuses prices that already match, and reports a portal that lets sellers switch plans', async () => {
-		const existing = [1, 2, 3, 4].map((tier, index) => ({ id: `price_old_${tier}`, lookup_key: `estori_premium_tier_${tier}`, unit_amount: [9_900, 19_900, 34_900, 59_900][index], active: true }));
+		const existing = [
+			{ id: 'price_old_pro', lookup_key: BILLING_LOOKUP_KEYS.pro, unit_amount: 4_900, active: true },
+			{ id: 'price_old_premium', lookup_key: BILLING_LOOKUP_KEYS.premium, unit_amount: 19_900, active: true },
+			{ id: 'price_old_credits', lookup_key: BILLING_LOOKUP_KEYS.credits, unit_amount: 150, active: true },
+		];
 		const { fetchImpl, seen } = stripe({
-			[`GET /v1/products/${PREMIUM_PRODUCT_ID}`]: () => Response.json({ id: PREMIUM_PRODUCT_ID }),
+			'GET /v1/products/:id': () => Response.json({ id: 'estori_pro' }),
 			'GET /v1/prices': () => Response.json({ data: existing }),
 			'GET /v1/billing_portal/configurations': () => Response.json({ data: [{ id: 'bpc_1', features: { subscription_update: { enabled: true }, subscription_cancel: { enabled: true, mode: 'immediately' }, payment_method_update: { enabled: true }, invoice_history: { enabled: true } } }] }),
 		});
-		const result = await setUpPremium({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
-		expect(result.priceIds).toEqual({ 1: 'price_old_1', 2: 'price_old_2', 3: 'price_old_3', 4: 'price_old_4' });
+		const result = await setUpBilling({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
+		expect(result.priceIds).toEqual({ pro: 'price_old_pro', premium: 'price_old_premium', credits: 'price_old_credits' });
 		expect(seen.some((call) => call.startsWith('POST'))).toBe(false);
 		expect(result.portalProblems).toEqual(['Turn off plan switching in the customer portal.', 'Set cancellations to happen at the end of the billing period.']);
 	});
 
 	it("refuses a key whose mode isn't the one asked for", async () => {
 		const { fetchImpl } = stripe({});
-		await expect(setUpPremium({ secretKey: 'sk_live_fake', mode: 'test', fetchImpl })).rejects.toThrow('The key is a live key, but --mode test was asked for.');
-		await expect(setUpPremium({ secretKey: 'rk_test_fake', mode: 'live', fetchImpl })).rejects.toThrow('The key is a test key, but --mode live was asked for.');
+		await expect(setUpBilling({ secretKey: 'sk_live_fake', mode: 'test', fetchImpl })).rejects.toThrow('The key is a live key, but --mode test was asked for.');
+		await expect(setUpBilling({ secretKey: 'rk_test_fake', mode: 'live', fetchImpl })).rejects.toThrow('The key is a test key, but --mode live was asked for.');
 	});
 });
 ```
@@ -1557,109 +1806,83 @@ describe('setUpPremium', () => {
 Run: `rtk proxy bun run test -- worker/services/payments/stripe-billing-client.test.ts worker/services/billing/prices.test.ts scripts/stripe-billing-setup.test.ts`
 Expected: FAIL, "client.createCustomer is not a function" and failed imports.
 
-- [ ] **Step 4: Add the client methods** to `createStripeClient`. Add the types from Interfaces first, and export `IDEMPOTENCY_BUCKET_MS`.
+- [ ] **Step 4: Add the client methods.** Add the types first, and export `IDEMPOTENCY_BUCKET_MS`. The tests pin each method's parameters and their key order; build the objects in that order.
 
-```ts
-		// One customer per account; a double click within Stripe's 24-hour key window gets the same one.
-		createCustomer: ({ userId, email }) =>
-			request<StripeCustomer>('POST', '/customers', { email: email || undefined, metadata: { estori_user_id: userId } }, `billing-customer-${userId}`),
-		// Card only: renewals and Smart Retries charge the card on file, and bank methods would settle days later.
-		createSubscriptionCheckoutSession: (input) =>
-			request<StripeCheckoutSession>(
-				'POST',
-				'/checkout/sessions',
-				{
-					mode: 'subscription',
-					customer: input.customerId,
-					client_reference_id: input.userId,
-					line_items: [{ price: input.priceId, quantity: 1 }],
-					payment_method_types: ['card'],
-					allow_promotion_codes: true,
-					subscription_data: { metadata: { estori_user_id: input.userId } },
-					metadata: { kind: PREMIUM_CHECKOUT_KIND, estori_user_id: input.userId, tier: String(input.tier) },
-					consent_collection: { terms_of_service: 'required' },
-					custom_text: { submit: { message: renewalDisclosure(input.priceCents) } },
-					success_url: input.successUrl,
-					cancel_url: input.cancelUrl,
-					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
-				},
-				`billing-checkout-${input.userId}-${input.tier}-${Math.floor(input.nowMs / IDEMPOTENCY_BUCKET_MS)}`,
-			),
-		retrieveSubscription: (subscriptionId) =>
-			request<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}?${encodeForm({ expand: ['schedule'] })}`),
-```
+- **`createCustomer`:** key `billing-customer-{userId}`. An empty email is left out.
+- **`createSubscriptionCheckoutSession`:**
+  - key `billing-checkout-{userId}-{plan}-{bucket}`;
+  - `mode`, `customer`, `client_reference_id`, `line_items: [{ price, quantity: 1 }]`, `payment_method_types: ['card']`, `allow_promotion_codes: true`;
+  - `subscription_data: { metadata: { estori_user_id } }`, `metadata: { estori_user_id, plan }`;
+  - `consent_collection: { terms_of_service: 'required' }`, `custom_text: { submit: { message: renewalDisclosure(plan) } }`;
+  - the URLs, and `expires_at` = now plus `CHECKOUT_SESSION_TTL_SECONDS`;
+  - card only, because renewals and Smart Retries charge the card on file and bank methods would settle days later.
+- **`createCreditsCheckoutSession`:**
+  - key `billing-credits-{userId}-{credits}-{bucket}`;
+  - `mode: 'payment'`, `customer`, `client_reference_id`, `line_items: [{ price, quantity: credits / EXTRA_CREDITS.creditsPerUnit }]`, `payment_method_types: ['card']`;
+  - the same `metadata` on the session and on `payment_intent_data`: `{ kind: CHECKOUT_KIND_CREDITS, estori_user_id, credits: String(credits) }`;
+  - `custom_text.submit.message = EXTRA_CREDITS_DISCLOSURE`, the URLs and `expires_at`;
+  - no promotion codes.
+- **`retrieveSubscription`:** `GET /subscriptions/{id}?{encodeForm({ expand: ['schedule'] })}`.
+- **`changeSubscriptionPrice`:**
+  - `items: [{ id: firstItem.id, price }]`, `proration_behavior: 'always_invoice'`, `payment_behavior: 'error_if_incomplete'`, `expand: ['schedule']`;
+  - throws `Error('Subscription {id} has no items')` without an item.
+- **`scheduleSubscriptionPrice`:**
+  1. Use the attached schedule (a string id, or the expanded object's id) through `GET /subscription_schedules/{id}`. Without one, `POST /subscription_schedules { from_subscription }` with key `{key}-create`.
+  2. Then `POST /subscription_schedules/{id}` with key `{key}-phases`. The body:
+     - `end_behavior: 'release'` and `proration_behavior: 'none'`;
+     - phase 0: the current price, quantity 1, from `current_phase.start_date` to `current_phase.end_date`;
+     - phase 1: the new price, quantity 1, `duration: { interval: 'month', interval_count: 1 }`, `proration_behavior: 'none'`;
+     - both carry the current phase's `discounts`, mapped to `{ discount }` when a discount id is present, otherwise `{ coupon }`, and left out when there are none.
+  3. The current phase is the one whose `start_date` equals `current_phase.start_date`.
+- **`releaseSubscriptionSchedule`:** POSTs `/subscription_schedules/{id}/release`. A `StripeApiError` with status 400 counts as done, as `expireCheckoutSession` does.
+- **`cancelAtPeriodEnd`:** `{ cancel_at_period_end: true }`.
+- **`resumeSubscription`:** `{ cancel_at: '' }` when `cancel_at !== null && !cancel_at_period_end`, otherwise `{ cancel_at_period_end: false }`.
+- **`createBillingPortalSession`:** `{ customer, return_url }`.
 
-**`changeSubscriptionPrice`:**
-- POSTs `/subscriptions/{id}` with `items: [{ id: firstItem.id, price: priceId }]`, `proration_behavior: 'always_invoice'`, `payment_behavior: 'error_if_incomplete'` and `expand: ['schedule']`, under the given key.
-- It throws `Error('Subscription {id} has no items')` when there's no item.
+- [ ] **Step 5: `prices.ts`.**
+- **`stripePriceIds`:** parses a JSON object whose `pro`, `premium` and `credits` are each a string starting `price_`, and answers null otherwise.
+- **`planOfPrice`:** matches `ids.pro` and `ids.premium`, then `metadata.estori_plan` through `isPaidPlanId`, else null.
 
-**`scheduleSubscriptionPrice`:**
-1. Use the attached schedule (a string id, or the expanded object's id) through `GET /subscription_schedules/{id}`. Without one, `POST /subscription_schedules { from_subscription }` with key `${idempotencyKey}-create`.
-2. Then `POST /subscription_schedules/{id}` with key `${idempotencyKey}-phases`. The body:
-   - `end_behavior: 'release'` and `proration_behavior: 'none'`;
-   - phase 0 is the current price, quantity 1, from `current_phase.start_date` to `current_phase.end_date`;
-   - phase 1 is the new price, quantity 1, for `duration: { interval: 'month', interval_count: 1 }`, with `proration_behavior: 'none'`;
-   - both carry the current phase's `discounts`, mapped to `{ discount }` when a discount id is present, otherwise `{ coupon }`, and left out when there are none.
-3. Find the current phase as the phase whose `start_date` equals `current_phase.start_date`. Keep the key order in the test.
-
-**The rest:**
-- **`releaseSubscriptionSchedule`:** POSTs `/subscription_schedules/{id}/release`. A `StripeApiError` with status 400 means already released or canceled, which counts as done; that's the same pattern as `expireCheckoutSession`.
-- **`cancelAtPeriodEnd`:** POSTs `{ cancel_at_period_end: true }`.
-- **`resumeSubscription`:** sends `{ cancel_at: '' }` when `cancel_at !== null && !cancel_at_period_end`, otherwise `{ cancel_at_period_end: false }`. An empty string unsets the field at Stripe.
-- **`createBillingPortalSession`:** POSTs `/billing_portal/sessions { customer, return_url }`.
-
-- [ ] **Step 5: Implement `prices.ts`.**
-- **`premiumPriceIds`:**
-  - parse the JSON object;
-  - require keys "1" to "4", each a string starting with `price_`;
-  - answer `null` otherwise.
-- **`tierOfPrice`:**
-  - look the id up in `ids` first;
-  - then try `metadata.estori_tier` parsed as an integer, passing it through `isPremiumTierNumber`;
-  - else null.
-
-- [ ] **Step 6: Implement `scripts/stripe-billing-setup.ts`**
+- [ ] **Step 6: `scripts/stripe-billing-setup.ts`.**
 
 ```ts
 /**
- * Creates Estori Premium in Stripe: the product and its four monthly prices, each tagged with its tier, and checks the
- * customer portal. Rerunning reuses what exists. Prints the STRIPE_PREMIUM_PRICE_IDS value for the environment.
+ * Creates Estori's billing products in Stripe: Pro and Premium with a monthly price each, and AI credits with a
+ * one-time price per 1,000. Rerunning reuses what exists. Prints the STRIPE_PRICE_IDS value for the environment.
  * Usage: STRIPE_SECRET_KEY=sk_test_... bun scripts/stripe-billing-setup.ts --mode test
  */
 ```
 
-**The mode check** comes first. The key's mode is test for `sk_test_` and `rk_test_` prefixes, live otherwise. A mismatch throws `The key is a {test|live} key, but --mode {mode} was asked for.`
+**The mode check** comes first. Keys starting `sk_test_` or `rk_test_` are test keys; any other is live. A mismatch throws `The key is a {test|live} key, but --mode {mode} was asked for.`
 
-**Requests** use `fetchImpl` with `Authorization: Bearer`, `Stripe-Version: STRIPE_API_VERSION` and `encodeForm` bodies, imported from `worker/services/payments/stripe-client.ts`.
+**Requests** send `Authorization: Bearer`, `Stripe-Version: STRIPE_API_VERSION` and `encodeForm` bodies, imported from `worker/services/payments/stripe-client.ts`.
 
-**The product:**
-1. `GET /v1/products/estori_premium`.
-2. On 404, `POST /v1/products` with `{ id: 'estori_premium', name: 'Estori Premium', metadata: { estori_product: 'premium' } }`.
+**The products,** in order:
+- `estori_pro` "Estori Pro";
+- `estori_premium` "Estori Premium";
+- `estori_credits` "Estori AI credits".
+
+Each is `GET /v1/products/{id}`, and on 404 `POST /v1/products { id, name }`.
 
 **The prices:**
-1. `GET /v1/prices?lookup_keys[0..3]=...&active=true`.
-2. For each tier, keep an active price with that lookup key and the same `unit_amount`.
-3. Otherwise `POST /v1/prices` with:
-   - `product: 'estori_premium'`, `currency: 'usd'`, `unit_amount: tier.priceCents`;
-   - `recurring: { interval: 'month' }`, `nickname: '{credits} credits'`;
-   - `lookup_key: premiumLookupKey(tier)` and `transfer_lookup_key: true`;
-   - `metadata: { estori_tier: String(tier) }`.
+1. `GET /v1/prices?lookup_keys[0..2]=...&active=true`, then keep an active price with the lookup key and the same `unit_amount`.
+2. Otherwise `POST /v1/prices` with `{ product, currency: 'usd', unit_amount, lookup_key, transfer_lookup_key: true }` and:
+   - Pro: `recurring: { interval: 'month' }`, `metadata: { estori_plan: 'pro' }`, 4,900;
+   - Premium: the same with `premium`, 19,900;
+   - credits: no `recurring`, `metadata: { estori_kind: 'credits' }`, `EXTRA_CREDITS.unitPriceCents`, nickname "1,000 AI credits".
 
-**The portal:**
-- Read `GET /v1/billing_portal/configurations?is_default=true`.
-- These problems are reported, in this order, with the exact strings the test pins:
-  - "Turn off plan switching in the customer portal." when `subscription_update.enabled`;
-  - "Set cancellations to happen at the end of the billing period." when cancel is enabled but `mode !== 'at_period_end'`;
-  - "Turn on cancelling in the customer portal." when cancel is off;
-  - "Turn on card updates in the customer portal." when `payment_method_update` is off;
-  - "Turn on invoice history in the customer portal." when `invoice_history` is off;
-  - "Create the customer portal's default configuration in the Stripe Dashboard." when there's none.
+**The portal** is read from `GET /v1/billing_portal/configurations?is_default=true`, which reports these problems in order:
+- "Turn off plan switching in the customer portal." when `subscription_update.enabled`;
+- "Set cancellations to happen at the end of the billing period." when cancel is enabled but `mode !== 'at_period_end'`;
+- "Turn on cancelling in the customer portal." when cancel is off;
+- "Turn on card updates in the customer portal." when `payment_method_update` is off;
+- "Turn on invoice history in the customer portal." when `invoice_history` is off;
+- "Create the customer portal's default configuration in the Stripe Dashboard." when there's none.
 
 **`main()`:**
 - reads `--mode` and `STRIPE_SECRET_KEY`;
-- prints the mode, the product id, `STRIPE_PREMIUM_PRICE_IDS=<json>` and each portal problem;
+- prints the mode, `STRIPE_PRICE_IDS=<json>`, each portal problem, and "Also set a Terms of Service URL under Settings, Public details: Checkout requires it for the terms agreement.";
 - exits 1 on an error;
-- also prints "Also set a Terms of Service URL under Settings, Public details: Checkout requires it for the terms agreement.";
 - runs only when `import.meta.main`.
 
 - [ ] **Step 7: Run the tests to verify they pass**
@@ -1668,18 +1891,18 @@ Run: `rtk proxy bun run test -- worker/services/payments/stripe-billing-client.t
 Expected: PASS.
 
 Run: `bun run typecheck`
-Expected: no errors.
+Expected: no new errors.
 
 - [ ] **Step 8: Commit**
 
 ```bash
 git add worker/services/payments/stripe-client.ts worker/services/payments/stripe-billing-client.test.ts worker/services/billing/prices.ts worker/services/billing/prices.test.ts scripts/stripe-billing-setup.ts scripts/stripe-billing-setup.test.ts
-git commit -m "feat(billing): stripe calls for customers, subscription checkout, tier changes, cancelling and the portal, and the price setup script
+git commit -m "feat(billing): stripe calls for plan and credit checkouts, plan changes, cancelling and the portal, and the setup script
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 5: Billing emails from Estori
+### Task 7: Billing emails from Estori
 
 **Files:**
 - Create:
@@ -1692,119 +1915,100 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Interfaces:**
 - **Consumes:**
-  - from Task 1: `formatBillingDate`, `formatUsd`, `premiumTier`, `PLAN_LIMITS`, `PremiumTierNumber`;
-  - from Task 2: `BILLING_PATH`, `BillingNoticeKind`;
+  - from Task 1: `PLAN_LIMITS`, `PLAN_PRICES_CENTS`, `planName`, `formatBillingDate`, `formatUsd`, `formatCredits`, `PaidPlanId`, `PlanId`;
+  - from Task 3: `BILLING_PATH`, `BillingNoticeKind`;
   - existing: `renderEmail`, `createEmailSender`, `configuredBaseUrl`, `UserService.findUser`, `LEGAL_ENTITY`, `legalAddressLine`, `LEGAL_CONTACT`.
 - **Produces:**
-  - from `billing-templates.ts`, each answering an `OutgoingEmail`:
-    - `premiumStartedEmail(to, { tier, renewsAt, billingLink })`;
-    - `premiumReceiptEmail(to, { amountCents, currency, periodStart, periodEnd, invoiceNumber, invoiceUrl })`;
-    - `tierUpgradedEmail(to, { tier, billingLink })`;
-    - `downgradeScheduledEmail(to, { tier, at, billingLink })`;
-    - `paymentFailedEmail(to, { graceEndsAt, billingLink })`;
-    - `premiumEndingEmail(to, { endsAt, billingLink })`;
-    - `premiumEndedEmail(to, { reason: 'cancelled' | 'payment-failed', pricingLink })`;
-    - `creditsNoticeEmail(to, { percent: 80 | 100, credits, renewsAt, billingLink })`;
-    - `enforcementNoticeEmail(to, { startsOn, aiCreditsPerDay, liveStores, sellsCatalog, pricingLink })`.
-    - Links are `string | null`. Times are ms.
-  - from `notices.ts`:
-    - `BillingEmail`, a union discriminated by `kind`, one member per `BillingNoticeKind`, with the fields the matching template takes minus the links;
+  - `notices.ts`:
+    - `BillingEmail`, a union discriminated by `kind`, one member per `BillingNoticeKind`:
+      - `{ kind: 'plan_started'; plan: PaidPlanId; renewsAt: number }`;
+      - `{ kind: 'receipt'; plan: PaidPlanId; amountCents: number; currency: string; periodStart: number; periodEnd: number; invoiceNumber: string | null; invoiceUrl: string | null }`;
+      - `{ kind: 'plan_upgraded'; plan: PaidPlanId }`;
+      - `{ kind: 'downgrade_scheduled'; plan: PaidPlanId; at: number }`;
+      - `{ kind: 'payment_failed'; plan: PaidPlanId; graceEndsAt: number }`;
+      - `{ kind: 'plan_ending'; plan: PaidPlanId; endsAt: number }`;
+      - `{ kind: 'plan_ended'; plan: PaidPlanId; reason: 'cancelled' | 'payment-failed' }`;
+      - `{ kind: 'credits_renewed'; credits: number; renewsAt: number }`;
+      - `{ kind: 'credits_20' | 'credits_5'; plan: PlanId; left: number; renewsAt: number }`;
+      - `{ kind: 'credits_receipt'; credits: number; amountCents: number; expiresAt: number; receiptNumber: string }`;
+      - `{ kind: 'credits_refunded'; credits: number; amountCents: number }`;
+      - `{ kind: 'enforcement_notice'; startsOn: number; overLimits: boolean }`.
     - `PlannedNotice { key: string; email: BillingEmail }`;
     - `BillingMailDeps { sender: EmailSender | null; userEmail(userId: string): Promise<string | null>; baseUrl: string | null }`;
     - `billingEmail(to: string, email: BillingEmail, baseUrl: string | null): OutgoingEmail`;
-    - `sendBillingEmails(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<number>` (never throws; answers how many were sent);
-    - `claimAndSendNotice(deps: BillingMailDeps & { claim(userId: string, key: string, kind: BillingNoticeKind): Promise<boolean> }, userId: string, notice: PlannedNotice): Promise<'sent' | 'already-sent' | 'not-sent'>` (never throws);
-    - `creditNoticeDue(used: number, limit: number): 'credits_80' | 'credits_100' | null`;
-    - `creditNoticeKey(kind: 'credits_80' | 'credits_100', periodStartMs: number): string` (`credits_80:<period start seconds>`);
-    - `billingMailFromEnv(env: Env): BillingMailDeps`.
+    - `sendBillingEmails(deps, userId, notices: readonly PlannedNotice[]): Promise<number>` (never throws; answers how many were sent);
+    - `ClaimingMailDeps = BillingMailDeps & { claim(userId: string, key: string, kind: BillingNoticeKind): Promise<boolean> }`;
+    - `claimAndSendNotice(deps: ClaimingMailDeps, userId, notice): Promise<'sent' | 'already-sent' | 'not-sent'>` (never throws);
+    - `billingMailFromEnv(env): BillingMailDeps`, `claimingMailFromEnv(env): ClaimingMailDeps`.
+  - `billing-templates.ts`: one function per kind, as Step 4's table names them.
 
 - [ ] **Step 1: Write the failing template test** `worker/services/email/billing-templates.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
 import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../../../src/routes/copy-rules';
-import {
-	creditsNoticeEmail,
-	downgradeScheduledEmail,
-	enforcementNoticeEmail,
-	paymentFailedEmail,
-	premiumEndedEmail,
-	premiumEndingEmail,
-	premiumReceiptEmail,
-	premiumStartedEmail,
-	tierUpgradedEmail,
-} from './billing-templates';
+import { billingEmail, type BillingEmail } from '../billing/notices';
 
 const TO = 'ana@example.test';
-const BILLING = 'https://estori.app/settings/billing';
+const BASE = 'https://estori.app';
 const NOV_5 = Date.UTC(2026, 10, 5, 10);
 
-const ALL = [
-	premiumStartedEmail(TO, { tier: 2, renewsAt: NOV_5, billingLink: BILLING }),
-	premiumReceiptEmail(TO, { amountCents: 17_000, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: 'EST-0002', invoiceUrl: 'https://invoice.stripe.com/i/in_1' }),
-	tierUpgradedEmail(TO, { tier: 3, billingLink: BILLING }),
-	downgradeScheduledEmail(TO, { tier: 1, at: NOV_5, billingLink: BILLING }),
-	paymentFailedEmail(TO, { graceEndsAt: NOV_5, billingLink: BILLING }),
-	premiumEndingEmail(TO, { endsAt: NOV_5, billingLink: BILLING }),
-	premiumEndedEmail(TO, { reason: 'payment-failed', pricingLink: 'https://estori.app/pricing' }),
-	creditsNoticeEmail(TO, { percent: 80, credits: 50_000, renewsAt: NOV_5, billingLink: BILLING }),
-	creditsNoticeEmail(TO, { percent: 100, credits: 50_000, renewsAt: NOV_5, billingLink: BILLING }),
-	enforcementNoticeEmail(TO, { startsOn: Date.UTC(2026, 10, 1), aiCreditsPerDay: 200, liveStores: 2, sellsCatalog: true, pricingLink: 'https://estori.app/pricing' }),
-];
+const text = (email: BillingEmail) => billingEmail(TO, email, BASE);
 
 describe('billing emails', () => {
-	it('welcomes Premium with its pool, renewal date and price', () => {
-		const [started] = ALL;
-		expect(started.subject).toBe('Welcome to Estori Premium');
-		expect(started.text).toContain('Your account now has 50,000 AI credits a month, up to 10 live stores, your own domains and the supplier catalog.');
-		expect(started.text).toContain('Premium renews on November 5 at $199 a month until you cancel.');
-		expect(started.text).toContain(`Manage billing: ${BILLING}`);
+	it('welcomes a new plan with its credits, renewal date and price', () => {
+		const started = text({ kind: 'plan_started', plan: 'pro', renewsAt: NOV_5 });
+		expect(started.subject).toBe('Welcome to Estori Pro');
+		expect(started.text).toContain('Your account now has 20,000 AI credits a month, up to 3 live stores, your own domains and the supplier catalog. Pro renews on November 5 at $49 a month until you cancel.');
+		expect(started.text).toContain('Manage billing: https://estori.app/settings/billing');
 	});
 
-	it('sends a receipt with the amount, the period, the invoice and the seller of record', () => {
-		const receipt = ALL[1];
-		expect(receipt.subject).toBe('Your Estori Premium receipt: $170.00');
-		expect(receipt.text).toContain('We received $170.00 for Estori Premium, October 5 to November 5.');
+	it('sends receipts with the amount, the period, the invoice and the seller of record', () => {
+		const receipt = text({ kind: 'receipt', plan: 'premium', amountCents: 15_000, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: 'EST-0002', invoiceUrl: 'https://invoice.stripe.com/i/in_1' });
+		expect(receipt.subject).toBe('Your Estori receipt: $150.00');
+		expect(receipt.text).toContain('We received $150.00 for Estori Premium, October 5 to November 5.');
 		expect(receipt.text).toContain('View invoice: https://invoice.stripe.com/i/in_1');
-		expect(receipt.text).toContain('Invoice number: EST-0002');
 		expect(receipt.text).toContain('Sold by Globalink Commerce Technologies LLC');
+		const credits = text({ kind: 'credits_receipt', credits: 12_000, amountCents: 1_800, expiresAt: Date.UTC(2027, 9, 19), receiptNumber: 'pi_1' });
+		expect(credits.subject).toBe('Your Estori receipt: 12,000 AI credits');
+		expect(credits.text).toContain("We received $18.00 for 12,000 extra AI credits. They're used after your monthly credits and expire on October 19, 2027.");
 	});
 
-	it('explains each change in plain words', () => {
-		expect(ALL[2]).toMatchObject({ subject: 'Your Premium pool is bigger now' });
-		expect(ALL[2].text).toContain('You now have 100,000 AI credits a month. We charged the difference for the rest of this month; your receipt follows.');
-		expect(ALL[3]).toMatchObject({ subject: 'Your Premium pool changes at renewal' });
-		expect(ALL[3].text).toContain('On November 5 your pool moves to 20,000 AI credits a month at $99. Until then you keep your current pool.');
-		expect(ALL[4]).toMatchObject({ subject: "Your Premium payment didn't go through" });
-		expect(ALL[4].text).toContain("We couldn't charge your card for Estori Premium. Premium continues until November 5 while we retry. Update your card to keep it.");
-		expect(ALL[4].text).toContain(`Update your card: ${BILLING}`);
-		expect(ALL[5]).toMatchObject({ subject: 'Premium ends on November 5' });
-		expect(ALL[5].text).toContain('You cancelled Premium. It stays on until November 5, then your account moves to Basic. Your stores stay live.');
-		expect(ALL[6]).toMatchObject({ subject: 'Your account is on Basic now' });
-		expect(ALL[6].text).toContain("We couldn't collect the payment for Premium, so it has ended. Your live stores and their domains keep working.");
+	it('explains each plan change in plain words', () => {
+		expect(text({ kind: 'plan_upgraded', plan: 'premium' })).toMatchObject({ subject: "You're on Premium now" });
+		expect(text({ kind: 'plan_upgraded', plan: 'premium' }).text).toContain("You now have 100,000 AI credits a month, and the credits you've used this month count against them. We charged the difference for the rest of this month; your receipt follows.");
+		expect(text({ kind: 'downgrade_scheduled', plan: 'pro', at: NOV_5 }).text).toContain('On November 5 your plan moves to Pro, with 20,000 AI credits a month at $49. Until then you keep Premium. Extra credits you bought stay yours.');
+		expect(text({ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5 })).toMatchObject({ subject: "Your Pro payment didn't go through" });
+		expect(text({ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5 }).text).toContain("We couldn't charge your card for Estori Pro. Pro continues until November 5 while we retry. Update your card to keep it.");
+		expect(text({ kind: 'plan_ending', plan: 'premium', endsAt: NOV_5 })).toMatchObject({ subject: 'Premium ends on November 5' });
+		expect(text({ kind: 'plan_ended', plan: 'premium', reason: 'payment-failed' }).text).toContain("We couldn't collect the payment for Premium, so it has ended. Your live stores and their domains keep working.");
 	});
 
-	it('warns at 80% and 100% of the monthly pool', () => {
-		expect(ALL[7]).toMatchObject({ subject: "You've used 80% of this month's AI credits" });
-		expect(ALL[7].text).toContain("You've used 80% of your 50,000 AI credits. They refill on November 5. Move to a bigger pool any time.");
-		expect(ALL[8]).toMatchObject({ subject: "You've used this month's AI credits" });
-		expect(ALL[8].text).toContain("You've used all 50,000 AI credits for this month. Move to a bigger pool now, or wait until November 5. A change already running always finishes.");
+	it('tells every plan its credits renewed, and warns at 20% and 5% left with the next step for the plan', () => {
+		expect(text({ kind: 'credits_renewed', credits: 5_000, renewsAt: NOV_5 })).toMatchObject({ subject: 'Your AI credits are renewed' });
+		expect(text({ kind: 'credits_renewed', credits: 5_000, renewsAt: NOV_5 }).text).toContain('You have 5,000 AI credits for this month. They last until November 5.');
+		expect(text({ kind: 'credits_20', plan: 'basic', left: 1_000, renewsAt: NOV_5 })).toMatchObject({ subject: 'You have 20% of your AI credits left' });
+		expect(text({ kind: 'credits_20', plan: 'basic', left: 1_000, renewsAt: NOV_5 }).text).toContain('You have 1,000 AI credits left until November 5. Get Pro for 20,000 a month.');
+		expect(text({ kind: 'credits_5', plan: 'premium', left: 5_000, renewsAt: NOV_5 }).text).toContain('You have 5,000 AI credits left until November 5. Buy extra credits any time.');
+		expect(text({ kind: 'credits_refunded', credits: 3_000, amountCents: 750 }).text).toContain('We refunded $7.50 for extra AI credits, and removed 3,000 unused credits from your account.');
 	});
 
-	it('gives every seller a week of notice, and tells those over the new limits that their stores stay live', () => {
-		const notice = ALL[9];
+	it('gives every seller a week of notice of the new plans, and tells those over them that their stores stay live', () => {
+		const notice = text({ kind: 'enforcement_notice', startsOn: Date.UTC(2026, 10, 1), overLimits: true });
 		expect(notice.subject).toBe('Plans and limits on Estori from November 1');
-		expect(notice.text).toContain('From November 1, Basic includes 200 AI credits a day, 1 live store and no supplier catalog.');
-		expect(notice.text).toContain('Your stores stay live; to publish more, get Premium.');
-		const under = enforcementNoticeEmail(TO, { startsOn: Date.UTC(2026, 10, 1), aiCreditsPerDay: 200, liveStores: 1, sellsCatalog: false, pricingLink: null });
-		expect(under.text).not.toContain('to publish more');
-		expect(under.text).toContain('Your stores stay live.');
+		expect(notice.text).toContain('From November 1, Basic includes 5,000 AI credits a month, 3 stores and 1 live store, without the supplier catalog.');
+		expect(notice.text).toContain('Your stores stay live; to publish more, get Pro or Premium.');
+		expect(text({ kind: 'enforcement_notice', startsOn: Date.UTC(2026, 10, 1), overLimits: false }).text).not.toContain('to publish more');
 	});
 
 	it('names no supplier and no AI assistant', () => {
-		for (const email of ALL) {
-			const words = `${email.subject} ${email.text}`.toLowerCase();
-			for (const name of [...SUPPLIER_NAMES, ...AI_ASSISTANT_NAMES]) expect(words, name).not.toContain(name);
+		const all: BillingEmail[] = [
+			{ kind: 'plan_started', plan: 'premium', renewsAt: NOV_5 },
+			{ kind: 'credits_5', plan: 'pro', left: 10, renewsAt: NOV_5 },
+			{ kind: 'enforcement_notice', startsOn: NOV_5, overLimits: true },
+		];
+		for (const email of all.map(text)) {
+			for (const name of [...SUPPLIER_NAMES, ...AI_ASSISTANT_NAMES]) expect(`${email.subject} ${email.text}`.toLowerCase(), name).not.toContain(name);
 		}
 	});
 });
@@ -1816,10 +2020,10 @@ describe('billing emails', () => {
 import { describe, expect, it } from 'vitest';
 import { createEmailSender } from '../email/sender';
 import type { OutgoingEmail } from '../email/types';
-import { claimAndSendNotice, creditNoticeDue, creditNoticeKey, sendBillingEmails, type BillingMailDeps, type PlannedNotice } from './notices';
+import { claimAndSendNotice, sendBillingEmails, type BillingMailDeps, type PlannedNotice } from './notices';
 
-const STARTED: PlannedNotice = { key: 'premium_started:sub_1', email: { kind: 'premium_started', tier: 1, renewsAt: Date.UTC(2026, 10, 5) } };
-const ENDING: PlannedNotice = { key: 'premium_ending:sub_1:1793872800', email: { kind: 'premium_ending', endsAt: Date.UTC(2026, 10, 5) } };
+const STARTED: PlannedNotice = { key: 'plan_started:sub_1', email: { kind: 'plan_started', plan: 'pro', renewsAt: Date.UTC(2026, 10, 5) } };
+const ENDING: PlannedNotice = { key: 'plan_ending:sub_1:1793872800', email: { kind: 'plan_ending', plan: 'pro', endsAt: Date.UTC(2026, 10, 5) } };
 
 function mail(overrides: Partial<BillingMailDeps> = {}): { deps: BillingMailDeps; sent: OutgoingEmail[] } {
 	const sent: OutgoingEmail[] = [];
@@ -1830,10 +2034,7 @@ describe('sending billing emails', () => {
 	it("sends each planned notice to the account's email", async () => {
 		const { deps, sent } = mail();
 		expect(await sendBillingEmails(deps, 'u1', [STARTED, ENDING])).toBe(2);
-		expect(sent.map((email) => [email.to, email.subject])).toEqual([
-			['ana@example.test', 'Welcome to Estori Premium'],
-			['ana@example.test', 'Premium ends on November 5'],
-		]);
+		expect(sent.map((email) => email.subject)).toEqual(['Welcome to Estori Pro', 'Pro ends on November 5']);
 	});
 
 	it('sends nothing without a sender or an address, and never throws', async () => {
@@ -1849,27 +2050,23 @@ describe('sending billing emails', () => {
 		const sender = createEmailSender(env);
 		expect(await sendBillingEmails({ sender, userEmail: async () => 'team@pluriza.com', baseUrl: null }, 'u1', [STARTED])).toBe(1);
 		expect(await sendBillingEmails({ sender, userEmail: async () => 'ana@example.test', baseUrl: null }, 'u2', [STARTED])).toBe(0);
-		expect(delivered).toEqual([{ to: 'team@pluriza.com', subject: '[Staging] Welcome to Estori Premium' }]);
+		expect(delivered).toEqual([{ to: 'team@pluriza.com', subject: '[Staging] Welcome to Estori Pro' }]);
 	});
 
 	it('claims a notice before sending it, so it goes once', async () => {
 		const claimed = new Set<string>();
 		const { deps, sent } = mail();
-		const claiming = { ...deps, claim: async (userId: string, key: string) => !claimed.has(`${userId}:${key}`) && Boolean(claimed.add(`${userId}:${key}`)) };
+		const claiming = {
+			...deps,
+			claim: async (userId: string, key: string) => {
+				if (claimed.has(`${userId}:${key}`)) return false;
+				claimed.add(`${userId}:${key}`);
+				return true;
+			},
+		};
 		expect(await claimAndSendNotice(claiming, 'u1', ENDING)).toBe('sent');
 		expect(await claimAndSendNotice(claiming, 'u1', ENDING)).toBe('already-sent');
 		expect(sent).toHaveLength(1);
-	});
-});
-
-describe('credit warnings', () => {
-	it('are due at 80% and at 100% of the pool', () => {
-		expect(creditNoticeDue(15_999, 20_000)).toBeNull();
-		expect(creditNoticeDue(16_000, 20_000)).toBe('credits_80');
-		expect(creditNoticeDue(19_999, 20_000)).toBe('credits_80');
-		expect(creditNoticeDue(20_000, 20_000)).toBe('credits_100');
-		expect(creditNoticeDue(0, 0)).toBeNull();
-		expect(creditNoticeKey('credits_80', Date.UTC(2026, 9, 5, 10))).toBe(`credits_80:${Date.UTC(2026, 9, 5, 10) / 1000}`);
 	});
 });
 ```
@@ -1879,50 +2076,45 @@ describe('credit warnings', () => {
 Run: `rtk proxy bun run test -- worker/services/email/billing-templates.test.ts worker/services/billing/notices.test.ts`
 Expected: FAIL, failed imports.
 
-- [ ] **Step 4: Implement `billing-templates.ts`.** First export `renderEmail` and `EmailContent` from `templates.ts`, unchanged. Then each template calls `renderEmail`. Use:
-- `formatBillingDate` for dates;
-- `formatUsd` for the monthly price;
-- `new Intl.NumberFormat('en-US', { style: 'currency', currency: currency.toUpperCase() })` for receipt amounts.
+- [ ] **Step 4: Implement `billing-templates.ts`.** First export `renderEmail` and `EmailContent` from `templates.ts`, unchanged. Then each template calls `renderEmail`, using:
+- `formatBillingDate` for dates; the credits receipt's expiry adds the year ("October 19, 2027");
+- `formatCredits` for credits, and `formatUsd` for plan prices;
+- `new Intl.NumberFormat('en-US', { style: 'currency', currency })` for amounts paid.
 
-When a link is null, leave the action out. The copy:
+Plan names come from `planName`, and numbers from `PLAN_LIMITS` and `PLAN_PRICES_CENTS`. A null link drops the action. The links are `{base}/settings/billing` ("billing") and `{base}/pricing` ("pricing").
 
 | Function | Subject | Body | Action | Details, footer |
 | --- | --- | --- | --- | --- |
-| `premiumStartedEmail` | Welcome to Estori Premium | "Your account now has {credits} AI credits a month, up to {PLAN_LIMITS.premium.liveStores} live stores, your own domains and the supplier catalog. Premium renews on {date} at {price} a month until you cancel." | Manage billing | footer "Cancel any time in Estori; Premium then runs to the end of the month you paid for." |
-| `premiumReceiptEmail` | Your Estori Premium receipt: {amount} | "We received {amount} for Estori Premium, {start} to {end}." | View invoice (`invoiceUrl`) | details Amount, Period, Invoice number (when known); footer "Sold by {LEGAL_ENTITY.name}, {legalAddressLine()}. For help, email {LEGAL_CONTACT.support}." |
-| `tierUpgradedEmail` | Your Premium pool is bigger now | "You now have {credits} AI credits a month. We charged the difference for the rest of this month; your receipt follows." | Manage billing | footer "Your stores stay live whatever plan you're on." |
-| `downgradeScheduledEmail` | Your Premium pool changes at renewal | "On {date} your pool moves to {credits} AI credits a month at {price}. Until then you keep your current pool." | Manage billing | same footer |
-| `paymentFailedEmail` | Your Premium payment didn't go through | "We couldn't charge your card for Estori Premium. Premium continues until {date} while we retry. Update your card to keep it." | Update your card | same footer |
-| `premiumEndingEmail` | Premium ends on {date} | "You cancelled Premium. It stays on until {date}, then your account moves to Basic. Your stores stay live." | Keep Premium | footer "Changed your mind? Keep Premium from your billing page before {date}." |
-| `premiumEndedEmail` | Your account is on Basic now | cancelled: "Premium has ended. Your live stores and their domains keep working." payment-failed: "We couldn't collect the payment for Premium, so it has ended. Your live stores and their domains keep working." Both continue: " To publish more stores or add catalog products, get Premium again." | See Premium (`pricingLink`) | same footer |
-| `creditsNoticeEmail` 80 | You've used 80% of this month's AI credits | "You've used 80% of your {credits} AI credits. They refill on {date}. Move to a bigger pool any time." | See your pools | footer "We send this once a month." |
-| `creditsNoticeEmail` 100 | You've used this month's AI credits | "You've used all {credits} AI credits for this month. Move to a bigger pool now, or wait until {date}. A change already running always finishes." | See your pools | same footer |
-| `enforcementNoticeEmail` | Plans and limits on Estori from {date} | "From {date}, Basic includes {aiCreditsPerDay} AI credits a day, {PLAN_LIMITS.basic.liveStores} live store and no supplier catalog. Premium adds a monthly pool of AI credits, up to {premium live stores} live stores, your own domains and the catalog." Then " Your stores stay live; to publish more, get Premium." when `liveStores > PLAN_LIMITS.basic.liveStores` or `sellsCatalog`, else " Your stores stay live." | See plans (`pricingLink`) | footer "Building on Estori stays free." |
+| `planStartedEmail` | Welcome to Estori {Plan} | "Your account now has {credits} AI credits a month, up to {live} live stores, your own domains and the supplier catalog. {Plan} renews on {date} at {price} a month until you cancel." Premium adds " When you need more, you can buy extra credits." | Manage billing (billing) | footer "Cancel any time in Estori; {Plan} then runs to the end of the month you paid for." |
+| `planReceiptEmail` | Your Estori receipt: {amount} | "We received {amount} for Estori {Plan}, {start} to {end}." | View invoice (`invoiceUrl`) | details Amount, Period, Invoice number when known; footer "Sold by {LEGAL_ENTITY.name}, {legalAddressLine()}. For help, email {LEGAL_CONTACT.support}." |
+| `planUpgradedEmail` | You're on Premium now | "You now have 100,000 AI credits a month, and the credits you've used this month count against them. We charged the difference for the rest of this month; your receipt follows." | Manage billing | footer "Your stores stay live whatever plan you're on." |
+| `downgradeScheduledEmail` | Your plan moves to Pro at renewal | "On {date} your plan moves to Pro, with 20,000 AI credits a month at $49. Until then you keep Premium. Extra credits you bought stay yours." | Manage billing | same footer |
+| `paymentFailedEmail` | Your {Plan} payment didn't go through | "We couldn't charge your card for Estori {Plan}. {Plan} continues until {date} while we retry. Update your card to keep it." | Update your card (billing) | same footer |
+| `planEndingEmail` | {Plan} ends on {date} | "You cancelled {Plan}. It stays on until {date}, then your account moves to Basic. Your stores stay live." | Keep {Plan} (billing) | footer "Changed your mind? Keep {Plan} from your billing page before {date}." |
+| `planEndedEmail` | Your account is on Basic now | cancelled: "{Plan} has ended. Your live stores and their domains keep working." payment-failed: "We couldn't collect the payment for {Plan}, so it has ended. Your live stores and their domains keep working." Both add " To publish more stores or add catalog products, get Pro or Premium again." | See plans (pricing) | same footer |
+| `creditsRenewedEmail` | Your AI credits are renewed | "You have {credits} AI credits for this month. They last until {date}." | See your credits (billing) | footer "We send this when your credits renew." |
+| `creditsLowEmail` (20 and 5) | You have {20 or 5}% of your AI credits left | "You have {left} AI credits left until {date}." then by plan: Basic " Get Pro for 20,000 a month."; Pro " Move to Premium for 100,000 a month."; Premium " Buy extra credits any time."; Enterprise " Talk to us if you need more." | See your credits (billing) | footer "We send each of these once a month." |
+| `creditsReceiptEmail` | Your Estori receipt: {credits} AI credits | "We received {amount} for {credits} extra AI credits. They're used after your monthly credits and expire on {date with year}." | See your credits (billing) | details Amount, Credits, Expires, Receipt number; footer: the receipt footer above |
+| `creditsRefundedEmail` | We refunded your extra credits | "We refunded {amount} for extra AI credits, and removed {credits} unused credits from your account." | See your credits (billing) | footer "Your bank may take 5 to 10 business days to show the refund." |
+| `enforcementNoticeEmail` | Plans and limits on Estori from {date} | "From {date}, Basic includes 5,000 AI credits a month, 3 stores and 1 live store, without the supplier catalog. Pro, at $49 a month, adds 20,000 credits, 3 live stores, your own domains and the catalog. Premium, at $199 a month, adds 100,000 credits, 10 live stores and extra credits." Then " Your stores stay live; to publish more, get Pro or Premium." when `overLimits`, else " Your stores stay live." | See plans (pricing) | footer "Building on Estori stays free." |
 
-Credits use `credits.toLocaleString('en-US')`. Tier credits and prices come from `premiumTier(tier)`.
-
-- [ ] **Step 5: Implement `notices.ts`**
-- **`billingEmail`:** switches on `email.kind` and calls the matching template, with:
-  - `billingLink`: the base url plus `BILLING_PATH`, or null without a base url;
-  - `pricingLink`: the base url plus `/pricing`, or null without one.
+- [ ] **Step 5: Implement `notices.ts`.**
+- **`billingEmail`:** switches on `email.kind` and calls the matching template with the links built from `baseUrl`.
 - **`sendBillingEmails`:**
   - returns 0 without a sender;
   - looks the address up once;
   - sends each notice, catching and logging each failure (an allowlist block included) so the rest still go;
   - answers the count sent.
 - **`claimAndSendNotice`:**
-  - calls `deps.claim(userId, notice.key, notice.email.kind)` first;
+  - claims first;
   - answers `'already-sent'` when the claim fails;
   - otherwise sends through `sendBillingEmails` and answers `'sent'` or `'not-sent'`;
   - catches and logs everything else.
-- **`creditNoticeDue`:**
-  - null when `limit <= 0`;
-  - `credits_100` when `used >= limit`;
-  - `credits_80` when `used >= 0.8 * limit`.
 - **`billingMailFromEnv`:**
   - `sender: createEmailSender(env)`;
   - `userEmail: async (id) => (await new UserService(env).findUser({ id }))?.email ?? null`;
   - `baseUrl: configuredBaseUrl(env)`.
+- **`claimingMailFromEnv`:** adds `claim: (userId, key, kind) => new BillingService(env).claimNotice(userId, key, kind, new Date())`.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
@@ -1933,12 +2125,12 @@ Expected: PASS.
 
 ```bash
 git add worker/services/email/templates.ts worker/services/email/billing-templates.ts worker/services/email/billing-templates.test.ts worker/services/billing/notices.ts worker/services/billing/notices.test.ts
-git commit -m "feat(billing): estori's own emails for every subscription event and the credit warnings, sent once each
+git commit -m "feat(billing): estori's own emails for plans, payments, renewed and low credits, and extra-credit receipts and refunds
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 6: The billing API
+### Task 8: The billing API
 
 **Files:**
 - Create:
@@ -1948,39 +2140,50 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - `worker/api/routes/billingRoutes.ts`.
 - Modify:
   - `shared/types/billing.ts` (the view and request types);
+  - `worker/api/responses.ts`, `worker/api/controllers/baseController.ts`;
   - `worker/api/routes/index.ts`;
-  - `src/api-types.ts`;
-  - `src/lib/api-client.ts`;
-  - `src/lib/query-keys.ts`.
+  - `src/api-types.ts`, `src/lib/api-client.ts`, `src/lib/query-keys.ts`.
 - Test:
   - `worker/services/billing/actions.test.ts`;
   - `worker/api/controllers/billing/controller.sql.test.ts`;
-  - `worker/api/controllers/billing/billing-routes-wiring.test.ts`.
+  - `worker/api/controllers/billing/billing-routes-wiring.test.ts`;
+  - `worker/api/responses-plan-limit.test.ts`.
 
 **Interfaces:**
 - **Consumes:**
-  - from Task 3: `loadAccount`, `creditBucketFor`, `creditsUsed`, `isBillingOn`, `BillingAccount`;
-  - from Task 4: the new Stripe methods, `premiumPriceIds`, `IDEMPOTENCY_BUCKET_MS`, `StripeApiError`;
-  - from Task 2: `BillingService`, `LIVE_SUBSCRIPTION_STATUSES`, `BILLING_PATH`;
+  - from Task 5: `loadAccount`, `loadCredits`, `isBillingOn`, `BillingAccount`;
+  - from Task 6: the new Stripe methods, `stripePriceIds`, `IDEMPOTENCY_BUCKET_MS`, `StripeApiError`;
+  - from Task 4: `CreditLedgerService.purchasesOf`, `CreditBalance`, `creditAlertDue`;
+  - from Task 3: `BillingService`, `LIVE_SUBSCRIPTION_STATUSES`, `BILLING_PATH`;
+  - from Task 1: `assertWithinLimit`, `isExtraCreditsAmount`, `isPaidPlanId`;
   - existing: `appBaseUrl`, `stripeFromEnv`, `STRIPE_REQUEST_FAILED_MESSAGE`.
 - **Produces:**
   - `shared/types/billing.ts`:
-    - `BillingCreditsView { used: number; limit: number; granted: number; window: CreditsWindow; resetsAt: number }`;
-    - `BillingView { enabled: boolean; plan: PlanId; tier: PremiumTierNumber | null; source: BillingSource; status: SubscriptionStatus | null; periodStart: number; periodEnd: number; cancelAtPeriodEnd: boolean; pendingTier: PremiumTierNumber | null; pendingTierAt: number | null; graceEndsAt: number | null; paymentFailing: boolean; credits: BillingCreditsView; limits: PlanLimits; canManageBilling: boolean }`;
-    - `CheckoutStarted { url: string; sessionId: string }`, `BillingRedirect { url: string }`, `BillingChangeRequested { requested: true }`, `PremiumTierRequest { tier: PremiumTierNumber }`;
-    - `BILLING_NOT_OPEN_MESSAGE = "Premium isn't open for your account yet."`;
-  - `view.ts`: `billingView(account: BillingAccount, creditsUsed: number, hasCustomer: boolean): BillingView`;
+    - `BillingCreditsView { pool: number; granted: number; used: number; left: number; purchasedLeft: number; available: number; renewsAt: number }`;
+    - `PurchaseView { credits: number; left: number; purchasedAt: number; expiresAt: number }`;
+    - `BillingView { enabled: boolean; plan: PlanId; source: BillingSource; status: SubscriptionStatus | null; periodStart: number; periodEnd: number; cancelAtPeriodEnd: boolean; pendingPlan: PaidPlanId | null; pendingPlanAt: number | null; graceEndsAt: number | null; paymentFailing: boolean; credits: BillingCreditsView | null; alert: 'credits_20' | 'credits_5' | null; purchases: PurchaseView[]; limits: PlanLimits; canManageBilling: boolean; canBuyCredits: boolean }`;
+    - `CheckoutStarted { url: string; sessionId: string }`, `BillingRedirect { url: string }`, `BillingChangeRequested { requested: true }`;
+    - `PlanRequest { plan: PaidPlanId }`, `CreditsRequest { credits: number }`;
+    - `BILLING_NOT_OPEN_MESSAGE = "Plans aren't open for your account yet."`.
+  - `view.ts`: `billingView(account: BillingAccount, credits: CreditBalance | null, purchases: readonly CreditPurchaseRecord[], hasCustomer: boolean): BillingView`.
   - `actions.ts`:
-    - `BillingActionResult<T> = { ok: true; value: T } | { ok: false; status: 400 | 404 | 409 | 502 | 503; message: string }`;
+    - `BillingActionResult<T> = { ok: true; value: T } | { ok: false; status: 400 | 404 | 409 | 502 | 503; message: string } | { ok: false; status: 402; refusal: PlanLimitRefusal }`;
     - `BillingActionDeps`, `BILLING_MESSAGES`;
-    - `startCheckout(deps, user: { id: string; email: string }, tier: unknown)`;
-    - `changeTier(deps, userId, tier: unknown)`, `cancelPremium(deps, userId)`, `resumePremium(deps, userId)`, `openPortal(deps, userId)`;
-    - `billingActionDepsFromEnv(env: Env, request: Request): BillingActionDeps`;
-  - routes (all `AuthConfig.authenticated`, acting only on `context.user`):
+    - `startCheckout(deps, user: { id: string; email: string }, plan: unknown)`;
+    - `changePlan(deps, userId, plan: unknown)`, `cancelPlan(deps, userId)`, `resumePlan(deps, userId)`, `openPortal(deps, userId)`;
+    - `buyCredits(deps, user, account: BillingAccount, credits: unknown)`;
+    - `billingActionDepsFromEnv(env, request): BillingActionDeps`.
+  - `planLimitResponse(refusal): Response` (402), `BaseController.createPlanLimitResponse<T>(refusal)`. `BaseErrorResponse` gains `code?: string` and `planLimit?: PlanLimitRefusal`.
+  - Routes, all `AuthConfig.authenticated`, acting only on `context.user`:
     - `GET /api/billing`;
-    - `POST /api/billing/checkout`, `POST /api/billing/change-tier` (both `{ tier }`);
+    - `POST /api/billing/checkout`, `POST /api/billing/change-plan` (both `{ plan }`);
     - `POST /api/billing/cancel`, `POST /api/billing/resume`, `POST /api/billing/portal`;
-  - `apiClient`: `getBilling()`, `startPremiumCheckout(tier)`, `changePremiumTier(tier)`, `cancelPremium()`, `resumePremium()`, `openBillingPortal()`;
+    - `POST /api/billing/credits` (`{ credits }`).
+  - `apiClient`:
+    - `getBilling()`;
+    - `startPlanCheckout(plan)`, `changePlan(plan)`;
+    - `cancelPlan()`, `resumePlan()`, `openBillingPortal()`;
+    - `buyCredits(credits)`.
   - `queryKeys.billing()`.
 
 - [ ] **Step 1: Write the failing actions test** `worker/services/billing/actions.test.ts`:
@@ -1988,8 +2191,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```ts
 import { describe, expect, it } from 'vitest';
 import { StripeApiError, type StripeCheckoutSession, type StripeSubscription } from '../payments/stripe-client';
-import { BILLING_MESSAGES, cancelPremium, changeTier, openPortal, resumePremium, startCheckout, type BillingActionDeps } from './actions';
+import { BILLING_MESSAGES, buyCredits, cancelPlan, changePlan, openPortal, resumePlan, startCheckout, type BillingActionDeps } from './actions';
 import type { SubscriptionRecord } from '../../database/schema';
+import type { BillingAccount } from './account';
+import { PLAN_LIMITS } from '../../../shared/types/plans';
 
 const USER = { id: 'u1', email: 'ana@example.test' };
 
@@ -1998,12 +2203,12 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 		userId: 'u1',
 		stripeSubscriptionId: 'sub_1',
 		status: 'active',
-		tier: 2,
+		plan: 'pro',
 		currentPeriodStart: new Date('2026-10-05T10:00:00Z'),
 		currentPeriodEnd: new Date('2026-11-05T10:00:00Z'),
 		cancelAtPeriodEnd: false,
-		pendingTier: null,
-		pendingTierAt: null,
+		pendingPlan: null,
+		pendingPlanAt: null,
 		stripeScheduleId: null,
 		stripeCreatedAt: new Date('2026-10-05T10:00:00Z'),
 		updatedAt: new Date('2026-10-05T10:00:00Z'),
@@ -2011,18 +2216,12 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 	};
 }
 
-const SUBSCRIPTION: StripeSubscription = {
-	id: 'sub_1',
-	customer: 'cus_1',
-	status: 'active',
-	created: 1,
-	cancel_at_period_end: true,
-	cancel_at: null,
-	metadata: { estori_user_id: 'u1' },
-	items: { data: [{ id: 'si_1', price: { id: 'price_t2' }, current_period_start: 1, current_period_end: 2 }] },
-	schedule: null,
-};
+function account(plan: 'basic' | 'pro' | 'premium'): BillingAccount {
+	const period = { key: 'sub:sub_1:1', startMs: 0, endMs: 1 };
+	return { billing: true, userId: 'u1', plan, limits: PLAN_LIMITS[plan], creditsResetAt: 1, source: 'subscription', period, graceEndsAtMs: null, subscription: null };
+}
 
+const SUBSCRIPTION: StripeSubscription = { id: 'sub_1', customer: 'cus_1', status: 'active', created: 1, cancel_at_period_end: true, cancel_at: null, metadata: { estori_user_id: 'u1' }, items: { data: [{ id: 'si_1', price: { id: 'price_pro' }, current_period_start: 1, current_period_end: 2 }] }, schedule: null };
 const SESSION: StripeCheckoutSession = { id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1', payment_status: 'unpaid', status: 'open', client_reference_id: 'u1', metadata: null, amount_total: null, currency: 'usd', payment_intent: null };
 
 function fake(state: { row?: SubscriptionRecord | null; customer?: string | null; failWith?: Error } = {}) {
@@ -2037,17 +2236,21 @@ function fake(state: { row?: SubscriptionRecord | null; customer?: string | null
 				calls.push(`checkout:${input.customerId}:${input.priceId}`);
 				return SESSION;
 			},
+			createCreditsCheckoutSession: async (input) => {
+				calls.push(`credits:${input.customerId}:${input.credits}`);
+				return SESSION;
+			},
 			retrieveSubscription: async (id) => {
 				calls.push(`read:${id}`);
 				return SUBSCRIPTION;
 			},
 			changeSubscriptionPrice: async ({ priceId }) => {
 				if (state.failWith) throw state.failWith;
-				calls.push(`upgrade:${priceId}`);
+				calls.push(`now:${priceId}`);
 				return SUBSCRIPTION;
 			},
 			scheduleSubscriptionPrice: async ({ priceId }) => {
-				calls.push(`schedule:${priceId}`);
+				calls.push(`renewal:${priceId}`);
 				return { id: 'sub_sched_1', status: 'active', subscription: 'sub_1', current_phase: null, phases: [] };
 			},
 			releaseSubscriptionSchedule: async (id) => void calls.push(`release:${id}`),
@@ -2073,151 +2276,151 @@ function fake(state: { row?: SubscriptionRecord | null; customer?: string | null
 			},
 			subscriptionOf: async () => state.row ?? null,
 		},
-		priceIds: { 1: 'price_t1', 2: 'price_t2', 3: 'price_t3', 4: 'price_t4' },
+		priceIds: { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' },
 		baseUrl: 'https://estori.app',
 		nowMs: Date.parse('2026-10-19T15:00:00Z'),
 	};
 	return { deps, calls };
 }
 
-describe('starting Premium', () => {
+describe('starting a plan', () => {
 	it('makes the Stripe customer on the first checkout and reuses it after', async () => {
 		const { deps, calls } = fake();
-		expect(await startCheckout(deps, USER, 2)).toEqual({ ok: true, value: { url: 'https://checkout.stripe.com/c/cs_1', sessionId: 'cs_1' } });
-		expect(await startCheckout(deps, USER, 3)).toMatchObject({ ok: true });
-		expect(calls).toEqual(['customer:u1', 'saved:cus_new', 'checkout:cus_new:price_t2', 'checkout:cus_new:price_t3']);
+		expect(await startCheckout(deps, USER, 'pro')).toEqual({ ok: true, value: { url: 'https://checkout.stripe.com/c/cs_1', sessionId: 'cs_1' } });
+		expect(await startCheckout(deps, USER, 'premium')).toMatchObject({ ok: true });
+		expect(calls).toEqual(['customer:u1', 'saved:cus_new', 'checkout:cus_new:price_pro', 'checkout:cus_new:price_premium']);
 	});
 
-	it('refuses a second subscription, an unknown pool and a deployment without prices', async () => {
+	it('refuses a second subscription, an unknown plan and a deployment without prices', async () => {
 		for (const status of ['active', 'trialing', 'past_due'] as const) {
-			expect(await startCheckout(fake({ row: row({ status }) }).deps, USER, 1)).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.alreadyPremium });
+			expect(await startCheckout(fake({ row: row({ status }) }).deps, USER, 'premium')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.alreadyPaying });
 		}
-		expect(await startCheckout(fake({ row: row({ status: 'canceled' }) }).deps, USER, 1)).toMatchObject({ ok: true });
-		for (const tier of [0, 5, '2', null, 2.5]) expect(await startCheckout(fake().deps, USER, tier)).toMatchObject({ ok: false, status: 400 });
-		expect(await startCheckout({ ...fake().deps, priceIds: null }, USER, 1)).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+		expect(await startCheckout(fake({ row: row({ status: 'canceled' }) }).deps, USER, 'pro')).toMatchObject({ ok: true });
+		for (const plan of ['basic', 'enterprise', 'gold', null]) expect(await startCheckout(fake().deps, USER, plan)).toMatchObject({ ok: false, status: 400 });
+		expect(await startCheckout({ ...fake().deps, priceIds: null }, USER, 'pro')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
 	});
 });
 
-describe('changing the pool', () => {
-	it('upgrades now and downgrades at renewal', async () => {
-		const up = fake({ row: row({ tier: 2 }) });
-		expect(await changeTier(up.deps, 'u1', 4)).toEqual({ ok: true, value: { requested: true } });
-		expect(up.calls).toEqual(['read:sub_1', 'upgrade:price_t4']);
-		const down = fake({ row: row({ tier: 2 }) });
-		expect(await changeTier(down.deps, 'u1', 1)).toMatchObject({ ok: true });
-		expect(down.calls).toEqual(['read:sub_1', 'schedule:price_t1']);
+describe('moving between Pro and Premium', () => {
+	it('moves up now and down at renewal', async () => {
+		const up = fake({ row: row({ plan: 'pro' }) });
+		expect(await changePlan(up.deps, 'u1', 'premium')).toEqual({ ok: true, value: { requested: true } });
+		expect(up.calls).toEqual(['read:sub_1', 'now:price_premium']);
+		const down = fake({ row: row({ plan: 'premium' }) });
+		expect(await changePlan(down.deps, 'u1', 'pro')).toMatchObject({ ok: true });
+		expect(down.calls).toEqual(['read:sub_1', 'renewal:price_pro']);
 	});
 
-	it('refuses the same pool, a failing payment, an ending plan, no Premium, a second pending change and a declined card', async () => {
-		expect(await changeTier(fake({ row: row() }).deps, 'u1', 2)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.samePool });
-		expect(await changeTier(fake({ row: row({ status: 'past_due' }) }).deps, 'u1', 3)).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.paymentFailing });
-		expect(await changeTier(fake({ row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1', 3)).toEqual({ ok: false, status: 409, message: 'Premium ends on November 5. Keep Premium first.' });
-		expect(await changeTier(fake().deps, 'u1', 3)).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noPremium });
-		const pending = row({ tier: 3, pendingTier: 1, pendingTierAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' });
-		expect(await changeTier(fake({ row: pending }).deps, 'u1', 4)).toEqual({ ok: false, status: 409, message: 'You have a change scheduled for November 5. Keep your current pool first.' });
+	it('refuses the same plan, a failing payment, an ending plan, no plan, a second pending change and a declined card', async () => {
+		expect(await changePlan(fake({ row: row() }).deps, 'u1', 'pro')).toEqual({ ok: false, status: 400, message: "You're already on Pro." });
+		expect(await changePlan(fake({ row: row({ status: 'past_due' }) }).deps, 'u1', 'premium')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.paymentFailing });
+		expect(await changePlan(fake({ row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1', 'premium')).toEqual({ ok: false, status: 409, message: 'Pro ends on November 5. Keep Pro first.' });
+		expect(await changePlan(fake().deps, 'u1', 'premium')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noPlan });
+		const pending = row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' });
+		expect(await changePlan(fake({ row: pending }).deps, 'u1', 'pro')).toEqual({ ok: false, status: 409, message: 'You have a change scheduled for November 5. Keep your current plan first.' });
 		const declined = fake({ row: row(), failWith: new StripeApiError('Your card was declined.', 402, 'card_declined', 'card_error') });
-		expect(await changeTier(declined.deps, 'u1', 4)).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.declined });
+		expect(await changePlan(declined.deps, 'u1', 'premium')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.declined });
 	});
 
-	it('cancels a pending downgrade when the seller picks their current pool again', async () => {
-		const { deps, calls } = fake({ row: row({ tier: 3, pendingTier: 1, pendingTierAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }) });
-		expect(await changeTier(deps, 'u1', 3)).toMatchObject({ ok: true });
+	it('cancels a pending move to Pro when the seller picks Premium again', async () => {
+		const { deps, calls } = fake({ row: row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }) });
+		expect(await changePlan(deps, 'u1', 'premium')).toMatchObject({ ok: true });
 		expect(calls).toEqual(['release:sub_sched_1']);
 	});
 });
 
-describe('cancelling, keeping Premium and managing billing', () => {
-	it('drops a pending downgrade before cancelling at the period end, and refuses a second cancel', async () => {
-		const { deps, calls } = fake({ row: row({ pendingTier: 1, pendingTierAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }) });
-		expect(await cancelPremium(deps, 'u1')).toMatchObject({ ok: true });
+describe('cancelling, keeping the plan, the portal and extra credits', () => {
+	it('drops a pending change before cancelling at the period end, and refuses a second cancel', async () => {
+		const { deps, calls } = fake({ row: row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }) });
+		expect(await cancelPlan(deps, 'u1')).toMatchObject({ ok: true });
 		expect(calls).toEqual(['release:sub_sched_1', 'cancel:sub_1']);
-		expect(await cancelPremium(fake({ row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toEqual({ ok: false, status: 409, message: 'Premium already ends on November 5.' });
+		expect(await cancelPlan(fake({ row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toEqual({ ok: false, status: 409, message: 'Pro already ends on November 5.' });
 	});
 
-	it('keeps Premium only when it was set to end', async () => {
-		expect(await resumePremium(fake({ row: row() }).deps, 'u1')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.notEnding });
+	it('keeps the plan only when it was set to end, and opens the portal once there are billing details', async () => {
+		expect(await resumePlan(fake({ row: row() }).deps, 'u1')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.notEnding });
 		const ending = fake({ row: row({ cancelAtPeriodEnd: true }) });
-		expect(await resumePremium(ending.deps, 'u1')).toMatchObject({ ok: true });
+		expect(await resumePlan(ending.deps, 'u1')).toMatchObject({ ok: true });
 		expect(ending.calls).toEqual(['read:sub_1', 'resume:sub_1']);
-	});
-
-	it("opens Stripe's portal once the account has billing details", async () => {
 		expect(await openPortal(fake().deps, 'u1')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCustomer });
 		expect(await openPortal(fake({ customer: 'cus_1' }).deps, 'u1')).toEqual({ ok: true, value: { url: 'https://billing.stripe.com/p/1' } });
+	});
+
+	it('sells extra credits to Premium only, in amounts from 5,000 in thousands', async () => {
+		const premium = fake({ customer: 'cus_1' });
+		expect(await buyCredits(premium.deps, USER, account('premium'), 12_000)).toEqual({ ok: true, value: { url: 'https://checkout.stripe.com/c/cs_1', sessionId: 'cs_1' } });
+		expect(premium.calls).toEqual(['credits:cus_1:12000']);
+		expect(await buyCredits(fake().deps, USER, account('pro'), 12_000)).toMatchObject({ ok: false, status: 402, refusal: { limit: 'extraCredits', upgradeTo: 'premium' } });
+		for (const credits of [4_000, 5_500, 2_000_000, '5000']) expect(await buyCredits(fake().deps, USER, account('premium'), credits)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.creditsAmount });
 	});
 });
 ```
 
-- [ ] **Step 2: Write the failing controller test** `worker/api/controllers/billing/controller.sql.test.ts`:
+- [ ] **Step 2: Write the failing endpoint tests.** `worker/api/controllers/billing/controller.sql.test.ts`:
 
 ```ts
-/** The billing endpoints on real SQL, with Stripe stood in by fetch and the credit counter by a fake. */
+/** The billing endpoints on real SQL, with Stripe stood in by fetch. */
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { envWith, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
-import { DEFAULT_RATE_LIMIT_SETTINGS } from '../../../services/rate-limit/config';
+import { envWith, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { BillingController } from './controller';
 import type { RouteContext } from '../../types/route-context';
 
 let db: D1Database;
-const PRICES = JSON.stringify({ 1: 'price_t1', 2: 'price_t2', 3: 'price_t3', 4: 'price_t4' });
+const PRICES = JSON.stringify({ pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' });
+const NOW = Date.now();
 
 beforeAll(async () => {
 	db = await migratedD1();
-	for (const id of ['u_basic', 'u_paying', 'u_off']) await insertUser(db, id);
-	await insertSubscription(db, { userId: 'u_paying', stripeSubscriptionId: 'sub_paying', status: 'active', tier: 2, currentPeriodStart: new Date(Date.now() - 86_400_000), currentPeriodEnd: new Date(Date.now() + 29 * 86_400_000) });
+	for (const id of ['u_basic', 'u_paying', 'u_off']) await insertUser(db, id, { createdAt: new Date(NOW - 40 * 86_400_000) });
+	await insertSubscription(db, { userId: 'u_paying', stripeSubscriptionId: 'sub_paying', status: 'active', plan: 'premium', currentPeriodStart: new Date(NOW - 86_400_000), currentPeriodEnd: new Date(NOW + 29 * 86_400_000) });
+	await insertPurchase(db, { id: 'cp_1', userId: 'u_paying', credits: 5_000, purchasedAt: new Date(NOW - 86_400_000), expiresAt: new Date(NOW + 364 * 86_400_000) });
 });
 
 afterEach(() => vi.restoreAllMocks());
 
 function env(extra: Record<string, unknown> = {}): Env {
-	const counter = { getRemainingLimit: async (_key: string, config: { limit: number }) => config.limit, increment: async () => ({ success: true }) };
-	return envWith(db, {
-		BILLING: 'on',
-		STRIPE_SECRET_KEY: 'sk_test_fake',
-		STRIPE_PREMIUM_PRICE_IDS: PRICES,
-		CUSTOM_DOMAIN: 'estori.app',
-		VibecoderStore: { get: async () => null },
-		DORateLimitStore: { getByName: () => counter },
-		...extra,
-	});
+	return envWith(db, { BILLING: 'on', STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_PRICE_IDS: PRICES, CUSTOM_DOMAIN: 'estori.app', VibecoderStore: { get: async () => null }, ...extra });
 }
 
 function context(userId: string): RouteContext {
-	return { user: { id: userId, email: `${userId}@example.test` }, sessionId: 's1', config: { security: { rateLimit: DEFAULT_RATE_LIMIT_SETTINGS } }, pathParams: {}, queryParams: new URLSearchParams() } as unknown as RouteContext;
+	return { user: { id: userId, email: `${userId}@example.test` }, sessionId: 's1', pathParams: {}, queryParams: new URLSearchParams() } as unknown as RouteContext;
 }
 
-function post(path: string, body: unknown = {}): Request {
-	return new Request(`https://estori.app${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-}
+const post = (path: string, body: unknown = {}) => new Request(`https://estori.app${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 describe('the billing endpoints', () => {
-	it("shows a Basic account today's credits, with billing on", async () => {
+	it("shows a Basic account its month's credits", async () => {
 		const response = await BillingController.get(new Request('https://estori.app/api/billing'), env(), {} as ExecutionContext, context('u_basic'));
-		expect(response.status).toBe(200);
-		expect((await response.json()).data).toMatchObject({ enabled: true, plan: 'basic', tier: null, source: 'free', status: null, paymentFailing: false, credits: { used: 0, limit: 200, granted: 0, window: 'day' }, limits: { liveStores: 1, supplierCatalog: false }, canManageBilling: false });
+		expect((await response.json()).data).toMatchObject({ enabled: true, plan: 'basic', source: 'free', status: null, credits: { pool: 5_000, used: 0, left: 5_000 }, alert: null, purchases: [], limits: { liveStores: 1 }, canManageBilling: false, canBuyCredits: false });
 	});
 
-	it('starts a checkout, keeping the Stripe customer it made', async () => {
+	it('shows Premium its pool and purchases, and lets it buy more', async () => {
+		const response = await BillingController.get(new Request('https://estori.app/api/billing'), env(), {} as ExecutionContext, context('u_paying'));
+		expect((await response.json()).data).toMatchObject({ plan: 'premium', credits: { pool: 100_000, left: 105_000, purchasedLeft: 5_000 }, purchases: [{ credits: 5_000, left: 5_000 }], canBuyCredits: true });
+	});
+
+	it('starts a checkout, keeping the Stripe customer it made, and refuses a second subscription', async () => {
 		const stripe = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
 			const path = new URL(String(input)).pathname;
 			if (path === '/v1/customers') return Response.json({ id: 'cus_basic', email: null, metadata: null });
 			if (path === '/v1/checkout/sessions') return Response.json({ id: 'cs_9', url: 'https://checkout.stripe.com/c/cs_9' });
 			throw new Error(`unexpected ${path}`);
 		});
-		const response = await BillingController.checkout(post('/api/billing/checkout', { tier: 2 }), env(), {} as ExecutionContext, context('u_basic'));
-		expect(response.status).toBe(200);
+		const response = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), {} as ExecutionContext, context('u_basic'));
 		expect((await response.json()).data).toEqual({ url: 'https://checkout.stripe.com/c/cs_9', sessionId: 'cs_9' });
 		expect(stripe).toHaveBeenCalledTimes(2);
 		expect(await db.prepare("SELECT stripe_customer_id FROM billing_customers WHERE user_id = 'u_basic'").first()).toEqual({ stripe_customer_id: 'cus_basic' });
+		expect((await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), {} as ExecutionContext, context('u_paying'))).status).toBe(409);
 	});
 
-	it('answers 409 to a second checkout, and 403 when billing is off for the account', async () => {
-		const paying = await BillingController.checkout(post('/api/billing/checkout', { tier: 1 }), env(), {} as ExecutionContext, context('u_paying'));
-		expect(paying.status).toBe(409);
-		const off = await BillingController.checkout(post('/api/billing/checkout', { tier: 1 }), env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else' }), {} as ExecutionContext, context('u_off'));
+	it('answers 402 plan_limit when Basic tries to buy credits, and 403 when billing is off for the account', async () => {
+		const refused = await BillingController.credits(post('/api/billing/credits', { credits: 5_000 }), env(), {} as ExecutionContext, context('u_basic'));
+		expect(refused.status).toBe(402);
+		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'extraCredits', upgradeTo: 'premium' });
+		const off = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else' }), {} as ExecutionContext, context('u_off'));
 		expect(off.status).toBe(403);
-		expect((await off.json()).error.message).toBe("Premium isn't open for your account yet.");
+		expect((await off.json()).error.message).toBe("Plans aren't open for your account yet.");
 	});
 });
 ```
@@ -2238,1004 +2441,14 @@ function source(path: string): string {
 describe('billing routes', () => {
 	it("are signed-in only, act on the caller's own account, and are registered", () => {
 		const routes = source('/worker/api/routes/billingRoutes.ts');
-		for (const path of ["'/api/billing'", "'/api/billing/checkout'", "'/api/billing/change-tier'", "'/api/billing/cancel'", "'/api/billing/resume'", "'/api/billing/portal'"]) {
-			const start = routes.indexOf(path);
+		const sellerRoutes = routes.slice(0, routes.indexOf("'/api/admin/") === -1 ? routes.length : routes.indexOf("'/api/admin/"));
+		for (const path of ["'/api/billing'", "'/api/billing/checkout'", "'/api/billing/change-plan'", "'/api/billing/cancel'", "'/api/billing/resume'", "'/api/billing/portal'", "'/api/billing/credits'"]) {
+			const start = sellerRoutes.indexOf(path);
 			expect(start, path).toBeGreaterThan(-1);
-			expect(routes.slice(start, start + 160), path).toContain('setAuthLevel(AuthConfig.authenticated)');
+			expect(sellerRoutes.slice(start, start + 160), path).toContain('setAuthLevel(AuthConfig.authenticated)');
 		}
-		expect(routes).not.toContain(':userId');
+		expect(sellerRoutes).not.toContain(':userId');
 		expect(source('/worker/api/routes/index.ts')).toContain('setupBillingRoutes(app);');
-	});
-});
-```
-
-- [ ] **Step 3: Run them to verify they fail**
-
-Run: `rtk proxy bun run test -- worker/services/billing/actions.test.ts worker/api/controllers/billing/controller.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts`
-Expected: FAIL, failed imports.
-
-- [ ] **Step 4: Implement `actions.ts`**
-
-```ts
-export const BILLING_MESSAGES = {
-	notSetUp: "Premium isn't set up on this deployment yet.",
-	pickTier: 'Pick one of the four credit pools.',
-	alreadyPremium: 'You already have Premium. Change your pool on the billing page.',
-	noPremium: "You don't have Premium.",
-	paymentFailing: "Your last payment didn't go through. Update your card in Manage billing first.",
-	samePool: "You're already on this pool.",
-	declined: 'Your card was declined. Update it in Manage billing, then try again.',
-	notEnding: "Premium isn't set to end.",
-	noCustomer: "You don't have billing details yet.",
-} as const;
-
-export interface BillingActionDeps {
-	stripe: Pick<StripeClient, 'createCustomer' | 'createSubscriptionCheckoutSession' | 'retrieveSubscription' | 'changeSubscriptionPrice' | 'scheduleSubscriptionPrice' | 'releaseSubscriptionSchedule' | 'cancelAtPeriodEnd' | 'resumeSubscription' | 'createBillingPortalSession'> | null;
-	store: Pick<BillingService, 'customerOf' | 'saveCustomer' | 'subscriptionOf'>;
-	priceIds: PremiumPriceIds | null;
-	/** Estori's own address, for Stripe's return links. */
-	baseUrl: string;
-	nowMs: number;
-}
-```
-
-**Common rules:**
-- Answer 503 `notSetUp` when `stripe` or `priceIds` is null.
-- A "live" row is one whose status is in `LIVE_SUBSCRIPTION_STATUSES`.
-- Idempotency keys are `billing-{action}-{userId}-{tier or nothing}-{Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS)}`.
-- A `StripeApiError` whose `type` is `card_error` or whose status is 402 answers 409 `declined`. Any other `StripeApiError` answers 502 `STRIPE_REQUEST_FAILED_MESSAGE`. Other errors are rethrown.
-- Dates use `formatBillingDate`.
-
-**`startCheckout`:**
-1. Check the tier with `isPremiumTierNumber`.
-2. Answer 409 when the row is live.
-3. Take the customer from `customerOf`, or else `createCustomer`, then `saveCustomer`.
-4. Create the session for `priceIds[tier]`, at `premiumTier(tier).priceCents`. The URLs are `${baseUrl}${BILLING_PATH}?checkout=success` and `?checkout=cancelled`.
-5. Answer `{ url, sessionId }`. A session without a url answers 502.
-
-**`changeTier`,** in this order:
-1. a bad tier answers 400;
-2. no live row answers 404 `noPremium`;
-3. `past_due` answers 409 `paymentFailing`;
-4. cancelling answers 409 "Premium ends on {date}. Keep Premium first.";
-5. a pending tier: the same tier as now releases `stripeScheduleId` and answers ok; any other tier answers 409 "You have a change scheduled for {date}. Keep your current pool first.";
-6. the same tier answers 400 `samePool`;
-7. otherwise retrieve the subscription. A higher tier calls `changeSubscriptionPrice`; a lower one calls `scheduleSubscriptionPrice`.
-
-**`cancelPremium`:**
-- no live row answers 404;
-- already cancelling answers 409 "Premium already ends on {date}.";
-- otherwise release `stripeScheduleId` when set, then `cancelAtPeriodEnd`.
-
-**`resumePremium`:**
-- no live row answers 404;
-- not cancelling answers 409 `notEnding`;
-- otherwise retrieve the subscription, then `resumeSubscription`.
-
-**`openPortal`:**
-- no customer answers 404 `noCustomer`;
-- otherwise `createBillingPortalSession` with the return url `${baseUrl}${BILLING_PATH}`.
-
-**`billingActionDepsFromEnv(env, request)`:** `{ stripe: stripeFromEnv(env), store: new BillingService(env), priceIds: premiumPriceIds(env.STRIPE_PREMIUM_PRICE_IDS), baseUrl: appBaseUrl(env, request), nowMs: Date.now() }`.
-
-- [ ] **Step 5: Implement `view.ts`**
-
-```ts
-/** What the billing page shows: the account's plan, Stripe's status of its subscription, and this window's credits. */
-export function billingView(account: BillingAccount, creditsUsed: number, hasCustomer: boolean): BillingView {
-	const subscription = account.subscription;
-	const pendingTier = subscription && isPremiumTierNumber(subscription.pendingTier) ? subscription.pendingTier : null;
-	return {
-		enabled: account.billing,
-		plan: account.plan,
-		tier: account.tier,
-		source: account.source,
-		status: subscription?.status ?? null,
-		periodStart: account.periodStartMs,
-		periodEnd: account.periodEndMs,
-		cancelAtPeriodEnd: subscription?.cancelAtPeriodEnd ?? false,
-		pendingTier,
-		pendingTierAt: pendingTier !== null ? subscription?.pendingTierAt?.getTime() ?? null : null,
-		graceEndsAt: account.graceEndsAtMs,
-		paymentFailing: subscription?.status === 'past_due' || subscription?.status === 'unpaid',
-		credits: { used: creditsUsed, limit: account.limits.aiCredits, granted: account.grantedCredits, window: account.limits.aiCreditsWindow, resetsAt: account.creditsResetAt },
-		limits: account.limits,
-		canManageBilling: hasCustomer,
-	};
-}
-```
-
-- [ ] **Step 6: Implement the controller and the routes.** `BillingController extends BaseController`:
-- **`get`:**
-  1. `loadAccount(env, user.id)`;
-  2. `creditsUsed(env, creditBucketFor(account, context.config.security.rateLimit.llmCalls))`;
-  3. `new BillingService(env).customerOf(user.id)`;
-  4. answer `billingView(...)`. It works with the flag off too, answering `enabled: false`.
-- **Every `POST`:**
-  - answers 401 without `context.user`;
-  - answers 403 `BILLING_NOT_OPEN_MESSAGE` when `!isBillingOn(env, user.id)`;
-  - reads `{ tier }` with `parseJsonBody` where it applies;
-  - calls the action with `billingActionDepsFromEnv(env, request)`;
-  - maps the result: ok is `createSuccessResponse(value)`, otherwise `createErrorResponse(message, status)`.
-- **`setupBillingRoutes(app)`** registers the six routes with `setAuthLevel(AuthConfig.authenticated)`. Call it from `setupRoutes` in `worker/api/routes/index.ts`, just before `setupLimitsRoutes(app)`.
-
-- [ ] **Step 7: The frontend client.**
-- Re-export the new billing types and `BILLING_PATH` from `src/api-types.ts`.
-- Add `billing: () => ['billing'] as const` to `queryKeys`.
-- Add to `ApiClient`, following `getLimitsUsage`'s pattern:
-
-```ts
-	async getBilling(): Promise<ApiResponse<BillingView>> {
-		return this.request<BillingView>('/api/billing');
-	}
-
-	async startPremiumCheckout(tier: PremiumTierNumber): Promise<ApiResponse<CheckoutStarted>> {
-		return this.request<CheckoutStarted>('/api/billing/checkout', { method: 'POST', body: { tier } });
-	}
-```
-
-  `changePremiumTier(tier)` POSTs `/api/billing/change-tier` with `{ tier }`. `cancelPremium()`, `resumePremium()` and `openBillingPortal()` POST their paths with no body.
-
-- [ ] **Step 8: Run the tests to verify they pass**
-
-Run: `rtk proxy bun run test -- worker/services/billing/actions.test.ts worker/api/controllers/billing/controller.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts`
-Expected: PASS (12 tests).
-
-Run: `bun run typecheck`
-Expected: no errors.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add shared/types/billing.ts worker/services/billing/actions.ts worker/services/billing/actions.test.ts worker/services/billing/view.ts worker/api/controllers/billing worker/api/routes/billingRoutes.ts worker/api/routes/index.ts src/api-types.ts src/lib/api-client.ts src/lib/query-keys.ts
-git commit -m "feat(billing): the billing api to start premium, change the pool, cancel, keep it and manage the card
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
-
-### Task 7: Subscription events in the webhook, and the daily repair
-
-**Files:**
-- Create:
-  - `worker/services/billing/subscription-sync.ts`;
-  - `worker/services/billing/events.ts`;
-  - `worker/services/billing/repair.ts`;
-  - `worker/services/billing/wiring.ts`.
-- Modify:
-  - `worker/api/controllers/payments/webhook.ts`;
-  - `worker/services/payments/fulfill.ts` (no logic change; `StripeCheckoutSession` now carries `mode`);
-  - `worker/services/alerts/platform-alerts.ts`;
-  - `worker/index.ts`.
-- Test:
-  - `worker/services/billing/subscription-sync.test.ts`;
-  - `worker/api/controllers/payments/webhook-billing.sql.test.ts`;
-  - `worker/services/billing/repair.sql.test.ts`;
-  - `worker/services/billing/wiring.test.ts`.
-
-**Interfaces:**
-- **Consumes:**
-  - from Task 2: `BillingService.eventSeen`, `userOfCustomer`, `subscriptionOf`, `sentNoticeKeys`, `recordEvent`, `subscriptionsToRepair`;
-  - from Task 3: `graceEndsAt`, `DAY_MS`;
-  - from Task 4: `retrieveSubscription`, `StripeSubscription`, `StripeInvoice`, `StripeSubscriptionSchedule`, `tierOfPrice`, `premiumPriceIds`;
-  - from Task 5: `PlannedNotice`, `sendBillingEmails`, `billingMailFromEnv`;
-  - existing: `platformAlertsFromEnv`, `CATALOG_HEALTH_CRON`, `isCheckoutSession`.
-- **Produces:**
-  - `subscription-sync.ts` (pure):
-    - `recordFromSubscription(subscription, userId, tierOf: (price: Pick<StripePrice, 'id' | 'metadata'>) => PremiumTierNumber | null, nowMs): SubscriptionRecord | null`;
-    - `decideRow(stored: SubscriptionRecord | null, incoming: SubscriptionRecord): 'write' | 'ignore' | 'duplicate'`;
-    - `noticesFor(input: { previous: SubscriptionRecord | null; next: SubscriptionRecord; eventType: string; invoice: StripeInvoice | null }): PlannedNotice[]`;
-    - `subscriptionIdOfInvoice(invoice: StripeInvoice): string | null`.
-  - `events.ts`:
-    - `BILLING_EVENT_TYPES` (the six from the spec plus the four schedule events);
-    - `isBillingEvent(event: StripeEvent): boolean`;
-    - `BillingTarget { subscriptionId: string; expectedUserId: string | null; invoice: StripeInvoice | null }`;
-    - `billingTarget(event: StripeEvent): BillingTarget | null`;
-    - `BillingEventDeps { stripe: Pick<StripeClient, 'retrieveSubscription'>; store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent'>; tierOf; notify(userId: string, notices: readonly PlannedNotice[]): Promise<void>; alert(alert: PlatformAlert): Promise<void>; nowMs(): number }`;
-    - `BillingEventOutcome = 'applied' | 'duplicate' | 'ignored' | 'refused'`;
-    - `handleBillingEvent(deps, event): Promise<BillingEventOutcome>`;
-    - `applySubscription(deps, input: { eventId: string; eventType: string } & BillingTarget): Promise<BillingEventOutcome>`.
-  - `repair.ts`: `runBillingRepair(deps: BillingEventDeps & { store: BillingEventDeps['store'] & Pick<BillingService, 'subscriptionsToRepair'> }, nowMs: number): Promise<{ checked: number; failed: number }>`.
-  - `wiring.ts`:
-    - `billingEventDepsFromEnv(env: Env): BillingEventDeps & { store: BillingService }` (throws "Stripe is not configured" without a key);
-    - `runBillingSchedule(cron: string, env: Env): Promise<void>`.
-  - Alert kinds `billing-mismatch`, `billing-unknown-price` and `billing-duplicate-subscription`.
-
-- [ ] **Step 1: Write the failing pure test** `worker/services/billing/subscription-sync.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { decideRow, noticesFor, recordFromSubscription, subscriptionIdOfInvoice } from './subscription-sync';
-import { tierOfPrice } from './prices';
-import type { StripeInvoice, StripePrice, StripeSubscription, StripeSubscriptionSchedule } from '../payments/stripe-client';
-import type { SubscriptionRecord } from '../../database/schema';
-
-const IDS = { 1: 'price_t1', 2: 'price_t2', 3: 'price_t3', 4: 'price_t4' } as const;
-const tierOf = (price: Pick<StripePrice, 'id' | 'metadata'>) => tierOfPrice(price, IDS);
-const NOW = Date.parse('2026-10-19T15:00:00Z');
-const START = Date.parse('2026-10-05T10:00:00Z') / 1000;
-const END = Date.parse('2026-11-05T10:00:00Z') / 1000;
-
-function subscription(overrides: Partial<StripeSubscription> = {}): StripeSubscription {
-	return {
-		id: 'sub_1',
-		customer: 'cus_1',
-		status: 'active',
-		created: START,
-		cancel_at_period_end: false,
-		cancel_at: null,
-		metadata: { estori_user_id: 'u1' },
-		schedule: null,
-		items: { data: [{ id: 'si_1', price: { id: 'price_t3' }, current_period_start: START, current_period_end: END }] },
-		...overrides,
-	};
-}
-
-function record(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
-	const base = recordFromSubscription(subscription(), 'u1', tierOf, NOW);
-	if (!base) throw new Error('expected a record');
-	return { ...base, ...overrides };
-}
-
-function invoice(overrides: Partial<StripeInvoice> = {}): StripeInvoice {
-	return { id: 'in_1', customer: 'cus_1', amount_paid: 34_900, currency: 'usd', hosted_invoice_url: 'https://invoice.stripe.com/i/in_1', number: 'EST-1', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } }, ...overrides };
-}
-
-describe('recordFromSubscription', () => {
-	it("reads the tier, the period from the item, and the cancel state from Stripe's subscription", () => {
-		expect(recordFromSubscription(subscription(), 'u1', tierOf, NOW)).toEqual({
-			userId: 'u1',
-			stripeSubscriptionId: 'sub_1',
-			status: 'active',
-			tier: 3,
-			currentPeriodStart: new Date(START * 1000),
-			currentPeriodEnd: new Date(END * 1000),
-			cancelAtPeriodEnd: false,
-			pendingTier: null,
-			pendingTierAt: null,
-			stripeScheduleId: null,
-			stripeCreatedAt: new Date(START * 1000),
-			updatedAt: new Date(NOW),
-		});
-	});
-
-	it('counts a cancel date at the period end, or the cancel flag, as cancelling', () => {
-		expect(recordFromSubscription(subscription({ cancel_at: END }), 'u1', tierOf, NOW)?.cancelAtPeriodEnd).toBe(true);
-		expect(recordFromSubscription(subscription({ cancel_at_period_end: true }), 'u1', tierOf, NOW)?.cancelAtPeriodEnd).toBe(true);
-	});
-
-	it("reads a pending downgrade from the active schedule's next phase", () => {
-		const schedule: StripeSubscriptionSchedule = {
-			id: 'sub_sched_1',
-			status: 'active',
-			subscription: 'sub_1',
-			current_phase: { start_date: START, end_date: END },
-			phases: [
-				{ start_date: START, end_date: END, items: [{ price: 'price_t3' }] },
-				{ start_date: END, end_date: null, items: [{ price: 'price_t1' }] },
-			],
-		};
-		expect(recordFromSubscription(subscription({ schedule }), 'u1', tierOf, NOW)).toMatchObject({ pendingTier: 1, pendingTierAt: new Date(END * 1000), stripeScheduleId: 'sub_sched_1' });
-		expect(recordFromSubscription(subscription({ schedule: { ...schedule, status: 'released' } }), 'u1', tierOf, NOW)).toMatchObject({ pendingTier: null, stripeScheduleId: null });
-	});
-
-	it("answers null for a price that isn't one of Premium's", () => {
-		const other = subscription({ items: { data: [{ id: 'si_1', price: { id: 'price_other' }, current_period_start: START, current_period_end: END }] } });
-		expect(recordFromSubscription(other, 'u1', tierOf, NOW)).toBeNull();
-	});
-});
-
-describe('decideRow', () => {
-	it('writes the first subscription and any change to the same one', () => {
-		expect(decideRow(null, record())).toBe('write');
-		expect(decideRow(record(), record({ tier: 1, status: 'canceled' }))).toBe('write');
-	});
-
-	it("refuses a second live subscription and ignores an ended one's late event", () => {
-		expect(decideRow(record(), record({ stripeSubscriptionId: 'sub_2', stripeCreatedAt: new Date(NOW) }))).toBe('duplicate');
-		expect(decideRow(record({ stripeSubscriptionId: 'sub_new' }), record({ stripeSubscriptionId: 'sub_old', status: 'canceled' }))).toBe('ignore');
-	});
-
-	it('lets a newer subscription replace an ended one, and never an older one', () => {
-		const ended = record({ status: 'canceled' });
-		expect(decideRow(ended, record({ stripeSubscriptionId: 'sub_2', stripeCreatedAt: new Date(NOW) }))).toBe('write');
-		expect(decideRow(ended, record({ stripeSubscriptionId: 'sub_0', status: 'incomplete_expired', stripeCreatedAt: new Date(0) }))).toBe('ignore');
-	});
-});
-
-describe('noticesFor', () => {
-	const kinds = (notices: ReturnType<typeof noticesFor>) => notices.map((notice) => notice.key);
-
-	it('welcomes an active subscription, keyed once per subscription', () => {
-		expect(kinds(noticesFor({ previous: null, next: record(), eventType: 'customer.subscription.created', invoice: null }))).toEqual(['premium_started:sub_1']);
-		expect(kinds(noticesFor({ previous: null, next: record({ status: 'incomplete' }), eventType: 'customer.subscription.created', invoice: null }))).toEqual([]);
-	});
-
-	it('tells of an upgrade, a scheduled downgrade and a cancel', () => {
-		expect(kinds(noticesFor({ previous: record({ tier: 1 }), next: record({ tier: 3 }), eventType: 'customer.subscription.updated', invoice: null }))).toEqual(['premium_started:sub_1', `tier_upgraded:sub_1:3:${START}`]);
-		expect(kinds(noticesFor({ previous: record(), next: record({ pendingTier: 1, pendingTierAt: new Date(END * 1000) }), eventType: 'subscription_schedule.updated', invoice: null }))).toContain(`downgrade_scheduled:sub_1:1:${END}`);
-		expect(kinds(noticesFor({ previous: record(), next: record({ cancelAtPeriodEnd: true }), eventType: 'customer.subscription.updated', invoice: null }))).toContain(`premium_ending:sub_1:${END}`);
-	});
-
-	it('sends a receipt for a paid invoice with money in it, and one payment-failed notice per invoice', () => {
-		expect(kinds(noticesFor({ previous: record(), next: record(), eventType: 'invoice.paid', invoice: invoice() }))).toContain('receipt:in_1');
-		expect(kinds(noticesFor({ previous: record(), next: record(), eventType: 'invoice.paid', invoice: invoice({ amount_paid: 0 }) }))).not.toContain('receipt:in_1');
-		const failed = noticesFor({ previous: record(), next: record({ status: 'past_due' }), eventType: 'invoice.payment_failed', invoice: invoice({ id: 'in_2', amount_paid: 0 }) });
-		expect(failed).toEqual([{ key: 'payment_failed:in_2', email: { kind: 'payment_failed', graceEndsAt: (START + 7 * 86_400) * 1000 } }]);
-	});
-
-	it('says whether Premium ended by cancelling or by an unpaid renewal', () => {
-		expect(noticesFor({ previous: record({ status: 'past_due' }), next: record({ status: 'canceled' }), eventType: 'customer.subscription.deleted', invoice: null })).toEqual([{ key: 'premium_ended:sub_1', email: { kind: 'premium_ended', reason: 'payment-failed' } }]);
-		expect(noticesFor({ previous: record({ cancelAtPeriodEnd: true }), next: record({ status: 'canceled', cancelAtPeriodEnd: true }), eventType: 'customer.subscription.deleted', invoice: null })[0]?.email).toEqual({ kind: 'premium_ended', reason: 'cancelled' });
-	});
-});
-
-describe('subscriptionIdOfInvoice', () => {
-	it("reads the subscription from the invoice's parent", () => {
-		expect(subscriptionIdOfInvoice(invoice())).toBe('sub_1');
-		expect(subscriptionIdOfInvoice(invoice({ parent: null }))).toBeNull();
-		expect(subscriptionIdOfInvoice(invoice({ parent: { type: 'quote_details', subscription_details: null } }))).toBeNull();
-	});
-});
-```
-
-- [ ] **Step 2: Write the failing webhook test** `worker/api/controllers/payments/webhook-billing.sql.test.ts`:
-
-```ts
-/**
- * Billing events through the real webhook on real SQL. Payloads are signed. Stripe is stood in by a fetch that answers
- * each subscription as Stripe now has it, and emails are captured from the Email Service binding.
- */
-
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { handleStripeWebhook } from './webhook';
-import { envWith, insertBillingCustomer, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
-import { loadAccount } from '../../../services/billing/account';
-import { formatBillingDate } from '../../../../shared/types/plans';
-
-const SECRET = 'whsec_billing_test';
-const PRICES = { 1: 'price_t1', 2: 'price_t2', 3: 'price_t3', 4: 'price_t4' } as const;
-const DAY = 86_400;
-const NOW = Math.floor(Date.now() / 1000);
-const START = NOW - 14 * DAY;
-const END = NOW + 16 * DAY;
-
-let db: D1Database;
-/** Stripe's current state of each subscription; tests change it between events. */
-const stripeState = new Map<string, Record<string, unknown>>();
-const emails: Array<{ to: string; subject: string; text: string }> = [];
-let stripeDown = false;
-
-function subscription(id: string, userId: string, overrides: Record<string, unknown> = {}, tier: 1 | 2 | 3 | 4 = 1): Record<string, unknown> {
-	return {
-		id,
-		customer: `cus_${userId}`,
-		status: 'active',
-		created: START,
-		cancel_at_period_end: false,
-		cancel_at: null,
-		metadata: { estori_user_id: userId },
-		schedule: null,
-		items: { data: [{ id: `si_${id}`, price: { id: PRICES[tier], metadata: { estori_tier: String(tier) } }, current_period_start: START, current_period_end: END }] },
-		...overrides,
-	};
-}
-
-function testEnv(): Env {
-	return envWith(db, {
-		STRIPE_WEBHOOK_SECRET: SECRET,
-		STRIPE_SECRET_KEY: 'sk_test_fake',
-		STRIPE_PREMIUM_PRICE_IDS: JSON.stringify(PRICES),
-		BILLING: 'on',
-		ENVIRONMENT: 'prod',
-		CUSTOM_DOMAIN: 'estori.app',
-		EMAIL: {
-			send: async (message: { to: string; subject: string; text: string }) => {
-				emails.push({ to: message.to, subject: message.subject, text: message.text });
-				return { messageId: 'm1' };
-			},
-		},
-		VibecoderStore: { get: async () => null, put: async () => undefined },
-	});
-}
-
-async function signed(payload: string): Promise<string> {
-	const timestamp = Math.floor(Date.now() / 1000);
-	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-	const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`));
-	return `t=${timestamp},v1=${Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
-}
-
-async function deliver(id: string, type: string, object: Record<string, unknown>): Promise<number> {
-	const payload = JSON.stringify({ id, type, data: { object } });
-	const request = new Request('https://estori.test/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': await signed(payload) }, body: payload });
-	return (await handleStripeWebhook(request, testEnv())).status;
-}
-
-function subjectsTo(userId: string): string[] {
-	return emails.filter((email) => email.to === `${userId}@example.test`).map((email) => email.subject);
-}
-
-async function rowOf(userId: string) {
-	return db.prepare('SELECT stripe_subscription_id, status, tier, cancel_at_period_end, pending_tier FROM subscriptions WHERE user_id = ?').bind(userId).first();
-}
-
-async function resultOf(eventId: string) {
-	return (await db.prepare('SELECT result FROM billing_events WHERE stripe_event_id = ?').bind(eventId).first())?.result ?? null;
-}
-
-function invoice(id: string, subscriptionId: string, userId: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
-	return { id, customer: `cus_${userId}`, amount_paid: 9_900, currency: 'usd', hosted_invoice_url: `https://invoice.stripe.com/i/${id}`, number: id.toUpperCase(), billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: subscriptionId } }, ...overrides };
-}
-
-beforeAll(async () => {
-	db = await migratedD1();
-	// Users and their Stripe customers outlive each test; each test's own writes roll back after it.
-	for (const id of ['u_new', 'u_rep', 'u_order', 'u_up', 'u_down', 'u_fail', 'u_cancel', 'u_del', 'u_bad', 'u_other', 'u_dup', 'u_late']) {
-		await insertUser(db, id);
-		await insertBillingCustomer(db, id, `cus_${id}`);
-	}
-});
-
-beforeEach(() => {
-	emails.length = 0;
-	stripeDown = false;
-	vi.restoreAllMocks();
-	vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-		if (stripeDown) return Response.json({ error: { message: 'Stripe is down', type: 'api_error' } }, { status: 500 });
-		const state = stripeState.get(new URL(String(input)).pathname.replace('/v1/subscriptions/', ''));
-		return state ? Response.json(state) : Response.json({ error: { message: 'No such subscription', code: 'resource_missing', type: 'invalid_request_error' } }, { status: 404 });
-	});
-});
-
-describe('subscription events in the Stripe webhook', () => {
-	it('records Premium from a completed checkout and then its subscription event, welcoming the seller once', async () => {
-		stripeState.set('sub_new', subscription('sub_new', 'u_new'));
-		const session = { id: 'cs_new', mode: 'subscription', payment_status: 'paid', client_reference_id: 'u_new', customer: 'cus_u_new', subscription: 'sub_new', metadata: { kind: 'estori_premium' } };
-		expect(await deliver('evt_n1', 'checkout.session.completed', session)).toBe(200);
-		expect(await deliver('evt_n2', 'customer.subscription.created', subscription('sub_new', 'u_new'))).toBe(200);
-		expect(await rowOf('u_new')).toEqual({ stripe_subscription_id: 'sub_new', status: 'active', tier: 1, cancel_at_period_end: 0, pending_tier: null });
-		expect(subjectsTo('u_new')).toEqual(['Welcome to Estori Premium']);
-		expect([await resultOf('evt_n1'), await resultOf('evt_n2')]).toEqual(['applied', 'applied']);
-		expect(await db.prepare("SELECT COUNT(*) AS n FROM template_purchases WHERE stripe_checkout_session_id = 'cs_new'").first()).toEqual({ n: 0 });
-	});
-
-	it('answers a repeated delivery without applying it again', async () => {
-		stripeState.set('sub_rep', subscription('sub_rep', 'u_rep'));
-		expect(await deliver('evt_r1', 'customer.subscription.created', subscription('sub_rep', 'u_rep'))).toBe(200);
-		emails.length = 0;
-		expect(await deliver('evt_r1', 'customer.subscription.created', subscription('sub_rep', 'u_rep'))).toBe(200);
-		expect(await db.prepare("SELECT COUNT(*) AS n FROM billing_events WHERE stripe_event_id = 'evt_r1'").first()).toEqual({ n: 1 });
-		expect(emails).toEqual([]);
-	});
-
-	it("converges on Stripe's state when the update arrives before the creation", async () => {
-		stripeState.set('sub_order', subscription('sub_order', 'u_order', {}, 3));
-		expect(await deliver('evt_o2', 'customer.subscription.updated', subscription('sub_order', 'u_order', {}, 3))).toBe(200);
-		expect(await deliver('evt_o1', 'customer.subscription.created', subscription('sub_order', 'u_order', {}, 1))).toBe(200);
-		expect(await rowOf('u_order')).toMatchObject({ tier: 3 });
-		expect(subjectsTo('u_order')).toEqual(['Welcome to Estori Premium']);
-	});
-
-	it('applies an upgrade invoice: the bigger pool now, a note and a receipt', async () => {
-		stripeState.set('sub_up', subscription('sub_up', 'u_up'));
-		await deliver('evt_u1', 'customer.subscription.created', subscription('sub_up', 'u_up'));
-		stripeState.set('sub_up', subscription('sub_up', 'u_up', {}, 3));
-		emails.length = 0;
-		expect(await deliver('evt_u2', 'invoice.paid', invoice('in_up', 'sub_up', 'u_up', { amount_paid: 17_000, billing_reason: 'subscription_update' }))).toBe(200);
-		expect(await rowOf('u_up')).toMatchObject({ tier: 3 });
-		expect(subjectsTo('u_up')).toEqual(['Your Premium pool is bigger now', 'Your Estori Premium receipt: $170.00']);
-	});
-
-	it('shows a scheduled downgrade, then moves to the smaller pool when it reaches its date', async () => {
-		const schedule = { id: 'sub_sched_down', status: 'active', subscription: 'sub_down', current_phase: { start_date: START, end_date: END }, phases: [{ start_date: START, end_date: END, items: [{ price: PRICES[3] }] }, { start_date: END, end_date: null, items: [{ price: PRICES[2] }] }] };
-		stripeState.set('sub_down', subscription('sub_down', 'u_down', { schedule }, 3));
-		await deliver('evt_d1', 'subscription_schedule.updated', schedule);
-		expect(await rowOf('u_down')).toMatchObject({ tier: 3, pending_tier: 2 });
-		expect(subjectsTo('u_down')).toEqual(['Welcome to Estori Premium', 'Your Premium pool changes at renewal']);
-		const renewed = subscription('sub_down', 'u_down', { items: { data: [{ id: 'si_sub_down', price: { id: PRICES[2] }, current_period_start: END, current_period_end: END + 30 * DAY }] } });
-		stripeState.set('sub_down', renewed);
-		await deliver('evt_d2', 'customer.subscription.updated', renewed);
-		expect(await rowOf('u_down')).toMatchObject({ tier: 2, pending_tier: null });
-	});
-
-	it("keeps Premium through a failed renewal's grace, drops to Basic after it, and restores Premium on payment", async () => {
-		stripeState.set('sub_fail', subscription('sub_fail', 'u_fail'));
-		await deliver('evt_f0', 'customer.subscription.created', subscription('sub_fail', 'u_fail'));
-		const renewal = NOW - 3 * DAY;
-		const pastDue = subscription('sub_fail', 'u_fail', { status: 'past_due', items: { data: [{ id: 'si_f', price: { id: PRICES[1] }, current_period_start: renewal, current_period_end: renewal + 30 * DAY }] } });
-		stripeState.set('sub_fail', pastDue);
-		emails.length = 0;
-		expect(await deliver('evt_f1', 'invoice.payment_failed', invoice('in_fail', 'sub_fail', 'u_fail', { amount_paid: 0 }))).toBe(200);
-		const graceEnd = (renewal + 7 * DAY) * 1000;
-		expect(subjectsTo('u_fail')).toEqual(["Your Premium payment didn't go through"]);
-		expect(emails[0]?.text).toContain(`Premium continues until ${formatBillingDate(graceEnd)}`);
-		expect((await loadAccount(testEnv(), 'u_fail', graceEnd - 1)).plan).toBe('premium');
-		expect((await loadAccount(testEnv(), 'u_fail', graceEnd + DAY * 1000)).plan).toBe('basic');
-		stripeState.set('sub_fail', { ...pastDue, status: 'active' });
-		emails.length = 0;
-		expect(await deliver('evt_f2', 'invoice.paid', invoice('in_fail', 'sub_fail', 'u_fail'))).toBe(200);
-		expect((await loadAccount(testEnv(), 'u_fail', graceEnd + DAY * 1000)).plan).toBe('premium');
-		expect(subjectsTo('u_fail')).toEqual(['Your Estori Premium receipt: $99.00']);
-	});
-
-	it('emails once when Premium is set to end, and clears it when the seller keeps Premium', async () => {
-		stripeState.set('sub_cancel', subscription('sub_cancel', 'u_cancel', { cancel_at_period_end: true }));
-		await deliver('evt_c1', 'customer.subscription.updated', subscription('sub_cancel', 'u_cancel'));
-		await deliver('evt_c2', 'customer.subscription.updated', subscription('sub_cancel', 'u_cancel'));
-		expect(await rowOf('u_cancel')).toMatchObject({ cancel_at_period_end: 1 });
-		expect(subjectsTo('u_cancel')).toEqual(['Welcome to Estori Premium', `Premium ends on ${formatBillingDate(END * 1000)}`]);
-		stripeState.set('sub_cancel', subscription('sub_cancel', 'u_cancel'));
-		await deliver('evt_c3', 'customer.subscription.updated', subscription('sub_cancel', 'u_cancel'));
-		expect(await rowOf('u_cancel')).toMatchObject({ cancel_at_period_end: 0 });
-	});
-
-	it('moves the account to Basic when the subscription is deleted, and says so', async () => {
-		stripeState.set('sub_del', subscription('sub_del', 'u_del'));
-		await deliver('evt_x1', 'customer.subscription.created', subscription('sub_del', 'u_del'));
-		stripeState.set('sub_del', subscription('sub_del', 'u_del', { status: 'canceled' }));
-		emails.length = 0;
-		await deliver('evt_x2', 'customer.subscription.deleted', subscription('sub_del', 'u_del', { status: 'canceled' }));
-		expect((await loadAccount(testEnv(), 'u_del')).plan).toBe('basic');
-		expect(subjectsTo('u_del')).toEqual(['Your account is on Basic now']);
-	});
-
-	it("refuses a subscription whose account doesn't own its Stripe customer, and tells the team", async () => {
-		stripeState.set('sub_bad', subscription('sub_bad', 'u_bad', { customer: 'cus_u_other' }));
-		expect(await deliver('evt_b1', 'customer.subscription.created', subscription('sub_bad', 'u_bad'))).toBe(200);
-		expect(await rowOf('u_bad')).toBeNull();
-		expect(await resultOf('evt_b1')).toBe('refused');
-		expect(emails.some((email) => email.subject.startsWith("Estori alert: A billing event didn't match its account"))).toBe(true);
-	});
-
-	it('refuses a second live subscription for one account, keeping the first and alerting the team', async () => {
-		stripeState.set('sub_dup1', subscription('sub_dup1', 'u_dup'));
-		await deliver('evt_p1', 'customer.subscription.created', subscription('sub_dup1', 'u_dup'));
-		stripeState.set('sub_dup2', subscription('sub_dup2', 'u_dup', { created: NOW }));
-		await deliver('evt_p2', 'customer.subscription.created', subscription('sub_dup2', 'u_dup'));
-		expect(await rowOf('u_dup')).toMatchObject({ stripe_subscription_id: 'sub_dup1' });
-		expect(await resultOf('evt_p2')).toBe('refused');
-		expect(emails.some((email) => email.subject.startsWith('Estori alert: An account has two Premium subscriptions'))).toBe(true);
-	});
-
-	it('ignores a late event from an ended subscription once a newer one is live', async () => {
-		stripeState.set('sub_late_new', subscription('sub_late_new', 'u_late', { created: NOW }));
-		await deliver('evt_l1', 'customer.subscription.created', subscription('sub_late_new', 'u_late'));
-		stripeState.set('sub_late_old', subscription('sub_late_old', 'u_late', { status: 'canceled', created: START - 60 * DAY }));
-		emails.length = 0;
-		await deliver('evt_l2', 'customer.subscription.deleted', subscription('sub_late_old', 'u_late'));
-		expect(await rowOf('u_late')).toMatchObject({ stripe_subscription_id: 'sub_late_new', status: 'active' });
-		expect(await resultOf('evt_l2')).toBe('ignored');
-		expect(emails).toEqual([]);
-	});
-
-	it('answers 500 while Stripe is unreachable, recording nothing, so Stripe retries', async () => {
-		stripeDown = true;
-		expect(await deliver('evt_s1', 'customer.subscription.updated', subscription('sub_new', 'u_new'))).toBe(500);
-		expect(await resultOf('evt_s1')).toBeNull();
-	});
-});
-```
-
-`worker/services/billing/repair.sql.test.ts`:
-
-```ts
-import { beforeAll, describe, expect, it, vi } from 'vitest';
-import { envWith, insertBillingCustomer, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
-import { runBillingRepair } from './repair';
-import { billingEventDepsFromEnv } from './wiring';
-
-let db: D1Database;
-const NOW = Date.now();
-
-beforeAll(async () => {
-	db = await migratedD1();
-	await insertUser(db, 'u_repair');
-	await insertBillingCustomer(db, 'u_repair', 'cus_u_repair');
-	await insertSubscription(db, { userId: 'u_repair', stripeSubscriptionId: 'sub_repair', status: 'past_due', currentPeriodStart: new Date(NOW - 2 * 86_400_000), currentPeriodEnd: new Date(NOW + 28 * 86_400_000) });
-});
-
-describe('the daily billing repair', () => {
-	it('re-reads a subscription past due for over a day, once a day', async () => {
-		const start = Math.floor((NOW - 2 * 86_400_000) / 1000);
-		vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-			Response.json({ id: 'sub_repair', customer: 'cus_u_repair', status: 'active', created: start, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_repair' }, schedule: null, items: { data: [{ id: 'si_r', price: { id: 'price_t1' }, current_period_start: start, current_period_end: start + 30 * 86_400 }] } }),
-		);
-		const env = envWith(db, { STRIPE_SECRET_KEY: 'sk_test_fake', STRIPE_PREMIUM_PRICE_IDS: JSON.stringify({ 1: 'price_t1', 2: 'price_t2', 3: 'price_t3', 4: 'price_t4' }), VibecoderStore: { get: async () => null, put: async () => undefined } });
-		expect(await runBillingRepair(billingEventDepsFromEnv(env), NOW)).toEqual({ checked: 1, failed: 0 });
-		expect(await db.prepare("SELECT status FROM subscriptions WHERE user_id = 'u_repair'").first()).toEqual({ status: 'active' });
-		const day = new Date(NOW).toISOString().slice(0, 10);
-		expect(await db.prepare('SELECT result FROM billing_events WHERE stripe_event_id = ?').bind(`repair:sub_repair:${day}`).first()).toEqual({ result: 'applied' });
-		expect(await runBillingRepair(billingEventDepsFromEnv(env), NOW)).toEqual({ checked: 0, failed: 0 });
-	});
-});
-```
-
-`worker/services/billing/wiring.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { recordingD1 } from '../../database/test-support/recording-d1';
-import { CATALOG_REFRESH_CRON } from '../catalog/scheduler';
-import { CATALOG_HEALTH_CRON } from '../catalog/health';
-import { runBillingSchedule } from './wiring';
-
-describe('the billing schedule', () => {
-	it('repairs on the daily run only, and only where Stripe is set up', async () => {
-		const { d1, statements } = recordingD1();
-		await runBillingSchedule(CATALOG_REFRESH_CRON, { DB: d1, STRIPE_SECRET_KEY: 'sk_test_fake' } as unknown as Env);
-		await runBillingSchedule(CATALOG_HEALTH_CRON, { DB: d1 } as unknown as Env);
-		expect(statements).toEqual([]);
-		await runBillingSchedule(CATALOG_HEALTH_CRON, { DB: d1, STRIPE_SECRET_KEY: 'sk_test_fake' } as unknown as Env);
-		expect(statements.some((entry) => entry.sql.includes('"subscriptions"'))).toBe(true);
-	});
-});
-```
-
-- [ ] **Step 3: Run them to verify they fail**
-
-Run: `rtk proxy bun run test -- worker/services/billing/subscription-sync.test.ts worker/services/billing/wiring.test.ts`
-Expected: FAIL, failed imports.
-
-Run: `rtk proxy bun run test -- worker/api/controllers/payments/webhook-billing.sql.test.ts worker/services/billing/repair.sql.test.ts`
-Expected: FAIL. The billing events fall through to the purchase path, and `./repair` doesn't exist.
-
-- [ ] **Step 4: Implement `subscription-sync.ts`.**
-
-**`recordFromSubscription`:**
-1. Take the first item. Its tier comes from `tierOf(item.price)`. Null when there's no item or no tier.
-2. The schedule counts only when it's an expanded object with `status === 'active'`.
-3. The pending change is the first schedule phase with `start_date * 1000 > nowMs` whose first item's price differs from the current one. Its tier comes from `tierOf({ id, metadata: null })` for a string price.
-4. `cancelAtPeriodEnd = cancel_at_period_end || (cancel_at !== null && cancel_at <= item.current_period_end)`.
-5. All times are seconds times 1000. `updatedAt` is `new Date(nowMs)`.
-
-**`decideRow`:**
-
-```ts
-export function decideRow(stored: SubscriptionRecord | null, incoming: SubscriptionRecord): 'write' | 'ignore' | 'duplicate' {
-	if (!stored || stored.stripeSubscriptionId === incoming.stripeSubscriptionId) return 'write';
-	const storedLive = LIVE_SUBSCRIPTION_STATUSES.includes(stored.status);
-	const incomingLive = LIVE_SUBSCRIPTION_STATUSES.includes(incoming.status);
-	if (storedLive && incomingLive) return 'duplicate';
-	if (storedLive) return 'ignore';
-	if (incomingLive) return 'write';
-	return incoming.stripeCreatedAt > stored.stripeCreatedAt ? 'write' : 'ignore';
-}
-```
-
-**`noticesFor`** returns notices in this order. Every key embeds the subscription id `s`, and times in keys are seconds.
-1. `premium_started:{s}` when `next.status` is `active` or `trialing`. Email `{ kind, tier, renewsAt: periodEnd }`.
-2. `tier_upgraded:{s}:{tier}:{periodStart}` when `previous` is the same subscription and `next.tier > previous.tier`.
-3. `downgrade_scheduled:{s}:{pendingTier}:{pendingAt}` when `next.pendingTier` and `next.pendingTierAt` are set.
-4. `premium_ending:{s}:{periodEnd}` when `next.cancelAtPeriodEnd` and the status is live. Email `{ endsAt: periodEnd }`.
-5. `premium_ended:{s}` when `next.status === 'canceled'`. The reason is `'payment-failed'` when `previous?.status` is `past_due` or `unpaid`, else `'cancelled'`.
-6. `receipt:{invoice.id}` for `invoice.paid` with `amount_paid > 0`. The email carries `amount_paid`, `currency`, the row's period, `number` and `hosted_invoice_url`.
-7. `payment_failed:{invoice.id}` for `invoice.payment_failed`. Email `{ graceEndsAt: currentPeriodStart + 7 days }`.
-
-**`subscriptionIdOfInvoice`** returns `invoice.parent?.subscription_details?.subscription` when `parent.type === 'subscription_details'`, else null.
-
-- [ ] **Step 5: Implement `events.ts`.**
-
-```ts
-export const BILLING_EVENT_TYPES: readonly string[] = [
-	'customer.subscription.created',
-	'customer.subscription.updated',
-	'customer.subscription.deleted',
-	'invoice.paid',
-	'invoice.payment_failed',
-	'subscription_schedule.created',
-	'subscription_schedule.updated',
-	'subscription_schedule.released',
-	'subscription_schedule.canceled',
-];
-```
-
-**`isBillingEvent`:** true for these types, and for `checkout.session.completed` whose object `isCheckoutSession` with `mode === 'subscription'`.
-
-**`billingTarget`:**
-- a subscription-mode checkout: `{ subscriptionId: session.subscription, expectedUserId: session.client_reference_id, invoice: null }`;
-- `customer.subscription.*`: the object's `id`, when it starts `sub_`;
-- `invoice.*`: `subscriptionIdOfInvoice(object)`, with the invoice, when the object is an invoice (`id` starts `in_`, `amount_paid` is a number);
-- `subscription_schedule.*`: `object.subscription ?? object.released_subscription`;
-- otherwise null.
-
-Write small `isRecord`-style guards. No casts to `any`.
-
-**`handleBillingEvent(deps, event)`:**
-1. When the event was seen, answer `'duplicate'`.
-2. With no target, record `{ result: 'ignored', userId: null, objectId }` with no row and no notices, and answer `'ignored'`.
-3. Otherwise answer `applySubscription(deps, { eventId: event.id, eventType: event.type, ...target })`.
-
-**`applySubscription`:**
-1. When `eventSeen(eventId)`, answer `'duplicate'`.
-2. `subscription = await deps.stripe.retrieveSubscription(subscriptionId)`. Errors propagate, so the webhook answers 500 and Stripe retries.
-3. `claimed = subscription.metadata?.estori_user_id ?? null` and `owner = await store.userOfCustomer(subscription.customer)`.
-4. When `!claimed || owner !== claimed || (expectedUserId !== null && expectedUserId !== claimed)`:
-   - alert `{ kind: 'billing-mismatch', subject: subscription.id, message: "A billing event's account didn't match its Stripe customer, so it wasn't applied.", details: [['Event', eventId], ['Metadata account', claimed ?? 'none'], ['Customer owner', owner ?? 'none'], ['Checkout account', expectedUserId ?? 'none']] }`;
-   - record `'refused'` and answer `'refused'`.
-5. `incoming = recordFromSubscription(subscription, claimed, deps.tierOf, deps.nowMs())`. When null:
-   - alert `billing-unknown-price`, naming the price id;
-   - record `'refused'` and answer `'refused'`.
-6. `stored = await store.subscriptionOf(claimed)`, then `decideRow(stored, incoming)`:
-   - `'duplicate'`: alert `billing-duplicate-subscription` with both subscription ids and "Refund the newer one in the Stripe Dashboard and cancel it." Record `'refused'`.
-   - `'ignore'`: record `'ignored'`.
-7. `planned = noticesFor({ previous: stored, next: incoming, eventType, invoice })`. Drop the keys `sentNoticeKeys` already has.
-8. `recordEvent({ event: { id, type, objectId: subscription.id, userId: claimed, result: 'applied' }, row: incoming, notices: fresh.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now })`. A failed batch propagates, so the webhook answers 500 and the retry sees what landed.
-9. `await deps.notify(claimed, fresh)`, then answer `'applied'`.
-
-- [ ] **Step 6: Implement `repair.ts` and `wiring.ts`.**
-
-**`runBillingRepair(deps, nowMs)`:**
-- For each row from `subscriptionsToRepair(nowMs)`, call `applySubscription` with:
-  - `eventId` set to `repair:{subscription id}:{YYYY-MM-DD of nowMs}`;
-  - `eventType: 'repair'`;
-  - `expectedUserId: row.userId`;
-  - `invoice: null`.
-- Count `checked` for each `'applied'`. Count `failed` for each throw, logging it.
-- Skip outcomes are `'duplicate'`, `'ignored'` and `'refused'`; count them in neither.
-- Log a warning with the counts when anything was checked or failed.
-
-**`billingEventDepsFromEnv(env)`:**
-- `stripe` is `stripeFromEnv(env)`. Throw `Error('Stripe is not configured')` when it's null.
-- `store` is `new BillingService(env)`.
-- `tierOf` is `(price) => tierOfPrice(price, premiumPriceIds(env.STRIPE_PREMIUM_PRICE_IDS))`.
-- `notify` calls `sendBillingEmails(billingMailFromEnv(env), userId, notices)`.
-- `alert` is `platformAlertsFromEnv(env)`.
-- `nowMs` is `() => Date.now()`.
-
-**`runBillingSchedule(cron, env)`:**
-- returns unless `cron === CATALOG_HEALTH_CRON && env.STRIPE_SECRET_KEY`;
-- runs the repair in a try/catch that logs.
-
-**Alerts:** add the three kinds to `PLATFORM_ALERT_KINDS`, labelled:
-- "A billing event didn't match its account";
-- "A subscription has a price Estori doesn't know";
-- "An account has two Premium subscriptions".
-
-- [ ] **Step 7: Wire the webhook and the cron.** In `dispatchStripeEvent`, right after the Connect filter:
-
-```ts
-    // Premium subscriptions: rebuilt from Stripe's API, so retries and out-of-order events converge.
-    if (isBillingEvent(event)) {
-        const outcome = await handleBillingEvent(billingEventDepsFromEnv(env), event);
-        logger.info('Billing event handled', { id: event.id, type: event.type, outcome });
-        return;
-    }
-```
-
-Also:
-- add `mode?`, `subscription?` and `customer?` to `StripeCheckoutSession` if Task 4 didn't;
-- extend the header comment of `webhook.ts` to name subscriptions;
-- in `worker/index.ts`, add `ctx.waitUntil(runBillingSchedule(controller.cron, env));` after the shopper email schedule.
-
-- [ ] **Step 8: Run the tests to verify they pass**
-
-Run: `rtk proxy bun run test -- worker/services/billing/subscription-sync.test.ts worker/services/billing/wiring.test.ts worker/services/billing/repair.sql.test.ts`
-Expected: PASS.
-
-Run: `rtk proxy bun run test -- worker/api/controllers/payments/webhook-billing.sql.test.ts worker/api/controllers/payments/webhook.test.ts worker/api/controllers/payments/webhook-store.test.ts`
-Expected: PASS. The store and purchase webhook tests are unchanged.
-
-Run: `bun run typecheck`
-Expected: no errors.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add worker/services/billing/subscription-sync.ts worker/services/billing/subscription-sync.test.ts worker/services/billing/events.ts worker/services/billing/repair.ts worker/services/billing/repair.sql.test.ts worker/services/billing/wiring.ts worker/services/billing/wiring.test.ts worker/api/controllers/payments/webhook.ts worker/api/controllers/payments/webhook-billing.sql.test.ts worker/services/payments/stripe-client.ts worker/services/alerts/platform-alerts.ts worker/index.ts
-git commit -m "feat(billing): subscription events rebuild the account's row from stripe, once each and in any order, with a daily repair
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
-
-### Task 8: Credits enforced before every turn, the warnings, and the shared Upgrade dialog
-
-**Files:**
-- Create:
-  - `worker/services/billing/gates.ts`;
-  - `worker/services/billing/credit-notices.ts`;
-  - `worker/services/billing/usage.ts`;
-  - `src/lib/plan-limit-events.ts`;
-  - `src/components/billing/upgrade-copy.ts`;
-  - `src/components/billing/UpgradeDialog.tsx`.
-- Modify:
-  - worker, agents: `worker/agents/core/websocket.ts`, `worker/agents/think/ThinkAgent.ts`;
-  - worker, API: `worker/api/websocketTypes.ts`, `worker/api/responses.ts`, `worker/api/controllers/baseController.ts`, `worker/api/controllers/agent/controller.ts`, `worker/api/controllers/limits/controller.ts`;
-  - worker, services: `worker/services/rate-limit/usageChecker.ts` (export `UNLIMITED_USAGE`);
-  - shared: `shared/types/plan.ts`, `shared/types/billing.ts`;
-  - frontend: `src/App.tsx`, `src/lib/api-client.ts`, `src/hooks/use-limits.ts`, `src/utils/usage-limit-checker.tsx`, `src/components/usage-limits-badge.tsx`, `src/routes/chat/utils/handle-websocket-message.ts`.
-- Test:
-  - `worker/services/billing/gates.test.ts`;
-  - `worker/services/billing/credit-notices.test.ts`;
-  - `worker/services/billing/usage.test.ts`;
-  - `worker/api/responses-plan-limit.test.ts`;
-  - `worker/agents/core/websocket.test.ts`;
-  - `worker/agents/think/model-wiring.test.ts`;
-  - `src/components/billing/upgrade-copy.test.ts`;
-  - `src/components/billing/plan-limit-guard.test.ts`.
-
-**Interfaces:**
-- **Consumes:**
-  - from Task 3: `loadAccount`, `BillingAccount`, `creditBucketFor`, `creditsUsed`, `recordCredits`, `isBillingOn`, `CreditBucket`;
-  - from Task 1: `assertWithinLimit`, `isPlanLimitRefusal`, `PlanLimitRefusal`;
-  - from Task 5: `claimAndSendNotice`, `creditNoticeDue`, `creditNoticeKey`, `billingMailFromEnv`;
-  - from Task 2: `BillingService.claimNotice`, `PLAN_LIMIT_ERROR_CODE`, `BILLING_PATH`.
-- **Produces:**
-  - `gates.ts`:
-    - `creditRefusal(env: Env, account: BillingAccount, llmCalls: LLMCallsRateLimitConfig): Promise<PlanLimitRefusal | null>`;
-    - `PromptPlanCheck { billing: boolean; refusal: PlanLimitRefusal | null }`;
-    - `checkPromptPlan(env: Env, userId: string): Promise<PromptPlanCheck>`.
-  - `credit-notices.ts`:
-    - `CreditUse { userId: string; window: CreditsWindow; used: number; limit: number; periodStartMs: number; renewsAt: number }`;
-    - `noticeCreditUse(deps: CreditNoticeDeps, use: CreditUse, claimedHere: Set<string>): Promise<void>` (never throws);
-    - `CreditNoticeDeps = BillingMailDeps & { claim(userId, key, kind): Promise<boolean> }`;
-    - `creditNoticeDepsFromEnv(env): CreditNoticeDeps`.
-  - `usage.ts`: `billingCreditsSummary(account: BillingAccount, used: number)`, answering `{ billing: UsageBilling; planLimit: PlanLimitRefusal | null; config; usage; limitCheck }` in the existing usage shape.
-  - `shared/types/billing.ts`: `UsageBilling { plan: PlanId; tier: PremiumTierNumber | null; window: CreditsWindow; resetsAt: string }`.
-  - `shared/types/plan.ts`: `PublicPlan extends PublicPlanLimits { billing: boolean }`, which `GET /api/limits/plan` answers.
-  - `worker/api/responses.ts`:
-    - `planLimitResponse(refusal): Response` (402);
-    - `BaseErrorResponse` gains `code?: string` and `planLimit?: PlanLimitRefusal`.
-  - `BaseController.createPlanLimitResponse<T>(refusal)`.
-  - The WebSocket `ErrorMessage` gains `planLimit?: PlanLimitRefusal`.
-  - `handleWebSocketMessage(agent, connection, message, usageCheck = checkUsageAndBalance, planCheck: typeof checkPromptPlan = checkPromptPlan)`.
-  - `usageChecker.ts`: `UNLIMITED_USAGE: UsageCheckResult`.
-  - Frontend:
-    - `src/lib/plan-limit-events.ts`: `PLAN_LIMIT_EVENT`, `showPlanLimit(refusal)`, `onPlanLimit(listener): () => void`;
-    - `src/components/billing/upgrade-copy.ts`: `UpgradeCopy { title: string; action: { label: string; to: string } | null }`, `upgradeCopy(refusal): UpgradeCopy`, `billingBadgeText(billing: UsageBilling, remaining: number): { usage: string; mobile: string; plan: string }`;
-    - `UpgradeDialog({ refusal, onClose })` and `UpgradeDialogHost()`;
-    - `PlanLimitError extends ApiError { refusal }`;
-    - `UsageSummary` gains `billing?: UsageBilling | null` and `planLimit?: PlanLimitRefusal | null`.
-
-- [ ] **Step 1: Write the failing worker tests.**
-
-`worker/services/billing/gates.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_RATE_LIMIT_SETTINGS } from '../rate-limit/config';
-import { checkPromptPlan, creditRefusal } from './gates';
-import type { BillingAccount } from './account';
-
-const LLM = DEFAULT_RATE_LIMIT_SETTINGS.llmCalls;
-
-function account(overrides: Partial<BillingAccount> = {}): BillingAccount {
-	return {
-		billing: true,
-		userId: 'u1',
-		plan: 'basic',
-		tier: null,
-		source: 'free',
-		limits: { aiCredits: 200, aiCreditsWindow: 'day', newStoresPerDay: 3, liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, draftsPerStore: 5 },
-		creditsResetAt: Date.UTC(2026, 9, 20),
-		periodStartMs: Date.UTC(2026, 9, 19),
-		periodEndMs: Date.UTC(2026, 9, 20),
-		graceEndsAtMs: null,
-		grantedCredits: 0,
-		subscription: null,
-		...overrides,
-	};
-}
-
-function remaining(left: number): Env {
-	return { DORateLimitStore: { getByName: () => ({ getRemainingLimit: async () => left }) } } as unknown as Env;
-}
-
-describe('the credit check before a turn', () => {
-	it('lets a turn start while any credit is left, and refuses once the window is used up', async () => {
-		expect(await creditRefusal(remaining(1), account(), LLM)).toBeNull();
-		expect(await creditRefusal(remaining(0), account(), LLM)).toMatchObject({ code: 'plan_limit', limit: 'aiCredits', plan: 'basic', upgradeTo: 'premium' });
-	});
-
-	it('refuses nothing while billing is off', async () => {
-		expect(await creditRefusal(remaining(0), account({ billing: false }), LLM)).toBeNull();
-	});
-
-	it('answers billing off without reading the database when the flag is off for the account', async () => {
-		const env = {
-			BILLING_USER_IDS: 'someone-else',
-			get DB(): never {
-				throw new Error('The plan check read the database while billing was off');
-			},
-		} as unknown as Env;
-		expect(await checkPromptPlan(env, 'u1')).toEqual({ billing: false, refusal: null });
-	});
-});
-```
-
-`worker/services/billing/credit-notices.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
-
-function deps() {
-	const claimed = new Set<string>();
-	const subjects: string[] = [];
-	let claims = 0;
-	const value: CreditNoticeDeps = {
-		sender: { send: async (email) => void subjects.push(email.subject) },
-		userEmail: async () => 'ana@example.test',
-		baseUrl: 'https://estori.app',
-		claim: async (_userId, key) => {
-			claims += 1;
-			if (claimed.has(key)) return false;
-			claimed.add(key);
-			return true;
-		},
-	};
-	return { value, subjects, claims: () => claims };
-}
-
-const USE = { userId: 'u1', window: 'period' as const, limit: 20_000, periodStartMs: Date.UTC(2026, 9, 5, 10), renewsAt: Date.UTC(2026, 10, 5, 10) };
-
-describe('credit warnings while metering', () => {
-	it("warns at 80% and at 100%, once each per period, even after the agent restarts", async () => {
-		const { value, subjects } = deps();
-		const here = new Set<string>();
-		for (const used of [15_999, 16_000, 17_000, 20_000, 20_000]) await noticeCreditUse(value, { ...USE, used }, here);
-		await noticeCreditUse(value, { ...USE, used: 20_000 }, new Set());
-		expect(subjects).toEqual(["You've used 80% of this month's AI credits", "You've used this month's AI credits"]);
-	});
-
-	it('asks the database once per warning per agent', async () => {
-		const { value, claims } = deps();
-		const here = new Set<string>();
-		for (const used of [16_000, 16_100, 16_200]) await noticeCreditUse(value, { ...USE, used }, here);
-		expect(claims()).toBe(1);
-	});
-
-	it("never warns about Basic's daily allowance", async () => {
-		const { value, subjects, claims } = deps();
-		await noticeCreditUse(value, { ...USE, window: 'day', limit: 200, used: 200 }, new Set());
-		expect(subjects).toEqual([]);
-		expect(claims()).toBe(0);
-	});
-});
-```
-
-`worker/services/billing/usage.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { billingCreditsSummary } from './usage';
-import type { BillingAccount } from './account';
-
-const RESET = Date.UTC(2026, 10, 5);
-
-function account(overrides: Partial<BillingAccount>): BillingAccount {
-	return {
-		billing: true,
-		userId: 'u1',
-		plan: 'basic',
-		tier: null,
-		source: 'free',
-		limits: { aiCredits: 200, aiCreditsWindow: 'day', newStoresPerDay: 3, liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, draftsPerStore: 5 },
-		creditsResetAt: RESET,
-		periodStartMs: 0,
-		periodEndMs: RESET,
-		graceEndsAtMs: null,
-		grantedCredits: 0,
-		subscription: null,
-		...overrides,
-	};
-}
-
-describe('the usage summary with billing on', () => {
-	it("reports Premium's monthly pool, so the existing badge follows", () => {
-		const premium = account({ plan: 'premium', tier: 1, source: 'subscription', limits: { aiCredits: 20_000, aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, draftsPerStore: 5 } });
-		expect(billingCreditsSummary(premium, 5_000)).toEqual({
-			billing: { plan: 'premium', tier: 1, window: 'period', resetsAt: '2026-11-05T00:00:00.000Z' },
-			planLimit: null,
-			config: { limit: { type: 'credits', window: 'monthly', maxValue: 20_000, enabled: true, resetAt: '2026-11-05T00:00:00.000Z' }, unlimited: false },
-			usage: { credits: { monthly: 5_000 } },
-			limitCheck: { withinLimits: true, exceededLimits: [], message: 'Within limits' },
-		});
-	});
-
-	it('carries the refusal once the window is used up', () => {
-		const summary = billingCreditsSummary(account({}), 200);
-		expect(summary.planLimit).toMatchObject({ code: 'plan_limit', limit: 'aiCredits' });
-		expect(summary.limitCheck).toEqual({ withinLimits: false, exceededLimits: [{ type: 'credits', window: 'daily', current: 200, max: 200, percentUsed: 100 }], message: 'Limit exceeded' });
 	});
 });
 ```
@@ -3248,7 +2461,7 @@ import { planLimitResponse } from './responses';
 
 describe('planLimitResponse', () => {
 	it('answers 402 with the refusal under error, where the frontend looks for it', async () => {
-		const refusal = { code: 'plan_limit' as const, limit: 'liveStores' as const, plan: 'basic' as const, upgradeTo: 'premium' as const, message: 'Basic includes 1 live store. Get Premium for up to 10.' };
+		const refusal = { code: 'plan_limit' as const, limit: 'liveStores' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: 'Basic includes 1 live store. Get Pro for up to 3, or Premium for up to 10.' };
 		const response = planLimitResponse(refusal);
 		expect(response.status).toBe(402);
 		expect(await response.json()).toEqual({ success: false, error: { message: refusal.message, name: 'PlanLimit', code: 'plan_limit', planLimit: refusal }, message: refusal.message });
@@ -3256,105 +2469,1238 @@ describe('planLimitResponse', () => {
 });
 ```
 
-In `worker/agents/core/websocket.test.ts`:
-- give `fakes` a third parameter `behaviorType = 'phasic'` and set `state: { metadata: { userId: 'u1' }, behaviorType }`;
-- import `type { checkPromptPlan } from '../../services/billing/gates'`;
-- add:
+- [ ] **Step 3: Run them to verify they fail**
+
+Run: `rtk proxy bun run test -- worker/services/billing/actions.test.ts worker/api/controllers/billing/controller.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts worker/api/responses-plan-limit.test.ts`
+Expected: FAIL, failed imports.
+
+- [ ] **Step 4: Implement `actions.ts`.**
 
 ```ts
-const REFUSAL = { code: 'plan_limit', limit: 'aiCredits', plan: 'basic', upgradeTo: 'premium', message: "You've used today's free AI credits. They reset at midnight UTC, or get Premium for a monthly pool." } as const;
-const plan = (billing: boolean, refusal: typeof REFUSAL | null = null): typeof checkPromptPlan => async () => ({ billing, refusal });
-const suggestion = JSON.stringify({ type: 'user_suggestion', message: 'Make the header blue' });
+export const BILLING_MESSAGES = {
+	notSetUp: "Plans aren't set up on this deployment yet.",
+	pickPlan: 'Pick Pro or Premium.',
+	alreadyPaying: 'You already have a plan. Change it on the billing page.',
+	noPlan: "You don't have Pro or Premium.",
+	paymentFailing: "Your last payment didn't go through. Update your card in Manage billing first.",
+	declined: 'Your card was declined. Update it in Manage billing, then try again.',
+	notEnding: "Your plan isn't set to end.",
+	noCustomer: "You don't have billing details yet.",
+	creditsAmount: 'Pick 5,000 to 1,000,000 credits, in thousands.',
+} as const;
+```
 
-describe('the plan check before a prompt', () => {
-	it('refuses with the plan_limit popup, without asking the old check or the agent', async () => {
-		const order: string[] = [];
-		const { agent, connection, sent } = fakes({}, order);
-		await handleWebSocketMessage(agent, connection, suggestion, recordingCheck(order, { allowed: true }), plan(true, REFUSAL));
-		expect(sent).toEqual([{ type: 'error', error: REFUSAL.message, code: 'PLAN_LIMIT', showAsPopup: true, planLimit: REFUSAL }]);
-		expect(order).toEqual([]);
+`BillingActionDeps` has `stripe` (a `Pick` of the methods the fake has, or null), `store` (`customerOf`, `saveCustomer`, `subscriptionOf`), `priceIds: StripePriceIds | null`, `baseUrl` and `nowMs`.
+
+**Common rules:**
+- Answer 503 `notSetUp` without Stripe or price ids.
+- A "live" row has a status in `LIVE_SUBSCRIPTION_STATUSES`.
+- Idempotency keys are `billing-{action}-{userId}-{plan or credits or nothing}-{Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS)}`.
+- A `StripeApiError` whose `type` is `card_error`, or whose status is 402, answers 409 `declined`. Any other `StripeApiError` answers 502 `STRIPE_REQUEST_FAILED_MESSAGE`. Other errors are rethrown.
+- Dates use `formatBillingDate`, and plan names `planName`.
+- The customer comes from `customerOf`, or else `createCustomer` then `saveCustomer`.
+
+**`startCheckout`:**
+1. `isPaidPlanId(plan)`, else 400 `pickPlan`.
+2. Answer 409 `alreadyPaying` when the row is live.
+3. The session uses `priceIds[plan]`; the URLs are `${baseUrl}${BILLING_PATH}?checkout=success` and `?checkout=cancelled`.
+4. Answer `{ url, sessionId }`; a session without a url answers 502.
+
+**`changePlan`,** in this order:
+1. a plan that isn't paid answers 400 `pickPlan`;
+2. no live row answers 404 `noPlan`;
+3. `past_due` answers 409 `paymentFailing`;
+4. cancelling answers 409 "{Plan} ends on {date}. Keep {Plan} first.";
+5. a pending change: choosing the row's plan releases `stripeScheduleId` and answers ok; any other choice answers 409 "You have a change scheduled for {date}. Keep your current plan first.";
+6. the row's own plan answers 400 "You're already on {Plan}.";
+7. otherwise retrieve the subscription. Premium calls `changeSubscriptionPrice`; Pro calls `scheduleSubscriptionPrice`.
+
+**`cancelPlan`:**
+- no live row answers 404;
+- already cancelling answers 409 "{Plan} already ends on {date}.";
+- otherwise release `stripeScheduleId` when set, then `cancelAtPeriodEnd`.
+
+**`resumePlan`:**
+- no live row answers 404;
+- not cancelling answers 409 `notEnding`;
+- otherwise retrieve the subscription, then `resumeSubscription`.
+
+**`openPortal`:**
+- no customer answers 404 `noCustomer`;
+- otherwise open the portal, returning to `${baseUrl}${BILLING_PATH}`.
+
+**`buyCredits`:**
+1. `assertWithinLimit(account, 'extraCredits')`, which answers `{ ok: false, status: 402, refusal }`.
+2. `isExtraCreditsAmount(credits)`, else 400 `creditsAmount`.
+3. The customer, then `createCreditsCheckoutSession` with `priceIds.credits`. The URLs are `?credits=success` and the plain billing path.
+
+**`billingActionDepsFromEnv(env, request)`:** `{ stripe: stripeFromEnv(env), store: new BillingService(env), priceIds: stripePriceIds(env.STRIPE_PRICE_IDS), baseUrl: appBaseUrl(env, request), nowMs: Date.now() }`.
+
+- [ ] **Step 5: Implement `view.ts`, the 402 response, the controller and the routes.**
+
+**`billingView(account, credits, purchases, hasCustomer)`:**
+- maps the subscription row: status, cancel flag, `pendingPlan` and its date when `isPaidPlanId`;
+- `paymentFailing`: status `past_due` or `unpaid`;
+- `credits`: the balance plus `renewsAt: account.creditsResetAt`, or null when billing is off;
+- `alert`: `creditAlertDue(credits)` when there are credits, else null; the banner in Task 12 shows it;
+- `purchases`: those with credits left, mapped to `PurchaseView` with `left = credits - used - removedCredits`;
+- `canBuyCredits`: `assertWithinLimit(account, 'extraCredits') === null && account.billing`.
+
+**`planLimitResponse(refusal)`:**
+- returns status 402 with `{ success: false, error: { message: refusal.message, name: 'PlanLimit', code: PLAN_LIMIT_CODE, planLimit: refusal }, message: refusal.message }`;
+- add `code?` and `planLimit?` to `BaseErrorResponse`;
+- `BaseController.createPlanLimitResponse<T = never>(refusal)` casts it like `createErrorResponse`.
+
+**`BillingController extends BaseController`:**
+- **`get`:**
+  1. `account = await loadAccount(env, user.id)`;
+  2. when billing is on, `credits = await loadCredits(env, account)` and `purchases = await new CreditLedgerService(env).purchasesOf(user.id)`;
+  3. read the customer, and answer `billingView`.
+- **Every `POST`:**
+  - answers 401 without `context.user`;
+  - answers 403 `BILLING_NOT_OPEN_MESSAGE` when `!isBillingOn(env, user.id)`;
+  - reads its body with `parseJsonBody`;
+  - calls its action with `billingActionDepsFromEnv(env, request)`.
+- **`credits`** loads the account first, for `buyCredits`.
+- **Results:** ok is `createSuccessResponse(value)`, a refusal is `createPlanLimitResponse(refusal)`, otherwise `createErrorResponse(message, status)`.
+- **`setupBillingRoutes(app)`** registers the seven routes. Call it from `setupRoutes` in `worker/api/routes/index.ts`, before `setupLimitsRoutes(app)`.
+
+- [ ] **Step 6: The frontend client.**
+- Re-export the new types, `BILLING_PATH` and `BILLING_NOT_OPEN_MESSAGE` from `src/api-types.ts`.
+- Add `billing: () => ['billing'] as const` to `queryKeys`.
+- `ApiClient` gains `getBilling`, `startPlanCheckout(plan)`, `changePlan(plan)`, `cancelPlan`, `resumePlan`, `openBillingPortal` and `buyCredits(credits)`. Each is a `this.request<…>` call: GET for the view, POST with its body otherwise.
+
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- worker/services/billing/actions.test.ts worker/api/controllers/billing/controller.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts worker/api/responses-plan-limit.test.ts`
+Expected: PASS (14 tests).
+
+Run: `bun run typecheck`
+Expected: no new errors.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add shared/types/billing.ts worker/services/billing/actions.ts worker/services/billing/actions.test.ts worker/services/billing/view.ts worker/api/controllers/billing worker/api/routes/billingRoutes.ts worker/api/routes/index.ts worker/api/responses.ts worker/api/responses-plan-limit.test.ts worker/api/controllers/baseController.ts src/api-types.ts src/lib/api-client.ts src/lib/query-keys.ts
+git commit -m "feat(billing): the billing api to start pro or premium, move between them, cancel, keep the plan, manage the card and buy credits
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 9: Webhooks, extra credits, refunds, and the daily and hourly runs
+
+**Files:**
+- Create:
+  - `worker/services/billing/subscription-row.ts` (pure);
+  - `worker/services/billing/events.ts`;
+  - `worker/services/billing/jobs.ts`;
+  - `worker/services/billing/wiring.ts`.
+- Modify:
+  - `worker/api/controllers/payments/webhook.ts`, `worker/index.ts`;
+  - `worker/services/alerts/platform-alerts.ts` (three kinds);
+  - `worker/services/billing/flag.ts` (`billingAudience`), `worker/services/billing/periods.ts` (`addMonths`, `renewalDaysOf`);
+  - `worker/database/services/BillingService.ts` (`accountsRenewing`), `worker/database/services/CreditLedgerService.ts` (`purchaseBySession`).
+- Test:
+  - `worker/services/billing/subscription-row.test.ts`;
+  - `worker/api/controllers/payments/webhook-billing.sql.test.ts`;
+  - `worker/services/billing/jobs.sql.test.ts`;
+  - `worker/services/billing/wiring.test.ts`.
+
+**Interfaces:**
+- **Consumes:**
+  - from Task 3: `BillingService.recordEvent`, `eventSeen`, `userOfCustomer`, `subscriptionOf`, `sentNoticeKeys`, `subscriptionsToRepair`, `LIVE_SUBSCRIPTION_STATUSES`, `CHECKOUT_KIND_CREDITS`;
+  - from Task 4: `CreditLedgerService.settle`, `usersToSettle`, `expirePurchases`, `pruneUses`, `purchaseByPaymentIntent`;
+  - from Task 5: `loadAccount`, `subscriptionPeriod`, `graceEndsAt`, `isBillingOn`;
+  - from Task 6: `StripeSubscription`, `StripeInvoice`, `StripeCharge`, `StripeSubscriptionSchedule`, `planOfPrice`, `stripePriceIds`;
+  - from Task 7: `PlannedNotice`, `sendBillingEmails`, `billingMailFromEnv`, `claimAndSendNotice`, `claimingMailFromEnv`;
+  - from Task 1: `isExtraCreditsAmount`, `extraCreditsPriceCents`, `EXTRA_CREDITS`, `PLAN_LIMITS`;
+  - existing: `isCheckoutSession`, `StripeEvent`, `platformAlertsFromEnv`, `CATALOG_HEALTH_CRON`, `CATALOG_SWEEP_CRON`, `generateId`.
+- **Produces:**
+  - `subscription-row.ts`:
+    - `subscriptionRowFrom(subscription: StripeSubscription, userId: string, ids: StripePriceIds | null, nowMs: number): SubscriptionRecord | null` (null for a price that's neither plan);
+    - `noticesFor(previous: SubscriptionRecord | null, next: SubscriptionRecord, context: { eventType: string; invoice: StripeInvoice | null }): PlannedNotice[]`.
+  - `events.ts`:
+    - `BillingEventOutcome = 'applied' | 'duplicate' | 'ignored' | 'refused'`;
+    - `BillingEventDeps { stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession'>; store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent'>; ledger: Pick<CreditLedgerService, 'purchaseBySession' | 'purchaseByPaymentIntent' | 'settle'>; priceIds: StripePriceIds | null; notify(userId: string, notices: readonly PlannedNotice[]): Promise<void>; alert(alert: PlatformAlert): Promise<void>; nowMs(): number }`;
+    - `SubscriptionTarget { eventId: string; eventType: string; subscriptionId: string; expectedUserId: string | null; invoice: StripeInvoice | null }`;
+    - `applySubscription(deps, input: SubscriptionTarget): Promise<BillingEventOutcome>`;
+    - `applyCreditPurchase(deps, input: { eventId: string; eventType: string; sessionId: string }): Promise<BillingEventOutcome>`;
+    - `applyCreditRefund(deps, input: { eventId: string; eventType: string; charge: StripeCharge }): Promise<BillingEventOutcome | null>`;
+    - `handleBillingEvent(deps, event: StripeEvent): Promise<BillingEventOutcome | null>` (null when the event isn't billing's).
+  - `jobs.ts`: `runDailyBilling(env: Env, nowMs: number): Promise<void>`, `runHourlyBilling(env: Env, nowMs: number): Promise<void>`.
+  - `wiring.ts`: `billingEventDepsFromEnv(env): BillingEventDeps`, `runBillingSchedule(cron: string, env: Env): Promise<void>` (never throws).
+  - `flag.ts`: `billingAudience(env): 'everyone' | readonly string[]`.
+  - `periods.ts`:
+    - `addMonths(ms: number, months: number): number` (the day clamped to the month's end);
+    - `renewalDaysOf(nowMs: number): number[]` (the sign-up days whose period starts today).
+  - `BillingService.accountsRenewing(input: { dayStartMs: number; days: readonly number[]; userIds: readonly string[] | null; limit: number }): Promise<string[]>`.
+  - `CreditLedgerService.purchaseBySession(sessionId): Promise<CreditPurchaseRecord | null>`.
+  - Platform alert kinds `billing-mismatch`, `billing-second-subscription`, `billing-unknown-price`.
+
+- [ ] **Step 1: Write the failing pure test** `worker/services/billing/subscription-row.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { noticesFor, subscriptionRowFrom } from './subscription-row';
+import type { StripeInvoice, StripeSubscription, StripeSubscriptionSchedule } from '../payments/stripe-client';
+import type { SubscriptionRecord } from '../../database/schema';
+import type { PlannedNotice } from './notices';
+
+const IDS = { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' };
+const DAY = 86_400_000;
+const START = Date.parse('2026-10-05T10:00:00Z') / 1000;
+const END = Date.parse('2026-11-05T10:00:00Z') / 1000;
+const NEXT_END = Date.parse('2026-12-05T10:00:00Z') / 1000;
+const NOW = Date.parse('2026-10-19T15:00:00Z');
+
+function stripeSub(overrides: Partial<StripeSubscription> = {}, price = 'price_pro'): StripeSubscription {
+	return {
+		id: 'sub_1',
+		customer: 'cus_1',
+		status: 'active',
+		created: START,
+		cancel_at_period_end: false,
+		cancel_at: null,
+		metadata: { estori_user_id: 'u1' },
+		items: { data: [{ id: 'si_1', price: { id: price, metadata: null }, current_period_start: START, current_period_end: END }] },
+		schedule: null,
+		...overrides,
+	};
+}
+
+function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
+	return {
+		userId: 'u1',
+		stripeSubscriptionId: 'sub_1',
+		status: 'active',
+		plan: 'pro',
+		currentPeriodStart: new Date(START * 1000),
+		currentPeriodEnd: new Date(END * 1000),
+		cancelAtPeriodEnd: false,
+		pendingPlan: null,
+		pendingPlanAt: null,
+		stripeScheduleId: null,
+		stripeCreatedAt: new Date(START * 1000),
+		updatedAt: new Date(NOW),
+		...overrides,
+	};
+}
+
+function invoice(reason: string, amountPaid = 4_900): StripeInvoice {
+	return { id: 'in_1', customer: 'cus_1', amount_paid: amountPaid, currency: 'usd', hosted_invoice_url: 'https://invoice.stripe.com/i/in_1', number: 'EST-0001', billing_reason: reason, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } } };
+}
+
+const UPDATED = { eventType: 'customer.subscription.updated', invoice: null };
+const keys = (notices: PlannedNotice[]) => notices.map((notice) => notice.key);
+
+describe('subscriptionRowFrom', () => {
+	it("rebuilds the row from Stripe's subscription: the plan from its price, the period from its item", () => {
+		expect(subscriptionRowFrom(stripeSub(), 'u1', IDS, NOW)).toEqual(row());
+		expect(subscriptionRowFrom(stripeSub({ cancel_at: END }), 'u1', IDS, NOW)?.cancelAtPeriodEnd).toBe(true);
+		expect(subscriptionRowFrom(stripeSub({}, 'price_unknown'), 'u1', IDS, NOW)).toBeNull();
 	});
 
-	it("skips the old balance check for a Think app once billing is on, since Think always runs on Estori's gateway", async () => {
-		const order: string[] = [];
-		const { agent, connection } = fakes({}, order, 'think');
-		await handleWebSocketMessage(agent, connection, suggestion, recordingCheck(order, { allowed: false, reason: 'limit' }), plan(true));
-		expect(order).toEqual(['input:Make the header blue']);
+	it("shows a scheduled move to Pro from the schedule's next phase, and nothing once it's released", () => {
+		const schedule: StripeSubscriptionSchedule = {
+			id: 'sub_sched_1',
+			status: 'active',
+			subscription: 'sub_1',
+			current_phase: { start_date: START, end_date: END },
+			phases: [
+				{ start_date: START, end_date: END, items: [{ price: 'price_premium', quantity: 1 }] },
+				{ start_date: END, end_date: NEXT_END, items: [{ price: 'price_pro', quantity: 1 }] },
+			],
+		};
+		expect(subscriptionRowFrom(stripeSub({ schedule }, 'price_premium'), 'u1', IDS, NOW)).toMatchObject({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date(END * 1000), stripeScheduleId: 'sub_sched_1' });
+		expect(subscriptionRowFrom(stripeSub({ schedule: { ...schedule, status: 'released' } }, 'price_premium'), 'u1', IDS, NOW)).toMatchObject({ pendingPlan: null, pendingPlanAt: null, stripeScheduleId: null });
+	});
+});
+
+describe('noticesFor', () => {
+	it('welcomes a plan once, and sends a receipt for each paid invoice', () => {
+		expect(noticesFor(null, row(), { eventType: 'customer.subscription.created', invoice: null })).toEqual([{ key: 'plan_started:sub_1', email: { kind: 'plan_started', plan: 'pro', renewsAt: END * 1000 } }]);
+		expect(noticesFor(row(), row(), UPDATED)).toEqual([]);
+		expect(keys(noticesFor(row(), row(), { eventType: 'invoice.paid', invoice: invoice('subscription_create') }))).toEqual(['receipt:in_1']);
+		expect(keys(noticesFor(row(), row(), { eventType: 'invoice.paid', invoice: invoice('subscription_create', 0) }))).toEqual([]);
 	});
 
-	it('keeps the old check for older apps, and for every app while billing is off', async () => {
-		for (const [behaviorType, billing] of [['phasic', true], ['think', false]] as const) {
-			const order: string[] = [];
-			const { agent, connection } = fakes({}, order, behaviorType);
-			await handleWebSocketMessage(agent, connection, suggestion, recordingCheck(order, { allowed: true }), plan(billing));
-			expect(order).toEqual(['usage-check', 'input:Make the header blue']);
+	it('says the credits renewed when a renewal invoice is paid', () => {
+		const renewed = row({ currentPeriodStart: new Date(END * 1000), currentPeriodEnd: new Date(NEXT_END * 1000) });
+		const notices = noticesFor(row(), renewed, { eventType: 'invoice.paid', invoice: invoice('subscription_cycle') });
+		expect(keys(notices)).toEqual(['receipt:in_1', `credits_renewed:sub:sub_1:${END}`]);
+		expect(notices[1].email).toEqual({ kind: 'credits_renewed', credits: 20_000, renewsAt: NEXT_END * 1000 });
+	});
+
+	it('tells the seller about a move up, a move down at renewal, a cancel and the end', () => {
+		expect(keys(noticesFor(row(), row({ plan: 'premium' }), UPDATED))).toEqual([`plan_upgraded:sub_1:${START}`]);
+		const pending = row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date(END * 1000), stripeScheduleId: 'sub_sched_1' });
+		expect(noticesFor(row({ plan: 'premium' }), pending, UPDATED)).toEqual([{ key: 'downgrade_scheduled:sub_sched_1', email: { kind: 'downgrade_scheduled', plan: 'pro', at: END * 1000 } }]);
+		expect(keys(noticesFor(row(), row({ cancelAtPeriodEnd: true }), UPDATED))).toEqual([`plan_ending:sub_1:${END}`]);
+		expect(noticesFor(row({ cancelAtPeriodEnd: true }), row(), UPDATED)).toEqual([]);
+		expect(noticesFor(row({ status: 'past_due' }), row({ status: 'canceled' }), UPDATED)).toEqual([{ key: 'plan_ended:sub_1', email: { kind: 'plan_ended', plan: 'pro', reason: 'payment-failed' } }]);
+		expect(noticesFor(row({ cancelAtPeriodEnd: true }), row({ status: 'canceled' }), UPDATED)[0].email).toEqual({ kind: 'plan_ended', plan: 'pro', reason: 'cancelled' });
+	});
+
+	it('warns once per failed invoice, naming the end of the grace period', () => {
+		expect(noticesFor(row(), row({ status: 'past_due' }), { eventType: 'invoice.payment_failed', invoice: invoice('subscription_cycle', 0) })).toEqual([
+			{ key: 'payment_failed:in_1', email: { kind: 'payment_failed', plan: 'pro', graceEndsAt: START * 1000 + 7 * DAY } },
+		]);
+	});
+});
+```
+
+- [ ] **Step 2: Write the failing webhook test** `worker/api/controllers/payments/webhook-billing.sql.test.ts`:
+
+```ts
+/**
+ * Billing webhooks on real SQL: signed deliveries, Stripe's API stood in by fetch serving each object's latest copy,
+ * and Estori's emails captured. Each test's writes roll back after it.
+ */
+
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
+import { CreditLedgerService } from '../../../database/services/CreditLedgerService';
+import { PLATFORM_ALERT_EMAILS } from '../../../services/alerts/platform-alerts';
+import type { StripeSubscription } from '../../../services/payments/stripe-client';
+import { handleStripeWebhook } from './webhook';
+
+const SECRET = 'whsec_billing_test';
+const PRICES = { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' };
+const DAY = 86_400;
+const START = Date.parse('2026-10-05T10:00:00Z') / 1000;
+const END = Date.parse('2026-11-05T10:00:00Z') / 1000;
+
+let db: D1Database;
+const sent: Array<{ to: string; subject: string }> = [];
+
+beforeAll(async () => {
+	db = await migratedD1();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	sent.length = 0;
+});
+
+async function signatureFor(payload: string): Promise<string> {
+	const timestamp = Math.floor(Date.now() / 1000);
+	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+	const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`));
+	return `t=${timestamp},v1=${Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function env(): Env {
+	return envWith(db, {
+		STRIPE_WEBHOOK_SECRET: SECRET,
+		STRIPE_SECRET_KEY: 'sk_test_fake',
+		STRIPE_PRICE_IDS: JSON.stringify(PRICES),
+		CUSTOM_DOMAIN: 'estori.app',
+		ENVIRONMENT: 'prod',
+		EMAIL: {
+			send: async (message: { to: string; subject: string }) => {
+				sent.push({ to: message.to, subject: message.subject });
+				return { messageId: 'm1' };
+			},
+		},
+		VibecoderStore: { get: async () => null, put: async () => undefined },
+	});
+}
+
+/** Stripe's API: the latest copy of each object by id. Tests change the map to move Stripe's state on. */
+function stripeServes(objects: Record<string, unknown>): Record<string, unknown> {
+	vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+		const id = new URL(String(input)).pathname.split('/').pop() ?? '';
+		const object = objects[id];
+		return object ? Response.json(object) : Response.json({ error: { message: `No such object: ${id}` } }, { status: 404 });
+	});
+	return objects;
+}
+
+async function deliver(id: string, type: string, object: unknown): Promise<number> {
+	const payload = JSON.stringify({ id, type, data: { object } });
+	const request = new Request('https://estori.app/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': await signatureFor(payload) }, body: payload });
+	return (await handleStripeWebhook(request, env())).status;
+}
+
+function subscription(userId: string, customer: string, overrides: Partial<StripeSubscription> = {}, price = 'price_pro'): StripeSubscription {
+	return {
+		id: `sub_${userId}`,
+		customer,
+		status: 'active',
+		created: START,
+		cancel_at_period_end: false,
+		cancel_at: null,
+		metadata: { estori_user_id: userId },
+		items: { data: [{ id: 'si_1', price: { id: price, metadata: null }, current_period_start: START, current_period_end: END }] },
+		schedule: null,
+		...overrides,
+	};
+}
+
+async function seller(userId: string): Promise<string> {
+	await insertUser(db, userId);
+	await insertBillingCustomer(db, userId, `cus_${userId}`);
+	return `cus_${userId}`;
+}
+
+const rowOf = (userId: string) =>
+	db.prepare('SELECT stripe_subscription_id AS id, status, plan, cancel_at_period_end AS ending, pending_plan AS pending FROM subscriptions WHERE user_id = ?').bind(userId).first();
+const resultOf = (eventId: string) => db.prepare('SELECT result FROM billing_events WHERE stripe_event_id = ?').bind(eventId).first('result');
+const subjects = () => sent.filter((email) => !PLATFORM_ALERT_EMAILS.includes(email.to)).map((email) => email.subject);
+const alerted = () => sent.some((email) => PLATFORM_ALERT_EMAILS.includes(email.to));
+
+describe('subscription webhooks', () => {
+	it('records a checkout and its subscription once, welcoming the seller once', async () => {
+		const customer = await seller('u_new');
+		stripeServes({ sub_u_new: subscription('u_new', customer) });
+		const session = { id: 'cs_new', mode: 'subscription', subscription: 'sub_u_new', customer, client_reference_id: 'u_new', payment_status: 'paid', status: 'complete', metadata: { estori_user_id: 'u_new', plan: 'pro' } };
+		expect(await deliver('evt_1', 'checkout.session.completed', session)).toBe(200);
+		expect(await deliver('evt_2', 'customer.subscription.created', { id: 'sub_u_new' })).toBe(200);
+		expect(await deliver('evt_2', 'customer.subscription.created', { id: 'sub_u_new' })).toBe(200);
+		expect(await rowOf('u_new')).toEqual({ id: 'sub_u_new', status: 'active', plan: 'pro', ending: 0, pending: null });
+		expect(subjects()).toEqual(['Welcome to Estori Pro']);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM billing_events WHERE object_id = 'sub_u_new'").first()).toEqual({ n: 2 });
+	});
+
+	it("ends at Stripe's latest state when updated arrives before created", async () => {
+		const customer = await seller('u_order');
+		stripeServes({ sub_u_order: subscription('u_order', customer, {}, 'price_premium') });
+		await deliver('evt_u', 'customer.subscription.updated', { id: 'sub_u_order' });
+		await deliver('evt_c', 'customer.subscription.created', { id: 'sub_u_order' });
+		expect(await rowOf('u_order')).toMatchObject({ plan: 'premium', status: 'active' });
+		expect(subjects()).toEqual(['Welcome to Estori Premium']);
+	});
+
+	it('moves Pro to Premium with its invoice, and shows a scheduled move back to Pro until the renewal', async () => {
+		const customer = await seller('u_up');
+		await insertSubscription(db, { userId: 'u_up', stripeSubscriptionId: 'sub_u_up', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		const stripe = stripeServes({ sub_u_up: subscription('u_up', customer, {}, 'price_premium') });
+		await deliver('evt_up', 'customer.subscription.updated', { id: 'sub_u_up' });
+		const prorated = { id: 'in_up', customer, amount_paid: 7_500, currency: 'usd', hosted_invoice_url: null, number: 'EST-0002', billing_reason: 'subscription_update', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_up' } } };
+		await deliver('evt_inv', 'invoice.paid', prorated);
+		expect(await rowOf('u_up')).toMatchObject({ plan: 'premium' });
+		const schedule = { id: 'sub_sched_up', status: 'active', subscription: 'sub_u_up', current_phase: { start_date: START, end_date: END }, phases: [{ start_date: START, end_date: END, items: [{ price: 'price_premium', quantity: 1 }] }, { start_date: END, end_date: END + 30 * DAY, items: [{ price: 'price_pro', quantity: 1 }] }] };
+		stripe.sub_u_up = subscription('u_up', customer, { schedule }, 'price_premium');
+		await deliver('evt_sched', 'subscription_schedule.created', schedule);
+		expect(await rowOf('u_up')).toMatchObject({ plan: 'premium', pending: 'pro' });
+		const renewed = { id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: END, current_period_end: END + 30 * DAY };
+		stripe.sub_u_up = subscription('u_up', customer, { items: { data: [renewed] } });
+		await deliver('evt_renew', 'customer.subscription.updated', { id: 'sub_u_up' });
+		expect(await rowOf('u_up')).toMatchObject({ plan: 'pro', pending: null });
+		expect(subjects()).toEqual(["You're on Premium now", 'Your Estori receipt: $75.00', 'Your plan moves to Pro at renewal']);
+	});
+
+	it('warns once when a renewal fails, keeps the plan through the grace period, and restores it when paid', async () => {
+		const customer = await seller('u_due');
+		await insertSubscription(db, { userId: 'u_due', stripeSubscriptionId: 'sub_u_due', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
+		const stripe = stripeServes({ sub_u_due: subscription('u_due', customer, { status: 'past_due' }) });
+		const failed = { id: 'in_due', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0003', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_due' } } };
+		await deliver('evt_f1', 'invoice.payment_failed', failed);
+		await deliver('evt_f2', 'invoice.payment_failed', { ...failed, attempt_count: 2 });
+		expect(await rowOf('u_due')).toMatchObject({ status: 'past_due', plan: 'pro' });
+		stripe.sub_u_due = subscription('u_due', customer);
+		await deliver('evt_paid', 'invoice.paid', { ...failed, amount_paid: 4_900 });
+		expect(await rowOf('u_due')).toMatchObject({ status: 'active' });
+		expect(subjects()).toEqual(["Your Pro payment didn't go through", 'Your Estori receipt: $49.00', 'Your AI credits are renewed']);
+	});
+
+	it('says when a cancelled plan ends, keeps it when the seller changes their mind, and says when it has ended', async () => {
+		const customer = await seller('u_end');
+		await insertSubscription(db, { userId: 'u_end', stripeSubscriptionId: 'sub_u_end', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		const stripe = stripeServes({ sub_u_end: subscription('u_end', customer, { cancel_at_period_end: true }) });
+		await deliver('evt_e1', 'customer.subscription.updated', { id: 'sub_u_end' });
+		expect(await rowOf('u_end')).toMatchObject({ ending: 1 });
+		stripe.sub_u_end = subscription('u_end', customer);
+		await deliver('evt_e2', 'customer.subscription.updated', { id: 'sub_u_end' });
+		expect(await rowOf('u_end')).toMatchObject({ ending: 0 });
+		stripe.sub_u_end = subscription('u_end', customer, { status: 'canceled' });
+		await deliver('evt_e3', 'customer.subscription.deleted', { id: 'sub_u_end' });
+		expect(await rowOf('u_end')).toMatchObject({ status: 'canceled' });
+		expect(subjects()).toEqual(['Pro ends on November 5', 'Your account is on Basic now']);
+	});
+
+	it("refuses a subscription whose account doesn't match its customer, and alerts", async () => {
+		const customer = await seller('u_a');
+		await insertUser(db, 'u_b');
+		stripeServes({ sub_x: subscription('u_b', customer, { id: 'sub_x' }) });
+		expect(await deliver('evt_x', 'customer.subscription.created', { id: 'sub_x' })).toBe(200);
+		expect(await rowOf('u_a')).toBeNull();
+		expect(await rowOf('u_b')).toBeNull();
+		expect(await resultOf('evt_x')).toBe('refused');
+		expect(alerted()).toBe(true);
+	});
+
+	it('keeps the first subscription when a second starts from another tab, and ignores a late event from an ended one', async () => {
+		const customer = await seller('u_two');
+		await insertSubscription(db, { userId: 'u_two', stripeSubscriptionId: 'sub_first', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		stripeServes({
+			sub_second: subscription('u_two', customer, { id: 'sub_second', created: START + 60 }, 'price_premium'),
+			sub_old: subscription('u_two', customer, { id: 'sub_old', status: 'canceled', created: START - 60 * DAY }),
+		});
+		await deliver('evt_s2', 'customer.subscription.created', { id: 'sub_second' });
+		expect(await resultOf('evt_s2')).toBe('refused');
+		expect(alerted()).toBe(true);
+		await deliver('evt_old', 'customer.subscription.deleted', { id: 'sub_old' });
+		expect(await resultOf('evt_old')).toBe('ignored');
+		expect(await rowOf('u_two')).toMatchObject({ id: 'sub_first', status: 'active', plan: 'pro' });
+	});
+});
+
+describe('extra credit webhooks', () => {
+	const session = (userId: string, customer: string, overrides: Record<string, unknown> = {}) => ({
+		id: `cs_${userId}`,
+		mode: 'payment',
+		customer,
+		client_reference_id: userId,
+		payment_status: 'paid',
+		status: 'complete',
+		amount_total: 1_800,
+		currency: 'usd',
+		payment_intent: `pi_${userId}`,
+		metadata: { kind: 'credits', estori_user_id: userId, credits: '12000' },
+		...overrides,
+	});
+
+	it('records a paid purchase once, even when its session is delivered twice, with one receipt', async () => {
+		const customer = await seller('u_buy');
+		stripeServes({ cs_u_buy: session('u_buy', customer) });
+		const event = { id: 'cs_u_buy', payment_status: 'paid', metadata: { kind: 'credits' } };
+		await deliver('evt_b1', 'checkout.session.completed', event);
+		await deliver('evt_b2', 'checkout.session.completed', event);
+		const purchases = await db.prepare("SELECT credits, amount_cents, stripe_payment_intent_id AS pi, expires_at - purchased_at AS valid FROM credit_purchases WHERE user_id = 'u_buy'").all();
+		expect(purchases.results).toEqual([{ credits: 12_000, amount_cents: 1_800, pi: 'pi_u_buy', valid: expect.any(Number) }]);
+		expect(Number(purchases.results[0].valid)).toBeGreaterThanOrEqual(365 * DAY);
+		expect(subjects()).toEqual(['Your Estori receipt: 12,000 AI credits']);
+	});
+
+	it("refuses a purchase whose amount doesn't match the credits, and alerts", async () => {
+		const customer = await seller('u_cheap');
+		stripeServes({ cs_u_cheap: session('u_cheap', customer, { amount_total: 100 }) });
+		await deliver('evt_cheap', 'checkout.session.completed', { id: 'cs_u_cheap', payment_status: 'paid', metadata: { kind: 'credits' } });
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_purchases WHERE user_id = 'u_cheap'").first()).toEqual({ n: 0 });
+		expect(await resultOf('evt_cheap')).toBe('refused');
+		expect(alerted()).toBe(true);
+	});
+
+	it('removes the refunded share of the unused credits, after taking the usage so far', async () => {
+		await seller('u_ref');
+		stripeServes({});
+		const now = Date.now();
+		await insertPurchase(db, { id: 'cp_ref', userId: 'u_ref', credits: 5_000, amountCents: 750, purchasedAt: new Date(now - DAY * 1000), expiresAt: new Date(now + 300 * DAY * 1000), paymentIntentId: 'pi_ref' });
+		const period = { key: 'acct:1', startMs: now - DAY * 1000, endMs: now + 29 * DAY * 1000 };
+		await new CreditLedgerService(env()).recordUse({ userId: 'u_ref', period, pool: 5_000, useKey: 'k_ref', credits: 6_000, source: 'think', model: 'm', usage: null, now: new Date(now) });
+		await deliver('evt_r1', 'charge.refunded', { id: 'ch_ref', object: 'charge', payment_intent: 'pi_ref', amount: 750, amount_refunded: 375 });
+		const purchase = () => db.prepare("SELECT used, refunded_cents AS refunded, removed_credits AS removed FROM credit_purchases WHERE id = 'cp_ref'").first();
+		// 1,000 credits of overrun were used first; half of the 4,000 left is removed.
+		expect(await purchase()).toEqual({ used: 1_000, refunded: 375, removed: 2_000 });
+		await deliver('evt_r2', 'charge.refunded', { id: 'ch_ref', object: 'charge', payment_intent: 'pi_ref', amount: 750, amount_refunded: 750 });
+		expect(await purchase()).toEqual({ used: 1_000, refunded: 750, removed: 4_000 });
+		expect(subjects()).toEqual(['We refunded your extra credits', 'We refunded your extra credits']);
+		expect(await deliver('evt_r3', 'charge.refunded', { id: 'ch_store', object: 'charge', payment_intent: 'pi_store_sale', amount: 4_600, amount_refunded: 4_600 })).toBe(200);
+		expect(await resultOf('evt_r3')).toBeNull();
+	});
+});
+```
+
+- [ ] **Step 3: Write the failing jobs tests.** `worker/services/billing/jobs.sql.test.ts`:
+
+```ts
+/** The daily and hourly billing runs on real SQL, with Stripe stood in by fetch. */
+
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { CreditLedgerService } from '../../database/services/CreditLedgerService';
+import { runDailyBilling, runHourlyBilling } from './jobs';
+
+let db: D1Database;
+const DAY = 86_400_000;
+const sent: string[] = [];
+
+beforeAll(async () => {
+	db = await migratedD1();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	sent.length = 0;
+});
+
+function env(extra: Record<string, unknown> = {}): Env {
+	return envWith(db, {
+		BILLING: 'on',
+		STRIPE_SECRET_KEY: 'sk_test_fake',
+		STRIPE_PRICE_IDS: JSON.stringify({ pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' }),
+		CUSTOM_DOMAIN: 'estori.app',
+		ENVIRONMENT: 'prod',
+		EMAIL: {
+			send: async (message: { to: string }) => {
+				sent.push(message.to);
+				return { messageId: 'm1' };
+			},
+		},
+		VibecoderStore: { get: async () => null, put: async () => undefined },
+		...extra,
+	});
+}
+
+describe('the daily billing run', () => {
+	it('re-reads a subscription a webhook may have missed', async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		await insertUser(db, 'u_rep');
+		await insertBillingCustomer(db, 'u_rep', 'cus_rep');
+		await insertSubscription(db, { userId: 'u_rep', stripeSubscriptionId: 'sub_rep', status: 'past_due', currentPeriodStart: new Date(now - 3 * DAY), currentPeriodEnd: new Date(now + 27 * DAY) });
+		const paid = { id: 'sub_rep', customer: 'cus_rep', status: 'active', created: 1, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_rep' }, schedule: null, items: { data: [{ id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: (now - 3 * DAY) / 1000, current_period_end: (now + 27 * DAY) / 1000 }] } };
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(paid));
+		await runDailyBilling(env(), now);
+		expect(await db.prepare("SELECT status FROM subscriptions WHERE user_id = 'u_rep'").first()).toEqual({ status: 'active' });
+		expect(await db.prepare("SELECT result FROM billing_events WHERE stripe_event_id = 'repair:sub_rep:2026-10-19'").first()).toEqual({ result: 'applied' });
+	});
+
+	it('settles overruns, closes ended periods, expires purchases and forgets old usage', async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		await insertUser(db, 'u_day');
+		await insertPurchase(db, { id: 'cp_day', userId: 'u_day', credits: 5_000, purchasedAt: new Date(now - 366 * DAY), expiresAt: new Date(now - DAY) });
+		const ledger = new CreditLedgerService(env());
+		const ended = { key: 'acct:ended', startMs: now - 40 * DAY, endMs: now - 10 * DAY };
+		await ledger.recordUse({ userId: 'u_day', period: ended, pool: 5_000, useKey: 'k_old', credits: 6_000, source: 'think', model: 'm', usage: null, now: new Date(now - 100 * DAY) });
+		await runDailyBilling(env(), now);
+		expect(await db.prepare("SELECT settled, forgiven, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_day'").first()).toEqual({ settled: 1_000, forgiven: 0, closed: 1 });
+		expect(await db.prepare("SELECT used, expired_at IS NOT NULL AS expired FROM credit_purchases WHERE id = 'cp_day'").first()).toEqual({ used: 1_000, expired: 1 });
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_uses WHERE user_id = 'u_day'").first()).toEqual({ n: 0 });
+	});
+});
+
+describe('the hourly billing run', () => {
+	it('tells Basic accounts with a verified email that their credits renewed, once, on their day', async () => {
+		const now = Date.parse('2026-10-19T10:05:00Z');
+		const signedUp = new Date('2026-09-19T08:00:00Z');
+		await insertUser(db, 'u_today', { createdAt: signedUp, emailVerified: true });
+		await insertUser(db, 'u_unverified', { createdAt: signedUp, emailVerified: false });
+		await insertUser(db, 'u_other_day', { createdAt: new Date('2026-09-18T08:00:00Z'), emailVerified: true });
+		await insertUser(db, 'u_paying', { createdAt: signedUp, emailVerified: true });
+		await insertUser(db, 'u_new', { createdAt: new Date('2026-10-19T09:00:00Z'), emailVerified: true });
+		await insertSubscription(db, { userId: 'u_paying', stripeSubscriptionId: 'sub_paying', status: 'active', currentPeriodStart: new Date(now - DAY), currentPeriodEnd: new Date(now + 29 * DAY) });
+		await runHourlyBilling(env(), now);
+		await runHourlyBilling(env(), now + 3_600_000);
+		expect(sent).toHaveLength(1);
+		expect(await db.prepare("SELECT user_id FROM billing_notices WHERE kind = 'credits_renewed'").all()).toMatchObject({ results: [{ user_id: 'u_today' }] });
+	});
+
+	it("renews an account made on the 31st on a short month's last day, and only for listed accounts while billing is limited", async () => {
+		await insertUser(db, 'u_31', { createdAt: new Date('2026-08-31T08:00:00Z'), emailVerified: true });
+		await runHourlyBilling(env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else' }), Date.parse('2026-09-30T10:05:00Z'));
+		expect(sent).toHaveLength(0);
+		await runHourlyBilling(env(), Date.parse('2026-09-30T10:05:00Z'));
+		expect(sent).toHaveLength(1);
+	});
+});
+```
+
+`worker/services/billing/wiring.test.ts`:
+
+```ts
+import { describe, expect, it } from 'vitest';
+import { recordingD1 } from '../../database/test-support/recording-d1';
+import { CATALOG_HEALTH_CRON } from '../catalog/health';
+import { CATALOG_REFRESH_CRON, CATALOG_SWEEP_CRON } from '../catalog/scheduler';
+import { runBillingSchedule } from './wiring';
+
+const sources = import.meta.glob<string>(['/worker/index.ts', '/worker/api/controllers/payments/webhook.ts'], { query: '?raw', import: 'default', eager: true });
+
+describe('billing schedule wiring', () => {
+	it('runs the daily jobs on the daily schedule and the renewal emails hourly, and nothing on the others', async () => {
+		const { d1, statements } = recordingD1();
+		const env = { DB: d1, BILLING: 'on', ENVIRONMENT: 'dev' } as unknown as Env;
+		await runBillingSchedule(CATALOG_REFRESH_CRON, env);
+		expect(statements).toEqual([]);
+		await runBillingSchedule(CATALOG_HEALTH_CRON, env);
+		expect(statements.some((entry) => entry.sql.includes('"subscriptions"'))).toBe(true);
+		expect(statements.some((entry) => entry.sql.includes('"credit_periods"'))).toBe(true);
+		statements.length = 0;
+		await runBillingSchedule(CATALOG_SWEEP_CRON, env);
+		expect(statements.some((entry) => entry.sql.includes('users') && entry.sql.includes('billing_notices'))).toBe(true);
+	});
+
+	it('is called from the scheduled handler, and the webhook offers billing each platform event first', () => {
+		expect(sources['/worker/index.ts']).toContain('ctx.waitUntil(runBillingSchedule(controller.cron, env));');
+		const webhook = sources['/worker/api/controllers/payments/webhook.ts'] ?? '';
+		const dispatch = webhook.slice(webhook.indexOf('async function dispatchStripeEvent('));
+		expect(dispatch.indexOf('handleBillingEvent(')).toBeGreaterThan(dispatch.indexOf('CONNECT_EVENT_TYPES.includes(event.type)'));
+		expect(dispatch.indexOf('handleBillingEvent(')).toBeLessThan(dispatch.indexOf('fulfillCheckoutSession('));
+	});
+});
+```
+
+- [ ] **Step 4: Run them to verify they fail**
+
+Run: `rtk proxy bun run test -- worker/services/billing/subscription-row.test.ts worker/api/controllers/payments/webhook-billing.sql.test.ts`
+Expected: FAIL, failed imports, and every billing delivery leaves no row.
+
+Run: `rtk proxy bun run test -- worker/services/billing/jobs.sql.test.ts worker/services/billing/wiring.test.ts`
+Expected: FAIL, failed imports.
+
+- [ ] **Step 5: Implement `subscription-row.ts`.**
+
+**`subscriptionRowFrom`:**
+- The plan is `planOfPrice(items.data[0].price, ids)`; null when there's no item or no plan.
+- The period is the first item's `current_period_start` and `current_period_end`, in milliseconds.
+- `cancelAtPeriodEnd` is `cancel_at_period_end || cancel_at !== null`.
+- The pending plan comes from an expanded schedule whose status is `active` or `not_started`:
+  - its next phase is the first with `start_date > current_phase.start_date`;
+  - that phase's first item's price (a string, or a price object's id) maps through `planOfPrice`;
+  - a plan other than the current one sets `pendingPlan`, `pendingPlanAt = start_date * 1000` and `stripeScheduleId`.
+  - Otherwise all three are null. A schedule that is only an id reads as no pending change; the webhook's re-read always expands it.
+- `stripeCreatedAt` is `created * 1000`, and `updatedAt` is `nowMs`.
+
+**`noticesFor(previous, next, { eventType, invoice })`** answers, in this order:
+1. **`plan_started:{subId}`** when `next` is `active` or `trialing`, and `previous` is null, another subscription, or not `active`, `trialing` or `past_due`. Email `{ kind: 'plan_started', plan, renewsAt: periodEnd }`.
+2. **`receipt:{invoiceId}`** for `invoice.paid` with `amount_paid > 0`. Email `{ kind: 'receipt', plan, amountCents, currency, periodStart, periodEnd, invoiceNumber, invoiceUrl }`, the period from `next`.
+3. **`credits_renewed:{subscriptionPeriod(next).key}`** for `invoice.paid` with `billing_reason === 'subscription_cycle'`. Email `{ kind: 'credits_renewed', credits: PLAN_LIMITS[next.plan].aiCredits, renewsAt: periodEnd }`.
+4. **`plan_upgraded:{subId}:{periodStartSeconds}`** when the same subscription goes from Pro to Premium.
+5. **`downgrade_scheduled:{scheduleId}`** when `next.pendingPlan` is set and differs from `previous?.pendingPlan`. Email `{ kind: 'downgrade_scheduled', plan: pendingPlan, at: pendingPlanAt }`.
+6. **`payment_failed:{invoiceId}`** for `invoice.payment_failed` when `next.status` is `past_due`. Email `{ kind: 'payment_failed', plan, graceEndsAt: graceEndsAt(next) }`.
+7. **`plan_ending:{subId}:{periodEndSeconds}`** when `next.cancelAtPeriodEnd` and not `previous?.cancelAtPeriodEnd`, with `next` still live. Email `{ kind: 'plan_ending', plan, endsAt: periodEnd }`.
+8. **`plan_ended:{subId}`** when `next.status` is `canceled`, `unpaid` or `incomplete_expired`, and `previous` was the same subscription in a live status. The reason is `'payment-failed'` when `previous.status` was `past_due`, else `'cancelled'`.
+
+Steps 2 to 8 apply only when `previous` is the same subscription or null.
+
+- [ ] **Step 6: Implement `events.ts`.**
+
+```ts
+/**
+ * Billing's Stripe events. Each is recorded once in billing_events, in the same batch as what it changes. Rows are
+ * rebuilt from Stripe's API at that moment, so retries and out-of-order deliveries converge on Stripe's latest state.
+ * Emails go out only after the batch commits.
+ */
+
+const isLive = (status: string): boolean => (LIVE_SUBSCRIPTION_STATUSES as readonly string[]).includes(status);
+
+/** The account named by Stripe's metadata, when the stored customer and the checkout agree; otherwise null. */
+async function accountOf(deps: BillingEventDeps, metadataUserId: string | null, customerId: string | null, expectedUserId: string | null): Promise<string | null> {
+	if (!metadataUserId) return null;
+	if (expectedUserId !== null && expectedUserId !== metadataUserId) return null;
+	const customerUserId = customerId ? await deps.store.userOfCustomer(customerId) : null;
+	return customerUserId === metadataUserId ? metadataUserId : null;
+}
+
+export async function applySubscription(deps: BillingEventDeps, input: SubscriptionTarget): Promise<BillingEventOutcome> {
+	if (await deps.store.eventSeen(input.eventId)) return 'duplicate';
+	const subscription = await deps.stripe.retrieveSubscription(input.subscriptionId);
+	const now = new Date(deps.nowMs());
+	const record = (userId: string | null, result: BillingEventResult, extra: Pick<BillingEventInput, 'row' | 'notices'> = {}) =>
+		deps.store.recordEvent({ event: { id: input.eventId, type: input.eventType, objectId: subscription.id, userId, result }, now, ...extra });
+
+	const userId = await accountOf(deps, subscription.metadata?.estori_user_id ?? null, subscription.customer, input.expectedUserId);
+	if (!userId) {
+		await deps.alert({ kind: 'billing-mismatch', subject: subscription.id, message: "The subscription's account doesn't match its Stripe customer, so nothing changed." });
+		await record(null, 'refused');
+		return 'refused';
+	}
+	const next = subscriptionRowFrom(subscription, userId, deps.priceIds, now.getTime());
+	if (!next) {
+		await deps.alert({ kind: 'billing-unknown-price', subject: subscription.id, message: 'The subscription has a price that is neither Pro nor Premium, so nothing changed.' });
+		await record(userId, 'refused');
+		return 'refused';
+	}
+	const previous = await deps.store.subscriptionOf(userId);
+	const replacing = previous !== null && previous.stripeSubscriptionId !== next.stripeSubscriptionId && isLive(previous.status);
+	if (previous && replacing) {
+		if (!isLive(next.status)) {
+			await record(userId, 'ignored');
+			return 'ignored';
 		}
-	});
-});
+		// Two live subscriptions: the one Stripe created first is kept.
+		const keepPrevious = previous.stripeCreatedAt.getTime() <= next.stripeCreatedAt.getTime();
+		const [kept, extra] = keepPrevious ? [previous, next] : [next, previous];
+		await deps.alert({ kind: 'billing-second-subscription', subject: extra.stripeSubscriptionId, message: `The account pays through two subscriptions. Estori keeps ${kept.stripeSubscriptionId}; cancel and refund ${extra.stripeSubscriptionId} in Stripe.` });
+		if (keepPrevious) {
+			await record(userId, 'refused');
+			return 'refused';
+		}
+	}
+	const planned = replacing ? [] : noticesFor(previous, next, { eventType: input.eventType, invoice: input.invoice });
+	const alreadySent = await deps.store.sentNoticeKeys(userId, planned.map((notice) => notice.key));
+	const notices = planned.filter((notice) => !alreadySent.has(notice.key));
+	try {
+		await record(userId, 'applied', { row: next, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })) });
+	} catch (error) {
+		// A concurrent delivery of the same event won; anything else is retried by Stripe.
+		if (await deps.store.eventSeen(input.eventId)) return 'duplicate';
+		throw error;
+	}
+	await deps.notify(userId, notices);
+	return 'applied';
+}
 ```
 
-In `worker/agents/think/model-wiring.test.ts`, extend the credit-cost test:
+**`applyCreditPurchase(deps, { eventId, eventType, sessionId })`:**
+1. `eventSeen` answers `'duplicate'`.
+2. Re-read the session with `retrieveCheckoutSession`. Not `paid`: record `'ignored'`.
+3. The account is `accountOf(metadata.estori_user_id, session.customer, client_reference_id)`.
+4. `credits = Number(metadata.credits)` must pass `isExtraCreditsAmount`, and `amount_total` must equal `extraCreditsPriceCents(credits)`. Promotion codes are off for credits, so the amounts match exactly.
+5. Any check failing: alert `billing-mismatch` and record `'refused'`.
+6. `purchaseBySession(sessionId)` already there: record `'ignored'` and answer `'duplicate'`.
+7. Otherwise record `'applied'` with:
+   - `purchase: { id: generateId(), userId, credits, amountCents, stripeCheckoutSessionId, stripePaymentIntentId: session.payment_intent, purchasedAt: now, expiresAt: new Date(addMonths(now, EXTRA_CREDITS.monthsValid)) }`;
+   - the notice `credits_receipt:{sessionId}`, email `{ kind: 'credits_receipt', credits, amountCents, expiresAt, receiptNumber: payment_intent ?? sessionId }`.
+8. A unique violation is retried by Stripe and then lands on step 1 or 6. Notify after the batch.
+
+**`applyCreditRefund(deps, { eventId, eventType, charge })`:**
+1. `purchaseByPaymentIntent(charge.payment_intent)`; none answers null, so other refunds aren't billing's.
+2. `eventSeen` answers `'duplicate'`.
+3. `ledger.settle(purchase.userId, nowMs)`, so usage up to now is taken first. Then read the purchase again.
+4. Work out the removal:
+   - `unusedBase = credits - used`;
+   - `removed = Math.max(purchase.removedCredits, Math.floor((unusedBase * charge.amount_refunded) / purchase.amountCents))`, capped at `unusedBase`;
+   - `removed` equal to `removedCredits` with the same refunded cents: record `'ignored'`.
+5. Record `'applied'` with:
+   - `refund: { purchaseId, refundedCents: charge.amount_refunded, removedCredits: removed }`;
+   - the notice `credits_refunded:{charge.id}:{amount_refunded}`, email `{ kind: 'credits_refunded', credits: removed - before, amountCents: amount_refunded - refundedBefore }`.
+
+**`handleBillingEvent(deps, event)`:**
+
+| Event | Handled as |
+| --- | --- |
+| `checkout.session.completed` with `metadata.kind === CHECKOUT_KIND_CREDITS` | `applyCreditPurchase` |
+| `checkout.session.completed` with `mode === 'subscription'` and a `subscription` id | `applySubscription`, `expectedUserId: client_reference_id` |
+| `customer.subscription.created`, `.updated`, `.deleted` | `applySubscription` for `object.id` |
+| `invoice.paid`, `invoice.payment_failed` with `parent.subscription_details.subscription` | `applySubscription` with the invoice |
+| `subscription_schedule.created`, `.updated`, `.released`, `.canceled` | `applySubscription` for `subscription ?? released_subscription` |
+| `charge.refunded` | `applyCreditRefund` |
+| anything else | null |
+
+Type guards (`isStripeInvoice`, `isStripeSchedule`, `isStripeCharge`, `hasStringId`) live in `events.ts`. They check only the fields read.
+
+- [ ] **Step 7: The jobs, the wiring and the webhook.**
+
+**`periods.ts` gains:**
+- `addMonths(ms, months)`: the same UTC day and time `months` later, the day clamped to the month's last day.
+- `renewalDaysOf(nowMs)`: `[today's day]`, or every day from today's to 31 when today is the month's last day.
+
+**`flag.ts` gains `billingAudience(env)`:** `'everyone'` when `BILLING` is on, else the parsed `BILLING_USER_IDS`. `isBillingOn` uses it.
+
+**`BillingService.accountsRenewing({ dayStartMs, days, userIds, limit })`** selects user ids:
+
+```sql
+SELECT u.id FROM users u
+WHERE u.email_verified = 1 AND u.deleted_at IS NULL
+  AND (CASE WHEN typeof(u.created_at) = 'integer' THEN CAST(strftime('%d', u.created_at, 'unixepoch') AS INTEGER) ELSE 1 END) IN (:days)
+  AND (typeof(u.created_at) <> 'integer' OR u.created_at < :dayStartSeconds)
+  AND NOT EXISTS (SELECT 1 FROM subscriptions s WHERE s.user_id = u.id AND s.status IN ('active', 'trialing', 'past_due'))
+  AND NOT EXISTS (SELECT 1 FROM billing_notices n WHERE n.user_id = u.id AND n.notice_key = :key)
+  [AND u.id IN (:userIds)]
+LIMIT :limit
+```
+
+- `:key` is `credits_renewed:acct:{dayStartSeconds}`.
+- Old rows whose `created_at` holds the text default renew on the 1st, as `anniversaryPeriod` treats them.
+- Write it with drizzle's `sql` template and `inArray`.
+
+**`CreditLedgerService.purchaseBySession(sessionId)`:** a plain select.
+
+**`jobs.ts`:**
 
 ```ts
-		expect(beforeTurn).toContain('loadAccount(');
-		expect(beforeTurn).toContain('creditBucketFor(');
-		expect(beforeStep).toContain('recordCredits(this.env, this.turnUsage.bucket, this.turnUsage.creditCost)');
-		expect(beforeStep).toContain('noticeCreditUse(');
-		expect(beforeStep).not.toContain('enforceLLMCallsRateLimit');
+const SETTLE_PER_RUN = 500;
+const RENEWALS_PER_RUN = 100;
+const KEEP_USES_MS = 90 * DAY_MS;
+
+/** Daily: re-read suspicious subscriptions, settle and close credit periods, expire purchases, forget old usage. */
+export async function runDailyBilling(env: Env, nowMs: number): Promise<void> {
+	const deps = billingEventDepsFromEnv(env);
+	const day = new Date(nowMs).toISOString().slice(0, 10);
+	for (const row of await new BillingService(env).subscriptionsToRepair(nowMs)) {
+		try {
+			await applySubscription(deps, { eventId: `repair:${row.stripeSubscriptionId}:${day}`, eventType: 'repair', subscriptionId: row.stripeSubscriptionId, expectedUserId: row.userId, invoice: null });
+		} catch (error) {
+			logger.error('Could not repair a subscription', { subscriptionId: row.stripeSubscriptionId, error });
+		}
+	}
+	const ledger = new CreditLedgerService(env);
+	for (const userId of await ledger.usersToSettle(nowMs, SETTLE_PER_RUN)) {
+		try {
+			// A purchase pays for usage up to its expiry before it goes; a raced settle waits for tomorrow's run.
+			if ((await ledger.settle(userId, nowMs)) !== 'raced') await ledger.expirePurchases(userId, nowMs);
+		} catch (error) {
+			logger.error('Could not settle credits', { userId, error });
+		}
+	}
+	await ledger.pruneUses(nowMs - KEEP_USES_MS);
+}
 ```
 
-Add `worker/api/controllers/agent/plan-checks-guard.test.ts`:
+**`runHourlyBilling(env, nowMs)`** sends the renewal emails for accounts without a subscription:
+1. Answer at once when the audience is an empty list.
+2. `dayStartMs` is today's UTC midnight. Read `accountsRenewing` with `renewalDaysOf(nowMs)`, the audience, and `RENEWALS_PER_RUN`.
+3. For each account:
+   - `loadAccount(env, userId, nowMs)`;
+   - skip it when `source === 'subscription'` or `period.startMs !== dayStartMs`;
+   - otherwise `claimAndSendNotice(claimingMailFromEnv(env), userId, { key: `credits_renewed:${period.key}`, email: { kind: 'credits_renewed', credits: limits.aiCredits, renewsAt: period.endMs } })`.
+   - Each account is caught and logged on its own.
+
+**`wiring.ts`:**
+- **`billingEventDepsFromEnv(env)`:**
+  - `stripe`: `stripeFromEnv(env)`, or one whose calls throw "Stripe is not configured";
+  - `store`: `new BillingService(env)`, and `ledger`: `new CreditLedgerService(env)`;
+  - `priceIds`: `stripePriceIds(env.STRIPE_PRICE_IDS)`;
+  - `notify`: `sendBillingEmails(billingMailFromEnv(env), …)`;
+  - `alert`: `platformAlertsFromEnv(env)`;
+  - `nowMs`: `Date.now`.
+- **`runBillingSchedule(cron, env)`:** `runDailyBilling` on `CATALOG_HEALTH_CRON`, `runHourlyBilling` on `CATALOG_SWEEP_CRON`, nothing otherwise. It catches and logs, like `runShopperEmailSchedule`.
+
+**Platform alerts:** add `billing-mismatch` ("A billing event didn't match its account"), `billing-second-subscription` ("An account pays through two subscriptions") and `billing-unknown-price` ("A subscription has an unknown price") to `PLATFORM_ALERT_KINDS` and `ALERT_LABELS`. Update any test that lists the kinds.
+
+**`webhook.ts`:** in `dispatchStripeEvent`, right after the Connect filter:
+
+```ts
+    const billing = await handleBillingEvent(billingEventDepsFromEnv(env), event);
+    if (billing !== null) {
+        logger.info('Billing event handled', { id: event.id, type: event.type, result: billing });
+        return;
+    }
+```
+
+Update the header comment to say it also records plans and extra credits.
+
+**`worker/index.ts`:** add `ctx.waitUntil(runBillingSchedule(controller.cron, env));` after the shopper email line.
+
+- [ ] **Step 8: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- worker/services/billing/subscription-row.test.ts worker/api/controllers/payments/webhook-billing.sql.test.ts worker/api/controllers/payments/webhook-store.test.ts worker/api/controllers/payments/webhook.test.ts`
+Expected: PASS.
+
+Run: `rtk proxy bun run test -- worker/services/billing/jobs.sql.test.ts worker/services/billing/wiring.test.ts worker/services/alerts/platform-alerts.test.ts worker/services/billing/periods.test.ts`
+Expected: PASS.
+
+Run: `bun run typecheck`
+Expected: no new errors.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add worker/services/billing worker/api/controllers/payments/webhook.ts worker/api/controllers/payments/webhook-billing.sql.test.ts worker/index.ts worker/services/alerts/platform-alerts.ts worker/services/alerts/platform-alerts.test.ts worker/database/services/BillingService.ts worker/database/services/CreditLedgerService.ts
+git commit -m "feat(billing): record plans, extra credits and refunds from stripe's webhooks, and run the daily repair, settling and renewal emails
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 10: Charging credits, the check before a turn, and the Upgrade dialog
+
+**Files:**
+- Create:
+  - worker: `worker/services/billing/credit-notices.ts`, `worker/services/billing/metering.ts`, `worker/services/billing/usage-summary.ts`;
+  - frontend: `src/lib/plan-limit-events.ts`, `src/components/billing/upgrade-action.ts`, `src/components/billing/UpgradeDialog.tsx`.
+- Modify:
+  - Think: `worker/agents/think/ThinkAgent.ts`, `worker/agents/think/model-wiring.test.ts`;
+  - prompts: `worker/agents/core/websocket.ts`, `worker/api/websocketTypes.ts`, `worker/api/controllers/agent/controller.ts`;
+  - older calls: `worker/agents/inferutils/core.ts`;
+  - usage: `worker/api/controllers/limits/controller.ts`;
+  - frontend: `src/hooks/use-limits.ts`, `src/components/usage-limits-badge.tsx`, `src/utils/usage-limit-checker.tsx`, `src/lib/api-client.ts`, `src/routes/chat/utils/handle-websocket-message.ts`, `src/App.tsx`.
+- Test:
+  - `worker/services/billing/credit-notices.test.ts`;
+  - `worker/services/billing/metering.sql.test.ts`;
+  - `worker/agents/core/websocket.test.ts`;
+  - `worker/agents/think/model-wiring.test.ts`;
+  - `src/components/billing/upgrade-action.test.ts`;
+  - `src/components/billing/billing-ui-guard.test.ts`.
+
+**Interfaces:**
+- **Consumes:**
+  - from Task 1: `assertWithinLimit`, `isPlanLimitRefusal`, `PlanLimitRefusal`, `PlanLimitKey`, `planName`;
+  - from Task 2: `stepCredits`, `stepUsageFrom`, `legacyCallCredits`, `TokenPrices`, `ThinkModel.prices`, `creditsPerStep`;
+  - from Task 3: `PLAN_LIMIT_ERROR_CODE`, `BILLING_PATH`;
+  - from Task 4: `CreditLedgerService.recordUse`, `readBalance`, `alertsMayBeDue`, `creditAlertDue`, `creditAlertKey`, `PeriodState`, `LedgerPeriod`;
+  - from Task 5: `isBillingOn`, `loadAccount`, `loadCredits`;
+  - from Task 7: `claimAndSendNotice`, `claimingMailFromEnv`, `ClaimingMailDeps`;
+  - from Task 8: `planLimitResponse`, `createPlanLimitResponse`, `apiClient.startPlanCheckout`.
+- **Produces:**
+  - `credit-notices.ts`:
+    - `CreditUse { userId: string; plan: PlanId; period: LedgerPeriod; pool: number; state: PeriodState }`;
+    - `CreditNoticeDeps { readBalance(userId: string, period: LedgerPeriod, pool: number): Promise<CreditBalance>; mail: ClaimingMailDeps }`;
+    - `noticeCreditUse(deps, use): Promise<CreditAlert | null>` (the alert sent, if any; never throws);
+    - `creditNoticeDepsFromEnv(env)`.
+  - `metering.ts`:
+    - `CreditCheck = { billing: false } | { billing: true; refusal: PlanLimitRefusal | null }`;
+    - `creditRefusal(account: PlanAccount, balance: CreditBalance): PlanLimitRefusal | null`;
+    - `checkCreditsBeforeTurn(env: Env, userId: string, nowMs?: number): Promise<CreditCheck>`;
+    - `StepCharge { userId; period: LedgerPeriod; pool: number; plan: PlanId; useKey: string; credits: number; source: 'think' | 'infer'; model: string; usage: StepUsage | null }`;
+    - `MeteringDeps { ledger: Pick<CreditLedgerService, 'recordUse'>; notices: CreditNoticeDeps; now(): Date }`;
+    - `chargeStep(deps, charge): Promise<PeriodState | null>` (up to 3 tries; never throws);
+    - `meteringDepsFromEnv(env)`;
+    - `chargeLegacyCall(env, input: { userId: string; model: string; creditCost: number }): Promise<boolean>` (true when billing took the charge).
+  - `usage-summary.ts`: `billingUsage(account: BillingAccount, balance: CreditBalance)`, the limit, usage and check fields of `GET /api/limits/usage`.
+  - `ThinkAgent.turnCreditsUsed(): number`.
+  - `ErrorMessage` (WebSocket) gains `planLimit?: PlanLimitRefusal`.
+  - Frontend:
+    - `announcePlanLimit(refusal)`, `onPlanLimit(listener): () => void`;
+    - `UpgradeAction`, `upgradeActionFor(refusal)`, `UPGRADE_TITLES: Record<PlanLimitKey, string>`;
+    - `UpgradeDialog`, `UpgradeDialogHost`;
+    - `ApiError.planLimit: PlanLimitRefusal | null`;
+    - `UsageSummary.billing?: { plan: PlanId; renewsAt: number } | null`.
+
+- [ ] **Step 1: Write the failing notice test** `worker/services/billing/credit-notices.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
+import { creditBalance, type PeriodState } from './credit-ledger';
+import { noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
+import type { OutgoingEmail } from '../email/types';
 
-const sources = import.meta.glob<string>(['/worker/api/controllers/agent/controller.ts'], { query: '?raw', import: 'default', eager: true });
+const PERIOD = { key: 'acct:1790812800', startMs: 1_790_812_800_000, endMs: 1_793_404_800_000 };
 
-describe('the plan checks when a store starts', () => {
-	it('checks credits before reserving a new store, so a refused start costs nothing', () => {
-		const controller = sources['/worker/api/controllers/agent/controller.ts'] ?? '';
-		const credits = controller.indexOf('creditRefusal(');
-		expect(credits).toBeGreaterThan(-1);
-		expect(credits).toBeLessThan(controller.indexOf('enforceAppCreationRateLimit('));
-		expect(controller).toContain('createPlanLimitResponse(');
-		expect(controller).toContain("account.billing && behaviorType === 'think' ? UNLIMITED_USAGE");
+function state(used: number): PeriodState {
+	return { key: PERIOD.key, startMs: PERIOD.startMs, endMs: PERIOD.endMs, pool: 5_000, granted: 0, used, settled: 0, closed: false };
+}
+
+function deps(purchased = 0) {
+	const sent: OutgoingEmail[] = [];
+	const claimed = new Set<string>();
+	let reads = 0;
+	let current = state(0);
+	const fake: CreditNoticeDeps = {
+		readBalance: async () => {
+			reads += 1;
+			return creditBalance({ current, open: [], purchases: purchased > 0 ? [{ id: 'cp', credits: purchased, used: 0, removed: 0, purchasedAtMs: 0, expiresAtMs: Number.MAX_SAFE_INTEGER }] : [] });
+		},
+		mail: {
+			sender: { send: async (email) => void sent.push(email) },
+			userEmail: async () => 'ana@example.test',
+			baseUrl: 'https://estori.app',
+			claim: async (_userId, key) => {
+				if (claimed.has(key)) return false;
+				claimed.add(key);
+				return true;
+			},
+		},
+	};
+	return { fake, sent, reads: () => reads, at: (used: number) => (current = state(used)) };
+}
+
+describe('noticeCreditUse', () => {
+	it('warns at 20% and 5% of the credits left, each once a period, and skips the read while the pool is above 20%', async () => {
+		const { fake, sent, reads, at } = deps();
+		const use = (used: number) => noticeCreditUse(fake, { userId: 'u1', plan: 'basic', period: PERIOD, pool: 5_000, state: at(used) });
+		expect(await use(3_000)).toBeNull();
+		expect(reads()).toBe(0);
+		expect(await use(4_000)).toBe('credits_20');
+		expect(await use(4_100)).toBeNull();
+		expect(await use(4_800)).toBe('credits_5');
+		expect(await use(5_200)).toBeNull();
+		expect(sent.map((email) => email.subject)).toEqual(['You have 20% of your AI credits left', 'You have 5% of your AI credits left']);
+	});
+
+	it('counts purchased credits in what is left', async () => {
+		const { fake, sent, at } = deps(5_000);
+		expect(await noticeCreditUse(fake, { userId: 'u1', plan: 'premium', period: PERIOD, pool: 5_000, state: at(4_500) })).toBeNull();
+		expect(sent).toEqual([]);
 	});
 });
 ```
 
-- [ ] **Step 2: Write the failing frontend tests.**
+- [ ] **Step 2: Write the failing metering test** `worker/services/billing/metering.sql.test.ts`:
 
-`src/components/billing/upgrade-copy.test.ts`:
+```ts
+/** The credit check before a turn, and charging steps, on real SQL. */
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { envWith, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { CreditLedgerService } from '../../database/services/CreditLedgerService';
+import { loadAccount } from './account';
+import { chargeLegacyCall, chargeStep, checkCreditsBeforeTurn, type MeteringDeps } from './metering';
+
+let db: D1Database;
+const NOW = Date.parse('2026-10-19T15:00:00Z');
+const DAY = 86_400_000;
+
+beforeAll(async () => {
+	db = await migratedD1();
+});
+
+const on = () => envWith(db, { BILLING: 'on' });
+
+async function use(userId: string, credits: number, key = `k_${userId}_${credits}`): Promise<void> {
+	const account = await loadAccount(on(), userId, NOW);
+	await new CreditLedgerService(on()).recordUse({ userId, period: account.period, pool: account.limits.aiCredits, useKey: key, credits, source: 'think', model: 'm', usage: null, now: new Date(NOW) });
+}
+
+describe('checkCreditsBeforeTurn', () => {
+	it('checks nothing new while billing is off', async () => {
+		await insertUser(db, 'u_off');
+		expect(await checkCreditsBeforeTurn(envWith(db), 'u_off', NOW)).toEqual({ billing: false });
+	});
+
+	it("starts a turn with any credit left, and refuses with the plan's message once none is", async () => {
+		await insertUser(db, 'u_basic', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		await use('u_basic', 4_999);
+		expect(await checkCreditsBeforeTurn(on(), 'u_basic', NOW)).toEqual({ billing: true, refusal: null });
+		await use('u_basic', 1);
+		expect(await checkCreditsBeforeTurn(on(), 'u_basic', NOW)).toEqual({
+			billing: true,
+			refusal: { code: 'plan_limit', limit: 'aiCredits', plan: 'basic', upgradeTo: 'pro', message: "You've used this month's free AI credits. They refill on November 12, or get Pro for 20,000 a month." },
+		});
+	});
+
+	it('counts extra credits as left, and points Premium at buying more once they are gone', async () => {
+		await insertUser(db, 'u_prem');
+		await insertSubscription(db, { userId: 'u_prem', stripeSubscriptionId: 'sub_prem', status: 'active', plan: 'premium', currentPeriodStart: new Date(NOW - DAY), currentPeriodEnd: new Date(NOW + 29 * DAY) });
+		await insertPurchase(db, { id: 'cp_prem', userId: 'u_prem', credits: 5_000, purchasedAt: new Date(NOW - 2 * DAY), expiresAt: new Date(NOW + 300 * DAY) });
+		await use('u_prem', 100_000);
+		expect(await checkCreditsBeforeTurn(on(), 'u_prem', NOW)).toEqual({ billing: true, refusal: null });
+		await use('u_prem', 5_000);
+		expect(await checkCreditsBeforeTurn(on(), 'u_prem', NOW)).toMatchObject({ refusal: { plan: 'premium', upgradeTo: 'credits' } });
+	});
+});
+
+describe('chargeStep', () => {
+	it('records a step after a passing failure, once, with the same key', async () => {
+		await insertUser(db, 'u_retry', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		const account = await loadAccount(on(), 'u_retry', NOW);
+		const ledger = new CreditLedgerService(on());
+		let failures = 1;
+		const deps: MeteringDeps = {
+			ledger: {
+				recordUse: async (input) => {
+					if (failures-- > 0) throw new Error('D1_ERROR: network connection lost');
+					return ledger.recordUse(input);
+				},
+			},
+			notices: { readBalance: (userId, period, pool) => ledger.readBalance(userId, period, pool), mail: { sender: null, userEmail: async () => null, baseUrl: null, claim: async () => true } },
+			now: () => new Date(NOW),
+		};
+		const charge = { userId: 'u_retry', period: account.period, pool: 5_000, plan: 'basic' as const, useKey: 'agent:turn:1', credits: 165, source: 'think' as const, model: 'anthropic/claude-sonnet-5-5', usage: { inputTokens: 40_000, outputTokens: 3_000 } };
+		expect((await chargeStep(deps, charge))?.used).toBe(165);
+		expect((await chargeStep(deps, charge))?.used).toBe(165);
+		expect(await db.prepare("SELECT credits, input_tokens, output_tokens FROM credit_uses WHERE use_key = 'agent:turn:1'").first()).toEqual({ credits: 165, input_tokens: 40_000, output_tokens: 3_000 });
+	});
+});
+
+describe('chargeLegacyCall', () => {
+	it("charges an older AI call its old flat cost in the new unit, and leaves it to today's counter while billing is off", async () => {
+		await insertUser(db, 'u_infer', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		expect(await chargeLegacyCall(envWith(db), { userId: 'u_infer', model: 'anthropic/claude-sonnet-5-5', creditCost: 8 })).toBe(false);
+		expect(await chargeLegacyCall(on(), { userId: 'u_infer', model: 'anthropic/claude-sonnet-5-5', creditCost: 8 })).toBe(true);
+		expect(await db.prepare("SELECT credits, source FROM credit_uses WHERE user_id = 'u_infer'").first()).toEqual({ credits: 136, source: 'infer' });
+	});
+});
+```
+
+In the Premium case the pool is 100,000 and 5,000 extra credits are left after it, so the turn starts; once those are used too, nothing is left.
+
+- [ ] **Step 3: Write the failing WebSocket and wiring tests.** Add to `worker/agents/core/websocket.test.ts`:
+
+```ts
+import type { checkCreditsBeforeTurn } from '../../services/billing/metering';
+
+function creditCheck(order: string[], result: Awaited<ReturnType<typeof checkCreditsBeforeTurn>>): typeof checkCreditsBeforeTurn {
+	return async () => {
+		order.push('credit-check');
+		return result;
+	};
+}
+
+const REFUSAL = { code: 'plan_limit' as const, limit: 'aiCredits' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: "You've used this month's free AI credits. They refill on November 12, or get Pro for 20,000 a month." };
+
+describe('the credit check before a turn', () => {
+	it('refuses with the plan limit and skips the old usage check while billing is on', async () => {
+		const order: string[] = [];
+		const { agent, connection, sent, calls } = fakes({ setModel: async () => undefined });
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: REFUSAL }));
+		expect(order).toEqual(['credit-check']);
+		expect(calls).toEqual([]);
+		expect(sent).toEqual([{ type: 'error', error: REFUSAL.message, code: 'PLAN_LIMIT', planLimit: REFUSAL, showAsPopup: true }]);
+	});
+
+	it('lets the turn start with credit left, and keeps the old check while billing is off', async () => {
+		const order: string[] = [];
+		const { agent, connection } = fakes({ setModel: async () => undefined }, order);
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: null }));
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: false }));
+		expect(order).toEqual(['credit-check', `input:${RESUME_BUILD_MESSAGE}`, 'credit-check', 'usage-check', `input:${RESUME_BUILD_MESSAGE}`]);
+	});
+});
+```
+
+Replace the metering test in `worker/agents/think/model-wiring.test.ts`:
+
+```ts
+	it("charges each step from its real usage at the turn's model prices, or by the old daily counter while billing is off", () => {
+		const agent = source('/worker/agents/think/ThinkAgent.ts');
+		const beforeTurn = agent.slice(agent.indexOf('override async beforeTurn('), agent.indexOf('override getSkills('));
+		const beforeStep = agent.slice(agent.indexOf('override async beforeStep('), agent.indexOf('override async onStepFinish('));
+		const onStepFinish = agent.slice(agent.indexOf('override async onStepFinish('), agent.indexOf('turnCreditsUsed(): number'));
+		expect(beforeTurn).toContain('resolveThinkModel(');
+		expect(beforeTurn).toContain('ctx.model');
+		expect(beforeTurn).toContain('isBillingOn(this.env, config.userId)');
+		expect(beforeTurn).toContain('prices: model.prices');
+		expect(beforeTurn).toContain('creditCost');
+		expect(beforeStep).toContain('this.turnUsage.creditCost');
+		expect(beforeStep).not.toContain('resolveThinkModel');
+		expect(onStepFinish).toContain('stepCredits(usage.prices, stepUsage, usage.typical)');
+		expect(onStepFinish).toContain('useKey: `${this.name}:${usage.turnId}:${ctx.stepNumber}`');
+		expect(onStepFinish).not.toContain('resolveThinkModel');
+	});
+```
+
+Add to `worker/agents/think/model-wiring.test.ts`'s `describe`:
+
+```ts
+	it('checks credits before a new store starts, and charges older AI calls through billing when it is on', () => {
+		const controller = source('/worker/api/controllers/agent/controller.ts');
+		const credit = controller.indexOf('checkCreditsBeforeTurn(env, user.id)');
+		expect(credit).toBeGreaterThan(-1);
+		expect(credit).toBeLessThan(controller.indexOf('enforceAppCreationRateLimit('));
+		expect(controller).toContain('createPlanLimitResponse(credits.refusal)');
+		const infer = source('/worker/agents/inferutils/core.ts');
+		expect(infer.indexOf('chargeLegacyCall(env,')).toBeLessThan(infer.indexOf('RateLimitService.enforceLLMCallsRateLimit('));
+	});
+```
+
+Add `'/worker/agents/inferutils/core.ts'` to its glob.
+
+- [ ] **Step 4: Write the failing frontend tests.** `src/components/billing/upgrade-action.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { billingBadgeText, upgradeCopy } from './upgrade-copy';
+import type { PlanLimitRefusal } from '@/api-types';
+import { announcePlanLimit, onPlanLimit } from '@/lib/plan-limit-events';
+import { UPGRADE_TITLES, upgradeActionFor } from './upgrade-action';
 
-const base = { code: 'plan_limit' as const, message: 'x' };
+function refusal(overrides: Partial<PlanLimitRefusal> = {}): PlanLimitRefusal {
+	return { code: 'plan_limit', limit: 'liveStores', plan: 'basic', upgradeTo: 'pro', message: 'Basic includes 1 live store. Get Pro for up to 3, or Premium for up to 10.', ...overrides };
+}
 
-describe('the Upgrade dialog copy', () => {
-	it('offers Basic Premium, Premium a bigger pool, and the largest plans a talk with sales', () => {
-		expect(upgradeCopy({ ...base, limit: 'liveStores', plan: 'basic', upgradeTo: 'premium' })).toEqual({ title: 'Get Premium', action: { label: 'Get Premium', to: '/settings/billing' } });
-		expect(upgradeCopy({ ...base, limit: 'aiCredits', plan: 'premium', upgradeTo: 'premium' })).toEqual({ title: 'Move to a bigger pool', action: { label: 'See your pools', to: '/settings/billing' } });
-		expect(upgradeCopy({ ...base, limit: 'liveStores', plan: 'premium', upgradeTo: 'enterprise' })).toEqual({ title: 'Talk to us about Enterprise', action: { label: 'Talk to sales', to: '/contact?topic=enterprise' } });
-		expect(upgradeCopy({ ...base, limit: 'liveStores', plan: 'enterprise', upgradeTo: null })).toEqual({ title: "You've reached your plan's limit", action: null });
+describe('the Upgrade dialog', () => {
+	it('starts a checkout from Basic, moves Pro up on the billing page, sells Premium credits, and sends the rest to sales', () => {
+		expect(upgradeActionFor(refusal())).toEqual({ kind: 'checkout', plan: 'pro', label: 'Get Pro' });
+		expect(upgradeActionFor(refusal({ limit: 'extraCredits', upgradeTo: 'premium' }))).toEqual({ kind: 'checkout', plan: 'premium', label: 'Get Premium' });
+		expect(upgradeActionFor(refusal({ plan: 'pro', upgradeTo: 'premium' }))).toEqual({ kind: 'link', to: '/settings/billing?plan=premium', label: 'Move to Premium' });
+		expect(upgradeActionFor(refusal({ plan: 'premium', limit: 'aiCredits', upgradeTo: 'credits' }))).toEqual({ kind: 'link', to: '/settings/billing#extra-credits', label: 'Buy credits' });
+		expect(upgradeActionFor(refusal({ plan: 'premium', upgradeTo: 'enterprise' }))).toEqual({ kind: 'link', to: '/contact?topic=enterprise', label: 'Talk to us' });
+		expect(upgradeActionFor(refusal({ plan: 'enterprise', upgradeTo: null }))).toEqual({ kind: 'none' });
 	});
 
-	it('words the usage badge for each plan', () => {
-		expect(billingBadgeText({ plan: 'basic', tier: null, window: 'day', resetsAt: '' }, 120)).toEqual({ usage: '120 free credits left', mobile: '120 credits', plan: 'Basic' });
-		expect(billingBadgeText({ plan: 'premium', tier: 2, window: 'period', resetsAt: '' }, 41_250)).toEqual({ usage: '41,250 credits left', mobile: '41,250 credits', plan: 'Premium' });
-		expect(billingBadgeText({ plan: 'premium', tier: 2, window: 'period', resetsAt: '' }, 1)).toEqual({ usage: '1 credit left', mobile: '1 credit', plan: 'Premium' });
+	it('has a title for every limit', () => {
+		expect(Object.keys(UPGRADE_TITLES).sort()).toEqual(['aiCredits', 'extraCredits', 'liveStores', 'newStoresPerDay', 'ownDomainsPerLiveStore', 'storesLifetime', 'supplierCatalog']);
+	});
+
+	it('hands each refusal to whoever listens, until they stop', () => {
+		const heard: string[] = [];
+		const stop = onPlanLimit((entry) => heard.push(entry.limit));
+		announcePlanLimit(refusal());
+		stop();
+		announcePlanLimit(refusal({ limit: 'aiCredits' }));
+		expect(heard).toEqual(['liveStores']);
 	});
 });
 ```
 
-`src/components/billing/plan-limit-guard.test.ts`:
+`src/components/billing/billing-ui-guard.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/src/lib/api-client.ts', '/src/App.tsx', '/src/routes/chat/utils/handle-websocket-message.ts', '/src/utils/usage-limit-checker.tsx', '/src/components/usage-limits-badge.tsx'],
+	['/src/lib/api-client.ts', '/src/routes/chat/utils/handle-websocket-message.ts', '/src/App.tsx', '/src/utils/usage-limit-checker.tsx', '/src/components/usage-limits-badge.tsx'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -3364,781 +3710,768 @@ function source(path: string): string {
 	return text;
 }
 
-describe('one Upgrade dialog for every plan_limit refusal', () => {
-	it('opens from any 402 refusal, any PLAN_LIMIT socket error, and the pre-send check', () => {
+describe('plan limits in the app', () => {
+	it('opens one Upgrade dialog for every refusal, from the API and from the build socket', () => {
 		const client = source('/src/lib/api-client.ts');
-		expect(client).toContain('response.status === 402 && isPlanLimitRefusal(');
-		expect(client).toContain('showPlanLimit(');
-		expect(client).toContain('if (error instanceof PlanLimitError) throw error;');
+		expect(client).toContain('isPlanLimitRefusal(data?.error?.planLimit)');
+		expect(client.match(/announcePlanLimit\(/g)?.length).toBeGreaterThanOrEqual(2);
+		const socket = source('/src/routes/chat/utils/handle-websocket-message.ts');
+		expect(socket).toContain('errorData.code === PLAN_LIMIT_ERROR_CODE');
+		expect(socket).toContain('announcePlanLimit(errorData.planLimit)');
 		expect(source('/src/App.tsx')).toContain('<UpgradeDialogHost />');
-		expect(source('/src/routes/chat/utils/handle-websocket-message.ts')).toContain('errorData.code === PLAN_LIMIT_ERROR_CODE');
-		expect(source('/src/utils/usage-limit-checker.tsx')).toContain('<UpgradeDialog refusal={limitsData.planLimit}');
 	});
 
-	it('shows the usage badge for everyone once billing is on, without Cloudflare wording', () => {
+	it("stops asking for a Cloudflare account while billing is on, and shows the credits left to everyone", () => {
+		const checker = source('/src/utils/usage-limit-checker.tsx');
+		expect(checker).toContain('if (limitsData.billing) return { canProceed: true };');
 		const badge = source('/src/components/usage-limits-badge.tsx');
 		expect(badge).toContain('!data.cloudflareConnectEnabled && !data.billing');
-		expect(badge).toContain('billingBadgeText(');
-		expect(badge).toContain('BILLING_PATH');
 	});
 });
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [ ] **Step 5: Run them to verify they fail**
 
-Run: `rtk proxy bun run test -- worker/services/billing/gates.test.ts worker/services/billing/credit-notices.test.ts worker/services/billing/usage.test.ts worker/api/responses-plan-limit.test.ts`
-Expected: FAIL, failed imports.
+Run: `rtk proxy bun run test -- worker/services/billing/credit-notices.test.ts worker/services/billing/metering.sql.test.ts worker/agents/core/websocket.test.ts worker/agents/think/model-wiring.test.ts`
+Expected: FAIL, failed imports and the new wiring missing.
 
-Run: `rtk proxy bun run test -- worker/agents/core/websocket.test.ts worker/agents/think/model-wiring.test.ts worker/api/controllers/agent/plan-checks-guard.test.ts src/components/billing/upgrade-copy.test.ts src/components/billing/plan-limit-guard.test.ts`
-Expected: FAIL. The new WebSocket tests fail, the guards find no matches, and `./upgrade-copy` doesn't exist.
+Run: `rtk proxy bun run test -- src/components/billing/upgrade-action.test.ts src/components/billing/billing-ui-guard.test.ts`
+Expected: FAIL.
 
-- [ ] **Step 4: The worker side.**
-
-**`gates.ts`:**
-- `creditRefusal` returns null when `!account.billing`. Otherwise it answers `assertWithinLimit(account, 'aiCredits', await creditsUsed(env, creditBucketFor(account, llmCalls)))`.
-- `checkPromptPlan` returns `{ billing: false, refusal: null }` when `!isBillingOn(env, userId)`, before anything else. Otherwise it loads `loadAccount(env, userId)` and `getUserConfigurableSettings(env, userId)` together, and answers `{ billing: true, refusal: await creditRefusal(env, account, settings.security.rateLimit.llmCalls) }`.
+- [ ] **Step 6: Implement the notices and metering.**
 
 **`credit-notices.ts`:**
 
 ```ts
-/** The 80% and 100% warnings for a monthly pool, claimed in billing_notices so each goes once per period. */
-export async function noticeCreditUse(deps: CreditNoticeDeps, use: CreditUse, claimedHere: Set<string>): Promise<void> {
-	if (use.window !== 'period') return;
-	const kind = creditNoticeDue(use.used, use.limit);
-	if (!kind) return;
-	const key = creditNoticeKey(kind, use.periodStartMs);
-	// Each agent asks the database once per warning; billing_notices keeps it to once across agents and restarts.
-	if (claimedHere.has(key)) return;
-	claimedHere.add(key);
-	await claimAndSendNotice(deps, use.userId, { key, email: { kind, credits: use.limit, renewsAt: use.renewsAt } });
+/** The 20% and 5% warnings: checked after a step is charged, sent once a period each, never throwing. */
+export async function noticeCreditUse(deps: CreditNoticeDeps, use: CreditUse): Promise<CreditAlert | null> {
+	try {
+		if (!alertsMayBeDue(use.state)) return null;
+		const balance = await deps.readBalance(use.userId, use.period, use.pool);
+		const alert = creditAlertDue(balance);
+		if (!alert) return null;
+		const email = { kind: alert, plan: use.plan, left: balance.left, renewsAt: use.period.endMs };
+		return (await claimAndSendNotice(deps.mail, use.userId, { key: creditAlertKey(alert, use.period.key), email })) === 'sent' ? alert : null;
+	} catch (error) {
+		logger.error('Could not check the credit warnings', { userId: use.userId, error });
+		return null;
+	}
 }
 ```
 
-`creditNoticeDepsFromEnv(env)` returns `{ ...billingMailFromEnv(env), claim: (userId, key, kind) => new BillingService(env).claimNotice(userId, key, kind, new Date()) }`.
+`creditNoticeDepsFromEnv(env)` is `{ readBalance: (…) => new CreditLedgerService(env).readBalance(…), mail: claimingMailFromEnv(env) }`.
 
-**`usage.ts`:** `billingCreditsSummary` builds the shape the test pins:
-- `window` is `'daily'` for a day and `'monthly'` for a period;
-- `resetAt` is the ISO form of `creditsResetAt`;
-- the refusal comes from `assertWithinLimit(account, 'aiCredits', used)`;
-- `percentUsed = limit > 0 ? Math.min(100, (used / limit) * 100) : 0`.
-
-**`responses.ts`:**
-- `planLimitResponse(refusal)` returns 402 with `{ success: false, error: { message: refusal.message, name: 'PlanLimit', code: PLAN_LIMIT_CODE, planLimit: refusal }, message: refusal.message }`;
-- add `code?: string` and `planLimit?: PlanLimitRefusal` to `BaseErrorResponse`;
-- `BaseController.createPlanLimitResponse<T = never>(refusal)` casts it like `createErrorResponse`.
-
-**`usageChecker.ts`:** export `UNLIMITED_USAGE: UsageCheckResult = { allowed: true, shouldUseByok: false, withinLimits: true, remaining: Infinity, limit: Infinity, balance: null, hasUserToken: false }`. Return it from the disabled branch of `checkUsageAndBalance`.
-
-**`websocket.ts`:** add the `planCheck` parameter (default `checkPromptPlan`) to `handleWebSocketMessage` and pass it to `ensureCanPrompt`. In `ensureCanPrompt`, before the existing usage check:
+**`metering.ts`:**
 
 ```ts
-        const plan = await planCheck(env, userId);
-        if (plan.refusal) {
-            sendToConnection(connection, WebSocketMessageResponses.ERROR, { error: plan.refusal.message, code: PLAN_LIMIT_ERROR_CODE, showAsPopup: true, planLimit: plan.refusal });
-            return false;
-        }
-        // Think always runs on Estori's gateway, so with billing on the plan check is the whole check.
-        if (plan.billing && agent.state.behaviorType === 'think') return true;
-```
+const RECORD_TRIES = 3;
 
-Add `planLimit?: PlanLimitRefusal` to `ErrorMessage` in `websocketTypes.ts`.
+export function creditRefusal(account: PlanAccount, balance: CreditBalance): PlanLimitRefusal | null {
+	return assertWithinLimit(account, 'aiCredits', account.limits.aiCredits - balance.left);
+}
 
-**`agent/controller.ts`,** right after the `reuseSeed` block and before the `enforceAppCreationRateLimit` try:
+/** Before a turn: some credit must be left. A started turn always finishes; its overrun is settled later. */
+export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
+	if (!isBillingOn(env, userId)) return { billing: false };
+	const account = await loadAccount(env, userId, nowMs);
+	return { billing: true, refusal: creditRefusal(account, await loadCredits(env, account)) };
+}
 
-```ts
-            const account = await loadAccount(env, user.id);
-            const creditsRefused = await creditRefusal(env, account, context.config.security.rateLimit.llmCalls);
-            if (creditsRefused) return CodingAgentController.createPlanLimitResponse(creditsRefused);
-```
-
-Then make the usage check `const limitResult = account.billing && behaviorType === 'think' ? UNLIMITED_USAGE : await checkUsageAndBalance(env, user.id, request, userToken);`. Keep the guard's literal.
-
-**`ThinkAgent.ts`:**
-- `turnUsage` becomes `{ bucket: CreditBucket; creditCost: number; userId: string; billing: boolean; periodStartMs: number; renewsAt: number } | null`.
-- Add `private readonly creditNoticesClaimed = new Set<string>();`.
-- **`beforeTurn`:** keep the `creditCost` line. In the try, load `loadAccount(this.env, config.userId)` and `getUserConfigurableSettings(this.env, config.userId)` together, then set `this.turnUsage = { bucket: creditBucketFor(account, userConfig.security.rateLimit.llmCalls), creditCost, userId: config.userId, billing: account.billing, periodStartMs: account.periodStartMs, renewsAt: account.creditsResetAt }`.
-- **`beforeStep`:**
-
-```ts
-		if (this.turnUsage && config) {
-			const used = await recordCredits(this.env, this.turnUsage.bucket, this.turnUsage.creditCost);
-			if (this.turnUsage.billing) {
-				await noticeCreditUse(creditNoticeDepsFromEnv(this.env), { userId: this.turnUsage.userId, window: this.turnUsage.bucket.window, used, limit: this.turnUsage.bucket.config.limit, periodStartMs: this.turnUsage.periodStartMs, renewsAt: this.turnUsage.renewsAt }, this.creditNoticesClaimed);
-			}
+/** Records a charged step with the same key up to three times, then checks the warnings. */
+export async function chargeStep(deps: MeteringDeps, charge: StepCharge): Promise<PeriodState | null> {
+	let failure: unknown = null;
+	for (let attempt = 0; attempt < RECORD_TRIES; attempt += 1) {
+		try {
+			const state = await deps.ledger.recordUse({ ...charge, now: deps.now() });
+			await noticeCreditUse(deps.notices, { userId: charge.userId, plan: charge.plan, period: charge.period, pool: charge.pool, state });
+			return state;
+		} catch (error) {
+			failure = error;
 		}
+	}
+	logger.error('A charged step could not be recorded', { useKey: charge.useKey, credits: charge.credits, error: failure });
+	return null;
+}
 ```
 
-- Remove the imports this leaves unused: `RateLimitService`, `hasCloudflareConfigured` and `RateLimitSettings`.
-- A turn that started always finishes. `recordCredits` never throws and never stops a step. Only the next turn's check refuses.
+- **`meteringDepsFromEnv(env)`:** `{ ledger: new CreditLedgerService(env), notices: creditNoticeDepsFromEnv(env), now: () => new Date() }`.
+- **`chargeLegacyCall(env, { userId, model, creditCost })`:**
+  - answers false when `!isBillingOn(env, userId)`;
+  - otherwise loads the account and charges `legacyCallCredits(creditCost)` with `source: 'infer'`, `useKey: `infer:${userId}:${crypto.randomUUID()}``, `usage: null`;
+  - answers true. Charging never refuses: the turn's check came first.
 
-**`limits/controller.ts`:**
-- **`getPublicPlan`:** answers `{ ...publicPlanFromSettings(context.config.security.rateLimit), billing: isBillingOn(env, null) }`, typed `PublicPlan`.
-- **`getUsage`:**
-  - load `loadAccount(env, user.id)` alongside the existing three reads;
-  - build today's body as `base`;
-  - when `account.billing`, read `creditsUsed(env, creditBucketFor(account, context.config.security.rateLimit.llmCalls))` and answer `{ ...base, cloudflareConnectEnabled: false, ...billingCreditsSummary(account, used) }`;
-  - otherwise answer `{ ...base, billing: null, planLimit: null }`;
-  - keep the Set-Cookie echo.
+**`usage-summary.ts`:** `billingUsage(account, balance)` answers:
+- `config: { limit: { type: 'credits', window: 'monthly', maxValue: balance.available, enabled: true, resetAt: new Date(account.period.endMs).toISOString() }, unlimited: false }`;
+- `usage: { credits: { monthly: balance.used } }`;
+- `limitCheck: { withinLimits: balance.left > 0, exceededLimits: [], message: balance.left > 0 ? 'Within limits' : 'Limit exceeded' }`;
+- `billing: { plan: account.plan, renewsAt: account.period.endMs }`.
 
-- [ ] **Step 5: The frontend side.**
-
-**`src/lib/plan-limit-events.ts`:**
+- [ ] **Step 7: Charge Think's steps.** In `ThinkAgent.ts`:
 
 ```ts
-/** The page-wide signal that a plan_limit refusal came back; UpgradeDialogHost listens. */
-export const PLAN_LIMIT_EVENT = 'estori:plan-limit';
-
-export function showPlanLimit(refusal: PlanLimitRefusal): void {
-	window.dispatchEvent(new CustomEvent<PlanLimitRefusal>(PLAN_LIMIT_EVENT, { detail: refusal }));
-}
-
-export function onPlanLimit(listener: (refusal: PlanLimitRefusal) => void): () => void {
-	const handle = (event: Event) => {
-		const detail: unknown = (event as CustomEvent<unknown>).detail;
-		if (isPlanLimitRefusal(detail)) listener(detail);
-	};
-	window.addEventListener(PLAN_LIMIT_EVENT, handle);
-	return () => window.removeEventListener(PLAN_LIMIT_EVENT, handle);
-}
+	/** Metering fixed when the turn starts, so a mid-turn model switch can't reprice its steps. */
+	private turnUsage:
+		| { mode: 'credits'; userId: string; plan: PlanId; period: LedgerPeriod; pool: number; turnId: string; model: string; prices: TokenPrices; typical: number }
+		| { mode: 'daily'; config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number }
+		| null = null;
+	private turnCredits = 0;
 ```
 
-**`upgrade-copy.ts`:**
-- `upgradeCopy` gives exactly the four answers the test pins. Basic's and Premium's links go to `BILLING_PATH`; Enterprise's to `contactPath('enterprise')`.
-- `billingBadgeText`:
-  - formats `remaining.toLocaleString('en-US')`;
-  - says "free " before "credits" on a daily window;
-  - uses "credit" when exactly 1 is left;
-  - `plan` is `planById(billing.plan).name`.
+**`beforeTurn`:**
+- resets `turnCredits`;
+- resolves `const model = resolveThinkModel(turnModelId)`;
+- with `isBillingOn(this.env, config.userId)`: `loadAccount`, then `{ mode: 'credits', userId, plan: account.plan, period: account.period, pool: account.limits.aiCredits, turnId: crypto.randomUUID(), model: model.id, prices: model.prices, typical: model.creditsPerStep }`;
+- otherwise today's object, with `mode: 'daily'` and `creditCost: model.config.creditCost`;
+- keeps the `try`/`catch` and its warning.
+
+**`beforeStep`:** calls `enforceLLMCallsRateLimit` only when `this.turnUsage?.mode === 'daily'`, unchanged otherwise.
+
+**`onStepFinish` and `turnCreditsUsed`,** after `beforeStep`:
+
+```ts
+	/** Charges the step just finished from the tokens it used; a failed record is retried, and never fails the turn. */
+	override async onStepFinish(ctx: StepContext): Promise<void> {
+		const usage = this.turnUsage;
+		if (usage?.mode !== 'credits') return;
+		const stepUsage = stepUsageFrom(ctx.usage);
+		const credits = stepCredits(usage.prices, stepUsage, usage.typical);
+		this.turnCredits += credits;
+		await chargeStep(meteringDepsFromEnv(this.env), {
+			userId: usage.userId,
+			period: usage.period,
+			pool: usage.pool,
+			plan: usage.plan,
+			useKey: `${this.name}:${usage.turnId}:${ctx.stepNumber}`,
+			credits,
+			source: 'think',
+			model: usage.model,
+			usage: stepUsage,
+		});
+	}
+
+	/** The credits this turn's steps were charged, for the build summary. */
+	turnCreditsUsed(): number {
+		return this.turnCredits;
+	}
+```
+
+Import `StepContext` as a type from `@cloudflare/think`.
+
+- [ ] **Step 8: Check credits before prompts and new stores; charge older calls.**
+
+**`websocket.ts`:**
+- `handleWebSocketMessage` gains a fifth parameter, `creditCheck: typeof checkCreditsBeforeTurn = checkCreditsBeforeTurn`, passed to both `ensureCanPrompt` calls.
+- `ensureCanPrompt` first runs `creditCheck(env, userId)`:
+  - with billing on and a refusal: sends `{ error: refusal.message, code: PLAN_LIMIT_ERROR_CODE, planLimit: refusal, showAsPopup: true }` and answers false;
+  - with billing on and no refusal: answers true, skipping the Cloudflare usage check. Think always runs on Estori's gateway;
+  - with billing off: today's check, unchanged.
+- In `websocketTypes.ts`, `ErrorMessage` gains `planLimit?: PlanLimitRefusal`.
+
+**The agent controller, `startCodeGeneration`,** before `enforceAppCreationRateLimit`:
+
+```ts
+            const credits = await checkCreditsBeforeTurn(env, user.id);
+            if (credits.billing && credits.refusal) return CodingAgentController.createPlanLimitResponse(credits.refusal);
+```
+
+With billing on, `checkUsageAndBalance` runs only when `behaviorType !== 'think'`, the older builders that use the seller's own Cloudflare account.
+
+**`inferutils/core.ts`:** before today's call:
+
+```ts
+        const modelCreditCost = AI_MODEL_CONFIG[modelName as AIModels]?.creditCost ?? 0;
+        const chargedByBilling = !isUsingBYOK && (await chargeLegacyCall(env, { userId: metadata.userId, model: modelName, creditCost: modelCreditCost }));
+        if (!chargedByBilling) {
+            await RateLimitService.enforceLLMCallsRateLimit(/* unchanged arguments */);
+        }
+```
+
+**`LimitsController.getUsage`:** with `isBillingOn(env, user.id)`:
+- reads the gateway connection and preference as today, but not `checkUsageAndBalance`;
+- spreads `billingUsage(account, await loadCredits(env, account))` over the response;
+- sets `cloudflareCredits: null`, `hasUserToken: false`, `cloudflareConnectEnabled: false`.
+- Billing off is unchanged, with `billing: null`.
+
+- [ ] **Step 9: The Upgrade dialog and the app's wiring.**
+
+**`plan-limit-events.ts`:** a module-level `Set` of listeners.
+- `announcePlanLimit(refusal)` calls each;
+- `onPlanLimit(listener)` adds one and answers a function that removes it.
+
+**`upgrade-action.ts`:**
+
+```ts
+export type UpgradeAction = { kind: 'checkout'; plan: PaidPlanId; label: string } | { kind: 'link'; to: string; label: string } | { kind: 'none' };
+
+export const UPGRADE_TITLES: Record<PlanLimitKey, string> = {
+	aiCredits: "You're out of AI credits",
+	storesLifetime: "You've started all your stores",
+	newStoresPerDay: "That's today's new stores",
+	liveStores: "You've reached your live stores",
+	ownDomainsPerLiveStore: "Own domains aren't on your plan",
+	supplierCatalog: 'Catalog products need Pro or Premium',
+	extraCredits: 'Extra credits come with Premium',
+};
+
+/** Basic buys a plan at checkout; Pro moves up on the billing page, where the charge is explained first. */
+export function upgradeActionFor(refusal: PlanLimitRefusal): UpgradeAction {
+	switch (refusal.upgradeTo) {
+		case 'pro':
+			return { kind: 'checkout', plan: 'pro', label: 'Get Pro' };
+		case 'premium':
+			return refusal.plan === 'basic' ? { kind: 'checkout', plan: 'premium', label: 'Get Premium' } : { kind: 'link', to: `${BILLING_PATH}?plan=premium`, label: 'Move to Premium' };
+		case 'credits':
+			return { kind: 'link', to: `${BILLING_PATH}#extra-credits`, label: 'Buy credits' };
+		case 'enterprise':
+			return { kind: 'link', to: contactPath('enterprise'), label: 'Talk to us' };
+		default:
+			return { kind: 'none' };
+	}
+}
+```
 
 **`UpgradeDialog.tsx`:**
-- Uses `@/components/ui/dialog` and `@/components/ui/button`, as `usage-limit-checker.tsx` does.
-- The title is `copy.title`. The description is `refusal.message`.
-- When `copy.action` is set, its button navigates to `action.to` through `useNavigate` after closing.
-- A "Not now" outline button closes it.
-- `UpgradeDialogHost` holds the latest refusal from `onPlanLimit` in state and renders `UpgradeDialog` while it's set. Mount it in `App.tsx` beside `<TermsGate />`.
+- **`UpgradeDialog({ refusal, onClose })`:**
+  - uses the existing `Dialog` components;
+  - the title is `UPGRADE_TITLES[refusal.limit]`, and the description `refusal.message`;
+  - a `checkout` action calls `apiClient.startPlanCheckout(plan)` and sets `window.location.href` to the answer's URL, with a spinner on the button. A 409 sends the seller to `BILLING_PATH`;
+  - a `link` action is a router `Link` that closes the dialog;
+  - "Not now" closes it.
+- **`UpgradeDialogHost()`:** subscribes with `onPlanLimit` in an effect and keeps the latest refusal in state.
+- Mount `<UpgradeDialogHost />` in `src/App.tsx`, next to `<TermsGate />`.
 
 **`api-client.ts`:**
+- `ApiError` gains `public planLimit: PlanLimitRefusal | null = null`, set from `isPlanLimitRefusal(data?.error?.planLimit)`.
+- `requestRaw` calls `announcePlanLimit` for a 402 with a refusal, before throwing.
+- `createAgentSession` does the same for its 402, then throws `Error(data.error.message)`.
 
-```ts
-/** A plan_limit refusal; the Upgrade dialog has already opened for it. */
-export class PlanLimitError extends ApiError {
-	constructor(endpoint: string, readonly refusal: PlanLimitRefusal) {
-		super(402, 'Payment Required', refusal.message, endpoint);
-		this.name = 'PlanLimitError';
-	}
-}
-```
-
-- In `requestRaw`'s non-OK branch, before `const errorData = data.error;`:
-
-```ts
-                const planLimit = data.error?.planLimit;
-                if (response.status === 402 && isPlanLimitRefusal(planLimit)) {
-                    showPlanLimit(planLimit);
-                    throw new PlanLimitError(endpoint, planLimit);
-                }
-```
-
-- `getPublicPlan` returns `ApiResponse<PublicPlan>`.
-- In `createAgentSession`'s catch, add `if (error instanceof PlanLimitError) throw error;` before the toast. The dialog already explains.
-
-**`usage-limit-checker.tsx`:** in `checkCanSendPrompt` (after the loading check) and in `getBackendLimitDialog` (after the null check):
-
-```tsx
-	if (limitsData.billing) {
-		if (limitsData.limitCheck.withinLimits || !limitsData.planLimit) return { canProceed: true };
-		return { canProceed: false, dialogComponent: <UpgradeDialog refusal={limitsData.planLimit} onClose={onClose} /> };
-	}
-```
-
-The Cloudflare dialogs stay for deployments with billing off. Billing-on accounts never see "Connect your Cloudflare account".
-
-**`usage-limits-badge.tsx`:**
-- `hidden` becomes `!loading && Boolean(data && !data.cloudflareConnectEnabled && !data.billing)`.
-- When `data.billing` is set:
-  - the usage texts come from `billingBadgeText(data.billing, remaining)`;
-  - the right-hand segment shows the plan name instead of Connect or credits;
-  - the button navigates to `BILLING_PATH`;
-  - none of the Cloudflare segments render.
-
-**`handle-websocket-message.ts`:** add a first branch to the error handling:
+**The build socket:** in `handle-websocket-message.ts`'s `'error'` case, first:
 
 ```ts
                 if (errorData.code === PLAN_LIMIT_ERROR_CODE && isPlanLimitRefusal(errorData.planLimit)) {
-                    showPlanLimit(errorData.planLimit);
-                } else if (errorData.showAsPopup && errorData.code === 'USAGE_LIMIT_EXCEEDED') {
+                    announcePlanLimit(errorData.planLimit);
+                    break;
+                }
 ```
 
-**`use-limits.ts`:** add `billing?: UsageBilling | null` and `planLimit?: PlanLimitRefusal | null` to `UsageSummary`, imported from `@/api-types`.
+**Limits UI:**
+- `UsageSummary` gains `billing?: { plan: PlanId; renewsAt: number } | null`.
+- In `usage-limit-checker.tsx`, `checkCanSendPrompt` and `getBackendLimitDialog` start with `if (limitsData.billing) return { canProceed: true };`, after their null checks. With billing on, the server's refusal opens the Upgrade dialog, so its copy lives in one place.
+- In `usage-limits-badge.tsx`:
+  - `hidden` becomes `!loading && Boolean(data && !data.cloudflareConnectEnabled && !data.billing)`;
+  - with billing, the text is "{n} credits left" (no "free"), and the mobile text "{n} credits".
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [ ] **Step 10: Run the tests to verify they pass**
 
-Run: `rtk proxy bun run test -- worker/services/billing/gates.test.ts worker/services/billing/credit-notices.test.ts worker/services/billing/usage.test.ts worker/api/responses-plan-limit.test.ts`
+Run: `rtk proxy bun run test -- worker/services/billing/credit-notices.test.ts worker/services/billing/metering.sql.test.ts worker/agents/core/websocket.test.ts worker/agents/think/model-wiring.test.ts`
 Expected: PASS.
 
-Run: `rtk proxy bun run test -- worker/agents/core/websocket.test.ts worker/agents/think/model-wiring.test.ts worker/api/controllers/agent/plan-checks-guard.test.ts worker/api/controllers/limits/plan-wiring.test.ts`
-Expected: PASS, the existing `set_model` tests included.
-
-Run: `rtk proxy bun run test -- src/components/billing/upgrade-copy.test.ts src/components/billing/plan-limit-guard.test.ts worker/services/rate-limit/rateLimits.test.ts`
+Run: `rtk proxy bun run test -- src/components/billing/upgrade-action.test.ts src/components/billing/billing-ui-guard.test.ts worker/api/controllers/limits/plan-wiring.test.ts`
 Expected: PASS.
 
 Run: `bun run typecheck`
-Expected: no errors.
+Expected: no new errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
-git add worker/services/billing/gates.ts worker/services/billing/gates.test.ts worker/services/billing/credit-notices.ts worker/services/billing/credit-notices.test.ts worker/services/billing/usage.ts worker/services/billing/usage.test.ts worker/api/responses.ts worker/api/responses-plan-limit.test.ts worker/api/controllers/baseController.ts worker/api/websocketTypes.ts worker/agents/core/websocket.ts worker/agents/core/websocket.test.ts worker/agents/think/ThinkAgent.ts worker/agents/think/model-wiring.test.ts worker/api/controllers/agent/controller.ts worker/api/controllers/agent/plan-checks-guard.test.ts worker/api/controllers/limits/controller.ts worker/services/rate-limit/usageChecker.ts shared/types/plan.ts shared/types/billing.ts src/lib/plan-limit-events.ts src/components/billing src/App.tsx src/lib/api-client.ts src/hooks/use-limits.ts src/utils/usage-limit-checker.tsx src/components/usage-limits-badge.tsx src/routes/chat/utils/handle-websocket-message.ts
-git commit -m "feat(billing): check ai credits by plan before every turn and new store, warn at 80 and 100 percent, and one upgrade dialog for every limit
+git add worker/services/billing worker/agents/think/ThinkAgent.ts worker/agents/think/model-wiring.test.ts worker/agents/core/websocket.ts worker/agents/core/websocket.test.ts worker/api/websocketTypes.ts worker/api/controllers/agent/controller.ts worker/agents/inferutils/core.ts worker/api/controllers/limits/controller.ts src/lib/plan-limit-events.ts src/components/billing src/hooks/use-limits.ts src/components/usage-limits-badge.tsx src/utils/usage-limit-checker.tsx src/lib/api-client.ts src/routes/chat/utils/handle-websocket-message.ts src/App.tsx
+git commit -m "feat(billing): charge each ai step from its real cost, check credits before a turn, and show one upgrade dialog for every limit
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 9: New stores, live stores, own domains and the catalog
+### Task 11: Stores, live stores, own domains and the catalog
 
 **Files:**
+- Create `worker/services/billing/store-limits.ts`.
 - Modify:
-  - worker: `worker/services/billing/gates.ts`, `worker/api/controllers/agent/controller.ts`, `worker/database/services/LiveStoreService.ts`, `worker/api/controllers/liveStores/controller.ts`, `worker/agents/think/catalog-tools.ts`, `worker/agents/think/ThinkAgent.ts`;
-  - shared: `shared/types/live-stores.ts`;
-  - space: `space/src/space/store-manifest.ts`, `space/src/space/deploy-engine.ts`, `space/src/space/drafts-store.ts`, `space/src/space/durable-object.ts`, `space/src/index.ts`.
+  - worker: `worker/api/controllers/agent/controller.ts`, `worker/api/controllers/liveStores/controller.ts`, `worker/database/services/LiveStoreService.ts`, `worker/agents/think/catalog-tools.ts`, `worker/agents/think/ThinkAgent.ts`;
+  - shared: `shared/types/billing.ts` (`NEW_CATALOG_PRODUCTS_ERROR`);
+  - space: `space/src/space/store-manifest.ts`, `space/src/space/durable-object.ts`, `space/src/space/drafts-store.ts` (`PublishDraftOptions`), `space/src/index.ts` (export it).
 - Test:
-  - worker: `worker/services/billing/gates.test.ts`, `worker/database/services/live-stores.sql.test.ts`, `worker/api/controllers/liveStores/controller.sql.test.ts`, `worker/agents/think/catalog-tools.test.ts`, `worker/api/controllers/agent/plan-checks-guard.test.ts`, `worker/api/controllers/liveStores/catalog-mirror.test.ts`;
-  - space: `space/test/live-deployment.test.ts`, `space/test/publish-catalog-wiring.test.ts`.
+  - `worker/services/billing/store-limits.test.ts`;
+  - `worker/api/controllers/liveStores/controller-billing.sql.test.ts`;
+  - `worker/api/controllers/liveStores/live-store-routes-wiring.test.ts`;
+  - `worker/agents/think/catalog-tools.test.ts`;
+  - `space/src/space/store-manifest.test.ts`, `space/test/drafts-wiring.test.ts`.
 
 **Interfaces:**
-- **Consumes:**
-  - from Task 3: `loadAccount`, `BillingAccount`;
-  - from Task 1: `assertWithinLimit`;
-  - from Task 8: `BaseController.createPlanLimitResponse`;
-  - existing: `RateLimitService.enforce`, `RateLimitService.enforceAppCreationRateLimit`, `RateLimitType.APP_CREATION`.
+- **Consumes:** `assertWithinLimit` (Task 1); `BillingService.reserveStore` (Task 3); `loadAccount`, `BillingAccount` (Task 5); `createPlanLimitResponse` (Task 8); `RateLimitService.enforceAppCreationRateLimit`, `RateLimitExceededError`.
 - **Produces:**
-  - `gates.ts`:
-    - `withNewStoresPerDay(rateLimit: RateLimitSettings, perDay: number): RateLimitSettings`;
-    - `reserveNewStore(env: Env, rateLimit: RateLimitSettings, account: BillingAccount, user: AuthUser, request: Request): Promise<PlanLimitRefusal | null>`. With billing off it throws `RateLimitExceededError` as today; with billing on it answers a refusal.
-  - `LiveStoreService.liveStoreAppIdsOfUser(userId): Promise<string[]>` (live status only).
+  - `store-limits.ts`:
+    - `StoreStartDeps { reserveStore(cap: number | null): Promise<{ reserved: boolean; started: number }>; takeDailyStore(limit: number): Promise<boolean> }`;
+    - `checkStoreStart(deps, account: BillingAccount): Promise<PlanLimitRefusal | null>`;
+    - `storeStartDepsFromEnv(env, user: AuthUser, request: Request, rateLimit: RateLimitSettings): StoreStartDeps`.
+  - `LiveStoreService.liveCountOf(userId): Promise<number>`.
+  - `NEW_CATALOG_PRODUCTS_ERROR = 'This version adds catalog products, which need Pro or Premium.'` in `shared/types/billing.ts`, mirrored in `space/src/space/store-manifest.ts`.
   - space:
-    - `CATALOG_NEEDS_PLAN = "This version adds catalog products, which need Premium."`;
-    - `catalogVariantIdsOf(manifest: string | null): string[]`;
-    - `newCatalogVariants(sql: SqlStorage, branch: string): string[]`;
-    - `PublishOptions { catalogFromLiveOnly?: boolean }`;
-    - `SpaceDO.publishDraft(id?: string, options?: PublishOptions)`.
-  - `shared/types/live-stores.ts`: `CATALOG_NEEDS_PLAN_ERROR`, the same string.
-  - Catalog tools:
-    - `CatalogToolDeps` gains `planNote(): Promise<string | null>`;
-    - `CATALOG_PLAN_NOTE`;
-    - `catalogToolDepsFromEnv(env, userId: string | null)`.
+    - `catalogVariantIdsOf(manifest: string | null): Set<string>`;
+    - `newCatalogVariantIds(draft: string | null, live: string | null): string[]`;
+    - `PublishDraftOptions { refuseNewCatalogProducts?: boolean }`;
+    - `SpaceDO.publishDraft(id?: string, options?: PublishDraftOptions)`.
+  - `CatalogToolDeps` gains `catalogRefusal(): Promise<PlanLimitRefusal | null>`; `catalogToolDepsFromEnv(env, userId: string | null)`.
 
-- [ ] **Step 1: Write the failing space tests.** Append to `space/test/live-deployment.test.ts`, importing `newCatalogVariants` from `../src/space/deploy-engine` and `catalogVariantIdsOf` from `../src/space/store-manifest`:
-
-```ts
-const manifest = (...catalogIds: string[]) =>
-	JSON.stringify({ products: [{ id: 'mugs', name: 'Mugs', variants: [{ id: 'own', name: 'Own mug', priceCents: 1500 }, ...catalogIds.map((id, index) => ({ id: `cat-${index}`, name: 'Catalog mug', priceCents: 2500, catalogVariantId: id }))] }] });
-
-describe('catalog products a publish would add', () => {
-	it('reads every catalogVariantId in a manifest, and none from an unreadable one', () => {
-		expect(catalogVariantIdsOf(manifest('cv_1', 'cv_2', 'cv_1'))).toEqual(['cv_1', 'cv_2']);
-		for (const bad of [null, '', '{', '{"products":7}', '{"products":[{"variants":"x"}]}']) expect(catalogVariantIdsOf(bad)).toEqual([]);
-	});
-
-	it("lists the draft's catalog products that the live store doesn't sell yet", async () => {
-		await runInDurableObject(uniqueStub('catalog'), async (_instance, state) => {
-			const sql = state.storage.sql;
-			sql.exec(DEPLOYMENTS_TABLE_SQL);
-			deployMain(sql, 'c1', manifest('cv_1'));
-			expect(newCatalogVariants(sql, 'main')).toEqual(['cv_1']);
-			publishLiveDeployment(sql, 10, 'main');
-			expect(newCatalogVariants(sql, 'main')).toEqual([]);
-			deployMain(sql, 'c2', manifest('cv_1', 'cv_9'));
-			expect(newCatalogVariants(sql, 'main')).toEqual(['cv_9']);
-			deployMain(sql, 'c3', manifest());
-			expect(newCatalogVariants(sql, 'main')).toEqual([]);
-		});
-	});
-});
-```
-
-`space/test/publish-catalog-wiring.test.ts`:
+- [ ] **Step 1: Write the failing store test** `worker/services/billing/store-limits.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
+import { PLAN_LIMITS, type PlanId } from '../../../shared/types/plans';
+import type { BillingAccount } from './account';
+import { checkStoreStart, type StoreStartDeps } from './store-limits';
 
-const sources = import.meta.glob<string>(['/space/src/space/durable-object.ts'], { query: '?raw', import: 'default', eager: true });
+function account(plan: PlanId, billing = true): BillingAccount {
+	const period = { key: 'acct:1', startMs: 0, endMs: Date.UTC(2026, 10, 12) };
+	return { billing, userId: 'u1', plan, limits: billing ? PLAN_LIMITS[plan] : { ...PLAN_LIMITS.basic, storesLifetime: null, liveStores: null }, creditsResetAt: period.endMs, source: 'free', period, graceEndsAtMs: null, subscription: null };
+}
 
-describe('publishing a draft on a plan without the catalog', () => {
-	it('refuses new catalog products under the draft lock, before the live deployment moves', () => {
-		const source = sources['/space/src/space/durable-object.ts'] ?? '';
-		const publish = source.slice(source.indexOf('async publishDraft('), source.indexOf('async bringInLiveChanges('));
-		const check = publish.indexOf('options.catalogFromLiveOnly && newCatalogVariants(sql, draft.branch).length > 0');
-		expect(check).toBeGreaterThan(-1);
-		expect(check).toBeLessThan(publish.indexOf('publishLiveDeployment('));
-		expect(publish).toContain('return { error: CATALOG_NEEDS_PLAN }');
+function counters(started: number, today: number) {
+	const calls: string[] = [];
+	const deps: StoreStartDeps = {
+		reserveStore: async (cap) => {
+			calls.push(`reserve:${cap}`);
+			if (cap !== null && started >= cap) return { reserved: false, started };
+			started += 1;
+			return { reserved: true, started };
+		},
+		takeDailyStore: async (limit) => {
+			calls.push(`daily:${limit}`);
+			if (today >= limit) return false;
+			today += 1;
+			return true;
+		},
+	};
+	return { deps, calls };
+}
+
+describe('checkStoreStart', () => {
+	it("starts Basic's stores up to its third, counting deleted ones, and refuses after", async () => {
+		const { deps, calls } = counters(2, 0);
+		expect(await checkStoreStart(deps, account('basic'))).toBeNull();
+		expect(await checkStoreStart(deps, account('basic'))).toMatchObject({ limit: 'storesLifetime', upgradeTo: 'pro', message: "Basic includes 3 stores, counting ones you've deleted. Get Pro to start up to 10 a day." });
+		expect(calls).toEqual(['reserve:3', 'reserve:3']);
+	});
+
+	it('limits Pro and Premium per day, and still counts their stores in case they move to Basic', async () => {
+		const pro = counters(40, 9);
+		expect(await checkStoreStart(pro.deps, account('pro'))).toBeNull();
+		expect(await checkStoreStart(pro.deps, account('pro'))).toMatchObject({ limit: 'newStoresPerDay', upgradeTo: 'premium' });
+		expect(pro.calls).toEqual(['daily:10', 'reserve:null', 'daily:10']);
+		const premium = counters(0, 25);
+		expect(await checkStoreStart(premium.deps, account('premium'))).toMatchObject({ limit: 'newStoresPerDay', upgradeTo: 'enterprise' });
+	});
+
+	it("checks nothing new while billing is off; today's daily limit stays with the controller", async () => {
+		const { deps, calls } = counters(99, 99);
+		expect(await checkStoreStart(deps, account('basic', false))).toBeNull();
+		expect(calls).toEqual([]);
 	});
 });
 ```
 
-- [ ] **Step 2: Write the failing worker tests.**
-
-In `worker/services/billing/gates.test.ts`, add (importing `reserveNewStore`, `RateLimitExceededError` from `shared/types/errors`, and `type AuthUser`):
+- [ ] **Step 2: Write the failing live store test** `worker/api/controllers/liveStores/controller-billing.sql.test.ts`:
 
 ```ts
-describe('reserving a new store', () => {
-	const USER = { id: 'u1', email: 'ana@example.test' } as AuthUser;
-	const request = new Request('https://estori.app/api/agent', { method: 'POST' });
+/** Plan limits at Go live and on own domains, on real SQL with SpaceDO stood in. */
 
-	function counter(success: boolean) {
-		const seen: Array<{ key: string; limit: number; dailyLimit?: number }> = [];
-		const env = { DORateLimitStore: { getByName: () => ({ increment: async (key: string, config: { limit: number; dailyLimit?: number }) => { seen.push({ key, limit: config.limit, dailyLimit: config.dailyLimit }); return success ? { success } : { success, exceededLimit: 'daily', limitValue: config.limit }; } }) } } as unknown as Env;
-		return { env, seen };
-	}
+import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { envWith, insertApp, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
+import { LiveStoreService } from '../../../database/services/LiveStoreService';
+import { NEW_CATALOG_PRODUCTS_ERROR } from '../../../../shared/types/billing';
+import { LiveStoreController } from './controller';
+import type { RouteContext } from '../../types/route-context';
 
-	it("counts against the plan's number a day with billing on, and refuses with the plan's copy", async () => {
-		const premium = account({ plan: 'premium', tier: 1, limits: { aiCredits: 20_000, aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, draftsPerStore: 5 } });
-		const open = counter(true);
-		expect(await reserveNewStore(open.env, DEFAULT_RATE_LIMIT_SETTINGS, premium, USER, request)).toBeNull();
-		expect(open.seen).toEqual([{ key: 'platform:appCreation:user:u1', limit: 25, dailyLimit: 25 }]);
-		expect(await reserveNewStore(counter(false).env, DEFAULT_RATE_LIMIT_SETTINGS, premium, USER, request)).toMatchObject({ limit: 'newStoresPerDay', message: "You've started 25 new stores today. Start more tomorrow, or talk to us about Enterprise." });
+vi.mock('../../../agents', () => ({ getAgentStub: async () => ({ cancelLeftoverMerge: async () => undefined }) }));
+
+let db: D1Database;
+const DAY = 86_400_000;
+
+beforeAll(async () => {
+	db = await migratedD1();
+	await insertUser(db, 'u_basic');
+	await insertUser(db, 'u_pro');
+	await insertSubscription(db, { userId: 'u_pro', stripeSubscriptionId: 'sub_pro', status: 'active', plan: 'pro', currentPeriodStart: new Date(Date.now() - DAY), currentPeriodEnd: new Date(Date.now() + 29 * DAY) });
+	for (const [id, userId] of [['app_live', 'u_basic'], ['app_next', 'u_basic'], ['app_pro_1', 'u_pro'], ['app_pro_2', 'u_pro']] as const) await insertApp(db, { id, userId });
+});
+
+/** SpaceDO as the controller sees it; `addsCatalog` makes the draft add catalog products. */
+function spaces(addsCatalog = false) {
+	const published: Array<{ appId: string; refuseNewCatalogProducts: boolean }> = [];
+	const namespace = {
+		idFromName: (name: string) => name,
+		get: (appId: string) => ({
+			publishDraft: async (_draftId?: string, options?: { refuseNewCatalogProducts?: boolean }) => {
+				published.push({ appId, refuseNewCatalogProducts: options?.refuseNewCatalogProducts === true });
+				if (addsCatalog && options?.refuseNewCatalogProducts) return { error: NEW_CATALOG_PRODUCTS_ERROR };
+				return { commitHash: 'c0ffee1', storeManifest: null, draftId: 'main', draftName: 'Main' };
+			},
+			getPublishContext: async () => ({ active: { id: 'main', name: 'Main', tip: 'c0ffee1' }, publishedDraft: null }),
+			getStoreManifest: async () => ({ commitHash: 'c0ffee1', manifest: null }),
+		}),
+	};
+	return { namespace, published };
+}
+
+function call(method: 'publish' | 'addDomain', appId: string, userId: string, namespace: unknown, extra: Record<string, unknown> = { BILLING: 'on' }) {
+	const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-billing-test-secret-0123', SPACE_DO: namespace, ...extra });
+	const body = method === 'publish' ? { slug: appId.replace(/_/g, '-') } : { hostname: 'shop.example.com' };
+	const request = new Request(`https://estori.app/api/stores/${appId}/live/${method === 'publish' ? 'publish' : 'domain'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+	return LiveStoreController[method](request, env, {} as ExecutionContext, { pathParams: { id: appId }, user: { id: userId } } as unknown as RouteContext);
+}
+
+describe('plan limits at Go live', () => {
+	it("republishes Basic's live store, and refuses a second live store before anything is published", async () => {
+		await new LiveStoreService(envWith(db)).publish({ appId: 'app_live', slug: 'app-live', commit: 'c0ffee0', now: new Date() });
+		const { namespace, published } = spaces();
+		expect((await call('publish', 'app_live', 'u_basic', namespace)).status).toBe(200);
+		const refused = await call('publish', 'app_next', 'u_basic', namespace);
+		expect(refused.status).toBe(402);
+		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'liveStores', plan: 'basic', upgradeTo: 'pro' });
+		expect(published.map((entry) => entry.appId)).toEqual(['app_live']);
 	});
 
-	it("keeps today's counter and its 429 while billing is off", async () => {
-		const closed = counter(false);
-		await expect(reserveNewStore(closed.env, DEFAULT_RATE_LIMIT_SETTINGS, account({ billing: false }), USER, request)).rejects.toBeInstanceOf(RateLimitExceededError);
-		expect(closed.seen).toEqual([{ key: 'platform:appCreation:user:u1', limit: 3, dailyLimit: 3 }]);
+	it('asks SpaceDO to refuse new catalog products without the catalog, and answers with the plan limit', async () => {
+		await new LiveStoreService(envWith(db)).publish({ appId: 'app_live', slug: 'app-live', commit: 'c0ffee0', now: new Date() });
+		const basic = spaces(true);
+		const refused = await call('publish', 'app_live', 'u_basic', basic.namespace);
+		expect(refused.status).toBe(402);
+		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'supplierCatalog', message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' });
+		const pro = spaces(true);
+		expect((await call('publish', 'app_pro_1', 'u_pro', pro.namespace)).status).toBe(200);
+		expect(pro.published).toEqual([{ appId: 'app_pro_1', refuseNewCatalogProducts: false }]);
+	});
+
+	it('refuses an own domain on Basic, and changes nothing while billing is off', async () => {
+		const { namespace, published } = spaces(true);
+		const domain = await call('addDomain', 'app_live', 'u_basic', namespace);
+		expect(domain.status).toBe(402);
+		expect((await domain.json()).error.planLimit).toMatchObject({ limit: 'ownDomainsPerLiveStore', message: 'Own domains come with Pro and Premium.' });
+		expect((await call('addDomain', 'app_live', 'u_basic', namespace, {})).status).not.toBe(402);
+		expect((await call('publish', 'app_next', 'u_basic', namespace, {})).status).toBe(200);
+		expect(published).toEqual([{ appId: 'app_next', refuseNewCatalogProducts: false }]);
 	});
 });
 ```
 
-In `worker/api/controllers/agent/plan-checks-guard.test.ts`, replace the `enforceAppCreationRateLimit(` ordering with:
+- [ ] **Step 3: Write the failing space, wiring and catalog tool tests.** Add to `space/src/space/store-manifest.test.ts`:
 
 ```ts
-		expect(credits).toBeLessThan(controller.indexOf('reserveNewStore('));
-		expect(controller).not.toContain('enforceAppCreationRateLimit(');
+import { NEW_CATALOG_PRODUCTS_ERROR, catalogVariantIdsOf, newCatalogVariantIds } from "./store-manifest"
+
+const manifest = (...ids: string[]) =>
+  JSON.stringify({ products: [{ id: "lamp", name: "Lamp", variants: ids.map((id, index) => ({ id: `v${index}`, name: "V", priceCents: 1000, catalogVariantId: id })) }, { id: "own", name: "Own", variants: [{ id: "o", name: "O", priceCents: 500 }] }] })
+
+describe("catalog products in a version", () => {
+  it("reads the catalog variants, and finds those the draft adds to the live version", () => {
+    expect(catalogVariantIdsOf(manifest("cv_a", "cv_b"))).toEqual(new Set(["cv_a", "cv_b"]))
+    expect(catalogVariantIdsOf(null)).toEqual(new Set())
+    expect(catalogVariantIdsOf("{")).toEqual(new Set())
+    expect(newCatalogVariantIds(manifest("cv_a", "cv_c"), manifest("cv_a", "cv_b"))).toEqual(["cv_c"])
+    expect(newCatalogVariantIds(manifest("cv_a"), manifest("cv_a", "cv_b"))).toEqual([])
+    expect(newCatalogVariantIds(manifest("cv_a"), null)).toEqual(["cv_a"])
+    expect(NEW_CATALOG_PRODUCTS_ERROR).toBe("This version adds catalog products, which need Pro or Premium.")
+  })
+})
 ```
 
-In `worker/database/services/live-stores.sql.test.ts`, add:
+Add to `space/test/drafts-wiring.test.ts`:
 
 ```ts
-	it("lists an owner's live stores, leaving out ones taken offline and other sellers' stores", async () => {
-		await insertUser(db, 'seller_3');
-		for (const id of ['app_live_a', 'app_live_b', 'app_offline']) await insertApp(db, { id, userId: 'seller_3' });
-		const stores = new LiveStoreService(envWith(db));
-		for (const id of ['app_live_a', 'app_live_b', 'app_offline']) await stores.publish({ appId: id, slug: id.replaceAll('_', '-'), commit: 'c1', now: NOW });
-		await stores.publish({ appId: 'app_home', slug: 'lumen-home', commit: 'c1', now: NOW });
-		await stores.setOffline('app_offline', NOW);
-		expect((await stores.liveStoreAppIdsOfUser('seller_3')).sort()).toEqual(['app_live_a', 'app_live_b']);
-	});
+  it("refuses new catalog products only when asked, after deploying and before publishing", () => {
+    const publish = methodBody(spaceDo, "async publishDraft(")
+    const check = publish.indexOf("newCatalogVariantIds(")
+    expect(publish).toContain("options.refuseNewCatalogProducts")
+    expect(check).toBeGreaterThan(publish.indexOf("await this.deploy(draft.branch)"))
+    expect(check).toBeLessThan(publish.indexOf("publishLiveDeployment(sql, Date.now(), draft.branch)"))
+    expect(publish).toContain("return { error: NEW_CATALOG_PRODUCTS_ERROR }")
+  })
 ```
 
-`worker/api/controllers/liveStores/catalog-mirror.test.ts`:
+In `live-store-routes-wiring.test.ts`, change `'space.publishDraft(draftId)'` to `'space.publishDraft(draftId, { refuseNewCatalogProducts })'`, and add:
 
 ```ts
-import { describe, expect, it } from 'vitest';
-import { CATALOG_NEEDS_PLAN_ERROR } from '../../../../shared/types/live-stores';
-
-const sources = import.meta.glob<string>(['/space/src/space/store-manifest.ts'], { query: '?raw', import: 'default', eager: true });
-
-describe('the catalog refusal from SpaceDO', () => {
-	it('is the same string on both sides, so the controller can answer it as plan_limit', () => {
-		expect(sources['/space/src/space/store-manifest.ts']).toContain(JSON.stringify(CATALOG_NEEDS_PLAN_ERROR));
+	it('checks the live-store limit before publishing, and the domain limit before adding one', () => {
+		const controller = source('/worker/api/controllers/liveStores/controller.ts');
+		const publish = controller.slice(controller.indexOf('static async publish('), controller.indexOf('static async offline('));
+		expect(publish.indexOf("assertWithinLimit(account, 'liveStores'")).toBeLessThan(publish.indexOf('space.publishDraft('));
+		expect(publish).toContain('published.error === NEW_CATALOG_PRODUCTS_ERROR');
+		const addDomain = controller.slice(controller.indexOf('static async addDomain('), controller.indexOf('static async checkDomain('));
+		expect(addDomain.indexOf("assertWithinLimit(account, 'ownDomainsPerLiveStore', 0)")).toBeLessThan(addDomain.indexOf('addStoreDomain('));
 	});
-});
+
+	it('mirrors the catalog refusal SpaceDO answers', () => {
+		const space = Object.values(spaceSources)[0] ?? '';
+		expect(space).toContain(`"${NEW_CATALOG_PRODUCTS_ERROR}"`);
+	});
 ```
 
-Append to `worker/api/controllers/liveStores/controller.sql.test.ts`. Import `insertSubscription` and `CATALOG_NEEDS_PLAN_ERROR`:
-
-```ts
-describe('plan limits at publish', () => {
-	beforeAll(async () => {
-		for (const id of ['seller_basic', 'seller_premium']) await insertUser(db, id);
-		for (const [id, owner] of [['app_b1', 'seller_basic'], ['app_b2', 'seller_basic'], ['app_p1', 'seller_premium'], ['app_p2', 'seller_premium']]) await insertApp(db, { id, userId: owner });
-		for (const id of ['app_b1', 'app_p1']) {
-			await db.prepare("INSERT INTO live_stores (app_id, slug, status, published_commit, published_at, created_at, updated_at) VALUES (?, ?, 'live', 'abc', 0, 0, 0)").bind(id, id.replace('_', '-')).run();
-		}
-		await insertSubscription(db, { userId: 'seller_premium', stripeSubscriptionId: 'sub_premium', status: 'active', currentPeriodStart: new Date(Date.now() - 86_400_000), currentPeriodEnd: new Date(Date.now() + 29 * 86_400_000) });
-	});
-
-	/** SpaceDO recording each publish's options, refusing with `refusal` when given. */
-	function recordingSpace(refusal?: string) {
-		const options: unknown[] = [];
-		const namespace = {
-			idFromName: (name: string) => name,
-			get: () => ({
-				publishDraft: async (_draftId: string | undefined, opts: unknown) => {
-					options.push(opts);
-					return refusal ? { error: refusal } : { commitHash: 'c0ffee2', storeManifest: null, draftId: 'main', draftName: 'Main' };
-				},
-				getPublishContext: async () => ({ active: { id: 'main', name: 'Main', tip: 'c0ffee2' }, publishedDraft: null }),
-				getStoreManifest: async () => null,
-			}),
-		};
-		return { namespace, options };
-	}
-
-	function publishFor(userId: string, appId: string, namespace: unknown, extra: Record<string, unknown> = { BILLING: 'on' }) {
-		const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace, VibecoderStore: { get: async () => null }, ...extra });
-		const request = new Request(`https://estori.app/api/stores/${appId}/live/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: appId.replace('_', '-') }) });
-		return LiveStoreController.publish(request, env, {} as ExecutionContext, { user: { id: userId, email: `${userId}@example.test` }, pathParams: { id: appId } } as unknown as RouteContext);
-	}
-
-	it("refuses Basic a second live store before publishing anything, but always republishes a live one", async () => {
-		const refused = recordingSpace();
-		const response = await publishFor('seller_basic', 'app_b2', refused.namespace);
-		expect(response.status).toBe(402);
-		expect((await response.json()).error.planLimit).toMatchObject({ limit: 'liveStores', plan: 'basic', message: 'Basic includes 1 live store. Get Premium for up to 10.' });
-		expect(refused.options).toEqual([]);
-		const republish = recordingSpace();
-		expect((await publishFor('seller_basic', 'app_b1', republish.namespace)).status).toBe(200);
-		expect(republish.options).toEqual([{ catalogFromLiveOnly: true }]);
-	});
-
-	it('lets Premium publish more stores, with any catalog product', async () => {
-		const space = recordingSpace();
-		expect((await publishFor('seller_premium', 'app_p2', space.namespace)).status).toBe(200);
-		expect(space.options).toEqual([{ catalogFromLiveOnly: false }]);
-	});
-
-	it("answers SpaceDO's catalog refusal as plan_limit, saving nothing", async () => {
-		const space = recordingSpace(CATALOG_NEEDS_PLAN_ERROR);
-		const response = await publishFor('seller_basic', 'app_b1', space.namespace);
-		expect(response.status).toBe(402);
-		expect((await response.json()).error.planLimit).toMatchObject({ limit: 'supplierCatalog', message: 'Adding catalog products to your store comes with Premium. Products already live keep selling.' });
-		expect(await db.prepare("SELECT published_commit FROM live_stores WHERE app_id = 'app_b1'").first()).toEqual({ published_commit: 'abc' });
-	});
-
-	it('enforces nothing new while billing is off', async () => {
-		const space = recordingSpace();
-		expect((await publishFor('seller_basic', 'app_b2', space.namespace, {})).status).toBe(200);
-		expect(space.options).toEqual([{ catalogFromLiveOnly: false }]);
-	});
-
-	it('keeps own domains for Premium', async () => {
-		const env = envWith(db, { BILLING: 'on', VibecoderStore: { get: async () => null }, STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod' });
-		const add = (userId: string, appId: string) =>
-			LiveStoreController.addDomain(new Request(`https://estori.app/api/stores/${appId}/live/domain`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hostname: 'shop.example.com' }) }), env, {} as ExecutionContext, { user: { id: userId, email: `${userId}@example.test` }, pathParams: { id: appId } } as unknown as RouteContext);
-		const basic = await add('seller_basic', 'app_b1');
-		expect(basic.status).toBe(402);
-		expect((await basic.json()).error.planLimit).toMatchObject({ limit: 'ownDomainsPerLiveStore', message: 'Own domains come with Premium.' });
-		expect((await add('seller_premium', 'app_p1')).status).not.toBe(402);
-	});
-});
-```
-
-Each test's writes roll back after it, so `app_b1` keeps the `abc` commit from `beforeAll`. A refused publish writes nothing.
+At the top of the file, add `import { NEW_CATALOG_PRODUCTS_ERROR } from '../../../../shared/types/billing';` and `const spaceSources = import.meta.glob<string>('/space/src/space/store-manifest.ts', { query: '?raw', import: 'default', eager: true });`.
 
 In `worker/agents/think/catalog-tools.test.ts`:
-- give the existing `tools` a `planNote: async () => null`;
-- import `CATALOG_PLAN_NOTE`;
+- give the shared `tools` a `catalogRefusal: async () => null`;
+- change the agent pin to `'...createCatalogTools(catalogToolDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null))'`;
 - add:
 
 ```ts
-	it("tells the AI in plain words when the seller's plan doesn't include the catalog", async () => {
-		const limited = createCatalogTools({ search: async () => [PRODUCT], get: async () => PRODUCT, planNote: async () => CATALOG_PLAN_NOTE });
-		expect(JSON.parse(await run(limited.search_catalog, {})).note).toBe(CATALOG_PLAN_NOTE);
-		expect(JSON.parse(await run(limited.get_catalog_product, { productId: 'cp_1' })).note).toBe(CATALOG_PLAN_NOTE);
-		expect(JSON.parse(await run(tools.search_catalog, {})).note).toBeUndefined();
-		expect(CATALOG_PLAN_NOTE).toContain('comes with Premium');
+	it("tell the AI, in the seller's words, that catalog products need Pro or Premium", async () => {
+		const refusal = { code: 'plan_limit' as const, limit: 'supplierCatalog' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' };
+		const basic = createCatalogTools({ search: async () => [PRODUCT], get: async () => PRODUCT, catalogRefusal: async () => refusal });
+		for (const output of [await run(basic.search_catalog, {}), await run(basic.get_catalog_product, { productId: 'cp_1' })]) {
+			expect(JSON.parse(output).notice).toBe(`${refusal.message} Tell the seller this before adding a catalog product to their store.`);
+		}
+		expect(JSON.parse(await run(tools.search_catalog, {})).notice).toBeUndefined();
 	});
 ```
 
-- [ ] **Step 3: Run them to verify they fail**
+- [ ] **Step 4: Run them to verify they fail**
 
-Run: `rtk proxy bun run test -- space/test/live-deployment.test.ts space/test/publish-catalog-wiring.test.ts`
-Expected: FAIL, missing exports and no catalog check.
-
-Run: `rtk proxy bun run test -- worker/services/billing/gates.test.ts worker/database/services/live-stores.sql.test.ts worker/api/controllers/liveStores/controller.sql.test.ts worker/api/controllers/liveStores/catalog-mirror.test.ts`
+Run: `rtk proxy bun run test -- worker/services/billing/store-limits.test.ts worker/api/controllers/liveStores/controller-billing.sql.test.ts worker/api/controllers/liveStores/live-store-routes-wiring.test.ts`
 Expected: FAIL.
 
-Run: `rtk proxy bun run test -- worker/agents/think/catalog-tools.test.ts worker/api/controllers/agent/plan-checks-guard.test.ts`
+Run: `rtk proxy bun run test -- worker/agents/think/catalog-tools.test.ts space/src/space/store-manifest.test.ts space/test/drafts-wiring.test.ts`
 Expected: FAIL.
 
-- [ ] **Step 4: SpaceDO.**
-
-**`store-manifest.ts`:**
+- [ ] **Step 5: Starting stores.** `store-limits.ts`:
 
 ```ts
-/** The publish refusal for catalog products a plan doesn't include. Mirrored as CATALOG_NEEDS_PLAN_ERROR in shared/types/live-stores.ts. */
-export const CATALOG_NEEDS_PLAN = "This version adds catalog products, which need Premium."
+/** New stores on a plan: Pro and Premium per day, Basic in the account's lifetime. Every start is counted. */
+export async function checkStoreStart(deps: StoreStartDeps, account: BillingAccount): Promise<PlanLimitRefusal | null> {
+	if (!account.billing) return null;
+	const perDay = account.limits.newStoresPerDay;
+	if (perDay !== null && !(await deps.takeDailyStore(perDay))) return assertWithinLimit(account, 'newStoresPerDay', perDay);
+	const place = await deps.reserveStore(account.limits.storesLifetime);
+	return place.reserved ? null : assertWithinLimit(account, 'storesLifetime', place.started);
+}
+```
 
-/** Every catalogVariantId in a raw manifest, once each; an unreadable manifest has none. Validation happens in the worker. */
-export function catalogVariantIdsOf(manifest: string | null): string[] {
-  if (!manifest) return []
+**`storeStartDepsFromEnv(env, user, request, rateLimit)`:**
+- `reserveStore` is `new BillingService(env).reserveStore(user.id, cap, new Date())`.
+- `takeDailyStore(limit)` runs `RateLimitService.enforceAppCreationRateLimit` with `appCreation` set to `{ ...rateLimit.appCreation, enabled: true, limit, dailyLimit: limit, period: 86_400 }`. It answers false on `RateLimitExceededError`, and rethrows anything else.
+
+**In the agent controller,** right after the credit check from Task 10:
+- with `credits.billing`: `const refusal = await checkStoreStart(storeStartDepsFromEnv(env, user, request, context.config.security.rateLimit), await loadAccount(env, user.id));` and a refusal answers `createPlanLimitResponse(refusal)`;
+- otherwise today's `enforceAppCreationRateLimit` block, unchanged.
+
+A start that fails later still counts (spec decision 29a).
+
+- [ ] **Step 6: Live stores and domains.**
+
+**`LiveStoreService.liveCountOf(userId)`:**
+
+```sql
+SELECT COUNT(*) FROM live_stores ls JOIN apps a ON a.id = ls.app_id WHERE a.user_id = ? AND ls.status = 'live'
+```
+
+**In `LiveStoreController`:**
+- `liveStoreAccount(env, context)` answers `loadAccount(env, context.user.id)`, or null without a user. The routes are owner-only, so production always has one; billing is off for the existing tests that call without one.
+- **`publish`,** after the slug checks and before the agent's merge cleanup:
+  - when the account exists and `(await stores.getByApp(appId))?.status !== 'live'`, `assertWithinLimit(account, 'liveStores', await stores.liveCountOf(account.userId))`. A refusal answers `this.createPlanLimitResponse<LiveStoreView>(refusal)`;
+  - republishing a live store skips the count;
+  - `const refuseNewCatalogProducts = account !== null && assertWithinLimit(account, 'supplierCatalog') !== null;` and `space.publishDraft(draftId, { refuseNewCatalogProducts })`;
+  - when `published.error === NEW_CATALOG_PRODUCTS_ERROR`, answer the `supplierCatalog` refusal as a 402.
+- **`addDomain`,** first: `assertWithinLimit(account, 'ownDomainsPerLiveStore', 0)`. The 0 is the domains the store has, since a store holds at most one. A refusal answers 402.
+- `LiveSpaceStub.publishDraft` gains the options parameter, typed with `PublishDraftOptions` from `@space-do/space`.
+
+- [ ] **Step 7: The catalog in SpaceDO and in the AI's tools.**
+
+**`space/src/space/store-manifest.ts`:**
+
+```ts
+/** Mirrors NEW_CATALOG_PRODUCTS_ERROR in shared/types/billing.ts, which this package can't import. */
+export const NEW_CATALOG_PRODUCTS_ERROR = "This version adds catalog products, which need Pro or Premium."
+
+/** The catalog variants a manifest sells; a manifest that doesn't parse sells none. Validation happens in the worker. */
+export function catalogVariantIdsOf(manifest: string | null): Set<string> {
+  const ids = new Set<string>()
+  if (!manifest) return ids
   let parsed: unknown
   try {
     parsed = JSON.parse(manifest)
   } catch {
-    return []
+    return ids
   }
   const products = typeof parsed === "object" && parsed !== null ? (parsed as { products?: unknown }).products : undefined
-  if (!Array.isArray(products)) return []
-  const ids = new Set<string>()
+  if (!Array.isArray(products)) return ids
   for (const product of products) {
     const variants = typeof product === "object" && product !== null ? (product as { variants?: unknown }).variants : undefined
     if (!Array.isArray(variants)) continue
     for (const variant of variants) {
       const id = typeof variant === "object" && variant !== null ? (variant as { catalogVariantId?: unknown }).catalogVariantId : undefined
-      if (typeof id === "string" && id.length > 0) ids.add(id)
+      if (typeof id === "string") ids.add(id)
     }
   }
-  return [...ids]
+  return ids
+}
+
+export function newCatalogVariantIds(draft: string | null, live: string | null): string[] {
+  const published = catalogVariantIdsOf(live)
+  return [...catalogVariantIdsOf(draft)].filter((id) => !published.has(id))
 }
 ```
 
-**`deploy-engine.ts`:** `newCatalogVariants(sql, branch)` reads `store_manifest` for the branch and for `LIVE_BRANCH`, and answers the branch's ids that the live set lacks.
-
-**`drafts-store.ts`:** add `export interface PublishOptions { catalogFromLiveOnly?: boolean }`. Export the type from `space/src/index.ts` next to `PublishDraftResult`.
-
-**`durable-object.ts`:** in `publishDraft(id?: string, options: PublishOptions = {})`, right after the deploy-if-stale block and before `publishLiveDeployment(sql, ...)`:
-
-```ts
-      // On a plan without the catalog, only catalog products the live store already sells may go live again.
-      if (options.catalogFromLiveOnly && newCatalogVariants(sql, draft.branch).length > 0) return { error: CATALOG_NEEDS_PLAN }
-```
-
-- [ ] **Step 5: The worker checks.**
-
-**`shared/types/live-stores.ts`:** add `export const CATALOG_NEEDS_PLAN_ERROR = 'This version adds catalog products, which need Premium.';` with the mirror comment.
-
-**`LiveStoreService.liveStoreAppIdsOfUser(userId)`:** selects `live_stores.app_id` joined to `apps` on `apps.user_id = userId`, where `status = 'live'`.
-
-**`gates.ts`:**
-
-```ts
-/** The app-creation settings with the plan's number a day as both the window's limit and the daily limit. */
-export function withNewStoresPerDay(rateLimit: RateLimitSettings, perDay: number): RateLimitSettings {
-	const appCreation = rateLimit.appCreation;
-	return {
-		...rateLimit,
-		appCreation: appCreation.store === RateLimitStore.DURABLE_OBJECT ? { ...appCreation, limit: perDay, dailyLimit: perDay } : { ...appCreation, limit: perDay },
-	};
-}
-```
-
-**`reserveNewStore`:**
-- **Billing off:** `await RateLimitService.enforceAppCreationRateLimit(env, rateLimit, user, request)` and return null. It throws as today.
-- **Billing on:**
-  1. `key = RateLimitService.buildRateLimitKey(RateLimitType.APP_CREATION, await RateLimitService.getUserIdentifier(user))`.
-  2. `result = await RateLimitService.enforce(env, key, withNewStoresPerDay(rateLimit, account.limits.newStoresPerDay), RateLimitType.APP_CREATION)`. The check and the increment happen together, so two starts can't both take the last slot.
-  3. Answer `result.success ? null : assertWithinLimit(account, 'newStoresPerDay', account.limits.newStoresPerDay)`.
-- Skip all of it when `rateLimit.appCreation.enabled` is false.
-
-**`agent/controller.ts`:** replace the call in the `enforceAppCreationRateLimit` try block. Keep its catch, which still answers 429 with billing off.
-
-```ts
-            try {
-                const refused = await reserveNewStore(env, context.config.security.rateLimit, account, user, request);
-                if (refused) return CodingAgentController.createPlanLimitResponse(refused);
-            } catch (error) {
-```
-
-**`liveStores/controller.ts`:**
-- Extend `LiveSpaceStub.publishDraft(id?: string, options?: PublishOptions)`.
-- In `publish`, after the slug-holder check and before the leftover-merge cleanup:
-
-```ts
-            // Plan limits apply to stores going live, never to stores already live: republishing always works.
-            const account = context.user ? await loadAccount(env, context.user.id) : null;
-            if (account?.billing && (await stores.getByApp(appId))?.status !== 'live') {
-                const refusal = assertWithinLimit(account, 'liveStores', (await stores.liveStoreAppIdsOfUser(account.userId)).length);
-                if (refusal) return this.createPlanLimitResponse<LiveStoreView>(refusal);
-            }
-```
-
-- Call `space.publishDraft(draftId, { catalogFromLiveOnly: account?.billing === true && !account.limits.supplierCatalog })`.
-- When `published.error === CATALOG_NEEDS_PLAN_ERROR` and `account`, answer `this.createPlanLimitResponse<LiveStoreView>(refusal)` with `refusal = assertWithinLimit(account, 'supplierCatalog')`. When that is null, fall through to `draftErrorStatus`.
-- In `addDomain`, before `addStoreDomain`: load the account the same way, and answer `createPlanLimitResponse` when `assertWithinLimit(account, 'ownDomainsPerLiveStore', 0)` refuses.
-- `removeDomain` and `checkDomain` stay open on every plan: a domain kept after a downgrade must stay manageable.
+**`SpaceDO.publishDraft(id?: string, options: PublishDraftOptions = {})`:**
+- after the stale-draft deploy and before `publishLiveDeployment`, when `options.refuseNewCatalogProducts`, reads the draft branch's and the live branch's `store_manifest` the way `getStoreManifest` does;
+- answers `{ error: NEW_CATALOG_PRODUCTS_ERROR }` when `newCatalogVariantIds` finds any.
+- Comparing with the live version is the spec's rule: products already live keep selling, and only new ones are refused.
 
 **`catalog-tools.ts`:**
+- `CatalogToolDeps` gains `catalogRefusal()`.
+- Both tools add `notice: `${refusal.message} Tell the seller this before adding a catalog product to their store.`` to their JSON when it answers a refusal. They still return the products, so the AI can describe them.
+- `catalogToolDepsFromEnv(env, userId)` answers `assertWithinLimit(await loadAccount(env, userId), 'supplierCatalog')`, or null without a user.
+- ThinkAgent passes `this.getConfig<ThinkAgentConfig>()?.userId ?? null`.
 
-```ts
-/** For an account whose plan doesn't include the catalog: the AI tells the seller, and doesn't add catalog products. */
-export const CATALOG_PLAN_NOTE =
-	"This seller's plan doesn't include the supplier catalog. Tell them in plain words that adding catalog products to a store comes with Premium, and that catalog products already live keep selling. Don't add new catalog products to estori-store.json unless they get Premium.";
-```
+- [ ] **Step 8: Run the tests to verify they pass**
 
-- Both tools read `deps.planNote()` alongside their lookup. They answer `{ note, products }` or `{ note, product }` when it isn't null, and the old shape otherwise.
-- `catalogToolDepsFromEnv(env, userId)` gains `planNote: async () => (userId && assertWithinLimit(await loadAccount(env, userId), 'supplierCatalog') ? CATALOG_PLAN_NOTE : null)`.
-- In `ThinkAgent.getTools()`, pass `this.getConfig<ThinkAgentConfig>()?.userId ?? null`.
-
-- [ ] **Step 6: Run the tests to verify they pass**
-
-Run: `rtk proxy bun run test -- space/test/live-deployment.test.ts space/test/publish-catalog-wiring.test.ts space/test/drafts-wiring.test.ts`
+Run: `rtk proxy bun run test -- worker/services/billing/store-limits.test.ts worker/api/controllers/liveStores/controller-billing.sql.test.ts worker/api/controllers/liveStores/controller.sql.test.ts worker/api/controllers/liveStores/live-store-routes-wiring.test.ts`
 Expected: PASS.
 
-Run: `rtk proxy bun run test -- worker/services/billing/gates.test.ts worker/database/services/live-stores.sql.test.ts worker/api/controllers/liveStores/controller.sql.test.ts worker/api/controllers/liveStores/catalog-mirror.test.ts`
-Expected: PASS. The old publish tests are unchanged: they pass no user, so no plan applies.
-
-Run: `rtk proxy bun run test -- worker/agents/think/catalog-tools.test.ts worker/api/controllers/agent/plan-checks-guard.test.ts worker/api/controllers/liveStores/live-store-routes-wiring.test.ts`
+Run: `rtk proxy bun run test -- worker/agents/think/catalog-tools.test.ts space/src/space/store-manifest.test.ts space/test/drafts-wiring.test.ts worker/agents/think/model-wiring.test.ts`
 Expected: PASS.
 
 Run: `bun run typecheck`
-Expected: no errors.
+Expected: no new errors.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add space/src/space/store-manifest.ts space/src/space/deploy-engine.ts space/src/space/drafts-store.ts space/src/space/durable-object.ts space/src/index.ts space/test/live-deployment.test.ts space/test/publish-catalog-wiring.test.ts shared/types/live-stores.ts worker/services/billing/gates.ts worker/services/billing/gates.test.ts worker/api/controllers/agent/controller.ts worker/api/controllers/agent/plan-checks-guard.test.ts worker/database/services/LiveStoreService.ts worker/database/services/live-stores.sql.test.ts worker/api/controllers/liveStores/controller.ts worker/api/controllers/liveStores/controller.sql.test.ts worker/api/controllers/liveStores/catalog-mirror.test.ts worker/agents/think/catalog-tools.ts worker/agents/think/catalog-tools.test.ts worker/agents/think/ThinkAgent.ts
-git commit -m "feat(billing): plan limits on new stores, stores going live, own domains and new catalog products, never on stores already live
+git add worker/services/billing/store-limits.ts worker/services/billing/store-limits.test.ts worker/api/controllers/agent/controller.ts worker/api/controllers/liveStores worker/database/services/LiveStoreService.ts worker/agents/think/catalog-tools.ts worker/agents/think/catalog-tools.test.ts worker/agents/think/ThinkAgent.ts shared/types/billing.ts space/src/space/store-manifest.ts space/src/space/store-manifest.test.ts space/src/space/durable-object.ts space/src/space/drafts-store.ts space/src/index.ts space/test/drafts-wiring.test.ts
+git commit -m "feat(billing): plan limits on new stores, live stores, own domains and new catalog products, without touching what is live
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 10: The billing page, Premium on the pricing page, and the banners
+### Task 12: The pricing page, the calculator, the billing page and the banner
 
 **Files:**
 - Create:
+  - `src/routes/settings/billing-view.ts` (pure), `src/routes/settings/billing.tsx`;
   - `src/hooks/use-billing.ts`;
-  - `src/components/billing/billing-copy.ts`;
-  - `src/components/billing/BillingBanner.tsx`;
-  - `src/components/pricing/premium-action.ts`;
-  - `src/components/pricing/PremiumCheckoutButton.tsx`;
-  - `src/routes/settings/billing.tsx`.
+  - `src/components/billing/PlanButton.tsx`, `src/components/billing/BillingBanner.tsx`.
 - Modify:
-  - routes and layout: `src/routes.tsx`, `src/routes/settings/index.tsx`, `src/components/layout/app-layout.tsx`;
-  - pricing: `src/components/pricing/PlanCards.tsx`, `src/routes/pricing.tsx`, `src/content/positioning.ts`.
+  - plan answer: `shared/types/plan.ts` (`billing`), `worker/api/controllers/limits/controller.ts` (`getPublicPlan`);
+  - pricing: `src/components/marketing/PlanLimits.tsx`, `src/components/pricing/PlanCards.tsx`, `ComparePlans.tsx`, `Calculator.tsx`, `src/routes/pricing.tsx`, `src/content/positioning.ts`, `src/lib/contact.ts`, `src/components/contact/ContactForm.tsx`;
+  - app: `src/routes.tsx`, `src/routes/settings/index.tsx`, `src/components/layout/app-layout.tsx`.
 - Test:
-  - `src/components/billing/billing-copy.test.ts`;
-  - `src/components/pricing/premium-action.test.ts`;
-  - `src/routes/settings/billing-guard.test.ts`;
-  - `src/routes/pricing-guard.test.ts`.
+  - `src/routes/settings/billing-view.test.ts`;
+  - `src/routes/billing-page-guard.test.ts`;
+  - `src/routes/pricing-guard.test.ts`, `src/routes/calculator-guard.test.ts`, `src/routes/contact-guard.test.ts` (updated);
+  - `worker/api/controllers/limits/plan-wiring.test.ts` (updated).
 
 **Interfaces:**
 - **Consumes:**
-  - from Task 6: `BillingView`, `apiClient.getBilling`, `startPremiumCheckout`, `changePremiumTier`, `cancelPremium`, `resumePremium`, `openBillingPortal`, `queryKeys.billing`;
-  - from Task 8: `PublicPlan.billing`;
-  - from Task 1: `PREMIUM_TIERS`, `premiumTier`, `formatBillingDate`, `formatUsd`.
+  - from Task 1: `PLAN_LIMITS`, `PLAN_PRICES_CENTS`, `EXTRA_CREDITS`, `extraCreditsPriceCents`, `assertWithinLimit`, `planName`, `formatBillingDate`, `formatCredits`, `formatUsd`;
+  - from Task 2: `recommendPlan`, `DAYS_PER_MONTH`, `ENTERPRISE_FROM_CREDITS`;
+  - from Task 8: `BillingView`, `apiClient` billing calls, `queryKeys.billing`;
+  - from Task 10: `upgradeActionFor`, `UpgradeAction`;
+  - from Task 5: `isBillingOn`.
 - **Produces:**
-  - `use-billing.ts`: `useBilling(enabled?: boolean)`, `useBillingOpen(): boolean`.
-  - `billing-copy.ts`:
-    - copy: `planHeadline(view)`, `planStatusLines(view): string[]`, `creditsLine(view)`, `grantedLine(view): string | null`;
-    - tier buttons: `TierAction { kind: 'checkout' | 'change' | 'keep'; label: string; disabled: boolean; reason: string | null }`, `tierAction(view, tier): TierAction | null`;
-    - waiting for a change: `PendingChange = { kind: 'checkout' } | { kind: 'tier'; tier: PremiumTierNumber } | { kind: 'cancel' } | { kind: 'resume' }`, `changeLanded(change, view): boolean`, `ConfirmState = 'idle' | 'waiting' | 'landed' | 'slow'`, `confirmState(input: { change: PendingChange | null; startedAtMs: number; nowMs: number; view: BillingView | undefined }): ConfirmState`, `CONFIRM_POLL_MS = 2_000`, `CONFIRM_TIMEOUT_MS = 30_000`, `confirmCopy(change, state): string | null`;
-    - the banner: `billingBanner(view: BillingView | undefined): { text: string; action: { label: string; to: string } } | null`.
-  - `premium-action.ts`: `premiumAction(input: { billingOpen: boolean; signedIn: boolean }): 'contact' | 'signup' | 'checkout'`, `tierFromParam(value: string | null): PremiumTierNumber`.
-  - `positioning.ts`: `PRICING_FAQ_BILLING`, the FAQ once Premium is on sale.
+  - `PublicPlanLimits.billing: boolean`;
+  - `useBilling()`;
+  - `PlanButton({ plan, variant?, className? })`;
+  - `billing-view.ts`:
+    - `CONFIRM_POLL_MS = 2_000`, `CONFIRM_TIMEOUT_MS = 30_000`;
+    - `checkoutReturnOf(search: string): 'plan' | 'credits' | 'cancelled' | null`;
+    - `requestedPlanOf(search: string): PaidPlanId | null`;
+    - `PlanChoice { plan: PaidPlanId; action: 'checkout' | 'upgrade' | 'downgrade' | 'resume' | 'cancel-change' | 'current' | 'none'; label: string; note: string | null }`;
+    - `planChoicesFor(view: BillingView): PlanChoice[]` (Pro, then Premium);
+    - `confirmationFor(view: BillingView, action: 'upgrade' | 'downgrade' | 'cancel'): { title: string; body: string; confirm: string }`;
+    - `isConfirmed(kind: 'plan' | 'credits', initial: BillingView, current: BillingView): boolean`;
+    - `BillingBanner = { tone: 'warning' | 'info'; message: string; action: UpgradeAction | { kind: 'portal'; label: string } }`, `billingBannerFor(view: BillingView | undefined): BillingBanner | null`.
+  - `pricingFaq(billing: boolean): readonly FaqItem[]`, replacing `PRICING_FAQ`.
 
-- [ ] **Step 1: Write the failing tests.** `src/components/billing/billing-copy.test.ts`:
+- [ ] **Step 1: Write the failing view test** `src/routes/settings/billing-view.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import type { BillingView } from '@/api-types';
-import { billingBanner, changeLanded, confirmCopy, confirmState, creditsLine, grantedLine, planHeadline, planStatusLines, tierAction } from './billing-copy';
+import { PLAN_LIMITS, type BillingView, type PlanId } from '@/api-types';
+import { billingBannerFor, checkoutReturnOf, confirmationFor, isConfirmed, planChoicesFor, requestedPlanOf } from './billing-view';
 
 const NOV_5 = Date.UTC(2026, 10, 5, 10);
 
-function view(overrides: Partial<BillingView> = {}): BillingView {
+function view(plan: PlanId, overrides: Partial<BillingView> = {}): BillingView {
 	return {
 		enabled: true,
-		plan: 'premium',
-		tier: 2,
-		source: 'subscription',
-		status: 'active',
+		plan,
+		source: plan === 'basic' ? 'free' : 'subscription',
+		status: plan === 'basic' ? null : 'active',
 		periodStart: Date.UTC(2026, 9, 5, 10),
 		periodEnd: NOV_5,
 		cancelAtPeriodEnd: false,
-		pendingTier: null,
-		pendingTierAt: null,
+		pendingPlan: null,
+		pendingPlanAt: null,
 		graceEndsAt: null,
 		paymentFailing: false,
-		credits: { used: 41_000, limit: 50_000, granted: 0, window: 'period', resetsAt: NOV_5 },
-		limits: { aiCredits: 50_000, aiCreditsWindow: 'period', newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, draftsPerStore: 5 },
-		canManageBilling: true,
+		credits: { pool: PLAN_LIMITS[plan].aiCredits, granted: 0, used: 0, left: PLAN_LIMITS[plan].aiCredits, purchasedLeft: 0, available: PLAN_LIMITS[plan].aiCredits, renewsAt: NOV_5 },
+		alert: null,
+		purchases: [],
+		limits: PLAN_LIMITS[plan],
+		canManageBilling: plan !== 'basic',
+		canBuyCredits: plan === 'premium',
 		...overrides,
 	};
 }
 
-const BASIC = view({ plan: 'basic', tier: null, source: 'free', status: null, credits: { used: 120, limit: 200, granted: 0, window: 'day', resetsAt: Date.UTC(2026, 9, 20) }, canManageBilling: false });
+const actions = (choices: ReturnType<typeof planChoicesFor>) => choices.map((choice) => `${choice.plan}:${choice.action}`);
 
-describe('the billing page copy', () => {
-	it('names the plan and its state', () => {
-		expect(planHeadline(view())).toBe('Premium, 50,000 AI credits a month');
-		expect(planHeadline(BASIC)).toBe('Basic, free');
-		expect(planStatusLines(view())).toEqual(['Renews on November 5 at $199 a month.']);
-		expect(planStatusLines(view({ cancelAtPeriodEnd: true }))).toEqual(['Premium until November 5.']);
-		expect(planStatusLines(view({ pendingTier: 1, pendingTierAt: NOV_5 }))).toEqual(['Renews on November 5 at $199 a month.', 'Moves to 20,000 AI credits a month on November 5.']);
-		expect(planStatusLines(view({ status: 'past_due', paymentFailing: true, graceEndsAt: Date.UTC(2026, 9, 12, 10) }))).toEqual(["Your last payment didn't go through. Premium continues until October 12. Update your card to keep it."]);
-		expect(planStatusLines(view({ plan: 'basic', tier: null, source: 'free', status: 'past_due', paymentFailing: true }))).toEqual(["Your last payment didn't go through, so your account is on Basic. Update your card to restore Premium."]);
-		expect(planStatusLines(view({ plan: 'enterprise', tier: null, source: 'override' }))).toEqual(['Your plan is set by Estori.']);
+describe('the billing page', () => {
+	it('reads where the seller came back from, and the plan a link asked for', () => {
+		expect(checkoutReturnOf('?checkout=success')).toBe('plan');
+		expect(checkoutReturnOf('?credits=success')).toBe('credits');
+		expect(checkoutReturnOf('?checkout=cancelled')).toBe('cancelled');
+		expect(checkoutReturnOf('')).toBeNull();
+		expect(requestedPlanOf('?plan=premium')).toBe('premium');
+		expect(requestedPlanOf('?plan=enterprise')).toBeNull();
 	});
 
-	it('counts credits for the day or the month, and names credits added by Estori', () => {
-		expect(creditsLine(view())).toBe('41,000 of 50,000 AI credits used this month. They refill on November 5.');
-		expect(creditsLine(BASIC)).toBe('120 of 200 AI credits used today. They reset at midnight UTC.');
-		expect(grantedLine(view())).toBeNull();
-		expect(grantedLine(view({ credits: { used: 0, limit: 55_000, granted: 5_000, window: 'period', resetsAt: NOV_5 } }))).toBe('Includes 5,000 added by Estori.');
+	it('offers each plan the next step that fits the account', () => {
+		expect(actions(planChoicesFor(view('basic')))).toEqual(['pro:checkout', 'premium:checkout']);
+		expect(actions(planChoicesFor(view('pro')))).toEqual(['pro:current', 'premium:upgrade']);
+		expect(actions(planChoicesFor(view('premium')))).toEqual(['pro:downgrade', 'premium:current']);
+		expect(planChoicesFor(view('premium', { pendingPlan: 'pro', pendingPlanAt: NOV_5 }))).toEqual([
+			{ plan: 'pro', action: 'none', label: 'Starts November 5', note: null },
+			{ plan: 'premium', action: 'cancel-change', label: 'Keep Premium', note: 'Moves to Pro on November 5' },
+		]);
+		expect(planChoicesFor(view('pro', { cancelAtPeriodEnd: true }))[0]).toEqual({ plan: 'pro', action: 'resume', label: 'Keep Pro', note: 'Ends on November 5' });
+		expect(actions(planChoicesFor(view('pro', { status: 'past_due', paymentFailing: true })))).toEqual(['pro:current', 'premium:none']);
+		expect(actions(planChoicesFor(view('enterprise', { source: 'override' })))).toEqual(['pro:none', 'premium:none']);
 	});
 
-	it('offers each pool the action it can take, one change at a time', () => {
-		expect(tierAction(BASIC, 1)).toEqual({ kind: 'checkout', label: 'Get Premium', disabled: false, reason: null });
-		expect(tierAction(view(), 2)).toBeNull();
-		expect(tierAction(view(), 3)).toEqual({ kind: 'change', label: 'Move up now', disabled: false, reason: null });
-		expect(tierAction(view(), 1)).toEqual({ kind: 'change', label: 'Move down at renewal', disabled: false, reason: null });
-		expect(tierAction(view({ pendingTier: 1, pendingTierAt: NOV_5 }), 2)).toEqual({ kind: 'keep', label: 'Keep 50,000 credits', disabled: false, reason: null });
-		expect(tierAction(view({ pendingTier: 1, pendingTierAt: NOV_5 }), 4)).toMatchObject({ disabled: true, reason: 'Keep your current pool first.' });
-		expect(tierAction(view({ paymentFailing: true, status: 'past_due' }), 4)).toMatchObject({ disabled: true, reason: 'Update your card first.' });
-		expect(tierAction(view({ cancelAtPeriodEnd: true }), 4)).toMatchObject({ disabled: true, reason: 'Keep Premium first.' });
-		expect(tierAction(view({ plan: 'basic', tier: null, source: 'free', status: 'past_due', paymentFailing: true }), 1)).toMatchObject({ kind: 'checkout', disabled: true, reason: 'Update your card in Manage billing to restore Premium.' });
-		expect(tierAction(view({ plan: 'enterprise', tier: null, source: 'override' }), 1)).toBeNull();
+	it('explains a charge or a change before asking to confirm it', () => {
+		expect(confirmationFor(view('pro'), 'upgrade')).toEqual({
+			title: 'Move to Premium now?',
+			body: "You'll have 100,000 AI credits a month right away, and the credits you've used this month count against them. We'll charge the difference for the rest of this month, then Premium renews at $199 a month.",
+			confirm: 'Move to Premium',
+		});
+		expect(confirmationFor(view('premium'), 'downgrade').body).toBe("You keep Premium until November 5. Then Pro renews at $49 a month, with 20,000 AI credits a month. There's no refund for the rest of this month.");
+		expect(confirmationFor(view('premium'), 'cancel').body).toBe('Premium stays on until November 5, then your account moves to Basic. Your stores stay live.');
 	});
 
-	it('waits for Stripe to confirm, every 2 seconds for up to 30', () => {
-		const start = 1_000_000;
-		expect(confirmState({ change: null, startedAtMs: start, nowMs: start, view: BASIC })).toBe('idle');
-		expect(confirmState({ change: { kind: 'checkout' }, startedAtMs: start, nowMs: start + 4_000, view: BASIC })).toBe('waiting');
-		expect(confirmState({ change: { kind: 'checkout' }, startedAtMs: start, nowMs: start + 30_000, view: BASIC })).toBe('slow');
-		expect(confirmState({ change: { kind: 'checkout' }, startedAtMs: start, nowMs: start + 6_000, view: view() })).toBe('landed');
-		expect(confirmCopy({ kind: 'checkout' }, 'waiting')).toBe('Confirming your payment…');
-		expect(confirmCopy({ kind: 'checkout' }, 'slow')).toBe('Your payment is being confirmed. Refresh in a minute.');
-		expect(confirmCopy({ kind: 'cancel' }, 'waiting')).toBe('Saving your change…');
-		expect(confirmCopy({ kind: 'cancel' }, 'landed')).toBeNull();
+	it('knows when the webhook has recorded a payment', () => {
+		expect(isConfirmed('plan', view('basic'), view('basic'))).toBe(false);
+		expect(isConfirmed('plan', view('basic'), view('pro'))).toBe(true);
+		const before = view('premium', { credits: { ...view('premium').credits!, purchasedLeft: 0 } });
+		expect(isConfirmed('credits', before, before)).toBe(false);
+		expect(isConfirmed('credits', before, view('premium', { credits: { ...view('premium').credits!, purchasedLeft: 5_000 } }))).toBe(true);
 	});
 
-	it("knows when each change has landed in Stripe's state", () => {
-		expect(changeLanded({ kind: 'tier', tier: 3 }, view({ tier: 3 }))).toBe(true);
-		expect(changeLanded({ kind: 'tier', tier: 1 }, view({ pendingTier: 1 }))).toBe(true);
-		expect(changeLanded({ kind: 'tier', tier: 2 }, view())).toBe(true);
-		expect(changeLanded({ kind: 'tier', tier: 2 }, view({ pendingTier: 1 }))).toBe(false);
-		expect(changeLanded({ kind: 'cancel' }, view({ cancelAtPeriodEnd: true }))).toBe(true);
-		expect(changeLanded({ kind: 'resume' }, view({ cancelAtPeriodEnd: true }))).toBe(false);
-	});
-
-	it('shows a banner for a failing payment and for a pool past 80%, on every page', () => {
-		expect(billingBanner(view({ paymentFailing: true, status: 'past_due', graceEndsAt: Date.UTC(2026, 9, 12, 10) }))).toEqual({ text: "Your Premium payment didn't go through. Update your card by October 12 to keep Premium.", action: { label: 'Update card', to: '/settings/billing' } });
-		expect(billingBanner(view())).toEqual({ text: "You've used 82% of this month's AI credits.", action: { label: 'See your pools', to: '/settings/billing' } });
-		expect(billingBanner(view({ credits: { used: 50_000, limit: 50_000, granted: 0, window: 'period', resetsAt: NOV_5 } }))?.text).toBe("You've used this month's AI credits.");
-		expect(billingBanner(BASIC)).toBeNull();
-		expect(billingBanner(view({ enabled: false }))).toBeNull();
-		expect(billingBanner(undefined)).toBeNull();
+	it('puts a failed payment, then a credit warning, in the banner, with the next step for the plan', () => {
+		expect(billingBannerFor(view('pro', { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5 }))).toEqual({ tone: 'warning', message: "Your last payment didn't go through. Update your card by November 5 to keep Pro.", action: { kind: 'portal', label: 'Update card' } });
+		const low = { ...view('basic').credits!, used: 4_000, left: 1_000 };
+		expect(billingBannerFor(view('basic', { alert: 'credits_20', credits: low }))).toEqual({ tone: 'info', message: 'You have 1,000 AI credits left until November 5.', action: { kind: 'checkout', plan: 'pro', label: 'Get Pro' } });
+		expect(billingBannerFor(view('premium', { alert: 'credits_5' }))?.action).toEqual({ kind: 'link', to: '/settings/billing#extra-credits', label: 'Buy credits' });
+		expect(billingBannerFor(view('basic'))).toBeNull();
+		expect(billingBannerFor(view('basic', { enabled: false, alert: 'credits_5' }))).toBeNull();
 	});
 });
 ```
 
-`src/components/pricing/premium-action.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { premiumAction, tierFromParam } from './premium-action';
-
-describe("Premium's button on the pricing page", () => {
-	it('leads to sales until billing opens, then to sign-up or checkout', () => {
-		expect(premiumAction({ billingOpen: false, signedIn: true })).toBe('contact');
-		expect(premiumAction({ billingOpen: true, signedIn: false })).toBe('signup');
-		expect(premiumAction({ billingOpen: true, signedIn: true })).toBe('checkout');
-	});
-
-	it('comes back from sign-up with the pool the visitor picked', () => {
-		expect(tierFromParam('3')).toBe(3);
-		for (const bad of [null, '', '0', '5', 'x']) expect(tierFromParam(bad)).toBe(1);
-	});
-});
-```
-
-`src/routes/settings/billing-guard.test.ts`:
+- [ ] **Step 2: Write the failing guards.** `src/routes/billing-page-guard.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/src/routes.tsx', '/src/routes/settings/billing.tsx', '/src/routes/settings/index.tsx', '/src/components/layout/app-layout.tsx', '/src/components/pricing/PremiumCheckoutButton.tsx'],
+	['/src/routes.tsx', '/src/routes/settings/index.tsx', '/src/routes/settings/billing.tsx', '/src/components/layout/app-layout.tsx', '/src/components/billing/PlanButton.tsx'],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -4149,838 +4482,773 @@ function source(path: string): string {
 }
 
 describe('the billing page', () => {
-	it('is a signed-in page under settings', () => {
+	it('is a signed-in page in the app, linked from settings only when billing is on', () => {
 		const routes = source('/src/routes.tsx');
-		const start = routes.indexOf("path: 'settings/billing'");
-		expect(start).toBeGreaterThan(-1);
-		expect(routes.slice(start, start + 200)).toContain('<ProtectedRoute>');
-	});
-
-	it('waits for Stripe after every change, and sends card and invoice work to Stripe', () => {
-		const page = source('/src/routes/settings/billing.tsx');
-		for (const piece of ['confirmState(', 'CONFIRM_POLL_MS', 'tierAction(', 'apiClient.openBillingPortal(', 'apiClient.cancelPremium(', 'apiClient.resumePremium(', 'apiClient.changePremiumTier(', "searchParams.get('checkout') === 'success'"]) {
-			expect(page, piece).toContain(piece);
-		}
-	});
-
-	it('is linked from settings only while billing is on for the account, and its banner shows on every app page', () => {
+		const appRoutes = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
+		expect(appRoutes).toContain("path: 'settings/billing'");
+		expect(appRoutes.slice(appRoutes.indexOf("path: 'settings/billing'"), appRoutes.indexOf("path: 'settings/billing'") + 200)).toContain('<ProtectedRoute>');
 		const settings = source('/src/routes/settings/index.tsx');
-		expect(settings).toContain('billing.data?.enabled');
-		expect(settings).toContain('BILLING_PATH');
-		expect(source('/src/components/layout/app-layout.tsx')).toContain('<BillingBanner />');
+		expect(settings).toContain('billing.data?.enabled &&');
+		expect(settings).toContain('to={BILLING_PATH}');
 	});
 
-	it('starts checkout from the server, sending signed-out visitors through sign-up and back', () => {
-		const button = source('/src/components/pricing/PremiumCheckoutButton.tsx');
-		expect(button).toContain('apiClient.startPremiumCheckout(tier)');
-		expect(button).toContain('setIntendedUrl(`/pricing?tier=${tier}`)');
-		expect(button).toContain('window.location.assign(');
-		expect(button).not.toMatch(/priceCents|price_/);
+	it('waits for the webhook after a checkout, every 2 seconds for up to 30', () => {
+		const page = source('/src/routes/settings/billing.tsx');
+		expect(page).toContain('refetchInterval: confirming ? CONFIRM_POLL_MS : false');
+		expect(page).toContain('CONFIRM_TIMEOUT_MS');
+		expect(page).toContain('Confirming your payment…');
+		expect(page).toContain('Your payment is being confirmed. Refresh in a minute.');
+		expect(page).toContain('id="extra-credits"');
+	});
+
+	it('shows the banner on every app page, and sends signed-out buyers to sign up, then back to their plan', () => {
+		expect(source('/src/components/layout/app-layout.tsx')).toContain('<BillingBanner />');
+		const button = source('/src/components/billing/PlanButton.tsx');
+		expect(button).toContain('setIntendedUrl(`${BILLING_PATH}?plan=${plan}`)');
+		expect(button).toContain("navigate('/signup')");
+		expect(button).toContain('apiClient.startPlanCheckout(plan)');
 	});
 });
 ```
 
 In `src/routes/pricing-guard.test.ts`:
-- replace `"doesn't sell Premium before subscriptions exist"` with:
+- the order test pins `'<PublicFaq leading={pricingFaq(billing)} />'`;
+- replace the three card tests with:
 
 ```ts
-	it("sells Premium only once billing is open: before that it leads to sales, marked coming soon", () => {
+	it('shows Basic, Pro and Premium side by side in one frame, with Enterprise on its own band', () => {
 		const cards = source(CARDS);
-		expect(cards).toContain('premiumAction({ billingOpen, signedIn: isAuthenticated })');
-		expect(cards).toContain("contactPath('premium', tier.credits)");
-		expect(cards).toContain('{!billingOpen && <ComingSoon />}');
+		expect(cards).toContain('md:grid-cols-3');
+		for (const card of ['<BasicPlan billing={billing} />', '<PaidPlan plan="pro" billing={billing} />', '<PaidPlan plan="premium" billing={billing} />', '<EnterpriseBand />']) expect(cards).toContain(card);
+	});
+
+	it('prices Pro and Premium from the plan table, never typed in', () => {
+		const cards = source(CARDS);
+		expect(cards).toContain('<Price cents={PLAN_PRICES_CENTS[plan]} />');
+		expect(cards).not.toMatch(/\$(49|199)\b/);
+	});
+
+	it("sells Pro and Premium once billing is on, and until then marks them coming soon and leads to sales", () => {
+		const cards = source(CARDS);
+		expect(cards).toContain('billing ? <PlanButton plan={plan}');
+		expect(cards).toContain("contactPath('premium')");
+		expect(cards).toContain('<ComingSoon />');
 		expect(cards).toContain('Paid plans are coming soon');
-		expect(cards).toContain('<PremiumCheckoutButton');
+		expect(cards).not.toMatch(/Buy now|Subscribe|checkout/i);
 	});
 ```
 
-- change the order list's last entry to `'<PublicFaq leading={billingOpen ? PRICING_FAQ_BILLING : PRICING_FAQ} />'`;
-- add `'Can I change my Premium credits?'` and `'Is Premium available now?'` checks on `PRICING_FAQ_BILLING` in the credit-questions test, reading it from `positioning.ts`.
+- the credit questions test checks `pricingFaq` and the questions `'What are AI credits?'`, `'What happens when I run out of credits?'`, `'Can I buy more credits?'`, `'Can I change or cancel my plan?'` and `'Are Pro and Premium available now?'`.
 
-- [ ] **Step 2: Run them to verify they fail**
-
-Run: `rtk proxy bun run test -- src/components/billing/billing-copy.test.ts src/components/pricing/premium-action.test.ts src/routes/settings/billing-guard.test.ts src/routes/pricing-guard.test.ts`
-Expected: FAIL, missing modules and failed guards.
-
-- [ ] **Step 3: Implement `billing-copy.ts` and `premium-action.ts`.** The copy is exactly what the tests pin.
-- **`planHeadline`:** "Basic, free"; "Premium, {credits} AI credits a month"; "Enterprise".
-- **`planStatusLines`,** in this order:
-  - the override line, alone;
-  - the failing-payment line, alone: the Premium-in-grace form uses `graceEndsAt`, the Basic form is used when `plan === 'basic'`;
-  - "Premium until {periodEnd}." when cancelling;
-  - otherwise "Renews on {periodEnd} at {price} a month." for a subscription;
-  - "Moves to {credits} AI credits a month on {pendingTierAt}." when a downgrade is pending.
-- **`tierAction`:**
-  - null for an override or Enterprise;
-  - checkout for Basic, disabled with "Update your card in Manage billing to restore Premium." when `status` is `past_due` or `unpaid`;
-  - for a subscriber, null on the current pool unless a downgrade is pending, which offers "Keep {credits} credits";
-  - otherwise disabled with the first reason that applies: "Update your card first." when the payment is failing, "Keep Premium first." when cancelling, "Keep your current pool first." when a change is pending;
-  - else "Move up now" or "Move down at renewal".
-- **`changeLanded`:**
-  - checkout: `source === 'subscription'` and `status` is `active` or `trialing`;
-  - tier: `view.tier === tier && view.pendingTier === null`, or `view.pendingTier === tier`;
-  - cancel: `cancelAtPeriodEnd`; resume: `!cancelAtPeriodEnd`.
-- **`confirmState`:** idle with no change; landed when `changeLanded`; slow from 30 seconds; else waiting.
-- **`confirmCopy`:**
-  - checkout: "Confirming your payment…" when waiting, "Your payment is being confirmed. Refresh in a minute." when slow;
-  - other changes: "Saving your change…" when waiting, "Your change is being confirmed. Refresh in a minute." when slow;
-  - null when idle or landed.
-- **`billingBanner`:**
-  - only when `view?.enabled`;
-  - the failing payment first. When `graceEndsAt` is set it says "Update your card by {date} to keep Premium."; on Basic, "Your Premium payment didn't go through. Update your card to restore Premium.";
-  - then a monthly pool at 80% or more, with the percent rounded down. At 100% it's "You've used this month's AI credits.";
-  - every action is "See your pools" or "Update card" to `BILLING_PATH`.
-- **`premiumAction`:** contact while billing is closed, else signup or checkout.
-- **`tierFromParam`:** parses an integer with `isPremiumTierNumber`, defaulting to 1.
-
-- [ ] **Step 4: The hooks, page and banner.**
-
-**`use-billing.ts`:**
+In `src/routes/calculator-guard.test.ts`, replace `"contactPath('premium', recommendation.tier.credits)"` with:
 
 ```ts
-export function useBilling(enabled = true) {
-	return useQuery({ queryKey: queryKeys.billing(), queryFn: () => unwrap(apiClient.getBilling(), "Couldn't load your plan"), enabled, staleTime: 30_000 });
-}
-
-/** Whether Premium is on sale to this visitor: on for everyone, or for this signed-in account. */
-export function useBillingOpen(): boolean {
-	const { isAuthenticated } = useAuth();
-	const plan = usePublicPlan();
-	const billing = useBilling(isAuthenticated);
-	return Boolean(plan.data?.billing || billing.data?.enabled);
-}
+		expect(calculator).toContain("contactPath('premium', needed)");
+		expect(calculator).toContain('<PlanButton plan={recommendation.plan}');
+		expect(calculator).toContain('recommendPlan(needed, freeMonthly ?? undefined)');
 ```
 
-**`src/routes/settings/billing.tsx`** (default export `BillingPage`). It follows the settings page's look: Kumo `LayerCard`, `Button`, a `Dialog` for the cancel confirmation. Its sections, in order:
-1. **Your plan:**
-   - `planHeadline`, then each `planStatusLines` entry;
-   - "Keep Premium" (`resumePremium`) when cancelling;
-   - "Manage billing" when `canManageBilling`. It calls `openBillingPortal` and does `window.location.assign(url)`;
-   - "Cancel Premium" for a live subscription that isn't cancelling. It confirms with "Premium stays on until {periodEnd}, then your account moves to Basic. Your stores stay live." and the buttons "Cancel Premium" and "Keep Premium".
-2. **AI credits:** `creditsLine`, a progress bar at `used / limit`, and `grantedLine` when set.
-3. **Credit pools:**
-   - one row per `PREMIUM_TIERS` entry: credits a month, `formatUsd(priceCents)` a month, "Your pool" on the current one;
-   - the `tierAction` button, with `reason` under a disabled one. Checkout calls `startPremiumCheckout` and assigns the url; change and keep call `changePremiumTier(tier)`;
-   - not shown for an override, which just shows the status line.
-- **Waiting for a change.** Each successful mutation sets a `PendingChange` and its start time, and refetches `useBilling` every `CONFIRM_POLL_MS` until `confirmState` is `'landed'` or `'slow'`. `confirmCopy` shows above the sections.
-- **Back from checkout.** On load, `searchParams.get('checkout') === 'success'` starts a `{ kind: 'checkout' }` wait. `'cancelled'` shows "Checkout was cancelled. Nothing was charged."
-- **Errors** from mutations show their message with `toast.error`. A `PlanLimitError` never reaches here.
-- **Billing off** (`enabled: false`): the page says "Premium isn't open for your account yet." and shows the credits section only.
+In `worker/api/controllers/limits/plan-wiring.test.ts`, pin `'billing: isBillingOn(env, context.user?.id ?? null)'` in the controller.
 
-**`BillingBanner.tsx`:**
-- reads `useBilling(isAuthenticated)`;
-- renders `billingBanner(data)` as a thin amber bar, with the text and a link button;
-- renders nothing when it's null.
-- Mount it in `app-layout.tsx` right after `<GlobalHeader />`.
+- [ ] **Step 3: Run them to verify they fail**
 
-**`routes.tsx`:** add `{ path: 'settings/billing', element: (<ProtectedRoute><BillingPage /></ProtectedRoute>) }` after `settings`.
+Run: `rtk proxy bun run test -- src/routes/settings/billing-view.test.ts src/routes/billing-page-guard.test.ts src/routes/pricing-guard.test.ts src/routes/calculator-guard.test.ts worker/api/controllers/limits/plan-wiring.test.ts`
+Expected: FAIL.
 
-**`settings/index.tsx`:** add a "Plan and billing" `LayerCard` at the top. It shows `planHeadline(billing.data)` and a `LinkButton` to `BILLING_PATH`, rendered only when `billing.data?.enabled`, with `const billing = useBilling()`.
+- [ ] **Step 4: Implement `billing-view.ts`.**
+- **`checkoutReturnOf`:** `checkout=success` is `'plan'`, `credits=success` is `'credits'`, `checkout=cancelled` is `'cancelled'`, else null.
+- **`requestedPlanOf`:** `plan` when `isPaidPlanId`.
+- **`planChoicesFor(view)`,** in order Pro then Premium. Dates use `formatBillingDate`.
 
-- [ ] **Step 5: The pricing page.**
+| Account | Pro | Premium |
+| --- | --- | --- |
+| Basic | `checkout` "Get Pro" | `checkout` "Get Premium" |
+| `source === 'override'` | `none` "Set by Estori", note "Talk to us to change your plan." | the same |
+| `paymentFailing` | its own plan `current` "Your plan", the other `none` "Update your card first" | the same |
+| Pro | `current` "Your plan" | `upgrade` "Move to Premium" |
+| Pro, cancelling | `resume` "Keep Pro", note "Ends on {date}" | `none` "Keep Pro first" |
+| Premium | `downgrade` "Move to Pro at renewal" | `current` "Your plan" |
+| Premium, Pro pending | `none` "Starts {date}" | `cancel-change` "Keep Premium", note "Moves to Pro on {date}" |
+| Premium, cancelling | `none` "Keep Premium first" | `resume` "Keep Premium", note "Ends on {date}" |
 
-**`PremiumCheckoutButton.tsx`:**
+- **`confirmationFor(view, action)`:**
+  - `upgrade`: the title, body and button the test pins;
+  - `downgrade`: title "Move to Pro at renewal?", the pinned body, button "Move to Pro";
+  - `cancel`: title "Cancel {Plan}?", the pinned body, button "Cancel {Plan}".
+  - Numbers come from `PLAN_LIMITS` and `PLAN_PRICES_CENTS`.
+- **`isConfirmed`:** `plan` is true when `current.plan` is paid and `current.source !== 'free'`; `credits` is true when `current.credits.purchasedLeft > initial.credits.purchasedLeft`.
+- **`billingBannerFor(view)`:**
+  - null when the view is missing or `!view.enabled`;
+  - a failing payment with `graceEndsAt`: the warning the test pins;
+  - a failing payment after the grace period: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.";
+  - otherwise, with `alert`:
+    - the message "You have {left} AI credits left until {date}.", tone `warning` at 5% and `info` at 20%;
+    - the action is `upgradeActionFor(assertWithinLimit({ billing: true, plan, limits, creditsResetAt: credits.renewsAt }, 'aiCredits', limits.aiCredits))`, so each plan's next step comes from the shared table.
 
-```tsx
-/** Get Premium once billing is open: signed-out visitors sign up and come back; signed-in sellers go to Stripe's checkout. */
-export function PremiumCheckoutButton({ tier, signedIn, className }: { tier: PremiumTierNumber; signedIn: boolean; className?: string }) {
-	const navigate = useNavigate();
-	const { setIntendedUrl } = useAuth();
-	const checkout = useMutation({
-		mutationFn: () => unwrap(apiClient.startPremiumCheckout(tier), "Couldn't start checkout"),
-		onSuccess: ({ url }) => window.location.assign(url),
-		onError: (error) => {
-			if (error instanceof ApiError && error.status === 409) navigate(BILLING_PATH);
-			else toast.error(error.message);
-		},
-	});
-	const start = () => {
-		if (signedIn) return checkout.mutate();
-		setIntendedUrl(`/pricing?tier=${tier}`);
-		navigate('/signup');
-	};
-	return (
-		<button type="button" onClick={start} disabled={checkout.isPending} className={pillClass('charcoal', className)}>
-			Get Premium
-		</button>
-	);
-}
-```
+- [ ] **Step 5: The pages and components.**
 
-**`PlanCards.tsx` `PremiumPlan`:**
-- `const billingOpen = useBillingOpen();` and `const { isAuthenticated } = useAuth();`;
-- the initial pool comes from `tierFromParam(searchParams.get('tier'))`;
-- `const action = premiumAction({ billingOpen, signedIn: isAuthenticated });`;
-- the heading shows `{!billingOpen && <ComingSoon />}`;
-- while `action === 'contact'`, keep today's contact link and "Paid plans are coming soon" note; otherwise render `<PremiumCheckoutButton tier={tier.tier} signedIn={isAuthenticated} className="mt-6" />` and the note "Billed monthly by card. Cancel any time.";
-- select the pool by tier number.
+**The public plan answer:**
+- `PublicPlanLimits` gains `billing: boolean`.
+- `getPublicPlan` answers `{ ...publicPlanFromSettings(...), billing: isBillingOn(env, context.user?.id ?? null) }`.
+- Signed-out visitors see billing only once `BILLING=on`.
 
-**`positioning.ts`:** add `PRICING_FAQ_BILLING`, a copy of `PRICING_FAQ` with these answers:
-- "What happens when I run out of credits?": "On Basic, building and chatting pause until your allowance refills at midnight UTC. On Premium, move to a bigger pool any time, or wait for your next month. A change already running always finishes, and your stores keep working."
-- "Can I change my Premium credits?": "Yes. A bigger pool starts right away, and you pay the difference for the rest of the month. A smaller pool starts at your next renewal."
-- "Is Premium available now?": "Yes. Pick a pool and pay by card; Premium starts as soon as the payment goes through."
-- "Do unused credits roll over?": "No. Basic's allowance refills every day, and Premium's pool refills every month."
+**`useBilling()`:** `useQuery({ queryKey: queryKeys.billing(), queryFn: () => unwrap(apiClient.getBilling(), "Couldn't load your plan"), enabled: isAuthenticated, staleTime: 60_000 })`.
 
-**`pricing.tsx`:** `const billingOpen = useBillingOpen();` and `<PublicFaq leading={billingOpen ? PRICING_FAQ_BILLING : PRICING_FAQ} />`.
+**`PlanButton({ plan })`:**
+- **Signed out:** `setIntendedUrl(`${BILLING_PATH}?plan=${plan}`)`, then `navigate('/signup')`.
+- **Signed in:** `apiClient.startPlanCheckout(plan)`, then `window.location.href = url`. A 409 navigates to `${BILLING_PATH}?plan=${plan}`.
+- The label is "Get Pro" or "Get Premium", with a spinner while waiting.
+
+**`PlanLimits`:** with `plan.data?.billing`, it renders "5,000 AI credits a month · 3 stores · 1 live store" from `PLAN_LIMITS.basic`, through `formatCredits`. Otherwise today's daily line.
+
+**`PlanCards`:**
+- `const billing = usePublicPlan().data?.billing === true;`.
+- `md:grid-cols-3` holds `<BasicPlan billing={billing} />`, `<PaidPlan plan="pro" billing={billing} />` and `<PaidPlan plan="premium" billing={billing} />`; `<EnterpriseBand />` is unchanged.
+- **`PaidPlan`:**
+  - `planName`, the tagline, `<Price cents={PLAN_PRICES_CENTS[plan]} />`, and "{credits} AI credits a month" from `PLAN_LIMITS`;
+  - then `billing ? <PlanButton plan={plan} … /> : <PillLink to={contactPath('premium')} …>`, with `<ComingSoon />` and "Paid plans are coming soon. Tell us what you need and we'll set you up as they open." while billing is off;
+  - features:
+    - Pro: "Everything in Basic", "Up to 3 live stores, 10 new stores a day", "Your own domain on each live store", "The supplier catalog";
+    - Premium: "Everything in Pro", "Up to 10 live stores, 25 new stores a day", "Buy extra credits any time", the capability features from today's Premium card, and "Priority email support".
+- **`BasicPlan`** adds "1 live store, 3 stores in all" while billing is on.
+
+**`ComparePlans`:** it maps `PLANS`, which now has four plans. The phone picker's default plan becomes `'pro'`.
+
+**`Calculator`:**
+- `const billing = plan.data?.billing === true;`;
+- `const freeMonthly = !billing && plan.data?.aiCreditsPerDay != null ? plan.data.aiCreditsPerDay * DAYS_PER_MONTH : null;`;
+- `const recommendation = recommendPlan(needed, freeMonthly ?? undefined);`.
+- **`planPrice`:**
+  - Basic "$0";
+  - Pro `formatUsd(PLAN_PRICES_CENTS.pro)`;
+  - Premium `formatUsd(PLAN_PRICES_CENTS.premium + extraCreditsPriceCents(recommendation.extraCredits))`;
+  - Enterprise "Let's talk".
+- **The summary line:**
+  - Premium with extra credits: "Premium, 100,000 credits a month, plus {extra} extra credits ($X)";
+  - Pro: "Pro, 20,000 credits a month";
+  - Basic: "Basic, {5,000 credits a month | the free daily allowance}".
+- **The next step:**
+  - Basic: `<StartBuildingButton variant="blue" />`;
+  - Pro or Premium: `billing ? <PlanButton plan={recommendation.plan} /> : <PillLink to={contactPath('premium', needed)} …>`;
+  - Enterprise: `contactPath('enterprise')`.
+- The phone summary bar keeps `{planPrice(recommendation)}`.
+
+**`contact.ts`:**
+- `contactPrefill` accepts `credits` when it is a whole number from 1 to 10,000,000, without `PREMIUM_TIERS`.
+- The form's sentence becomes "You need about {credits} AI credits a month.".
+
+**`positioning.ts`:** `pricingFaq(billing)`.
+- **Billing on:**
+  - "What are AI credits?": "Credits pay for the AI's work. Each step is charged from the work it really does, at the price of the model you pick, so lighter models go further. A typical step takes about 16 to 445 credits.";
+  - "What happens when I run out of credits?": "Building and chatting pause until your credits renew, and your stores keep working. On Premium you can buy extra credits at once.";
+  - "Can I buy more credits?": "On Premium, yes: $1.50 per 1,000, from 5,000 at a time. They're used after your monthly credits and last 12 months.";
+  - "Can I change or cancel my plan?": "Any time, from your billing page. Moving to Premium happens at once; moving to Pro or cancelling happens at the end of the month you paid for.";
+  - "Do unused credits roll over?": "Monthly credits don't; extra credits you buy do, for 12 months."
+- **Billing off:** today's first two answers; "Are Pro and Premium available now?": "Not yet, they're coming soon. Tell us what you need and we'll set you up as they open."; and "Do unused credits roll over?": "No. Basic's allowance refills every day."
+- `pricing.tsx` reads `usePublicPlan()` and renders `<PublicFaq leading={pricingFaq(billing)} />`.
+
+**`/settings/billing`, `src/routes/settings/billing.tsx`:**
+- Register it under `AppShell` as `{ path: 'settings/billing', element: (<ProtectedRoute><BillingPage /></ProtectedRoute>) }`.
+- **Billing off** (`!data.enabled`): one card, "Plans aren't open for your account yet." with a link to `/pricing`.
+- **The current plan:** name, status, "Renews on {date}" or "Ends on {date}", and a failing-payment note with "Update card".
+- **The plans:** Pro and Premium side by side from `planChoicesFor`.
+  - `checkout` calls `startPlanCheckout`;
+  - `upgrade`, `downgrade` and Cancel open a confirmation from `confirmationFor`, then call `changePlan` or `cancelPlan`;
+  - `resume` calls `resumePlan`, and `cancel-change` calls `changePlan(view.plan)`;
+  - after each answer, invalidate `queryKeys.billing()` and toast "Done. It can take a few seconds to show here.";
+  - `?plan=` from `requestedPlanOf` opens that plan's action once: the checkout button for Basic, the confirmation for Pro.
+- **Credits:**
+  - "{used} of {pool} AI credits used this month";
+  - grants as "Added by Estori";
+  - extra credits left, with each purchase's expiry ("5,000 left, expire October 19, 2027");
+  - "Renews on {date}".
+- **Extra credits,** `id="extra-credits"`:
+  - on Premium, a stepper from 5,000 in steps of 1,000 up to 1,000,000, the price from `extraCreditsPriceCents`, and "Buy credits" calling `buyCredits`;
+  - otherwise "Extra credits come with Premium." with a `PlanButton` or the upgrade choice.
+- **Manage billing** (`canManageBilling`) calls `openBillingPortal`. **Cancel plan** shows on Pro and Premium when not cancelling.
+- **Back from checkout:**
+  - for `plan` or `credits`, set `confirming` and use `useQuery`'s `refetchInterval: confirming ? CONFIRM_POLL_MS : false`;
+  - show "Confirming your payment…" until `isConfirmed(...)`;
+  - after `CONFIRM_TIMEOUT_MS`, stop and show "Your payment is being confirmed. Refresh in a minute.";
+  - `cancelled` shows "Checkout cancelled. Nothing was charged.".
+- Every Stripe redirect sets `window.location.href`.
+
+**Settings and the app layout:**
+- In `settings/index.tsx`, a "Plan and billing" `LayerCard` shows your plan and a `Link to={BILLING_PATH}`, inside `billing.data?.enabled && (…)`.
+- **`BillingBanner`** renders `billingBannerFor(useBilling().data)` above the app layout's `<Outlet />`:
+  - `portal` actions call `openBillingPortal`;
+  - `checkout` and `link` actions use `PlanButton` or `Link`;
+  - a close button hides it for the rest of the session, stored under `billing-banner:{alert or 'payment'}:{renewsAt}` in `sessionStorage`, inside try/catch.
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `rtk proxy bun run test -- src/components/billing/billing-copy.test.ts src/components/pricing/premium-action.test.ts src/routes/settings/billing-guard.test.ts src/routes/pricing-guard.test.ts`
+Run: `rtk proxy bun run test -- src/routes/settings/billing-view.test.ts src/routes/billing-page-guard.test.ts src/routes/pricing-guard.test.ts src/routes/calculator-guard.test.ts`
 Expected: PASS.
 
-Run: `rtk proxy bun run test -- src/lib/plans.test.ts src/routes/calculator-guard.test.ts src/brand/brand-guard.test.ts`
+Run: `rtk proxy bun run test -- src/routes/contact-guard.test.ts src/lib/plans.test.ts src/lib/credits.test.ts worker/api/controllers/limits/plan-wiring.test.ts`
 Expected: PASS.
 
-Run: `bun run typecheck && npx eslint src/routes/settings src/components/billing src/components/pricing src/hooks/use-billing.ts src/content/positioning.ts`
-Expected: no errors.
+Run: `bun run typecheck`
+Expected: no errors. The Premium-tier errors left by Tasks 1 and 2 are gone.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Check the pages by eye.** Start the dev server with `BILLING_USER_IDS` naming a local test account, from the person's `.dev.vars` (they add it themselves).
+- `/pricing` signed out shows "coming soon".
+- Signed in as that account, it shows Get Pro and Get Premium.
+- `/settings/billing` shows Basic's credits.
+- The calculator recommends Premium with extra credits at 150,000 credits a month.
+- Check the light and dark themes, and a 375 px wide phone.
+
+- [ ] **Step 8: Commit**
 
 ```bash
-git add src/hooks/use-billing.ts src/components/billing src/components/pricing src/routes/settings src/routes.tsx src/routes/pricing.tsx src/routes/pricing-guard.test.ts src/content/positioning.ts src/components/layout/app-layout.tsx
-git commit -m "feat(billing): the billing page with pools, cancel and keep premium, checkout from pricing, and payment and credit banners
+git add shared/types/plan.ts worker/api/controllers/limits src/routes/settings src/routes/billing-page-guard.test.ts src/routes/pricing-guard.test.ts src/routes/calculator-guard.test.ts src/routes/contact-guard.test.ts src/routes/pricing.tsx src/routes.tsx src/hooks/use-billing.ts src/components/billing src/components/marketing/PlanLimits.tsx src/components/pricing src/content/positioning.ts src/lib/contact.ts src/components/contact/ContactForm.tsx src/components/layout/app-layout.tsx
+git commit -m "feat(billing): basic, pro and premium on the pricing page and calculator, a billing page with extra credits, and the billing banner
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 11: Admin endpoints: billing read, plan overrides, credit grants, the test link and the enforcement notice
+### Task 13: Admin endpoints
 
 **Files:**
 - Create:
   - `worker/api/controllers/admin/billing.ts`;
-  - `worker/services/billing/admin-view.ts`;
-  - `worker/services/billing/enforcement-notice.ts`.
+  - `worker/api/controllers/admin/billing.sql.test.ts`.
 - Modify:
   - `worker/api/routes/billingRoutes.ts`;
-  - `worker/database/services/PlanAdminService.ts` (`sellersAfter`, `linkTestCustomer`);
-  - `shared/types/billing.ts`;
-  - `src/api-types.ts`.
-- Test:
-  - `worker/api/controllers/admin/billing.test.ts`;
-  - `worker/api/controllers/admin/billing.sql.test.ts`;
-  - `worker/services/billing/enforcement-notice.test.ts`;
+  - `worker/database/services/BillingService.ts` (`linkCustomer`);
+  - `shared/types/billing.ts` (admin types);
   - `worker/api/controllers/billing/billing-routes-wiring.test.ts`.
 
 **Interfaces:**
 - **Consumes:**
-  - from Task 3: `loadAccount`, `creditBucketFor`, `creditsUsed`;
-  - from Task 6: `billingView`;
-  - from Task 2: `PlanAdminService.addOverride`, `addGrant`, `latestOverride`, `grantsOf`, `BillingService.customerOf`, `subscriptionOf`;
-  - from Task 8: `CreditNoticeDeps`, `creditNoticeDepsFromEnv`;
-  - from Task 5: `claimAndSendNotice`;
-  - from Task 9: `LiveStoreService.liveStoreAppIdsOfUser`;
-  - existing: `parseStoreManifest`, `stripeModeOf`, `UserService.findUser`.
+  - from Task 1: `PLAN_IDS`, `planLimitOverridesFrom`;
+  - from Task 3: `PlanAdminService.addOverride`, `latestOverride`;
+  - from Task 4: `CreditLedgerService.addGrant`, `grantsOf`, `purchasesOf`;
+  - from Task 5: `loadAccount`, `loadCredits`;
+  - from Task 8: `billingView`;
+  - existing: `stripeModeOf`, `AuthConfig.admin`.
 - **Produces:**
   - `shared/types/billing.ts`:
-    - `PlanOverrideView { plan: PlanId | null; tier: PremiumTierNumber | null; limits: PlanLimitOverrides; until: number | null; reason: string; adminUserId: string; createdAt: number }`;
-    - `CreditGrantView { credits: number; reason: string; adminUserId: string; createdAt: number }`;
-    - `AdminBillingView { view: BillingView; stripeCustomerUrl: string | null; stripeSubscriptionUrl: string | null; override: PlanOverrideView | null; grants: CreditGrantView[] }`;
-    - `EnforcementNoticeResult { sent: number; skipped: number; next: string | null }`.
-  - `admin-view.ts`:
-    - `stripeDashboardUrl(mode: 'test' | 'live' | null, kind: 'customers' | 'subscriptions', id: string | null): string | null`;
-    - `adminBillingView(input: { account: BillingAccount; used: number; customerId: string | null; override: PlanOverrideRecord | null; grants: CreditGrantRecord[]; mode: 'test' | 'live' | null }): AdminBillingView`.
-  - `admin/billing.ts`:
-    - `ParsedPlanOverride`;
-    - `parsePlanOverrideRequest(body: unknown, nowMs: number): ParsedPlanOverride | null`;
-    - `parseCreditGrantRequest(body: unknown): { credits: number; reason: string } | null`;
-    - `parseEnforcementNoticeRequest(body: unknown): { startsOn: number; after: string | null; limit: number; dryRun: boolean } | null`;
-    - `BillingAdminController` with `getBilling`, `setPlan`, `grantCredits`, `linkTestCustomer` and `sendEnforcementNotices`.
-  - `PlanAdminService`:
-    - `sellersAfter(after: string | null, limit: number): Promise<Array<{ userId: string; email: string }>>`;
-    - `linkTestCustomer(input: { userId; stripeCustomerId; adminUserId; now }): Promise<void>`.
-  - `enforcement-notice.ts`:
-    - `EnforcementNoticeDeps extends CreditNoticeDeps { sellersAfter; liveStoreAppIds(userId): Promise<string[]>; liveManifest(appId): Promise<string | null>; noticeSent(userId, key): Promise<boolean>; aiCreditsPerDay: number }`;
-    - `sendEnforcementNotices(deps, input: { startsOn: number; after: string | null; limit: number; dryRun: boolean }): Promise<EnforcementNoticeResult>`;
-    - `enforcementNoticeDepsFromEnv(env): Promise<EnforcementNoticeDeps>`.
-  - Routes, all `AuthConfig.admin`:
-    - `GET /api/admin/users/:userId/billing` (optional `?at=<ms>`, which evaluates the plan at that time for test clocks);
-    - `PUT /api/admin/users/:userId/plan`, `POST /api/admin/users/:userId/credits`;
-    - `PUT /api/admin/users/:userId/billing/test-customer`;
-    - `POST /api/admin/billing/enforcement-notices`.
+    - `AdminBillingView = BillingView & { userId: string; override: { plan: PlanId | null; limits: PlanLimitOverrides; until: number | null; reason: string; createdAt: number } | null; grants: Array<{ credits: number; reason: string; createdAt: number }>; stripeCustomerUrl: string | null; stripeSubscriptionUrl: string | null }`;
+    - `PlanOverrideRequest { plan: PlanId | null; limits?: PlanLimitOverrides; until?: string | null; reason: string }`;
+    - `CreditGrantRequest { credits: number; reason: string }`.
+  - `BillingService.linkCustomer(userId, stripeCustomerId, now): Promise<void>` (replaces the stored customer).
+  - `BillingAdminController`:
+    - `get`, `GET /api/admin/users/:userId/billing`;
+    - `setPlan`, `PUT /api/admin/users/:userId/plan`;
+    - `grantCredits`, `POST /api/admin/users/:userId/credits`;
+    - `linkTestCustomer`, `PUT /api/admin/users/:userId/stripe-customer`, test mode only, for the test-clock scenarios.
+    - All use `AuthConfig.admin`.
 
-- [ ] **Step 1: Write the failing tests.** `worker/api/controllers/admin/billing.test.ts`:
+- [ ] **Step 1: Write the failing test** `worker/api/controllers/admin/billing.sql.test.ts`:
 
 ```ts
-import { describe, expect, it } from 'vitest';
-import { parseCreditGrantRequest, parseEnforcementNoticeRequest, parsePlanOverrideRequest } from './billing';
-
-const NOW = Date.parse('2026-10-19T15:00:00Z');
-
-describe('admin billing requests', () => {
-	it('reads a plan override with its reason, an optional end date and custom limits', () => {
-		expect(parsePlanOverrideRequest({ plan: 'enterprise', limits: { aiCredits: 500_000, liveStores: 50 }, reason: '  Signed contract  ' }, NOW)).toEqual({ plan: 'enterprise', tier: null, limits: { aiCredits: 500_000, liveStores: 50 }, until: null, reason: 'Signed contract' });
-		expect(parsePlanOverrideRequest({ plan: 'premium', tier: 3, until: '2026-11-19T00:00:00Z', reason: 'Partner comp' }, NOW)).toMatchObject({ plan: 'premium', tier: 3, until: new Date('2026-11-19T00:00:00Z') });
-		expect(parsePlanOverrideRequest({ plan: null, reason: 'Contract ended' }, NOW)).toMatchObject({ plan: null });
-	});
-
-	it('refuses an unknown plan, a tier off Premium, a past end, a missing reason and unknown fields', () => {
-		for (const body of [
-			{ plan: 'gold', reason: 'x'.repeat(5) },
-			{ plan: 'basic', tier: 2, reason: 'Fix state' },
-			{ plan: 'premium', tier: 7, reason: 'Fix state' },
-			{ plan: 'premium', until: '2026-10-01T00:00:00Z', reason: 'Too late' },
-			{ plan: 'premium', reason: 'no' },
-			{ plan: 'premium', reason: 'Fine reason', limits: { draftsPerStore: 9 } },
-			{ plan: 'premium', reason: 'Fine reason', extra: true },
-			null,
-		]) {
-			expect(parsePlanOverrideRequest(body, NOW)).toBeNull();
-		}
-	});
-
-	it('reads a credit grant and an enforcement-notice batch', () => {
-		expect(parseCreditGrantRequest({ credits: 5_000, reason: 'Launch partner' })).toEqual({ credits: 5_000, reason: 'Launch partner' });
-		for (const body of [{ credits: 0, reason: 'Nope nope' }, { credits: 1.5, reason: 'Nope nope' }, { credits: 2_000_000, reason: 'Too many' }, { credits: 10 }]) expect(parseCreditGrantRequest(body)).toBeNull();
-		expect(parseEnforcementNoticeRequest({ startsOn: '2026-11-01' })).toEqual({ startsOn: Date.UTC(2026, 10, 1), after: null, limit: 25, dryRun: false });
-		expect(parseEnforcementNoticeRequest({ startsOn: '2026-11-01', after: 'u_9', limit: 50, dryRun: true })).toEqual({ startsOn: Date.UTC(2026, 10, 1), after: 'u_9', limit: 50, dryRun: true });
-		for (const body of [{ startsOn: 'soon' }, { startsOn: '2026-11-01', limit: 51 }, {}]) expect(parseEnforcementNoticeRequest(body)).toBeNull();
-	});
-});
-```
-
-`worker/services/billing/enforcement-notice.test.ts`:
-
-```ts
-import { describe, expect, it } from 'vitest';
-import { sendEnforcementNotices, type EnforcementNoticeDeps } from './enforcement-notice';
-
-/** A valid store manifest (parseStoreManifest reads it) with one catalog product. */
-const CATALOG = JSON.stringify({ version: 1, currency: 'usd', shipping: { countries: ['US'], flatRateCents: 500 }, products: [{ id: 'mug', name: 'Mug', variants: [{ id: 'mug-blue', name: 'Blue', priceCents: 2500, catalogVariantId: 'cv_1' }] }] });
-
-function fake() {
-	const sent = new Set<string>();
-	const emails: Array<{ to: string; text: string }> = [];
-	const deps: EnforcementNoticeDeps = {
-		sender: { send: async (email) => void emails.push({ to: email.to, text: email.text }) },
-		userEmail: async (userId) => `${userId}@example.test`,
-		baseUrl: 'https://estori.app',
-		claim: async (userId, key) => {
-			if (sent.has(`${userId}:${key}`)) return false;
-			sent.add(`${userId}:${key}`);
-			return true;
-		},
-		noticeSent: async (userId, key) => sent.has(`${userId}:${key}`),
-		sellersAfter: async (after, limit) => [{ userId: 'u1', email: 'u1@example.test' }, { userId: 'u2', email: 'u2@example.test' }, { userId: 'u3', email: 'u3@example.test' }].filter((seller) => after === null || seller.userId > after).slice(0, limit),
-		liveStoreAppIds: async (userId) => ({ u1: ['app_a', 'app_b'], u2: ['app_c'], u3: [] as string[] })[userId] ?? [],
-		liveManifest: async (appId) => (appId === 'app_c' ? CATALOG : null),
-		aiCreditsPerDay: 200,
-	};
-	return { deps, emails };
-}
-
-const STARTS = Date.UTC(2026, 10, 1);
-
-describe('the enforcement notice', () => {
-	it('emails every seller once, adding a line for those over the new limits', async () => {
-		const { deps, emails } = fake();
-		expect(await sendEnforcementNotices(deps, { startsOn: STARTS, after: null, limit: 25, dryRun: false })).toEqual({ sent: 3, skipped: 0, next: null });
-		const over = 'Your stores stay live; to publish more, get Premium.';
-		expect(emails.map((email) => [email.to, email.text.includes(over)])).toEqual([
-			['u1@example.test', true],
-			['u2@example.test', true],
-			['u3@example.test', false],
-		]);
-		expect(await sendEnforcementNotices(deps, { startsOn: STARTS, after: null, limit: 25, dryRun: false })).toEqual({ sent: 0, skipped: 3, next: null });
-	});
-
-	it('pages through sellers, and counts without sending on a dry run', async () => {
-		const { deps, emails } = fake();
-		expect(await sendEnforcementNotices(deps, { startsOn: STARTS, after: null, limit: 2, dryRun: true })).toEqual({ sent: 2, skipped: 0, next: 'u2' });
-		expect(await sendEnforcementNotices(deps, { startsOn: STARTS, after: 'u2', limit: 2, dryRun: true })).toEqual({ sent: 1, skipped: 0, next: null });
-		expect(emails).toEqual([]);
-	});
-});
-```
-
-`worker/api/controllers/admin/billing.sql.test.ts`:
-
-```ts
-/** The admin billing endpoints on real SQL: overrides and grants recorded with audit entries, and the plan following them. */
+/** Admins' billing endpoints on real SQL: overrides and grants are recorded with the admin and the reason. */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { envWith, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
+import { envWith, insertBillingCustomer, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { BillingAdminController } from './billing';
 import type { RouteContext } from '../../types/route-context';
 
 let db: D1Database;
+const DAY = 86_400_000;
 
 beforeAll(async () => {
 	db = await migratedD1();
-	for (const id of ['u_admin', 'u_target', 'u_late']) await insertUser(db, id);
-	await insertSubscription(db, { userId: 'u_late', stripeSubscriptionId: 'sub_late', status: 'past_due', currentPeriodStart: new Date('2026-10-10T00:00:00Z'), currentPeriodEnd: new Date('2026-11-10T00:00:00Z') });
+	await insertUser(db, 'u_admin');
+	await insertUser(db, 'u_seller', { createdAt: new Date(Date.now() - 40 * DAY) });
+	await insertUser(db, 'u_paying');
+	await insertSubscription(db, { userId: 'u_paying', stripeSubscriptionId: 'sub_paying', status: 'active', currentPeriodStart: new Date(Date.now() - DAY), currentPeriodEnd: new Date(Date.now() + 29 * DAY) });
 });
 
-function env(extra: Record<string, unknown> = {}): Env {
-	const counter = { getRemainingLimit: async (_key: string, config: { limit: number }) => config.limit };
-	return envWith(db, { BILLING: 'on', STRIPE_SECRET_KEY: 'sk_test_fake', VibecoderStore: { get: async () => null }, DORateLimitStore: { getByName: () => counter }, ...extra });
-}
+const env = (extra: Record<string, unknown> = {}) => envWith(db, { BILLING: 'on', STRIPE_SECRET_KEY: 'sk_test_fake', ...extra });
+const context = (userId: string) => ({ user: { id: 'u_admin' }, pathParams: { userId }, queryParams: new URLSearchParams() }) as unknown as RouteContext;
+const request = (method: string, body?: unknown) => new Request('https://estori.app/api/admin', { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
 
-function call(method: 'GET' | 'PUT' | 'POST', path: string, userId: string, body?: unknown, query = ''): [Request, RouteContext] {
-	const request = new Request(`https://estori.app${path}${query}`, { method, headers: { 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
-	return [request, { user: { id: 'u_admin', email: 'u_admin@example.test' }, pathParams: { userId }, queryParams: new URLSearchParams(query) } as unknown as RouteContext];
-}
-
-describe('admin billing', () => {
-	it('puts an account on Enterprise with custom limits, writes an audit entry, and the plan follows', async () => {
-		const [request, context] = call('PUT', '/api/admin/users/u_target/plan', 'u_target', { plan: 'enterprise', limits: { aiCredits: 500_000, liveStores: 50 }, reason: 'Signed contract' });
-		expect((await BillingAdminController.setPlan(request, env(), {} as ExecutionContext, context)).status).toBe(200);
-		const [read, readContext] = call('GET', '/api/admin/users/u_target/billing', 'u_target');
-		const body = await (await BillingAdminController.getBilling(read, env(), {} as ExecutionContext, readContext)).json();
-		expect(body.data.view).toMatchObject({ plan: 'enterprise', source: 'override', limits: { aiCredits: 500_000, liveStores: 50 } });
-		expect(body.data.override).toMatchObject({ plan: 'enterprise', reason: 'Signed contract', adminUserId: 'u_admin' });
-		expect(await db.prepare("SELECT action FROM audit_logs WHERE entity_id = 'u_target'").all()).toMatchObject({ results: [{ action: 'plan_override' }] });
+describe('admin billing endpoints', () => {
+	it('puts an account on Enterprise with custom limits, recorded with the admin and the reason', async () => {
+		const response = await BillingAdminController.setPlan(request('PUT', { plan: 'enterprise', limits: { aiCredits: 500_000, liveStores: 40 }, reason: 'Signed Enterprise contract' }), env(), {} as ExecutionContext, context('u_seller'));
+		expect(response.status).toBe(200);
+		expect((await response.json()).data).toMatchObject({ plan: 'enterprise', source: 'override', limits: { aiCredits: 500_000, liveStores: 40, newStoresPerDay: 25 }, override: { plan: 'enterprise', reason: 'Signed Enterprise contract' } });
+		expect(await db.prepare("SELECT user_id, action FROM audit_logs WHERE entity_id = 'u_seller'").first()).toEqual({ user_id: 'u_admin', action: 'plan_override' });
 	});
 
-	it('adds credits to the current window, shown as added by Estori', async () => {
-		const [grant, grantContext] = call('POST', '/api/admin/users/u_target/credits', 'u_target', { credits: 5_000, reason: 'Launch partner' });
-		expect((await BillingAdminController.grantCredits(grant, env(), {} as ExecutionContext, grantContext)).status).toBe(200);
-		const [read, readContext] = call('GET', '/api/admin/users/u_target/billing', 'u_target');
-		const body = await (await BillingAdminController.getBilling(read, env(), {} as ExecutionContext, readContext)).json();
-		expect(body.data.view.credits).toMatchObject({ limit: 5_200, granted: 5_000, window: 'day' });
-		expect(body.data.grants).toMatchObject([{ credits: 5_000, reason: 'Launch partner' }]);
+	it('refuses an override without a reason, with an unknown plan, or with limits out of range', async () => {
+		for (const body of [{ plan: 'enterprise' }, { plan: 'gold', reason: 'Because' }, { plan: 'premium', limits: { liveStores: -1 }, reason: 'Because' }, { plan: 'premium', until: 'tomorrow', reason: 'Because' }]) {
+			expect((await BillingAdminController.setPlan(request('PUT', body), env(), {} as ExecutionContext, context('u_seller'))).status).toBe(400);
+		}
 	});
 
-	it("reads the plan at a test clock's time", async () => {
-		const at = (iso: string) => call('GET', '/api/admin/users/u_late/billing', 'u_late', undefined, `?at=${Date.parse(iso)}`);
-		const [during, duringContext] = at('2026-10-16T00:00:00Z');
-		expect((await (await BillingAdminController.getBilling(during, env(), {} as ExecutionContext, duringContext)).json()).data.view.plan).toBe('premium');
-		const [after, afterContext] = at('2026-10-18T00:00:00Z');
-		expect((await (await BillingAdminController.getBilling(after, env(), {} as ExecutionContext, afterContext)).json()).data).toMatchObject({ view: { plan: 'basic', paymentFailing: true }, stripeSubscriptionUrl: 'https://dashboard.stripe.com/test/subscriptions/sub_late' });
+	it("adds credits to the account's current period, shown as added by Estori", async () => {
+		const response = await BillingAdminController.grantCredits(request('POST', { credits: 10_000, reason: 'Launch partner' }), env(), {} as ExecutionContext, context('u_seller'));
+		expect((await response.json()).data).toMatchObject({ credits: { pool: 5_000, granted: 10_000, left: 15_000 }, grants: [{ credits: 10_000, reason: 'Launch partner' }] });
+		expect((await BillingAdminController.grantCredits(request('POST', { credits: 10_000, reason: 'x' }), env({ BILLING: undefined }), {} as ExecutionContext, context('u_seller'))).status).toBe(409);
 	});
 
-	it('links a test-clock customer only with a test key, never to an account with a live subscription', async () => {
-		const link = (userId: string) => call('PUT', `/api/admin/users/${userId}/billing/test-customer`, userId, { stripeCustomerId: 'cus_clock_1' });
-		const [live, liveContext] = link('u_target');
-		expect((await BillingAdminController.linkTestCustomer(live, env({ STRIPE_SECRET_KEY: 'sk_live_fake' }), {} as ExecutionContext, liveContext)).status).toBe(409);
-		const [paying, payingContext] = link('u_late');
-		expect((await BillingAdminController.linkTestCustomer(paying, env(), {} as ExecutionContext, payingContext)).status).toBe(409);
-		const [ok, okContext] = link('u_target');
-		expect((await BillingAdminController.linkTestCustomer(ok, env(), {} as ExecutionContext, okContext)).status).toBe(200);
-		expect(await db.prepare("SELECT stripe_customer_id FROM billing_customers WHERE user_id = 'u_target'").first()).toEqual({ stripe_customer_id: 'cus_clock_1' });
+	it('links a test-clock customer only in test mode, and never over a live subscription', async () => {
+		await insertBillingCustomer(db, 'u_seller', 'cus_old');
+		const linked = await BillingAdminController.linkTestCustomer(request('PUT', { stripeCustomerId: 'cus_clock' }), env(), {} as ExecutionContext, context('u_seller'));
+		expect(linked.status).toBe(200);
+		expect(await db.prepare("SELECT stripe_customer_id FROM billing_customers WHERE user_id = 'u_seller'").first()).toEqual({ stripe_customer_id: 'cus_clock' });
+		expect((await BillingAdminController.linkTestCustomer(request('PUT', { stripeCustomerId: 'cus_x' }), env({ STRIPE_SECRET_KEY: 'sk_live_fake' }), {} as ExecutionContext, context('u_seller'))).status).toBe(409);
+		expect((await BillingAdminController.linkTestCustomer(request('PUT', { stripeCustomerId: 'cus_x' }), env(), {} as ExecutionContext, context('u_paying'))).status).toBe(409);
+	});
+
+	it("shows an account's billing with links to Stripe", async () => {
+		await insertBillingCustomer(db, 'u_paying', 'cus_paying');
+		const response = await BillingAdminController.get(request('GET'), env(), {} as ExecutionContext, context('u_paying'));
+		expect((await response.json()).data).toMatchObject({
+			userId: 'u_paying',
+			plan: 'pro',
+			stripeCustomerUrl: 'https://dashboard.stripe.com/test/customers/cus_paying',
+			stripeSubscriptionUrl: 'https://dashboard.stripe.com/test/subscriptions/sub_paying',
+		});
 	});
 });
 ```
 
-In `billing-routes-wiring.test.ts`, add:
+Add to `billing-routes-wiring.test.ts`:
 
 ```ts
-	it('keeps every admin billing route behind the admin check', () => {
+	it('keeps account billing changes to admins', () => {
 		const routes = source('/worker/api/routes/billingRoutes.ts');
-		for (const path of ["'/api/admin/users/:userId/billing'", "'/api/admin/users/:userId/plan'", "'/api/admin/users/:userId/credits'", "'/api/admin/users/:userId/billing/test-customer'", "'/api/admin/billing/enforcement-notices'"]) {
-			const start = routes.indexOf(path);
-			expect(start, path).toBeGreaterThan(-1);
-			expect(routes.slice(start, start + 160), path).toContain('setAuthLevel(AuthConfig.admin)');
+		for (const route of ["'/api/admin/users/:userId/billing'", "'/api/admin/users/:userId/plan'", "'/api/admin/users/:userId/credits'", "'/api/admin/users/:userId/stripe-customer'"]) {
+			const start = routes.indexOf(route);
+			expect(start, route).toBeGreaterThan(-1);
+			expect(routes.slice(start, start + 160), route).toContain('setAuthLevel(AuthConfig.admin)');
 		}
 	});
 ```
-
-The first test's `expect(routes).not.toContain(':userId')` must now apply only to the seller routes. Narrow it: check the slice from `'/api/billing'` to the first `'/api/admin/'`.
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `rtk proxy bun run test -- worker/api/controllers/admin/billing.test.ts worker/services/billing/enforcement-notice.test.ts worker/api/controllers/admin/billing.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts`
-Expected: FAIL, failed imports and missing routes.
+Run: `rtk proxy bun run test -- worker/api/controllers/admin/billing.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts`
+Expected: FAIL, "Failed to resolve import ./billing".
 
-- [ ] **Step 3: Implement the parsers.** Accept only known keys, through `Object.hasOwn`.
+- [ ] **Step 3: Implement the controller.**
 
-**`parsePlanOverrideRequest`:**
-- `plan` is a `PlanId` or null. `tier` is allowed only with `'premium'` and must pass `isPremiumTierNumber`; it's null otherwise.
-- `limits` goes through `planLimitOverridesFrom`, `{}` when absent.
-- `until` is an ISO string that parses to a time after `nowMs`, or null or absent.
-- `reason` is trimmed and 3 to 500 characters.
+**`BillingAdminController extends BaseController`.** Every method reads `context.pathParams.userId`, answers 404 when `UserService.findUser` finds nobody, and answers the account's `AdminBillingView` on success.
 
-**`parseCreditGrantRequest`:** an integer from 1 to 1,000,000 credits, with the same reason rule.
+**The view** is `billingView(...)` plus:
+- `override`: the latest active one, parsed;
+- `grants`: `grantsOf(userId, account.period.key)`;
+- the Stripe links: `https://dashboard.stripe.com/${stripeModeOf(env) === 'test' ? 'test/' : ''}customers/{id}` and `…/subscriptions/{id}`, or null without an id.
 
-**`parseEnforcementNoticeRequest`:**
-- `startsOn` must be `/^\d{4}-\d{2}-\d{2}$/` and parse with `Date.parse` + `T00:00:00Z`;
-- `after` is a string or null;
-- `limit` is an integer from 1 to 50, default 25;
-- `dryRun` is a boolean, default false.
+**`setPlan`** validates the body and answers 400 "Pick a plan, give a reason, and keep the limits in range." when:
+- `plan` isn't in `PLAN_IDS` or null;
+- `limits`, when given, fails `planLimitOverridesFrom`;
+- `until`, when given, isn't an ISO date in the future;
+- `reason` isn't 3 to 500 characters after trimming.
 
-- [ ] **Step 4: Implement the services.**
+Then `PlanAdminService.addOverride({ userId, plan, limits: limits ?? {}, until, adminUserId: context.user.id, reason, now })`. A null plan ends the override.
 
-**`admin-view.ts`:**
-- `stripeDashboardUrl` answers `https://dashboard.stripe.com/${mode === 'test' ? 'test/' : ''}${kind}/${id}`, or null without a mode or id.
-- `adminBillingView`:
-  - `view` is `billingView(account, used, customerId !== null)`;
-  - the dashboard links are for the customer and for `account.subscription?.stripeSubscriptionId`;
-  - `override` is the latest row mapped to `PlanOverrideView` (limits through `planLimitOverridesFrom(JSON.parse(...)) ?? {}`), or null;
-  - `grants` are mapped to `CreditGrantView`;
-  - times are ms.
+**`grantCredits`:**
+- `credits` must be an integer from 1 to 10,000,000, with the same reason rule;
+- billing off for the account answers 409 "Billing isn't on for this account.";
+- otherwise `CreditLedgerService.addGrant` on `loadAccount`'s period and pool.
 
-**`PlanAdminService`:**
-- **`sellersAfter`:** `SELECT DISTINCT users.id, users.email FROM users JOIN apps ON apps.user_id = users.id WHERE users.deleted_at IS NULL AND users.id > ? ORDER BY users.id LIMIT ?`. Use `''` for a null `after`. Write it with drizzle's `selectDistinct`.
-- **`linkTestCustomer`:** batches two rows:
-  - a `billing_customers` upsert on `userId`;
-  - an `audit_logs` row `{ entityType: 'billing_customer', action: 'link_test_customer', newValues: { stripeCustomerId } }`.
+**`linkTestCustomer`:**
+- 409 "Only in Stripe test mode." unless `stripeModeOf(env) === 'test'`;
+- 409 "This account has a live subscription." when its row's status is live;
+- 400 unless `stripeCustomerId` starts with `cus_`;
+- otherwise `BillingService.linkCustomer` (an upsert on `user_id`), and an audit row `billing_customer` / `link_test_customer` in the same batch.
 
-**`enforcement-notice.ts`:**
-- The key is `enforcement_notice:{YYYY-MM-DD of startsOn}`.
-- For each seller from `sellersAfter(after, limit)`:
-  - **dry run:** `noticeSent` counts it as skipped, otherwise as sent. Nothing is sent or claimed.
-  - **otherwise:**
-    1. read `liveStoreAppIds`;
-    2. `sellsCatalog` is any live manifest that `parseStoreManifest` reads as `ok` with a variant carrying `catalogVariantId`;
-    3. `claimAndSendNotice(deps, userId, { key, email: { kind: 'enforcement_notice', startsOn, aiCreditsPerDay, liveStores: ids.length, sellsCatalog } })`;
-    4. `'sent'` and `'not-sent'` count as sent, since the notice is claimed; `'already-sent'` counts as skipped.
-- `next` is the last seller's id when the page came back full, else null.
-- **`enforcementNoticeDepsFromEnv(env)`:**
-  - spreads `creditNoticeDepsFromEnv(env)`;
-  - `noticeSent` checks `BillingService.sentNoticeKeys`;
-  - `liveStoreAppIds` comes from `LiveStoreService`;
-  - `liveManifest` uses the SpaceDO stub's `getStoreManifest('live')`, as the live-store controller does;
-  - `aiCreditsPerDay` is `publicPlanFromSettings((await getGlobalConfigurableSettings(env)).security.rateLimit).aiCreditsPerDay ?? 200`.
-
-- [ ] **Step 5: Implement the controller and the routes.** `BillingAdminController extends BaseController`:
-- Every method reads `context.pathParams.userId` and answers 404 "No user has this id" when `UserService.findUser({ id })` finds nobody. The enforcement batch has no user.
-- **`getBilling`:**
-  1. `nowMs` comes from a positive numeric `?at=`, else `Date.now()`;
-  2. `account = await loadAccount(env, userId, nowMs)`;
-  3. `used` from the target's own `getUserConfigurableSettings(env, userId)`;
-  4. answer `adminBillingView` with `stripeModeOf(env)`.
-- **`setPlan`:** parses (400 "Send a plan or null, a reason, and limits in range" when invalid), then `addOverride({ ...parsed, userId, adminUserId: context.user.id, now: new Date() })`. Answers `{ saved: true }`.
-- **`grantCredits`:** parses (400 "Send 1 to 1,000,000 credits and a reason"), loads the account, and `addGrant({ ..., periodStart: new Date(account.periodStartMs) })`. Answers `{ saved: true, periodStart: account.periodStartMs }`.
-- **`linkTestCustomer`:**
-  - answers 409 "Test customers can be linked only with a Stripe test key." unless `stripeModeOf(env) === 'test'`;
-  - answers 400 unless `stripeCustomerId` starts with `cus_`;
-  - answers 409 "This account has a live subscription." when its row's status is live;
-  - then `linkTestCustomer`.
-- **`sendEnforcementNotices`:** parses (400 when invalid) and answers `sendEnforcementNotices(await enforcementNoticeDepsFromEnv(env), parsed)`.
-
-Register the five routes in `setupBillingRoutes` with `setAuthLevel(AuthConfig.admin)`. Re-export the admin view types from `src/api-types.ts`; there's no admin page at launch.
-
-- [ ] **Step 6: Run the tests to verify they pass**
-
-Run: `rtk proxy bun run test -- worker/api/controllers/admin/billing.test.ts worker/services/billing/enforcement-notice.test.ts worker/api/controllers/admin/billing.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts`
-Expected: PASS.
-
-Run: `bun run typecheck`
-Expected: no errors.
-
-- [ ] **Step 7: Commit**
-
-```bash
-git add worker/api/controllers/admin/billing.ts worker/api/controllers/admin/billing.test.ts worker/api/controllers/admin/billing.sql.test.ts worker/services/billing/admin-view.ts worker/services/billing/enforcement-notice.ts worker/services/billing/enforcement-notice.test.ts worker/api/routes/billingRoutes.ts worker/api/controllers/billing/billing-routes-wiring.test.ts worker/database/services/PlanAdminService.ts shared/types/billing.ts src/api-types.ts
-git commit -m "feat(billing): admin endpoints to read an account's billing, override its plan, grant credits and send the enforcement notice, each audited
-
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
-```
-
-### Task 12: Terms, refunds and the terms version
-
-**Files:**
-- Modify:
-  - `src/content/legal/terms.md`, `src/content/legal/refunds.md`, `src/content/legal/privacy.md`;
-  - `shared/types/legal.ts`.
-- Test: `src/content/legal/legal-documents.test.ts`.
-
-**Interfaces:**
-- **Consumes:** `renewalDisclosure` (Task 2), `GRACE_PERIOD_DAYS` (Task 1).
-- **Produces:** `TERMS_VERSION = '2026-10-19'`. Every signed-in user accepts again through the existing `TermsGate`.
-
-- [ ] **Step 1: Write the failing test.** In `legal-documents.test.ts`:
-- change `expect(terms.version).toBe('2026-10-16')` to `'2026-10-19'`;
-- import `renewalDisclosure` from `shared/types/billing` and `GRACE_PERIOD_DAYS` from `shared/types/plans`;
-- add:
+**Routes,** in `setupBillingRoutes` after the seller routes:
 
 ```ts
-	it('covers Premium: monthly renewal until cancelled, cancelling to the period end, no partial refunds, credits without cash value, and notice of price changes', () => {
-		const terms = LEGAL_DOCUMENTS.terms.body;
-		for (const promise of [
-			'### Premium subscriptions',
-			'renews automatically every month at the price shown when you subscribed until you cancel',
-			'Premium then stays on until the end of the month you paid for',
-			"We don't refund part of a month",
-			'A bigger pool starts right away',
-			'A smaller pool starts at your next renewal',
-			'have no cash value',
-			"don't carry over from one month to the next",
-			`Premium continues for ${GRACE_PERIOD_DAYS} days while we retry`,
-			'Your published stores stay live whatever plan you are on',
-			"at least 30 days' notice",
-		]) {
-			expect(terms, promise).toContain(promise);
-		}
-		expect(terms).not.toContain('Purchases are one-time payments');
-		expect(terms).toContain('A paid site is a one-time payment in US dollars.');
-	});
-
-	it('says at checkout what the Terms say about renewing and cancelling', () => {
-		const disclosure = renewalDisclosure(9_900);
-		expect(disclosure).toBe('Premium renews every month at $99 until you cancel. Cancel any time in Estori; it ends at the end of the period.');
-		expect(LEGAL_DOCUMENTS.terms.body).toContain('until you cancel');
-		expect(LEGAL_DOCUMENTS.terms.body).toContain('You can cancel any time from your billing page in Estori');
-	});
-
-	it('refunds Premium only for a double charge or an account that could not use Estori, within 14 days', () => {
-		const refunds = LEGAL_DOCUMENTS.refunds.body;
-		expect(refunds).toContain('## Premium');
-		expect(refunds).toContain('Premium payments are refundable only if you were charged twice, or if your account couldn\'t use Estori during the period you paid for.');
-		expect(refunds).toContain('within 14 days of the payment');
-	});
-
-	it('names the billing data kept for Premium', () => {
-		expect(LEGAL_DOCUMENTS.privacy.body).toContain('for Premium, your plan, its billing period and the identifier of your Stripe customer');
-	});
+	app.get('/api/admin/users/:userId/billing', setAuthLevel(AuthConfig.admin), adaptController(BillingAdminController, BillingAdminController.get));
+	app.put('/api/admin/users/:userId/plan', setAuthLevel(AuthConfig.admin), adaptController(BillingAdminController, BillingAdminController.setPlan));
+	app.post('/api/admin/users/:userId/credits', setAuthLevel(AuthConfig.admin), adaptController(BillingAdminController, BillingAdminController.grantCredits));
+	app.put('/api/admin/users/:userId/stripe-customer', setAuthLevel(AuthConfig.admin), adaptController(BillingAdminController, BillingAdminController.linkTestCustomer));
 ```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-Run: `rtk proxy bun run test -- src/content/legal/legal-documents.test.ts shared/types/legal.test.ts`
-Expected: FAIL. The version is still `2026-10-16` and the Premium wording is missing.
-
-- [ ] **Step 3: Write the wording.** The headers of `terms.md`, `privacy.md` and `refunds.md` get `version: 2026-10-19` and `updated: October 19, 2026`. `TERMS_VERSION` becomes `'2026-10-19'`.
-
-**In `terms.md`,** section 6: replace "Purchases are one-time payments in US dollars. Refunds follow our [Refund Policy](/refunds)." with "A paid site is a one-time payment in US dollars. Premium is a subscription, covered in section 8. Refunds follow our [Refund Policy](/refunds)."
-
-**In `terms.md`,** section 8: add after the fee paragraph, before the Stripe paragraph:
-
-```markdown
-### Premium subscriptions
-
-Premium is a monthly subscription to a pool of AI credits and the features our [pricing page](/pricing) lists for it. It renews automatically every month at the price shown when you subscribed until you cancel. We charge the card you gave at checkout at the start of each month.
-
-You can cancel any time from your billing page in Estori, or in the billing portal it opens. Premium then stays on until the end of the month you paid for, and your account moves to Basic after that. We don't refund part of a month, including when you cancel or move to a smaller pool.
-
-A bigger pool starts right away, and we charge the difference for the rest of the month. A smaller pool starts at your next renewal.
-
-AI credits are part of the Service, not money: they have no cash value, can't be transferred, and don't carry over from one month to the next.
-
-If a renewal payment fails, Premium continues for 7 days while we retry, and your account then moves to Basic until the payment goes through. Your published stores stay live whatever plan you are on.
-
-We may change Premium's prices with at least 30 days' notice by email. A new price applies from your first renewal after the notice.
-```
-
-**In `refunds.md`:**
-- The first paragraph becomes: "This policy covers purchases of paid sites and Premium subscriptions on Estori, sold by {{entity.name}} ("Globalink", "we") as merchant of record. Basic is free, so there's nothing to refund for it. Purchases from a store built on Estori are sold by that store's owner, and follow that store's own refund policy."
-- Add before "## Chargebacks":
-
-```markdown
-## Premium
-
-Premium payments are refundable only if you were charged twice, or if your account couldn't use Estori during the period you paid for. Email {{contact.support}} within 14 days of the payment, with the email address of your account. We don't refund part of a month, including when you cancel or move to a smaller pool; Premium stays on until the end of the month you paid for.
-```
-
-**In `privacy.md`:**
-- The "Marketplace information" paragraph gains, before "Card numbers": "And, for Premium, your plan, its billing period and the identifier of your Stripe customer."
-- The Stripe bullet becomes "payments, Premium subscriptions, seller onboarding and payouts".
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `rtk proxy bun run test -- src/content/legal/legal-documents.test.ts shared/types/legal.test.ts src/components/auth/terms-guard.test.ts`
+Run: `rtk proxy bun run test -- worker/api/controllers/admin/billing.sql.test.ts worker/api/controllers/billing/billing-routes-wiring.test.ts worker/database/services/billing.sql.test.ts`
 Expected: PASS.
+
+Run: `bun run typecheck`
+Expected: no new errors.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/content/legal/terms.md src/content/legal/refunds.md src/content/legal/privacy.md src/content/legal/legal-documents.test.ts shared/types/legal.ts
-git commit -m "feat(billing): terms and refunds cover premium's monthly renewal, cancelling and credits, and everyone accepts the new terms
+git add worker/api/controllers/admin/billing.ts worker/api/controllers/admin/billing.sql.test.ts worker/api/routes/billingRoutes.ts worker/api/controllers/billing/billing-routes-wiring.test.ts worker/database/services/BillingService.ts shared/types/billing.ts
+git commit -m "feat(billing): admin endpoints for an account's billing, enterprise and comp overrides, credit grants and test customers
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-### Task 13: The test-clock scenarios, the checklist, the notice script, and shipping
+### Task 14: Terms, refunds and the checkout agreement
+
+**Files:**
+- Modify:
+  - `src/content/legal/terms.md`, `src/content/legal/refunds.md`, `src/content/legal/privacy.md` (version only);
+  - `shared/types/legal.ts` (`TERMS_VERSION`);
+  - `src/content/legal/legal-documents.test.ts`.
+
+**Interfaces:**
+- **Consumes:** `renewalDisclosure`, `EXTRA_CREDITS_DISCLOSURE` (Task 3), which say the same as the Terms.
+- **Produces:** `TERMS_VERSION = '2026-10-19'`, and a new section 11, "Plans, AI credits and extra credits". Sections 11 to 21 become 12 to 22.
+
+- [ ] **Step 1: Write the failing test.** In `legal-documents.test.ts`:
+- the selling-terms test expects `terms.version` to be `'2026-10-19'`, keeps `## 10. Selling in your own store`, and expects `## 22. Contact`;
+- add:
+
+```ts
+	it('adds plans, credits and extra credits as section 11, with renewal, cancelling and refunds', () => {
+		const terms = LEGAL_DOCUMENTS.terms.body;
+		expect(terms).toContain('## 11. Plans, AI credits and extra credits');
+		for (const promise of [
+			'renew automatically every month until you cancel',
+			'Cancelling takes effect at the end of the period you paid for',
+			'no refunds for part of a period',
+			'Credits have no cash value',
+			"charged from the AI's real usage",
+			"Monthly credits don't carry over",
+			'Extra credits are used after your monthly credits and expire 12 months after purchase',
+			'non-refundable, except when you were charged twice or your account could not use them',
+			"at least 30 days' notice",
+		]) {
+			expect(terms).toContain(promise);
+		}
+		expect(terms).not.toContain('Purchases are one-time payments');
+		expect(terms).toContain('A paid site is a one-time payment in US dollars');
+		const refunds = LEGAL_DOCUMENTS.refunds.body;
+		expect(refunds).toContain('Pro, Premium and extra credits');
+		expect(refunds).toContain('within 14 days');
+	});
+
+	it('says at checkout what the Terms say', () => {
+		const terms = LEGAL_DOCUMENTS.terms.body;
+		expect(EXTRA_CREDITS_DISCLOSURE.startsWith('Extra credits are used after your monthly credits and expire 12 months after purchase')).toBe(true);
+		expect(terms).toContain(EXTRA_CREDITS_DISCLOSURE.replace(/\.$/, ''));
+		expect(renewalDisclosure('pro')).toContain('until you cancel');
+	});
+```
+
+with `import { EXTRA_CREDITS_DISCLOSURE, renewalDisclosure } from '../../../shared/types/billing';`.
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `rtk proxy bun run test -- src/content/legal/legal-documents.test.ts`
+Expected: FAIL, version and section 11 missing.
+
+- [ ] **Step 3: Write the wording.**
+
+**`terms.md`:**
+- In section 6, replace "Purchases are one-time payments in US dollars." with "A paid site is a one-time payment in US dollars."
+- Insert after section 10:
+
+```markdown
+## 11. Plans, AI credits and extra credits
+
+Estori has a free plan, Basic, and paid plans, Pro and Premium, at the prices on our pricing page when you subscribe. Paid plans are billed in US dollars to your card through Stripe, and renew automatically every month until you cancel. You can cancel any time from your billing page in Estori. Cancelling takes effect at the end of the period you paid for; until then you keep your plan. Moving from Pro to Premium takes effect at once, and we charge the difference for the rest of the period. Moving from Premium to Pro takes effect at the next renewal. There are no refunds for part of a period or for a move to Pro.
+
+Each plan includes AI credits for each period. Credits pay for the AI's work: each step the AI takes is charged from the AI's real usage, at the price of the model you choose. Monthly credits don't carry over to the next period. Credits have no cash value and can't be transferred or exchanged for money.
+
+On Premium you can buy extra credits. Extra credits are used after your monthly credits and expire 12 months after purchase. They stay yours if you change plans. Extra credits are non-refundable, except when you were charged twice or your account could not use them; refunded extra credits that are still unused are removed from your account.
+
+A turn the AI has started always finishes. If it uses more credits than you had left, the difference is taken from your extra credits; if you have none, we don't charge you for it.
+
+We may change the prices or the credits of a plan with at least 30 days' notice. A change applies from your first renewal after it takes effect. Plans also set limits, such as how many stores can be live at once; going over a limit after a plan change never takes a live store offline.
+```
+
+- Renumber the later sections, and every "section N" reference to them in the Terms and the other legal pages. Search the repository for references to the old numbers, such as "section 14", and update them.
+- Set the front matter `version: 2026-10-19` and `updated: October 19, 2026`.
+
+**`refunds.md`:** after the paid-site section, add "## Pro, Premium and extra credits":
+- Payments for Pro, Premium and extra credits are refundable only when you were charged twice, or when your account couldn't use Estori. Ask within 14 days of the payment, as above.
+- A refund of extra credits removes the unused credits it covers.
+- Cancelling a plan stops its renewal; the current period isn't refunded.
+- Update the opening paragraph to say the policy covers plans and extra credits too, and set the version and date.
+
+**`privacy.md` and `legal.ts`:**
+- `privacy.md` gets `version: 2026-10-19`, since the two versions move together.
+- `TERMS_VERSION` becomes `'2026-10-19'`. `SELLER_TERMS_VERSION` stays `'2026-10-16'`, because section 10 didn't change.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- src/content/legal/legal-documents.test.ts`
+Expected: PASS.
+
+Run: `rg -n "TERMS_VERSION|2026-10-16" src worker shared --type ts`
+Expected: no test or guard still pins the old Terms version. Update any that does.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/content/legal shared/types/legal.ts
+git commit -m "feat(billing): terms and refund policy for plans, ai credits and extra credits, with everyone accepting the new terms
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Task 15: The enforcement notice, the Stripe scenarios, the by-eye check and the PR
 
 **Files:**
 - Create:
-  - `scripts/stripe-billing-scenarios.ts`, `scripts/stripe-billing-scenarios.test.ts`;
-  - `scripts/billing-enforcement-notice.ts`, `scripts/billing-enforcement-notice.test.ts`;
+  - `worker/services/billing/enforcement-notice.ts`;
+  - `scripts/stripe-billing-scenarios.ts`;
   - `docs/estori/billing-test-scenarios.md`.
-- Modify `README.md` (the dashboard-managed settings line).
-- Test: the two script tests.
+- Modify:
+  - `worker/services/billing/jobs.ts` (the hourly run sends the notice);
+  - `worker/types/env.d.ts` (`BILLING_ENFORCEMENT_FROM`);
+  - `worker/database/services/BillingService.ts` (`accountsWithoutNotice`, `storesStartedOf`);
+  - `worker/database/services/LiveStoreService.ts` (`liveAppsOf`);
+  - `docs/estori/launch-checklist.md` (the owner steps).
+- Test:
+  - `worker/services/billing/enforcement-notice.sql.test.ts`;
+  - `scripts/stripe-billing-scenarios.test.ts`.
 
 **Interfaces:**
 - **Consumes:**
-  - the seller endpoints from Task 6;
-  - the admin endpoints from Task 11 (`?at=`, the test-customer link, the enforcement batch);
-  - `encodeForm` and `STRIPE_API_VERSION` from `stripe-client.ts`;
-  - `premiumPriceIds` from Task 4.
+  - `claimAndSendNotice`, `claimingMailFromEnv` (Task 7);
+  - `LiveStoreService.liveCountOf` (Task 11);
+  - `parseStoreManifest` (existing);
+  - the admin endpoints (Task 13);
+  - the webhook (Task 9).
 - **Produces:**
-  - `stripe-billing-scenarios.ts`:
-    - `ScenarioConfig { origin; stripeSecretKey; sellerApiKey; adminApiKey; sellerUserId; stagingGateKey: string | null; priceIds: PremiumPriceIds }`;
-    - `ScenarioResult { name; ok; detail }`;
-    - `assertTestKey(key: string): void`;
-    - `waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, options: { timeoutMs: number; intervalMs: number; sleep(ms: number): Promise<void> }): Promise<T>`;
-    - `runBillingScenarios(config, fetchImpl: FetchLike, sleep: (ms: number) => Promise<void>): Promise<ScenarioResult[]>`.
-  - `billing-enforcement-notice.ts`: `sendAllEnforcementNotices(input: { origin; adminApiKey; stagingGateKey: string | null; startsOn: string; dryRun: boolean }, fetchImpl: FetchLike): Promise<{ sent: number; skipped: number }>`.
+  - `enforcement-notice.ts`:
+    - `enforcementStartsOn(value: string | undefined): number | null` (UTC midnight of a `YYYY-MM-DD` date);
+    - `sellsCatalogProducts(manifest: string | null): boolean`;
+    - `EnforcementDeps { accounts(key: string, limit: number): Promise<string[]>; liveStores(userId: string): Promise<string[]>; storesStarted(userId: string): Promise<number>; liveManifest(appId: string): Promise<string | null>; mail: ClaimingMailDeps }`;
+    - `sendEnforcementNotices(deps, startsOnMs: number, nowMs: number): Promise<number>`;
+    - `enforcementDepsFromEnv(env)`.
+  - `BillingService.accountsWithoutNotice(key: string, limit: number): Promise<string[]>`, `storesStartedOf(userId): Promise<number>`.
+  - `LiveStoreService.liveAppsOf(userId): Promise<string[]>`.
+  - `scripts/stripe-billing-scenarios.ts`:
+    - `ScenarioConfig { stripeKey: string; baseUrl: string; adminCookie: string; stagingKey: string | null; userId: string }`;
+    - `readScenarioConfig(env: Record<string, string | undefined>): ScenarioConfig` (throws on a live key);
+    - `waitFor<T>(read: () => Promise<T>, done: (value: T) => boolean, options?: { tries: number; delayMs: number }): Promise<T>`;
+    - `SCENARIOS: ReadonlyArray<{ id: number; name: string; byEye: boolean }>`.
+  - Env: `BILLING_ENFORCEMENT_FROM?: string`.
 
-- [ ] **Step 1: Write the failing script tests.**
+- [ ] **Step 1: Write the failing notice test** `worker/services/billing/enforcement-notice.sql.test.ts`:
 
-`scripts/stripe-billing-scenarios.test.ts`:
+```ts
+/** A week's notice before limits apply: once per account, with a line for accounts already over Basic. */
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { envWith, insertApp, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { LiveStoreService } from '../../database/services/LiveStoreService';
+import { BillingService } from '../../database/services/BillingService';
+import { enforcementDepsFromEnv, enforcementStartsOn, sellsCatalogProducts, sendEnforcementNotices } from './enforcement-notice';
+
+let db: D1Database;
+const STARTS = Date.parse('2026-11-01T00:00:00Z');
+const NOW = Date.parse('2026-10-25T10:05:00Z');
+const CATALOG = JSON.stringify({ products: [{ id: 'lamp', name: 'Lamp', variants: [{ id: 'v', name: 'Black', priceCents: 3500, catalogVariantId: '5e0c1d64-8f1e-4a7b-9b55-2f7f6c1d9a10' }] }] });
+
+beforeAll(async () => {
+	db = await migratedD1();
+	for (const id of ['u_small', 'u_big', 'u_catalog']) await insertUser(db, id);
+	for (const [id, userId] of [['app_s', 'u_small'], ['app_b1', 'u_big'], ['app_b2', 'u_big'], ['app_c', 'u_catalog']] as const) await insertApp(db, { id, userId });
+});
+
+function env(sent: Array<{ to: string; text: string }>): Env {
+	const namespace = { idFromName: (name: string) => name, get: (appId: string) => ({ getStoreManifest: async () => ({ commitHash: 'c1', manifest: appId === 'app_c' ? CATALOG : null }) }) };
+	return envWith(db, {
+		ENVIRONMENT: 'prod',
+		CUSTOM_DOMAIN: 'estori.app',
+		SPACE_DO: namespace,
+		EMAIL: {
+			send: async (message: { to: string; text: string }) => {
+				sent.push({ to: message.to, text: message.text });
+				return { messageId: 'm1' };
+			},
+		},
+	});
+}
+
+describe('the enforcement notice', () => {
+	it('reads the start date, and finds catalog products in a live version', () => {
+		expect(enforcementStartsOn('2026-11-01')).toBe(STARTS);
+		for (const bad of [undefined, '', 'November 1', '2026-13-01']) expect(enforcementStartsOn(bad)).toBeNull();
+		expect(sellsCatalogProducts(CATALOG)).toBe(true);
+		expect(sellsCatalogProducts(null)).toBe(false);
+		expect(sellsCatalogProducts('{')).toBe(false);
+	});
+
+	it('tells every account once, adding a line for those over Basic, and stops when limits start', async () => {
+		const stores = new LiveStoreService(envWith(db));
+		for (const appId of ['app_s', 'app_b1', 'app_b2', 'app_c']) await stores.publish({ appId, slug: appId.replace('_', '-'), commit: 'c1', now: new Date(NOW) });
+		await new BillingService(envWith(db)).reserveStore('u_small', null, new Date(NOW));
+		const sent: Array<{ to: string; text: string }> = [];
+		const deps = enforcementDepsFromEnv(env(sent));
+		expect(await sendEnforcementNotices(deps, STARTS, NOW)).toBe(3);
+		expect(await sendEnforcementNotices(deps, STARTS, NOW + 3_600_000)).toBe(0);
+		const over = (userId: string) => sent.find((email) => email.to.startsWith(userId))?.text.includes('to publish more, get Pro or Premium');
+		expect([over('u_small'), over('u_big'), over('u_catalog')]).toEqual([false, true, true]);
+		expect(await sendEnforcementNotices(deps, STARTS, STARTS)).toBe(0);
+	});
+});
+```
+
+`insertUser` writes `{id}@example.test`, which the `startsWith` check relies on.
+
+- [ ] **Step 2: Write the failing script test** `scripts/stripe-billing-scenarios.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest';
-import { assertTestKey, runBillingScenarios, waitFor } from './stripe-billing-scenarios';
+import { SCENARIOS, readScenarioConfig, waitFor } from './stripe-billing-scenarios';
 
-describe('the billing scenarios', () => {
-	it('run only against Stripe test mode', async () => {
-		expect(() => assertTestKey('sk_test_1')).not.toThrow();
-		expect(() => assertTestKey('rk_test_1')).not.toThrow();
-		expect(() => assertTestKey('sk_live_1')).toThrow('The scenarios run only with a Stripe test key.');
-		let calls = 0;
-		const config = { origin: 'https://staging.estori.app', stripeSecretKey: 'sk_live_1', sellerApiKey: 'k1', adminApiKey: 'k2', sellerUserId: 'u1', stagingGateKey: null, priceIds: { 1: 'price_a', 2: 'price_b', 3: 'price_c', 4: 'price_d' } } as const;
-		await expect(runBillingScenarios(config, async () => { calls += 1; return Response.json({}); }, async () => undefined)).rejects.toThrow('The scenarios run only with a Stripe test key.');
-		expect(calls).toBe(0);
+const ENV = { STRIPE_SECRET_KEY: 'sk_test_fake', ESTORI_BASE_URL: 'https://staging.estori.app', ESTORI_ADMIN_COOKIE: 'session=abc', ESTORI_STAGING_KEY: 'gate', ESTORI_TEST_USER_ID: 'u_test' };
+
+describe('the Stripe billing scenarios', () => {
+	it('runs only in test mode, against the account it is given', () => {
+		expect(readScenarioConfig(ENV)).toEqual({ stripeKey: 'sk_test_fake', baseUrl: 'https://staging.estori.app', adminCookie: 'session=abc', stagingKey: 'gate', userId: 'u_test' });
+		expect(() => readScenarioConfig({ ...ENV, STRIPE_SECRET_KEY: 'sk_live_fake' })).toThrow('Run the scenarios with a test key only.');
+		expect(() => readScenarioConfig({ ...ENV, ESTORI_TEST_USER_ID: undefined })).toThrow('Set ESTORI_TEST_USER_ID');
 	});
 
-	it('wait for a condition every interval, and say what they last saw when it never comes', async () => {
+	it("covers the spec's ten scenarios, with 3-D Secure by eye", () => {
+		expect(SCENARIOS.map((scenario) => scenario.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+		expect(SCENARIOS.filter((scenario) => scenario.byEye).map((scenario) => scenario.id)).toEqual([6]);
+	});
+
+	it('waits for the webhook to land, and gives up after its tries', async () => {
 		let reads = 0;
-		const slept: number[] = [];
-		const sleep = async (ms: number) => void slept.push(ms);
-		expect(await waitFor(async () => ++reads, (value) => value === 3, { timeoutMs: 10_000, intervalMs: 2_000, sleep })).toBe(3);
-		expect(slept).toEqual([2_000, 2_000]);
-		await expect(waitFor(async () => 'basic', (value) => value === 'premium', { timeoutMs: 4_000, intervalMs: 2_000, sleep })).rejects.toThrow('Timed out; last saw "basic"');
+		expect(await waitFor(async () => ++reads, (value) => value >= 3, { tries: 5, delayMs: 0 })).toBe(3);
+		await expect(waitFor(async () => 0, (value) => value > 0, { tries: 2, delayMs: 0 })).rejects.toThrow('Gave up after 2 tries');
 	});
 });
 ```
 
-`scripts/billing-enforcement-notice.test.ts`:
+- [ ] **Step 3: Run them to verify they fail**
 
-```ts
-import { describe, expect, it } from 'vitest';
-import { sendAllEnforcementNotices } from './billing-enforcement-notice';
-
-describe('sending the enforcement notice', () => {
-	it('pages through every seller with an admin token, adding up what was sent', async () => {
-		const bodies: unknown[] = [];
-		const pages = [{ sent: 25, skipped: 0, next: 'u_25' }, { sent: 3, skipped: 1, next: null }];
-		const fetchImpl = async (url: string, init?: RequestInit) => {
-			if (url.endsWith('/api/auth/exchange-api-key')) return Response.json({ success: true, data: { accessToken: 'token', expiresAt: '2099-01-01T00:00:00Z' } });
-			expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token');
-			bodies.push(JSON.parse(String(init?.body)));
-			return Response.json({ success: true, data: pages.shift() });
-		};
-		expect(await sendAllEnforcementNotices({ origin: 'https://estori.app', adminApiKey: 'admin-key', stagingGateKey: null, startsOn: '2026-11-01', dryRun: false }, fetchImpl)).toEqual({ sent: 28, skipped: 1 });
-		expect(bodies).toEqual([
-			{ startsOn: '2026-11-01', after: null, limit: 25, dryRun: false },
-			{ startsOn: '2026-11-01', after: 'u_25', limit: 25, dryRun: false },
-		]);
-	});
-});
-```
-
-- [ ] **Step 2: Run them to verify they fail**
-
-Run: `rtk proxy bun run test -- scripts/stripe-billing-scenarios.test.ts scripts/billing-enforcement-notice.test.ts`
+Run: `rtk proxy bun run test -- worker/services/billing/enforcement-notice.sql.test.ts scripts/stripe-billing-scenarios.test.ts`
 Expected: FAIL, failed imports.
 
-- [ ] **Step 3: Implement `scripts/stripe-billing-scenarios.ts`.**
+- [ ] **Step 4: Implement the notice.**
 
-**The header** says what it does and how to run it:
+**`enforcementStartsOn(value)`:** matches `^\d{4}-\d{2}-\d{2}$`, builds `Date.UTC`, and answers null unless the date round-trips (so `2026-13-01` fails).
 
+**`sellsCatalogProducts(manifest)`:** true when `parseStoreManifest(manifest)` is ok and any product's variant has a `catalogVariantId`.
+
+**`sendEnforcementNotices(deps, startsOnMs, nowMs)`:**
+1. Answer 0 when `nowMs >= startsOnMs`.
+2. The key is `enforcement_notice:{YYYY-MM-DD}`. Read up to 100 `deps.accounts(key, 100)`.
+3. For each account, `overLimits` is true when any of these holds:
+   - more than one live store;
+   - more than 3 stores started;
+   - a live version that sells catalog products.
+4. Claim and send `{ kind: 'enforcement_notice', startsOn: startsOnMs, overLimits }`.
+5. Answer the count sent. Each account is caught and logged on its own.
+
+**`enforcementDepsFromEnv(env)`:**
+- `accounts`: `BillingService.accountsWithoutNotice(key, limit)`, the users not deleted without that notice;
+- `liveStores`: `LiveStoreService.liveAppsOf`;
+- `storesStarted`: `BillingService.storesStartedOf`, from `account_store_counts`, 0 without a row;
+- `liveManifest`: SpaceDO's `getStoreManifest('live')`;
+- `mail`: `claimingMailFromEnv(env)`.
+
+**`runHourlyBilling`** also calls `sendEnforcementNotices(enforcementDepsFromEnv(env), startsOn, nowMs)` when `enforcementStartsOn(env.BILLING_ENFORCEMENT_FROM)` isn't null. It runs whatever the billing flag says: the notice goes out before the flag turns on.
+
+**`env.d.ts`:** add `// "YYYY-MM-DD": the day plan limits start; the hourly run emails every account the week before. BILLING_ENFORCEMENT_FROM?: string;`.
+
+- [ ] **Step 5: The scenarios script.**
+
+```ts
+/**
+ * Billing end to end in Stripe test mode against a deployed Estori (staging), using test clocks to move time.
+ * After each step it reads Estori's billing view through the admin API and checks the plan and credits.
+ * Usage: STRIPE_SECRET_KEY=sk_test_... ESTORI_BASE_URL=https://staging.estori.app ESTORI_ADMIN_COOKIE='...'
+ *        ESTORI_STAGING_KEY=... ESTORI_TEST_USER_ID=... bun scripts/stripe-billing-scenarios.ts [--only 1,2]
+ */
 ```
-ESTORI_ORIGIN=https://staging.estori.app STRIPE_SECRET_KEY=sk_test_... ESTORI_SELLER_API_KEY=... ESTORI_ADMIN_API_KEY=... ESTORI_SELLER_USER_ID=... STRIPE_PREMIUM_PRICE_IDS='{...}' [STAGING_GATE_KEY=...] bun scripts/stripe-billing-scenarios.ts
-```
 
-**Setup:**
-- `assertTestKey` runs first, before any request.
-- Exchange each API key for a token through `POST {origin}/api/auth/exchange-api-key` with `Authorization: Bearer <key>`, and read `data.accessToken`.
-- Estori requests send `Authorization: Bearer <token>`, and `x-estori-staging-key` when a gate key is set.
-- Stripe requests send the secret key, `Stripe-Version: STRIPE_API_VERSION` and `encodeForm` bodies.
-- `view(atMs)` reads `GET /api/admin/users/{sellerUserId}/billing?at={atMs}` with the admin token, and answers `data.view`.
+**`readScenarioConfig`:**
+- throws "Run the scenarios with a test key only." for a key not starting with `sk_test_` or `rk_test_`;
+- throws "Set {NAME}" for each missing value; only `ESTORI_STAGING_KEY` is optional.
 
-**`advance(clockId, toSeconds)`:**
-1. `POST /v1/test_helpers/test_clocks/{id}/advance { frozen_time }`;
-2. then `waitFor` the clock's `status === 'ready'` (every 2 s, up to 120 s);
-3. then wait 10 s for webhooks.
+**`waitFor`:** reads up to `tries` times (default 15), `delayMs` apart (default 2,000), answers the first value `done` accepts, and otherwise throws `Gave up after {tries} tries`.
 
-**`waitFor`:**
-- reads, and answers as soon as `done` holds;
-- otherwise sleeps `intervalMs` and reads again;
-- counts elapsed time as the sum of its sleeps, so a test can pass a fake `sleep`;
-- once that reaches `timeoutMs`, throws `Timed out; last saw ${JSON.stringify(last)}`.
+**Calls:**
+- Stripe calls use `createStripeClient`'s request shape, with `encodeForm`, the pinned version and idempotency keys.
+- Estori calls send the `Cookie` header and `x-estori-staging-key`.
 
-**Every `waitFor` on the view** polls every 2 s for up to 60 s. Each scenario runs in its own try/catch and records `{ name, ok, detail }`. A failed scenario stops the later ones, since they share the subscription, and marks them "skipped".
+**The account:** the scenarios share one test account.
+1. Create a test clock.
+2. Create a customer on it with `metadata[estori_user_id]`, attach `pm_card_visa`, and set it as the default.
+3. Link the customer with `PUT /api/admin/users/:userId/stripe-customer`.
+4. Before scenario 1, end any override with `PUT /api/admin/users/:userId/plan` and `{ plan: null, reason: 'Billing scenarios' }`.
 
-| # | Scenario | Steps | Expected view (at the clock's time) |
+| # | Scenario | The script does | Estori's view must show |
 | --- | --- | --- | --- |
-| 9 | Expired checkout (runs first, before the test customer is linked) | `POST /api/billing/checkout { tier: 1 }` as the seller, then `POST /v1/checkout/sessions/{sessionId}/expire`, then a second checkout, also expired | plan `basic`; the second checkout answers 200, not 409 |
-| 1 | Subscribe with 4242 | create a test clock at now; create a customer `{ test_clock, email: 'billing-scenarios@pluriza.com', metadata: { estori_user_id } }`; `PUT /api/admin/users/{id}/billing/test-customer`; attach `pm_card_visa` and make it `invoice_settings.default_payment_method`; `POST /v1/subscriptions { customer, items: [{ price: priceIds[1] }], metadata: { estori_user_id } }` | `premium`, tier 1, `credits.limit` 20,000, status `active` |
-| 2 | Renew a month later | advance to `periodEnd + 3600` | `periodStart` moved to the old `periodEnd`; still `premium` tier 1 |
-| 3 | Upgrade 1 to 3 mid-period | advance 10 days; `POST /api/billing/change-tier { tier: 3 }` | tier 3, `credits.limit` 100,000 |
-| 4 | Downgrade 3 to 2 at renewal | `change-tier { tier: 2 }`; then advance to `periodEnd + 3600` | first `pendingTier` 2; after the advance tier 2, `pendingTier` null |
-| 5 | Failed renewal with 0341, the grace, then a good card | attach `pm_card_chargeCustomerFail` as default; advance to `periodEnd + 3600`; read the view at the clock + 6 days and at the clock + 8 days; attach `pm_card_visa` as default; pay the open invoice (`GET /v1/invoices?subscription=...&status=open`, then `POST /v1/invoices/{id}/pay`) | `past_due` and `premium` at +6 d; `basic` with `paymentFailing` at +8 d; `premium`, `active` after paying |
-| 7 | Cancel at the period's end | `POST /api/billing/cancel` | `cancelAtPeriodEnd` true, still `premium` |
-| 8 | Resume before the end | `POST /api/billing/resume`; then cancel again and advance to `periodEnd + 3600` | `cancelAtPeriodEnd` false; after the second cancel and the advance, `basic` with status `canceled` |
+| 1 | Subscribe to Pro | create a subscription for the Pro price with `metadata[estori_user_id]` | `plan: 'pro'`, `status: 'active'`, 20,000 credits |
+| 2 | Renew a month later | advance the clock past the period end | a new `periodStart`, `credits.used` 0 |
+| 3 | Pro to Premium mid-period | update the item to Premium with `proration_behavior=always_invoice`, `payment_behavior=error_if_incomplete` | `plan: 'premium'`, 100,000 credits |
+| 4 | Premium to Pro at renewal | create the schedule as `scheduleSubscriptionPrice` does; then advance the clock past the period end | `pendingPlan: 'pro'`; then `plan: 'pro'`, `pendingPlan: null` |
+| 5 | Failed renewal, grace, new card | set `pm_card_chargeCustomerFail` (4000 0000 0000 0341) as default; advance past renewal; advance 8 days; set `pm_card_visa` and pay the open invoice | `status: 'past_due'` with the plan kept and `graceEndsAt` set; then `plan: 'basic'`; then `status: 'active'` with the plan back |
+| 6 | 3-D Secure at checkout | prints a reminder: by eye with 4000 0025 0000 3155 | (by eye) |
+| 7 | Cancel at the period end | `cancel_at_period_end=true` | `cancelAtPeriodEnd: true`, the plan kept |
+| 8 | Resume before the end | `cancel_at_period_end=false` | `cancelAtPeriodEnd: false` |
+| 9 | An expired checkout | create a credits Checkout Session with the account's metadata, then expire it | no new purchase |
+| 10 | Extra credits bought, then refunded | asks the person to buy 5,000 credits on the billing page with 4242 4242 4242 4242, waits for the purchase, then refunds its payment in full | `purchasedLeft` 5,000; then 0 |
 
-At the end, `DELETE /v1/test_helpers/test_clocks/{id}` removes the clock's customer and subscriptions, even after a failure. `main()`:
-- reads the environment;
-- parses `STRIPE_PREMIUM_PRICE_IDS` with `premiumPriceIds`;
-- prints one line per result;
-- exits 1 when any failed.
+**Running it:**
+- Each scenario prints "PASS n name" or "FAIL n name: reason".
+- The run ends by deleting the test clock, which removes its customer and subscriptions.
+- `main()` runs only when `import.meta.main`, and exits 1 on any failure.
 
-- [ ] **Step 4: Implement `scripts/billing-enforcement-notice.ts`.**
-- Exchange the admin key, then POST `{ startsOn, after, limit: 25, dryRun }` to `/api/admin/billing/enforcement-notices` until `next` is null. Send the staging gate header when set.
-- Add up `sent` and `skipped`.
-- `main()` reads `ESTORI_ORIGIN`, `ESTORI_ADMIN_API_KEY` and `STAGING_GATE_KEY`, plus the `--starts-on YYYY-MM-DD` and `--dry-run` flags.
-- Print the totals, prefixed "Would send" on a dry run.
+- [ ] **Step 6: The written checklist** `docs/estori/billing-test-scenarios.md`. List:
+- the ten scenarios, with how to run them and what Estori must show;
+- the by-eye journeys:
+  - buying Pro from `/pricing` signed out, through sign-up;
+  - buying Premium from a limit dialog;
+  - moving between plans on the billing page;
+  - Manage billing;
+  - buying extra credits;
+  - each limit dialog;
+  - the banner at 20% and 5%;
+  - the failed-payment banner;
+  - each Estori email, with its "[Staging]" prefix on staging.
 
-- [ ] **Step 5: Run the script tests**
+Add the owner steps from spec section 14 to `docs/estori/launch-checklist.md`:
+- the setup script in each mode, and `STRIPE_PRICE_IDS`;
+- the portal and the Terms of Service URL;
+- Smart Retries;
+- Stripe's emails off;
+- the billing webhook events, `charge.refunded` included;
+- the Enterprise override for the owner's account;
+- confirming the Gemini prices;
+- `BILLING_ENFORCEMENT_FROM` a week before `BILLING=on`.
 
-Run: `rtk proxy bun run test -- scripts/stripe-billing-scenarios.test.ts scripts/billing-enforcement-notice.test.ts scripts/stripe-billing-setup.test.ts`
+- [ ] **Step 7: Run the tests to verify they pass**
+
+Run: `rtk proxy bun run test -- worker/services/billing/enforcement-notice.sql.test.ts scripts/stripe-billing-scenarios.test.ts worker/services/billing/jobs.sql.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Write `docs/estori/billing-test-scenarios.md`.** Sections, in order:
-1. **Setup, once per environment:**
-   - run `scripts/stripe-billing-setup.ts --mode test` and set `STRIPE_PREMIUM_PRICE_IDS`;
-   - set a Terms of Service URL in Stripe's Public details;
-   - configure the customer portal: card updates, invoices, cancel at the period end, no plan switching. The setup script reports what's off;
-   - turn on Smart Retries, up to 2 weeks;
-   - turn off Stripe's customer emails for invoices and failed payments;
-   - add the webhook events: `checkout.session.completed`, `customer.subscription.created`, `.updated`, `.deleted`, `invoice.paid`, `invoice.payment_failed`, and `subscription_schedule.created`, `.updated`, `.released`, `.canceled`;
-   - set `BILLING_USER_IDS` or `BILLING=on`;
-   - create the scenario seller and an admin API key.
-2. **Automated scenarios:** the table from Step 3 with each expected result, and the command.
-3. **By eye on staging,** with a test card:
-   - scenario 6, 3-D Secure (4000 0025 0000 3155), from the pricing page: the 3-D Secure prompt, then "Confirming your payment…", then Premium;
-   - the Get Premium flow signed out (sign-up, then back to pricing with the pool kept);
-   - each limit dialog: credits, a second live store, an own domain, a new catalog product (refused), and republishing a live store (always allowed);
-   - the failing-payment and credits banners;
-   - each email with its "[Staging]" prefix: started, receipt, upgraded, downgrade scheduled, payment failed, ending, ended, 80%, 100%.
-4. **Before each release:** rerun the automated scenarios against staging, then the by-eye list.
-5. **Launch day, the owner's steps:** spec section 14, with the schedule events added. Then:
-   1. live-mode prices with `--mode live`;
-   2. `BILLING_USER_IDS` with the owner only;
-   3. the enforcement notice a week before `BILLING=on`, sent with `bun scripts/billing-enforcement-notice.ts --starts-on <date>` (try `--dry-run` first);
-   4. a lawyer's review of the Terms wording.
-
-In `README.md`'s dashboard-managed settings sentence, add `BILLING`, `BILLING_USER_IDS` and `STRIPE_PREMIUM_PRICE_IDS`, all unset by default. With them unset, billing is off.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add scripts/stripe-billing-scenarios.ts scripts/stripe-billing-scenarios.test.ts scripts/billing-enforcement-notice.ts scripts/billing-enforcement-notice.test.ts docs/estori/billing-test-scenarios.md README.md
-git commit -m "test(billing): stripe test-clock scenarios, the written checklist, and the enforcement notice script
+git add worker/services/billing/enforcement-notice.ts worker/services/billing/enforcement-notice.sql.test.ts worker/services/billing/jobs.ts worker/types/env.d.ts worker/database/services/BillingService.ts worker/database/services/LiveStoreService.ts scripts/stripe-billing-scenarios.ts scripts/stripe-billing-scenarios.test.ts docs/estori/billing-test-scenarios.md docs/estori/launch-checklist.md
+git commit -m "feat(billing): a week's notice before limits apply, the stripe test-clock scenarios, and the billing checklist
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
-- [ ] **Step 8: By eye on localhost.**
-1. **Start everything:**
-   - restart the dev server on port 8100 the way this checkout always runs it;
-   - the person running it sets `BILLING_USER_IDS` to the test account's id, `STRIPE_PREMIUM_PRICE_IDS` (test prices) and the test Stripe keys in `.dev.vars`. Never read that file;
-   - start `stripe listen --forward-to localhost:8100/api/stripe/webhook`, as in the local Stripe setup;
-   - sign in with the test account from `.superpowers/realtest/local-accounts.md`, and never paste its password into chat.
-2. **Basic:**
-   - the usage badge shows "N free credits left" and links to the billing page;
-   - with the account's daily credits used up, sending a prompt opens the Upgrade dialog ("Get Premium"), not a Cloudflare dialog;
-   - publishing a second store opens it with "Basic includes 1 live store. Get Premium for up to 10.";
-   - republishing the live store works;
-   - adding a catalog product and publishing is refused with the catalog copy; the live store keeps selling its existing catalog products.
-3. **Buy Premium from `/pricing`:**
-   - pick 50,000, Get Premium;
-   - Stripe's page shows the terms checkbox and the renewal disclosure;
-   - pay with 4242, return to `/settings/billing`;
-   - "Confirming your payment…" turns into Premium within seconds;
-   - the welcome and receipt emails appear in the dev log.
-4. **Change tiers:**
-   - "Move up now" to 100,000: the pool grows after the poll, with an upgrade email and a receipt;
-   - "Move down at renewal" to 20,000: the "Moves to 20,000…" line, with "Keep 100,000 credits" to undo it.
-5. **Cancel and keep:** Cancel Premium shows "Premium until {date}", then Keep Premium clears it.
-6. **Manage billing:** opens Stripe's portal; it has no plan switching.
-7. **Flag off:** remove the account from `BILLING_USER_IDS` and restart. The pricing page shows "coming soon", `/settings` has no Plan and billing card, and a second store publishes as before.
+- [ ] **Step 9: The by-eye check on local.**
+1. Restart the dev server. The person running it has added `BILLING_USER_IDS` (the local test account), `STRIPE_PRICE_IDS` from a test-mode run of the setup script, and the test keys to `.dev.vars`.
+2. Run `stripe listen --forward-to localhost:<port>/api/stripe/webhook` as for store payments.
+3. Sign in with the test account from `.superpowers/realtest/local-accounts.md`. Never paste its password into chat.
+4. Walk the by-eye list from Step 6:
+   - buy Pro with 4242 4242 4242 4242;
+   - move to Premium;
+   - buy 5,000 extra credits;
+   - schedule Pro;
+   - cancel and keep the plan;
+   - open Manage billing.
+5. Run out of credits with a small admin override (`aiCredits: 200`). Check the Upgrade dialog, the 20% and 5% banner and emails, and that the turn in progress finished.
+6. As a Basic account, try:
+   - a second live store;
+   - an own domain;
+   - a version adding a catalog product.
+   Each opens the Upgrade dialog, and the live store keeps serving.
+7. With `BILLING_USER_IDS` emptied, check `/pricing` shows "coming soon" and the old daily allowance.
 
-- [ ] **Step 9: The CI steps**
+- [ ] **Step 10: The CI steps**
 
 ```bash
 npx eslint .
@@ -5004,23 +5272,17 @@ bun run test
 
 Expected: all pass. Report the shard totals.
 
-- [ ] **Step 10: Final review.** Run the fresh whole-branch review the execution skill names, with this plan's Review Focus. Fix its Critical and Important findings with failing tests first.
+- [ ] **Step 11: Final review.** Run the fresh whole-branch review the execution skill names, with this plan's Review Focus. Fix its Critical and Important findings with failing tests first.
 
-- [ ] **Step 11: Open the PR into `main`.**
-- Push the branch.
-- Describe in the PR:
-  - what was built;
-  - the three rulings against the spec and the fifteen choices;
+- [ ] **Step 12: Open the PR into `main`.**
+- Push `feat/billing` and open the PR with `gh pr create --base main`.
+- The description says:
+  - what was built, by area;
+  - the choices from the top of this plan;
   - the migration number;
-  - the owner steps from the checklist;
-  - the localhost by-eye results;
-  - the test totals.
+  - the owner steps from spec section 14;
+  - the by-eye results;
+  - the test totals;
+  - that billing stays off until `BILLING` or `BILLING_USER_IDS` is set.
 - End the description with "Generated with [Claude Code](https://claude.com/claude-code)".
-- Don't merge. The flag stays off in production until the owner turns it on.
-
-- [ ] **Step 12: Staging, once the owner merges.** `main` auto-deploys staging, and billing stays off there until the flag is set.
-1. With the owner, set the staging variables, run the setup script in test mode, and configure the webhook and the portal (checklist section 1).
-2. Run `scripts/stripe-billing-scenarios.ts` against staging. All rows pass.
-3. Walk the by-eye list in `docs/estori/billing-test-scenarios.md`, scenario 6 included.
-4. Post the results on the PR. Fix anything they find with a failing test first, on a follow-up branch.
-
+- Don't merge.
