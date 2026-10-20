@@ -301,6 +301,24 @@ describe('while billing checkout is paused', () => {
 		for (const { deps } of [checkout, change, credits]) expect(deps.checkoutPaused).toHaveBeenCalledWith('u1');
 	});
 
+	it("refuses a real change, up or down, before Stripe is asked, as it refuses the plan the seller is already on", async () => {
+		const down = fake({ paused: true, row: row({ plan: 'premium' }) });
+		expect(await changePlan(down.deps, 'u1', 'pro')).toEqual(PAUSED);
+		const same = fake({ paused: true, row: row() });
+		expect(await changePlan(same.deps, 'u1', 'pro')).toEqual(PAUSED);
+		expect([...down.calls, ...same.calls]).toEqual([]);
+	});
+
+	it('lets a seller keep the current plan, which only drops a scheduled move and charges nothing, but not pick another one', async () => {
+		const scheduled = row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' });
+		const keep = fake({ paused: true, row: scheduled, schedule: 'sub_sched_1' });
+		expect(await changePlan(keep.deps, 'u1', 'premium')).toEqual({ ok: true, value: { requested: true } });
+		expect(keep.calls).toEqual(['release:sub_sched_1', 'read:sub_1']);
+		const other = fake({ paused: true, row: scheduled, schedule: 'sub_sched_1' });
+		expect(await changePlan(other.deps, 'u1', 'pro')).toEqual({ ok: false, status: 409, message: 'You have a change scheduled for November 5. Keep your current plan first.' });
+		expect(other.calls).toEqual([]);
+	});
+
 	it('keeps cancelling, undoing a cancel and the billing portal open', async () => {
 		expect(await cancelPlan(fake({ paused: true, row: row() }).deps, 'u1')).toMatchObject({ ok: true });
 		expect(await resumePlan(fake({ paused: true, row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toMatchObject({ ok: true });

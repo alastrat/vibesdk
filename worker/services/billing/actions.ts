@@ -155,7 +155,6 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 
 /** Premium starts now, prorated; Pro starts at the renewal. Choosing the current plan again drops a pending move. */
 export async function changePlan(deps: BillingActionDeps, userId: string, plan: unknown): Promise<BillingActionResult<BillingChangeRequested>> {
-	if (await deps.checkoutPaused(userId)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	if (!isPaidPlanId(plan)) return fail(400, BILLING_MESSAGES.pickPlan);
@@ -175,6 +174,8 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 			return ok(REQUESTED);
 		});
 	}
+	// After the pending-plan branch above, which only drops a scheduled move and charges nothing, so it stays open.
+	if (await deps.checkoutPaused(userId)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	if (plan === row.plan) return fail(400, `You're already on ${current}.`);
 	return askStripe(async () => {
 		let subscription = await stripe.retrieveSubscription(row.stripeSubscriptionId);

@@ -14,13 +14,23 @@ function action(name: string): string {
 const PAUSE = 'await deps.checkoutPaused(';
 
 describe('billing while checkout is paused', () => {
-	it('refuses a plan checkout, a plan change and extra credits first, before Stripe or the ledger is asked', () => {
-		for (const name of ['startCheckout', 'changePlan', 'buyCredits']) {
+	it('refuses a plan checkout and extra credits first, before Stripe or the ledger is asked', () => {
+		for (const name of ['startCheckout', 'buyCredits']) {
 			const body = action(name);
 			expect(body, name).toContain(PAUSE);
 			expect(body, name).toContain('{ ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE }');
 			expect(body.indexOf('await '), name).toBe(body.indexOf(PAUSE));
 		}
+	});
+
+	it("refuses a plan change after keeping the current plan, which only drops a scheduled move, and before any price is changed", () => {
+		const body = action('changePlan');
+		const pause = body.indexOf(PAUSE);
+		const keepCurrent = body.indexOf('releaseSchedule(stripe, row.stripeSubscriptionId, scheduleId)');
+		expect(body).toContain('{ ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE }');
+		expect(keepCurrent).toBeGreaterThan(-1);
+		expect(pause).toBeGreaterThan(keepCurrent);
+		for (const call of ['scheduleSubscriptionPrice', 'changeSubscriptionPrice']) expect(body.indexOf(call), call).toBeGreaterThan(pause);
 	});
 
 	it('keeps cancelling, undoing a cancel and the billing portal open', () => {
