@@ -124,6 +124,11 @@ async function customerOf(deps: BillingActionDeps, stripe: BillingStripe, user: 
 	return deps.store.saveCustomer(user.id, created.id, new Date(deps.nowMs));
 }
 
+/** Where Stripe sends the seller once a plan or credits payment is done; Stripe fills in the session id. */
+function checkoutReturnUrl(deps: BillingActionDeps): string {
+	return `${deps.baseUrl}${BILLING_PATH}/checkout/return?session_id={CHECKOUT_SESSION_ID}`;
+}
+
 function checkoutStarted(session: StripeCheckoutSession): BillingActionResult<CheckoutStarted> {
 	return session.url ? ok({ url: session.url, sessionId: session.id }) : STRIPE_FAILED;
 }
@@ -145,8 +150,7 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 			priceId: setup.priceIds[plan],
 			userId: user.id,
 			plan,
-			successUrl: `${deps.baseUrl}${BILLING_PATH}?checkout=success`,
-			cancelUrl: `${deps.baseUrl}${BILLING_PATH}?checkout=cancelled`,
+			returnUrl: checkoutReturnUrl(deps),
 			nowMs: deps.nowMs,
 		});
 		return checkoutStarted(session);
@@ -260,8 +264,7 @@ export async function buyCredits(deps: BillingActionDeps, user: { id: string; em
 			priceId: setup.priceIds.credits,
 			userId: user.id,
 			credits,
-			successUrl: `${deps.baseUrl}${BILLING_PATH}?credits=success`,
-			cancelUrl: `${deps.baseUrl}${BILLING_PATH}`,
+			returnUrl: checkoutReturnUrl(deps),
 			nowMs: deps.nowMs,
 			idempotencyKey: idempotencyKey(deps, 'credits', user.id, [String(credits), newest]),
 		});

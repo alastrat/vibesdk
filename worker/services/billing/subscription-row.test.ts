@@ -45,7 +45,7 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 }
 
 function invoice(reason: string, amountPaid = 4_900): StripeInvoice {
-	return { id: 'in_1', customer: 'cus_1', amount_paid: amountPaid, currency: 'usd', hosted_invoice_url: 'https://invoice.stripe.com/i/in_1', number: 'EST-0001', billing_reason: reason, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } } };
+	return { id: 'in_1', customer: 'cus_1', status: 'paid', created: 1, amount_due: amountPaid, amount_paid: amountPaid, total: amountPaid, currency: 'usd', hosted_invoice_url: 'https://invoice.stripe.com/i/in_1', invoice_pdf: null, number: 'EST-0001', description: null, billing_reason: reason, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } } };
 }
 
 const UPDATED = { eventType: 'customer.subscription.updated', invoice: null };

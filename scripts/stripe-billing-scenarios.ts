@@ -388,8 +388,7 @@ async function expiredCheckout(ctx: Context): Promise<void> {
 		priceId: ctx.prices.credits,
 		userId: ctx.config.userId,
 		credits: EXTRA_CREDITS.minCredits,
-		successUrl: `${ctx.config.baseUrl}/settings/billing?credits=success`,
-		cancelUrl: `${ctx.config.baseUrl}/settings/billing`,
+		returnUrl: `${ctx.config.baseUrl}/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}`,
 		nowMs: Date.now(),
 		idempotencyKey: keyFor(ctx, 'expired-checkout'),
 	});

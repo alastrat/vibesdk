@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createStripeClient, type StripeSubscription } from './stripe-client';
+import { BILLING_CHECKOUT_EXPAND, createStripeClient, type StripeSubscription } from './stripe-client';
 
 /** A fetch that answers every call with `body` (or `status`) and remembers what it was sent. */
 function recordingFetch(body: unknown, status = 200) {
@@ -43,13 +43,14 @@ describe('Stripe billing calls', () => {
 		expect(calls[0].params).toEqual(['email=ana@example.test', 'metadata[estori_user_id]=u1']);
 	});
 
-	it("opens a card-only subscription checkout for the plan's price, with codes, the terms agreement and the renewal disclosure", async () => {
-		const { calls, client } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1' });
-		await client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_premium', userId: 'u1', plan: 'premium', successUrl: 'https://estori.app/settings/billing?checkout=success', cancelUrl: 'https://estori.app/settings/billing?checkout=cancelled', nowMs: NOW });
+	it('the subscription session is an elements session with a return url and no stripe consent', async () => {
+		const { calls, client } = recordingFetch({ id: 'cs_1', url: null, client_secret: 'cs_1_secret_x' });
+		await client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_premium', userId: 'u1', plan: 'premium', returnUrl: 'https://estori.app/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}', nowMs: NOW });
 		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/checkout/sessions', key: `billing-checkout-u1-premium-${BUCKET}` });
 		expect(calls[0].params).toEqual(
 			expect.arrayContaining([
 				'mode=subscription',
+				'ui_mode=elements',
 				'customer=cus_1',
 				'client_reference_id=u1',
 				'line_items[0][price]=price_premium',
@@ -59,20 +60,22 @@ describe('Stripe billing calls', () => {
 				'subscription_data[metadata][estori_user_id]=u1',
 				'metadata[estori_user_id]=u1',
 				'metadata[plan]=premium',
-				'consent_collection[terms_of_service]=required',
-				'custom_text[submit][message]=Premium renews every month at $199 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
-				'success_url=https://estori.app/settings/billing?checkout=success',
+				'return_url=https://estori.app/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}',
 			]),
 		);
+		for (const key of ['consent_collection', 'custom_text', 'success_url', 'cancel_url']) {
+			expect(calls[0].params.some((param) => param.startsWith(key))).toBe(false);
+		}
 	});
 
-	it('opens a one-time checkout for extra credits, a line per 1,000 credits, tagged on the session and the payment', async () => {
-		const { calls, client } = recordingFetch({ id: 'cs_c', url: 'https://checkout.stripe.com/c/cs_c' });
-		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 12_000, successUrl: 'https://estori.app/settings/billing?credits=success', cancelUrl: 'https://estori.app/settings/billing', nowMs: NOW, idempotencyKey: 'billing-credits-u1-12000-cp_1-1' });
+	it('opens a one-time elements checkout for extra credits, a line per 1,000 credits, tagged on the session and the payment', async () => {
+		const { calls, client } = recordingFetch({ id: 'cs_c', url: null, client_secret: 'cs_c_secret_x' });
+		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 12_000, returnUrl: 'https://estori.app/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}', nowMs: NOW, idempotencyKey: 'billing-credits-u1-12000-cp_1-1' });
 		expect(calls[0].key).toBe('billing-credits-u1-12000-cp_1-1');
 		expect(calls[0].params).toEqual(
 			expect.arrayContaining([
 				'mode=payment',
+				'ui_mode=elements',
 				'customer=cus_1',
 				'client_reference_id=u1',
 				'line_items[0][price]=price_credits',
@@ -83,10 +86,50 @@ describe('Stripe billing calls', () => {
 				'metadata[credits]=12000',
 				'payment_intent_data[metadata][kind]=credits',
 				'payment_intent_data[metadata][estori_user_id]=u1',
-				'custom_text[submit][message]=Extra credits are used after your monthly credits and expire 12 months after purchase.',
+				'return_url=https://estori.app/settings/billing/checkout/return?session_id={CHECKOUT_SESSION_ID}',
 			]),
 		);
-		expect(calls[0].params.some((param) => param.startsWith('allow_promotion_codes'))).toBe(false);
+		for (const key of ['allow_promotion_codes', 'custom_text', 'success_url', 'cancel_url']) {
+			expect(calls[0].params.some((param) => param.startsWith(key))).toBe(false);
+		}
+	});
+
+	it('the credits session creates an invoice with the purchase metadata', async () => {
+		const { calls, client } = recordingFetch({ id: 'cs_c', url: null });
+		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, returnUrl: 'https://estori.app/r', nowMs: NOW, idempotencyKey: 'k' });
+		expect(calls[0].params).toEqual(
+			expect.arrayContaining([
+				'invoice_creation[enabled]=true',
+				'invoice_creation[invoice_data][metadata][kind]=credits',
+				'invoice_creation[invoice_data][metadata][estori_user_id]=u1',
+				'invoice_creation[invoice_data][metadata][credits]=5000',
+			]),
+		);
+	});
+
+	it('a card setup session is a setup-mode elements session', async () => {
+		const { calls, client } = recordingFetch({ id: 'cs_card', url: null, client_secret: 'cs_card_secret_x' });
+		const session = await client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'pay', returnUrl: 'https://estori.app/settings/billing/card/return?session_id={CHECKOUT_SESSION_ID}', nowMs: NOW });
+		expect(session.client_secret).toBe('cs_card_secret_x');
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/checkout/sessions', method: 'POST', key: `billing-card-u1-pay-${BUCKET}` });
+		expect(calls[0].params).toEqual(
+			expect.arrayContaining([
+				'mode=setup',
+				'ui_mode=elements',
+				'customer=cus_1',
+				'currency=usd',
+				'payment_method_types[0]=card',
+				'metadata[kind]=card',
+				'metadata[estori_user_id]=u1',
+				'metadata[card_mode]=pay',
+				'return_url=https://estori.app/settings/billing/card/return?session_id={CHECKOUT_SESSION_ID}',
+				`expires_at=${(BUCKET + 1) * 600 + 35 * 60}`,
+			]),
+		);
+		const saved = recordingFetch({ id: 'cs_card2' });
+		await saved.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', returnUrl: 'https://estori.app/r', nowMs: NOW });
+		expect(saved.calls[0].key).toBe(`billing-card-u1-save-${BUCKET}`);
+		expect(saved.calls[0].params).toContain('metadata[card_mode]=save');
 	});
 
 	it('sends the same checkout twice within a key bucket, closing at least 30 minutes after either call', async () => {
@@ -95,11 +138,13 @@ describe('Stripe billing calls', () => {
 		const expiresAt = (params: string[]) => Number(params.find((param) => param.startsWith('expires_at='))?.split('=')[1]);
 		const subscription = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1' });
 		const credits = recordingFetch({ id: 'cs_c', url: 'https://checkout.stripe.com/c/cs_c' });
+		const card = recordingFetch({ id: 'cs_card' });
 		for (const nowMs of [NOW, NOW + nineMinutes, lastMoment]) {
-			await subscription.client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_pro', userId: 'u1', plan: 'pro', successUrl: 'https://estori.app/s', cancelUrl: 'https://estori.app/c', nowMs });
-			await credits.client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, successUrl: 'https://estori.app/s', cancelUrl: 'https://estori.app/c', nowMs, idempotencyKey: 'billing-credits-u1-5000-none-1' });
+			await subscription.client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_pro', userId: 'u1', plan: 'pro', returnUrl: 'https://estori.app/r', nowMs });
+			await credits.client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, returnUrl: 'https://estori.app/r', nowMs, idempotencyKey: 'billing-credits-u1-5000-none-1' });
+			await card.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', returnUrl: 'https://estori.app/r', nowMs });
 		}
-		for (const { calls } of [subscription, credits]) {
+		for (const { calls } of [subscription, credits, card]) {
 			expect(new Set(calls.map((call) => call.key)).size).toBe(1);
 			expect(calls[1].params).toEqual(calls[0].params);
 			expect(calls[2].params).toEqual(calls[0].params);
@@ -194,5 +239,99 @@ describe('Stripe billing calls', () => {
 		const portal = recordingFetch({ url: 'https://billing.stripe.com/p/session/1' });
 		expect(await portal.client.createBillingPortalSession({ customerId: 'cus_1', returnUrl: 'https://estori.app/settings/billing' })).toEqual({ url: 'https://billing.stripe.com/p/session/1' });
 		expect(portal.calls[0].params).toEqual(['customer=cus_1', 'return_url=https://estori.app/settings/billing']);
+	});
+
+	it('reads a checkout session with the objects billing needs expanded, and without expands when none are asked for', async () => {
+		const plain = recordingFetch({ id: 'cs_1' });
+		await plain.client.retrieveCheckoutSession('cs_1');
+		expect(plain.calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/checkout/sessions/cs_1', method: 'GET' });
+		const expanded = recordingFetch({
+			id: 'cs_1',
+			discounts: [{ coupon: null, promotion_code: { id: 'promo_1', promotion: { type: 'coupon', coupon: { id: 'c1', duration: 'repeating', duration_in_months: 3 } } } }],
+			setup_intent: { id: 'seti_1', payment_method: 'pm_1' },
+		});
+		const session = await expanded.client.retrieveCheckoutSession('cs_1', BILLING_CHECKOUT_EXPAND);
+		expect(expanded.calls[0].url).toBe(
+			'https://api.stripe.com/v1/checkout/sessions/cs_1?expand%5B0%5D=discounts.coupon&expand%5B1%5D=discounts.promotion_code.promotion.coupon&expand%5B2%5D=setup_intent',
+		);
+		expect(session.discounts?.[0]?.promotion_code).toMatchObject({ promotion: { coupon: { duration: 'repeating', duration_in_months: 3 } } });
+	});
+
+	it('setting the default card updates the customer and the subscription', async () => {
+		const { calls, client } = recordingFetch({ id: 'x' });
+		await client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: 'sub_1', paymentMethodId: 'pm_9' });
+		expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual(['POST https://api.stripe.com/v1/customers/cus_1', 'POST https://api.stripe.com/v1/subscriptions/sub_1']);
+		expect(calls[0].params).toEqual(['invoice_settings[default_payment_method]=pm_9']);
+		expect(calls[1].params).toEqual(['default_payment_method=pm_9']);
+		expect(calls[0].key).toBe('billing-default-card-cus_1-pm_9');
+		expect(calls[1].key).toBe('billing-default-card-sub_1-pm_9');
+	});
+
+	it('setting the default card with no subscription updates only the customer', async () => {
+		const { calls, client } = recordingFetch({ id: 'x' });
+		await client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: null, paymentMethodId: 'pm_9' });
+		expect(calls.map((call) => call.url)).toEqual(['https://api.stripe.com/v1/customers/cus_1']);
+	});
+
+	it('reads a payment method as its card summary, and as no card when it is not a card', async () => {
+		const card = recordingFetch({ id: 'pm_1', type: 'card', card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030, funding: 'credit', country: 'US' } });
+		expect(await card.client.retrievePaymentMethod('pm_1')).toEqual({ id: 'pm_1', card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030 } });
+		expect(card.calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/payment_methods/pm_1', method: 'GET' });
+		const bank = recordingFetch({ id: 'pm_2', type: 'us_bank_account' });
+		expect(await bank.client.retrievePaymentMethod('pm_2')).toEqual({ id: 'pm_2', card: null });
+	});
+
+	it('listing invoices asks for 24 for the customer', async () => {
+		const { calls, client } = recordingFetch({ object: 'list', has_more: false, data: [{ id: 'in_2' }, { id: 'in_1' }] });
+		const invoices = await client.listInvoices('cus_1', 24);
+		expect(invoices.map((invoice) => invoice.id)).toEqual(['in_2', 'in_1']);
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/invoices?customer=cus_1&limit=24', method: 'GET', key: null });
+	});
+
+	it("reads an invoice with the payment intent's client secret and its payments", async () => {
+		const { calls, client } = recordingFetch({
+			id: 'in_1',
+			status: 'open',
+			confirmation_secret: { client_secret: 'pi_1_secret_x', type: 'payment_intent' },
+			payments: { data: [{ status: 'open', payment: { type: 'payment_intent', payment_intent: 'pi_1' } }] },
+		});
+		const invoice = await client.retrieveInvoice('in_1');
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/invoices/in_1?expand%5B0%5D=confirmation_secret&expand%5B1%5D=payments', method: 'GET' });
+		expect(invoice.confirmation_secret?.client_secret).toBe('pi_1_secret_x');
+		expect(invoice.payments?.data[0]).toMatchObject({ status: 'open', payment: { payment_intent: 'pi_1' } });
+	});
+
+	it('paying an invoice sends the chosen card, as the seller being present', async () => {
+		const { calls, client } = recordingFetch({ id: 'in_1', status: 'paid' });
+		expect((await client.payInvoice('in_1', 'pm_9', 'billing-pay-u1-in_1-pm_9')).status).toBe('paid');
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/invoices/in_1/pay', method: 'POST', key: 'billing-pay-u1-in_1-pm_9' });
+		expect(calls[0].params).toEqual(['payment_method=pm_9', 'off_session=false']);
+	});
+
+	it("paying an invoice with no chosen card leaves the card to the invoice's own default", async () => {
+		const { calls, client } = recordingFetch({ id: 'in_1', status: 'paid' });
+		await client.payInvoice('in_1', null, 'billing-pay-u1-in_1-default');
+		expect(calls[0].params).toEqual(['off_session=false']);
+	});
+
+	it('a payment that needs the seller to authenticate reaches the caller as the error Stripe sent', async () => {
+		const { client } = recordingFetch({ error: { message: 'This payment requires additional user action', type: 'invalid_request_error', code: 'invoice_payment_intent_requires_action' } }, 402);
+		await expect(client.payInvoice('in_1', null, 'k')).rejects.toMatchObject({ status: 402, code: 'invoice_payment_intent_requires_action' });
+	});
+
+	it("fetches an invoice's pdf with the secret key, and refuses an address that isn't Stripe's", async () => {
+		const seen: Array<{ url: string; method: string; authorization: string | null }> = [];
+		const fakeFetch: typeof fetch = async (input, init) => {
+			seen.push({ url: String(input), method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('Authorization') });
+			return new Response('%PDF-1.7', { status: 200, headers: { 'Content-Type': 'application/pdf' } });
+		};
+		const client = createStripeClient('sk_test_fake', fakeFetch);
+		const response = await client.fetchInvoicePdf('https://pay.stripe.com/invoice/acct_1/test_x/pdf?s=ap');
+		expect(await response.text()).toBe('%PDF-1.7');
+		expect(seen).toEqual([{ url: 'https://pay.stripe.com/invoice/acct_1/test_x/pdf?s=ap', method: 'GET', authorization: 'Bearer sk_test_fake' }]);
+		for (const url of ['https://evil.example/invoice.pdf', 'http://pay.stripe.com/invoice.pdf', 'https://stripe.com.evil.example/x', 'not a url']) {
+			await expect(client.fetchInvoicePdf(url)).rejects.toThrow('The invoice PDF is not on a Stripe address');
+		}
+		expect(seen).toHaveLength(1);
 	});
 });

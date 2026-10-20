@@ -42,6 +42,9 @@ export const BILLING_PATH = '/settings/billing';
 /** Marks a Checkout session as an extra-credits purchase rather than a subscription. */
 export const CHECKOUT_KIND_CREDITS = 'credits';
 
+/** Marks a Checkout session as a card setup rather than a payment. */
+export const CHECKOUT_KIND_CARD = 'card';
+
 export const PLAN_LIMIT_ERROR_CODE = 'PLAN_LIMIT';
 
 /** SpaceDO's answer to a publish that adds catalog products for an account without the catalog. Mirrored in space/src/space/store-manifest.ts. */
