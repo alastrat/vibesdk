@@ -46,6 +46,7 @@ import { createEmailSender, isEmailSendingEnabled } from '../../../services/emai
 import { appBaseUrl } from '../../../services/email/links';
 import { CONFIRM_LINK_INVALID_MESSAGE, FORGOT_PASSWORD_MESSAGE } from '../../../services/auth/one-time-token';
 import { isEmailAuthEnabled } from '../../../utils/envs';
+import { honorAnalyticsChoice, sessionTelemetry } from '../../../services/posthog/session';
 /**
  * Authentication Controller
  */
@@ -80,9 +81,11 @@ export class AuthController extends BaseController {
                 appBaseUrl(env, request)
             );
             
-            const response = AuthController.createSuccessResponse(
-                formatAuthResponse(result.user, result.sessionId, result.expiresAt)
-            );
+            const telemetry = await sessionTelemetry(env, request, result.user.id);
+            const response = AuthController.createSuccessResponse({
+                ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
+                telemetry,
+            });
             
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
@@ -145,9 +148,11 @@ export class AuthController extends BaseController {
             const authService = new AuthService(env);
             const result = await authService.login(validatedData, request);
             
-            const response = AuthController.createSuccessResponse(
-                formatAuthResponse(result.user, result.sessionId, result.expiresAt)
-            );
+            const telemetry = await sessionTelemetry(env, request, result.user.id);
+            const response = AuthController.createSuccessResponse({
+                ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
+                telemetry,
+            });
             
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
@@ -364,14 +369,15 @@ export class AuthController extends BaseController {
      * Get current user profile
      * GET /api/auth/profile
      */
-    static async getProfile(_request: Request, _env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
+    static async getProfile(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
         try {
             if (!routeContext.user) {
                 return AuthController.createErrorResponse('Unauthorized', 401);
             }
             return AuthController.createSuccessResponse({
                 user: mapUserResponse(routeContext.user),
-                sessionId: routeContext.sessionId
+                sessionId: routeContext.sessionId,
+                telemetry: await sessionTelemetry(env, request, routeContext.user.id),
             });
         } catch (error) {
             return AuthController.handleError(error, 'get profile');
@@ -632,6 +638,9 @@ export class AuthController extends BaseController {
                 state,
                 request
             );
+
+            // A GPC signal on this navigation becomes the account's opt-out before anything is sent.
+            await honorAnalyticsChoice(env, request, result.user.id);
             
             const baseUrl = new URL(request.url).origin;
             

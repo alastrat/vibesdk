@@ -4,6 +4,7 @@
  */
 import { SessionResponse } from 'worker/types/auth-types';
 import { AuthUser } from './api-types';
+import type { SessionTelemetry } from '../shared/types/telemetry.js';
 
 export type { SecretTemplate } from 'worker/types/secretsTemplates';
 
@@ -453,6 +454,7 @@ export type RegisterResponseData = SessionResponse & {
 export type ProfileResponseData = {
   user: AuthUser;
   sessionId: string;
+  telemetry: SessionTelemetry;
 };
 
 export interface AuthProvidersResponseData {

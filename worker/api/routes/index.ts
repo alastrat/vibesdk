@@ -22,6 +22,7 @@ import { setupCodegenRoutes } from './codegenRoutes';
 import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
+import { setupTelemetryRoutes } from './telemetryRoutes';
 import { setupTicketRoutes } from './ticketRoutes';
 import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
@@ -45,6 +46,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Platform capabilities routes (public)
     setupCapabilitiesRoutes(app);
+
+    // PostHog config, the analytics setting and the flags admin view
+    setupTelemetryRoutes(app);
 
     // Authentication and user management routes
     setupAuthRoutes(app);
