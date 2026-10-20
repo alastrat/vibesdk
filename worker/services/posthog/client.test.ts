@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PostHogClient, MAX_QUEUED_EVENTS } from './client';
 import type { PostHogConfig } from './config';
+import { keepAlive, runInRequestScope } from './request-scope';
 
 const CONFIG: PostHogConfig = { projectKey: 'phc_test', projectId: '675096', environment: 'prod', release: 'ver-1', host: 'estori.app' };
 const NOW = new Date('2026-10-19T12:00:00.000Z');
@@ -59,7 +60,7 @@ describe('the PostHog capture client', () => {
 			event: 'store_published',
 			distinct_id: 'user_1',
 			timestamp: '2026-10-19T12:00:00.000Z',
-			properties: { app_id: 'app_1', environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker' },
+			properties: { app_id: 'app_1', environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker', $geoip_disable: true },
 		});
 	});
 
@@ -88,8 +89,8 @@ describe('the PostHog capture client', () => {
 		client.capture({ event: 'build_finished', distinctId: 'user_1', properties: build, anonymousCost: { credits_used: 12 } });
 		await settle();
 		expect(requests[0].body.batch.map((event) => [event.distinct_id, event.properties])).toEqual([
-			['opted-out', { credits_used: 12, environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker', $process_person_profile: false }],
-			['user_1', { ...build, environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker' }],
+			['opted-out', { credits_used: 12, environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker', $geoip_disable: true, $process_person_profile: false }],
+			['user_1', { ...build, environment: 'prod', release: 'ver-1', $host: 'estori.app', $lib: 'estori-worker', $geoip_disable: true }],
 		]);
 	});
 
@@ -105,6 +106,19 @@ describe('the PostHog capture client', () => {
 		]);
 		expect(requests[0].body.batch[0].properties).not.toHaveProperty('app_id');
 		expect(requests[0].body.batch[1]).toMatchObject({ properties: { $process_person_profile: false } });
+	});
+
+	it("never geolocates the Worker's own address, so a person's country stays the one their browser sent", async () => {
+		const { client, requests, settle } = harness({ optedOut: async () => new Set(['user_2']) });
+		client.capture({ event: 'signed_in', distinctId: 'user_1', properties: { method: 'password' } });
+		client.capture({ event: 'build_finished', distinctId: 'user_2', properties: { credits_used: 3 }, anonymousCost: { credits_used: 3 } });
+		client.capture({ event: 'heartbeat', distinctId: 'estori-system', properties: { healthy: true }, personless: true });
+		await settle();
+		expect(requests[0].body.batch.map((event) => [event.distinct_id, event.properties.$geoip_disable])).toEqual([
+			['user_1', true],
+			['opted-out', true],
+			['estori-system', true],
+		]);
 	});
 
 	it('never looks system events up', async () => {
@@ -126,6 +140,36 @@ describe('the PostHog capture client', () => {
 		const { client, settle } = harness({ respond });
 		client.capture({ event: 'email_confirmed', distinctId: 'user_1', properties: {} });
 		await expect(settle()).resolves.toBeDefined();
+		expect(warned).toHaveBeenCalledTimes(1);
+	});
+
+	it('never throws when waitUntil refuses the work, and a later batch still sends', async () => {
+		const sent: SentBatch[] = [];
+		const kept: Promise<unknown>[] = [];
+		const client = new PostHogClient({
+			config: CONFIG,
+			fetcher: async (_input, init) => {
+				sent.push(JSON.parse(String(init?.body)) as SentBatch);
+				return new Response('{"status":1}', { status: 200 });
+			},
+			optedOut: async () => new Set<string>(),
+			keepAlive,
+			now: () => NOW,
+		});
+		let calls = 0;
+		const waitUntil = (work: Promise<unknown>) => {
+			calls += 1;
+			if (calls === 1) throw new Error('waitUntil after the response');
+			kept.push(work);
+		};
+		await runInRequestScope({ waitUntil }, async () => {
+			expect(() => client.capture({ event: 'email_confirmed', distinctId: 'user_1', properties: {} })).not.toThrow();
+			await new Promise((resolve) => setTimeout(resolve, 0));
+			client.capture({ event: 'signed_in', distinctId: 'user_1', properties: { method: 'password' } });
+		});
+		await Promise.all(kept);
+		expect(kept).toHaveLength(1);
+		expect(sent.map((body) => body.batch.map((event) => event.event))).toEqual([['email_confirmed'], ['signed_in']]);
 		expect(warned).toHaveBeenCalledTimes(1);
 	});
 

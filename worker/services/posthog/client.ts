@@ -26,7 +26,7 @@ export interface PostHogClientDeps {
 	fetcher: typeof fetch;
 	/** The ids among these that turned analytics off. A rejection counts everyone in the batch as opted out. */
 	optedOut(userIds: readonly string[]): Promise<ReadonlySet<string>>;
-	/** Keeps sending alive after the response (request-scope.ts). */
+	/** Keeps sending alive after the response (request-scope.ts); never throws. */
 	keepAlive(work: Promise<unknown>): void;
 	now(): Date;
 	timeoutMs?: number;
@@ -60,7 +60,9 @@ export class PostHogClient {
 		this.queue.push({ ...input, timestamp: this.deps.now().toISOString() });
 		if (this.flushScheduled) return;
 		this.flushScheduled = true;
-		this.deps.keepAlive(Promise.resolve().then(() => this.flush()));
+		// Scheduled before it's handed on, so the flush runs and clears flushScheduled even if nothing keeps it alive.
+		const flushing = Promise.resolve().then(() => this.flush());
+		this.deps.keepAlive(flushing);
 	}
 
 	async flush(): Promise<void> {
@@ -112,6 +114,8 @@ function batchEvent(event: QueuedEvent, config: PostHogConfig) {
 			...(config.release ? { release: config.release } : {}),
 			$host: config.host,
 			$lib: 'estori-worker',
+			// The Worker's address isn't the person's: geolocating it would overwrite the country their browser sent.
+			$geoip_disable: true,
 			...(event.personless ? { $process_person_profile: false } : {}),
 		},
 	};

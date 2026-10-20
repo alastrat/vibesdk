@@ -16,11 +16,19 @@ export function runInRequestScope<T>(ctx: { waitUntil?: WaitUntil } | undefined,
 	return waitUntil ? scope.run(waitUntil, run) : run();
 }
 
-/** Keeps work running after the response. Never rejects, so a failure can't surface as an unhandled rejection. */
+/**
+ * Keeps work running after the response. Never throws and never rejects: when waitUntil refuses the work, as after the
+ * response, the work still runs, just without being kept alive.
+ */
 export function keepAlive(work: Promise<unknown>): void {
 	const settled = work.then(
 		() => undefined,
 		() => undefined,
 	);
-	scope.getStore()?.(settled);
+	try {
+		scope.getStore()?.(settled);
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		console.warn(JSON.stringify({ level: 'warn', component: 'PostHog', msg: 'waitUntil refused work; it runs without being kept alive', error: reason }));
+	}
 }
