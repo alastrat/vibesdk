@@ -6,11 +6,8 @@
 
 import { EXTRA_CREDITS, PLAN_PRICES_CENTS } from '../shared/types/plans';
 import type { StripePriceIds } from '../worker/services/billing/prices';
-import { STRIPE_API_VERSION, StripeApiError, encodeForm, type FormValue } from '../worker/services/payments/stripe-client';
-
-const STRIPE_API = 'https://api.stripe.com/v1';
-
-export type StripeMode = 'test' | 'live';
+import { StripeApiError, type FormValue } from '../worker/services/payments/stripe-client';
+import { modeOfKey, stripeCaller, type StripeMode } from './stripe-api';
 
 export const BILLING_PRODUCTS = [
 	{ id: 'estori_pro', name: 'Estori Pro' },
@@ -54,32 +51,6 @@ interface PortalConfiguration {
 	};
 }
 
-/** Keys starting sk_test_ or rk_test_ belong to Stripe's test mode; any other key is live. */
-function modeOfKey(secretKey: string): StripeMode {
-	return secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_') ? 'test' : 'live';
-}
-
-function stripeClient(secretKey: string, fetchImpl: typeof fetch) {
-	return async function call<T>(method: 'GET' | 'POST', path: string, params: Record<string, FormValue> = {}): Promise<T> {
-		const body = encodeForm(params);
-		const response = await fetchImpl(method === 'GET' && body ? `${STRIPE_API}${path}?${body}` : `${STRIPE_API}${path}`, {
-			method,
-			headers: {
-				Authorization: `Bearer ${secretKey}`,
-				'Content-Type': 'application/x-www-form-urlencoded',
-				'Stripe-Version': STRIPE_API_VERSION,
-			},
-			body: method === 'POST' ? body : undefined,
-		});
-		const json: unknown = await response.json();
-		if (!response.ok) {
-			const error = (json as { error?: { message?: string; type?: string; code?: string } }).error;
-			throw new StripeApiError(error?.message ?? 'Stripe request failed', response.status, error?.code ?? null, error?.type ?? null);
-		}
-		return json as T;
-	};
-}
-
 /** What the customer portal's default configuration still needs, in the order to fix it. */
 function portalProblems(configuration: PortalConfiguration | undefined): string[] {
 	if (!configuration) return ["Create the customer portal's default configuration in the Stripe Dashboard."];
@@ -103,7 +74,7 @@ export async function setUpBilling(input: {
 }): Promise<{ mode: StripeMode; priceIds: StripePriceIds; portalProblems: string[] }> {
 	const keyMode = modeOfKey(input.secretKey);
 	if (keyMode !== input.mode) throw new Error(`The key is a ${keyMode} key, but --mode ${input.mode} was asked for.`);
-	const call = stripeClient(input.secretKey, input.fetchImpl);
+	const call = stripeCaller(input.secretKey, input.fetchImpl);
 
 	for (const product of BILLING_PRODUCTS) {
 		try {

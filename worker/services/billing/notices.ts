@@ -21,6 +21,7 @@ import {
 } from '../email/billing-templates';
 import { configuredBaseUrl } from '../email/links';
 import { createEmailSender } from '../email/sender';
+import { classifySendError } from '../email/send-errors';
 import type { EmailSender, OutgoingEmail } from '../email/types';
 
 const PRICING_PATH = '/pricing';
@@ -56,6 +57,8 @@ export interface BillingMailDeps {
 export type ClaimingMailDeps = BillingMailDeps & {
 	/** True for the caller that records the notice first. */
 	claim(userId: string, key: string, kind: BillingNoticeKind): Promise<boolean>;
+	/** Takes back a claim whose email could not go out, so a later run sends it. */
+	release(userId: string, key: string): Promise<void>;
 };
 
 const logger = createLogger('BillingNotices');
@@ -95,40 +98,56 @@ export function billingEmail(to: string, email: BillingEmail, baseUrl: string | 
 	}
 }
 
-/** Sends each notice to the account's address; one that fails is logged and the rest still go. Answers how many were sent. */
-export async function sendBillingEmails(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<number> {
+/** How a send went: how many emails left, and whether a failure was one a later attempt could get past (an outage, a rate limit, a lookup that failed). */
+interface Delivery {
+	sent: number;
+	retryable: boolean;
+}
+
+async function deliver(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<Delivery> {
 	const { sender } = deps;
-	if (!sender || notices.length === 0) return 0;
+	if (!sender || notices.length === 0) return { sent: 0, retryable: false };
 	try {
 		const to = await deps.userEmail(userId);
-		if (!to) return 0;
-		let sent = 0;
+		if (!to) return { sent: 0, retryable: false };
+		const delivery: Delivery = { sent: 0, retryable: false };
 		for (const notice of notices) {
 			try {
 				await sender.send(billingEmail(to, notice.email, deps.baseUrl));
-				sent += 1;
+				delivery.sent += 1;
 			} catch (error) {
+				// A suppressed or refused address, or a request the service rejects, would fail the same way again.
+				if (classifySendError(error) === 'retry') delivery.retryable = true;
 				logger.error('Could not send a billing email', { userId, kind: notice.email.kind, key: notice.key, error });
 			}
 		}
-		return sent;
+		return delivery;
 	} catch (error) {
 		logger.error('Could not look up the address for billing emails', { userId, error });
-		return 0;
+		return { sent: 0, retryable: true };
 	}
+}
+
+/** Sends each notice to the account's address; one that fails is logged and the rest still go. Answers how many were sent. */
+export async function sendBillingEmails(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<number> {
+	return (await deliver(deps, userId, notices)).sent;
 }
 
 /**
  * Claims the notice, then sends it: a notice already claimed is not sent again. Without a sender nothing can go out, so
- * the notice is left unclaimed for a later run that has one.
+ * the notice is left unclaimed for a later run that has one. A send that fails in a way a later attempt could get past
+ * gives the claim back, so an email outage doesn't leave the notice marked sent and never delivered.
  */
 export async function claimAndSendNotice(deps: ClaimingMailDeps, userId: string, notice: PlannedNotice): Promise<'sent' | 'already-sent' | 'not-sent'> {
 	if (!deps.sender) return 'not-sent';
 	try {
 		if (!(await deps.claim(userId, notice.key, notice.email.kind))) return 'already-sent';
-		return (await sendBillingEmails(deps, userId, [notice])) === 1 ? 'sent' : 'not-sent';
+		const delivery = await deliver(deps, userId, [notice]);
+		if (delivery.sent === 1) return 'sent';
+		if (delivery.retryable) await deps.release(userId, notice.key);
+		return 'not-sent';
 	} catch (error) {
-		logger.error('Could not claim a billing notice', { userId, kind: notice.email.kind, key: notice.key, error });
+		logger.error('Could not claim or release a billing notice', { userId, kind: notice.email.kind, key: notice.key, error });
 		return 'not-sent';
 	}
 }
@@ -142,5 +161,10 @@ export function billingMailFromEnv(env: Env): BillingMailDeps {
 }
 
 export function claimingMailFromEnv(env: Env): ClaimingMailDeps {
-	return { ...billingMailFromEnv(env), claim: (userId, key, kind) => new BillingService(env).claimNotice(userId, key, kind, new Date()) };
+	const billing = new BillingService(env);
+	return {
+		...billingMailFromEnv(env),
+		claim: (userId, key, kind) => billing.claimNotice(userId, key, kind, new Date()),
+		release: (userId, key) => billing.releaseNotice(userId, key),
+	};
 }

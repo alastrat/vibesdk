@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEmailSender } from '../email/sender';
 import type { OutgoingEmail } from '../email/types';
 import { claimAndSendNotice, sendBillingEmails, type BillingMailDeps, type PlannedNotice } from './notices';
@@ -12,6 +12,15 @@ function mail(overrides: Partial<BillingMailDeps> = {}): { deps: BillingMailDeps
 }
 
 describe('sending billing emails', () => {
+	// Failing sends are logged; the tests below fail them on purpose.
+	beforeEach(() => {
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
 	it("sends each planned notice to the account's email", async () => {
 		const { deps, sent } = mail();
 		expect(await sendBillingEmails(deps, 'u1', [STARTED, ENDING])).toBe(2);
@@ -79,9 +88,72 @@ describe('sending billing emails', () => {
 
 	it('answers not-sent when a claimed notice cannot go out, and never throws', async () => {
 		const claim = async () => true;
+		const release = async () => undefined;
 		const failing = mail({ sender: { send: async () => { throw new Error('Email Service unavailable'); } } });
-		expect(await claimAndSendNotice({ ...failing.deps, claim }, 'u1', STARTED)).toBe('not-sent');
-		await expect(claimAndSendNotice({ ...mail().deps, claim: async () => { throw new Error('D1 unavailable'); } }, 'u1', STARTED)).resolves.toBe('not-sent');
+		expect(await claimAndSendNotice({ ...failing.deps, claim, release }, 'u1', STARTED)).toBe('not-sent');
+		await expect(claimAndSendNotice({ ...mail().deps, claim: async () => { throw new Error('D1 unavailable'); }, release }, 'u1', STARTED)).resolves.toBe('not-sent');
+		await expect(claimAndSendNotice({ ...failing.deps, claim, release: async () => { throw new Error('D1 unavailable'); } }, 'u1', STARTED)).resolves.toBe('not-sent');
+	});
+
+	describe('when the email does not go out', () => {
+		function claims() {
+			const held = new Set<string>();
+			return {
+				held,
+				claim: async (userId: string, key: string) => {
+					if (held.has(`${userId}:${key}`)) return false;
+					held.add(`${userId}:${key}`);
+					return true;
+				},
+				release: async (userId: string, key: string) => void held.delete(`${userId}:${key}`),
+			};
+		}
+
+		it('gives the claim back after a send that fails, so the next run sends it', async () => {
+			const book = claims();
+			const sent: OutgoingEmail[] = [];
+			let outage = true;
+			const { deps } = mail({
+				sender: {
+					send: async (email) => {
+						if (outage) throw new Error('Email Service unavailable');
+						sent.push(email);
+					},
+				},
+			});
+			const claiming = { ...deps, claim: book.claim, release: book.release };
+			expect(await claimAndSendNotice(claiming, 'u1', ENDING)).toBe('not-sent');
+			expect(book.held.size).toBe(0);
+			outage = false;
+			expect(await claimAndSendNotice(claiming, 'u1', ENDING)).toBe('sent');
+			expect(await claimAndSendNotice(claiming, 'u1', ENDING)).toBe('already-sent');
+			expect(sent).toHaveLength(1);
+		});
+
+		it('gives the claim back when the address cannot be looked up', async () => {
+			const book = claims();
+			const { deps } = mail({ userEmail: async () => { throw new Error('D1 unavailable'); } });
+			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('not-sent');
+			expect(book.held.size).toBe(0);
+		});
+
+		it.each([
+			['an address the service suppresses', Object.assign(new Error('suppressed'), { code: 'E_RECIPIENT_SUPPRESSED' })],
+			["a recipient staging's allowlist refuses", Object.assign(new Error('blocked'), { code: 'E_STAGING_BLOCKED' })],
+			['a request the service rejects', Object.assign(new Error('bad request'), { code: 'E_VALIDATION_ERROR' })],
+		])('keeps the claim for %s, since a retry would fail the same way', async (_name, error) => {
+			const book = claims();
+			const { deps } = mail({ sender: { send: async () => { throw error; } } });
+			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('not-sent');
+			expect(book.held.size).toBe(1);
+		});
+
+		it('keeps the claim of an account with no address to send to', async () => {
+			const book = claims();
+			const { deps } = mail({ userEmail: async () => null });
+			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('not-sent');
+			expect(book.held.size).toBe(1);
+		});
 	});
 
 	it('claims with the notice kind', async () => {

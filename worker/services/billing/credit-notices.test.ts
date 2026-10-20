@@ -30,6 +30,7 @@ function deps(purchased = 0) {
 				claimed.add(key);
 				return true;
 			},
+			release: async (_userId, key) => void claimed.delete(key),
 		},
 	};
 	return { fake, sent, reads: () => reads, at: (used: number) => (current = state(used)) };

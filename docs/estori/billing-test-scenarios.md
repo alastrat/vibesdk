@@ -43,7 +43,7 @@ bun scripts/stripe-billing-scenarios.ts
 Notes:
 - Test clocks move Stripe's time, not Estori's. Scenario 5 therefore checks the grace Estori works out from the failed renewal, and does not wait for the fall to Basic on day 8. That fall, and the plan returning when the invoice is paid, are covered on real SQL by `worker/services/billing/account.test.ts` and `worker/api/controllers/payments/webhook-billing.sql.test.ts`.
 - Scenario 10 needs a person at a browser signed in as the test account. The script waits up to 5 minutes for the purchase.
-- If a run stops half way, delete its test clock in the Stripe dashboard (Developers, Test clocks) and cancel the subscription on the account's admin billing page before running again.
+- If a run stops half way, first cancel the subscription in Stripe's test dashboard (the webhook then updates Estori, and `GET /api/admin/users/:userId/billing` shows the account off its plan), and only then delete the test clock (Developers, Test clocks). Estori refuses to link a new customer to an account that still has a live subscription, and has no admin page for cancelling one.
 
 ## Part two: by eye
 

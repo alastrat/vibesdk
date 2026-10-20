@@ -9,10 +9,9 @@ import { CHECKOUT_KIND_CREDITS, type AdminBillingView } from '../shared/types/bi
 import { EXTRA_CREDITS, GRACE_PERIOD_DAYS, PLAN_LIMITS } from '../shared/types/plans';
 import { DAY_MS } from '../worker/services/billing/periods';
 import type { StripePriceIds } from '../worker/services/billing/prices';
-import { STRIPE_API_VERSION, StripeApiError, createStripeClient, encodeForm, type FormValue, type StripeClient, type StripeCustomer, type StripeSubscription } from '../worker/services/payments/stripe-client';
+import { createStripeClient, type StripeClient, type StripeCustomer, type StripeSubscription } from '../worker/services/payments/stripe-client';
+import { modeOfKey, stripeCaller, type StripeCall } from './stripe-api';
 import { BILLING_LOOKUP_KEYS } from './stripe-billing-setup';
-
-const STRIPE_API = 'https://api.stripe.com/v1';
 
 const DAY_SECONDS = DAY_MS / 1000;
 /** A clock advances at most two billing intervals at a time, so longer jumps are made in steps well inside that. */
@@ -59,10 +58,6 @@ const DEFAULT_TIMING: Timing = {
 	quietMs: 8_000,
 };
 
-function isTestKey(key: string): boolean {
-	return key.startsWith('sk_test_') || key.startsWith('rk_test_');
-}
-
 function required(env: Record<string, string | undefined>, name: string): string {
 	const value = env[name];
 	if (!value) throw new Error(`Set ${name}.`);
@@ -72,7 +67,7 @@ function required(env: Record<string, string | undefined>, name: string): string
 /** The run's settings from the environment; a live Stripe key is refused before anything else. */
 export function readScenarioConfig(env: Record<string, string | undefined>): ScenarioConfig {
 	const stripeKey = required(env, 'STRIPE_SECRET_KEY');
-	if (!isTestKey(stripeKey)) throw new Error('Run the scenarios with a test key only.');
+	if (modeOfKey(stripeKey) !== 'test') throw new Error('Run the scenarios with a test key only.');
 	return {
 		stripeKey,
 		baseUrl: required(env, 'ESTORI_BASE_URL').replace(/\/+$/, ''),
@@ -95,31 +90,6 @@ export async function waitFor<T>(read: () => Promise<T>, done: (value: T) => boo
 }
 
 type Say = (message: string) => void;
-type StripeCall = <T>(method: 'GET' | 'POST' | 'DELETE', path: string, params?: Record<string, FormValue>, idempotencyKey?: string) => Promise<T>;
-
-/** Stripe calls in the shape of the app's own client: form-encoded, the pinned API version, an idempotency key on writes. */
-function stripeCaller(secretKey: string): StripeCall {
-	return async <T>(method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, FormValue> = {}, idempotencyKey?: string): Promise<T> => {
-		const body = encodeForm(params);
-		const headers: Record<string, string> = {
-			Authorization: `Bearer ${secretKey}`,
-			'Content-Type': 'application/x-www-form-urlencoded',
-			'Stripe-Version': STRIPE_API_VERSION,
-		};
-		if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-		const response = await fetch(method === 'GET' && body ? `${STRIPE_API}${path}?${body}` : `${STRIPE_API}${path}`, {
-			method,
-			headers,
-			body: method === 'POST' ? body : undefined,
-		});
-		const json: unknown = await response.json();
-		if (!response.ok) {
-			const error = (json as { error?: { message?: string; type?: string; code?: string } }).error;
-			throw new StripeApiError(error?.message ?? 'Stripe request failed', response.status, error?.code ?? null, error?.type ?? null);
-		}
-		return json as T;
-	};
-}
 
 interface EstoriBody<T> {
 	success?: boolean;

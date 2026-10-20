@@ -13,7 +13,13 @@ const CATALOG = JSON.stringify({ products: [{ id: 'lamp', name: 'Lamp', variants
 
 beforeAll(async () => {
 	db = await migratedD1();
-	for (const id of ['u_small', 'u_big', 'u_catalog']) await insertUser(db, id);
+	for (const id of ['u_small', 'u_big', 'u_catalog']) await insertUser(db, id, { emailVerified: true });
+	// Accounts that can't be emailed: each is skipped for a different reason.
+	await insertUser(db, 'u_unverified');
+	for (const [id, column] of [['u_suspended', 'is_suspended = 1'], ['u_inactive', 'is_active = 0'], ['u_deleted', 'deleted_at = 1790000000']] as const) {
+		await insertUser(db, id, { emailVerified: true });
+		await db.prepare(`UPDATE users SET ${column} WHERE id = ?`).bind(id).run();
+	}
 	for (const [id, userId] of [['app_s', 'u_small'], ['app_b1', 'u_big'], ['app_b2', 'u_big'], ['app_c', 'u_catalog']] as const) await insertApp(db, { id, userId });
 	const stores = new LiveStoreService(envWith(db));
 	for (const appId of ['app_s', 'app_b1', 'app_b2', 'app_c']) await stores.publish({ appId, slug: appId.replace('_', '-'), commit: 'c1', now: new Date(NOW) });
@@ -24,7 +30,7 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-function env(sent: Array<{ to: string; text: string }>, options: { failManifestFor?: string; email?: boolean } = {}): Env {
+function env(sent: Array<{ to: string; text: string }>, options: { failManifestFor?: string; email?: boolean; sendFails?: boolean } = {}): Env {
 	const namespace = {
 		idFromName: (name: string) => name,
 		get: (appId: string) => ({
@@ -43,6 +49,7 @@ function env(sent: Array<{ to: string; text: string }>, options: { failManifestF
 			: {
 					EMAIL: {
 						send: async (message: { to: string; text: string }) => {
+							if (options.sendFails) throw new Error('Email Service unavailable');
 							sent.push({ to: message.to, text: message.text });
 							return { messageId: 'm1' };
 						},
@@ -84,6 +91,21 @@ describe('the enforcement notice', () => {
 		expect(sent.at(-1)?.to).toBe('u_small@example.test');
 	});
 
+	it('tells an account again on the next run when its email could not be sent', async () => {
+		const starts = Date.parse('2027-02-01T00:00:00Z');
+		const sent: Array<{ to: string; text: string }> = [];
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		expect(await sendEnforcementNotices(enforcementDepsFromEnv(env(sent, { sendFails: true })), starts, NOW)).toBe(0);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM billing_notices WHERE notice_key = 'enforcement_notice:2027-02-01'").first('n')).toBe(0);
+		expect(await sendEnforcementNotices(enforcementDepsFromEnv(env(sent)), starts, NOW + 3_600_000)).toBe(3);
+		expect(await sendEnforcementNotices(enforcementDepsFromEnv(env(sent)), starts, NOW + 7_200_000)).toBe(0);
+	});
+
+	it('skips accounts that are suspended, inactive, unverified or deleted', async () => {
+		const waiting = await new BillingService(envWith(db)).accountsWithoutNotice('enforcement_notice:2099-01-01', 100);
+		expect(waiting).toEqual(['u_big', 'u_catalog', 'u_small']);
+	});
+
 	it('claims nothing while no email can go out, so a later run with a sender still tells everyone', async () => {
 		const starts = Date.parse('2027-01-01T00:00:00Z');
 		const sent: Array<{ to: string; text: string }> = [];
@@ -112,6 +134,7 @@ describe('who is over Basic', () => {
 				userEmail: async () => 'one@example.test',
 				baseUrl: null,
 				claim: async () => true,
+				release: async () => undefined,
 			},
 		};
 		return { deps, sent };

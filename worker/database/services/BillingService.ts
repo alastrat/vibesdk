@@ -226,7 +226,10 @@ export class BillingService extends BaseService {
         return claimed.length > 0;
     }
 
-    /** Accounts that aren't deleted and have no notice under `key`, in id order. */
+    /**
+     * Accounts that can be emailed and have no notice under `key`, in id order: not deleted, active and not suspended,
+     * with a verified email, as `accountsRenewing` takes them.
+     */
     async accountsWithoutNotice(key: string, limit: number): Promise<string[]> {
         const users = schema.users;
         const rows = await this.database
@@ -234,7 +237,10 @@ export class BillingService extends BaseService {
             .from(users)
             .where(
                 and(
+                    eq(users.emailVerified, true),
                     isNull(users.deletedAt),
+                    eq(users.isActive, true),
+                    eq(users.isSuspended, false),
                     notExists(
                         this.database
                             .select({ userId: schema.billingNotices.userId })
@@ -253,6 +259,11 @@ export class BillingService extends BaseService {
         const counts = schema.accountStoreCounts;
         const [found] = await this.database.select({ started: counts.storesStarted }).from(counts).where(eq(counts.userId, userId)).limit(1);
         return found?.started ?? 0;
+    }
+
+    /** Takes back a claim whose email never went out, so a later run can claim and send it. */
+    async releaseNotice(userId: string, key: string): Promise<void> {
+        await this.database.delete(schema.billingNotices).where(and(eq(schema.billingNotices.userId, userId), eq(schema.billingNotices.noticeKey, key)));
     }
 
     /**

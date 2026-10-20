@@ -134,14 +134,14 @@ describe('the hourly billing run', () => {
 
 	it('sends the enforcement notice while billing is still off, once, and not once the start date has come', async () => {
 		const now = Date.parse('2026-10-25T10:05:00Z');
-		await insertUser(db, 'u_notice');
+		await insertUser(db, 'u_notice', { emailVerified: true });
 		const billingOff = { BILLING: undefined, BILLING_USER_IDS: undefined, BILLING_ENFORCEMENT_FROM: '2026-11-01' };
 		await runHourlyBilling(env(billingOff), now);
 		await runHourlyBilling(env(billingOff), now + 3_600_000);
 		expect(sent.filter((to) => to === 'u_notice@example.test')).toHaveLength(1);
 		expect(await db.prepare("SELECT kind FROM billing_notices WHERE user_id = 'u_notice'").all()).toMatchObject({ results: [{ kind: 'enforcement_notice' }] });
 
-		await insertUser(db, 'u_after');
+		await insertUser(db, 'u_after', { emailVerified: true });
 		await runHourlyBilling(env(billingOff), Date.parse('2026-11-01T00:05:00Z'));
 		expect(sent).not.toContain('u_after@example.test');
 	});
