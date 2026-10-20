@@ -68,8 +68,8 @@ describe('Stripe billing calls', () => {
 
 	it('opens a one-time checkout for extra credits, a line per 1,000 credits, tagged on the session and the payment', async () => {
 		const { calls, client } = recordingFetch({ id: 'cs_c', url: 'https://checkout.stripe.com/c/cs_c' });
-		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 12_000, successUrl: 'https://estori.app/settings/billing?credits=success', cancelUrl: 'https://estori.app/settings/billing', nowMs: NOW });
-		expect(calls[0].key).toBe(`billing-credits-u1-12000-${BUCKET}`);
+		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 12_000, successUrl: 'https://estori.app/settings/billing?credits=success', cancelUrl: 'https://estori.app/settings/billing', nowMs: NOW, idempotencyKey: 'billing-credits-u1-12000-cp_1-1' });
+		expect(calls[0].key).toBe('billing-credits-u1-12000-cp_1-1');
 		expect(calls[0].params).toEqual(
 			expect.arrayContaining([
 				'mode=payment',
@@ -87,6 +87,12 @@ describe('Stripe billing calls', () => {
 			]),
 		);
 		expect(calls[0].params.some((param) => param.startsWith('allow_promotion_codes'))).toBe(false);
+	});
+
+	it('reads a customer, with its default payment method', async () => {
+		const { calls, client } = recordingFetch({ id: 'cus_1', email: null, metadata: null, invoice_settings: { default_payment_method: 'pm_1' } });
+		expect((await client.retrieveCustomer('cus_1')).invoice_settings?.default_payment_method).toBe('pm_1');
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/customers/cus_1', method: 'GET', key: null });
 	});
 
 	it('reads a subscription with its schedule', async () => {

@@ -137,10 +137,15 @@ export interface StripeTransferReversal {
 	amount: number;
 }
 
+/** A payment method as Stripe refers to it: its id, or the object when the request expanded it. */
+export type StripePaymentMethodRef = string | { id: string };
+
 export interface StripeCustomer {
 	id: string;
 	email: string | null;
 	metadata: Record<string, string> | null;
+	/** What the customer's invoices charge when the subscription names no payment method of its own. */
+	invoice_settings?: { default_payment_method: StripePaymentMethodRef | null } | null;
 }
 
 export interface StripePrice {
@@ -191,6 +196,8 @@ export interface StripeSubscription {
 	items: { data: StripeSubscriptionItem[] };
 	/** The schedule's id, or the schedule itself when the request expanded it. */
 	schedule: string | StripeSubscriptionSchedule | null;
+	/** What the subscription's invoices charge; null falls back to the customer's default. */
+	default_payment_method?: StripePaymentMethodRef | null;
 }
 
 export interface StripeInvoice {
@@ -230,6 +237,8 @@ export interface CreditsCheckoutInput {
 	successUrl: string;
 	cancelUrl: string;
 	nowMs: number;
+	/** The caller's key: it must change once a purchase is recorded, or a second purchase of the same amount replays the paid session. */
+	idempotencyKey: string;
 }
 
 export interface SubscriptionPriceChange {
@@ -309,6 +318,7 @@ export interface StripeClient {
 	/** Only the payout delay, so payout days the seller chose stay as they are. */
 	updatePayoutDelay(accountId: string, delayDays: number): Promise<StripeAccount>;
 	createCustomer(input: { userId: string; email: string }): Promise<StripeCustomer>;
+	retrieveCustomer(customerId: string): Promise<StripeCustomer>;
 	/** Card only: renewals and Smart Retries charge the card on file, and bank methods would settle days later. */
 	createSubscriptionCheckoutSession(input: SubscriptionCheckoutInput): Promise<StripeCheckoutSession>;
 	createCreditsCheckoutSession(input: CreditsCheckoutInput): Promise<StripeCheckoutSession>;
@@ -568,6 +578,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		// One customer per account: the key is stable, so a retried first purchase can't make a second.
 		createCustomer: ({ userId, email }) =>
 			request<StripeCustomer>('POST', '/customers', { email: email || undefined, metadata: { estori_user_id: userId } }, `billing-customer-${userId}`),
+		retrieveCustomer: (customerId) => request<StripeCustomer>('GET', `/customers/${encodeURIComponent(customerId)}`),
 		createSubscriptionCheckoutSession: (input) =>
 			request<StripeCheckoutSession>(
 				'POST',
@@ -607,7 +618,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					cancel_url: input.cancelUrl,
 					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
 				},
-				`billing-credits-${input.userId}-${input.credits}-${idempotencyBucket(input.nowMs)}`,
+				input.idempotencyKey,
 			);
 		},
 		retrieveSubscription: (subscriptionId) =>

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { StripeApiError, type StripeCheckoutSession, type StripeSubscription } from '../payments/stripe-client';
 import { STRIPE_REQUEST_FAILED_MESSAGE } from '../payments/config';
 import { BILLING_MESSAGES, buyCredits, cancelPlan, changePlan, openPortal, resumePlan, startCheckout, type BillingActionDeps } from './actions';
-import type { SubscriptionRecord } from '../../database/schema';
+import type { CreditPurchaseRecord, SubscriptionRecord } from '../../database/schema';
 import type { BillingAccount } from './account';
 import { PLAN_LIMITS } from '../../../shared/types/plans';
 
@@ -39,16 +39,41 @@ function account(plan: 'basic' | 'pro' | 'premium'): BillingAccount {
 }
 
 const SUBSCRIPTION: StripeSubscription = { id: 'sub_1', customer: 'cus_1', status: 'active', created: 1, cancel_at_period_end: true, cancel_at: null, metadata: { estori_user_id: 'u1' }, items: { data: [{ id: 'si_1', price: { id: 'price_pro' }, current_period_start: 1, current_period_end: 2 }] }, schedule: null };
+function purchase(id: string): CreditPurchaseRecord {
+	const at = new Date('2026-10-19T14:00:00Z');
+	return { id, userId: 'u1', credits: 12_000, amountCents: 1_800, stripeCheckoutSessionId: `cs_${id}`, stripePaymentIntentId: `pi_${id}`, purchasedAt: at, expiresAt: new Date('2027-10-19T14:00:00Z'), used: 0, refundedCents: 0, removedCredits: 0, expiredAt: null };
+}
+
 const SESSION: StripeCheckoutSession = { id: 'cs_1', url: 'https://checkout.stripe.com/c/cs_1', payment_status: 'unpaid', status: 'open', client_reference_id: 'u1', metadata: null, amount_total: null, currency: 'usd', payment_intent: null };
 
-/** `schedule` is a schedule Stripe has on the subscription, which a release drops unless it is `stuck`. */
-function fake(state: { row?: SubscriptionRecord | null; customer?: string | null; failWith?: Error; schedule?: string | null; stuck?: boolean } = {}) {
+/**
+ * `schedule` is a schedule Stripe has on the subscription, which a release drops unless it is `stuck`; `price` is the
+ * price Stripe has it on; `card` is the subscription's own default payment method (null: the customer's, `customerCard`).
+ */
+function fake(
+	state: {
+		row?: SubscriptionRecord | null;
+		customer?: string | null;
+		failWith?: Error;
+		schedule?: string | null;
+		stuck?: boolean;
+		price?: string;
+		card?: string | null;
+		customerCard?: string | null;
+		purchases?: CreditPurchaseRecord[];
+	} = {},
+) {
 	const calls: string[] = [];
+	const keys: string[] = [];
 	const deps: BillingActionDeps = {
 		stripe: {
 			createCustomer: async ({ userId }) => {
 				calls.push(`customer:${userId}`);
 				return { id: 'cus_new', email: null, metadata: null };
+			},
+			retrieveCustomer: async (id) => {
+				calls.push(`read-customer:${id}`);
+				return { id, email: null, metadata: null, invoice_settings: { default_payment_method: state.customerCard ?? null } };
 			},
 			createSubscriptionCheckoutSession: async (input) => {
 				calls.push(`checkout:${input.customerId}:${input.priceId}`);
@@ -56,14 +81,18 @@ function fake(state: { row?: SubscriptionRecord | null; customer?: string | null
 			},
 			createCreditsCheckoutSession: async (input) => {
 				calls.push(`credits:${input.customerId}:${input.credits}`);
+				keys.push(input.idempotencyKey);
 				return SESSION;
 			},
 			retrieveSubscription: async (id) => {
 				calls.push(`read:${id}`);
 				const schedule = state.schedule ? { id: state.schedule, status: 'active', subscription: id, current_phase: null, phases: [] } : null;
-				return { ...SUBSCRIPTION, schedule };
+				const item = { ...SUBSCRIPTION.items.data[0], price: { id: state.price ?? 'price_pro' } };
+				const card = state.card === undefined ? 'pm_1' : state.card;
+				return { ...SUBSCRIPTION, schedule, items: { data: [item] }, default_payment_method: card };
 			},
-			changeSubscriptionPrice: async ({ priceId }) => {
+			changeSubscriptionPrice: async ({ priceId, idempotencyKey }) => {
+				keys.push(idempotencyKey);
 				if (state.failWith) throw state.failWith;
 				calls.push(`now:${priceId}`);
 				return SUBSCRIPTION;
@@ -98,11 +127,12 @@ function fake(state: { row?: SubscriptionRecord | null; customer?: string | null
 			},
 			subscriptionOf: async () => state.row ?? null,
 		},
+		ledger: { purchasesOf: async () => state.purchases ?? [] },
 		priceIds: { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' },
 		baseUrl: 'https://estori.app',
 		nowMs: Date.parse('2026-10-19T15:00:00Z'),
 	};
-	return { deps, calls };
+	return { deps, calls, keys, state };
 }
 
 describe('starting a plan', () => {
@@ -148,6 +178,28 @@ describe('moving between Pro and Premium', () => {
 		expect(await changePlan(failed.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 		expect(await changePlan(fake({ row: row() }).deps, 'u1', 'enterprise')).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.pickPlan });
+	});
+
+	it('reaches Stripe again after a declined upgrade once the card changes, and leaves a subscription already on Premium alone', async () => {
+		quietWarnings();
+		const declined = fake({ row: row(), failWith: new StripeApiError('Your card was declined.', 402, 'card_declined', 'card_error') });
+		expect(await changePlan(declined.deps, 'u1', 'premium')).toMatchObject({ status: 409 });
+		expect(await changePlan(declined.deps, 'u1', 'premium')).toMatchObject({ status: 409 });
+		declined.state.card = 'pm_2';
+		delete declined.state.failWith;
+		expect(await changePlan(declined.deps, 'u1', 'premium')).toMatchObject({ ok: true });
+		expect(declined.keys[0]).toBe(declined.keys[1]);
+		expect(declined.keys[2]).not.toBe(declined.keys[0]);
+		expect(declined.keys[2]).toContain('-pm_2-');
+
+		const customerDefault = fake({ row: row(), card: null, customerCard: 'pm_9' });
+		expect(await changePlan(customerDefault.deps, 'u1', 'premium')).toMatchObject({ ok: true });
+		expect(customerDefault.calls).toEqual(['read:sub_1', 'read-customer:cus_1', 'now:price_premium']);
+		expect(customerDefault.keys[0]).toContain('-pm_9-');
+
+		const moved = fake({ row: row(), price: 'price_premium' });
+		expect(await changePlan(moved.deps, 'u1', 'premium')).toEqual({ ok: true, value: { requested: true } });
+		expect(moved.calls).toEqual(['read:sub_1']);
 	});
 
 	it('cancels a pending move to Pro when the seller picks Premium again, and checks Stripe dropped it', async () => {
@@ -199,6 +251,17 @@ describe('cancelling, keeping the plan, the portal and extra credits', () => {
 		expect(premium.calls).toEqual(['credits:cus_1:12000']);
 		expect(await buyCredits(fake().deps, USER, account('pro'), 12_000)).toMatchObject({ ok: false, status: 402, refusal: { limit: 'extraCredits', upgradeTo: 'premium' } });
 		for (const credits of [4_000, 5_500, 2_000_000, '5000']) expect(await buyCredits(fake().deps, USER, account('premium'), credits)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.creditsAmount });
+	});
+
+	it('opens a new checkout for the same amount once the first purchase is recorded, and one for a double click', async () => {
+		const { deps, keys, state } = fake({ customer: 'cus_1' });
+		await buyCredits(deps, USER, account('premium'), 12_000);
+		await buyCredits(deps, USER, account('premium'), 12_000);
+		state.purchases = [purchase('cp_old'), purchase('cp_1')];
+		await buyCredits(deps, USER, account('premium'), 12_000);
+		expect(keys[0]).toBe(keys[1]);
+		expect(keys[0]).toMatch(/^billing-credits-u1-12000-none-\d+$/);
+		expect(keys[2]).toMatch(/^billing-credits-u1-12000-cp_1-\d+$/);
 	});
 
 	it('calls Stripe for no refused amount or plan', async () => {

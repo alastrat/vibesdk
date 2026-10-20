@@ -3,16 +3,16 @@
  * the customer portal and buy extra credits. Each asks Stripe and changes no row; the webhook records what Stripe did.
  */
 
-import { BillingService } from '../../database';
+import { BillingService, CreditLedgerService } from '../../database';
 import type { SubscriptionRecord } from '../../database/schema';
 import { BILLING_PATH, type BillingChangeRequested, type BillingRedirect, type CheckoutStarted } from '../../../shared/types/billing';
 import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PlanLimitRefusal } from '../../../shared/types/plans';
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
-import { IDEMPOTENCY_BUCKET_MS, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeSubscription } from '../payments/stripe-client';
+import { IDEMPOTENCY_BUCKET_MS, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
-import { stripePriceIds, type StripePriceIds } from './prices';
+import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 
 const logger = createLogger('BillingActions');
 
@@ -36,6 +36,7 @@ export type BillingActionResult<T> =
 export type BillingStripe = Pick<
 	StripeClient,
 	| 'createCustomer'
+	| 'retrieveCustomer'
 	| 'createSubscriptionCheckoutSession'
 	| 'createCreditsCheckoutSession'
 	| 'retrieveSubscription'
@@ -50,6 +51,7 @@ export type BillingStripe = Pick<
 export interface BillingActionDeps {
 	stripe: BillingStripe | null;
 	store: Pick<BillingService, 'customerOf' | 'saveCustomer' | 'subscriptionOf'>;
+	ledger: Pick<CreditLedgerService, 'purchasesOf'>;
 	priceIds: StripePriceIds | null;
 	baseUrl: string;
 	nowMs: number;
@@ -72,13 +74,30 @@ function configured(deps: BillingActionDeps): Configured | null {
 }
 
 /**
- * One key per account, action and subscription state, rotating with the client's bucket: a double click or a retry is
- * one request, while repeating an action after Stripe confirmed a change in between (cancel, keep, cancel again) is not
- * served the first one's saved answer.
+ * One key per account, action and state, rotating with the client's bucket. `state` is whatever a repeat of the action
+ * must not share with the first: a double click or a retry is one request, while the same action after a change in
+ * between (cancel, keep, cancel again; a new card after a decline; a second purchase) is not served the first's answer.
  */
-function idempotencyKey(deps: BillingActionDeps, action: string, row: SubscriptionRecord, detail?: string): string {
-	const parts = ['billing', action, row.userId, detail, String(Math.floor(row.updatedAt.getTime() / 1000)), String(Math.floor(deps.nowMs / IDEMPOTENCY_BUCKET_MS))];
-	return parts.filter((part) => part !== undefined).join('-');
+function idempotencyKey(deps: BillingActionDeps, action: string, userId: string, state: readonly string[]): string {
+	return ['billing', action, userId, ...state, String(Math.floor(deps.nowMs / IDEMPOTENCY_BUCKET_MS))].join('-');
+}
+
+/** The subscription row's version: the webhook rebuilds the row, so it moves with every change Stripe confirms. */
+function rowVersion(row: SubscriptionRecord): string {
+	return String(Math.floor(row.updatedAt.getTime() / 1000));
+}
+
+function paymentMethodId(ref: StripePaymentMethodRef | null | undefined): string | null {
+	if (!ref) return null;
+	return typeof ref === 'string' ? ref : ref.id;
+}
+
+/** The payment method Stripe charges the subscription's invoices with: its own default, else the customer's. */
+async function chargedPaymentMethod(stripe: BillingStripe, subscription: StripeSubscription): Promise<string> {
+	const own = paymentMethodId(subscription.default_payment_method);
+	if (own) return own;
+	const customer = await stripe.retrieveCustomer(subscription.customer);
+	return paymentMethodId(customer.invoice_settings?.default_payment_method) ?? 'none';
 }
 
 /** Stripe's answer for a card it couldn't charge, for any other refusal, or the error itself when it isn't Stripe's. */
@@ -171,20 +190,26 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 		});
 	}
 	if (plan === row.plan) return fail(400, `You're already on ${current}.`);
-	const key = idempotencyKey(deps, 'change-plan', row, plan);
 	return askStripe(async () => {
 		let subscription = await stripe.retrieveSubscription(row.stripeSubscriptionId);
 		if (plan === 'pro') {
-			await stripe.scheduleSubscriptionPrice({ subscription, priceId: priceIds.pro, idempotencyKey: key });
+			const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, rowVersion(row)]);
+			await stripe.scheduleSubscriptionPrice({ subscription, priceId: priceIds.pro, idempotencyKey: idempotency });
 			return ok(REQUESTED);
 		}
+		// The row lags the webhook; a subscription Stripe already moved needs nothing more.
+		const item = subscription.items.data[0];
+		if (item && planOfPrice(item.price, priceIds) === 'premium') return ok(REQUESTED);
 		const scheduleId = pendingScheduleId(subscription);
 		if (scheduleId) {
 			const released = await releaseSchedule(stripe, subscription.id, scheduleId);
 			if (!released) return STRIPE_FAILED;
 			subscription = released;
 		}
-		await stripe.changeSubscriptionPrice({ subscription, priceId: priceIds.premium, idempotencyKey: key });
+		// Keyed on the card too: a retry after a decline and a new card in Manage billing must reach Stripe again, not replay the 402.
+		const card = await chargedPaymentMethod(stripe, subscription);
+		const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, card, rowVersion(row)]);
+		await stripe.changeSubscriptionPrice({ subscription, priceId: priceIds.premium, idempotencyKey: idempotency });
 		return ok(REQUESTED);
 	});
 }
@@ -199,7 +224,7 @@ export async function cancelPlan(deps: BillingActionDeps, userId: string): Promi
 	const { stripe } = setup;
 	return askStripe(async () => {
 		if (row.stripeScheduleId && !(await releaseSchedule(stripe, row.stripeSubscriptionId, row.stripeScheduleId))) return STRIPE_FAILED;
-		await stripe.cancelAtPeriodEnd(row.stripeSubscriptionId, idempotencyKey(deps, 'cancel', row));
+		await stripe.cancelAtPeriodEnd(row.stripeSubscriptionId, idempotencyKey(deps, 'cancel', userId, [rowVersion(row)]));
 		return ok(REQUESTED);
 	});
 }
@@ -214,7 +239,7 @@ export async function resumePlan(deps: BillingActionDeps, userId: string): Promi
 	const { stripe } = setup;
 	return askStripe(async () => {
 		const subscription = await stripe.retrieveSubscription(row.stripeSubscriptionId);
-		await stripe.resumeSubscription(subscription, idempotencyKey(deps, 'resume', row));
+		await stripe.resumeSubscription(subscription, idempotencyKey(deps, 'resume', userId, [rowVersion(row)]));
 		return ok(REQUESTED);
 	});
 }
@@ -239,6 +264,9 @@ export async function buyCredits(deps: BillingActionDeps, user: { id: string; em
 	if (refusal) return { ok: false, status: 402, refusal };
 	if (!isExtraCreditsAmount(credits)) return fail(400, BILLING_MESSAGES.creditsAmount);
 	return askStripe(async () => {
+		// Keyed on the newest recorded purchase, so buying the same amount again after the first is paid opens a new checkout.
+		const purchases = await deps.ledger.purchasesOf(user.id);
+		const newest = purchases.at(-1)?.id ?? 'none';
 		const customerId = await customerOf(deps, setup.stripe, user);
 		const session = await setup.stripe.createCreditsCheckoutSession({
 			customerId,
@@ -248,6 +276,7 @@ export async function buyCredits(deps: BillingActionDeps, user: { id: string; em
 			successUrl: `${deps.baseUrl}${BILLING_PATH}?credits=success`,
 			cancelUrl: `${deps.baseUrl}${BILLING_PATH}`,
 			nowMs: deps.nowMs,
+			idempotencyKey: idempotencyKey(deps, 'credits', user.id, [String(credits), newest]),
 		});
 		return checkoutStarted(session);
 	});
@@ -257,6 +286,7 @@ export function billingActionDepsFromEnv(env: Env, request: Request): BillingAct
 	return {
 		stripe: stripeFromEnv(env),
 		store: new BillingService(env),
+		ledger: new CreditLedgerService(env),
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),
 		baseUrl: appBaseUrl(env, request),
 		nowMs: Date.now(),
