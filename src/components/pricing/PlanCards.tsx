@@ -127,7 +127,7 @@ function PaidPlan({ plan, billing }: { plan: PaidPlanId; billing: boolean }) {
 			<Allowance>{formatCredits(PLAN_LIMITS[plan].aiCredits)} AI credits a month</Allowance>
 			{billing ? <PlanButton plan={plan} className="mt-6" /> : (
 				<>
-					<PillLink to={contactPath('premium')} variant="charcoal" className="mt-6">
+					<PillLink to={contactPath(plan)} variant="charcoal" className="mt-6">
 						Get {planById(plan).name}
 					</PillLink>
 					<p className="mt-3 text-center text-xs text-public-muted">Paid plans are coming soon. Tell us what you need and we'll set you up as they open.</p>

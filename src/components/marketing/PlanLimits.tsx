@@ -1,4 +1,4 @@
-import { PLAN_LIMITS, formatCredits } from '@/api-types';
+import { LEGACY_CREDIT_FACTOR, PLAN_LIMITS, formatCredits } from '@/api-types';
 import { useBillingOn } from '@/hooks/use-billing';
 import { usePublicPlan } from '@/hooks/use-public-plan';
 
@@ -16,8 +16,9 @@ function basicMonthly(): string {
 }
 
 /**
- * Basic's allowance: its monthly limits once billing is on, and until then "Up to 3 new sites a day · 200 AI credits a
- * day" from the limits in force; while those aren't known, the fallback or nothing.
+ * Basic's allowance: its monthly limits once billing is on, and until then "Up to 3 new sites a day · 3,400 AI credits a
+ * day" from the limits in force, the credits converted from the older unit they're set in to the one steps are priced
+ * in; while those aren't known, the fallback or nothing.
  */
 export function PlanLimits({ className, fallback }: { className?: string; fallback?: string }) {
 	const plan = usePublicPlan();
@@ -25,7 +26,7 @@ export function PlanLimits({ className, fallback }: { className?: string; fallba
 	if (billing) return <p className={className}>{basicMonthly()}</p>;
 	const parts: string[] = [];
 	if (plan.data?.newSitesPerDay != null) parts.push(`Up to ${plan.data.newSitesPerDay} new sites a day`);
-	if (plan.data?.aiCreditsPerDay != null) parts.push(`${plan.data.aiCreditsPerDay} AI credits a day`);
+	if (plan.data?.aiCreditsPerDay != null) parts.push(`${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} AI credits a day`);
 	if (parts.length === 0) return fallback ? <p className={className}>{fallback}</p> : null;
 	return <p className={className}>{parts.join(' · ')}</p>;
 }

@@ -9,7 +9,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePublicPlan } from '@/hooks/use-public-plan';
 import { CAPABILITIES, STATUS_LABELS, type CapabilityId } from '@/lib/capabilities';
 import { contactPath } from '@/lib/contact';
-import { PLAN_LIMITS, PLAN_PRICES_CENTS } from '@/api-types';
+import { LEGACY_CREDIT_FACTOR, PLAN_LIMITS, PLAN_PRICES_CENTS } from '@/api-types';
 import { comparisonFor, formatCredits, formatUsd, planById, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +45,7 @@ function headerFor(id: PlanId, billing: boolean): Header {
 				action: billing ? (
 					<PlanButton plan={id} className={ACTION} />
 				) : (
-					<PillLink to={contactPath('premium')} variant="charcoal" className={ACTION}>
+					<PillLink to={contactPath(id)} variant="charcoal" className={ACTION}>
 						Get {planById(id).name}
 					</PillLink>
 				),
@@ -131,11 +131,12 @@ export function ComparePlans({ billing }: { billing: boolean }) {
 	const phonePlan = plans.find((entry) => entry.id === picked)?.id ?? (billing ? 'pro' : 'premium');
 	const shown = isPhone ? plans.filter((entry) => entry.id === phonePlan) : plans;
 	const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
+	// Today's daily allowance is set in the older unit, so it is shown in the one steps are priced in, as the calculator does.
 	const basicCredits = billing
 		? `${formatCredits(PLAN_LIMITS.basic.aiCredits)} a month`
 		: plan.data?.aiCreditsPerDay == null
 			? 'A daily allowance'
-			: `${formatCredits(plan.data.aiCreditsPerDay)} a day`;
+			: `${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} a day`;
 	const toggle = (title: string) =>
 		setFolded((current) => {
 			const next = new Set(current);

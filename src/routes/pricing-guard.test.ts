@@ -67,6 +67,15 @@ describe('pricing page', () => {
 		expect(source('/src/components/marketing/PlanLimits.tsx')).toContain('fallback');
 	});
 
+	it("states today's daily allowance, while billing is off, in the credits steps are priced in, as the calculator does", () => {
+		const limits = source('/src/components/marketing/PlanLimits.tsx');
+		expect(limits).toContain('${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} AI credits a day');
+		expect(limits).not.toContain('${plan.data.aiCreditsPerDay} AI credits a day');
+		const compare = source(COMPARE);
+		expect(compare).toContain('${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} a day');
+		expect(compare).not.toContain('formatCredits(plan.data.aiCreditsPerDay)');
+	});
+
 	it('prices Pro and Premium from the plan table, never typed in', () => {
 		const cards = source(CARDS);
 		expect(cards).toContain('<Price cents={PLAN_PRICES_CENTS[plan]} />');
@@ -78,7 +87,9 @@ describe('pricing page', () => {
 	it("sells Pro and Premium once billing is on, and until then marks them coming soon and leads to sales", () => {
 		const cards = source(CARDS);
 		expect(cards).toContain('billing ? <PlanButton plan={plan}');
-		expect(cards).toContain("contactPath('premium')");
+		// Each card asks sales about its own plan.
+		expect(cards).toContain('contactPath(plan)');
+		expect(cards).not.toContain("contactPath('premium')");
 		expect(cards).toContain('<ComingSoon />');
 		expect(cards).toContain('Paid plans are coming soon');
 		expect(cards).not.toMatch(/Buy now|Subscribe|checkout/i);
@@ -99,7 +110,8 @@ describe('pricing page', () => {
 		expect(paid).toContain("case 'premium':");
 		expect(paid).toContain('action: billing ? (');
 		expect(paid).toContain('<PlanButton plan={id}');
-		expect(paid).toContain("contactPath('premium')");
+		expect(paid).toContain('contactPath(id)');
+		expect(paid).not.toContain("contactPath('premium')");
 		// Until billing is on, the paid columns keep the coming-soon tag beside the plan's name.
 		expect(paid).toContain('comingSoon: !billing');
 		expect(compare).toContain('{header.comingSoon && <ComingSoon />}');
