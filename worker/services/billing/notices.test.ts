@@ -67,9 +67,18 @@ describe('sending billing emails', () => {
 		expect(sent).toHaveLength(1);
 	});
 
+	it('leaves a notice unclaimed without a sender, so a later run with one can still send it', async () => {
+		const claims: string[] = [];
+		const claim = async (_userId: string, key: string) => {
+			claims.push(key);
+			return true;
+		};
+		expect(await claimAndSendNotice({ ...mail({ sender: null }).deps, claim }, 'u1', STARTED)).toBe('not-sent');
+		expect(claims).toEqual([]);
+	});
+
 	it('answers not-sent when a claimed notice cannot go out, and never throws', async () => {
 		const claim = async () => true;
-		expect(await claimAndSendNotice({ ...mail({ sender: null }).deps, claim }, 'u1', STARTED)).toBe('not-sent');
 		const failing = mail({ sender: { send: async () => { throw new Error('Email Service unavailable'); } } });
 		expect(await claimAndSendNotice({ ...failing.deps, claim }, 'u1', STARTED)).toBe('not-sent');
 		await expect(claimAndSendNotice({ ...mail().deps, claim: async () => { throw new Error('D1 unavailable'); } }, 'u1', STARTED)).resolves.toBe('not-sent');

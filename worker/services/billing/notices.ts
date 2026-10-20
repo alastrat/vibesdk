@@ -118,8 +118,12 @@ export async function sendBillingEmails(deps: BillingMailDeps, userId: string, n
 	}
 }
 
-/** Claims the notice, then sends it: a notice already claimed is not sent again. */
+/**
+ * Claims the notice, then sends it: a notice already claimed is not sent again. Without a sender nothing can go out, so
+ * the notice is left unclaimed for a later run that has one.
+ */
 export async function claimAndSendNotice(deps: ClaimingMailDeps, userId: string, notice: PlannedNotice): Promise<'sent' | 'already-sent' | 'not-sent'> {
+	if (!deps.sender) return 'not-sent';
 	try {
 		if (!(await deps.claim(userId, notice.key, notice.email.kind))) return 'already-sent';
 		return (await sendBillingEmails(deps, userId, [notice])) === 1 ? 'sent' : 'not-sent';
