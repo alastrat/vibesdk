@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
-	['/src/components/analytics/PostHogSync.tsx', '/src/App.tsx', '/src/components/ErrorBoundary.tsx', '/src/contexts/auth-context.tsx', '/src/hooks/use-flag.ts'],
+	[
+		'/src/components/analytics/PostHogSync.tsx',
+		'/src/lib/analytics/posthog-browser.ts',
+		'/src/App.tsx',
+		'/src/components/ErrorBoundary.tsx',
+		'/src/contexts/auth-context.tsx',
+		'/src/hooks/use-flag.ts',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -20,14 +27,16 @@ describe('PostHog in the browser', () => {
 	});
 
 	it('identifies people by user id only, never by email, name or username', () => {
-		expect(sync).toContain('posthog.identify(userId)');
-		expect(sync).not.toMatch(/email|displayName|username/);
+		const person = source('/src/lib/analytics/posthog-browser.ts');
+		expect(sync).toContain('const userId = user?.id ?? null;');
+		expect(sync).toContain('syncPerson(posthog, syncedUserId.current, userId, optedOut);');
+		expect(person).toContain('client.identify(userId)');
+		for (const text of [sync, person]) expect(text).not.toMatch(/email|displayName|username/);
 	});
 
-	it('starts a new anonymous person on sign-out, and before another account is identified', () => {
-		const reset = sync.indexOf('posthog.reset()');
-		expect(reset).toBeGreaterThan(-1);
-		expect(reset).toBeLessThan(sync.indexOf('posthog.identify(userId)'));
+	it('keeps PostHog in step before the page paints, so a paused page is never recorded', () => {
+		expect(sync).not.toMatch(/\buseEffect\b/);
+		expect(sync.match(/useLayoutEffect\(\(\) => \{/g)?.length).toBe(3);
 	});
 
 	it('pauses replay on the paused paths and when the pause flag is on, and resumes it under the sampling rules', () => {

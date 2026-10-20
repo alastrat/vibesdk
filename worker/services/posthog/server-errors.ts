@@ -9,6 +9,7 @@
 import { env } from 'cloudflare:workers';
 import { SYSTEM_DISTINCT_ID } from '../../../shared/types/analytics-events';
 import type { ServerErrorInput } from '../../../shared/types/server-errors';
+import { scrubEmails } from '../../../shared/types/scrub-emails';
 import { PostHogClient, type CaptureInput, type EventValue } from './client';
 import { posthogConfig } from './config';
 import { keepAlive } from './request-scope';
@@ -34,18 +35,9 @@ const MAX_FINGERPRINTS = 500;
 const MAX_FRAME_LINE_CHARS = 1_000;
 /** What is sent of a message. */
 const MAX_TEXT_CHARS = 2_000;
-/** Read past the cut, and dropped from the end when the read itself stopped short; more than any address the pattern matches. */
+/** Read past the cut, and dropped from the end when the read itself stopped short; more than any address scrubEmails matches. */
 const SCRUB_MARGIN_CHARS = 512;
 const FRAME_LINE = /^\s*at (?:(.+?) \()?(.+?):(\d+):(\d+)\)?\s*$/;
-/** Bounded runs, so reading a long text without an address stays linear. */
-const EMAIL = /[^\s@<>()"',;:]{1,64}@[^\s@<>()"',;:]{1,255}\.[a-z]{2,}/gi;
-const ENCODED_AT = /%40/gi;
-
-export function scrubEmails(text: string): string {
-	// An address in a URL is encoded, so its @ is decoded first, which keeps the scrubbing to one linear pattern.
-	return text.replace(ENCODED_AT, '@').replace(EMAIL, '[email]');
-}
-
 /** Bounds the text a fingerprint keeps; it is never sent, so it needs no scrubbing. */
 function clip(text: string): string {
 	return text.length > MAX_TEXT_CHARS ? text.slice(0, MAX_TEXT_CHARS) : text;

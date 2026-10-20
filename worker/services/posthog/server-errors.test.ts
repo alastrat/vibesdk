@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ErrorReporter, errorFingerprint, exceptionProperties, parseStack, reportServerError, scrubEmails } from './server-errors';
+import { scrubEmails } from '../../../shared/types/scrub-emails';
+import { ErrorReporter, errorFingerprint, exceptionProperties, parseStack, reportServerError } from './server-errors';
 import type { CaptureInput } from './client';
 
 const STACK = [
