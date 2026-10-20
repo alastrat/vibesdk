@@ -16,7 +16,7 @@ function invoice(overrides: Partial<StripeInvoice> = {}): StripeInvoice {
 		invoice_pdf: 'https://pay.stripe.com/invoice/x/pdf',
 		number: 'ABCD-0001',
 		description: null,
-		lines: { data: [{ description: '1 x Estori Pro (at $49.00 / month)' }, { description: 'Another line' }] },
+		lines: { data: [{ description: '1 x Estori Pro (at $49.00 / month)', amount: 4_900 }, { description: 'Another line', amount: 0 }] },
 		billing_reason: 'subscription_cycle',
 		parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } },
 		...overrides,
@@ -34,7 +34,31 @@ describe('the billing history row of a stripe invoice', () => {
 	it("describes an invoice with no line by the invoice's own description, else by its owner", () => {
 		expect(invoiceView(invoice({ lines: { data: [] }, description: 'Extra credits' }))).toMatchObject({ description: 'Extra credits' });
 		expect(invoiceView(invoice({ lines: undefined, description: null }))).toMatchObject({ description: 'Estori invoice' });
-		expect(invoiceView(invoice({ lines: { data: [{ description: null }] }, description: null }))).toMatchObject({ description: 'Estori invoice' });
+		expect(invoiceView(invoice({ lines: { data: [{ description: null, amount: 4_900 }] }, description: null }))).toMatchObject({ description: 'Estori invoice' });
+	});
+
+	it("describes a plan change by its charge, not by the credit for the unused time that Stripe lists first", () => {
+		const change = invoice({
+			amount_paid: 14_999,
+			billing_reason: 'subscription_update',
+			lines: {
+				data: [
+					{ description: 'Unused time on Estori Pro after 20 Oct 2026', amount: -4_901 },
+					{ description: 'Remaining time on Estori Premium after 20 Oct 2026', amount: 19_900 },
+				],
+			},
+		});
+		expect(invoiceView(change)).toMatchObject({ description: 'Remaining time on Estori Premium after 20 Oct 2026', amountCents: 14_999 });
+	});
+
+	it("prefers the invoice's own description, as a credits purchase sets it, over its lines", () => {
+		const credits = invoice({ description: '5,000 extra AI credits', billing_reason: 'manual', parent: null, lines: { data: [{ description: 'Estori AI credits', amount: 750 }] } });
+		expect(invoiceView(credits)).toMatchObject({ description: '5,000 extra AI credits' });
+	});
+
+	it('falls back to the first line with words when no line charges anything', () => {
+		const credited = invoice({ lines: { data: [{ description: null, amount: -100 }, { description: 'Credit for unused time', amount: -4_900 }] } });
+		expect(invoiceView(credited)).toMatchObject({ description: 'Credit for unused time' });
 	});
 
 	it('drafts are left out', () => {

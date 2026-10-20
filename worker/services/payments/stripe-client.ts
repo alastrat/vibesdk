@@ -4,7 +4,7 @@
  */
 
 import { CHECKOUT_KIND_CARD, CHECKOUT_KIND_CREDITS, type CardSetupMode, type SubscriptionStatus } from '../../../shared/types/billing';
-import { EXTRA_CREDITS, type PaidPlanId } from '../../../shared/types/plans';
+import { EXTRA_CREDITS, formatCredits, type PaidPlanId } from '../../../shared/types/plans';
 import type { SellerReadiness } from '../../../shared/types/seller-setup';
 import { STRIPE_API_VERSION } from '../../../shared/types/stripe';
 
@@ -247,7 +247,8 @@ export interface StripeInvoice {
 	invoice_pdf: string | null;
 	number: string | null;
 	description: string | null;
-	lines?: { data: Array<{ description: string | null }> };
+	/** `amount` is in cents, negative for a credit such as a plan change's unused time. */
+	lines?: { data: Array<{ description: string | null; amount: number }> };
 	billing_reason: string | null;
 	attempt_count?: number;
 	parent: { type: string; subscription_details?: { subscription: string } | null } | null;
@@ -713,8 +714,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					...USD_CARD_CHECKOUT,
 					metadata,
 					payment_intent_data: { metadata },
-					// The purchase's invoice is its receipt in billing history.
-					invoice_creation: { enabled: true, invoice_data: { metadata } },
+					// The purchase's invoice is its receipt in billing history, which shows its description.
+					invoice_creation: { enabled: true, invoice_data: { description: `${formatCredits(input.credits)} extra AI credits`, metadata } },
 					ui_mode: 'elements',
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),

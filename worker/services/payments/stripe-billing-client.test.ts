@@ -94,7 +94,7 @@ describe('Stripe billing calls', () => {
 		}
 	});
 
-	it('the credits session creates an invoice with the purchase metadata', async () => {
+	it('the credits session creates an invoice with the purchase metadata, described by the credits bought', async () => {
 		const { calls, client } = recordingFetch({ id: 'cs_c', url: null });
 		await client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, returnUrl: 'https://estori.app/r', nowMs: NOW, idempotencyKey: 'k' });
 		expect(calls[0].params).toEqual(
@@ -103,6 +103,7 @@ describe('Stripe billing calls', () => {
 				'invoice_creation[invoice_data][metadata][kind]=credits',
 				'invoice_creation[invoice_data][metadata][estori_user_id]=u1',
 				'invoice_creation[invoice_data][metadata][credits]=5000',
+				'invoice_creation[invoice_data][description]=5,000 extra AI credits',
 			]),
 		);
 	});

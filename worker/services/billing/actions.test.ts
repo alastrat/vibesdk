@@ -716,7 +716,7 @@ function invoice(overrides: Partial<StripeInvoice> = {}): StripeInvoice {
 		invoice_pdf: 'https://pay.stripe.com/invoice/x/pdf',
 		number: 'ABCD-0001',
 		description: null,
-		lines: { data: [{ description: '1 x Estori Pro (at $49.00 / month)' }] },
+		lines: { data: [{ description: '1 x Estori Pro (at $49.00 / month)', amount: 4_900 }] },
 		billing_reason: 'subscription_cycle',
 		parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } },
 		confirmation_secret: { client_secret: 'in_1_secret_x', type: 'payment_intent' },

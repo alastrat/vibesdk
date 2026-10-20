@@ -12,13 +12,25 @@ export function invoiceSubscriptionId(invoice: StripeInvoice): string | null {
 	return typeof subscription === 'string' ? subscription : null;
 }
 
+/**
+ * What an invoice is for: its own description (a credits purchase sets one), else the line that charges the most, else
+ * its first line. A plan change lists the credit for the unused time first, so the first line alone can misdescribe it.
+ */
+function invoiceDescription(invoice: StripeInvoice): string {
+	if (invoice.description) return invoice.description;
+	const described = (invoice.lines?.data ?? []).filter((line) => line.description);
+	const charged = described.filter((line) => line.amount > 0);
+	const chosen = charged.length > 0 ? charged.reduce((best, line) => (line.amount > best.amount ? line : best)) : described[0];
+	return chosen?.description ?? FALLBACK_DESCRIPTION;
+}
+
 /** One history row; null for a draft, which Stripe hasn't finalized and the seller can't act on. */
 export function invoiceView(invoice: StripeInvoice): InvoiceView | null {
 	if (invoice.status === 'draft') return null;
 	return {
 		id: invoice.id,
 		date: invoice.created * 1000,
-		description: invoice.lines?.data[0]?.description ?? invoice.description ?? FALLBACK_DESCRIPTION,
+		description: invoiceDescription(invoice),
 		amountCents: invoice.status === 'paid' ? invoice.amount_paid : invoice.amount_due,
 		currency: invoice.currency,
 		status: invoice.status,
