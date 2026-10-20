@@ -39,3 +39,11 @@ export function useSetAnalyticsPreference() {
 		onError: (error: Error) => toast.error(error.message),
 	});
 }
+
+export function useAdminFlags() {
+	return useQuery({
+		queryKey: queryKeys.account.adminFlags(),
+		queryFn: () => unwrap(apiClient.getAdminFlags(), "Couldn't load flags"),
+		retry: false,
+	});
+}

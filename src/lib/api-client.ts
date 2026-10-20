@@ -57,6 +57,7 @@ import type{
 	PlatformStatusData,
 	RateLimitError,
 	CapabilitiesData,
+	AdminFlagsData,
 	AnalyticsPreferenceData,
 	TelemetryConfigData,
 	VaultConfigResponse,
@@ -549,6 +550,11 @@ class ApiClient {
 	/** Quiet: the settings card shows its own error. */
 	async setAnalyticsPreference(optedOut: boolean): Promise<ApiResponse<AnalyticsPreferenceData>> {
 		return this.request<AnalyticsPreferenceData>('/api/user/analytics', { method: 'PUT', body: { optedOut } }, true);
+	}
+
+	/** Every flag's value for the signed-in admin; quiet because non-admins get 403. */
+	async getAdminFlags(): Promise<ApiResponse<AdminFlagsData>> {
+		return this.request<AdminFlagsData>('/api/admin/flags', {}, true);
 	}
 
 	// ===============================

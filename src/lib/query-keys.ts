@@ -134,6 +134,8 @@ export const queryKeys = {
 		},
 		/** The user's analytics setting: never persisted, like the rest of `account`. */
 		analytics: (userId?: string | null) => [...queryKeys.account.all, 'analytics', userId ?? 'anonymous'] as const,
+		/** The flags admin view for the signed-in admin: never persisted. */
+		adminFlags: () => [...queryKeys.account.all, 'admin-flags'] as const,
 		contactRequests: {
 			admin: () => [...queryKeys.account.all, 'contact-requests', 'admin'] as const,
 		},

@@ -9,4 +9,5 @@ export function setupTelemetryRoutes(app: Hono<AppEnv>): void {
     app.get('/api/telemetry/config', setAuthLevel(AuthConfig.public), adaptController(TelemetryController, TelemetryController.config));
     app.get('/api/user/analytics', setAuthLevel(AuthConfig.authenticated), adaptController(TelemetryController, TelemetryController.getAnalyticsPreference));
     app.put('/api/user/analytics', setAuthLevel(AuthConfig.authenticated), adaptController(TelemetryController, TelemetryController.setAnalyticsPreference));
+    app.get('/api/admin/flags', setAuthLevel(AuthConfig.admin), adaptController(TelemetryController, TelemetryController.adminFlags));
 }

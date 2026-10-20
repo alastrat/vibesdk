@@ -16,6 +16,7 @@ import AdminEarlyAccessPage from './routes/admin/early-access';
 import AdminContactRequestsPage from './routes/admin/contact-requests';
 import AdminCatalogOrdersPage from './routes/admin/catalog-orders';
 import AdminCatalogOrderPage from './routes/admin/catalog-order';
+import AdminFlagsPage from './routes/admin/flags';
 import SellerOrdersPage from './routes/orders/orders';
 import SellerOrderPage from './routes/orders/order';
 import ShopperEmailsPage from './routes/emails/emails';
@@ -187,6 +188,14 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<AdminCatalogOrderPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'admin/flags',
+						element: (
+							<ProtectedRoute>
+								<AdminFlagsPage />
 							</ProtectedRoute>
 						),
 					},
