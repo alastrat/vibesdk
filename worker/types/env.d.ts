@@ -62,6 +62,8 @@ declare namespace Cloudflare {
 		BILLING?: string;
 		// Comma-separated user ids that get billing while BILLING isn't "on": the owner-only phase.
 		BILLING_USER_IDS?: string;
+		// "YYYY-MM-DD": the day plan limits start; the hourly run emails every account the week before.
+		BILLING_ENFORCEMENT_FROM?: string;
 		// JSON {"pro":"price_...","premium":"price_...","credits":"price_..."}, in the Stripe key's mode.
 		STRIPE_PRICE_IDS?: string;
 		CATALOG_ORDER_RUNNER: DurableObjectNamespace<import('../services/catalog/CatalogOrderRunner').CatalogOrderRunner>;

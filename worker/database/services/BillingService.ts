@@ -226,6 +226,35 @@ export class BillingService extends BaseService {
         return claimed.length > 0;
     }
 
+    /** Accounts that aren't deleted and have no notice under `key`, in id order. */
+    async accountsWithoutNotice(key: string, limit: number): Promise<string[]> {
+        const users = schema.users;
+        const rows = await this.database
+            .select({ id: users.id })
+            .from(users)
+            .where(
+                and(
+                    isNull(users.deletedAt),
+                    notExists(
+                        this.database
+                            .select({ userId: schema.billingNotices.userId })
+                            .from(schema.billingNotices)
+                            .where(and(eq(schema.billingNotices.userId, users.id), eq(schema.billingNotices.noticeKey, key))),
+                    ),
+                ),
+            )
+            .orderBy(users.id)
+            .limit(limit);
+        return rows.map((row) => row.id);
+    }
+
+    /** The account's lifetime count of stores started; 0 for one that has started none. */
+    async storesStartedOf(userId: string): Promise<number> {
+        const counts = schema.accountStoreCounts;
+        const [found] = await this.database.select({ started: counts.storesStarted }).from(counts).where(eq(counts.userId, userId)).limit(1);
+        return found?.started ?? 0;
+    }
+
     /**
      * Counts a new store against the account's lifetime total, and reserves its place only while the total is under
      * `cap` (null: no cap, the store is always reserved). One batch, so starts racing for the last place can't all win.

@@ -1,10 +1,11 @@
-/** Billing's scheduled runs: daily repair and settling, and the hourly renewal emails for accounts without a subscription. */
+/** Billing's scheduled runs: daily repair and settling, and the hourly notice before limits start and renewal emails for accounts without a subscription. */
 
 import { BillingService } from '../../database/services/BillingService';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { createLogger } from '../../logger';
 import { heldPeriodKey, loadAccount } from './account';
 import { applySubscription } from './events';
+import { enforcementDepsFromEnv, enforcementStartsOn, sendEnforcementNotices } from './enforcement-notice';
 import { billingAudience } from './flag';
 import { claimAndSendNotice, claimingMailFromEnv } from './notices';
 import { DAY_MS, renewalDaysOf } from './periods';
@@ -40,8 +41,20 @@ export async function runDailyBilling(env: Env, nowMs: number): Promise<void> {
 	await ledger.pruneUses(nowMs - KEEP_USES_MS);
 }
 
-/** Hourly: tells accounts without a subscription that their monthly credits renewed today, once each. */
+/** The week's notice before limits start. It goes out whatever the billing flag says, since it comes before the flag turns on. */
+async function runEnforcementNotices(env: Env, nowMs: number): Promise<void> {
+	const startsOn = enforcementStartsOn(env.BILLING_ENFORCEMENT_FROM);
+	if (startsOn === null) return;
+	try {
+		await sendEnforcementNotices(enforcementDepsFromEnv(env), startsOn, nowMs);
+	} catch (error) {
+		logger.error('Could not send the enforcement notices', { error });
+	}
+}
+
+/** Hourly: the notice before limits start, then tells accounts without a subscription that their monthly credits renewed today, once each. */
 export async function runHourlyBilling(env: Env, nowMs: number): Promise<void> {
+	await runEnforcementNotices(env, nowMs);
 	const audience = billingAudience(env);
 	if (audience !== 'everyone' && audience.length === 0) return;
 	const now = new Date(nowMs);

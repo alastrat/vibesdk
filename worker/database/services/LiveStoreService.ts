@@ -50,6 +50,11 @@ function recordsOf(text: string): StoreDomainRecord[] {
     }
 }
 
+/** Narrows a join of stores and their apps to the account's stores that are live now. */
+function liveStoresOf(userId: string) {
+    return and(eq(schema.apps.userId, userId), eq(schema.liveStores.status, 'live'));
+}
+
 export class LiveStoreService extends BaseService {
     async getByApp(appId: string): Promise<LiveStoreRow | null> {
         const row = await this.database.select().from(schema.liveStores).where(eq(schema.liveStores.appId, appId)).get();
@@ -87,9 +92,21 @@ export class LiveStoreService extends BaseService {
             .select({ live: count() })
             .from(schema.liveStores)
             .innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
-            .where(and(eq(schema.apps.userId, userId), eq(schema.liveStores.status, 'live')))
+            .where(liveStoresOf(userId))
             .get();
         return row?.live ?? 0;
+    }
+
+    /** The ids of the account's apps whose stores are live now. */
+    async liveAppsOf(userId: string): Promise<string[]> {
+        const rows = await this.database
+            .select({ appId: schema.liveStores.appId })
+            .from(schema.liveStores)
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
+            .where(liveStoresOf(userId))
+            .orderBy(asc(schema.liveStores.appId))
+            .all();
+        return rows.map((row) => row.appId);
     }
 
     async setOffline(appId: string, now: Date): Promise<void> {

@@ -34,7 +34,7 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 	};
 }
 
-/** Daily: repair, settle, expire and prune. Hourly: renewal emails for accounts without a subscription. Never throws. */
+/** Daily: repair, settle, expire and prune. Hourly: the notice before limits start, and renewal emails for accounts without a subscription. Never throws. */
 export async function runBillingSchedule(cron: string, env: Env): Promise<void> {
 	try {
 		if (cron === CATALOG_HEALTH_CRON) await runDailyBilling(env, Date.now());

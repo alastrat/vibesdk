@@ -2,6 +2,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { BillingService } from '../../database/services/BillingService';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { handleBillingEvent } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
@@ -129,5 +130,33 @@ describe('the hourly billing run', () => {
 		expect(sent).toHaveLength(0);
 		await runHourlyBilling(env(), Date.parse('2026-09-30T10:05:00Z'));
 		expect(sent).toHaveLength(1);
+	});
+
+	it('sends the enforcement notice while billing is still off, once, and not once the start date has come', async () => {
+		const now = Date.parse('2026-10-25T10:05:00Z');
+		await insertUser(db, 'u_notice');
+		const billingOff = { BILLING: undefined, BILLING_USER_IDS: undefined, BILLING_ENFORCEMENT_FROM: '2026-11-01' };
+		await runHourlyBilling(env(billingOff), now);
+		await runHourlyBilling(env(billingOff), now + 3_600_000);
+		expect(sent.filter((to) => to === 'u_notice@example.test')).toHaveLength(1);
+		expect(await db.prepare("SELECT kind FROM billing_notices WHERE user_id = 'u_notice'").all()).toMatchObject({ results: [{ kind: 'enforcement_notice' }] });
+
+		await insertUser(db, 'u_after');
+		await runHourlyBilling(env(billingOff), Date.parse('2026-11-01T00:05:00Z'));
+		expect(sent).not.toContain('u_after@example.test');
+	});
+
+	it('sends no enforcement notice when no start date is set, and still sends renewal emails when the notice fails', async () => {
+		await insertUser(db, 'u_quiet');
+		const now = Date.parse('2026-10-19T10:05:00Z');
+		await runHourlyBilling(env(), now + 2 * DAY);
+		expect(sent).not.toContain('u_quiet@example.test');
+
+		await insertUser(db, 'u_renewal', { createdAt: new Date('2026-08-21T08:00:00Z'), emailVerified: true });
+		vi.spyOn(BillingService.prototype, 'accountsWithoutNotice').mockRejectedValue(new Error('D1 is unavailable'));
+		const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		await runHourlyBilling(env({ BILLING_ENFORCEMENT_FROM: '2026-12-01' }), now + 2 * DAY);
+		expect(errorLog).toHaveBeenCalledTimes(1);
+		expect(sent).toContain('u_renewal@example.test');
 	});
 });
