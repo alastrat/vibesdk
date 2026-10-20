@@ -152,7 +152,7 @@ describe('AuthService.verifyEmail', () => {
 	it('claims the token in one statement that requires it unused and unexpired, then confirms that address', async () => {
 		const { auth, statements } = serviceWith(rowsByTable({ email_verification_tokens: tokenRow(), users: USER }));
 		const before = Math.floor(Date.now() / 1000);
-		await auth.verifyEmail('some-token');
+		expect(await auth.verifyEmail('some-token')).toBe(USER.id);
 
 		const claimIndex = statements.findIndex(isClaim);
 		expect(claimIndex).toBeGreaterThan(-1);

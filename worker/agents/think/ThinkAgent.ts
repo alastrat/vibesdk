@@ -37,6 +37,7 @@ import { resolveThinkModel, type TokenPrices } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 import { createAssetCache, inlineAgentAssets } from './agent-assets';
+import type { BuildTurnUsage } from './build-events';
 import { MODEL_RESPONSE_TIMEOUT_MS } from '../../../shared/think';
 
 /** Memory for conversation images already read from R2, so later steps skip the read. */
@@ -204,6 +205,8 @@ export class ThinkAgent extends Think<Env> {
 	private turnUsage: TurnUsage | null = null;
 	/** The current turn's step credits at its model's prices, billing on or off. */
 	private turnCredits = 0;
+	/** The current turn's steps; the host reads them when the turn ends (getTurnUsage). Null before any turn. */
+	private turnSteps: number | null = null;
 
 	private requireConfig(): ThinkAgentConfig {
 		const cfg = this.getConfig<ThinkAgentConfig>();
@@ -297,6 +300,7 @@ export class ThinkAgent extends Think<Env> {
 	}
 
 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
+		this.turnSteps = 0;
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
 		this.providerFailure = null;
@@ -390,6 +394,7 @@ export class ThinkAgent extends Think<Env> {
 	 * user input.
 	 */
 	override async beforeStep(ctx: PrepareStepContext): Promise<StepConfig | void> {
+		if (this.turnSteps !== null) this.turnSteps += 1;
 		const config = this.getConfig<ThinkAgentConfig>();
 		if (this.turnUsage?.mode === 'daily' && config) {
 			await RateLimitService.enforceLLMCallsRateLimit(
@@ -443,6 +448,11 @@ export class ThinkAgent extends Think<Env> {
 	/** RPC for the host: the credits this turn's steps cost, for every build, billing on or off. */
 	turnCreditsUsed(): number {
 		return this.turnCredits;
+	}
+
+	/** RPC for the host: the turn's steps, and the credits billing's per-step charge took for them. */
+	async getTurnUsage(): Promise<BuildTurnUsage | null> {
+		return this.turnSteps === null ? null : { steps: this.turnSteps, credits: this.turnCreditsUsed() };
 	}
 
 	/**

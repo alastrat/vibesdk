@@ -1,9 +1,11 @@
-/** What flags and person properties know about an account's plan. */
+/** An account's plan, for flags and person properties, and the person properties sent with events about it. */
 
 import type { PlanId } from '../../../shared/types/plans';
+import { AnalyticsPersonService } from '../../database/services/AnalyticsPersonService';
 import { BillingService } from '../../database/services/BillingService';
 import { PlanAdminService } from '../../database/services/PlanAdminService';
 import { resolvePlan } from '../billing/account';
+import type { PersonUpdate } from './analytics';
 
 /**
  * The plan billing's plan resolution gives from the subscription row, the grace period and the latest admin override.
@@ -17,5 +19,19 @@ export async function planOf(env: Env, userId: string): Promise<PlanId> {
 		return resolvePlan({ subscription, override, signupMs: null, nowMs: Date.now() }).plan;
 	} catch {
 		return 'basic';
+	}
+}
+
+/** The person properties to set with an event about this user; empty when they can't be read, never throwing. */
+export async function personUpdateOf(env: Env, userId: string): Promise<PersonUpdate> {
+	try {
+		const facts = await new AnalyticsPersonService(env).personFacts(userId);
+		if (!facts) return {};
+		const plan = await planOf(env, userId);
+		const update: PersonUpdate = { set: { plan, seller_level: facts.sellerLevel ?? 'none', has_live_store: facts.hasLiveStore } };
+		if (facts.createdAt) update.setOnce = { signup_date: facts.createdAt.toISOString().slice(0, 10) };
+		return update;
+	} catch {
+		return {};
 	}
 }

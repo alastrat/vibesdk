@@ -76,7 +76,7 @@ let enforceClient: MockInstance<typeof RateLimitService.enforceAuthEmailRateLimi
 let enforceResend: MockInstance<typeof RateLimitService.enforceEmailConfirmationResendRateLimit>;
 
 beforeEach(() => {
-	mockVerifyEmail.mockReset().mockResolvedValue(undefined);
+	mockVerifyEmail.mockReset().mockResolvedValue(USER.id);
 	mockResendEmailConfirmation.mockReset().mockResolvedValue(undefined);
 	mockRegister.mockReset();
 	enforceClient = vi.spyOn(RateLimitService, 'enforceAuthEmailRateLimit').mockResolvedValue(undefined);

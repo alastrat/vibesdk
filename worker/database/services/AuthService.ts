@@ -596,9 +596,9 @@ export class AuthService extends BaseService {
 
     /**
      * Confirm the address a confirmation link was sent to. The link works once, and only
-     * while that address is still the account's email.
+     * while that address is still the account's email. Answers the confirmed user's id.
      */
-    async verifyEmail(token: string): Promise<void> {
+    async verifyEmail(token: string): Promise<string> {
         const now = new Date();
         const row = await this.database
             .select({
@@ -648,6 +648,7 @@ export class AuthService extends BaseService {
             .where(and(eq(schema.users.id, user.id), eq(schema.users.email, row.email)));
 
         logger.info('Email confirmed', { userId: user.id });
+        return user.id;
     }
 
     /**
@@ -899,7 +900,7 @@ export class AuthService extends BaseService {
             enforceAllowedEmail(this.env, oauthUserInfo.email, 'oauth');
 
             // Find or create user
-            const user = await this.findOrCreateOAuthUser(provider, oauthUserInfo);
+            const { user, created } = await this.findOrCreateOAuthUser(provider, oauthUserInfo);
             
             // Create session
             const { accessToken: sessionAccessToken, session } = await this.sessionService.createSession(
@@ -918,6 +919,7 @@ export class AuthService extends BaseService {
                 sessionId: session.sessionId,
                 expiresAt: session.expiresAt,
                 redirectUrl: oauthState.redirectUri || undefined,
+                isNewUser: created,
                 // Surface raw provider tokens only for Cloudflare so the controller can
                 // best-effort auto-connect the AI Gateway in the same round-trip.
                 oauthTokens: provider === 'cloudflare' ? tokens : undefined,
@@ -950,7 +952,7 @@ export class AuthService extends BaseService {
     private async findOrCreateOAuthUser(
         provider: OAuthProvider,
         oauthUserInfo: OAuthUserInfo
-    ): Promise<schema.User> {
+    ): Promise<{ user: schema.User; created: boolean }> {
         // Fail closed unless the provider asserts the email is verified.
         if (oauthUserInfo.emailVerified !== true) {
             throw new SecurityError(
@@ -1006,7 +1008,7 @@ export class AuthService extends BaseService {
                     500
                 );
             }
-            return user;
+            return { user, created: false };
         }
 
         // An admin email is claimed only through a provider that verifies it,
@@ -1036,7 +1038,7 @@ export class AuthService extends BaseService {
                     userId: emailRow.id,
                     provider
                 });
-                return emailRow;
+                return { user: emailRow, created: false };
             }
 
             // Only a provider that verifies email itself proves who owns an unconfirmed address.
@@ -1048,14 +1050,14 @@ export class AuthService extends BaseService {
                 );
             }
 
-            return this.claimUnconfirmedAccount(emailRow, provider, oauthUserInfo);
+            return { user: await this.claimUnconfirmedAccount(emailRow, provider, oauthUserInfo), created: false };
         }
 
         // A provider sign-in that would create an account is refused; one that finds or claims an account isn't.
         if (await isFlagOn(this.env, 'signups-paused', null)) throw new SignupsPausedError();
 
         // 3. Brand-new identity: create the user and its first identity row.
-        return this.createOAuthUser(provider, oauthUserInfo);
+        return { user: await this.createOAuthUser(provider, oauthUserInfo), created: true };
     }
 
     /**

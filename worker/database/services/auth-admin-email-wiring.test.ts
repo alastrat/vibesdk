@@ -37,7 +37,9 @@ describe('OAuth sign-in of a platform admin email', () => {
 		const identityLookup = oauth.indexOf('eq(schema.userOauthIdentities.providerId, oauthUserInfo.id)');
 		expect(identityLookup).toBeGreaterThan(-1);
 		expect(identityLookup).toBeLessThan(oauth.indexOf('mayClaimEmailByOAuth('));
-		expect(oauth.indexOf('return user;')).toBeLessThan(oauth.indexOf('mayClaimEmailByOAuth('));
+		const identityReturn = oauth.indexOf('return { user, created: false };');
+		expect(identityReturn).toBeGreaterThan(-1);
+		expect(identityReturn).toBeLessThan(oauth.indexOf('mayClaimEmailByOAuth('));
 	});
 
 	it('refuses providers that do not verify email before auto-linking by email or creating a user', () => {
