@@ -12,7 +12,7 @@ import { createLogger } from '../../../logger';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { publicPlanFromSettings } from '../../../services/rate-limit/public-plan';
 import { RateLimitExceededError } from 'shared/types/errors';
-import { isBillingOn } from '../../../services/billing/flag';
+import { isFlagOn } from '../../../services/posthog/flags';
 import { loadAccount, loadCredits } from '../../../services/billing/account';
 import { billingUsage } from '../../../services/billing/usage-summary';
 
@@ -53,7 +53,7 @@ export class LimitsController extends BaseController {
 		}
 		return LimitsController.createSuccessResponse({
 			...publicPlanFromSettings(context.config.security.rateLimit),
-			billing: isBillingOn(env, context.user?.id ?? null),
+			billing: await isFlagOn(env, 'billing', context.user?.id ?? null),
 		});
 	}
 
@@ -74,7 +74,7 @@ export class LimitsController extends BaseController {
 
 		try {
 			// With billing on, the account's credits are the limit, whatever Cloudflare Connect says.
-			if (isBillingOn(env, user.id)) {
+			if (await isFlagOn(env, 'billing', user.id)) {
 				const [account, { gateway }] = await Promise.all([loadAccount(env, user.id), aiGatewayState(env, user.id)]);
 				return LimitsController.createSuccessResponse({
 					cloudflareConnectEnabled: false,

@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { BringInOutcome, DraftsSnapshot } from '@space-do/space';
+import { STORE_DRAFTS_PAUSED_MESSAGE } from '../../../shared/types/drafts';
 import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../../../src/routes/copy-rules';
 import { createDraftTools } from './draft-tools';
 import type { SpaceWorkspaceStub } from './space-workspace-ops';
@@ -36,7 +37,7 @@ function harness(overrides: Partial<Record<string, unknown>> = {}) {
 		cancelBringingInLiveChanges: async () => (calls.push('cancel'), { cancelled: true }),
 		...overrides,
 	} as unknown as SpaceWorkspaceStub;
-	const tools = createDraftTools({ getStub: () => stub });
+	const tools = createDraftTools({ getStub: () => stub, draftsPaused: async () => false });
 	const run = async (name: keyof typeof tools, args: Record<string, unknown> = {}) =>
 		JSON.parse(await (tools[name].execute as unknown as Execute)(args, { toolCallId: 'call_1', messages: [] }));
 	return { calls, run };
@@ -56,7 +57,7 @@ describe('draft tools', () => {
 	it('says to edit the draft the AI is already in, and to start a quick fix only from Main', async () => {
 		const rule = /already editing another draft/i;
 		const skill = SKILL.replace(/\s+/g, ' ');
-		const description = createDraftTools({ getStub: () => ({}) as SpaceWorkspaceStub }).create_draft.description ?? '';
+		const description = createDraftTools({ getStub: () => ({}) as SpaceWorkspaceStub, draftsPaused: async () => false }).create_draft.description ?? '';
 		expect(description).toMatch(rule);
 		expect(description).not.toMatch(GIT_WORDS);
 		expect(skill).toMatch(rule);
@@ -67,7 +68,7 @@ describe('draft tools', () => {
 
 	it('tells the AI to change drafts in a step of its own, since a file edit beside it can land in either draft', () => {
 		const sentence = 'Call this on its own, never in the same step as file edits.';
-		const tools = createDraftTools({ getStub: () => ({}) as SpaceWorkspaceStub });
+		const tools = createDraftTools({ getStub: () => ({}) as SpaceWorkspaceStub, draftsPaused: async () => false });
 		for (const name of ['create_draft', 'switch_draft', 'bring_in_live_changes'] as const) {
 			expect(tools[name].description, name).toContain(sentence);
 			expect(tools[name].description, name).not.toMatch(GIT_WORDS);
@@ -202,6 +203,21 @@ describe('draft tools', () => {
 		expect(result.activeDraft).toMatchObject({ id: 'main' });
 	});
 
+	it('refuses to start a draft while starting drafts is paused, touching nothing', async () => {
+		const createDraft = vi.fn();
+		const tools = createDraftTools({ getStub: () => ({ createDraft }) as unknown as SpaceWorkspaceStub, draftsPaused: async () => true });
+		const answer = await tools.create_draft.execute?.({ name: 'Typo fix', from: 'live' }, { toolCallId: 't1', messages: [] });
+		expect(String(answer)).toContain(STORE_DRAFTS_PAUSED_MESSAGE);
+		expect(createDraft).not.toHaveBeenCalled();
+	});
+
+	it('keeps the drafts that exist working while starting drafts is paused', async () => {
+		const stub = { listDrafts: async () => DRAFTS, activateDraft: async (id: string) => ({ draft: { id, name: 'Typo fix', branch: `draft-${id}` }, previewStale: false }) } as unknown as SpaceWorkspaceStub;
+		const tools = createDraftTools({ getStub: () => stub, draftsPaused: async () => true });
+		const switched = await (tools.switch_draft.execute as unknown as Execute)({ draft: 'Typo fix' }, { toolCallId: 't1', messages: [] });
+		expect(JSON.parse(switched)).toEqual({ activeDraft: { id: 'k3x9q2mf', name: 'Typo fix', branch: 'draft-k3x9q2mf' } });
+	});
+
 	it('cancels bringing changes in', async () => {
 		const { calls, run } = harness();
 		expect(await run('cancel_bringing_in_live_changes')).toEqual({ cancelled: true });
@@ -214,7 +230,7 @@ describe('the store drafts skill and its wiring', () => {
 		expect(Object.values(skills)[0]).toContain("'store-drafts': STORE_DRAFTS");
 		expect(SKILL).toMatch(/^---\nname: store-drafts\ndescription: .+\n---/);
 		const agent = Object.values(agents)[0] ?? '';
-		expect(agent).toContain('...createDraftTools({ getStub: () => this.getSpaceStub() })');
+		expect(agent).toContain("...createDraftTools({ getStub: () => this.getSpaceStub(), draftsPaused: () => isFlagOn(this.env, 'store-drafts-paused', userId) })");
 		expect(agent.indexOf('deploy_space: createDeploySpaceTool')).toBeLessThan(agent.indexOf('...createDraftTools('));
 	});
 

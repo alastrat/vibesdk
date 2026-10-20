@@ -30,7 +30,7 @@ import { getUserConfigurableSettings } from '../../config';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
-import { isBillingOn } from '../../services/billing/flag';
+import { isFlagOn } from '../../services/posthog/flags';
 import { chargeStep, loadTurnAccount, meteringDepsFromEnv, type TurnAccount } from '../../services/billing/metering';
 import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
 import { resolveThinkModel, type TokenPrices } from './model-config';
@@ -306,7 +306,7 @@ export class ThinkAgent extends Think<Env> {
 		const model = resolveThinkModel(turnModelId);
 		const pricing: TurnPricing = { turnId: crypto.randomUUID(), model: model.id, prices: model.prices, typical: model.creditsPerStep };
 		this.turnUsage = { ...pricing, mode: 'unmetered' };
-		if (config && isBillingOn(this.env, config.userId)) {
+		if (config && (await isFlagOn(this.env, 'billing', config.userId))) {
 			// A billed turn is billed even if its account doesn't load now: each step loads it again.
 			this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, account: await loadTurnAccount(this.env, config.userId) };
 		} else if (config) {
@@ -340,6 +340,7 @@ export class ThinkAgent extends Think<Env> {
 
 	override getTools(): ToolSet {
 		const ops = createSpaceWorkspaceOps(() => this.getSpaceStub());
+		const userId = this.getConfig<ThinkAgentConfig>()?.userId ?? null;
 		// Same names as Think's built-in workspace tools, so these SpaceDO-backed
 		// versions win the tool-merge. Bash is disabled via `workspaceBash`.
 		return {
@@ -359,7 +360,7 @@ export class ThinkAgent extends Think<Env> {
 				// Commit + deploy the SpaceDO branch so the preview rebuilds.
 				deploy_space: createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
 				// Drafts: list, start and switch, and bring in the live store's changes.
-				...createDraftTools({ getStub: () => this.getSpaceStub() }),
+				...createDraftTools({ getStub: () => this.getSpaceStub(), draftsPaused: () => isFlagOn(this.env, 'store-drafts-paused', userId) }),
 				// Client-side debugging via a real headless browser.
 				// Reads the preview URL when it runs, so a draft switch earlier in the turn is followed.
 				get_browser_console_logs: createBrowserConsoleLogsTool({
@@ -368,8 +369,8 @@ export class ThinkAgent extends Think<Env> {
 				}),
 			}),
 			// Estori's catalog, for stores that sell catalog products.
-			...createCatalogTools(catalogToolDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
-			...createPaymentsSetupTool(paymentsSetupDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
+			...createCatalogTools(catalogToolDepsFromEnv(this.env, userId)),
+			...createPaymentsSetupTool(paymentsSetupDepsFromEnv(this.env, userId)),
 			// Set the project's short display title (host observes the output).
 			set_title: createSetTitleTool(),
 			// Ask the user clarifying questions via a frontend popup.

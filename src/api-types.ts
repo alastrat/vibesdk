@@ -233,7 +233,7 @@ export type {
   DraftSummary,
   DraftsSnapshot,
 } from 'worker/api/controllers/drafts/types';
-export { MAIN_DRAFT_ID, DRAFT_NAME_MAX_LENGTH, DRAFT_LIMIT } from '../shared/types/drafts.js';
+export { MAIN_DRAFT_ID, DRAFT_NAME_MAX_LENGTH, DRAFT_LIMIT, STORE_DRAFTS_PAUSED_MESSAGE } from '../shared/types/drafts.js';
 export type {
 	PaidPlanId,
 	PlanAccount,
@@ -321,7 +321,7 @@ export type {
 	CatalogOrderStatus,
 	ShippingAddress,
 } from '../shared/types/catalog';
-export { ADMIN_CATALOG_ORDERS_PATH } from '../shared/types/catalog';
+export { ADMIN_CATALOG_ORDERS_PATH, CATALOG_PAUSED_MESSAGE } from '../shared/types/catalog';
 
 export type {
 	AdminSalesData,

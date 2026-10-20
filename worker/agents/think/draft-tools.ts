@@ -6,6 +6,7 @@
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
 import type { ActiveDraft, BringInOutcome, DraftSummary } from '@space-do/space';
+import { STORE_DRAFTS_PAUSED_MESSAGE } from '../../../shared/types/drafts';
 import { withDurableObjectResetRetry, type SpaceWorkspaceStub } from './space-workspace-ops';
 
 type GetStub = () => SpaceWorkspaceStub;
@@ -114,8 +115,9 @@ async function activate(getStub: GetStub, id: string): Promise<{ activeDraft: Ac
 	}
 }
 
-export function createDraftTools(opts: { getStub: GetStub }): Record<DraftToolName, Tool> {
-	const { getStub } = opts;
+/** `draftsPaused` answers whether starting new drafts is paused; drafts that exist keep working. */
+export function createDraftTools(opts: { getStub: GetStub; draftsPaused: () => Promise<boolean> }): Record<DraftToolName, Tool> {
+	const { getStub, draftsPaused } = opts;
 	return {
 		list_drafts: tool({
 			description: "List the store's drafts: versions of the store, each with its own preview. Shows which one you are editing and how each compares with the live store.",
@@ -141,6 +143,7 @@ export function createDraftTools(opts: { getStub: GetStub }): Record<DraftToolNa
 				from: z.enum(['main', 'live']).describe('Where the draft starts.'),
 			}),
 			execute: async (args: { name: string; from: 'main' | 'live' }) => {
+				if (await draftsPaused()) return `${STORE_DRAFTS_PAUSED_MESSAGE} Keep working in the current draft.`;
 				const created = await withDurableObjectResetRetry(getStub, (stub) => stub.createDraft(args.name, args.from));
 				if ('error' in created) return JSON.stringify(created);
 				return JSON.stringify(await activate(getStub, created.id));

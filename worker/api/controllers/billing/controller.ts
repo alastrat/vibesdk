@@ -17,7 +17,7 @@ import {
 	type BillingActionDeps,
 	type BillingActionResult,
 } from '../../../services/billing/actions';
-import { isBillingOn } from '../../../services/billing/flag';
+import { isFlagOn } from '../../../services/posthog/flags';
 import { billingView } from '../../../services/billing/view';
 import { createLogger } from '../../../logger';
 import type { AuthUser } from '../../../types/auth-types';
@@ -81,7 +81,7 @@ export class BillingController extends BaseController {
 	private static async act<T>(request: Request, env: Env, context: RouteContext, what: string, action: BillingAction<T>): Promise<ControllerResponse<ApiResponse<T>>> {
 		const user = context.user;
 		if (!user) return this.createErrorResponse<T>('Authentication required', 401);
-		if (!isBillingOn(env, user.id)) return this.createErrorResponse<T>(BILLING_NOT_OPEN_MESSAGE, 403);
+		if (!(await isFlagOn(env, 'billing', user.id))) return this.createErrorResponse<T>(BILLING_NOT_OPEN_MESSAGE, 403);
 		try {
 			const result = await action(billingActionDepsFromEnv(env, request), user);
 			if (result.ok) return this.createSuccessResponse(result.value);

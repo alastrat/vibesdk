@@ -10,11 +10,15 @@ import { billingAudience } from './flag';
 import { claimAndSendNotice, claimingMailFromEnv } from './notices';
 import { DAY_MS, renewalDaysOf } from './periods';
 import { billingEventDepsFromEnv } from './wiring';
+import { posthogConfig } from '../posthog/config';
+import { flagOverridesOf } from '../posthog/flags';
 
 const logger = createLogger('BillingJobs');
 
 const SETTLE_PER_RUN = 500;
 const RENEWALS_PER_RUN = 100;
+/** Renewing accounts read per run: more than are emailed, so accounts whose billing flag is off don't crowd out the rest. */
+const RENEWALS_SCANNED_PER_RUN = 1_000;
 const KEEP_USES_MS = 90 * DAY_MS;
 
 /** Daily: re-read suspicious subscriptions, settle and close credit periods, expire purchases, forget old usage. */
@@ -52,24 +56,37 @@ async function runEnforcementNotices(env: Env, nowMs: number): Promise<void> {
 	}
 }
 
+/**
+ * The accounts billing's switches name, while the switches are the whole billing flag; null when PostHog or an
+ * override can put more accounts on billing (or BILLING=on puts everyone on it), so each account's flag decides.
+ */
+function renewalAudience(env: Env): readonly string[] | null {
+	if (posthogConfig(env) || flagOverridesOf(env).billing) return null;
+	const audience = billingAudience(env);
+	return audience === 'everyone' ? null : audience;
+}
+
 /** Hourly: the notice before limits start, then tells accounts without a subscription that their monthly credits renewed today, once each. */
 export async function runHourlyBilling(env: Env, nowMs: number): Promise<void> {
 	await runEnforcementNotices(env, nowMs);
-	const audience = billingAudience(env);
-	if (audience !== 'everyone' && audience.length === 0) return;
+	const userIds = renewalAudience(env);
+	if (userIds?.length === 0) return;
 	const now = new Date(nowMs);
 	const dayStartMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
 	const renewing = await new BillingService(env).accountsRenewing({
 		dayStartMs,
 		days: renewalDaysOf(nowMs),
-		userIds: audience === 'everyone' ? null : audience,
-		limit: RENEWALS_PER_RUN,
+		userIds,
+		limit: RENEWALS_SCANNED_PER_RUN,
 	});
 	const mail = claimingMailFromEnv(env);
+	let attempted = 0;
 	for (const userId of renewing) {
+		if (attempted >= RENEWALS_PER_RUN) break;
 		try {
 			const account = await loadAccount(env, userId, nowMs);
-			if (account.source === 'subscription' || account.period.startMs !== dayStartMs) continue;
+			if (!account.billing || account.source === 'subscription' || account.period.startMs !== dayStartMs) continue;
+			attempted += 1;
 			await claimAndSendNotice(mail, userId, {
 				key: `credits_renewed:${account.period.key}`,
 				email: { kind: 'credits_renewed', credits: account.limits.aiCredits, renewsAt: account.period.endMs },

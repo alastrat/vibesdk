@@ -7,7 +7,7 @@ import type { CreditUseSource } from '../../../shared/types/billing';
 import { loadAccount, loadCredits, type BillingAccount } from './account';
 import { creditNoticeDepsFromEnv, noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
 import type { CreditBalance, LedgerPeriod, PeriodState } from './credit-ledger';
-import { isBillingOn } from './flag';
+import { isFlagOn } from '../posthog/flags';
 import { legacyCallCredits, type StepUsage } from './step-credits';
 
 export type CreditCheck = { billing: false } | { billing: true; refusal: PlanLimitRefusal | null };
@@ -58,7 +58,7 @@ export function creditRefusal(account: BillingAccount, balance: CreditBalance): 
 
 /** Before a turn: some credit must be left. A started turn always finishes; its overrun is settled later. */
 export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
-	if (!isBillingOn(env, userId)) return { billing: false };
+	if (!(await isFlagOn(env, 'billing', userId))) return { billing: false };
 	const account = await loadAccount(env, userId, nowMs);
 	return { billing: true, refusal: creditRefusal(account, await loadCredits(env, account)) };
 }
@@ -109,7 +109,7 @@ export function meteringDepsFromEnv(env: Env): MeteringDeps {
  * is off, leaving the call to the daily counter. It never refuses: the turn's check came first.
  */
 export async function chargeLegacyCall(env: Env, input: { userId: string; model: string; creditCost: number }): Promise<boolean> {
-	if (!isBillingOn(env, input.userId)) return false;
+	if (!(await isFlagOn(env, 'billing', input.userId))) return false;
 	const credits = legacyCallCredits(input.creditCost);
 	if (credits <= 0) return true;
 	const account = await loadTurnAccount(env, input.userId);

@@ -7,6 +7,7 @@ import { CreditLedgerService } from '../../database/services/CreditLedgerService
 import { handleBillingEvent } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
 import { billingEventDepsFromEnv } from './wiring';
+import { FLAGS_URL } from '../posthog/flags';
 
 let db: D1Database;
 const DAY = 86_400_000;
@@ -158,6 +159,29 @@ describe('the hourly billing run', () => {
 		expect(sent).toHaveLength(0);
 		await runHourlyBilling(env(), Date.parse('2026-09-30T10:05:00Z'));
 		expect(sent).toHaveLength(1);
+	});
+
+	it("with PostHog, tells the accounts its billing flag is on for, beside the switches' accounts, and no one else", async () => {
+		const now = Date.parse('2026-10-23T10:05:00Z');
+		const signedUp = new Date('2026-09-23T08:00:00Z');
+		for (const id of ['u_ph_on', 'u_ph_off', 'u_ph_listed']) await insertUser(db, id, { createdAt: signedUp, emailVerified: true });
+		const asked: string[] = [];
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+			if (String(input) !== FLAGS_URL) throw new Error(`Unexpected fetch: ${String(input)}`);
+			const distinctId = (JSON.parse(String(init?.body)) as { distinct_id: string }).distinct_id;
+			asked.push(distinctId);
+			return Response.json({ flags: distinctId === 'u_ph_on' ? { billing: { enabled: true } } : {} });
+		});
+		await runHourlyBilling(env({ BILLING: undefined, BILLING_USER_IDS: 'u_ph_listed', POSTHOG_PROJECT_KEY: 'phc_test' }), now);
+		expect([...sent].sort()).toEqual(['u_ph_listed@example.test', 'u_ph_on@example.test']);
+		expect(asked).toContain('u_ph_off');
+	});
+
+	it('outside production, tells the accounts an override puts on billing, without PostHog', async () => {
+		const now = Date.parse('2026-10-24T10:05:00Z');
+		await insertUser(db, 'u_override', { createdAt: new Date('2026-09-24T08:00:00Z'), emailVerified: true });
+		await runHourlyBilling(env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else', ENVIRONMENT: 'dev', FEATURE_FLAG_OVERRIDES: 'billing=on' }), now);
+		expect(sent).toEqual(['u_override@example.test']);
 	});
 
 	it('sends the enforcement notice while billing is still off, once, and not once the start date has come', async () => {
