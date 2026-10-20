@@ -35,10 +35,11 @@ bun scripts/stripe-billing-scenarios.ts
 | 4 | Premium to Pro at renewal | Creates the schedule as the app does; then moves the clock past the period end | `pendingPlan: pro` with Premium kept; then `plan: pro`, `pendingPlan: null` |
 | 5 | Failed renewal, grace, new card | Sets the card that attaches and then declines (4000 0000 0000 0341) as default, moves past the renewal, then 8 more days; sets the Visa and pays the open invoice | `status: past_due` with the plan kept, no monthly credits, and `graceEndsAt` the period start plus 7 days; then `status: active` with the plan and its credits back |
 | 6 | 3-D Secure at checkout | Prints a reminder | By eye: subscribe with 4000 0025 0000 3155 and complete the challenge |
-| 7 | Cancel at the period end | `cancel_at_period_end=true` | `cancelAtPeriodEnd: true`, the plan kept |
+| 7 | Cancel at the period end | Cancels as the billing page does: releases any schedule still on the subscription, then `cancel_at_period_end=true` | `cancelAtPeriodEnd: true`, the plan kept |
 | 8 | Resume before the end | `cancel_at_period_end=false` | `cancelAtPeriodEnd: false` |
 | 9 | An expired checkout | Creates an extra-credits Checkout Session with the account's metadata, then expires it | No new purchase |
 | 10 | Extra credits bought, then refunded | Moves the account to Premium, asks you to buy 5,000 credits on the billing page with 4242 4242 4242 4242, waits for the purchase, then refunds its payment in full | `purchasedLeft` up by 5,000; then back to what it was |
+| 11 | Cancel after a scheduled move to Pro | Scenario 4 (Premium, then Pro scheduled and the clock past the renewal), then cancels as in scenario 7. The schedule stays on the subscription for the month after the move, and Stripe refuses to cancel a subscription a schedule manages, so the cancel must release it first | `plan: pro`, `cancelAtPeriodEnd: true`, `status: active` |
 
 Notes:
 - Test clocks move Stripe's time, not Estori's. Scenario 5 therefore checks the grace Estori works out from the failed renewal, and does not wait for the fall to Basic on day 8. That fall, and the plan returning when the invoice is paid, are covered on real SQL by `worker/services/billing/account.test.ts` and `worker/api/controllers/payments/webhook-billing.sql.test.ts`.

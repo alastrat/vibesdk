@@ -22,8 +22,8 @@ describe('the Stripe billing scenarios', () => {
 		expect(() => readScenarioConfig({ ...ENV, ESTORI_ADMIN_COOKIE: '' })).toThrow('Set ESTORI_ADMIN_COOKIE');
 	});
 
-	it("covers the spec's ten scenarios, with 3-D Secure by eye", () => {
-		expect(SCENARIOS.map((scenario) => scenario.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+	it("covers the spec's ten scenarios and a cancel after a scheduled move, with 3-D Secure by eye", () => {
+		expect(SCENARIOS.map((scenario) => scenario.id)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
 		expect(SCENARIOS.filter((scenario) => scenario.byEye).map((scenario) => scenario.id)).toEqual([6]);
 	});
 
@@ -39,6 +39,11 @@ const FAST: Timing = { view: { tries: 2, delayMs: 0 }, clock: { tries: 2, delayM
 
 type PlanName = 'basic' | 'pro' | 'premium';
 
+/** A Stripe error answer. */
+class Refusal {
+	constructor(readonly message: string) {}
+}
+
 /** Stripe's test clocks and Estori's admin billing view, reduced to what the scenarios read and change. */
 class FakeWorld {
 	calls: string[] = [];
@@ -48,6 +53,8 @@ class FakeWorld {
 	periodEnd = 0;
 	cancelAtPeriodEnd = false;
 	pendingPlan: 'pro' | null = null;
+	/** A schedule on the subscription: it stays through its last phase, after the move it made, and releases at the renewal after. */
+	scheduled = false;
 	card = 'pm_visa';
 	subscribed = false;
 	clockDeleted = false;
@@ -73,6 +80,11 @@ class FakeWorld {
 		};
 	}
 
+	private schedule() {
+		const phase = { start_date: this.periodStart / 1000, end_date: this.periodEnd / 1000, items: [{ price: `price_${this.plan}` }] };
+		return { id: 'sched_1', status: 'active', subscription: 'sub_1', current_phase: phase, phases: [phase] };
+	}
+
 	private subscription() {
 		const price = { id: `price_${this.plan}`, metadata: null };
 		return {
@@ -83,7 +95,7 @@ class FakeWorld {
 			cancel_at_period_end: this.cancelAtPeriodEnd,
 			cancel_at: null,
 			metadata: {},
-			schedule: null,
+			schedule: this.scheduled ? this.schedule() : null,
 			items: { data: [{ id: 'si_1', price, current_period_start: this.periodStart / 1000, current_period_end: this.periodEnd / 1000 }] },
 		};
 	}
@@ -92,6 +104,7 @@ class FakeWorld {
 		this.periodStart = this.periodEnd;
 		this.periodEnd += 30 * DAY;
 		if (this.pendingPlan) this.plan = this.pendingPlan;
+		else this.scheduled = false;
 		this.pendingPlan = null;
 		this.status = this.card === 'pm_fail' ? 'past_due' : 'active';
 	}
@@ -132,18 +145,29 @@ class FakeWorld {
 		if (path === '/subscriptions/sub_1' && method === 'GET') return this.subscription();
 		if (path === '/subscriptions/sub_1' && method === 'DELETE') {
 			this.subscribed = false;
+			this.scheduled = false;
 			return this.subscription();
 		}
 		if (path === '/subscriptions/sub_1') {
+			if (params.has('cancel_at_period_end') && this.scheduled) {
+				return new Refusal('The subscription is managed by the subscription schedule `sched_1`, and updating any cancelation behavior directly is not allowed. Please update the schedule instead.');
+			}
 			if (params.has('items[0][price]')) this.plan = planOfPrice(params.get('items[0][price]'));
 			if (params.has('cancel_at_period_end')) this.cancelAtPeriodEnd = params.get('cancel_at_period_end') === 'true';
 			return this.subscription();
 		}
-		const phase = { start_date: this.periodStart / 1000, end_date: this.periodEnd / 1000, items: [{ price: `price_${this.plan}` }] };
-		if (path === '/subscription_schedules') return { id: 'sched_1', status: 'active', subscription: 'sub_1', current_phase: phase, phases: [phase] };
+		if (path === '/subscription_schedules') {
+			this.scheduled = true;
+			return this.schedule();
+		}
+		if (path === '/subscription_schedules/sched_1/release') {
+			this.scheduled = false;
+			this.pendingPlan = null;
+			return this.schedule();
+		}
 		if (path === '/subscription_schedules/sched_1') {
-			this.pendingPlan = 'pro';
-			return { id: 'sched_1', status: 'active', subscription: 'sub_1', current_phase: phase, phases: [phase] };
+			if (method === 'POST') this.pendingPlan = 'pro';
+			return this.schedule();
 		}
 		if (path === '/invoices') return { data: this.status === 'past_due' ? [{ id: 'in_1' }] : [] };
 		if (path === '/invoices/in_1/pay') {
@@ -163,7 +187,9 @@ function serve(world: FakeWorld): { estoriCalls: Array<{ method: string; path: s
 		if (url.host === 'api.stripe.com') {
 			expect(headers.get('Stripe-Version')).toBeTruthy();
 			const params = new URLSearchParams(method === 'GET' ? url.search : String(init?.body ?? ''));
-			return Response.json(world.stripe(method, url.pathname.replace('/v1', ''), params));
+			const answer = world.stripe(method, url.pathname.replace('/v1', ''), params);
+			if (answer instanceof Refusal) return Response.json({ error: { message: answer.message, type: 'invalid_request_error' } }, { status: 400 });
+			return Response.json(answer);
 		}
 		estoriCalls.push({ method, path: url.pathname, headers, body: String(init?.body ?? '') });
 		return Response.json({ success: true, data: world.view() });
@@ -209,6 +235,20 @@ describe('running the scenarios', () => {
 		expect(await runScenarios(CONFIG, new Set([4]), (line) => lines.push(line), FAST)).toBe(true);
 		expect(lines).toEqual(['PASS 4 Premium to Pro at renewal']);
 		expect(world.calls).toContain('POST /subscriptions');
+	});
+
+	it('cancels after a scheduled move to Pro took effect, releasing the schedule Stripe keeps on the subscription first', async () => {
+		const world = new FakeWorld();
+		serve(world);
+		const lines: string[] = [];
+		const passed = await runScenarios(CONFIG, new Set([11]), (line) => lines.push(line), FAST);
+		expect(lines).toEqual(['PASS 11 Cancel after a scheduled move to Pro']);
+		expect(passed).toBe(true);
+		const release = world.calls.indexOf('POST /subscription_schedules/sched_1/release');
+		expect(release).toBeGreaterThan(world.calls.indexOf('POST /subscription_schedules/sched_1'));
+		expect(world.calls.slice(release)).toContain('POST /subscriptions/sub_1');
+		expect(world.plan).toBe('pro');
+		expect(world.cancelAtPeriodEnd).toBe(true);
 	});
 
 	it('reports what Estori showed instead of what was expected, still cleans up, and fails the run', async () => {

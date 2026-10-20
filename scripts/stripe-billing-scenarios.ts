@@ -9,6 +9,7 @@ import { CHECKOUT_KIND_CREDITS, type AdminBillingView } from '../shared/types/bi
 import { EXTRA_CREDITS, GRACE_PERIOD_DAYS, PLAN_LIMITS } from '../shared/types/plans';
 import { DAY_MS } from '../worker/services/billing/periods';
 import type { StripePriceIds } from '../worker/services/billing/prices';
+import { cancelAtPeriodEndReleasingSchedule } from '../worker/services/billing/schedules';
 import { createStripeClient, type StripeClient, type StripeCustomer, type StripeSubscription } from '../worker/services/payments/stripe-client';
 import { modeOfKey, stripeCaller, type StripeCall } from './stripe-api';
 import { BILLING_LOOKUP_KEYS } from './stripe-billing-setup';
@@ -318,8 +319,11 @@ async function failedRenewal(ctx: Context): Promise<void> {
 	);
 }
 
+/** Cancels as the billing page does, releasing a schedule Stripe still has on the subscription first. */
 async function requestCancel(ctx: Context): Promise<AdminBillingView> {
-	await ctx.client.cancelAtPeriodEnd(subscriptionIdOf(ctx), keyFor(ctx, 'cancel'));
+	if (!(await cancelAtPeriodEndReleasingSchedule(ctx.client, subscriptionIdOf(ctx), keyFor(ctx, 'cancel')))) {
+		throw new Error('A subscription schedule is still on the subscription after its release');
+	}
 	return expectView(ctx, (view) => differences([['cancelAtPeriodEnd', view.cancelAtPeriodEnd, true]]));
 }
 
@@ -329,6 +333,17 @@ async function cancelAtPeriodEnd(ctx: Context): Promise<void> {
 	const after = await requestCancel(ctx);
 	const problem = differences([
 		['plan', after.plan, before.plan],
+		['status', after.status, 'active'],
+	]);
+	if (problem) throw new Error(problem);
+}
+
+/** Premium to Pro at renewal, then a cancel while the schedule that made the move is still on the subscription. */
+async function cancelAfterMoveToPro(ctx: Context): Promise<void> {
+	await premiumToProAtRenewal(ctx);
+	const after = await requestCancel(ctx);
+	const problem = differences([
+		['plan', after.plan, 'pro'],
 		['status', after.status, 'active'],
 	]);
 	if (problem) throw new Error(problem);
@@ -401,6 +416,7 @@ const DEFINITIONS: readonly ScenarioDefinition[] = [
 	{ id: 8, name: 'Resume before the end', byEye: false, run: resumeBeforeEnd },
 	{ id: 9, name: 'An expired checkout', byEye: false, run: expiredCheckout },
 	{ id: 10, name: 'Extra credits bought, then refunded', byEye: false, run: extraCredits },
+	{ id: 11, name: 'Cancel after a scheduled move to Pro', byEye: false, run: cancelAfterMoveToPro },
 ];
 
 export const SCENARIOS: ReadonlyArray<{ id: number; name: string; byEye: boolean }> = DEFINITIONS.map(({ id, name, byEye }) => ({ id, name, byEye }));

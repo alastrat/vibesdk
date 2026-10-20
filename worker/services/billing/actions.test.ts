@@ -106,6 +106,8 @@ function fake(
 				if (!state.stuck && state.schedule === id) state.schedule = null;
 			},
 			cancelAtPeriodEnd: async (id) => {
+				// Stripe refuses to end a subscription a schedule still manages.
+				if (state.schedule) throw new StripeApiError(`The subscription is managed by the subscription schedule \`${state.schedule}\``, 400, null, 'invalid_request_error');
 				calls.push(`cancel:${id}`);
 				return SUBSCRIPTION;
 			},
@@ -227,13 +229,23 @@ describe('cancelling, keeping the plan, the portal and extra credits', () => {
 		const warnings = quietWarnings();
 		const { deps, calls } = fake({ row: row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }), schedule: 'sub_sched_1' });
 		expect(await cancelPlan(deps, 'u1')).toMatchObject({ ok: true });
-		expect(calls).toEqual(['release:sub_sched_1', 'read:sub_1', 'cancel:sub_1']);
+		expect(calls).toEqual(['read:sub_1', 'release:sub_sched_1', 'read:sub_1', 'cancel:sub_1']);
 		expect(await cancelPlan(fake({ row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toEqual({ ok: false, status: 409, message: 'Pro already ends on November 5.' });
 		expect(await cancelPlan(fake().deps, 'u1')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noPlan });
 		const stuck = fake({ row: row({ stripeScheduleId: 'sub_sched_1' }), schedule: 'sub_sched_1', stuck: true });
 		expect(await cancelPlan(stuck.deps, 'u1')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
-		expect(stuck.calls).toEqual(['release:sub_sched_1', 'read:sub_1']);
+		expect(stuck.calls).toEqual(['read:sub_1', 'release:sub_sched_1', 'read:sub_1']);
 		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+
+	it('releases a schedule still attached in its last phase, which the row no longer names, before cancelling', async () => {
+		quietWarnings();
+		const { deps, calls } = fake({ row: row({ plan: 'pro', currentPeriodStart: new Date('2026-11-05T10:00:00Z'), currentPeriodEnd: new Date('2026-12-05T10:00:00Z') }), schedule: 'sub_sched_1' });
+		expect(await cancelPlan(deps, 'u1')).toEqual({ ok: true, value: { requested: true } });
+		expect(calls).toEqual(['read:sub_1', 'release:sub_sched_1', 'read:sub_1', 'cancel:sub_1']);
+		const unscheduled = fake({ row: row() });
+		expect(await cancelPlan(unscheduled.deps, 'u1')).toMatchObject({ ok: true });
+		expect(unscheduled.calls).toEqual(['read:sub_1', 'cancel:sub_1']);
 	});
 
 	it('keeps the plan only when it was set to end, and opens the portal once there are billing details', async () => {

@@ -13,6 +13,7 @@ import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config
 import { idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
+import { cancelAtPeriodEndReleasingSchedule, pendingScheduleId, releaseSchedule } from './schedules';
 
 const logger = createLogger('BillingActions');
 
@@ -123,27 +124,6 @@ function checkoutStarted(session: StripeCheckoutSession): BillingActionResult<Ch
 	return session.url ? ok({ url: session.url, sessionId: session.id }) : STRIPE_FAILED;
 }
 
-/** The schedule still governing the subscription, if any; a released, completed or cancelled one no longer does. */
-function pendingScheduleId(subscription: StripeSubscription): string | null {
-	const { schedule } = subscription;
-	if (schedule === null) return null;
-	if (typeof schedule === 'string') return schedule;
-	return schedule.status === 'active' || schedule.status === 'not_started' ? schedule.id : null;
-}
-
-/**
- * Drops a pending plan change and reads the subscription back. The release call counts every refusal as already
- * released, so only the fresh read shows it worked; null when a schedule still governs the subscription.
- */
-async function releaseSchedule(stripe: BillingStripe, subscriptionId: string, scheduleId: string): Promise<StripeSubscription | null> {
-	await stripe.releaseSubscriptionSchedule(scheduleId);
-	const fresh = await stripe.retrieveSubscription(subscriptionId);
-	const still = pendingScheduleId(fresh);
-	if (still === null) return fresh;
-	logger.warn('A subscription schedule is still attached after its release', { subscriptionId, scheduleId, still });
-	return null;
-}
-
 function endsOn(row: SubscriptionRecord): string {
 	return formatBillingDate(row.currentPeriodEnd.getTime());
 }
@@ -214,7 +194,7 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 	});
 }
 
-/** Ends the plan at the period's end, dropping a pending move first. */
+/** Ends the plan at the period's end, releasing whatever schedule Stripe still has on it first. */
 export async function cancelPlan(deps: BillingActionDeps, userId: string): Promise<BillingActionResult<BillingChangeRequested>> {
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
@@ -223,9 +203,8 @@ export async function cancelPlan(deps: BillingActionDeps, userId: string): Promi
 	if (row.cancelAtPeriodEnd) return fail(409, `${planName(row.plan)} already ends on ${endsOn(row)}.`);
 	const { stripe } = setup;
 	return askStripe(async () => {
-		if (row.stripeScheduleId && !(await releaseSchedule(stripe, row.stripeSubscriptionId, row.stripeScheduleId))) return STRIPE_FAILED;
-		await stripe.cancelAtPeriodEnd(row.stripeSubscriptionId, idempotencyKey(deps, 'cancel', userId, [rowVersion(row)]));
-		return ok(REQUESTED);
+		const cancelled = await cancelAtPeriodEndReleasingSchedule(stripe, row.stripeSubscriptionId, idempotencyKey(deps, 'cancel', userId, [rowVersion(row)]));
+		return cancelled ? ok(REQUESTED) : STRIPE_FAILED;
 	});
 }
 
