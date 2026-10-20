@@ -4,7 +4,8 @@
  * and its exception script from `<api_host>/static`, so they come through here too and the CSP needs no PostHog
  * host. Only a short list of headers goes out, so no session cookie, Authorization header or staging key reaches
  * PostHog, and no cookie comes back. The Referer is cut to its path: pages like /reset-password carry a token in
- * their query string, and tokens never leave the browser for PostHog.
+ * their query string, and tokens never leave the browser for PostHog. If PostHog can't be reached or is too slow,
+ * the browser gets a 502 and the Worker logs one warning: a beacon must never turn into an unhandled exception.
  */
 
 import { INGEST_PATH, POSTHOG_ASSET_HOST, POSTHOG_INGEST_HOST, posthogConfig } from './config';
@@ -12,6 +13,8 @@ import { INGEST_PATH, POSTHOG_ASSET_HOST, POSTHOG_INGEST_HOST, posthogConfig } f
 const ASSET_PATHS = ['/static/', '/array/'] as const;
 const FORWARDED_HEADERS = ['accept', 'accept-encoding', 'accept-language', 'content-encoding', 'content-type', 'origin', 'user-agent'] as const;
 const ALLOWED_METHODS: ReadonlySet<string> = new Set(['GET', 'HEAD', 'POST', 'OPTIONS']);
+/** How long PostHog gets to answer before the browser is told 502. */
+export const UPSTREAM_TIMEOUT_MS = 10_000;
 /** Versioned scripts only: remote config under /array/ must follow setting changes. */
 const STATIC_CACHE_SECONDS = 3600;
 
@@ -58,13 +61,20 @@ export async function proxyPostHog(request: Request, env: Env, fetcher: typeof f
 	const ip = request.headers.get('CF-Connecting-IP');
 	if (ip) headers.set('X-Forwarded-For', ip);
 	const cacheable = request.method === 'GET' && target.pathname.startsWith('/static/');
-	const upstream = await fetcher(target.toString(), {
-		method: request.method,
-		headers,
-		body: request.method === 'POST' ? request.body : undefined,
-		redirect: 'manual',
-		...(cacheable ? { cf: { cacheEverything: true, cacheTtl: STATIC_CACHE_SECONDS } } : {}),
-	});
+	let upstream: Response;
+	try {
+		upstream = await fetcher(target.toString(), {
+			method: request.method,
+			headers,
+			body: request.method === 'POST' ? request.body : undefined,
+			redirect: 'manual',
+			signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+			...(cacheable ? { cf: { cacheEverything: true, cacheTtl: STATIC_CACHE_SECONDS } } : {}),
+		});
+	} catch (error) {
+		console.warn(JSON.stringify({ level: 'warn', component: 'PostHog', msg: 'ingest proxy upstream failed', path: target.pathname, reason: error instanceof Error ? error.message : String(error) }));
+		return new Response('Bad gateway', { status: 502 });
+	}
 	const responseHeaders = new Headers(upstream.headers);
 	responseHeaders.delete('set-cookie');
 	return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: responseHeaders });

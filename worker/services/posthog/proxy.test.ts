@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { ingestTarget, isIngestPath, proxyPostHog } from './proxy';
+import { describe, expect, it, vi } from 'vitest';
+import { UPSTREAM_TIMEOUT_MS, ingestTarget, isIngestPath, proxyPostHog } from './proxy';
 
 const ENV = { POSTHOG_PROJECT_KEY: 'phc_test', ENVIRONMENT: 'prod' } as unknown as Env;
 
@@ -111,5 +111,52 @@ describe('the /ingest proxy', () => {
 		expect((await proxyPostHog(at('/ingest/e/', { method: 'POST', body: '{}' }), { ENVIRONMENT: 'prod' } as unknown as Env, fetcher)).status).toBe(404);
 		expect((await proxyPostHog(at('/ingest/e/', { method: 'DELETE' }), ENV, fetcher)).status).toBe(405);
 		expect(calls).toEqual([]);
+	});
+
+	it('answers 502 with one warning, not an error, when PostHog cannot be reached', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		try {
+			const fetcher: typeof fetch = async () => {
+				throw new TypeError('Network connection lost');
+			};
+			const response = await proxyPostHog(at('/ingest/e/', { method: 'POST', body: '{}' }), ENV, fetcher);
+			expect(response.status).toBe(502);
+			expect(await response.text()).toBe('Bad gateway');
+			expect(warn).toHaveBeenCalledTimes(1);
+			expect(error).not.toHaveBeenCalled();
+		} finally {
+			warn.mockRestore();
+			error.mockRestore();
+		}
+	});
+
+	it('gives the upstream call a timeout signal that fires after ten seconds', async () => {
+		const { calls, fetcher } = recorder();
+		await proxyPostHog(at('/ingest/e/', { method: 'POST', body: '{}' }), ENV, fetcher);
+		const signal = calls[0].init.signal;
+		expect(UPSTREAM_TIMEOUT_MS).toBe(10_000);
+		expect(signal).toBeInstanceOf(AbortSignal);
+		expect(signal?.aborted).toBe(false);
+	});
+
+	it('answers 502 when the upstream call times out', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const fetcher: typeof fetch = async (_input, init) => {
+				throw init?.signal?.reason ?? new Error('no signal');
+			};
+			const timeout = new DOMException('The operation timed out', 'TimeoutError');
+			const spy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(AbortSignal.abort(timeout));
+			try {
+				const response = await proxyPostHog(at('/ingest/e/', { method: 'POST', body: '{}' }), ENV, fetcher);
+				expect(spy).toHaveBeenCalledWith(10_000);
+				expect(response.status).toBe(502);
+			} finally {
+				spy.mockRestore();
+			}
+		} finally {
+			warn.mockRestore();
+		}
 	});
 });
