@@ -1,4 +1,4 @@
-/** D1 for billing: Stripe customers, subscriptions, handled events, sent notices and the lifetime store counter. */
+/** D1 for billing: Stripe customers, subscription consents, subscriptions, handled events, sent notices and the lifetime store counter. */
 
 import { and, eq, inArray, isNull, lt, lte, notExists, or, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
@@ -6,6 +6,7 @@ import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { generateId } from '../../utils/idGenerator';
 import { LIVE_SUBSCRIPTION_STATUSES, type BillingEventResult, type BillingNoticeKind } from '../../../shared/types/billing';
+import type { PaidPlanId } from '../../../shared/types/plans';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -19,6 +20,23 @@ export interface BillingEventInput {
     pool?: { periodKey: string; pool: number } | null;
     notices?: ReadonlyArray<{ key: string; kind: BillingNoticeKind }>;
     now: Date;
+}
+
+export interface BillingConsentInput {
+    sessionId: string;
+    userId: string;
+    plan: PaidPlanId;
+    termsVersion: string;
+    consentText: string;
+    now: Date;
+}
+
+export interface BillingConsent {
+    userId: string;
+    plan: PaidPlanId;
+    termsVersion: string;
+    consentText: string;
+    createdAt: Date;
 }
 
 export class BillingService extends BaseService {
@@ -70,6 +88,25 @@ export class BillingService extends BaseService {
                 createdAt: now,
             }),
         ]);
+    }
+
+    /** Keeps the wording shown at a subscription Checkout session. Saving again replaces it, as applying a promotion code changes it; the session's account stays as first saved. */
+    async recordConsent(input: BillingConsentInput): Promise<void> {
+        const { sessionId, userId, plan, termsVersion, consentText, now } = input;
+        await this.database
+            .insert(schema.billingConsents)
+            .values({ stripeCheckoutSessionId: sessionId, userId, plan, termsVersion, consentText, createdAt: now })
+            .onConflictDoUpdate({ target: schema.billingConsents.stripeCheckoutSessionId, set: { plan, termsVersion, consentText, createdAt: now } });
+    }
+
+    async consentFor(sessionId: string): Promise<BillingConsent | null> {
+        const consents = schema.billingConsents;
+        const [found] = await this.database
+            .select({ userId: consents.userId, plan: consents.plan, termsVersion: consents.termsVersion, consentText: consents.consentText, createdAt: consents.createdAt })
+            .from(consents)
+            .where(eq(consents.stripeCheckoutSessionId, sessionId))
+            .limit(1);
+        return found ?? null;
     }
 
     async subscriptionOf(userId: string): Promise<schema.SubscriptionRecord | null> {
