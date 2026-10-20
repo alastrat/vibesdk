@@ -20,7 +20,7 @@ This Privacy Policy explains how {{entity.name}} ("Globalink", "we", "us") colle
 
 **Site views.** When someone views a public site, we store a one-way hash so each viewer is counted once. We don't store the viewer's IP address with it.
 
-**Usage information.** On estori.app we collect the pages you view, without the part of the address after a question mark, where you click, your device and browser, your approximate location (country and region, from your IP address), errors the Service runs into, and recordings of some sessions. We record layouts and clicks, not what's written on the page or what you type. Recordings show no images. They skip your orders, shopper emails, profile and payments setup, settings and billing, and admin pages, and never show the preview of your store. We link this to your account by its id, never by your email address or name. Section 4 says how to turn it off.
+**Usage information.** On estori.app we collect the pages you view, without the part of the address after a question mark, where you click, your device and browser, your IP address and the approximate location worked out from it (such as country, region and city), errors the Service runs into, and recordings of some sessions. We also note what you do in Estori, such as building and publishing sites, your plan and subscription, credit purchases, and sales in your stores. We record layouts and clicks, not what's written on the page or what you type. Recordings show no images. They skip your orders, shopper emails, profile and payments setup, settings and billing, and admin pages, and never show the preview of your store. We link this to your account by its id, never by your email address or name. Section 4 says how to turn it off.
 
 **Page view counts.** Cloudflare Web Analytics counts page views on Estori's pages, previews and stores served on estori.app addresses, with the page, the referring site, and the visitor's browser, device and country. It uses no cookies and doesn't identify visitors.
 
@@ -46,7 +46,7 @@ We share personal data only as described here.
 **Service providers** that process it for us under contract:
 
 - **Cloudflare**: hosting, databases, file storage, AI request routing, browser rendering for site screenshots and for pages you ask the AI to look at, sending account emails such as password resets and email confirmations, sending the order emails stores send their shoppers, operational logs, and page view counts through Cloudflare Web Analytics, which uses no cookies.
-- **PostHog** (hosted in the United States): product analytics, session recordings and error reports for estori.app, and the switches that turn parts of the Service on or pause them. PostHog receives the usage information in section 1, linked to your account's id. We don't send it your email address or name.
+- **PostHog** (hosted in the United States): product analytics, session recordings and error reports for estori.app, and the switches that turn parts of the Service on or pause them. PostHog receives the usage information in section 1, including your IP address, linked to your account's id. We don't send it your email address or name.
 - **AI model providers** (currently Anthropic and Google): your prompts, messages, images and site files are sent to the model you choose, or to a fallback model when the chosen one is unavailable, to generate and edit your site.
 - **Stripe**: payments, seller onboarding and payouts. Stripe receives buyers', shoppers' and sellers' email addresses, shoppers' shipping addresses, and the payment and payout details people give Stripe directly.
 - **Fulfillment partners**: when a store sells products from the Estori catalog, the shopper's name, shipping address, email and phone number go to the partner that ships the order.
@@ -77,7 +77,7 @@ We keep account information and your content while your account exists. When you
 
 You can update your account information in Settings.
 
-You can turn analytics off at any time with the Analytics setting in Settings. We also treat a Global Privacy Control signal from your browser as a request to turn analytics off, and keep it off for your account. With analytics off, we still count the AI credits your builds use, without anything that identifies you, to manage what the Service costs to run.
+You can turn analytics off at any time with the Analytics setting in Settings. We also treat a Global Privacy Control signal from your browser as a request to turn analytics off, and keep it off for your account. With analytics off, we still count the AI credits your builds use, without anything that identifies you, to manage what the Service costs to run. We also still ask PostHog which switches apply to your account, using its id and your plan.
 
 You can also ask us to:
 

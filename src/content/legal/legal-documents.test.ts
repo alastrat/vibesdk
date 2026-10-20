@@ -161,4 +161,19 @@ describe('legal documents', () => {
 		expect(privacy).toContain('Global Privacy Control');
 		expect(LEGAL_DOCUMENTS.privacy.version).toBe(TERMS_VERSION);
 	});
+
+	it('says PostHog receives the IP address, business events and flag checks, and what recordings leave out', () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain(
+			'your IP address and the approximate location worked out from it (such as country, region and city)',
+		);
+		expect(privacy).not.toContain('country and region, from your IP address');
+		expect(privacy).toContain(
+			'We also note what you do in Estori, such as building and publishing sites, your plan and subscription, credit purchases, and sales in your stores.',
+		);
+		expect(privacy).toContain("PostHog receives the usage information in section 1, including your IP address, linked to your account's id.");
+		expect(privacy).toContain('We also still ask PostHog which switches apply to your account, using its id and your plan.');
+		expect(privacy).toContain('Recordings show no images.');
+		expect(privacy).toContain('never show the preview of your store.');
+	});
 });
