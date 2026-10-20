@@ -144,6 +144,19 @@ describe('the card on the billing view', () => {
 		expect(asked).toEqual(['/v1/subscriptions/sub_card', '/v1/payment_methods/pm_sub']);
 	});
 
+	it("names the unpaid subscription's own card, the one Pay now charges", async () => {
+		await insertUser(db, 'u_unpaid', { createdAt: new Date(NOW - 40 * 86_400_000) });
+		await insertSubscription(db, { userId: 'u_unpaid', stripeSubscriptionId: 'sub_unpaid', status: 'unpaid', plan: 'pro', currentPeriodStart: new Date(NOW - 86_400_000), currentPeriodEnd: new Date(NOW + 29 * 86_400_000) });
+		await insertBillingCustomer(db, 'u_unpaid', 'cus_unpaid');
+		const asked = stripeServes({
+			'/v1/subscriptions/sub_unpaid': { id: 'sub_unpaid', default_payment_method: 'pm_unpaid' },
+			'/v1/payment_methods/pm_unpaid': cardMethod('pm_unpaid', 'visa', '0341', 4, 2030),
+		});
+		const response = await BillingController.get(get('/api/billing'), env(), ctx, context('u_unpaid'));
+		expect((await response.json()).data).toMatchObject({ paymentFailing: true, card: { brand: 'visa', last4: '0341' } });
+		expect(asked).toEqual(['/v1/subscriptions/sub_unpaid', '/v1/payment_methods/pm_unpaid']);
+	});
+
 	it("shows the customer's own default card when there is no live subscription", async () => {
 		const asked = stripeServes({
 			'/v1/customers/cus_cust': { id: 'cus_cust', email: null, metadata: null, invoice_settings: { default_payment_method: 'pm_cust' } },

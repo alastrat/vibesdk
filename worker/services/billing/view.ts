@@ -5,7 +5,7 @@ import type { BillingView, CardOnFile, PurchaseView } from '../../../shared/type
 import { assertWithinLimit, isPaidPlanId } from '../../../shared/types/plans';
 import { createLogger } from '../../logger';
 import type { StripeClient } from '../payments/stripe-client';
-import { liveSubscription, type BillingAccount } from './account';
+import { liveSubscription, payableSubscription, type BillingAccount } from './account';
 import { creditAlertDue, purchaseLeft, type CreditBalance } from './credit-ledger';
 import { cardOnFile } from './invoices';
 
@@ -24,7 +24,7 @@ function purchaseView(purchase: CreditPurchaseRecord): PurchaseView {
 export const CARD_READ_BUDGET_MS = 1_500;
 
 /**
- * The card the account's invoices are charged to: the live subscription's own, else the customer's. Null with no Stripe
+ * The card the account's invoices are charged to: a payable subscription's own, else the customer's. Null with no Stripe
  * customer, no card, when Stripe can't say, or when it takes longer than `CARD_READ_BUDGET_MS`; the last two are warnings.
  */
 export async function cardForView(
@@ -34,7 +34,7 @@ export async function cardForView(
 ): Promise<CardOnFile | null> {
 	if (!stripe || !customerId) return null;
 	// Settled with a warning rather than rejected, so a read that fails after the budget ran out is recorded, never unhandled.
-	const read = cardOnFile(stripe, customerId, liveSubscription(account.subscription)?.stripeSubscriptionId ?? null).catch((error: unknown) => {
+	const read = cardOnFile(stripe, customerId, payableSubscription(account.subscription)?.stripeSubscriptionId ?? null).catch((error: unknown) => {
 		logger.warn("Could not read the account's card for the billing page", { userId: account.userId, error });
 		return null;
 	});

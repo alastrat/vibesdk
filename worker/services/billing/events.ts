@@ -16,7 +16,7 @@ import { isCheckoutSession } from '../payments/fulfill';
 import { idempotencyBucket, type StripeCharge, type StripeClient, type StripeInvoice, type StripeSubscriptionSchedule } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
 import { subscriptionEventsFor, type BillingAnalyticsEvent } from '../posthog/billing-events';
-import { heldPeriodKey, liveSubscription, type BillingAccount } from './account';
+import { heldPeriodKey, payableSubscription, type BillingAccount } from './account';
 import { invoiceSubscriptionId, setDefaultCard } from './invoices';
 import type { PlannedNotice } from './notices';
 import { addMonths } from './periods';
@@ -241,7 +241,7 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 }
 
 /**
- * A finished card setup makes its card the default for the customer's invoices and the live subscription. The seller's
+ * A finished card setup makes its card the default for the customer's invoices and a payable subscription. The seller's
  * return runs the same step, and each call is keyed on the card, so either can come first. Stripe is changed before the
  * event is recorded, so a call that fails is retried rather than recorded as done. It never pays an invoice: only the
  * page's pay mode, with the seller there for the bank's confirmation, does.
@@ -270,7 +270,7 @@ export async function applyCardSetup(deps: BillingEventDeps, input: { eventId: s
 		await deps.store.recordEvent({ event: event(userId, 'ignored'), now });
 		return 'ignored';
 	}
-	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
+	const subscription = payableSubscription(await deps.store.subscriptionOf(userId));
 	await setDefaultCard(deps.stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId, now.getTime());
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), now });
 	return recorded === 'duplicate' ? 'duplicate' : 'applied';

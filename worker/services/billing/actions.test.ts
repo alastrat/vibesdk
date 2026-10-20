@@ -1154,7 +1154,20 @@ describe('paying a failed invoice', () => {
 		expect(keys[2]).toContain('-in_1-pm_2-');
 	});
 
-	it('needs a customer and a live subscription, and Stripe', async () => {
+	it('pays the open invoice of an unpaid subscription, by Pay now and by a pay setup, which reactivates it', async () => {
+		const unpaid = row({ status: 'unpaid' });
+		const payNow = fake({ customer: 'cus_1', row: unpaid, invoices: [invoice()] });
+		expect(await payOpenInvoice(payNow.deps, 'u1', null)).toEqual({ ok: true, value: { state: 'paid' } });
+		expect(payNow.calls).toEqual(['list:cus_1:24', 'read:sub_1', 'pay:in_1:pm_1']);
+		const payMode = fake({ customer: 'cus_1', row: unpaid, sessions: [PAY_SETUP_SESSION], invoices: [invoice()] });
+		expect(await completeCardSetup(payMode.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'paid' } });
+		expect(payMode.calls).toEqual(['session:cs_card', 'default-card:cus_1:sub_1:pm_new', 'list:cus_1:24', 'pay:in_1:pm_new']);
+		const start = fake({ customer: 'cus_1', row: unpaid });
+		await startCardSetup(start.deps, USER, 'pay');
+		expect(start.calls.slice(0, 2)).toEqual(['read:sub_1', 'card-session:cus_1:pay:pm_1']);
+	});
+
+	it('needs a customer and a subscription that can still be paid, and Stripe', async () => {
 		expect(await payOpenInvoice(fake({ row: PAST_DUE }).deps, 'u1', null)).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCustomer });
 		const ended = fake({ customer: 'cus_1', row: row({ status: 'canceled' }), invoices: [invoice()] });
 		expect(await payOpenInvoice(ended.deps, 'u1', null)).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noPlan });

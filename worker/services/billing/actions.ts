@@ -33,7 +33,7 @@ import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
 import { isFlagOn } from '../posthog/flags';
 import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeInvoice } from '../payments/stripe-client';
-import { liveSubscription, type BillingAccount } from './account';
+import { liveSubscription, payableSubscription, type BillingAccount } from './account';
 import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
 import { checkoutReturnRecorders, type CheckoutReturnRecorder } from './events';
 import { chargedPaymentMethod, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
@@ -474,10 +474,10 @@ export async function startCardSetup(deps: BillingActionDeps, user: { id: string
 	if (!isCardSetupMode(mode)) return fail(400, BILLING_MESSAGES.cardMode);
 	const customerId = await deps.store.customerOf(user.id);
 	if (!customerId) return fail(404, BILLING_MESSAGES.noCustomer);
-	const live = liveSubscription(await deps.store.subscriptionOf(user.id));
+	const payable = payableSubscription(await deps.store.subscriptionOf(user.id));
 	return askStripe(async () => {
 		// The card Stripe charges now is part of the session's key: a finished setup changes it, so the next setup is a new session, not the finished one replayed.
-		const subscription = live ? await stripe.retrieveSubscription(live.stripeSubscriptionId) : null;
+		const subscription = payable ? await stripe.retrieveSubscription(payable.stripeSubscriptionId) : null;
 		const afterCardId = await chargedPaymentMethod(stripe, customerId, subscription);
 		// A setup finished but not yet returned from is kept: the card page sends it to the return route.
 		const session = await currentSession(stripe, (replaces) =>
@@ -497,8 +497,8 @@ function savedCardOf(session: StripeCheckoutSession): string | null {
 }
 
 /**
- * Makes the card the seller just saved their default, on the customer and on the live subscription, and in `pay` mode
- * pays the failed invoice with it. Repeating it is safe: the page can retry and the webhook can set the same card.
+ * Makes the card the seller just saved their default, on the customer and on a subscription that can still be paid, and
+ * in `pay` mode pays the failed invoice with it. Repeating it is safe: the page can retry and the webhook can set the same card.
  */
 export async function completeCardSetup(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<InvoicePaymentResult>> {
 	const { stripe } = deps;
@@ -514,7 +514,7 @@ export async function completeCardSetup(deps: BillingActionDeps, userId: string,
 	if (session.status !== 'complete') return fail(400, BILLING_MESSAGES.cardNotSaved);
 	const cardId = savedCardOf(session);
 	if (!cardId) return STRIPE_FAILED;
-	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
+	const subscription = payableSubscription(await deps.store.subscriptionOf(userId));
 	return askStripe(async () => {
 		try {
 			await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId, deps.nowMs);
@@ -522,7 +522,7 @@ export async function completeCardSetup(deps: BillingActionDeps, userId: string,
 			// The webhook sets the same card under the same keys; an overlap means it is being set, and a payment names its card itself.
 			if (!isConcurrentRequest(error)) throw error;
 		}
-		// Only a pay setup, from the failed-payment banner, pays; with no live subscription there is nothing to pay.
+		// Only a pay setup, from the failed-payment banner, pays; with no payable subscription there is nothing to pay.
 		if (session.metadata?.card_mode !== 'pay' || !subscription) return ok(SAVED);
 		return payNewestOpenInvoice(deps, stripe, userId, customerId, subscription, cardId);
 	});
@@ -588,7 +588,8 @@ export async function payOpenInvoice(deps: BillingActionDeps, userId: string, pa
 	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
 	const customerId = await deps.store.customerOf(userId);
 	if (!customerId) return fail(404, BILLING_MESSAGES.noCustomer);
-	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
+	// An unpaid subscription is paid too: paying its open invoice reactivates it.
+	const subscription = payableSubscription(await deps.store.subscriptionOf(userId));
 	if (!subscription) return fail(404, BILLING_MESSAGES.noPlan);
 	return askStripe(() => payNewestOpenInvoice(deps, stripe, userId, customerId, subscription, paymentMethod));
 }
