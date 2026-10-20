@@ -26,6 +26,7 @@ import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
 import { runBillingSchedule } from './services/billing/wiring';
 import { stagingGate } from './services/staging-gate';
 import { runInRequestScope } from './services/posthog/request-scope';
+import { isIngestPath, proxyPostHog } from './services/posthog/proxy';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -330,6 +331,11 @@ async function handleFetch(request: Request, env: Env, ctx: ExecutionContext): P
 			return app.fetch(request, env, ctx);
 		}
 		
+		// The browser's PostHog traffic, through Estori's own domain (services/posthog/proxy.ts).
+		if (isIngestPath(pathname)) {
+			return proxyPostHog(request, env);
+		}
+
 		// Serve static assets and the app for all other non-API routes, with the public pages' heads,
 		// the sitemap and robots.txt for crawlers.
 		if (!pathname.startsWith('/api/')) {

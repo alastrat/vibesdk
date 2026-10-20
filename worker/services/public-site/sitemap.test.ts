@@ -41,6 +41,6 @@ describe('renderRobotsTxt', () => {
 			.split('\n')
 			.filter((line) => line.startsWith('Disallow:'))
 			.map((line) => line.slice('Disallow:'.length).trim());
-		expect(disallowed).toEqual(['/api/', '/admin/', '/chat/', '/apps', '/settings', '/profile']);
+		expect(disallowed).toEqual(['/api/', '/admin/', '/chat/', '/apps', '/settings', '/profile', '/ingest/']);
 	});
 });

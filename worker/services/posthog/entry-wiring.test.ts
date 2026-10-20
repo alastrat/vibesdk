@@ -28,4 +28,11 @@ describe('the Worker entry and the request scope', () => {
 			expect(scheduled.indexOf(run), run).toBeGreaterThan(scope);
 		}
 	});
+
+	it('sends /ingest to PostHog before the public site, on the main domain only', () => {
+		const main = index.slice(index.indexOf('if (isMainDomainRequest) {'));
+		expect(main.indexOf('if (isIngestPath(pathname))')).toBeGreaterThan(-1);
+		expect(main.indexOf('if (isIngestPath(pathname))')).toBeLessThan(main.indexOf('return servePublicSite('));
+		expect(index).toContain('return proxyPostHog(request, env);');
+	});
 });
