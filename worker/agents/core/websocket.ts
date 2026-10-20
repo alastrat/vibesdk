@@ -7,6 +7,8 @@ import { type CredentialsPayload } from '../inferutils/config.types';
 import { checkUsageAndBalance } from '../../services/rate-limit';
 import { checkCreditsBeforeTurn } from '../../services/billing/metering';
 import { PLAN_LIMIT_ERROR_CODE } from '../../../shared/types/billing';
+import { AI_BUILDS_PAUSED_CODE, AI_BUILDS_PAUSED_MESSAGE } from '../../../shared/types/pauses';
+import { isFlagOn } from '../../services/posthog/flags';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { DeploymentTarget } from './types';
 import { isThinkModelId } from '../think/model-config';
@@ -50,6 +52,7 @@ export async function handleWebSocketMessage(
                 break;
             }
             case WebSocketMessageRequests.GENERATE_ALL:
+                if (await refuseWhileBuildsPaused(agent, connection)) return;
                 // Set shouldBeGenerating flag to indicate persistent intent
                 agent.setState({ 
                     ...agent.state, 
@@ -195,6 +198,7 @@ export async function handleWebSocketMessage(
                 break;
             }
             case WebSocketMessageRequests.RESUME_GENERATION:
+                if (await refuseWhileBuildsPaused(agent, connection)) return;
                 // Set shouldBeGenerating and restart generation
                 logger.info('Resuming code generation');
                 agent.setState({ 
@@ -334,6 +338,13 @@ export async function handleWebSocketMessage(
     }
 }
 
+/** While AI builds are paused, tells the user and answers true. A turn already running finishes. */
+async function refuseWhileBuildsPaused(agent: CodeGeneratorAgent, connection: Connection): Promise<boolean> {
+    if (!(await isFlagOn(agent.env, 'ai-builds-paused', agent.state.metadata.userId ?? null))) return false;
+    sendToConnection(connection, WebSocketMessageResponses.ERROR, { error: AI_BUILDS_PAUSED_MESSAGE, code: AI_BUILDS_PAUSED_CODE, showAsPopup: true });
+    return true;
+}
+
 /**
  * Runs the checks for a new prompt. Sends the limit popup or error and
  * returns false when the user may not prompt. With billing on, the account's
@@ -347,6 +358,7 @@ async function ensureCanPrompt(
     usageCheck: typeof checkUsageAndBalance,
     creditCheck: typeof checkCreditsBeforeTurn,
 ): Promise<boolean> {
+    if (await refuseWhileBuildsPaused(agent, connection)) return false;
     try {
         const env = agent.env;
         const userId = agent.state.metadata.userId;

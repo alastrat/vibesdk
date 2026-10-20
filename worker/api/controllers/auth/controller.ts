@@ -17,6 +17,7 @@ import {
     verifyEmailSchema
 } from './authSchemas';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
+import { SIGNUPS_PAUSED_ERROR_CODE, SignupsPausedError } from '../../../../shared/types/pauses';
 import {
     formatAuthResponse,
     mapUserResponse,
@@ -686,11 +687,15 @@ export class AuthController extends BaseController {
             
             return response;
         } catch (error) {
-            this.logger.error('OAuth callback failed', error);
+            // A paused sign-up is expected while the pause is on, so it stays out of error reporting.
+            if (error instanceof SignupsPausedError) this.logger.warn('OAuth sign-up refused while sign-ups are paused');
+            else this.logger.error('OAuth callback failed', error);
             const baseUrl = new URL(request.url).origin;
-            const reason = error instanceof SecurityError && error.statusCode === 409
-                ? 'email_exists'
-                : 'auth_failed';
+            const reason = error instanceof SignupsPausedError
+                ? SIGNUPS_PAUSED_ERROR_CODE
+                : error instanceof SecurityError && error.statusCode === 409
+                    ? 'email_exists'
+                    : 'auth_failed';
             return Response.redirect(`${baseUrl}/?error=${reason}`, 302);
         }
     }

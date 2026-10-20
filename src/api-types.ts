@@ -553,6 +553,7 @@ export type { PublicPlanLimits } from '../shared/types/plan.js';
 export type { AmountBand, PersonProperties, ServerEventName, ServerEventProperties } from '../shared/types/analytics-events.js';
 export type { ClientFlagKey, ClientFlagValues, FlagKey, FlagKind, FlagValues } from '../shared/types/feature-flags.js';
 export { FEATURE_FLAGS, FLAG_KEYS } from '../shared/types/feature-flags.js';
+export * from '../shared/types/pauses';
 export type {
 	AdminFlagRow,
 	AdminFlagsData,

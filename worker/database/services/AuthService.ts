@@ -19,6 +19,8 @@ import {
     SecurityError, 
     SecurityErrorType 
 } from 'shared/types/errors';
+import { SignupsPausedError } from '../../../shared/types/pauses';
+import { isFlagOn } from '../../services/posthog/flags';
 import { AuthResult, AuthUserSession, OAuthUserInfo } from '../../types/auth-types';
 import { generateId } from '../../utils/idGenerator';
 import {
@@ -221,6 +223,9 @@ export class AuthService extends BaseService {
                 );
             }
             
+            // Only a new account is refused.
+            if (await isFlagOn(this.env, 'signups-paused', null)) throw new SignupsPausedError();
+
             // Hash password
             const passwordHash = await this.passwordService.hash(data.password);
             
@@ -1045,6 +1050,9 @@ export class AuthService extends BaseService {
 
             return this.claimUnconfirmedAccount(emailRow, provider, oauthUserInfo);
         }
+
+        // A provider sign-in that would create an account is refused; one that finds or claims an account isn't.
+        if (await isFlagOn(this.env, 'signups-paused', null)) throw new SignupsPausedError();
 
         // 3. Brand-new identity: create the user and its first identity row.
         return this.createOAuthUser(provider, oauthUserInfo);

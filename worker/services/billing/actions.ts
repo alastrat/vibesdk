@@ -7,9 +7,11 @@ import { BillingService, CreditLedgerService } from '../../database';
 import type { SubscriptionRecord } from '../../database/schema';
 import { BILLING_PATH, type BillingChangeRequested, type BillingRedirect, type CheckoutStarted } from '../../../shared/types/billing';
 import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PlanLimitRefusal } from '../../../shared/types/plans';
+import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
+import { isFlagOn } from '../posthog/flags';
 import { idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
@@ -56,6 +58,8 @@ export interface BillingActionDeps {
 	priceIds: StripePriceIds | null;
 	baseUrl: string;
 	nowMs: number;
+	/** The billing-checkout pause for this seller: it refuses a plan checkout, a plan change and extra credits. */
+	checkoutPaused(userId: string): Promise<boolean>;
 }
 
 type Failure = Extract<BillingActionResult<never>, { message: string }>;
@@ -129,6 +133,7 @@ function endsOn(row: SubscriptionRecord): string {
 }
 
 export async function startCheckout(deps: BillingActionDeps, user: { id: string; email: string }, plan: unknown): Promise<BillingActionResult<CheckoutStarted>> {
+	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	if (!isPaidPlanId(plan)) return fail(400, BILLING_MESSAGES.pickPlan);
@@ -150,6 +155,7 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 
 /** Premium starts now, prorated; Pro starts at the renewal. Choosing the current plan again drops a pending move. */
 export async function changePlan(deps: BillingActionDeps, userId: string, plan: unknown): Promise<BillingActionResult<BillingChangeRequested>> {
+	if (await deps.checkoutPaused(userId)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	if (!isPaidPlanId(plan)) return fail(400, BILLING_MESSAGES.pickPlan);
@@ -237,6 +243,7 @@ export async function openPortal(deps: BillingActionDeps, userId: string): Promi
 
 /** A checkout for extra credits, at the price from the server's table; the plan and the amount are checked before Stripe is asked. */
 export async function buyCredits(deps: BillingActionDeps, user: { id: string; email: string }, account: BillingAccount, credits: unknown): Promise<BillingActionResult<CheckoutStarted>> {
+	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	const refusal = assertWithinLimit(account, 'extraCredits');
@@ -269,5 +276,6 @@ export function billingActionDepsFromEnv(env: Env, request: Request): BillingAct
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),
 		baseUrl: appBaseUrl(env, request),
 		nowMs: Date.now(),
+		checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId),
 	};
 }

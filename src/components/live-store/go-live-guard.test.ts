@@ -64,5 +64,16 @@ describe('the Go live panel', () => {
 		for (const copy of ['Take your store offline?', 'Remove this domain?']) expect(dialog, copy).toContain(copy);
 		expect(dialog).toContain('connectedDomainNote(storeStatus)');
 	});
+
+	it('holds publishing and new domains while they are paused, and keeps the rest of the panel', () => {
+		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
+		expect(dialog).toContain("const publishingPaused = useFlag('store-publishing-paused');");
+		expect(dialog).toMatch(/disabled=\{publishingPaused \|\| problem !== null/);
+		expect(dialog).toContain('{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}');
+		expect(dialog).toContain("const domainsPaused = useFlag('custom-domains-paused');");
+		expect(dialog).toContain('{view.domainsAvailable && !view.domain && !domainsPaused && (');
+		expect(dialog).toContain('{CUSTOM_DOMAINS_PAUSED_MESSAGE}');
+		expect(dialog).toContain('Take offline');
+	});
 });
 

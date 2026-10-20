@@ -5,6 +5,7 @@ import { BILLING_MESSAGES, buyCredits, cancelPlan, changePlan, openPortal, resum
 import type { CreditPurchaseRecord, SubscriptionRecord } from '../../database/schema';
 import type { BillingAccount } from './account';
 import { PLAN_LIMITS } from '../../../shared/types/plans';
+import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 
 const USER = { id: 'u1', email: 'ana@example.test' };
 
@@ -61,6 +62,7 @@ function fake(
 		card?: string | null;
 		customerCard?: string | null;
 		purchases?: CreditPurchaseRecord[];
+		paused?: boolean;
 	} = {},
 ) {
 	const calls: string[] = [];
@@ -133,6 +135,7 @@ function fake(
 		priceIds: { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' },
 		baseUrl: 'https://estori.app',
 		nowMs: Date.parse('2026-10-19T15:00:00Z'),
+		checkoutPaused: vi.fn(async () => state.paused === true),
 	};
 	return { deps, calls, keys, state };
 }
@@ -281,5 +284,26 @@ describe('cancelling, keeping the plan, the portal and extra credits', () => {
 		for (const credits of [0, 4_000, 5_500, 2_000_000, '5000', null]) await buyCredits(deps, USER, account('premium'), credits);
 		await buyCredits(deps, USER, account('basic'), 5_000);
 		expect(calls).toEqual([]);
+	});
+});
+
+describe('while billing checkout is paused', () => {
+	const PAUSED = { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
+
+	it("refuses a plan checkout, a plan change and extra credits for the seller's account, asking Stripe nothing", async () => {
+		const checkout = fake({ paused: true });
+		const change = fake({ paused: true, row: row() });
+		const credits = fake({ paused: true, customer: 'cus_1' });
+		expect(await startCheckout(checkout.deps, USER, 'pro')).toEqual(PAUSED);
+		expect(await changePlan(change.deps, 'u1', 'premium')).toEqual(PAUSED);
+		expect(await buyCredits(credits.deps, USER, account('premium'), 12_000)).toEqual(PAUSED);
+		expect([...checkout.calls, ...change.calls, ...credits.calls]).toEqual([]);
+		for (const { deps } of [checkout, change, credits]) expect(deps.checkoutPaused).toHaveBeenCalledWith('u1');
+	});
+
+	it('keeps cancelling, undoing a cancel and the billing portal open', async () => {
+		expect(await cancelPlan(fake({ paused: true, row: row() }).deps, 'u1')).toMatchObject({ ok: true });
+		expect(await resumePlan(fake({ paused: true, row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toMatchObject({ ok: true });
+		expect(await openPortal(fake({ paused: true, customer: 'cus_1' }).deps, 'u1')).toMatchObject({ ok: true });
 	});
 });

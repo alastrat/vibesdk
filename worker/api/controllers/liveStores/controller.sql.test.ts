@@ -8,6 +8,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { LiveStoreController } from './controller';
 import type { RouteContext } from '../../types/route-context';
+import { LiveStoreService } from '../../../database/services/LiveStoreService';
+import { CUSTOM_DOMAINS_PAUSED_MESSAGE, STORE_PUBLISHING_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
 
 /** The agent's calls to clear a leftover merge, in order with SpaceDO's publishes when a test records those too. */
 const calls = vi.hoisted((): string[] => []);
@@ -147,5 +149,42 @@ describe('publishing a live store', () => {
 		expect(response.status).toBe(409);
 		expect(published).toEqual(['app_tea']);
 		expect(await db.prepare("SELECT app_id FROM live_stores WHERE app_id = 'app_tea'").first()).toBeNull();
+	});
+});
+
+describe('while publishing or new domains are paused', () => {
+	const owner = (appId: string) => ({ pathParams: { id: appId }, user: { id: 'seller_1' } }) as unknown as RouteContext;
+	const envPausing = (pauses: string, namespace: unknown) =>
+		envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace, FEATURE_FLAG_OVERRIDES: pauses });
+	const post = (path: string, body: unknown) => new Request(`https://estori.app${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+	beforeEach(() => {
+		calls.length = 0;
+		agentFailure.mode = 'none';
+	});
+
+	it('refuses Go live and republishing, publishing nothing and asking no agent', async () => {
+		const { namespace, published } = spaces();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('store-publishing-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(await response.json())).toContain(STORE_PUBLISHING_PAUSED_MESSAGE);
+		expect(published).toEqual([]);
+		expect(calls).toEqual([]);
+	});
+
+	it('refuses connecting a new domain, storing nothing', async () => {
+		const { namespace } = spaces();
+		const env = envPausing('custom-domains-paused=on', namespace);
+		const response = await LiveStoreController.addDomain(post('/api/stores/app_tea/live/domain', { hostname: 'shop.northwind.example' }), env, {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(await response.json())).toContain(CUSTOM_DOMAINS_PAUSED_MESSAGE);
+		expect(await new LiveStoreService(env).domainOfApp('app_tea')).toBeNull();
+	});
+
+	it('still publishes while only new domains are paused', async () => {
+		const { namespace, published } = spaces();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('custom-domains-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(200);
+		expect(published).toEqual(['app_tea']);
 	});
 });

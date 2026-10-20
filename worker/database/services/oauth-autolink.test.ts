@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { SecurityError } from 'shared/types/errors';
+import { SignupsPausedError } from '../../../shared/types/pauses';
 import { AuthService } from './AuthService';
 import { SessionService } from './SessionService';
 import { recordingD1 } from '../test-support/recording-d1';
@@ -68,11 +69,11 @@ interface SignIn {
 }
 
 /** Signs in through a provider with no identity linked yet, so the account is found by its email. */
-function signIn(provider: OAuthProvider, account: Row): SignIn {
+function signIn(provider: OAuthProvider, account: Row | undefined, extraEnv: Record<string, string> = {}): SignIn {
 	const { d1, statements, batches } = recordingD1(rowsByTable({ oauth_states: stateRow(provider), users: account }));
 	const batch = vi.spyOn(d1, 'batch');
 	vi.spyOn(AuthService.prototype, 'getOauthProvider').mockResolvedValue(fakeProvider(provider));
-	const env = { DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', ENVIRONMENT: 'dev' } as unknown as Env;
+	const env = { DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', ENVIRONMENT: 'dev', ...extraEnv } as unknown as Env;
 	const run = new AuthService(env)
 		.handleOAuthCallback(provider, 'code-1', 'state-1', callbackRequest(provider))
 		.then((result) => result.user);
@@ -188,5 +189,23 @@ describe('provider sign-in to an existing account with an unconfirmed email', ()
 		expect(batches).toEqual([]);
 		expect(claimWrites(statements)).toEqual([]);
 		expect(createSession).not.toHaveBeenCalled();
+	});
+});
+
+describe('provider sign-in while sign-ups are paused', () => {
+	const PAUSED = { FEATURE_FLAG_OVERRIDES: 'signups-paused=on' };
+
+	it('refuses a new account, creating no user, identity or session', async () => {
+		const { statements, run } = signIn('google', undefined, PAUSED);
+		await expect(run).rejects.toBeInstanceOf(SignupsPausedError);
+		expect(writes(statements, 'insert', 'users')).toEqual([]);
+		expect(writes(statements, 'insert', 'user_oauth_identities')).toEqual([]);
+		expect(createSession).not.toHaveBeenCalled();
+	});
+
+	it('still signs in an existing account', async () => {
+		const { run } = signIn('google', existingAccount(1), PAUSED);
+		expect((await run).id).toBe('user-1');
+		expect(createSession).toHaveBeenCalledOnce();
 	});
 });

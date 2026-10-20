@@ -18,6 +18,8 @@ import { draftErrorStatus } from '../../../agents/think/draft-change';
 import { loadAccount, type BillingAccount } from '../../../services/billing/account';
 import { assertWithinLimit } from '../../../../shared/types/plans';
 import { NEW_CATALOG_PRODUCTS_ERROR } from '../../../../shared/types/billing';
+import { CUSTOM_DOMAINS_PAUSED_MESSAGE, STORE_PUBLISHING_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
+import { isFlagOn } from '../../../services/posthog/flags';
 import type { PublishContext, PublishDraftOptions, PublishDraftResult } from '@space-do/space';
 
 interface LiveSpaceStub {
@@ -77,6 +79,9 @@ export class LiveStoreController extends BaseController {
         const appId = context.pathParams.id;
         if (!appId) return this.createErrorResponse<LiveStoreView>('Store not found', 404);
         try {
+            if (await isFlagOn(env, 'store-publishing-paused', context.user?.id ?? null)) {
+                return this.createErrorResponse<LiveStoreView>(STORE_PUBLISHING_PAUSED_MESSAGE, 503);
+            }
             if (!storeHostConfig(env).storesDomain) return this.createErrorResponse<LiveStoreView>("Store addresses aren't set up yet.", 409);
             const body = await this.parseJsonBody<{ slug?: unknown; draftId?: unknown }>(request);
             const slug = body.success && typeof body.data?.slug === 'string' ? body.data.slug.trim().toLowerCase() : '';
@@ -143,6 +148,9 @@ export class LiveStoreController extends BaseController {
         const appId = context.pathParams.id;
         if (!appId) return this.createErrorResponse<LiveStoreView>('Store not found', 404);
         try {
+            if (await isFlagOn(env, 'custom-domains-paused', context.user?.id ?? null)) {
+                return this.createErrorResponse<LiveStoreView>(CUSTOM_DOMAINS_PAUSED_MESSAGE, 503);
+            }
             // Refused only on a plan without own domains. A store holds one at most, so with an allowance the domain
             // checks below answer a store that already has one.
             const account = await liveStoreAccount(env, context);
