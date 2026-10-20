@@ -29,6 +29,10 @@ describe('the Worker entry and the request scope', () => {
 		}
 	});
 
+	it('runs the heartbeat from the cron, checking the app through its own fetch handler', () => {
+		expect(index).toContain('ctx.waitUntil(runHeartbeat(controller.cron, env, (request) => worker.fetch(request, env, ctx)));');
+	});
+
 	it('sends /ingest to PostHog before the public site, on the main domain only', () => {
 		const main = index.slice(index.indexOf('if (isMainDomainRequest) {'));
 		expect(main.indexOf('if (isIngestPath(pathname))')).toBeGreaterThan(-1);

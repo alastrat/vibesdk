@@ -26,6 +26,7 @@ import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
 import { runBillingSchedule } from './services/billing/wiring';
 import { stagingGate } from './services/staging-gate';
 import { runInRequestScope } from './services/posthog/request-scope';
+import { runHeartbeat } from './services/posthog/heartbeat';
 import { reportServerError } from './services/posthog/server-errors';
 import { isIngestPath, proxyPostHog } from './services/posthog/proxy';
 import {
@@ -398,6 +399,7 @@ const worker = {
 			ctx.waitUntil(runLiveStoresSchedule(controller.cron, env));
 			ctx.waitUntil(runShopperEmailSchedule(controller.cron, env));
 			ctx.waitUntil(runBillingSchedule(controller.cron, env));
+			ctx.waitUntil(runHeartbeat(controller.cron, env, (request) => worker.fetch(request, env, ctx)));
 		});
 	},
 } satisfies ExportedHandler<Env>;
