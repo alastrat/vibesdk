@@ -82,7 +82,26 @@ describe('server flag evaluation', () => {
 		expect(requests).toHaveLength(2);
 	});
 
-	it("keeps a user's last billing answer when PostHog then fails, so a paying seller stays on billing; pauses still go off", async () => {
+	it.each([
+		['premium', true],
+		['pro', true],
+		['enterprise', true],
+		['basic', false],
+	] as const)('turns billing on for an account on %s while PostHog fails: %s, with every pause still off', async (plan, billing) => {
+		const { flags } = evaluator(async () => Promise.reject(new Error('PostHog down')));
+		expect(await flags.evaluate({ distinctId: 'user_paying', plan: async () => plan })).toEqual({ values: { ...OFF, billing }, source: 'defaults', inPostHog: [] });
+	});
+
+	it('keeps billing on for an account on a paid plan when PostHog answers it off', async () => {
+		const { flags } = evaluator(async () => flagsAnswer({ billing: false, 'catalog-paused': true }));
+		expect(await flags.evaluate({ distinctId: 'user_paying', plan: async () => 'premium' })).toEqual({
+			values: { ...OFF, billing: true, 'catalog-paused': true },
+			source: 'posthog',
+			inPostHog: ['billing', 'catalog-paused'],
+		});
+	});
+
+	it("keeps a targeted Basic account's last billing answer when PostHog then fails; pauses still go off", async () => {
 		let respond: () => Promise<Response> = async () => flagsAnswer({ billing: true, 'catalog-paused': true });
 		const { flags, advance } = evaluator(() => respond());
 		await flags.evaluate(USER);

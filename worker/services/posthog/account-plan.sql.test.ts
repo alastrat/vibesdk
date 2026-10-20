@@ -1,19 +1,23 @@
 /** The plan flags and person properties use: billing's own resolution, on real SQL. */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { envWith, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { envWith, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { PlanAdminService } from '../../database/services/PlanAdminService';
+import { DAY_MS } from '../billing/periods';
 import { planOf } from './person';
 
 let db: D1Database;
 
 beforeAll(async () => {
 	db = await migratedD1();
-	for (const id of ['plan_1', 'plan_2', 'plan_admin']) await insertUser(db, id);
+	for (const id of ['plan_1', 'plan_2', 'plan_3', 'plan_admin']) await insertUser(db, id);
 });
 
 describe("an account's plan", () => {
 	it('is Basic with no subscription or override, and what billing resolves otherwise', async () => {
 		expect(await planOf(envWith(db), 'plan_1')).toBe('basic');
+		const now = Date.now();
+		await insertSubscription(db, { userId: 'plan_3', stripeSubscriptionId: 'sub_plan_3', status: 'active', plan: 'premium', currentPeriodStart: new Date(now - DAY_MS), currentPeriodEnd: new Date(now + 29 * DAY_MS) });
+		expect(await planOf(envWith(db), 'plan_3')).toBe('premium');
 		// Billing's override writer, as its admin page uses it.
 		await new PlanAdminService(envWith(db)).addOverride({ userId: 'plan_2', plan: 'enterprise', limits: {}, until: null, adminUserId: 'plan_admin', reason: 'Partner', now: new Date() });
 		expect(await planOf(envWith(db), 'plan_2')).toBe('enterprise');

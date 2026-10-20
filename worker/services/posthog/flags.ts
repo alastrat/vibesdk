@@ -1,10 +1,10 @@
 /**
  * Feature flags from PostHog, for the registry in shared/types/feature-flags.ts. Every flag defaults off, so a flag
  * PostHog leaves out (disabled or deleted), a failure, a timeout, a quota-limited answer or one computed with errors
- * pauses nothing and rolls nothing out. The one exception is billing: a failed answer keeps each subject's last billing
- * answer, so a paying seller is never dropped. Answers are cached in the isolate for 60 s per user; failures for 10 s.
- * Outside production, FEATURE_FLAG_OVERRIDES wins. Billing's own switches keep billing on whatever PostHog says.
- * Nothing here throws.
+ * pauses nothing and rolls nothing out. Billing is the exception: an account on a paid plan has it on whatever PostHog
+ * answers, or if it fails, and a failed answer keeps an account's last billing answer from PostHog in this isolate.
+ * Answers are cached in the isolate for 60 s per user; failures for 10 s. Outside production, FEATURE_FLAG_OVERRIDES
+ * wins. Billing's own switches keep billing on whatever PostHog says. Nothing here throws.
  */
 
 import { FLAG_KEYS, defaultFlagValues, isFlagKey, type FlagKey, type FlagValues } from '../../../shared/types/feature-flags';
@@ -31,7 +31,7 @@ export interface FlagSubject {
 
 export interface FlagEvaluation {
 	values: FlagValues;
-	/** posthog: PostHog answered; defaults: it didn't, so every flag is off but billing keeps its last answer; off: no project key. */
+	/** posthog: PostHog answered; defaults: it didn't, so every flag is off except billing (see above); off: no project key. */
 	source: 'posthog' | 'defaults' | 'off';
 	/** Flags PostHog answered for; the rest are off. */
 	inPostHog: FlagKey[];
@@ -78,9 +78,26 @@ export function readFlagsAnswer(body: unknown): Partial<FlagValues> | null {
 	return values;
 }
 
+/** Pro, Premium or Enterprise, whether from a subscription or an admin's override. */
+function isOnPaidPlan(plan: PlanId | 'none'): boolean {
+	return plan !== 'basic' && plan !== 'none';
+}
+
+/** 'none' when the plan can't be read; planOf answers Basic on its own failures, so this guards other subjects. */
+async function planOrNone(subject: FlagSubject): Promise<PlanId | 'none'> {
+	try {
+		return await subject.plan();
+	} catch {
+		return 'none';
+	}
+}
+
 export class FlagEvaluator {
 	private readonly cache = new Map<string, { evaluation: FlagEvaluation; expiresAtMs: number }>();
-	/** Subjects whose last answer from PostHog had billing on. */
+	/**
+	 * Subjects whose last answer from PostHog had billing on. Paid plans don't need it; it keeps an account PostHog
+	 * targets without one on billing through a failure, in this isolate only.
+	 */
 	private readonly billed = new Set<string>();
 
 	constructor(private readonly deps: FlagEvaluatorDeps) {}
@@ -90,21 +107,24 @@ export class FlagEvaluator {
 		if (!config) return this.withOverrides({ values: defaultFlagValues(), source: 'off', inPostHog: [] });
 		const cached = this.cache.get(subject.distinctId);
 		if (cached && cached.expiresAtMs > this.deps.nowMs()) return this.withOverrides(cached.evaluation);
-		const answered = await this.ask(config, subject);
+		// Read before PostHog is asked, so a failed answer still knows whether the account pays.
+		const plan = await planOrNone(subject);
+		const answered = await this.ask(config, subject.distinctId, plan);
 		if (answered) this.rememberBilling(subject.distinctId, answered.billing === true);
+		const billing = isOnPaidPlan(plan) || (answered ? answered.billing === true : this.billed.has(subject.distinctId));
 		const evaluation: FlagEvaluation = answered
-			? { values: { ...defaultFlagValues(), ...answered }, source: 'posthog', inPostHog: FLAG_KEYS.filter((flag) => flag in answered) }
-			: { values: { ...defaultFlagValues(), billing: this.billed.has(subject.distinctId) }, source: 'defaults', inPostHog: [] };
+			? { values: { ...defaultFlagValues(), ...answered, billing }, source: 'posthog', inPostHog: FLAG_KEYS.filter((flag) => flag in answered) }
+			: { values: { ...defaultFlagValues(), billing }, source: 'defaults', inPostHog: [] };
 		this.remember(subject.distinctId, evaluation, answered ? FLAG_CACHE_MS : FLAG_FAILURE_CACHE_MS);
 		return this.withOverrides(evaluation);
 	}
 
-	private async ask(config: PostHogConfig, subject: FlagSubject): Promise<Partial<FlagValues> | null> {
+	private async ask(config: PostHogConfig, distinctId: string, plan: PlanId | 'none'): Promise<Partial<FlagValues> | null> {
 		try {
 			const response = await this.deps.fetcher(FLAGS_URL, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ api_key: config.projectKey, distinct_id: subject.distinctId, person_properties: { plan: await subject.plan() } }),
+				body: JSON.stringify({ api_key: config.projectKey, distinct_id: distinctId, person_properties: { plan } }),
 				signal: AbortSignal.timeout(this.deps.timeoutMs ?? FLAG_TIMEOUT_MS),
 			});
 			return response.ok ? readFlagsAnswer(await response.json()) : null;
@@ -162,7 +182,9 @@ export async function flagsFor(env: Env, userId: string | null): Promise<FlagEva
 	} catch {
 		evaluation = { values: { ...defaultFlagValues(), ...flagOverridesOf(env) }, source: 'defaults', inPostHog: [] };
 	}
-	// Billing shipped first behind BILLING and BILLING_USER_IDS. PostHog can add accounts, never take a paying seller out.
+	// Billing is on when PostHog says so, when BILLING or BILLING_USER_IDS says so, or when the account's plan is paid
+	// (Pro, Premium or Enterprise; the evaluator applies that on every answer and every failure). PostHog answering off,
+	// or failing, never drops a paying seller.
 	if (!evaluation.values.billing && isBillingOn(env, userId)) return { ...evaluation, values: { ...evaluation.values, billing: true } };
 	return evaluation;
 }
