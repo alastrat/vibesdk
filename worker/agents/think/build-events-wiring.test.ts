@@ -25,10 +25,15 @@ describe('build analytics wiring', () => {
 	const host = source('/worker/agents/core/behaviors/think.ts');
 
 	it("counts every step of a turn and answers its steps and billing's charged credits to the host", () => {
-		expect(between(agent, 'override async beforeTurn(', 'override getSkills(')).toContain('this.turnSteps = 0;');
+		expect(between(agent, 'override async beforeTurn(', 'override getSkills(')).toMatch(/this\.turnSteps = 0;\s*this\.turnCredits = 0;/);
 		expect(between(agent, 'override async beforeStep(', 'if (ctx.stepNumber')).toContain('this.turnSteps += 1;');
 		expect(agent).toContain('async getTurnUsage(): Promise<BuildTurnUsage | null>');
 		expect(agent).toContain('credits: this.turnCreditsUsed()');
+	});
+
+	it("reads a turn's usage once, so a turn that never reached beforeTurn can't repeat the previous one", () => {
+		const read = between(agent, 'async getTurnUsage(): Promise<BuildTurnUsage | null>', '\n\t}\n');
+		expect(read).toMatch(/const steps = this\.turnSteps;\s*this\.turnSteps = null;\s*return steps === null \? null : \{ steps, credits: this\.turnCreditsUsed\(\) \};/);
 	});
 
 	it('sends build_started before the turn, and build_finished after it, failed or not', () => {

@@ -205,7 +205,7 @@ export class ThinkAgent extends Think<Env> {
 	private turnUsage: TurnUsage | null = null;
 	/** The current turn's step credits at its model's prices, billing on or off. */
 	private turnCredits = 0;
-	/** The current turn's steps; the host reads them when the turn ends (getTurnUsage). Null before any turn. */
+	/** The current turn's steps; the host reads them once when the turn ends (getTurnUsage). Null until a turn starts. */
 	private turnSteps: number | null = null;
 
 	private requireConfig(): ThinkAgentConfig {
@@ -301,10 +301,10 @@ export class ThinkAgent extends Think<Env> {
 
 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
 		this.turnSteps = 0;
+		this.turnCredits = 0;
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
 		this.providerFailure = null;
-		this.turnCredits = 0;
 		// ctx.model is the model this turn runs on; the config may change before the turn ends.
 		const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
 		const model = resolveThinkModel(turnModelId);
@@ -450,9 +450,14 @@ export class ThinkAgent extends Think<Env> {
 		return this.turnCredits;
 	}
 
-	/** RPC for the host: the turn's steps, and the credits billing's per-step charge took for them. */
+	/**
+	 * RPC for the host: the turn's steps, and the credits billing's per-step charge took for them. Read once, so a turn
+	 * that ends before beforeTurn answers null instead of the previous turn's usage.
+	 */
 	async getTurnUsage(): Promise<BuildTurnUsage | null> {
-		return this.turnSteps === null ? null : { steps: this.turnSteps, credits: this.turnCreditsUsed() };
+		const steps = this.turnSteps;
+		this.turnSteps = null;
+		return steps === null ? null : { steps, credits: this.turnCreditsUsed() };
 	}
 
 	/**

@@ -85,7 +85,9 @@ export class AuthController extends BaseController {
             );
             
             const telemetry = await sessionTelemetry(env, request, result.user.id);
-            serverAnalytics(env).capture('account_created', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
+            if (!telemetry.analyticsOptOut) {
+                serverAnalytics(env).capture('account_created', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
+            }
             const response = AuthController.createSuccessResponse({
                 ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
                 telemetry,
@@ -153,7 +155,9 @@ export class AuthController extends BaseController {
             const result = await authService.login(validatedData, request);
             
             const telemetry = await sessionTelemetry(env, request, result.user.id);
-            serverAnalytics(env).capture('signed_in', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
+            if (!telemetry.analyticsOptOut) {
+                serverAnalytics(env).capture('signed_in', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
+            }
             const response = AuthController.createSuccessResponse({
                 ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
                 telemetry,
@@ -647,8 +651,9 @@ export class AuthController extends BaseController {
             );
 
             // A GPC signal on this navigation becomes the account's opt-out before anything is sent.
-            await honorAnalyticsChoice(env, request, result.user.id);
-            serverAnalytics(env).capture(result.isNewUser ? 'account_created' : 'signed_in', result.user.id, { method: validatedProvider }, await personUpdateOf(env, result.user.id));
+            if (!(await honorAnalyticsChoice(env, request, result.user.id))) {
+                serverAnalytics(env).capture(result.isNewUser ? 'account_created' : 'signed_in', result.user.id, { method: validatedProvider }, await personUpdateOf(env, result.user.id));
+            }
             
             const baseUrl = new URL(request.url).origin;
             

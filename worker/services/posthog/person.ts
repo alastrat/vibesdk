@@ -25,9 +25,8 @@ export async function planOf(env: Env, userId: string): Promise<PlanId> {
 /** The person properties to set with an event about this user; empty when they can't be read, never throwing. */
 export async function personUpdateOf(env: Env, userId: string): Promise<PersonUpdate> {
 	try {
-		const facts = await new AnalyticsPersonService(env).personFacts(userId);
+		const [facts, plan] = await Promise.all([new AnalyticsPersonService(env).personFacts(userId), planOf(env, userId)]);
 		if (!facts) return {};
-		const plan = await planOf(env, userId);
 		const update: PersonUpdate = { set: { plan, seller_level: facts.sellerLevel ?? 'none', has_live_store: facts.hasLiveStore } };
 		if (facts.createdAt) update.setOnce = { signup_date: facts.createdAt.toISOString().slice(0, 10) };
 		return update;

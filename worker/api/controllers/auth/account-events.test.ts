@@ -2,21 +2,26 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { TERMS_VERSION } from '../../../../shared/types/legal';
 import type { RouteContext } from '../../types/route-context';
 
-const recorded = vi.hoisted(() => ({ calls: [] as string[], events: [] as Array<{ name: string; userId: string; properties: unknown }> }));
+const recorded = vi.hoisted(() => ({ calls: [] as string[], events: [] as Array<{ name: string; userId: string; properties: unknown }>, optedOut: false, personReads: 0 }));
 const auth = vi.hoisted(() => ({ register: vi.fn(), login: vi.fn(), verifyEmail: vi.fn(), handleOAuthCallback: vi.fn(), getPendingLinkUserId: vi.fn(async () => null) }));
 
 vi.mock('../../../database/services/AuthService', () => ({ AuthService: vi.fn().mockImplementation(() => auth) }));
 vi.mock('../../../services/posthog/session', () => ({
 	sessionTelemetry: async () => {
 		recorded.calls.push('telemetry');
-		return { flags: { billing: false, 'store-drafts-paused': false, 'catalog-paused': false, 'session-replay-paused': false }, analyticsOptOut: false };
+		return { flags: { billing: false, 'store-drafts-paused': false, 'catalog-paused': false, 'session-replay-paused': false }, analyticsOptOut: recorded.optedOut };
 	},
 	honorAnalyticsChoice: async () => {
 		recorded.calls.push('gpc');
-		return false;
+		return recorded.optedOut;
 	},
 }));
-vi.mock('../../../services/posthog/person', () => ({ personUpdateOf: async () => ({ set: { plan: 'basic' } }) }));
+vi.mock('../../../services/posthog/person', () => ({
+	personUpdateOf: async () => {
+		recorded.personReads += 1;
+		return { set: { plan: 'basic' } };
+	},
+}));
 vi.mock('../../../services/posthog/analytics', () => ({
 	serverAnalytics: () => ({
 		capture: (name: string, userId: string, properties: unknown) => {
@@ -36,6 +41,11 @@ const post = (path: string, body: unknown) =>
 beforeEach(() => {
 	recorded.calls.length = 0;
 	recorded.events.length = 0;
+	recorded.optedOut = false;
+	recorded.personReads = 0;
+	auth.register.mockReset();
+	auth.login.mockReset();
+	auth.handleOAuthCallback.mockReset();
 });
 
 describe('account events', () => {
@@ -70,5 +80,20 @@ describe('account events', () => {
 			['signed_in', { method: 'google' }],
 		]);
 		expect(recorded.calls.indexOf('gpc')).toBeLessThan(recorded.calls.indexOf('capture:account_created'));
+	});
+
+	it('sends no account event and reads no person properties for someone who turned analytics off', async () => {
+		recorded.optedOut = true;
+		auth.register.mockResolvedValue(SESSION);
+		auth.login.mockResolvedValue(SESSION);
+		auth.handleOAuthCallback.mockResolvedValue({ ...SESSION, isNewUser: true });
+		await AuthController.register(post('/api/auth/register', { email: 'ana@example.test', password: 'A-strong-pass-123!', acceptedTermsVersion: TERMS_VERSION }), env, {} as ExecutionContext, {} as RouteContext);
+		await AuthController.login(post('/api/auth/login', { email: 'ana@example.test', password: 'whatever' }), env, {} as ExecutionContext, {} as RouteContext);
+		const callback = new Request('https://estori.app/api/auth/callback/google?code=c&state=s');
+		const context = { pathParams: { provider: 'google' }, queryParams: new URL(callback.url).searchParams } as unknown as RouteContext;
+		await AuthController.handleOAuthCallback(callback, env, {} as ExecutionContext, context);
+		expect(recorded.calls).toEqual(['telemetry', 'telemetry', 'gpc']);
+		expect(recorded.events).toEqual([]);
+		expect(recorded.personReads).toBe(0);
 	});
 });

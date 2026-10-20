@@ -38,20 +38,22 @@ export class AnalyticsPersonService extends BaseService {
 
 	/** What person properties are built from; null when the user doesn't exist. */
 	async personFacts(userId: string): Promise<{ createdAt: Date | null; sellerLevel: SellerLevel | null; hasLiveStore: boolean } | null> {
-		const user = await this.database.select({ createdAt: schema.users.createdAt }).from(schema.users).where(eq(schema.users.id, userId)).get();
+		const [user, seller, live] = await Promise.all([
+			this.database.select({ createdAt: schema.users.createdAt }).from(schema.users).where(eq(schema.users.id, userId)).get(),
+			this.database
+				.select({ level: schema.stripeConnectAccounts.sellerLevel })
+				.from(schema.stripeConnectAccounts)
+				.where(eq(schema.stripeConnectAccounts.userId, userId))
+				.get(),
+			this.database
+				.select({ appId: schema.liveStores.appId })
+				.from(schema.liveStores)
+				.innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
+				.where(and(eq(schema.apps.userId, userId), eq(schema.liveStores.status, 'live')))
+				.limit(1)
+				.get(),
+		]);
 		if (!user) return null;
-		const seller = await this.database
-			.select({ level: schema.stripeConnectAccounts.sellerLevel })
-			.from(schema.stripeConnectAccounts)
-			.where(eq(schema.stripeConnectAccounts.userId, userId))
-			.get();
-		const live = await this.database
-			.select({ appId: schema.liveStores.appId })
-			.from(schema.liveStores)
-			.innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
-			.where(and(eq(schema.apps.userId, userId), eq(schema.liveStores.status, 'live')))
-			.limit(1)
-			.get();
 		// Rows created with the column's text default read as an invalid date.
 		const createdAt = user.createdAt && !Number.isNaN(user.createdAt.getTime()) ? user.createdAt : null;
 		return { createdAt, sellerLevel: seller?.level ?? null, hasLiveStore: live !== undefined };
