@@ -1,19 +1,34 @@
 /**
- * Credits from a step's real cost: ceil(list-price cost × 1.5 ÷ $0.001). Prices are turned into whole units of $0.0001
- * per 1M tokens, so the arithmetic is exact: credits = ceil(Σ tokens × units × 15 ÷ 10^8).
+ * Credits from a step's real cost: ceil(list-price cost × CREDIT_MARGIN ÷ CREDIT_USD). Prices are turned into whole units
+ * of $0.0001 per 1M tokens and the margin into hundredths, so the arithmetic stays in integers:
+ * credits = ceil(Σ tokens × units × CREDIT_NUMERATOR ÷ CREDIT_DIVISOR), both worked out from the two constants below.
  */
 import type { LanguageModelUsage } from 'ai';
+import { LEGACY_CREDIT_FACTOR } from '../../../shared/types/plans';
 import type { TokenPrices } from '../../agents/think/model-config';
 
+/** What one credit is worth in US dollars. */
 export const CREDIT_USD = 0.001;
+/** What a step costs in credits, as a multiple of the model's list-price cost. */
 export const CREDIT_MARGIN = 1.5;
-/** Older paths charged a flat cost per call; Sonnet's 8 matches its typical 136 credits a step. */
-export const LEGACY_CREDIT_FACTOR = 17;
 
 const UNITS_PER_USD = 10_000;
-/** units × tokens × 15 ÷ 10^8 = (units ÷ 10^4 $) × (tokens ÷ 10^6) × 1.5 ÷ $0.001. */
-const CREDIT_DIVISOR = 100_000_000;
-const MARGIN_NUMERATOR = 15;
+const TOKENS_PER_PRICE = 1_000_000;
+const MARGIN_SCALE = 100;
+
+function gcd(a: number, b: number): number {
+	return b === 0 ? a : gcd(b, a % b);
+}
+
+/**
+ * (units ÷ UNITS_PER_USD $) × (tokens ÷ TOKENS_PER_PRICE) × (CREDIT_MARGIN ÷ CREDIT_USD) as one fraction, reduced so the
+ * products stay well inside Number's exact integer range.
+ */
+const FRACTION_NUMERATOR = Math.round(CREDIT_MARGIN * MARGIN_SCALE) * Math.round(1 / CREDIT_USD);
+const FRACTION_DIVISOR = UNITS_PER_USD * TOKENS_PER_PRICE * MARGIN_SCALE;
+const FRACTION_GCD = gcd(FRACTION_NUMERATOR, FRACTION_DIVISOR);
+const CREDIT_NUMERATOR = FRACTION_NUMERATOR / FRACTION_GCD;
+const CREDIT_DIVISOR = FRACTION_DIVISOR / FRACTION_GCD;
 
 /** The token counts a provider reported for one step. Every field is optional because providers differ in what they send. */
 export interface StepUsage {
@@ -53,7 +68,7 @@ export function stepCredits(prices: TokenPrices, usage: StepUsage | null, typica
 	const output = usage.outputTokens !== undefined ? count(usage.outputTokens) : count(usage.textTokens) + count(usage.reasoningTokens);
 	const total =
 		fresh * units(prices.inputUsd) + cacheRead * units(prices.cacheReadUsd) + cacheWrite * units(prices.cacheWriteUsd) + output * units(prices.outputUsd);
-	return Math.floor((total * MARGIN_NUMERATOR + CREDIT_DIVISOR - 1) / CREDIT_DIVISOR);
+	return Math.floor((total * CREDIT_NUMERATOR + CREDIT_DIVISOR - 1) / CREDIT_DIVISOR);
 }
 
 /** An older call's flat cost in today's unit. */

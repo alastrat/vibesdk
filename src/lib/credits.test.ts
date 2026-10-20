@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { LEGACY_CREDIT_FACTOR } from '@/api-types';
 import { CAPABILITIES } from './capabilities';
 import {
 	CREDIT_ACTIONS,
+	DAYS_PER_MONTH,
 	actionById,
 	actionCredits,
 	actionCreditsRange,
@@ -85,6 +87,14 @@ describe('credits', () => {
 		// With billing off, Basic is today's daily allowance over a month.
 		expect(recommendPlan(5_500, 6_000)).toEqual({ plan: 'basic' });
 		expect(recommendPlan(6_001, 6_000)).toEqual({ plan: 'pro' });
+	});
+
+	it("recommends Basic for one typical store at Sonnet while billing is off, as today's allowance is in the older unit", () => {
+		const perDay = 200;
+		const needed = monthlyCredits(typicalUsage(1, DEFAULT_RATE));
+		expect(recommendPlan(needed, perDay * DAYS_PER_MONTH * LEGACY_CREDIT_FACTOR)).toEqual({ plan: 'basic' });
+		// Left in the older unit, the same month would not have fit Basic.
+		expect(recommendPlan(needed, perDay * DAYS_PER_MONTH)).not.toEqual({ plan: 'basic' });
 	});
 
 	it('looks an action up by its category', () => {

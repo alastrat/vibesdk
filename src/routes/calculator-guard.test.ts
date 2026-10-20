@@ -24,7 +24,7 @@ describe('credits calculator', () => {
 		const calculator = source(CALCULATOR);
 		expect(calculator).toContain('useModelRates()');
 		expect(calculator).toContain('usePublicPlan()');
-		expect(calculator).toContain('aiCreditsPerDay * DAYS_PER_MONTH');
+		expect(calculator).toContain('aiCreditsPerDay * DAYS_PER_MONTH * LEGACY_CREDIT_FACTOR');
 	});
 
 	it('starts from typical amounts for the number of stores, and can start over', () => {

@@ -72,6 +72,9 @@ export const EXTRA_CREDITS = {
 	monthsValid: 12,
 } as const;
 
+/** Older paths charged a flat cost per call; Sonnet's 8 matches its typical 136 credits a step, so one old credit is 17 new ones. */
+export const LEGACY_CREDIT_FACTOR = 17;
+
 export const PLAN_LIMIT_CODE = 'plan_limit';
 
 /** How long a failing payment keeps its plan before the account runs as Basic. */

@@ -5,7 +5,7 @@ import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
 import { useModelRates } from '@/hooks/use-model-rates';
 import { usePublicPlan } from '@/hooks/use-public-plan';
-import { PLAN_LIMITS, PLAN_PRICES_CENTS, extraCreditsPriceCents } from '@/api-types';
+import { LEGACY_CREDIT_FACTOR, PLAN_LIMITS, PLAN_PRICES_CENTS } from '@/api-types';
 import { contactPath } from '@/lib/contact';
 import {
 	CREDIT_ACTIONS,
@@ -90,7 +90,7 @@ function planPrice(recommendation: Recommendation): string {
 	return 'Custom';
 }
 
-/** The credits a month the recommended plan covers, extra credits included; Enterprise covers whatever is needed. */
+/** The credits a month the recommended plan includes; Enterprise covers whatever is needed. */
 function includedCredits(recommendation: Recommendation, basicCredits: number, needed: number): number {
 	switch (recommendation.plan) {
 		case 'basic':
@@ -98,7 +98,7 @@ function includedCredits(recommendation: Recommendation, basicCredits: number, n
 		case 'pro':
 			return PLAN_LIMITS.pro.aiCredits;
 		case 'premium':
-			return PLAN_LIMITS.premium.aiCredits + recommendation.extraCredits;
+			return PLAN_LIMITS.premium.aiCredits;
 		case 'enterprise':
 			return needed;
 	}
@@ -117,7 +117,8 @@ export function Calculator() {
 
 	const model = models.find((entry) => entry.id === modelId) ?? defaultModel;
 	const usage: Usage = { ...amounts, creditsPerStep: model?.creditsPerStep ?? 0 };
-	const freeMonthly = plan.data?.aiCreditsPerDay != null ? plan.data.aiCreditsPerDay * DAYS_PER_MONTH : null;
+	// Today's allowance is in the older unit, where Sonnet takes 8 a step, so it is converted to the unit the steps are priced in.
+	const freeMonthly = plan.data?.aiCreditsPerDay != null ? plan.data.aiCreditsPerDay * DAYS_PER_MONTH * LEGACY_CREDIT_FACTOR : null;
 	const basicCredits = freeMonthly ?? PLAN_LIMITS.basic.aiCredits;
 	const needed = monthlyCredits(usage);
 	const recommendation = recommendPlan(needed, basicCredits);
@@ -325,12 +326,6 @@ export function Calculator() {
 									</span>
 									<span className="shrink-0 text-public-ink">{planPrice(recommendation)}</span>
 								</div>
-								{recommendation.plan === 'premium' && recommendation.extraCredits > 0 && (
-									<div className="flex items-baseline justify-between gap-3">
-										<span className="text-public-ink">Plus {formatCredits(recommendation.extraCredits)} extra credits</span>
-										<span className="shrink-0 text-public-ink">{formatUsd(extraCreditsPriceCents(recommendation.extraCredits))}</span>
-									</div>
-								)}
 								<div className="flex items-baseline justify-between gap-3 border-t border-public-line pt-3">
 									<span className="text-public-ink">Total</span>
 									<span className="text-2xl font-light text-public-ink">

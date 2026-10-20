@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legacyCallCredits, stepCredits, stepUsageFrom } from './step-credits';
+import { CREDIT_MARGIN, CREDIT_USD, legacyCallCredits, stepCredits, stepUsageFrom } from './step-credits';
 
 const SONNET = { inputUsd: 2, outputUsd: 10, cacheReadUsd: 0.2, cacheWriteUsd: 2.5 };
 const OPUS = { inputUsd: 4, outputUsd: 20, cacheReadUsd: 0.4, cacheWriteUsd: 5 };
@@ -12,6 +12,11 @@ describe('stepCredits', () => {
 		// $0.015 + $0.00375 = $0.01875, × 1.5 = $0.028125: 29 credits.
 		expect(stepCredits(FLASH, { inputTokens: 20_000, outputTokens: 1_000 }, 16)).toBe(29);
 		expect(stepCredits(SONNET, { inputTokens: 1, outputTokens: 0 }, 136)).toBe(1);
+	});
+
+	it('takes its margin and the size of a credit from the constants', () => {
+		// 500k tokens at $2 per 1M is exactly $1 of list-price cost.
+		expect(stepCredits(SONNET, { inputTokens: 500_000, outputTokens: 0 }, 136)).toBe(Math.round(CREDIT_MARGIN / CREDIT_USD));
 	});
 
 	it('prices cache reads and writes apart from fresh input, and counts reasoning as output', () => {
