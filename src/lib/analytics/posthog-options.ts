@@ -1,6 +1,6 @@
 import type { CaptureResult, PostHogConfig } from 'posthog-js';
 import { scrubEmails } from '../../../shared/types/scrub-emails';
-import { POSTHOG_API_HOST, POSTHOG_UI_HOST } from './posthog-projects';
+import { POSTHOG_API_HOST, POSTHOG_UI_HOST, type AnalyticsEnvironment } from './posthog-projects';
 
 /**
  * Recording stops on these paths and below them: orders, shopper emails, the profile with its payments setup
@@ -96,12 +96,25 @@ export function scrubEvent(event: CaptureResult | null): CaptureResult | null {
 }
 
 export interface AnalyticsState {
+	/** Which environment this page's events belong to. */
+	environment: AnalyticsEnvironment;
 	/** The browser's Global Privacy Control signal. */
 	gpc: boolean;
 	/** The signed-in user's analytics setting. */
 	optedOut: boolean;
 	/** Whether this page may record: replay isn't paused by its flag, and the path isn't a paused one. */
 	replay: boolean;
+}
+
+/**
+ * `before_send` for a page in `environment`: tags the event, then scrubs it. A super property would do the same, but
+ * `syncPerson`'s reset() clears those; before_send tags every event for as long as the page lives.
+ */
+function taggedScrubber(environment: AnalyticsEnvironment): (event: CaptureResult) => CaptureResult | null {
+	return (event) => {
+		event.properties.environment = environment;
+		return scrubEvent(event);
+	};
 }
 
 export function posthogInitOptions(state: AnalyticsState): Partial<PostHogConfig> {
@@ -131,7 +144,7 @@ export function posthogInitOptions(state: AnalyticsState): Partial<PostHogConfig
 			recordHeaders: false,
 			recordBody: false,
 		},
-		before_send: scrubEvent,
+		before_send: taggedScrubber(state.environment),
 		opt_out_capturing_by_default: state.gpc || state.optedOut,
 	};
 }

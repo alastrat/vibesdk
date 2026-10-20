@@ -20,7 +20,9 @@ export function PostHogSync() {
 	const { pathname } = useLocation();
 	const loaded = useRef(false);
 	const syncedUserId = useRef<string | null>(null);
-	const token = posthogTokenFor(window.location.hostname, config.data?.localProjectKey ?? null);
+	const project = posthogTokenFor(window.location.hostname, config.data?.localProjectKey ?? null);
+	const token = project?.token ?? null;
+	const environment = project?.environment ?? null;
 	// A failed config call still loads PostHog on estori.app, with replay not paused for visitors.
 	const ready = !config.isPending && !isLoading;
 	const gpc = globalPrivacyControl(navigator);
@@ -30,13 +32,13 @@ export function PostHogSync() {
 	const userId = user?.id ?? null;
 
 	useLayoutEffect(() => {
-		if (loaded.current || !token || !ready) return;
-		posthog.init(token, posthogInitOptions({ gpc, optedOut, replay: replay && !replayPausedOn(window.location.pathname) }));
+		if (loaded.current || !token || !environment || !ready) return;
+		posthog.init(token, posthogInitOptions({ environment, gpc, optedOut, replay: replay && !replayPausedOn(window.location.pathname) }));
 		// The browser can still carry an account from a session that ended without signing out; syncing resets it
 		// unless that account is the one signed in now.
 		syncedUserId.current = posthog._isIdentified() ? posthog.get_distinct_id() : null;
 		loaded.current = true;
-	}, [token, ready, gpc, optedOut, replay]);
+	}, [token, environment, ready, gpc, optedOut, replay]);
 
 	useLayoutEffect(() => {
 		if (!loaded.current) return;

@@ -23,7 +23,7 @@ describe('PostHog in the browser', () => {
 
 	it("loads only with this host's token, so staging, previews and stores never load it", () => {
 		expect(sync).toContain('posthogTokenFor(window.location.hostname, config.data?.localProjectKey ?? null)');
-		expect(sync).toContain('if (loaded.current || !token || !ready) return;');
+		expect(sync).toContain('if (loaded.current || !token || !environment || !ready) return;');
 	});
 
 	it('identifies people by user id only, never by email, name or username', () => {

@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { CaptureResult } from 'posthog-js';
+import type { BeforeSendFn, CaptureResult } from 'posthog-js';
 import { globalPrivacyControl, maskReplayAttribute, posthogInitOptions, replayPausedOn, scrubEvent, withoutQuery } from './posthog-options';
 
 describe('posthog-js options', () => {
 	it('talks to /ingest, records layouts and clicks but no page text, input values, images or iframes, and asks PostHog for no flags', () => {
-		expect(posthogInitOptions({ gpc: false, optedOut: false, replay: true })).toEqual({
+		expect(posthogInitOptions({ environment: 'prod', gpc: false, optedOut: false, replay: true })).toEqual({
 			api_host: '/ingest',
 			ui_host: 'https://us.posthog.com',
 			person_profiles: 'identified_only',
@@ -26,15 +26,28 @@ describe('posthog-js options', () => {
 				recordHeaders: false,
 				recordBody: false,
 			},
-			before_send: scrubEvent,
+			before_send: expect.any(Function),
 			opt_out_capturing_by_default: false,
 		});
 	});
 
+	it('tags every event with where it came from, and still scrubs it', () => {
+		// before_send, not posthog.register, since syncPerson's reset() clears super properties.
+		for (const environment of ['prod', 'dev'] as const) {
+			const beforeSend = posthogInitOptions({ environment, gpc: false, optedOut: false, replay: true }).before_send as BeforeSendFn;
+			const event = {
+				uuid: 'u0',
+				event: '$pageview',
+				properties: { $current_url: 'https://estori.app/reset-password?token=secret', title: 'Tea Shop', contact: 'ana@example.com' },
+			} as unknown as CaptureResult;
+			expect(beforeSend(event)?.properties, environment).toEqual({ $current_url: 'https://estori.app/reset-password', contact: '[email]', environment });
+		}
+	});
+
 	it('starts opted out under GPC or the account setting, and without replay when it is paused', () => {
-		expect(posthogInitOptions({ gpc: true, optedOut: false, replay: true }).opt_out_capturing_by_default).toBe(true);
-		expect(posthogInitOptions({ gpc: false, optedOut: true, replay: true }).opt_out_capturing_by_default).toBe(true);
-		expect(posthogInitOptions({ gpc: false, optedOut: false, replay: false }).disable_session_recording).toBe(true);
+		expect(posthogInitOptions({ environment: 'prod', gpc: true, optedOut: false, replay: true }).opt_out_capturing_by_default).toBe(true);
+		expect(posthogInitOptions({ environment: 'prod', gpc: false, optedOut: true, replay: true }).opt_out_capturing_by_default).toBe(true);
+		expect(posthogInitOptions({ environment: 'prod', gpc: false, optedOut: false, replay: false }).disable_session_recording).toBe(true);
 	});
 
 	it('pauses replay on orders, emails, profile and payments setup, settings and billing, and admin pages only', () => {

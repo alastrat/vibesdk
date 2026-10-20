@@ -6,9 +6,9 @@ const PRODUCTION = 'phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC';
 
 describe('the PostHog project for this page', () => {
 	it('is the production project on estori.app only', () => {
-		expect(POSTHOG_PROJECTS).toEqual({ 'estori.app': PRODUCTION });
-		expect(posthogTokenFor('estori.app', null)).toBe(PRODUCTION);
-		expect(posthogTokenFor('estori.app', 'phc_local')).toBe(PRODUCTION);
+		expect(POSTHOG_PROJECTS).toEqual({ 'estori.app': { token: PRODUCTION, environment: 'prod' } });
+		expect(posthogTokenFor('estori.app', null)).toEqual({ token: PRODUCTION, environment: 'prod' });
+		expect(posthogTokenFor('estori.app', 'phc_local')).toEqual({ token: PRODUCTION, environment: 'prod' });
 	});
 
 	it('is none on staging, previews, stores and any other host', () => {
@@ -17,8 +17,8 @@ describe('the PostHog project for this page', () => {
 		}
 	});
 
-	it('is the opt-in token on localhost, and none without it', () => {
-		for (const host of ['localhost', '127.0.0.1', '[::1]']) expect(posthogTokenFor(host, 'phc_local'), host).toBe('phc_local');
+	it('is the opt-in token on localhost, as dev, and none without it', () => {
+		for (const host of ['localhost', '127.0.0.1', '[::1]']) expect(posthogTokenFor(host, 'phc_local'), host).toEqual({ token: 'phc_local', environment: 'dev' });
 		expect(posthogTokenFor('localhost', null)).toBeNull();
 	});
 
