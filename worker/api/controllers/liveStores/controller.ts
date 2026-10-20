@@ -20,6 +20,9 @@ import { assertWithinLimit } from '../../../../shared/types/plans';
 import { NEW_CATALOG_PRODUCTS_ERROR } from '../../../../shared/types/billing';
 import { CUSTOM_DOMAINS_PAUSED_MESSAGE, STORE_PUBLISHING_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
 import { isFlagOn } from '../../../services/posthog/flags';
+import { serverAnalytics } from '../../../services/posthog/analytics';
+import { personUpdateOf } from '../../../services/posthog/person';
+import { MAIN_DRAFT_ID } from '../../../../shared/types/drafts';
 import type { PublishContext, PublishDraftOptions, PublishDraftResult } from '@space-do/space';
 
 interface LiveSpaceStub {
@@ -110,6 +113,7 @@ export class LiveStoreController extends BaseController {
             } catch (error) {
                 this.logger.warn('Could not clear a leftover merge before publishing; publishing anyway', { appId, error });
             }
+            const firstPublish = (await stores.getByApp(appId)) === null;
             const published = await space.publishDraft(draftId, { refuseNewCatalogProducts });
             if ('error' in published) {
                 if (catalogRefusal && published.error === NEW_CATALOG_PRODUCTS_ERROR) return this.createPlanLimitResponse<LiveStoreView>(catalogRefusal);
@@ -117,6 +121,11 @@ export class LiveStoreController extends BaseController {
             }
             const saved = await stores.publish({ appId, slug, commit: published.commitHash, now: new Date() });
             if (saved === 'slug-taken') return this.createErrorResponse<LiveStoreView>('That address is taken. Try another.', 409);
+            const ownerId = context.user?.id;
+            if (ownerId) {
+                const draft = published.draftId === MAIN_DRAFT_ID ? 'main' : 'other';
+                serverAnalytics(env).capture('store_published', ownerId, { app_id: appId, first_publish: firstPublish, draft }, await personUpdateOf(env, ownerId));
+            }
             return this.createSuccessResponse(await viewOf(env, appId));
         } catch (error) {
             return this.handleError(error, 'publish the store') as ControllerResponse<ApiResponse<LiveStoreView>>;
@@ -138,6 +147,8 @@ export class LiveStoreController extends BaseController {
                 },
                 markExpired: (checkoutId) => checkouts.expire(checkoutId),
             });
+            const ownerId = context.user?.id;
+            if (ownerId) serverAnalytics(env).capture('store_unpublished', ownerId, { app_id: appId }, await personUpdateOf(env, ownerId));
             return this.createSuccessResponse(await viewOf(env, appId));
         } catch (error) {
             return this.handleError(error, 'take the store offline') as ControllerResponse<ApiResponse<LiveStoreView>>;

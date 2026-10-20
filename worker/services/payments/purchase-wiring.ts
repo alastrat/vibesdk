@@ -1,8 +1,10 @@
 /** Recording a paid site's purchase, with its production dependencies; the webhook and the return page share it. */
 
-import { TemplateService } from '../../database';
+import { StripeConnectService, TemplateService } from '../../database';
 import { configuredBaseUrl } from '../email/links';
 import { createEmailSender } from '../email/sender';
+import { serverAnalytics } from '../posthog/analytics';
+import { templateSoldProperties } from '../posthog/commerce-events';
 import type { FulfillDeps } from './fulfill';
 import { sendPurchaseReceipt, type PurchaseReceiptDeps } from './purchase-receipt';
 
@@ -17,7 +19,14 @@ export function fulfillDepsFromEnv(env: Env, defer?: (sending: Promise<unknown>)
 	};
 	return {
 		listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,
-		recordStripePurchase: (record) => listings.recordStripePurchase(record),
+		recordStripePurchase: async (record) => {
+			const recorded = await listings.recordStripePurchase(record);
+			if (recorded) {
+				const seller = await new StripeConnectService(env).getByAccountId(record.sellerStripeAccountId).catch(() => null);
+				if (seller) serverAnalytics(env).capture('template_sold', seller.userId, templateSoldProperties(record));
+			}
+			return recorded;
+		},
 		sessionRecorded: (checkoutSessionId) => listings.hasCheckoutSession(checkoutSessionId),
 		sendReceipt: async (purchase, checkoutEmail) => {
 			const sending = sendPurchaseReceipt(receipts, purchase, checkoutEmail);
