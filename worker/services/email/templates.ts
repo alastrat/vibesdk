@@ -7,7 +7,7 @@ import type { PlatformAlert } from '../alerts/platform-alerts';
 const BUTTON_STYLE =
 	'display:inline-block;padding:12px 20px;background:#1a1a1a;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:600;';
 
-interface EmailContent {
+export interface EmailContent {
 	to: string;
 	subject: string;
 	heading: string;
@@ -40,7 +40,7 @@ function renderDetails(details: EmailContent['details']): string {
 `;
 }
 
-function renderEmail(content: EmailContent): OutgoingEmail {
+export function renderEmail(content: EmailContent): OutgoingEmail {
 	const html = `<!doctype html>
 <html>
 <body style="margin:0;padding:24px;background:#ffffff;color:#1a1a1a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;line-height:1.5;">
