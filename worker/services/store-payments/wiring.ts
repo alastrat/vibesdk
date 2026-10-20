@@ -34,7 +34,11 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 		recordOrder: async (order) => {
 			const recorded = await orders.recordOrder(order);
 			if (recorded === 'recorded') {
-				const firstSale = (await orders.sellerOrderCount(order.sellerUserId, order.mode).catch(() => 0)) === 1;
+				const sellerOrders = await orders.sellerOrderCount(order.sellerUserId, order.mode).catch((error: unknown) => {
+					logger.warn("Could not count the seller's orders; sale_completed sent with first_sale false", { sellerUserId: order.sellerUserId, error });
+					return 0;
+				});
+				const firstSale = sellerOrders === 1;
 				serverAnalytics(env).capture('sale_completed', order.sellerUserId, saleCompletedProperties(order, firstSale));
 			}
 			return recorded;
