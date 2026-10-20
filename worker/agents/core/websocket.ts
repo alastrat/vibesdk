@@ -5,6 +5,8 @@ import { WebSocketMessage, WebSocketMessageData, WebSocketMessageType } from '..
 import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } from '../../types/image-attachment';
 import { type CredentialsPayload } from '../inferutils/config.types';
 import { checkUsageAndBalance } from '../../services/rate-limit';
+import { checkCreditsBeforeTurn } from '../../services/billing/metering';
+import { PLAN_LIMIT_ERROR_CODE } from '../../../shared/types/billing';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { DeploymentTarget } from './types';
 import { isThinkModelId } from '../think/model-config';
@@ -34,6 +36,7 @@ export async function handleWebSocketMessage(
     connection: Connection, 
     message: string,
     usageCheck: typeof checkUsageAndBalance = checkUsageAndBalance,
+    creditCheck: typeof checkCreditsBeforeTurn = checkCreditsBeforeTurn,
 ): Promise<void> {
     try {
         logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
@@ -147,7 +150,7 @@ export async function handleWebSocketMessage(
                     return;
                 }
                 if (parsedMessage.resume === true) {
-                    if (!(await ensureCanPrompt(agent, connection, usageCheck))) {
+                    if (!(await ensureCanPrompt(agent, connection, usageCheck, creditCheck))) {
                         return;
                     }
                     agent.handleUserInput(RESUME_BUILD_MESSAGE).catch((error: unknown) => {
@@ -250,7 +253,7 @@ export async function handleWebSocketMessage(
                     }
                 }
                 
-                if (!(await ensureCanPrompt(agent, connection, usageCheck))) {
+                if (!(await ensureCanPrompt(agent, connection, usageCheck, creditCheck))) {
                     return;
                 }
                 
@@ -332,17 +335,33 @@ export async function handleWebSocketMessage(
 }
 
 /**
- * Runs the usage check for a new prompt. Sends the limit popup or error and
- * returns false when the user may not prompt.
+ * Runs the checks for a new prompt. Sends the limit popup or error and
+ * returns false when the user may not prompt. With billing on, the account's
+ * credits decide; the Cloudflare usage check runs only while billing is off,
+ * since the build always runs on Estori's gateway.
  */
 async function ensureCanPrompt(
     agent: CodeGeneratorAgent,
     connection: Connection,
     usageCheck: typeof checkUsageAndBalance,
+    creditCheck: typeof checkCreditsBeforeTurn,
 ): Promise<boolean> {
     try {
         const env = agent.env;
         const userId = agent.state.metadata.userId;
+
+        const credits = await creditCheck(env, userId);
+        if (credits.billing) {
+            if (!credits.refusal) return true;
+            logger.warn('Prompt refused by the credit check', { userId, plan: credits.refusal.plan });
+            sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+                error: credits.refusal.message,
+                code: PLAN_LIMIT_ERROR_CODE,
+                planLimit: credits.refusal,
+                showAsPopup: true,
+            });
+            return false;
+        }
 
         // The encrypted blob was captured from the HttpOnly cookie at WS
         // upgrade time (see codingAgent.onConnect) and stored in DO state.

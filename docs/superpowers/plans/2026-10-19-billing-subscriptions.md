@@ -34,7 +34,7 @@ Made here, one line each. Task 1's ledger records them.
 5. **Steps are recorded with up to 3 tries**, with the same key, so a passing D1 error neither loses nor doubles a step.
 6. **The lifetime store counter** is reserved with one conditional `UPDATE … RETURNING`, so two starts can't both take Basic's last place. The migration backfills it from today's apps.
 7. **Billing-off accounts** keep today's metering (`enforceLLMCallsRateLimit` with the model's flat `creditCost` into the daily Durable Object counter).
-8. **ThinkAgent exposes `turnCreditsUsed()`** (the sum of the turn's charged credits), for the PostHog change's `build_finished.credits_used`.
+8. **ThinkAgent exposes `turnCreditsUsed()`** (the sum of the turn's step credits at its model's prices, for every build, billing on or off), for the PostHog change's `build_finished.credits_used`. Only accounts inside the billing flag are charged those credits, through `chargeStep`.
 9. **Task order:** emails (Task 7) come before the billing API and the webhook, which send them. The shared Upgrade dialog arrives with credits (Task 10), its first user.
 10. **Test clocks need a linked customer.** Checkout can't put a customer on a test clock, so the scenarios script makes one and links it through a test-mode-only admin endpoint (Task 13).
 11. **The enforcement notice goes out from the hourly run,** 100 accounts an hour, from `BILLING_ENFORCEMENT_FROM` until that day. Only the Worker can send through the Email binding (Task 15).

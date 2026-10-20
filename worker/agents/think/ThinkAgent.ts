@@ -1,5 +1,5 @@
 import { Think } from '@cloudflare/think';
-import type { PrepareStepContext, StepConfig, Session, TurnContext, TurnConfig } from '@cloudflare/think';
+import type { PrepareStepContext, StepConfig, StepContext, Session, TurnContext, TurnConfig } from '@cloudflare/think';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModel, ToolSet } from 'ai';
 import {
@@ -30,7 +30,13 @@ import { getUserConfigurableSettings } from '../../config';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
-import { resolveThinkModel } from './model-config';
+import { loadAccount } from '../../services/billing/account';
+import type { LedgerPeriod } from '../../services/billing/credit-ledger';
+import { isBillingOn } from '../../services/billing/flag';
+import { chargeStep, meteringDepsFromEnv } from '../../services/billing/metering';
+import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
+import type { PlanId } from '../../../shared/types/plans';
+import { resolveThinkModel, type TokenPrices } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 import { createAssetCache, inlineAgentAssets } from './agent-assets';
@@ -41,6 +47,23 @@ const ASSET_CACHE_BYTES = 20 * 1024 * 1024;
 
 /** Retries per turn after the first attempt (about 6 seconds of backoff) before the user is asked. */
 const TURN_MAX_RETRIES = 2;
+
+/** The model a turn runs on and its prices, so every step is priced, whatever the account is metered by. */
+interface TurnPricing {
+	turnId: string;
+	model: string;
+	prices: TokenPrices;
+	typical: number;
+}
+
+/**
+ * How a turn is metered: charged to the credit ledger (billing on), counted by the old daily counter (billing off), or
+ * neither when the metering lookup failed.
+ */
+type TurnUsage =
+	| (TurnPricing & { mode: 'credits'; userId: string; plan: PlanId; period: LedgerPeriod; pool: number })
+	| (TurnPricing & { mode: 'daily'; config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number })
+	| (TurnPricing & { mode: 'unmetered' });
 
 /**
  * Per-instance configuration pushed into a {@link ThinkAgent} by the host
@@ -180,8 +203,10 @@ export class ThinkAgent extends Think<Env> {
 	private readonly assetCache = createAssetCache(ASSET_CACHE_BYTES);
 	/** Last provider failure in the current turn; the host reads it when a turn fails. */
 	private providerFailure: ProviderFailure | null = null;
-	/** Metering inputs fixed when the turn starts, so a mid-turn model switch cannot reprice steps. */
-	private turnUsage: { config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number } | null = null;
+	/** Metering fixed when the turn starts, so a mid-turn model switch can't reprice its steps. */
+	private turnUsage: TurnUsage | null = null;
+	/** The current turn's step credits at its model's prices, billing on or off. */
+	private turnCredits = 0;
 
 	private requireConfig(): ThinkAgentConfig {
 		const cfg = this.getConfig<ThinkAgentConfig>();
@@ -278,18 +303,27 @@ export class ThinkAgent extends Think<Env> {
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
 		this.providerFailure = null;
-		this.turnUsage = null;
+		this.turnCredits = 0;
+		// ctx.model is the model this turn runs on; the config may change before the turn ends.
+		const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
+		const model = resolveThinkModel(turnModelId);
+		const pricing: TurnPricing = { turnId: crypto.randomUUID(), model: model.id, prices: model.prices, typical: model.creditsPerStep };
+		this.turnUsage = { ...pricing, mode: 'unmetered' };
 		if (config) {
-			// ctx.model is the model this turn runs on; the config may change before the turn ends.
-			const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
-			const creditCost = resolveThinkModel(turnModelId).config.creditCost;
 			try {
-				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
-				this.turnUsage = {
-					config: userConfig.security.rateLimit,
-					hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
-					creditCost,
-				};
+				if (isBillingOn(this.env, config.userId)) {
+					const account = await loadAccount(this.env, config.userId);
+					this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, plan: account.plan, period: account.period, pool: account.limits.aiCredits };
+				} else {
+					const userConfig = await getUserConfigurableSettings(this.env, config.userId);
+					this.turnUsage = {
+						...pricing,
+						mode: 'daily',
+						config: userConfig.security.rateLimit,
+						hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
+						creditCost: model.config.creditCost,
+					};
+				}
 			} catch (error) {
 				console.warn('Failed to resolve Think credit metering configuration', error);
 			}
@@ -361,7 +395,7 @@ export class ThinkAgent extends Think<Env> {
 	 */
 	override async beforeStep(ctx: PrepareStepContext): Promise<StepConfig | void> {
 		const config = this.getConfig<ThinkAgentConfig>();
-		if (this.turnUsage && config) {
+		if (this.turnUsage?.mode === 'daily' && config) {
 			await RateLimitService.enforceLLMCallsRateLimit(
 				this.env,
 				this.turnUsage.config,
@@ -380,6 +414,35 @@ export class ThinkAgent extends Think<Env> {
 				messages: [...ctx.messages, { role: 'user', content: PROMPT_MAX_STEPS }],
 			};
 		}
+	}
+
+	/**
+	 * Prices the step just finished from the tokens it used and adds it to the turn's total. With billing on it is also
+	 * charged to the ledger; a failed record is retried, and never fails the turn.
+	 */
+	override async onStepFinish(ctx: StepContext): Promise<void> {
+		const usage = this.turnUsage;
+		if (!usage) return;
+		const stepUsage = stepUsageFrom(ctx.usage);
+		const credits = stepCredits(usage.prices, stepUsage, usage.typical);
+		this.turnCredits += credits;
+		if (usage.mode !== 'credits') return;
+		await chargeStep(meteringDepsFromEnv(this.env), {
+			userId: usage.userId,
+			period: usage.period,
+			pool: usage.pool,
+			plan: usage.plan,
+			useKey: `${this.name}:${usage.turnId}:${ctx.stepNumber}`,
+			credits,
+			source: 'think',
+			model: usage.model,
+			usage: stepUsage,
+		});
+	}
+
+	/** RPC for the host: the credits this turn's steps cost, for every build, billing on or off. */
+	turnCreditsUsed(): number {
+		return this.turnCredits;
 	}
 
 	/**

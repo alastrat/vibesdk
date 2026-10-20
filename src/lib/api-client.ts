@@ -130,13 +130,16 @@ import type{
 	CheckoutStarted,
 	CreditsRequest,
 	PaidPlanId,
+	PlanLimitRefusal,
 	PlanRequest,
 } from '@/api-types';
 import {
+	isPlanLimitRefusal,
 	RateLimitExceededError,
 	SecurityError,
 	SecurityErrorType,
 } from '@/api-types';
+import { announcePlanLimit } from './plan-limit-events';
 import { toast } from 'sonner';
 
 /**
@@ -152,6 +155,9 @@ export function setGlobalAuthModalTrigger(trigger: (context?: string) => void) {
  * API Client Error class with proper error context
  */
 export class ApiError extends Error {
+	/** The plan limit behind a 402, for the shared Upgrade dialog. */
+	public planLimit: PlanLimitRefusal | null = null;
+
 	constructor(
 		public status: number,
 		public statusText: string,
@@ -481,12 +487,18 @@ class ApiClient {
                         }
                     }
 
-                    throw new ApiError(
+                    const apiError = new ApiError(
                         response.status,
                         response.statusText,
                         data.error?.message || data.message || 'Request failed',
                         endpoint,
                     );
+                    // A plan limit opens the shared Upgrade dialog; callers can still read it from the error.
+                    if (response.status === 402 && isPlanLimitRefusal(data?.error?.planLimit)) {
+                        apiError.planLimit = data.error.planLimit;
+                        announcePlanLimit(data.error.planLimit);
+                    }
+                    throw apiError;
 			}
 
 		    return { response, data };
@@ -1062,7 +1074,8 @@ class ApiClient {
 		} catch (error) {
 			// Handle any network or parsing errors
 			const errorMessage = error instanceof Error ? error.message : 'Failed to create agent session';
-			toast.error(errorMessage);
+			// A plan limit already opened the Upgrade dialog with this message.
+			if (!(error instanceof ApiError && error.planLimit)) toast.error(errorMessage);
 
             throw new Error(errorMessage);
 		}

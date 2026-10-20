@@ -101,7 +101,8 @@ function useBannerInfo(limitsData?: UsageSummary | null): { bannerInfo: BannerIn
 	const [isDismissed, setIsDismissed] = useState(false);
 
 	const bannerInfo = useMemo<BannerInfo | null>(() => {
-		if (isDismissed || !limitsData) return null;
+		// With billing on, the plan's credits and their warnings live on the billing page, not in a Cloudflare prompt.
+		if (isDismissed || !limitsData || limitsData.billing) return null;
 		const { config, usage, hasUserToken, hasCloudflareConfigured, cloudflareCredits } = limitsData;
 		const isConnected = hasUserToken && hasCloudflareConfigured;
 

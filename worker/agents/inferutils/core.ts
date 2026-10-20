@@ -16,6 +16,7 @@ import { CompletionSignal, Message, MessageContent, MessageRole } from './common
 import { ToolCallResult, ToolDefinition, toOpenAITool } from '../tools/types';
 import { AgentActionKey, AI_MODEL_CONFIG, AIModelConfig, AIModels, InferenceMetadata, type InferenceRuntimeOverrides } from './config.types';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
+import { chargeLegacyCall } from '../../services/billing/metering';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import { getUserConfigurableSettings } from '../../config';
 import { SecurityError, RateLimitExceededError } from 'shared/types/errors';
@@ -726,21 +727,26 @@ export async function infer<OutputSchema extends z.ZodObject>({
     }
     
     try {
-        const userConfig = await getUserConfigurableSettings(env, metadata.userId)
         const isUsingBYOK = !!shouldUseUserKey && !!userApiToken;
-        const hasCfConnected = await hasCloudflareConfigured(env, metadata.userId);
+        // With billing on, the call is charged its old flat cost in credits; BYOK calls are paid by the seller.
+        const modelCreditCost = AI_MODEL_CONFIG[modelName as AIModels]?.creditCost ?? 0;
+        const chargedByBilling = !isUsingBYOK && (await chargeLegacyCall(env, { userId: metadata.userId, model: modelName, creditCost: modelCreditCost }));
+        if (!chargedByBilling) {
+            const userConfig = await getUserConfigurableSettings(env, metadata.userId);
+            const hasCfConnected = await hasCloudflareConfigured(env, metadata.userId);
 
-        // Skip rate limiting for BYOK users (they pay for their own usage)
-        // and for users who have connected Cloudflare (configurable)
-        await RateLimitService.enforceLLMCallsRateLimit(
-            env,
-            userConfig.security.rateLimit,
-            metadata.userId,
-            modelName,
-            "", // suffix
-            isUsingBYOK,
-            hasCfConnected
-        );
+            // Skip rate limiting for BYOK users (they pay for their own usage)
+            // and for users who have connected Cloudflare (configurable)
+            await RateLimitService.enforceLLMCallsRateLimit(
+                env,
+                userConfig.security.rateLimit,
+                metadata.userId,
+                modelName,
+                "", // suffix
+                isUsingBYOK,
+                hasCfConnected
+            );
+        }
         
         // Notify that usage was consumed
         onUsageConsumed?.();

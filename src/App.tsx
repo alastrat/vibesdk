@@ -4,6 +4,7 @@ import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client
 import { AuthProvider } from './contexts/auth-context';
 import { AuthModalProvider } from './components/auth/AuthModalProvider';
 import { TermsGate } from './components/auth/TermsGate';
+import { UpgradeDialogHost } from './components/billing/UpgradeDialog';
 import { ThemeProvider } from './contexts/theme-context';
 import { LimitsProvider } from './contexts/limits-context';
 import { Toaster } from './components/ui/sonner';
@@ -44,6 +45,7 @@ export default function App() {
 										position="top-right"
 									/>
 									<TermsGate />
+									<UpgradeDialogHost />
 								</AuthModalProvider>
 							</LimitsProvider>
 						</AuthProvider>

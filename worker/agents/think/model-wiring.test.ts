@@ -6,6 +6,7 @@ const sources = import.meta.glob<string>(
 		'/worker/agents/think/ThinkAgent.ts',
 		'/worker/agents/think/model-config.ts',
 		'/worker/api/controllers/agent/controller.ts',
+		'/worker/agents/inferutils/core.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -29,16 +30,50 @@ describe('think model wiring', () => {
 		expect(controller).toContain('thinkModelId: thinkModel.id');
 	});
 
-	it("charges the credit cost of the model the turn runs on, captured once per turn", () => {
+	it("charges each step from its real usage at the turn's model prices, or by the old daily counter while billing is off", () => {
 		const agent = source('/worker/agents/think/ThinkAgent.ts');
 		const beforeTurn = agent.slice(agent.indexOf('override async beforeTurn('), agent.indexOf('override getSkills('));
-		const beforeStep = agent.slice(agent.indexOf('override async beforeStep('), agent.indexOf('async configureVibe('));
+		const beforeStep = agent.slice(agent.indexOf('override async beforeStep('), agent.indexOf('override async onStepFinish('));
+		const onStepFinish = agent.slice(agent.indexOf('override async onStepFinish('), agent.indexOf('turnCreditsUsed(): number'));
 		expect(beforeTurn).toContain('resolveThinkModel(');
 		expect(beforeTurn).toContain('ctx.model');
+		expect(beforeTurn).toContain('isBillingOn(this.env, config.userId)');
+		expect(beforeTurn).toContain('prices: model.prices');
 		expect(beforeTurn).toContain('creditCost');
 		expect(beforeStep).toContain('this.turnUsage.creditCost');
 		expect(beforeStep).not.toContain('resolveThinkModel');
-		expect(beforeStep).not.toContain('modelName');
+		expect(onStepFinish).toContain('stepCredits(usage.prices, stepUsage, usage.typical)');
+		expect(onStepFinish).toContain('useKey: `${this.name}:${usage.turnId}:${ctx.stepNumber}`');
+		expect(onStepFinish).not.toContain('resolveThinkModel');
+	});
+
+	it("totals every turn's step credits, billing on or off, and charges them only with billing on", () => {
+		const agent = source('/worker/agents/think/ThinkAgent.ts');
+		const beforeTurn = agent.slice(agent.indexOf('override async beforeTurn('), agent.indexOf('override getSkills('));
+		const onStepFinish = agent.slice(agent.indexOf('override async onStepFinish('), agent.indexOf('turnCreditsUsed(): number'));
+		// The turn's prices come before the metering lookup, so a failed lookup still prices every step.
+		const pricing = beforeTurn.indexOf('prices: model.prices');
+		expect(pricing).toBeGreaterThan(-1);
+		expect(pricing).toBeLessThan(beforeTurn.indexOf('try {'));
+		expect(beforeTurn).toContain('this.turnCredits = 0;');
+		// Every step adds to the turn's total before the billing-only charge.
+		const total = onStepFinish.indexOf('this.turnCredits += credits;');
+		const billingOnly = onStepFinish.indexOf("if (usage.mode !== 'credits') return;");
+		expect(total).toBeGreaterThan(-1);
+		expect(billingOnly).toBeGreaterThan(total);
+		expect(onStepFinish.indexOf('await chargeStep(')).toBeGreaterThan(billingOnly);
+		expect(agent).toMatch(/turnCreditsUsed\(\): number \{\s*return this\.turnCredits;\s*\}/);
+	});
+
+	it('checks credits before a new store starts, and charges older AI calls through billing when it is on', () => {
+		const controller = source('/worker/api/controllers/agent/controller.ts');
+		const credit = controller.indexOf('checkCreditsBeforeTurn(env, user.id)');
+		expect(credit).toBeGreaterThan(-1);
+		expect(credit).toBeLessThan(controller.indexOf('enforceAppCreationRateLimit('));
+		expect(controller).toContain('createPlanLimitResponse(credits.refusal)');
+		const infer = source('/worker/agents/inferutils/core.ts');
+		expect(infer.indexOf('chargeLegacyCall(env,')).toBeGreaterThan(-1);
+		expect(infer.indexOf('chargeLegacyCall(env,')).toBeLessThan(infer.indexOf('RateLimitService.enforceLLMCallsRateLimit('));
 	});
 
 	it('keeps the catalog as the only model list', () => {

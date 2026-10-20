@@ -12,6 +12,30 @@ import { createLogger } from '../../../logger';
 import { RateLimitService } from '../../../services/rate-limit/rateLimits';
 import { publicPlanFromSettings } from '../../../services/rate-limit/public-plan';
 import { RateLimitExceededError } from 'shared/types/errors';
+import { isBillingOn } from '../../../services/billing/flag';
+import { loadAccount, loadCredits } from '../../../services/billing/account';
+import { billingUsage } from '../../../services/billing/usage-summary';
+
+/** The account's AI Gateway connection and the toggle that decides whether it is used. */
+async function aiGatewayState(env: Env, userId: string) {
+	const [selectedGateway, aiGatewayPref] = await Promise.all([
+		new CloudflareAccountService(env).getSelectedGatewayWithAccount(userId),
+		new UserService(env).getAiGatewayPreference(userId),
+	]);
+	// A gateway is "configured" for usage purposes only when one is connected
+	// AND the user has the AI Gateway toggle enabled; otherwise platform limits
+	// apply. The raw connection state is surfaced separately for the toggle UI.
+	const aiGatewayConnected = !!selectedGateway;
+	return {
+		selectedGateway,
+		gateway: {
+			hasCloudflareConfigured: aiGatewayConnected && aiGatewayPref.enabled,
+			aiGatewayConnected,
+			aiGatewayEnabled: aiGatewayPref.enabled,
+			aiGatewayPreferenceExplicit: aiGatewayPref.isExplicit,
+		},
+	};
+}
 
 export class LimitsController extends BaseController {
 	static logger = createLogger('LimitsController');
@@ -46,20 +70,23 @@ export class LimitsController extends BaseController {
 		}
 
 		try {
-			// Token is read from the HttpOnly cookie inside checkUsageAndBalance.
-			const accountService = new CloudflareAccountService(env);
-			const userService = new UserService(env);
-			const [usageResult, selectedGateway, aiGatewayPref] = await Promise.all([
-				checkUsageAndBalance(env, user.id, request),
-				accountService.getSelectedGatewayWithAccount(user.id),
-				userService.getAiGatewayPreference(user.id),
-			]);
-			// A gateway is "configured" for usage purposes only when one is connected
-			// AND the user has the AI Gateway toggle enabled; otherwise platform limits
-			// apply. The raw connection state is surfaced separately for the toggle UI.
-			const aiGatewayConnected = !!selectedGateway;
-			const hasCfConfigured = aiGatewayConnected && aiGatewayPref.enabled;
+			// With billing on, the account's credits are the limit, whatever Cloudflare Connect says.
+			if (isBillingOn(env, user.id)) {
+				const [account, { gateway }] = await Promise.all([loadAccount(env, user.id), aiGatewayState(env, user.id)]);
+				return LimitsController.createSuccessResponse({
+					cloudflareConnectEnabled: false,
+					...billingUsage(account, await loadCredits(env, account)),
+					hasUserToken: false,
+					...gateway,
+					cloudflareCredits: null,
+				});
+			}
 
+			// Token is read from the HttpOnly cookie inside checkUsageAndBalance.
+			const [usageResult, { selectedGateway, gateway }] = await Promise.all([
+				checkUsageAndBalance(env, user.id, request),
+				aiGatewayState(env, user.id),
+			]);
 			const window = usageResult.windowKind ?? 'rolling';
 			const unlimited = !Number.isFinite(usageResult.limit);
 			const used = unlimited ? 0 : usageResult.limit - usageResult.remaining;
@@ -100,11 +127,9 @@ export class LimitsController extends BaseController {
 					}],
 					message: usageResult.withinLimits ? 'Within limits' : 'Limit exceeded',
 				},
+				billing: null,
 				hasUserToken: usageResult.hasUserToken,
-				hasCloudflareConfigured: hasCfConfigured,
-				aiGatewayConnected,
-				aiGatewayEnabled: aiGatewayPref.enabled,
-				aiGatewayPreferenceExplicit: aiGatewayPref.isExplicit,
+				...gateway,
 				cloudflareCredits: usageResult.balance !== null ? {
 					credits: usageResult.balance,
 					currency: 'USD',

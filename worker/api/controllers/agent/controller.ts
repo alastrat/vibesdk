@@ -27,7 +27,8 @@ import { ImageType, uploadImage } from 'worker/utils/images';
 import { ProcessedImageAttachment } from 'worker/types/image-attachment';
 import { getTemplateImportantFiles } from 'worker/services/sandbox/utils';
 import { hasTicketParam } from '../../../middleware/auth/ticketAuth';
-import { checkUsageAndBalance, getUserGateway } from '../../../services/rate-limit/usageChecker';
+import { checkUsageAndBalance, getUserGateway, unlimitedUsage } from '../../../services/rate-limit/usageChecker';
+import { checkCreditsBeforeTurn } from '../../../services/billing/metering';
 import { readTokenCookie } from '../../../utils/oauthCookie';
 import { UsageLimitExceededError } from 'shared/types/errors';
 
@@ -108,6 +109,8 @@ export class CodingAgentController extends BaseController {
                 }
                 reuseSeed = start.seed;
             }
+            const credits = await checkCreditsBeforeTurn(env, user.id);
+            if (credits.billing && credits.refusal) return CodingAgentController.createPlanLimitResponse(credits.refusal);
             try {
                 await RateLimitService.enforceAppCreationRateLimit(env, context.config.security.rateLimit, user, request);
             } catch (error) {
@@ -143,7 +146,11 @@ export class CodingAgentController extends BaseController {
             // The encrypted blob lives in an HttpOnly cookie; read it once here so we
             // can pass it down to the inference pipeline for BYOK decryption.
             const userToken = readTokenCookie(request, env);
-            const limitResult = await checkUsageAndBalance(env, user.id, request, userToken);
+            // With billing on, credits gate Think builds, which always run on Estori's gateway; the Cloudflare
+            // check stays for the older builders that use the seller's own account.
+            const limitResult = credits.billing && behaviorType === 'think'
+                ? unlimitedUsage()
+                : await checkUsageAndBalance(env, user.id, request, userToken);
 
             if (!limitResult.allowed) {
                 this.logger.warn('Request blocked by usage check', {

@@ -3,6 +3,7 @@ import type { Connection } from 'agents';
 import { handleWebSocketMessage } from './websocket';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { checkUsageAndBalance } from '../../services/rate-limit';
+import type { checkCreditsBeforeTurn } from '../../services/billing/metering';
 import { RESUME_BUILD_MESSAGE } from '../../../shared/think';
 
 interface FakeBehavior {
@@ -18,6 +19,15 @@ function recordingCheck(order: string[], result: { allowed: boolean; reason?: st
 		return result;
 	}) as unknown as typeof checkUsageAndBalance;
 }
+
+function creditCheck(order: string[], result: Awaited<ReturnType<typeof checkCreditsBeforeTurn>>): typeof checkCreditsBeforeTurn {
+	return async () => {
+		order.push('credit-check');
+		return result;
+	};
+}
+
+const REFUSAL = { code: 'plan_limit' as const, limit: 'aiCredits' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: "You've used this month's free AI credits. They refill on November 12, or get Pro for 20,000 a month." };
 
 function fakes(behavior: FakeBehavior, calls: string[] = []) {
 	const sent: Array<{ type: string; error?: string; code?: string; showAsPopup?: boolean }> = [];
@@ -92,5 +102,24 @@ describe('set_model', () => {
 		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), allowAll);
 		expect(sent).toEqual([{ type: 'error', error: 'Could not switch model: the agent could not be reconfigured' }]);
 		expect(calls).toEqual([]);
+	});
+});
+
+describe('the credit check before a turn', () => {
+	it('refuses with the plan limit and skips the old usage check while billing is on', async () => {
+		const order: string[] = [];
+		const { agent, connection, sent, calls } = fakes({ setModel: async () => undefined });
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: REFUSAL }));
+		expect(order).toEqual(['credit-check']);
+		expect(calls).toEqual([]);
+		expect(sent).toEqual([{ type: 'error', error: REFUSAL.message, code: 'PLAN_LIMIT', planLimit: REFUSAL, showAsPopup: true }]);
+	});
+
+	it('lets the turn start with credit left, and keeps the old check while billing is off', async () => {
+		const order: string[] = [];
+		const { agent, connection } = fakes({ setModel: async () => undefined }, order);
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: null }));
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: false }));
+		expect(order).toEqual(['credit-check', `input:${RESUME_BUILD_MESSAGE}`, 'credit-check', 'usage-check', `input:${RESUME_BUILD_MESSAGE}`]);
 	});
 });

@@ -100,6 +100,8 @@ export interface PlanLimitRefusal {
 	plan: PlanId;
 	upgradeTo: 'pro' | 'premium' | 'enterprise' | 'credits' | null;
 	message: string;
+	/** The renewal's payment failed, so the next step is updating the card rather than another plan. */
+	paymentFailed?: true;
 }
 
 const PLAN_NAMES: Record<PlanId, string> = { basic: 'Basic', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise' };
@@ -278,6 +280,7 @@ export function isPlanLimitRefusal(value: unknown): value is PlanLimitRefusal {
 		(LIMIT_KEYS as readonly unknown[]).includes(value.limit) &&
 		(PLAN_IDS as readonly unknown[]).includes(value.plan) &&
 		(value.upgradeTo === null || (UPGRADE_TARGETS as readonly unknown[]).includes(value.upgradeTo)) &&
+		(value.paymentFailed === undefined || value.paymentFailed === true) &&
 		typeof value.message === 'string'
 	);
 }

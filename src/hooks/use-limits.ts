@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useAuth } from '@/contexts/auth-context';
+import type { PlanId } from '@/api-types';
 
 export interface LimitConfig {
 	type: 'prompts' | 'tokens' | 'cost' | 'credits';
@@ -74,6 +75,8 @@ export interface UsageSummary {
 		accountName?: string;
 		accountId?: string;
 	} | null;
+	/** Set while billing is on for the account: the limit is its plan's credits, renewing at `renewsAt` (ms). */
+	billing?: { plan: PlanId; renewsAt: number } | null;
 }
 
 export async function fetchLimitsUsage(): Promise<UsageSummary> {

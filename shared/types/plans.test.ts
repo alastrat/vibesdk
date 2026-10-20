@@ -99,7 +99,14 @@ describe('assertWithinLimit', () => {
 		const off = account({ billing: false });
 		for (const key of ['aiCredits', 'storesLifetime', 'liveStores', 'supplierCatalog', 'extraCredits'] as const) expect(assertWithinLimit(off, key, 1_000_000)).toBeNull();
 		expect(isPlanLimitRefusal(JSON.parse(JSON.stringify(assertWithinLimit(account(), 'supplierCatalog'))))).toBe(true);
-		for (const value of [null, 'plan_limit', { code: 'plan_limit', limit: 'nope', plan: 'basic', upgradeTo: null, message: 'x' }, { code: 'plan_limit', limit: 'liveStores', plan: 'gold', upgradeTo: null, message: 'x' }]) {
+		expect(isPlanLimitRefusal({ code: 'plan_limit', limit: 'aiCredits', plan: 'pro', upgradeTo: null, paymentFailed: true, message: 'x' })).toBe(true);
+		for (const value of [
+			null,
+			'plan_limit',
+			{ code: 'plan_limit', limit: 'nope', plan: 'basic', upgradeTo: null, message: 'x' },
+			{ code: 'plan_limit', limit: 'liveStores', plan: 'gold', upgradeTo: null, message: 'x' },
+			{ code: 'plan_limit', limit: 'aiCredits', plan: 'pro', upgradeTo: null, paymentFailed: 'yes', message: 'x' },
+		]) {
 			expect(isPlanLimitRefusal(value)).toBe(false);
 		}
 	});

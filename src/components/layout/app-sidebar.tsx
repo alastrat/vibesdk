@@ -159,9 +159,11 @@ export function AppSidebar() {
 	const isCollapsed = state === 'collapsed';
 	const usageLimits = useUsageLimitsBadgeState();
 	// Show only when action is needed: not connected, or token without gateway.
-	// Hide when configured even if cloudflareCredits is still null.
+	// Hide when configured even if cloudflareCredits is still null, and while
+	// billing is on, where plans replace the seller's own Cloudflare account.
 	const showCloudflareCta =
 		Boolean(user) &&
+		!usageLimits.billing &&
 		!usageLimits.hidden &&
 		!usageLimits.loading &&
 		(!usageLimits.hasUserToken || usageLimits.needsConfiguration);
