@@ -183,6 +183,15 @@ export class CsrfService {
     }
     
     /**
+     * Whether the response already sets the CSRF cookie, as the token endpoints do
+     */
+    static setsTokenCookie(response: Response): boolean {
+        return response.headers
+            .getAll('Set-Cookie')
+            .some((cookie) => cookie.startsWith(`${this.COOKIE_NAME}=`));
+    }
+
+    /**
      * Middleware to enforce CSRF protection with configuration
      */
     static async enforce(
@@ -192,7 +201,8 @@ export class CsrfService {
         // Generate and set token for GET requests (to establish cookie)
         if (request.method === 'GET' && response) {
             const existingToken = this.getTokenFromCookie(request);
-            if (!existingToken) {
+            // A second cookie would replace the one whose token the endpoint just returned
+            if (!existingToken && !this.setsTokenCookie(response)) {
                 const newToken = this.generateToken();
                 const maxAge = Math.floor(this.defaults.tokenTTL / 1000);
                 this.setTokenCookie(response, newToken, maxAge);
