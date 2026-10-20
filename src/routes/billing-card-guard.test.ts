@@ -116,6 +116,12 @@ describe("estori's own card page", () => {
 		expect(back).toContain('invalidateQueries({ queryKey: queryKeys.billing() })');
 	});
 
+	it('refreshes the billing view when finishing the card fails too, since the card may be saved and Pay now names it', () => {
+		const back = source(RETURN);
+		const failed = back.slice(back.indexOf('} catch (failure) {'), back.indexOf('void finish();'));
+		expect(failed).toContain('invalidateQueries({ queryKey: queryKeys.billing() })');
+	});
+
 	it('keeps a declined payment on the return page, with a way to try another card and a way back', () => {
 		const back = source(RETURN);
 		expect(back).toContain('if (target === null) {');

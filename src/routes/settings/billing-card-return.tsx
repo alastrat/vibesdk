@@ -56,6 +56,8 @@ export default function BillingCardReturnPage() {
 				toast.success(notice.message);
 				navigate(target, { replace: true });
 			} catch (failure) {
+				// The card may be saved though the payment failed, and Pay now names the card on file.
+				void queryClient.invalidateQueries({ queryKey: queryKeys.billing() });
 				if (current) setStopped({ message: cardRefusalOf(failure, CARD_NOT_CHECKED_MESSAGE).message, tryAgain: false });
 			}
 		};
