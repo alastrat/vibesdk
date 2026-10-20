@@ -1,14 +1,16 @@
 /**
  * Minimal Stripe REST client for Workers: form-encoded requests over fetch,
- * no SDK. Covers Connect Express onboarding and Checkout for paid sites.
+ * no SDK. Covers Connect Express onboarding, Checkout for paid sites, and Stripe Billing for plans and extra credits.
  */
 
+import { CHECKOUT_KIND_CREDITS, EXTRA_CREDITS_DISCLOSURE, renewalDisclosure, type SubscriptionStatus } from '../../../shared/types/billing';
+import { EXTRA_CREDITS, type PaidPlanId } from '../../../shared/types/plans';
 import type { SellerReadiness } from '../../../shared/types/seller-setup';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 /** Stripe replays a failed request for 24 hours per idempotency key, so keys rotate every 10 minutes. */
-const IDEMPOTENCY_BUCKET_MS = 600_000;
+export const IDEMPOTENCY_BUCKET_MS = 600_000;
 
 /** A Checkout session closes 35 minutes after it opens, so a buyer can't pay long after the listing changed. Stripe's minimum is 30. */
 const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
@@ -80,6 +82,10 @@ export interface StripeShippingDetails {
 
 export interface StripeCheckoutSession {
 	id: string;
+	/** Billing sessions: a subscription checkout, an extra-credits payment. */
+	mode?: 'payment' | 'subscription' | 'setup';
+	subscription?: string | null;
+	customer?: string | null;
 	url: string | null;
 	/** Elements sessions: what Stripe.js on Estori's checkout page starts the payment form with. */
 	client_secret?: string | null;
@@ -129,6 +135,107 @@ export interface StripeRefund {
 export interface StripeTransferReversal {
 	id: string;
 	amount: number;
+}
+
+export interface StripeCustomer {
+	id: string;
+	email: string | null;
+	metadata: Record<string, string> | null;
+}
+
+export interface StripePrice {
+	id: string;
+	metadata?: Record<string, string> | null;
+	unit_amount?: number | null;
+	lookup_key?: string | null;
+}
+
+export interface StripeSubscriptionItem {
+	id: string;
+	price: StripePrice;
+	current_period_start: number;
+	current_period_end: number;
+}
+
+/** One discount on a schedule phase: Stripe sets exactly one of the three. */
+export interface StripeDiscountRef {
+	coupon: string | null;
+	discount: string | null;
+	promotion_code: string | null;
+}
+
+export interface StripeSchedulePhase {
+	start_date: number;
+	end_date: number | null;
+	items: Array<{ price: string | StripePrice; quantity?: number }>;
+	discounts?: StripeDiscountRef[];
+}
+
+export interface StripeSubscriptionSchedule {
+	id: string;
+	status: string;
+	subscription: string | null;
+	released_subscription?: string | null;
+	current_phase: { start_date: number; end_date: number } | null;
+	phases: StripeSchedulePhase[];
+}
+
+export interface StripeSubscription {
+	id: string;
+	customer: string;
+	status: SubscriptionStatus;
+	created: number;
+	cancel_at_period_end: boolean;
+	cancel_at: number | null;
+	metadata: Record<string, string> | null;
+	items: { data: StripeSubscriptionItem[] };
+	/** The schedule's id, or the schedule itself when the request expanded it. */
+	schedule: string | StripeSubscriptionSchedule | null;
+}
+
+export interface StripeInvoice {
+	id: string;
+	customer: string | null;
+	amount_paid: number;
+	currency: string;
+	hosted_invoice_url: string | null;
+	number: string | null;
+	billing_reason: string | null;
+	attempt_count?: number;
+	parent: { type: string; subscription_details?: { subscription: string } | null } | null;
+}
+
+export interface StripeCharge {
+	id: string;
+	payment_intent: string | null;
+	amount: number;
+	amount_refunded: number;
+}
+
+export interface SubscriptionCheckoutInput {
+	customerId: string;
+	priceId: string;
+	userId: string;
+	plan: PaidPlanId;
+	successUrl: string;
+	cancelUrl: string;
+	nowMs: number;
+}
+
+export interface CreditsCheckoutInput {
+	customerId: string;
+	priceId: string;
+	userId: string;
+	credits: number;
+	successUrl: string;
+	cancelUrl: string;
+	nowMs: number;
+}
+
+export interface SubscriptionPriceChange {
+	subscription: StripeSubscription;
+	priceId: string;
+	idempotencyKey: string;
 }
 
 export interface CheckoutSessionInput {
@@ -201,6 +308,21 @@ export interface StripeClient {
 	updatePayoutSchedule(accountId: string, schedule: PayoutSchedule): Promise<StripeAccount>;
 	/** Only the payout delay, so payout days the seller chose stay as they are. */
 	updatePayoutDelay(accountId: string, delayDays: number): Promise<StripeAccount>;
+	createCustomer(input: { userId: string; email: string }): Promise<StripeCustomer>;
+	/** Card only: renewals and Smart Retries charge the card on file, and bank methods would settle days later. */
+	createSubscriptionCheckoutSession(input: SubscriptionCheckoutInput): Promise<StripeCheckoutSession>;
+	createCreditsCheckoutSession(input: CreditsCheckoutInput): Promise<StripeCheckoutSession>;
+	/** The subscription with its schedule expanded. */
+	retrieveSubscription(subscriptionId: string): Promise<StripeSubscription>;
+	/** Moves to the price now, prorated and invoiced; Stripe refuses the change when the invoice can't be paid. */
+	changeSubscriptionPrice(input: SubscriptionPriceChange): Promise<StripeSubscription>;
+	/** Moves to the price at the renewal, keeping the subscription's discounts and charging no proration. */
+	scheduleSubscriptionPrice(input: SubscriptionPriceChange): Promise<StripeSubscriptionSchedule>;
+	/** Drops a pending plan change; a schedule already released counts as done. */
+	releaseSubscriptionSchedule(scheduleId: string): Promise<void>;
+	cancelAtPeriodEnd(subscriptionId: string, idempotencyKey: string): Promise<StripeSubscription>;
+	resumeSubscription(subscription: StripeSubscription, idempotencyKey: string): Promise<StripeSubscription>;
+	createBillingPortalSession(input: { customerId: string; returnUrl: string }): Promise<{ url: string }>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -248,6 +370,25 @@ interface StripeErrorBody {
 	error?: { message?: string; type?: string; code?: string };
 }
 
+function idempotencyBucket(nowMs: number): number {
+	return Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS);
+}
+
+function priceIdOf(price: string | StripePrice): string {
+	return typeof price === 'string' ? price : price.id;
+}
+
+/** A phase's discounts as a phase accepts them: an applied discount by id, else its coupon or promotion code. */
+function phaseDiscounts(refs: readonly StripeDiscountRef[] | undefined): Array<Record<string, string>> | undefined {
+	const mapped: Array<Record<string, string>> = [];
+	for (const ref of refs ?? []) {
+		if (ref.discount) mapped.push({ discount: ref.discount });
+		else if (ref.coupon) mapped.push({ coupon: ref.coupon });
+		else if (ref.promotion_code) mapped.push({ promotion_code: ref.promotion_code });
+	}
+	return mapped.length > 0 ? mapped : undefined;
+}
+
 export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = fetch): StripeClient {
 	async function request<T>(
 		method: 'GET' | 'POST',
@@ -276,6 +417,13 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 			throw new StripeApiError(error?.message ?? 'Stripe request failed', response.status, error?.code ?? null, error?.type ?? null);
 		}
 		return json as T;
+	}
+
+	/** Stripe's schedule for a subscription: the one it already has, or a new one that starts from the subscription. */
+	async function scheduleFor(subscription: StripeSubscription, idempotencyKey: string): Promise<StripeSubscriptionSchedule> {
+		const existing = typeof subscription.schedule === 'string' ? subscription.schedule : subscription.schedule?.id;
+		if (existing) return request<StripeSubscriptionSchedule>('GET', `/subscription_schedules/${encodeURIComponent(existing)}`);
+		return request<StripeSubscriptionSchedule>('POST', '/subscription_schedules', { from_subscription: subscription.id }, `${idempotencyKey}-create`);
 	}
 
 	return {
@@ -417,5 +565,119 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					},
 				},
 			}),
+		// One customer per account: the key is stable, so a retried first purchase can't make a second.
+		createCustomer: ({ userId, email }) =>
+			request<StripeCustomer>('POST', '/customers', { email: email || undefined, metadata: { estori_user_id: userId } }, `billing-customer-${userId}`),
+		createSubscriptionCheckoutSession: (input) =>
+			request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'subscription',
+					customer: input.customerId,
+					client_reference_id: input.userId,
+					line_items: [{ price: input.priceId, quantity: 1 }],
+					payment_method_types: ['card'],
+					allow_promotion_codes: true,
+					subscription_data: { metadata: { estori_user_id: input.userId } },
+					metadata: { estori_user_id: input.userId, plan: input.plan },
+					consent_collection: { terms_of_service: 'required' },
+					custom_text: { submit: { message: renewalDisclosure(input.plan) } },
+					success_url: input.successUrl,
+					cancel_url: input.cancelUrl,
+					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
+				},
+				`billing-checkout-${input.userId}-${input.plan}-${idempotencyBucket(input.nowMs)}`,
+			),
+		createCreditsCheckoutSession: (input) => {
+			const metadata = { kind: CHECKOUT_KIND_CREDITS, estori_user_id: input.userId, credits: String(input.credits) };
+			return request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'payment',
+					customer: input.customerId,
+					client_reference_id: input.userId,
+					line_items: [{ price: input.priceId, quantity: input.credits / EXTRA_CREDITS.creditsPerUnit }],
+					payment_method_types: ['card'],
+					metadata,
+					payment_intent_data: { metadata },
+					custom_text: { submit: { message: EXTRA_CREDITS_DISCLOSURE } },
+					success_url: input.successUrl,
+					cancel_url: input.cancelUrl,
+					expires_at: Math.floor(input.nowMs / 1000) + CHECKOUT_SESSION_TTL_SECONDS,
+				},
+				`billing-credits-${input.userId}-${input.credits}-${idempotencyBucket(input.nowMs)}`,
+			);
+		},
+		retrieveSubscription: (subscriptionId) =>
+			request<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}?${encodeForm({ expand: ['schedule'] })}`),
+		changeSubscriptionPrice: async ({ subscription, priceId, idempotencyKey }) => {
+			const item = subscription.items.data[0];
+			if (!item) throw new Error(`Subscription ${subscription.id} has no items`);
+			return request<StripeSubscription>(
+				'POST',
+				`/subscriptions/${encodeURIComponent(subscription.id)}`,
+				{
+					items: [{ id: item.id, price: priceId }],
+					proration_behavior: 'always_invoice',
+					payment_behavior: 'error_if_incomplete',
+					expand: ['schedule'],
+				},
+				idempotencyKey,
+			);
+		},
+		scheduleSubscriptionPrice: async ({ subscription, priceId, idempotencyKey }) => {
+			const schedule = await scheduleFor(subscription, idempotencyKey);
+			const currentPhase = schedule.current_phase;
+			const current = currentPhase && schedule.phases.find((phase) => phase.start_date === currentPhase.start_date);
+			const currentItem = current?.items[0];
+			if (!currentPhase || !current || !currentItem) throw new Error(`Schedule ${schedule.id} has no current phase`);
+			const discounts = phaseDiscounts(current.discounts);
+			return request<StripeSubscriptionSchedule>(
+				'POST',
+				`/subscription_schedules/${encodeURIComponent(schedule.id)}`,
+				{
+					end_behavior: 'release',
+					proration_behavior: 'none',
+					phases: [
+						{
+							items: [{ price: priceIdOf(currentItem.price), quantity: 1 }],
+							start_date: currentPhase.start_date,
+							end_date: currentPhase.end_date,
+							discounts,
+						},
+						{
+							items: [{ price: priceId, quantity: 1 }],
+							duration: { interval: 'month', interval_count: 1 },
+							proration_behavior: 'none',
+							discounts,
+						},
+					],
+				},
+				`${idempotencyKey}-phases`,
+			);
+		},
+		releaseSubscriptionSchedule: async (scheduleId) => {
+			try {
+				await request<StripeSubscriptionSchedule>('POST', `/subscription_schedules/${encodeURIComponent(scheduleId)}/release`);
+			} catch (error) {
+				// Stripe refuses to release a schedule that isn't active: it was already released, completed or canceled.
+				if (error instanceof StripeApiError && error.status === 400) return;
+				throw error;
+			}
+		},
+		cancelAtPeriodEnd: (subscriptionId, idempotencyKey) =>
+			request<StripeSubscription>('POST', `/subscriptions/${encodeURIComponent(subscriptionId)}`, { cancel_at_period_end: true }, idempotencyKey),
+		// A subscription ends through cancel_at_period_end or through a cancel_at date; resuming clears whichever is set.
+		resumeSubscription: (subscription, idempotencyKey) =>
+			request<StripeSubscription>(
+				'POST',
+				`/subscriptions/${encodeURIComponent(subscription.id)}`,
+				subscription.cancel_at !== null && !subscription.cancel_at_period_end ? { cancel_at: '' } : { cancel_at_period_end: false },
+				idempotencyKey,
+			),
+		createBillingPortalSession: ({ customerId, returnUrl }) =>
+			request<{ url: string }>('POST', '/billing_portal/sessions', { customer: customerId, return_url: returnUrl }),
 	};
 }
