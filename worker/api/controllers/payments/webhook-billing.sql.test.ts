@@ -402,6 +402,7 @@ describe('extra credit webhooks', () => {
 					return settled;
 				},
 			},
+			track: async () => undefined,
 		};
 		const charge = { id: 'ch_race', payment_intent: 'pi_race', amount: 750, amount_refunded: 375 };
 		expect(await applyCreditRefund(racing, { eventId: 'evt_race', eventType: 'charge.refunded', charge })).toBe('applied');

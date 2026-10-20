@@ -3,6 +3,7 @@
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { createLogger } from '../../logger';
 import type { PlanId } from '../../../shared/types/plans';
+import { trackBilling, type BillingAnalyticsEvent } from '../posthog/billing-events';
 import { alertsMayBeDue, creditAlertDue, creditAlertKey, type CreditAlert, type CreditBalance, type LedgerPeriod, type PeriodState } from './credit-ledger';
 import { claimAndSendNotice, claimingMailFromEnv, type ClaimingMailDeps } from './notices';
 
@@ -18,6 +19,7 @@ export interface CreditUse {
 export interface CreditNoticeDeps {
 	readBalance(userId: string, period: LedgerPeriod, pool: number): Promise<CreditBalance>;
 	mail: ClaimingMailDeps;
+	track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>;
 }
 
 const logger = createLogger('CreditNotices');
@@ -30,7 +32,12 @@ export async function noticeCreditUse(deps: CreditNoticeDeps, use: CreditUse): P
 		const alert = creditAlertDue(balance);
 		if (!alert) return null;
 		const email = { kind: alert, plan: use.plan, left: balance.left, renewsAt: use.period.endMs };
-		return (await claimAndSendNotice(deps.mail, use.userId, { key: creditAlertKey(alert, use.period.key), email })) === 'sent' ? alert : null;
+		const outcome = await claimAndSendNotice(deps.mail, use.userId, { key: creditAlertKey(alert, use.period.key), email });
+		// The kept claim makes it once per period and threshold, whether or not the email went out.
+		if (outcome === 'sent' || outcome === 'claimed') {
+			await deps.track(use.userId, [{ name: 'credits_low', properties: { plan: use.plan, threshold: alert === 'credits_5' ? 5 : 20 } }]);
+		}
+		return outcome === 'sent' ? alert : null;
 	} catch (error) {
 		logger.error('Could not check the credit warnings', { userId: use.userId, error });
 		return null;
@@ -42,5 +49,6 @@ export function creditNoticeDepsFromEnv(env: Env): CreditNoticeDeps {
 	return {
 		readBalance: (userId, period, pool) => ledger.readBalance(userId, period, pool),
 		mail: claimingMailFromEnv(env),
+		track: (userId, events) => trackBilling(env, userId, events),
 	};
 }

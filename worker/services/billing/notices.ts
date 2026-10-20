@@ -143,21 +143,31 @@ export async function sendBillingEmails(deps: BillingMailDeps, userId: string, n
 }
 
 /**
+ * How a claimed send went. 'claimed': this call holds the claim but the email couldn't go out in a way a retry would
+ * get past, so it won't be tried again. 'not-sent': nothing is held, so a later run can try again.
+ */
+export type NoticeOutcome = 'sent' | 'claimed' | 'already-sent' | 'not-sent';
+
+/**
  * Claims the notice, then sends it: a notice already claimed is not sent again. Without a sender nothing can go out, so
  * the notice is left unclaimed for a later run that has one. A send that fails in a way a later attempt could get past
  * gives the claim back, so an email outage doesn't leave the notice marked sent and never delivered.
  */
-export async function claimAndSendNotice(deps: ClaimingMailDeps, userId: string, notice: PlannedNotice): Promise<'sent' | 'already-sent' | 'not-sent'> {
+export async function claimAndSendNotice(deps: ClaimingMailDeps, userId: string, notice: PlannedNotice): Promise<NoticeOutcome> {
 	if (!deps.sender) return 'not-sent';
+	let claimed = false;
 	try {
 		if (!(await deps.claim(userId, notice.key, notice.email.kind))) return 'already-sent';
+		claimed = true;
 		const delivery = await deliver(deps, userId, [notice]);
 		if (delivery.sent === 1) return 'sent';
-		if (delivery.retryable) await deps.release(userId, notice.key);
+		if (!delivery.retryable) return 'claimed';
+		await deps.release(userId, notice.key);
 		return 'not-sent';
 	} catch (error) {
 		logger.error('Could not claim or release a billing notice', { userId, kind: notice.email.kind, key: notice.key, error });
-		return 'not-sent';
+		// A claim that couldn't be given back is still held.
+		return claimed ? 'claimed' : 'not-sent';
 	}
 }
 

@@ -7,6 +7,7 @@ import type { CreditUseSource } from '../../../shared/types/billing';
 import { loadAccount, loadCredits, type BillingAccount } from './account';
 import { creditNoticeDepsFromEnv, noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
 import type { CreditBalance, LedgerPeriod, PeriodState } from './credit-ledger';
+import { trackBilling } from '../posthog/billing-events';
 import { isFlagOn } from '../posthog/flags';
 import { legacyCallCredits, type StepUsage } from './step-credits';
 
@@ -60,7 +61,9 @@ export function creditRefusal(account: BillingAccount, balance: CreditBalance): 
 export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
 	if (!(await isFlagOn(env, 'billing', userId))) return { billing: false };
 	const account = await loadAccount(env, userId, nowMs);
-	return { billing: true, refusal: creditRefusal(account, await loadCredits(env, account)) };
+	const refusal = creditRefusal(account, await loadCredits(env, account));
+	if (refusal) await trackBilling(env, account.userId, [{ name: 'credits_limit_reached', properties: { plan: account.plan } }]);
+	return { billing: true, refusal };
 }
 
 async function withTries<T>(attempt: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {

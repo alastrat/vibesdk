@@ -14,6 +14,7 @@ import type { PlatformAlert } from '../alerts/platform-alerts';
 import { isCheckoutSession } from '../payments/fulfill';
 import type { StripeCharge, StripeClient, StripeInvoice, StripeSubscriptionSchedule } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
+import { subscriptionEventsFor, type BillingAnalyticsEvent } from '../posthog/billing-events';
 import { heldPeriodKey, type BillingAccount } from './account';
 import type { PlannedNotice } from './notices';
 import { addMonths } from './periods';
@@ -35,6 +36,8 @@ export interface BillingEventDeps {
 	notify(userId: string, notices: readonly PlannedNotice[]): Promise<readonly PlannedNotice[]>;
 	alert(alert: PlatformAlert): Promise<void>;
 	nowMs(): number;
+	/** Sends billing's analytics events about the account; called only once the event is recorded the first time. Never throws. */
+	track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>;
 }
 
 type EventAccount = Pick<BillingAccount, 'billing' | 'period' | 'limits' | 'subscription'>;
@@ -184,6 +187,11 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	const pool = poolMayChange(previous, next, input.eventType) ? await poolWith(deps, userId, next, now.getTime()) : null;
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
 	if (recorded === 'duplicate') return 'duplicate';
+	// Like its notices, a subscription that replaces another live one starts nothing new for the account.
+	if (!replacing) {
+		const failedAttempt = input.eventType === 'invoice.payment_failed' ? (input.invoice?.attempt_count ?? 1) : null;
+		await deps.track(userId, subscriptionEventsFor({ previous, next, failedAttempt }));
+	}
 	await notifyOrAlert(deps, userId, notices);
 	return 'applied';
 }
@@ -225,6 +233,7 @@ export async function applyCreditPurchase(deps: BillingEventDeps, input: { event
 		now,
 	});
 	if (recorded === 'duplicate') return 'duplicate';
+	await deps.track(userId, [{ name: 'credits_purchased', properties: { credits, amount_cents: amountCents } }]);
 	await notifyOrAlert(deps, userId, [notice]);
 	return 'applied';
 }

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { creditBalance, type PeriodState } from './credit-ledger';
 import { noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
 import type { OutgoingEmail } from '../email/types';
+import type { BillingAnalyticsEvent } from '../posthog/billing-events';
 
 const PERIOD = { key: 'acct:1790812800', startMs: 1_790_812_800_000, endMs: 1_793_404_800_000 };
 
@@ -14,6 +15,7 @@ function state(used: number): PeriodState {
 function deps(purchased = 0) {
 	const sent: OutgoingEmail[] = [];
 	const claimed = new Set<string>();
+	const tracked: Array<[string, readonly BillingAnalyticsEvent[]]> = [];
 	let reads = 0;
 	let current = state(0);
 	const fake: CreditNoticeDeps = {
@@ -32,8 +34,9 @@ function deps(purchased = 0) {
 			},
 			release: async (_userId, key) => void claimed.delete(key),
 		},
+		track: async (userId, events) => void tracked.push([userId, events]),
 	};
-	return { fake, sent, reads: () => reads, at: (used: number) => (current = state(used)) };
+	return { fake, sent, tracked, reads: () => reads, at: (used: number) => (current = state(used)) };
 }
 
 describe('noticeCreditUse', () => {
@@ -53,6 +56,26 @@ describe('noticeCreditUse', () => {
 		const { fake, sent, at } = deps(5_000);
 		expect(await noticeCreditUse(fake, { userId: 'u1', plan: 'premium', period: PERIOD, pool: 5_000, state: at(4_500) })).toBeNull();
 		expect(sent).toEqual([]);
+	});
+
+	it('sends credits_low for a claim that is new and kept, whether or not the email went out, and not while an outage gives it back', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const { fake, tracked, at } = deps();
+		const failingWith = (error: Error): CreditNoticeDeps => ({ ...fake, mail: { ...fake.mail, sender: { send: async () => { throw error; } } } });
+		const use = (notices: CreditNoticeDeps, used: number) => noticeCreditUse(notices, { userId: 'u1', plan: 'pro', period: PERIOD, pool: 5_000, state: at(used) });
+		// An outage gives the claim back, so the next step tries again; counting it now would count it on every step.
+		expect(await use(failingWith(new Error('Email Service unavailable')), 4_000)).toBeNull();
+		expect(tracked).toEqual([]);
+		expect(await use(fake, 4_050)).toBe('credits_20');
+		expect(await use(fake, 4_100)).toBeNull();
+		expect(tracked).toEqual([['u1', [{ name: 'credits_low', properties: { plan: 'pro', threshold: 20 } }]]]);
+		// An address that refuses mail keeps the claim: the threshold was reached once, though no email went.
+		expect(await use(failingWith(Object.assign(new Error('suppressed'), { code: 'E_RECIPIENT_SUPPRESSED' })), 4_800)).toBeNull();
+		expect(await use(fake, 4_900)).toBeNull();
+		expect(tracked).toEqual([
+			['u1', [{ name: 'credits_low', properties: { plan: 'pro', threshold: 20 } }]],
+			['u1', [{ name: 'credits_low', properties: { plan: 'pro', threshold: 5 } }]],
+		]);
 	});
 
 	it('answers null instead of throwing when the balance cannot be read', async () => {

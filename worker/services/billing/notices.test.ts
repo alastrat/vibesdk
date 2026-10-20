@@ -91,13 +91,14 @@ describe('sending billing emails', () => {
 		expect(claims).toEqual([]);
 	});
 
-	it('answers not-sent when a claimed notice cannot go out, and never throws', async () => {
+	it('answers not-sent when a notice is given back or never claimed, claimed when the claim stays, and never throws', async () => {
 		const claim = async () => true;
 		const release = async () => undefined;
 		const failing = mail({ sender: { send: async () => { throw new Error('Email Service unavailable'); } } });
 		expect(await claimAndSendNotice({ ...failing.deps, claim, release }, 'u1', STARTED)).toBe('not-sent');
 		await expect(claimAndSendNotice({ ...mail().deps, claim: async () => { throw new Error('D1 unavailable'); }, release }, 'u1', STARTED)).resolves.toBe('not-sent');
-		await expect(claimAndSendNotice({ ...failing.deps, claim, release: async () => { throw new Error('D1 unavailable'); } }, 'u1', STARTED)).resolves.toBe('not-sent');
+		// A claim that can't be given back is still held, so the notice won't be tried again.
+		await expect(claimAndSendNotice({ ...failing.deps, claim, release: async () => { throw new Error('D1 unavailable'); } }, 'u1', STARTED)).resolves.toBe('claimed');
 	});
 
 	describe('when the email does not go out', () => {
@@ -149,14 +150,14 @@ describe('sending billing emails', () => {
 		])('keeps the claim for %s, since a retry would fail the same way', async (_name, error) => {
 			const book = claims();
 			const { deps } = mail({ sender: { send: async () => { throw error; } } });
-			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('not-sent');
+			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('claimed');
 			expect(book.held.size).toBe(1);
 		});
 
 		it('keeps the claim of an account with no address to send to', async () => {
 			const book = claims();
 			const { deps } = mail({ userEmail: async () => null });
-			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('not-sent');
+			expect(await claimAndSendNotice({ ...deps, claim: book.claim, release: book.release }, 'u1', ENDING)).toBe('claimed');
 			expect(book.held.size).toBe(1);
 		});
 	});

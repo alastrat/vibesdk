@@ -82,7 +82,7 @@ describe('chargeStep', () => {
 					return ledger.recordUse(input);
 				},
 			},
-			notices: { readBalance: (userId, period, pool) => ledger.readBalance(userId, period, pool), mail: { sender: null, userEmail: async () => null, baseUrl: null, claim: async () => true, release: async () => undefined } },
+			notices: { readBalance: (userId, period, pool) => ledger.readBalance(userId, period, pool), mail: { sender: null, userEmail: async () => null, baseUrl: null, claim: async () => true, release: async () => undefined }, track: async () => undefined },
 			now: () => new Date(NOW),
 		};
 		const charge = { userId: 'u_retry', period: account.period, pool: 5_000, plan: 'basic' as const, useKey: 'agent:turn:1', credits: 165, source: 'think' as const, model: 'anthropic/claude-sonnet-5-5', usage: { inputTokens: 40_000, outputTokens: 3_000 } };
