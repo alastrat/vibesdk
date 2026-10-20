@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
-import { Banner, Button, Input, LayerCard, Loader, buttonVariants } from '@cloudflare/kumo';
-import { ArrowLeftIcon, CreditCardIcon, ReceiptIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { useLocation, useNavigate } from 'react-router';
+import { Banner, Button, Input, LayerCard, Loader } from '@cloudflare/kumo';
+import { CreditCardIcon, ReceiptIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
-	BILLING_PATH,
 	CHECKOUT_EXPIRED_MESSAGE,
 	EXTRA_CREDITS_DISCLOSURE,
 	extraCreditsPriceCents,
@@ -14,8 +13,10 @@ import {
 	type CheckoutOrder,
 } from '@/api-types';
 import { pageTitle } from '@/brand';
+import { BackToBilling } from '@/components/billing/BackToBilling';
 import { CreditsStepper } from '@/components/billing/CreditsStepper';
 import { SectionTitle } from '@/components/billing/SectionTitle';
+import { Stopped } from '@/components/billing/Stopped';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useBillingCheckout } from '@/hooks/use-billing-checkout';
 import { EXTRA_CREDITS_PRICE } from '@/lib/plans';
@@ -25,36 +26,6 @@ import { canPayNow, checkoutExpiredOf, checkoutPathOf, checkoutRequestOf, consen
 const CREDITS_SETTLE_MS = 500;
 
 const TERMS_LINK_CLASS = 'underline hover:text-kumo-strong';
-
-function BackToBilling() {
-	return (
-		<Link to={BILLING_PATH} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-			<ArrowLeftIcon className="size-4" aria-hidden />
-			Back to billing
-		</Link>
-	);
-}
-
-/** Takes the form's place when the checkout can't go on: a refusal, a timeout, a form that didn't load. */
-function Stopped({ message, action }: { message: string; action: { label: string; onClick: () => void } | null }) {
-	return (
-		<LayerCard>
-			<LayerCard.Primary>
-				<div className="grid gap-4">
-					<Banner variant="alert" icon={<WarningCircleIcon />} description={message} />
-					<div className="flex flex-wrap items-center gap-2">
-						{action && (
-							<Button variant="primary" onClick={action.onClick}>
-								{action.label}
-							</Button>
-						)}
-						<BackToBilling />
-					</div>
-				</div>
-			</LayerCard.Primary>
-		</LayerCard>
-	);
-}
 
 function DueToday({ label }: { label: string }) {
 	return (

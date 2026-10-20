@@ -151,12 +151,12 @@ export interface CardSetupStart {
 	mode: CardSetupMode;
 }
 
-/** What happened when a saved card was used on an invoice. */
+/** What happened when a saved card was used on an invoice; `requires_action` carries what Stripe.js needs to finish the bank's confirmation. */
 export type InvoicePaymentResult =
 	| { state: 'paid' }
 	| { state: 'saved' }
 	| { state: 'nothing_due' }
-	| { state: 'requires_action'; clientSecret: string }
+	| { state: 'requires_action'; clientSecret: string; publishableKey: string }
 	| { state: 'declined'; message: string };
 
 /** The card a subscription renews on; never more than Stripe's display fields. */
@@ -166,6 +166,9 @@ export interface CardOnFile {
 	expMonth: number;
 	expYear: number;
 }
+
+/** The billing history lists this many invoices, newest first. */
+export const BILLING_HISTORY_LIMIT = 24;
 
 /** One invoice in the billing history; `date` is in ms. */
 export interface InvoiceView {

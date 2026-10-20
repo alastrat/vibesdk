@@ -101,16 +101,18 @@ describe("estori's own checkout page", () => {
 		expect(hook).toContain('FORM_NOT_LOADED_MESSAGE');
 	});
 
-	it('re-applies the look when the theme switches', () => {
-		const hook = source(HOOK);
-		expect(hook).toContain('changeAppearance(');
-		expect(hook).toContain('BILLING_APPEARANCE_TOKENS');
-		expect(hook).toContain('getComputedStyle(document.documentElement)');
+	it('re-applies the look when the theme switches, through the hook the card page shares', () => {
+		expect(source(HOOK)).toContain('useStripeAppearance(sdk)');
+		const look = source('/src/hooks/use-stripe-appearance.ts');
+		expect(look).toContain('changeAppearance(');
+		expect(look).toContain('BILLING_APPEARANCE_TOKENS');
+		expect(look).toContain('getComputedStyle(document.documentElement)');
 	});
 
 	it('returns to billing with the plain path, and reads the status with the return route', () => {
 		const page = source(PAGE);
-		expect(page).toContain('to={BILLING_PATH}');
+		expect(page).toContain('<BackToBilling />');
+		expect(source('/src/components/billing/BackToBilling.tsx')).toContain('to={BILLING_PATH}');
 		const back = source(RETURN);
 		expect(back).toContain('getCheckoutStatus(');
 		expect(back).toContain('returnTargetOf(');
@@ -153,6 +155,6 @@ describe("estori's own checkout page", () => {
 	it('waits for the payment the way billing always has, keyed by the confirm mark', () => {
 		const view = source('/src/routes/settings/billing-view.ts');
 		expect(view).toContain("params.get('confirm')");
-		expect(view).not.toContain("'success'");
+		expect(view).not.toMatch(/get\('(checkout|credits)'\) === 'success'/);
 	});
 });

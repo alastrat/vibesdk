@@ -875,7 +875,7 @@ describe('finishing a card setup', () => {
 		expect(await completeCardSetup(declined.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'declined', message: 'Your card has insufficient funds.' } });
 		expect(declined.calls).toContain('default-card:cus_1:sub_1:pm_new');
 		const confirm = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()], payFails: NEEDS_AUTHENTICATION });
-		expect(await completeCardSetup(confirm.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x' } });
+		expect(await completeCardSetup(confirm.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x', publishableKey: 'pk_test_1' } });
 		expect(confirm.calls).toContain('default-card:cus_1:sub_1:pm_new');
 	});
 
@@ -1015,9 +1015,9 @@ describe('paying a failed invoice', () => {
 		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'declined', message: 'Your card has insufficient funds.' } });
 	});
 
-	it('an invoice that needs authentication answers requires_action with the client secret', async () => {
+	it('an invoice that needs authentication answers requires_action with the client secret and the key to finish it with', async () => {
 		const { deps, calls } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: NEEDS_AUTHENTICATION });
-		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x' } });
+		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x', publishableKey: 'pk_test_1' } });
 		expect(calls).toEqual(['list:cus_1:24', 'read:sub_1', 'pay:in_1:pm_1', 'read-invoice:in_1']);
 	});
 
@@ -1025,7 +1025,7 @@ describe('paying a failed invoice', () => {
 		for (const [status, type] of [[402, 'card_error'], [402, 'invalid_request_error'], [400, 'invalid_request_error'], [409, null]] as const) {
 			const error = new StripeApiError('This payment needs the cardholder to authenticate.', status, 'invoice_payment_intent_requires_action', type);
 			const { deps } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: error });
-			expect(await payOpenInvoice(deps, 'u1', null), `${status} ${type}`).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x' } });
+			expect(await payOpenInvoice(deps, 'u1', null), `${status} ${type}`).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x', publishableKey: 'pk_test_1' } });
 		}
 	});
 
@@ -1039,6 +1039,11 @@ describe('paying a failed invoice', () => {
 		const bare = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice({ confirmation_secret: null })], payFails: NEEDS_AUTHENTICATION });
 		expect(await payOpenInvoice(bare.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
 		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+
+	it('answers 503 when the bank wants the seller and the deployment has no publishable key to finish the payment with', async () => {
+		const { deps } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: NEEDS_AUTHENTICATION, publishableKey: null });
+		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: false, status: 503, message: PAYMENTS_NOT_SET_UP_MESSAGE });
 	});
 
 	it('answers 502 and warns for any other refusal, and when Stripe answers an invoice that is still not paid', async () => {

@@ -290,6 +290,7 @@ export type {
 	SubscriptionStatus,
 } from '../shared/types/billing.js';
 export {
+	BILLING_HISTORY_LIMIT,
 	BILLING_NOT_OPEN_MESSAGE,
 	BILLING_PATH,
 	CHECKOUT_EXPIRED_MESSAGE,

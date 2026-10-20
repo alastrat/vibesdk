@@ -12,9 +12,15 @@ const sources = import.meta.glob<string>(
 		'/src/hooks/use-billing.ts',
 		'/src/lib/api-client.ts',
 		'/src/routes/settings/billing-view.ts',
+		'/src/components/billing/upgrade-action.ts',
+		'/src/components/billing/PaymentMethodCard.tsx',
+		'/src/components/billing/BillingHistory.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
+
+// Every source in the app, for the words no page may use; this file only names them to forbid them.
+const app = import.meta.glob<string>(['/src/**/*.ts', '/src/**/*.tsx', '!/src/routes/billing-page-guard.test.ts'], { query: '?raw', import: 'default', eager: true });
 
 function source(path: string): string {
 	const text = sources[path];
@@ -83,7 +89,84 @@ describe('the billing page', () => {
 		for (const path of ['/src/routes/settings/billing.tsx', '/src/routes/settings/billing-view.ts', '/src/components/billing/BillingBanner.tsx', '/src/hooks/use-billing.ts', '/src/lib/api-client.ts']) {
 			expect(source(path), path).not.toMatch(/portal/i);
 		}
-		expect(source('/src/routes/settings/billing.tsx')).not.toContain('Manage billing');
+	});
+
+	it('says "Open billing", and never "Manage billing", anywhere in the app', () => {
+		for (const [path, text] of Object.entries(app)) expect(text, path).not.toContain('Manage billing');
+		expect(source('/src/components/billing/upgrade-action.ts')).toContain("label: 'Open billing'");
+		expect(source('/src/routes/settings/billing-view.ts')).toContain("action: { kind: 'link', to: BILLING_PATH, label: 'Open billing' }");
+	});
+
+	it("shows the card on file and the invoices, for an account that has billing details", () => {
+		const page = source('/src/routes/settings/billing.tsx');
+		expect(page).toContain('view.canManageBilling && (');
+		expect(page).toContain('<PaymentMethodCard card={view.card} />');
+		expect(page).toContain('<BillingHistory />');
+		const card = source('/src/components/billing/PaymentMethodCard.tsx');
+		expect(card).toContain('to={CARD_PATH}');
+		expect(card).toContain('Change card');
+		expect(card).toContain('cardLabelFor(card)');
+	});
+
+	it('offers a seller whose renewal failed both ways out, and keeps the buttons from pressing twice', () => {
+		const page = source('/src/routes/settings/billing.tsx');
+		expect(page).toContain('pastDueActionsFor(view)');
+		expect(page).toContain('{actions.payNow}');
+		expect(page).toContain('to={actions.updateCard.to}');
+		expect(page).toContain('{actions.updateCard.label}');
+		expect(page).toContain('loading={paying}');
+		expect(page).toContain('onClick={onPayNow}');
+		expect(page).toContain('paying={payNow.isPending}');
+		expect(page).toContain('onPayNow={() => payNow.mutate()}');
+		const view = source('/src/routes/settings/billing-view.ts');
+		expect(view).toContain('`Pay now with ${');
+		expect(view).toContain("UPDATE_CARD_AND_PAY_LABEL = 'Update card and pay'");
+		expect(view).toContain('cardPathOf(\'pay\')');
+	});
+
+	it("pays the failed renewal through one guarded call that finishes the bank's confirmation, and refreshes the plan after it", () => {
+		const hooks = source('/src/hooks/use-billing.ts');
+		const payNow = hooks.slice(hooks.indexOf('export function usePayNow('), hooks.indexOf('export function useInvoiceDownload('));
+		expect(payNow).toContain('singleFlight(');
+		expect(payNow).toContain('settlePayment(await unwrap(apiClient.payOpenInvoice(), PAY_FAILED_MESSAGE))');
+		expect(payNow).toContain('invalidateQueries({ queryKey: queryKeys.billing() })');
+	});
+
+	it('waits for the webhook after a failed renewal was paid, the same way it waits after a checkout', () => {
+		const page = source('/src/routes/settings/billing.tsx');
+		expect(page).toContain("setWaiting({ kind: 'renewal' })");
+		expect(page).toContain('isRenewalPaid(view)');
+		expect(page).toContain("returned === 'renewal'");
+	});
+
+	it('has an invoice history section the billing emails can link to, and scrolls to it', () => {
+		const history = source('/src/components/billing/BillingHistory.tsx');
+		expect(history).toContain('id="history"');
+		expect(history).toContain('HISTORY_EMPTY_MESSAGE');
+		expect(history).toContain('Download');
+		expect(source('/src/routes/settings/billing.tsx')).toContain("'#history'");
+	});
+
+	it("downloads an invoice's PDF through the API client, never an anchor to the route, so a refusal is a toast and not a page of JSON", () => {
+		const history = source('/src/components/billing/BillingHistory.tsx');
+		expect(history).not.toMatch(/href=/);
+		expect(history).toContain('useInvoiceDownload()');
+		const hooks = source('/src/hooks/use-billing.ts');
+		const download = hooks.slice(hooks.indexOf('export function useInvoiceDownload('));
+		expect(download).toContain('apiClient.downloadInvoicePdf(invoiceId)');
+		expect(download).toContain('saveBlob(file.blob, file.filename)');
+		expect(download).toContain('toast.error(downloadFailureMessage(failure, INVOICE_DOWNLOAD_FAILED_MESSAGE))');
+	});
+
+	it('has the card page and its return route in the app, signed in, after the billing page', () => {
+		const routes = source('/src/routes.tsx');
+		const appRoutes = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
+		for (const path of ['settings/billing/card', 'settings/billing/card/return']) {
+			const at = appRoutes.indexOf(`path: '${path}'`);
+			expect(at, path).toBeGreaterThan(-1);
+			expect(appRoutes.slice(at, at + 200), path).toContain('<ProtectedRoute>');
+		}
+		expect(appRoutes.indexOf("path: 'settings/billing'")).toBeLessThan(appRoutes.indexOf("path: 'settings/billing/card'"));
 	});
 });
 
@@ -108,9 +191,11 @@ describe('the billing calls of the API client', () => {
 		expect(billing).not.toContain('fetch(');
 	});
 
-	it("gives an invoice's PDF as a path on Estori for a link, never Stripe's address", () => {
-		expect(billing).toContain('invoicePdfUrl(invoiceId: string): string {');
-		expect(billing).toContain('return `${this.baseUrl}/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`;');
+	it("fetches an invoice's PDF from a path on Estori, through the one request that sends credentials, with the server's file name", () => {
+		expect(billing).toContain('async downloadInvoicePdf(invoiceId: string): Promise<InvoicePdfFile> {');
+		expect(billing).toContain('this.requestRaw<unknown>(`/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`, { skipJsonParsing: true }, false, true)');
+		expect(billing).toContain("filenameOfDisposition(response.headers.get('Content-Disposition')");
+		expect(billing).not.toContain('invoicePdfUrl');
 		expect(billing).not.toContain('stripe.com');
 	});
 });

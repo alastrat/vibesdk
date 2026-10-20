@@ -148,8 +148,15 @@ import {
 	SecurityError,
 	SecurityErrorType,
 } from '@/api-types';
+import { filenameOfDisposition } from './download';
 import { announcePlanLimit } from './plan-limit-events';
 import { toast } from 'sonner';
+
+/** An invoice's PDF, ready to save. */
+export interface InvoicePdfFile {
+	blob: Blob;
+	filename: string;
+}
 
 /**
  * Global auth modal trigger for 401 interception
@@ -785,9 +792,14 @@ class ApiClient {
 		return this.request<InvoiceView[]>('/api/billing/history');
 	}
 
-	/** Where an invoice's PDF downloads from, for an anchor's `href`; the server streams it, so Stripe's address never reaches the page. */
-	invoicePdfUrl(invoiceId: string): string {
-		return `${this.baseUrl}/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`;
+	/**
+	 * An invoice's PDF to save, named as the server names it. The server streams it, so Stripe's address never reaches the
+	 * page. A refusal throws with the server's own message; quiet, since the page shows it. A failure with no message of
+	 * its own, such as a gateway page, has status 0.
+	 */
+	async downloadInvoicePdf(invoiceId: string): Promise<InvoicePdfFile> {
+		const { response } = await this.requestRaw<unknown>(`/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`, { skipJsonParsing: true }, false, true);
+		return { blob: await response.blob(), filename: filenameOfDisposition(response.headers.get('Content-Disposition'), `${invoiceId}.pdf`) };
 	}
 
 	/** The seller's level, store limits and this week's use. */

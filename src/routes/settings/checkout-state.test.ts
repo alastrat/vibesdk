@@ -1,11 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CHECKOUT_EXPIRED_MESSAGE, type CheckoutClientStart, type CheckoutStatusView } from '@/api-types';
+import { singleFlight } from '@/lib/async';
 import {
 	CHECKOUT_PATH,
 	FORM_NOT_LOADED_MESSAGE,
-	FormLoadTimeoutError,
 	PAYMENT_FAILED_MESSAGE,
-	STRIPE_LOAD_TIMEOUT_MS,
 	canPay,
 	canPayNow,
 	checkoutExpiredOf,
@@ -16,11 +15,9 @@ import {
 	dueTodayLabel,
 	initialCheckoutState,
 	isExpiredRefusal,
-	loadWithin,
 	readCheckoutRequest,
 	refusalOf,
 	returnTargetOf,
-	singleFlight,
 	startRefusalOf,
 	submitPayment,
 	type CheckoutEvent,
@@ -561,67 +558,11 @@ describe('confirming the payment', () => {
 		await press();
 		expect(calls).toEqual(['consent', 'confirm', 'consent', 'confirm']);
 	});
-
-	it('lets the next press through after a run that threw', async () => {
-		let runs = 0;
-		const press = singleFlight(async () => {
-			runs += 1;
-			if (runs === 1) throw new Error('first run fails');
-		});
-		await expect(press()).rejects.toThrow('first run fails');
-		await press();
-		expect(runs).toBe(2);
-	});
 });
 
-describe('waiting for the card form', () => {
-	beforeEach(() => {
-		vi.useFakeTimers();
-	});
-
-	afterEach(() => {
-		vi.useRealTimers();
-	});
-
-	it('gives Stripe ten seconds, then says the form did not load', async () => {
-		expect(STRIPE_LOAD_TIMEOUT_MS).toBe(10_000);
+describe('when the card form does not load', () => {
+	it('says so, with a retry, in place of the form', () => {
 		expect(FORM_NOT_LOADED_MESSAGE).toBe("The payment form didn't load. Check your connection and try again.");
-		const never = new Promise<string>(() => {});
-		const settled = vi.fn();
-		const waiting = loadWithin(never).catch((error: unknown) => settled(error));
-		await vi.advanceTimersByTimeAsync(STRIPE_LOAD_TIMEOUT_MS - 1);
-		expect(settled).not.toHaveBeenCalled();
-		await vi.advanceTimersByTimeAsync(1);
-		await waiting;
-		expect(settled).toHaveBeenCalledWith(expect.any(FormLoadTimeoutError));
-	});
-
-	it('returns what loaded in time and leaves no timer behind', async () => {
-		await expect(loadWithin(Promise.resolve('stripe'))).resolves.toBe('stripe');
-		expect(vi.getTimerCount()).toBe(0);
-	});
-
-	it('passes on a load that failed, and leaves no timer behind', async () => {
-		await expect(loadWithin(Promise.reject(new Error('Stripe could not load')))).rejects.toThrow('Stripe could not load');
-		expect(vi.getTimerCount()).toBe(0);
-	});
-
-	it('ignores a load that finishes after the time is up', async () => {
-		let finish: (value: string) => void = () => {};
-		const slow = new Promise<string>((resolve) => {
-			finish = resolve;
-		});
-		const waiting = loadWithin(slow, 1_000);
-		const outcome = waiting.then(
-			() => 'loaded',
-			(error: unknown) => (error instanceof FormLoadTimeoutError ? 'timed out' : 'other'),
-		);
-		await vi.advanceTimersByTimeAsync(1_000);
-		finish('late');
-		expect(await outcome).toBe('timed out');
-	});
-
-	it('shows the not-loaded message with a retry in place of the form', () => {
 		const state = run(initialCheckoutState(false), { type: 'started', start: PLAN_START }, { type: 'refused', message: FORM_NOT_LOADED_MESSAGE, retryable: true });
 		expect(state.phase).toEqual({ name: 'refused', message: FORM_NOT_LOADED_MESSAGE, retryable: true });
 	});

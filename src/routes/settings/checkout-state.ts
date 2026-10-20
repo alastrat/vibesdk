@@ -16,9 +16,6 @@ import type { StripeCheckoutActionResult } from '@/lib/stripe/stripe-js';
 
 export const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
 
-/** How long the card form gets to load before the page says it didn't. */
-export const STRIPE_LOAD_TIMEOUT_MS = 10_000;
-
 export const FORM_NOT_LOADED_MESSAGE = "The payment form didn't load. Check your connection and try again.";
 export const PAYMENT_FAILED_MESSAGE = "The payment didn't go through. Check your details and try again.";
 export const CODE_FAILED_MESSAGE = "Couldn't check that code. Try again.";
@@ -142,41 +139,6 @@ export function startRefusalOf(error: unknown, fallback: string): StartRefusal {
 	if (status === 503) return { kind: 'refused', message, retryable: true };
 	if (status !== null && status >= 400 && status < 500) return { kind: 'refused', message, retryable: false };
 	return { kind: 'refused', message: fallback, retryable: true };
-}
-
-export class FormLoadTimeoutError extends Error {
-	constructor() {
-		super('The card form took too long to load');
-		this.name = 'FormLoadTimeoutError';
-	}
-}
-
-/** Rejects with `FormLoadTimeoutError` when `load` hasn't settled in `ms`; a result that arrives later is ignored. */
-export function loadWithin<T>(load: Promise<T>, ms: number = STRIPE_LOAD_TIMEOUT_MS): Promise<T> {
-	return new Promise<T>((resolve, reject) => {
-		const timer = setTimeout(() => reject(new FormLoadTimeoutError()), ms);
-		load.then(
-			(value) => {
-				clearTimeout(timer);
-				resolve(value);
-			},
-			(error: unknown) => {
-				clearTimeout(timer);
-				reject(error);
-			},
-		);
-	});
-}
-
-/** Runs `task` once at a time: a call made while it runs gets the running call's result instead of starting another. */
-export function singleFlight<A extends unknown[], R>(task: (...args: A) => Promise<R>): (...args: A) => Promise<R> {
-	let running: Promise<R> | null = null;
-	return (...args) => {
-		running ??= task(...args).finally(() => {
-			running = null;
-		});
-		return running;
-	};
 }
 
 /** What pressing pay led to; only `redirecting` leaves the button disabled, because the page is going away. */

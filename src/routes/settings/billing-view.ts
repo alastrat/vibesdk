@@ -1,6 +1,7 @@
 /** What the billing page and the banner show for an account's billing view: its choices, confirmations and notices. */
 
 import {
+	BILLING_PATH,
 	EXTRA_CREDITS,
 	PAID_PLAN_IDS,
 	PLAN_LIMITS,
@@ -12,22 +13,25 @@ import {
 	isPaidPlanId,
 	planName,
 	type BillingView,
+	type CardOnFile,
 	type PaidPlanId,
 	type PurchaseView,
 } from '@/api-types';
 import { upgradeActionFor, type UpgradeAction } from '@/components/billing/upgrade-action';
+import type { SettledPayment } from '@/lib/stripe/next-action';
+import { cardPathOf } from './card-state';
 
 /** After a checkout, the page asks for the view this often until the webhook has recorded the payment, for up to this long. */
 export const CONFIRM_POLL_MS = 2_000;
 export const CONFIRM_TIMEOUT_MS = 30_000;
 
-export type CheckoutReturn = 'plan' | 'credits' | 'cancelled';
+export type CheckoutReturn = 'plan' | 'credits' | 'renewal' | 'cancelled';
 
-/** What the checkout page's return says the seller paid for, read from the billing page's address. */
+/** What a return says the seller paid for, read from the billing page's address: a plan, credits, or a failed renewal. */
 export function checkoutReturnOf(search: string): CheckoutReturn | null {
 	const params = new URLSearchParams(search);
 	const confirm = params.get('confirm');
-	if (confirm === 'plan' || confirm === 'credits') return confirm;
+	if (confirm === 'plan' || confirm === 'credits' || confirm === 'renewal') return confirm;
 	if (params.get('checkout') === 'cancelled') return 'cancelled';
 	return null;
 }
@@ -197,6 +201,11 @@ export function planStatusFor(view: BillingView): string {
 	return view.source === 'subscription' ? 'Active' : 'Free';
 }
 
+/** True once the webhook has recorded a paid renewal, so the page stops asking. */
+export function isRenewalPaid(view: BillingView): boolean {
+	return !view.paymentFailing;
+}
+
 /** When the plan renews, ends or changes; null while a failed payment's note says what happens instead. */
 export function renewalLineFor(view: BillingView): string | null {
 	if (paymentAtStake(view)) return null;
@@ -269,7 +278,7 @@ export function billingBannerFor(view: BillingView | undefined): BillingBanner |
 			view.graceEndsAt !== null
 				? `Your last payment didn't go through. Update your card by ${formatBillingDate(view.graceEndsAt)} to keep ${planName(view.plan)}.`
 				: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.";
-		return { tone: 'warning', message, action: { kind: 'none' } };
+		return { tone: 'warning', message, action: { kind: 'link', to: BILLING_PATH, label: 'Open billing' } };
 	}
 	if (view.alert === null || view.credits === null) return null;
 	const { credits, limits } = view;
@@ -285,4 +294,67 @@ export function billingBannerFor(view: BillingView | undefined): BillingBanner |
 /** Where a closed banner is remembered for the session: one key per notice and period, so the next one still shows. */
 export function bannerKeyFor(view: BillingView): string {
 	return `billing-banner:${paymentAtStake(view) ? 'payment' : (view.alert ?? 'none')}:${view.credits?.renewsAt ?? view.periodEnd}`;
+}
+
+const CARD_BRANDS: Record<string, string> = {
+	visa: 'Visa',
+	mastercard: 'Mastercard',
+	amex: 'American Express',
+	discover: 'Discover',
+	diners: 'Diners Club',
+	jcb: 'JCB',
+	unionpay: 'UnionPay',
+	cartes_bancaires: 'Cartes Bancaires',
+	eftpos_au: 'EFTPOS',
+};
+
+function brandNameOf(brand: string): string | null {
+	return CARD_BRANDS[brand] ?? null;
+}
+
+/** "Visa ending 4242, expires 08/28"; a brand it doesn't know is a card. */
+export function cardLabelFor(card: CardOnFile): string {
+	const month = String(card.expMonth).padStart(2, '0');
+	const year = String(card.expYear % 100).padStart(2, '0');
+	return `${brandNameOf(card.brand) ?? 'Card'} ending ${card.last4}, expires ${month}/${year}`;
+}
+
+export const UPDATE_CARD_AND_PAY_LABEL = 'Update card and pay';
+
+export interface PastDueActions {
+	/** The "Pay now" button's words, or null when there is no card on file to pay with. */
+	payNow: string | null;
+	updateCard: { label: string; to: string };
+}
+
+/** What a seller whose renewal failed can do about it on the billing page; null while payments are fine. */
+export function pastDueActionsFor(view: BillingView): PastDueActions | null {
+	if (!paymentAtStake(view)) return null;
+	const { card } = view;
+	return {
+		payNow: card ? `Pay now with ${brandNameOf(card.brand) ?? 'card'} ending ${card.last4}` : null,
+		updateCard: { label: UPDATE_CARD_AND_PAY_LABEL, to: cardPathOf('pay') },
+	};
+}
+
+export const PAYMENT_WENT_THROUGH_MESSAGE = 'Your payment went through.';
+export const CARD_SAVED_MESSAGE = 'Your card is saved.';
+const PAYMENT_DECLINED_MESSAGE = "The payment didn't go through. Try another card.";
+
+export interface PaymentNotice {
+	tone: 'success' | 'error';
+	message: string;
+}
+
+/** What to tell the seller about an invoice payment or a saved card. */
+export function describePaymentResult(result: SettledPayment): PaymentNotice {
+	switch (result.state) {
+		case 'paid':
+		case 'nothing_due':
+			return { tone: 'success', message: PAYMENT_WENT_THROUGH_MESSAGE };
+		case 'saved':
+			return { tone: 'success', message: CARD_SAVED_MESSAGE };
+		case 'declined':
+			return { tone: 'error', message: result.message || PAYMENT_DECLINED_MESSAGE };
+	}
 }

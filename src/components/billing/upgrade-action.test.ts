@@ -28,10 +28,10 @@ describe('the Upgrade dialog', () => {
 		expect(Object.values(UPGRADE_TITLES)).not.toContain("Own domains aren't on your plan");
 	});
 
-	it('sends a seller whose payment failed to the billing page to update the card', () => {
+	it('sends a seller whose payment failed to the billing page, where the failed payment is paid', () => {
 		const failed = refusal({ limit: 'aiCredits', plan: 'pro', upgradeTo: null, paymentFailed: true });
 		expect(upgradeTitleFor(failed)).toBe("Your payment didn't go through");
-		expect(upgradeActionFor(failed)).toEqual({ kind: 'link', to: '/settings/billing', label: 'Manage billing' });
+		expect(upgradeActionFor(failed)).toEqual({ kind: 'link', to: '/settings/billing', label: 'Open billing' });
 	});
 
 	it('hands each refusal to whoever listens, until they stop', () => {

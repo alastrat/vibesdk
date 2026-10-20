@@ -1,15 +1,22 @@
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { BILLING_PATH, type PaidPlanId } from '@/api-types';
 import { useAuth } from '@/contexts/auth-context';
 import { ApiError, apiClient } from '@/lib/api-client';
+import { singleFlight } from '@/lib/async';
+import { downloadFailureMessage, saveBlob } from '@/lib/download';
 import { queryKeys } from '@/lib/query-keys';
+import { settlePayment, type SettledPayment } from '@/lib/stripe/next-action';
 import { unwrap } from '@/lib/unwrap-response';
 import { usePublicPlan } from './use-public-plan';
 
 export const CHECKOUT_FAILED_MESSAGE = "Couldn't open the checkout. Try again in a moment.";
 export const CHANGE_FAILED_MESSAGE = "Couldn't change your plan. Try again in a moment.";
+export const PAY_FAILED_MESSAGE = "Couldn't take the payment. Try again in a moment.";
+export const HISTORY_FAILED_MESSAGE = "Couldn't load your invoices";
+export const INVOICE_DOWNLOAD_FAILED_MESSAGE = "Couldn't download the invoice. Try again in a moment.";
 
 /** Estori's own checkout page, which opens the Stripe session itself when it loads. */
 const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
@@ -88,4 +95,44 @@ export function usePlanChange() {
 export function useBuyCredits() {
 	const navigate = useNavigate();
 	return (credits: number) => navigate(`${CHECKOUT_PATH}?credits=${credits}`);
+}
+
+/** The account's last 24 invoices, newest first. */
+export function useBillingHistory() {
+	const { isAuthenticated } = useAuth();
+	return useQuery({
+		queryKey: queryKeys.billingHistory(),
+		queryFn: () => unwrap(apiClient.getBillingHistory(), HISTORY_FAILED_MESSAGE),
+		enabled: isAuthenticated,
+		staleTime: 60_000,
+	});
+}
+
+/**
+ * Pays the failed renewal with the card on file, and finishes the bank's confirmation on the page when it asks for one.
+ * It runs one payment at a time, and `isPending` holds from the press until the result, the confirmation included. A
+ * settled result, a declined card too, refreshes the plan and the history, and goes to `onSettled`.
+ */
+export function usePayNow(onSettled: (result: SettledPayment) => void) {
+	const queryClient = useQueryClient();
+	const pay = useMemo(() => singleFlight(async () => settlePayment(await unwrap(apiClient.payOpenInvoice(), PAY_FAILED_MESSAGE))), []);
+	return useMutation({
+		mutationFn: pay,
+		onSuccess: (result) => {
+			void queryClient.invalidateQueries({ queryKey: queryKeys.billing() });
+			onSettled(result);
+		},
+		onError: (failure) => showBillingError(failure, PAY_FAILED_MESSAGE),
+	});
+}
+
+/** Saves an invoice's PDF through the API, so a refusal shows the server's message instead of a page of JSON. */
+export function useInvoiceDownload() {
+	return useMutation({
+		mutationFn: async (invoiceId: string) => {
+			const file = await apiClient.downloadInvoicePdf(invoiceId);
+			saveBlob(file.blob, file.filename);
+		},
+		onError: (failure) => toast.error(downloadFailureMessage(failure, INVOICE_DOWNLOAD_FAILED_MESSAGE)),
+	});
 }

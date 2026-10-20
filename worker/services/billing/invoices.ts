@@ -3,9 +3,6 @@
 import type { CardOnFile, InvoiceView } from '../../../shared/types/billing';
 import type { StripeClient, StripeInvoice, StripePaymentMethodRef, StripeSubscription } from '../payments/stripe-client';
 
-/** The history lists this many invoices, newest first. */
-export const HISTORY_LIMIT = 24;
-
 /** Shown for an invoice whose lines carry no text. */
 const FALLBACK_DESCRIPTION = 'Estori invoice';
 

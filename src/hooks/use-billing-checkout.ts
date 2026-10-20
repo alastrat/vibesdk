@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'r
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { BILLING_PATH, TERMS_VERSION, type CheckoutClientStart } from '@/api-types';
-import { useTheme } from '@/contexts/theme-context';
 import { apiClient } from '@/lib/api-client';
+import { loadWithin, singleFlight } from '@/lib/async';
 import { queryKeys } from '@/lib/query-keys';
-import { BILLING_APPEARANCE_TOKENS, billingAppearance } from '@/lib/stripe/appearance';
 import { loadStripe, type StripeCheckoutActionResult, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
 import { unwrap } from '@/lib/unwrap-response';
 import {
@@ -17,14 +16,13 @@ import {
 	checkoutReducer,
 	initialCheckoutState,
 	isExpiredRefusal,
-	loadWithin,
 	readCheckoutRequest,
-	singleFlight,
 	startRefusalOf,
 	submitPayment,
 	type CheckoutRequest,
 } from '@/routes/settings/checkout-state';
 import { CHECKOUT_FAILED_MESSAGE } from './use-billing';
+import { useStripeAppearance } from './use-stripe-appearance';
 
 /** Where the page keeps what it asked for, so the return route can send an open or expired checkout back to it. */
 const REQUEST_KEY = 'billing:checkout-request';
@@ -50,13 +48,6 @@ function openSession(request: CheckoutRequest): Promise<CheckoutClientStart> {
 	return unwrap(opened, CHECKOUT_FAILED_MESSAGE);
 }
 
-/** Stripe's look for the card form, from the theme tokens as they are on the page now. */
-function appearanceFor(theme: 'light' | 'dark') {
-	const root = getComputedStyle(document.documentElement);
-	const tokens = Object.fromEntries(BILLING_APPEARANCE_TOKENS.map((name) => [name, root.getPropertyValue(name).trim()]));
-	return billingAppearance(theme, tokens);
-}
-
 /**
  * Opens the seller's checkout session when it mounts, shows Stripe's card form in `container`, and drives the page's
  * state: the terms and box, a promotion code, and the payment, which records consent before it confirms. Each start
@@ -65,7 +56,6 @@ function appearanceFor(theme: 'light' | 'dark') {
 export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArrival: boolean) {
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
-	const { resolvedTheme } = useTheme();
 	const [state, dispatch] = useReducer(checkoutReducer, expiredOnArrival, initialCheckoutState);
 	const [stale, setStale] = useState(expiredOnArrival);
 	const [attempt, setAttempt] = useState(0);
@@ -73,7 +63,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 	const sdk = useRef<StripeCheckoutSdk | null>(null);
 	const actions = useRef<StripeCheckoutActions | null>(null);
 	const latest = useRef(state);
-	const theme = useRef(resolvedTheme);
+	const appearance = useStripeAppearance(sdk);
 
 	useEffect(() => {
 		latest.current = state;
@@ -112,7 +102,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 			try {
 				const stripe = await loadWithin(loadStripe(start.publishableKey));
 				if (!current) return;
-				const checkout = stripe.initCheckoutElementsSdk({ clientSecret: start.clientSecret, elementsOptions: { appearance: appearanceFor(theme.current) } });
+				const checkout = stripe.initCheckoutElementsSdk({ clientSecret: start.clientSecret, elementsOptions: { appearance: appearance() } });
 				sdk.current = checkout;
 				// Stripe.js refuses to confirm until the page has read the total, so every change reads it.
 				checkout.on('change', (session) => dispatch({ type: 'sessionChanged', sessionId: start.sessionId, status: session.status.type, amount: session.total.total.amount }));
@@ -141,14 +131,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 			sdk.current = null;
 			actions.current = null;
 		};
-	}, [plan, credits, stale, attempt, navigate, queryClient]);
-
-	// The theme tokens are applied by the theme provider's effect, which runs after this one, so the look is read a frame later.
-	useEffect(() => {
-		theme.current = resolvedTheme;
-		const frame = requestAnimationFrame(() => sdk.current?.changeAppearance(appearanceFor(resolvedTheme)));
-		return () => cancelAnimationFrame(frame);
-	}, [resolvedTheme]);
+	}, [plan, credits, stale, attempt, navigate, queryClient, appearance]);
 
 	const refreshTerms = useCallback(async (sessionId: string) => {
 		try {

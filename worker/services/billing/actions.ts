@@ -9,6 +9,7 @@
 import { BillingService, CreditLedgerService } from '../../database';
 import type { SubscriptionRecord } from '../../database/schema';
 import {
+	BILLING_HISTORY_LIMIT,
 	BILLING_PATH,
 	CHECKOUT_EXPIRED_MESSAGE,
 	CHECKOUT_KIND_CARD,
@@ -35,7 +36,7 @@ import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type Stripe
 import { liveSubscription, type BillingAccount } from './account';
 import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
 import { checkoutReturnRecorders, type CheckoutReturnRecorder } from './events';
-import { HISTORY_LIMIT, chargedPaymentMethod, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
+import { chargedPaymentMethod, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 import { cancelAtPeriodEndReleasingSchedule, pendingScheduleId, releaseSchedule } from './schedules';
 import { billingEventDepsFromEnv } from './wiring';
@@ -510,8 +511,11 @@ export async function completeCardSetup(deps: BillingActionDeps, userId: string,
 	});
 }
 
-/** The secret that lets the page finish a payment the bank asked the seller to authenticate; an invoice paid meanwhile needs none. */
-async function confirmationNeeded(stripe: BillingStripe, invoiceId: string): Promise<BillingActionResult<InvoicePaymentResult>> {
+/**
+ * The secret, and the publishable key to open Stripe.js with, that let the page finish a payment the bank asked the seller
+ * to authenticate; an invoice paid meanwhile needs none.
+ */
+async function confirmationNeeded(deps: BillingActionDeps, stripe: BillingStripe, invoiceId: string): Promise<BillingActionResult<InvoicePaymentResult>> {
 	const invoice = await stripe.retrieveInvoice(invoiceId);
 	if (invoice.status === 'paid') return ok(PAID);
 	const clientSecret = invoice.confirmation_secret?.client_secret;
@@ -519,7 +523,8 @@ async function confirmationNeeded(stripe: BillingStripe, invoiceId: string): Pro
 		logger.warn('Stripe asked for authentication on an invoice but gave no secret to finish it with', { invoiceId });
 		return STRIPE_FAILED;
 	}
-	return ok({ state: 'requires_action', clientSecret });
+	if (!deps.publishableKey) return fail(503, PAYMENTS_NOT_SET_UP_MESSAGE);
+	return ok({ state: 'requires_action', clientSecret, publishableKey: deps.publishableKey });
 }
 
 /**
@@ -535,7 +540,7 @@ async function payNewestOpenInvoice(
 	subscription: SubscriptionRecord,
 	paymentMethod: string | null,
 ): Promise<BillingActionResult<InvoicePaymentResult>> {
-	const invoices = await stripe.listInvoices(customerId, HISTORY_LIMIT);
+	const invoices = await stripe.listInvoices(customerId, BILLING_HISTORY_LIMIT);
 	const open = invoices.find((invoice) => invoice.status === 'open' && invoiceSubscriptionId(invoice) === subscription.stripeSubscriptionId);
 	if (!open) return ok(NOTHING_DUE);
 	// Keyed on the card charged: a retry after a decline with another card must reach Stripe, not replay the decline.
@@ -548,7 +553,7 @@ async function payNewestOpenInvoice(
 	} catch (error) {
 		if (!(error instanceof StripeApiError)) throw error;
 		// By code alone: the status and type that carry an authentication need are Stripe's to change.
-		if (error.code === INVOICE_REQUIRES_ACTION) return confirmationNeeded(stripe, open.id);
+		if (error.code === INVOICE_REQUIRES_ACTION) return confirmationNeeded(deps, stripe, open.id);
 		if (isCardRefusal(error)) return ok({ state: 'declined', message: error.message });
 		// Stripe's own retry can pay the invoice after the list and refuse this payment; the seller's invoice is paid, which is what they asked for.
 		const settled = await stripe.retrieveInvoice(open.id).then(
@@ -577,7 +582,7 @@ export async function billingHistory(deps: BillingActionDeps, userId: string): P
 	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
 	const customerId = await deps.store.customerOf(userId);
 	if (!customerId) return ok([]);
-	return askStripe(async () => ok(historyOf(await stripe.listInvoices(customerId, HISTORY_LIMIT))));
+	return askStripe(async () => ok(historyOf(await stripe.listInvoices(customerId, BILLING_HISTORY_LIMIT))));
 }
 
 /** The file name of an invoice's PDF: its number, else its id, with nothing that could break the header it is sent in. */
