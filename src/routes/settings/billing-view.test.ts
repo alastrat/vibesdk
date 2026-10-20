@@ -8,6 +8,7 @@ import {
 	checkoutReturnOf,
 	clampExtraCredits,
 	confirmationFor,
+	creditsSummaryFor,
 	isConfirmed,
 	paymentNoteFor,
 	planChoicesFor,
@@ -16,6 +17,7 @@ import {
 	readCheckoutBaseline,
 	renewalLineFor,
 	requestedPlanOf,
+	showsChange,
 } from './billing-view';
 
 const NOV_5 = Date.UTC(2026, 10, 5, 10);
@@ -86,6 +88,19 @@ describe('the billing page', () => {
 		expect(isConfirmed('credits', before, view('premium', { credits: { ...view('premium').credits!, purchasedLeft: 5_000 } }))).toBe(true);
 	});
 
+	it("knows when the webhook has recorded a plan change, so the page stops asking", () => {
+		expect(showsChange('upgrade', view('pro'))).toBe(false);
+		expect(showsChange('upgrade', view('premium'))).toBe(true);
+		expect(showsChange('downgrade', view('premium'))).toBe(false);
+		expect(showsChange('downgrade', view('premium', { pendingPlan: 'pro', pendingPlanAt: NOV_5 }))).toBe(true);
+		expect(showsChange('cancel', view('pro'))).toBe(false);
+		expect(showsChange('cancel', view('pro', { cancelAtPeriodEnd: true }))).toBe(true);
+		expect(showsChange('resume', view('pro', { cancelAtPeriodEnd: true }))).toBe(false);
+		expect(showsChange('resume', view('pro'))).toBe(true);
+		expect(showsChange('cancel-change', view('premium', { pendingPlan: 'pro', pendingPlanAt: NOV_5 }))).toBe(false);
+		expect(showsChange('cancel-change', view('premium'))).toBe(true);
+	});
+
 	it('puts a failed payment, then a credit warning, in the banner, with the next step for the plan', () => {
 		expect(billingBannerFor(view('pro', { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5 }))).toEqual({ tone: 'warning', message: "Your last payment didn't go through. Update your card by November 5 to keep Pro.", action: { kind: 'portal', label: 'Update card' } });
 		const low = { ...view('basic').credits!, used: 4_000, left: 1_000 };
@@ -134,6 +149,28 @@ describe('the billing page, beyond the plan cards', () => {
 		expect(canCancel(view('pro', { cancelAtPeriodEnd: true }))).toBe(false);
 		expect(canCancel(view('basic'))).toBe(false);
 		expect(canCancel(view('enterprise', { source: 'override' }))).toBe(false);
+	});
+
+	it("shows the month's credits apart from extra credits, and never more used than the month had", () => {
+		const premium = view('premium').credits!;
+		expect(creditsSummaryFor(view('premium', { credits: { ...premium, granted: 5_000, used: 20_000, left: 90_000, purchasedLeft: 5_000, available: 110_000 } }))).toEqual({
+			meterLabel: '20,000 of 105,000 AI credits used this month',
+			meterPercent: (20_000 / 105_000) * 100,
+			monthlyLeft: 85_000,
+			extraLeft: 5_000,
+			overrunNote: null,
+		});
+		const purchase = { credits: 30_000, left: 30_000, purchasedAt: NOV_5, expiresAt: NOV_5 };
+		const covered = creditsSummaryFor(view('premium', { credits: { ...premium, used: 120_000, left: 10_000, purchasedLeft: 10_000, available: 130_000 }, purchases: [purchase] }));
+		expect(covered).toMatchObject({ meterLabel: '100,000 of 100,000 AI credits used this month', meterPercent: 100, monthlyLeft: 0, extraLeft: 10_000 });
+		expect(covered?.overrunNote).toBe('Your extra credits covered the other 20,000.');
+		// No extra credits: a turn already running finishes past the month's credits.
+		const pro = view('pro').credits!;
+		expect(creditsSummaryFor(view('pro', { credits: { ...pro, used: 20_450, left: 0, available: 20_450 } }))?.overrunNote).toBe('450 more were used to finish turns that were already running.');
+		const partly = creditsSummaryFor(view('premium', { credits: { ...premium, used: 120_000, left: 0, purchasedLeft: 0, available: 120_000 }, purchases: [{ ...purchase, left: 5_000 }] }));
+		expect(partly?.overrunNote).toBe('20,000 more were used to finish turns that were already running, 5,000 of them from your extra credits.');
+		expect(creditsSummaryFor(view('basic', { credits: null }))).toBeNull();
+		expect(creditsSummaryFor(view('pro', { credits: { ...pro, pool: 0, left: 0, available: 0 } }))?.meterPercent).toBe(0);
 	});
 
 	it('lists each purchase with what is left and the day it expires, year included', () => {

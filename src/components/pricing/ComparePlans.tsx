@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { CaretDownIcon, CheckIcon, MinusIcon } from '@phosphor-icons/react';
 import { PlanButton } from '@/components/billing/PlanButton';
+import { ComingSoon } from '@/components/marketing/ComingSoon';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { PillLink } from '@/components/public-site/primitives';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
@@ -14,8 +15,16 @@ import { cn } from '@/lib/utils';
 
 const ACTION = 'mt-4 w-full py-2 text-sm';
 
+interface Header {
+	price: string;
+	note: string;
+	action: ReactNode;
+	/** Pro and Premium aren't sold until billing is on. */
+	comingSoon?: boolean;
+}
+
 /** What each column header shows under the plan's name, and its button: sign up for Basic, buy Pro and Premium once billing is on, contact sales otherwise. */
-function headerFor(id: PlanId, billing: boolean): { price: string; note: string; action: ReactNode } {
+function headerFor(id: PlanId, billing: boolean): Header {
 	switch (id) {
 		case 'basic':
 			return {
@@ -32,6 +41,7 @@ function headerFor(id: PlanId, billing: boolean): { price: string; note: string;
 			return {
 				price: formatUsd(PLAN_PRICES_CENTS[id]),
 				note: `${formatCredits(PLAN_LIMITS[id].aiCredits)} AI credits a month`,
+				comingSoon: !billing,
 				action: billing ? (
 					<PlanButton plan={id} className={ACTION} />
 				) : (
@@ -177,7 +187,10 @@ export function ComparePlans({ billing }: { billing: boolean }) {
 											scope="col"
 											className="sticky top-[var(--public-header-h)] z-10 border-b border-l border-public-line bg-white px-3 pt-3 pb-5 text-left align-top font-normal lg:px-5"
 										>
-											<span className="block text-lg text-public-ink">{entry.name}</span>
+											<span className="flex flex-wrap items-center gap-2 text-lg text-public-ink">
+												{entry.name}
+												{header.comingSoon && <ComingSoon />}
+											</span>
 											<span className="mt-2 block text-3xl font-light tracking-[-0.02em] text-public-ink">{header.price}</span>
 											<span className="mt-2 block min-h-10 text-[13px] font-light text-public-muted">{header.note}</span>
 											{header.action}

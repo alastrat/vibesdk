@@ -38,6 +38,19 @@ describe('the billing page', () => {
 		expect(page).toContain('id="extra-credits"');
 	});
 
+	it('keeps asking after a plan change until the page shows it, within the same bounds', () => {
+		const page = source('/src/routes/settings/billing.tsx');
+		expect(page).toContain("setWaiting({ kind: 'change', action })");
+		expect(page).toContain('showsChange(waiting.action, view)');
+	});
+
+	it("opens a plan's next step from a link followed on the billing page itself, not only on arrival", () => {
+		const page = source('/src/routes/settings/billing.tsx');
+		const effect = page.slice(page.indexOf('const plan = requestedPlanOf(location.search);'));
+		expect(effect.slice(0, 600)).toContain('[location.pathname, location.search, location.hash, navigate]');
+		expect(page).not.toContain('useState(() => {');
+	});
+
 	it('shows the banner on every app page, and sends signed-out buyers to sign up, then back to their plan', () => {
 		expect(source('/src/components/layout/app-layout.tsx')).toContain('<BillingBanner />');
 		expect(source('/src/components/billing/PlanButton.tsx')).toContain('usePlanCheckout()');

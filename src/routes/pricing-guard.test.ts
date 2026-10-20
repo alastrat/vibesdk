@@ -100,6 +100,9 @@ describe('pricing page', () => {
 		expect(paid).toContain('action: billing ? (');
 		expect(paid).toContain('<PlanButton plan={id}');
 		expect(paid).toContain("contactPath('premium')");
+		// Until billing is on, the paid columns keep the coming-soon tag beside the plan's name.
+		expect(paid).toContain('comingSoon: !billing');
+		expect(compare).toContain('{header.comingSoon && <ComingSoon />}');
 		expect(compare).not.toContain('PREMIUM_TIERS');
 	});
 

@@ -104,6 +104,25 @@ export function confirmationFor(view: BillingView, action: ConfirmedAction): Con
 	}
 }
 
+/** A change the seller asked Stripe for on this page. */
+export type PlanAction = ConfirmedAction | 'resume' | 'cancel-change';
+
+/** True once the view shows the change, so the page can stop asking for it. */
+export function showsChange(action: PlanAction, view: BillingView): boolean {
+	switch (action) {
+		case 'upgrade':
+			return view.plan === 'premium';
+		case 'downgrade':
+			return view.pendingPlan === 'pro';
+		case 'cancel':
+			return view.cancelAtPeriodEnd;
+		case 'resume':
+			return !view.cancelAtPeriodEnd;
+		case 'cancel-change':
+			return view.pendingPlan === null;
+	}
+}
+
 /** True while the account pays for Pro or Premium itself and hasn't already cancelled. */
 export function canCancel(view: BillingView): boolean {
 	return view.source === 'subscription' && isPaidPlanId(view.plan) && !view.cancelAtPeriodEnd;
@@ -185,6 +204,41 @@ export function renewalLineFor(view: BillingView): string | null {
 	if (view.pendingPlan !== null) return `Moves to ${planName(view.pendingPlan)} on ${formatBillingDate(view.pendingPlanAt ?? view.periodEnd)}`;
 	if (view.source === 'subscription') return `Renews on ${formatBillingDate(view.periodEnd)}`;
 	return `AI credits renew on ${formatBillingDate(view.credits?.renewsAt ?? view.periodEnd)}`;
+}
+
+/** This month's credits on the billing page: the pool and grants apart from extra credits, so nothing reads as counted twice. */
+export interface CreditsSummary {
+	meterLabel: string;
+	meterPercent: number;
+	/** What's left of the pool and grants. */
+	monthlyLeft: number;
+	extraLeft: number;
+	/** Said under the meter when the month used more than its credits. */
+	overrunNote: string | null;
+}
+
+export function creditsSummaryFor(view: BillingView): CreditsSummary | null {
+	const { credits } = view;
+	if (!credits) return null;
+	const monthly = credits.pool + credits.granted;
+	const usedOfMonthly = Math.min(credits.used, monthly);
+	const overrun = credits.used - usedOfMonthly;
+	// The purchases' own balances, before this month's overrun is taken from them, bound what they covered.
+	const covered = Math.min(overrun, view.purchases.reduce((sum, purchase) => sum + purchase.left, 0));
+	let overrunNote: string | null = null;
+	if (overrun > 0) {
+		overrunNote =
+			covered === overrun
+				? `Your extra credits covered the other ${formatCredits(overrun)}.`
+				: `${formatCredits(overrun)} more were used to finish turns that were already running${covered > 0 ? `, ${formatCredits(covered)} of them from your extra credits` : ''}.`;
+	}
+	return {
+		meterLabel: `${formatCredits(usedOfMonthly)} of ${formatCredits(monthly)} AI credits used this month`,
+		meterPercent: monthly > 0 ? (usedOfMonthly / monthly) * 100 : 0,
+		monthlyLeft: monthly - usedOfMonthly,
+		extraLeft: credits.purchasedLeft,
+		overrunNote,
+	};
 }
 
 const EXPIRY_DATE = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });

@@ -15,6 +15,7 @@ import {
 	formatUsd,
 	planName,
 	type BillingView,
+	type PaidPlanId,
 } from '@/api-types';
 import { pageTitle } from '@/brand';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -39,6 +40,7 @@ import {
 	checkoutReturnOf,
 	clampExtraCredits,
 	confirmationFor,
+	creditsSummaryFor,
 	isConfirmed,
 	paymentNoteFor,
 	planChoicesFor,
@@ -47,13 +49,19 @@ import {
 	readCheckoutBaseline,
 	renewalLineFor,
 	requestedPlanOf,
+	showsChange,
 	type CheckoutBaseline,
 	type Confirmation,
 	type ConfirmedAction,
+	type PlanAction,
 	type PlanChoice,
 } from './billing-view';
 
 const CHANGE_REQUESTED = 'Done. It can take a few seconds to show here.';
+const CHANGE_SLOW = "Your change is taking longer than usual to show. Refresh in a minute.";
+
+/** What the page polls for: a payment back from Stripe, or a change Stripe took on this page. */
+type Waiting = { kind: 'payment'; paid: 'plan' | 'credits' } | { kind: 'change'; action: PlanAction };
 
 /** What each confirmed action asks Stripe for. */
 const CONFIRMED_CHANGES: Record<ConfirmedAction, PlanChange> = {
@@ -212,23 +220,22 @@ function Fact({ label, value }: { label: string; value: string }) {
 /** This period's credits: the monthly pool and Estori's grants, what's used, extra credits left and when they renew. */
 function Credits({ view }: { view: BillingView }) {
 	const { credits } = view;
-	if (!credits) return null;
-	const total = credits.pool + credits.granted;
+	const summary = creditsSummaryFor(view);
+	if (!credits || !summary) return null;
 	return (
 		<LayerCard>
 			<SectionTitle icon={<CoinsIcon className="size-4" aria-hidden />}>AI credits</SectionTitle>
 			<LayerCard.Primary>
 				<div className="grid gap-4">
-					<Meter
-						label={`${formatCredits(credits.used)} of ${formatCredits(total)} AI credits used this month`}
-						value={total > 0 ? Math.min(100, (credits.used / total) * 100) : 0}
-						showValue={false}
-					/>
+					<div className="grid gap-1.5">
+						<Meter label={summary.meterLabel} value={summary.meterPercent} showValue={false} />
+						{summary.overrunNote && <p className="text-xs text-kumo-subtle">{summary.overrunNote}</p>}
+					</div>
 					<dl className="grid gap-2 text-sm sm:grid-cols-2">
 						<Fact label="Monthly credits" value={formatCredits(credits.pool)} />
 						{credits.granted > 0 && <Fact label="Added by Estori" value={formatCredits(credits.granted)} />}
-						<Fact label="Left this month" value={formatCredits(credits.left)} />
-						{(credits.purchasedLeft > 0 || view.purchases.length > 0) && <Fact label="Extra credits left" value={formatCredits(credits.purchasedLeft)} />}
+						<Fact label="Left this month" value={formatCredits(summary.monthlyLeft)} />
+						{(summary.extraLeft > 0 || view.purchases.length > 0) && <Fact label="Extra credits left" value={formatCredits(summary.extraLeft)} />}
 						<Fact label="Renews on" value={formatBillingDate(credits.renewsAt)} />
 					</dl>
 					{view.purchases.length > 0 && (
@@ -374,64 +381,84 @@ function ConfirmDialog({ action, confirmation, pending, onClose, onConfirm }: { 
 export default function BillingPage() {
 	const location = useLocation();
 	const navigate = useNavigate();
-	// Read once: the address is cleared below, so a refresh doesn't confirm or open anything twice.
-	const [arrival] = useState(() => {
-		const returned = checkoutReturnOf(location.search);
-		return { returned, requested: requestedPlanOf(location.search), kept: returned === 'credits' ? readCheckoutBaseline(recallBaseline()) : null };
-	});
-	const waitingFor = arrival.returned === 'plan' || arrival.returned === 'credits' ? arrival.returned : null;
-	const [confirming, setConfirming] = useState(waitingFor !== null);
+	const [waiting, setWaiting] = useState<Waiting | null>(null);
 	const [timedOut, setTimedOut] = useState(false);
+	const [cancelled, setCancelled] = useState(false);
+	const [requested, setRequested] = useState<PaidPlanId | null>(null);
+	const confirming = waiting !== null;
 	const billing = useBilling({ refetchInterval: confirming ? CONFIRM_POLL_MS : false });
 	const view = billing.data;
 	const checkout = usePlanCheckout();
 	const planChange = usePlanChange();
 	const [confirm, setConfirm] = useState<ConfirmedAction | null>(null);
-	const firstView = useRef<CheckoutBaseline | null>(null);
-	const handledRequest = useRef(false);
+	/** What a credits return compares against: kept across the trip to Stripe, or else the first view after it. */
+	const baseline = useRef<CheckoutBaseline | null>(null);
 
+	// The address says what to do (a return from Stripe, or a plan a link asked for), whether the page just opened or a
+	// link was followed on it. It's cleared once read, so a refresh doesn't repeat it.
 	useEffect(() => {
-		if (location.search !== '') navigate({ pathname: location.pathname, hash: location.hash }, { replace: true });
+		if (location.search === '') return;
+		const returned = checkoutReturnOf(location.search);
+		if (returned === 'plan' || returned === 'credits') {
+			baseline.current = returned === 'credits' ? readCheckoutBaseline(recallBaseline()) : null;
+			setTimedOut(false);
+			setWaiting({ kind: 'payment', paid: returned });
+		}
+		setCancelled(returned === 'cancelled');
+		const plan = requestedPlanOf(location.search);
+		if (plan) setRequested(plan);
+		navigate({ pathname: location.pathname, hash: location.hash }, { replace: true });
 	}, [location.pathname, location.search, location.hash, navigate]);
 
 	useEffect(() => {
-		if (!confirming || waitingFor === null || !view) return;
-		firstView.current ??= checkoutBaselineOf(view);
-		if (!isConfirmed(waitingFor, arrival.kept ?? firstView.current, view)) return;
-		setConfirming(false);
+		if (!waiting || !view) return;
+		if (waiting.kind === 'change') {
+			if (showsChange(waiting.action, view)) setWaiting(null);
+			return;
+		}
+		baseline.current ??= checkoutBaselineOf(view);
+		if (!isConfirmed(waiting.paid, baseline.current, view)) return;
+		setWaiting(null);
 		forgetBaseline();
-		toast.success(waitingFor === 'plan' ? `You're on ${planName(view.plan)} now.` : 'Your extra credits are ready.');
-	}, [confirming, waitingFor, view, arrival.kept]);
+		toast.success(waiting.paid === 'plan' ? `You're on ${planName(view.plan)} now.` : 'Your extra credits are ready.');
+	}, [waiting, view]);
 
 	useEffect(() => {
-		if (!confirming) return;
+		if (!waiting) return;
 		const timer = window.setTimeout(() => {
-			setConfirming(false);
+			setWaiting(null);
+			if (waiting.kind === 'change') {
+				toast(CHANGE_SLOW);
+				return;
+			}
 			setTimedOut(true);
 			forgetBaseline();
 		}, CONFIRM_TIMEOUT_MS);
 		return () => window.clearTimeout(timer);
-	}, [confirming]);
+	}, [waiting]);
 
+	// Waits for a settled view: after a refused checkout the page refetches, and a stale view would start it again.
 	useEffect(() => {
-		if (handledRequest.current || arrival.requested === null || !view) return;
-		handledRequest.current = true;
+		if (requested === null || !view || billing.isFetching) return;
+		setRequested(null);
 		if (!view.enabled) return;
-		const requested = planChoicesFor(view).find((entry) => entry.plan === arrival.requested);
-		if (requested?.action === 'checkout') void checkout.start(requested.plan);
-		else if (requested?.action === 'upgrade' || requested?.action === 'downgrade') setConfirm(requested.action);
-	}, [arrival.requested, view, checkout]);
+		const choice = planChoicesFor(view).find((entry) => entry.plan === requested);
+		if (choice?.action === 'checkout') void checkout.start(choice.plan);
+		else if (choice?.action === 'upgrade' || choice?.action === 'downgrade') setConfirm(choice.action);
+	}, [requested, view, billing.isFetching, checkout]);
 
 	const loaded = view !== undefined;
 	useEffect(() => {
 		if (loaded && location.hash === '#extra-credits') document.getElementById('extra-credits')?.scrollIntoView({ block: 'start' });
 	}, [loaded, location.hash]);
 
-	const change = (request: PlanChange, onDone?: () => void) =>
+	const change = (action: PlanAction, request: PlanChange, onDone?: () => void) =>
 		planChange.mutate(request, {
 			onSuccess: () => {
 				onDone?.();
 				toast.success(CHANGE_REQUESTED);
+				setTimedOut(false);
+				setWaiting({ kind: 'change', action });
 			},
 			onError: (failure) => showBillingError(failure, CHANGE_FAILED_MESSAGE),
 		});
@@ -446,10 +473,10 @@ export default function BillingPage() {
 				setConfirm(choice.action);
 				return;
 			case 'resume':
-				change({ kind: 'resume' });
+				change('resume', { kind: 'resume' });
 				return;
 			case 'cancel-change':
-				change({ kind: 'change', plan: choice.plan });
+				change('cancel-change', { kind: 'change', plan: choice.plan });
 				return;
 			case 'current':
 			case 'none':
@@ -463,7 +490,7 @@ export default function BillingPage() {
 		if (choice.action === 'resume') return planChange.variables?.kind === 'resume';
 		return choice.action === 'cancel-change' && planChange.variables?.kind === 'change';
 	};
-	// One request at a time, and no second checkout while the last payment is being confirmed.
+	// One request at a time, and nothing new while the last payment or change is still on its way.
 	const busy = confirming || planChange.isPending || checkout.pending !== null;
 	const choices = view ? planChoicesFor(view) : [];
 	const premium = choices.find((entry) => entry.plan === 'premium');
@@ -477,11 +504,11 @@ export default function BillingPage() {
 					<p className="text-kumo-subtle">Your plan, this month's AI credits and extra credits.</p>
 				</div>
 
-				{confirming && (
+				{waiting?.kind === 'payment' && (
 					<Banner icon={<SpinnerGapIcon className="animate-spin motion-reduce:animate-none" />} title="Confirming your payment…" description="This takes a few seconds." />
 				)}
 				{timedOut && <Banner variant="alert" icon={<WarningCircleIcon />} description="Your payment is being confirmed. Refresh in a minute." />}
-				{arrival.returned === 'cancelled' && <Banner variant="secondary" icon={<InfoIcon />} description="Checkout cancelled. Nothing was charged." />}
+				{cancelled && <Banner variant="secondary" icon={<InfoIcon />} description="Checkout cancelled. Nothing was charged." />}
 
 				{view ? (
 					view.enabled ? (
@@ -524,7 +551,7 @@ export default function BillingPage() {
 					confirmation={confirmationFor(view, confirm)}
 					pending={planChange.isPending}
 					onClose={() => setConfirm(null)}
-					onConfirm={() => change(CONFIRMED_CHANGES[confirm], () => setConfirm(null))}
+					onConfirm={() => change(confirm, CONFIRMED_CHANGES[confirm], () => setConfirm(null))}
 				/>
 			)}
 		</div>
