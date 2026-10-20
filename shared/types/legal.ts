@@ -1,6 +1,6 @@
 /** Who runs Estori, how to reach them, and which terms version users agree to. */
 
-export const TERMS_VERSION = '2026-10-16';
+export const TERMS_VERSION = '2026-10-19';
 
 export const TERMS_REQUIRED_MESSAGE = 'Agree to the Terms of Service and Privacy Policy to create an account';
 export const TERMS_OUTDATED_MESSAGE = 'The terms were updated; reload the page to agree to the latest version';

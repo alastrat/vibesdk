@@ -1,7 +1,7 @@
 ---
 title: Terms of Service
-version: 2026-10-16
-updated: October 16, 2026
+version: 2026-10-19
+updated: October 19, 2026
 ---
 
 These Terms of Service ("Terms") are an agreement between you and {{entity.name}}, {{entity.kind}} ("Globalink", "we", "us"), which operates Estori at estori.app (the "Service"). By creating an account or using the Service, you agree to these Terms and to our [Privacy Policy](/privacy). If you don't agree, don't use the Service.
@@ -48,7 +48,7 @@ A paid site shows its price on its product page. When you buy it, you get a non-
 
 You may not republish, resell, sublicense, redistribute or give away a bought site or a copy of it, offer it as a template, or make a copy public in Discover. The Service keeps copies of paid sites private to enforce this.
 
-Purchases are one-time payments in US dollars. Refunds follow our [Refund Policy](/refunds).
+A paid site is a one-time payment in US dollars. Refunds follow our [Refund Policy](/refunds).
 
 ## 7. Selling a paid site
 
@@ -90,7 +90,19 @@ This section applies when a store you build on Estori takes payments from shoppe
 
 **Orders we hold.** We may hold an order that our payment checks flag as risky before we buy its catalog products. If we can't clear it within 24 hours, we refund its catalog products to the shopper.
 
-## 11. Acceptable use
+## 11. Plans, AI credits and extra credits
+
+Estori has a free plan, Basic, and paid plans, Pro and Premium, at the prices on our pricing page when you subscribe. Paid plans are billed in US dollars to your card through Stripe, and renew automatically every month until you cancel. You can cancel any time from your billing page in Estori. Cancelling takes effect at the end of the period you paid for; until then you keep your plan. Moving from Pro to Premium takes effect at once, and we charge the difference for the rest of the period. Moving from Premium to Pro takes effect at the next renewal. There are no refunds for part of a period or for a move to Pro.
+
+Each plan includes AI credits for each period. Credits pay for the AI's work: each step the AI takes is charged from the AI's real usage, at the price of the model you choose. Monthly credits don't carry over to the next period. Credits have no cash value and can't be transferred or exchanged for money.
+
+On Premium you can buy extra credits. Extra credits are used after your monthly credits and expire 12 months after purchase. They stay yours if you change plans. Extra credits are non-refundable, except when you were charged twice or your account could not use them; refunded extra credits that are still unused are removed from your account.
+
+A turn the AI has started always finishes. If it uses more credits than you had left, the difference is taken from your extra credits; if you have none, we don't charge you for it.
+
+We may change the prices or the credits of a plan with at least 30 days' notice. A change applies from your first renewal after it takes effect. Plans also set limits, such as how many stores can be live at once; going over a limit after a plan change never takes a live store offline.
+
+## 12. Acceptable use
 
 You may not use the Service to build, host, publish or sell anything that:
 
@@ -109,49 +121,49 @@ You also may not:
 - scrape the Service or other users' sites, except through features we provide;
 - resell or share access to the Service.
 
-## 12. Our property
+## 13. Our property
 
 The Service, including its software, design, the Estori name and logo, and our content, belongs to us or our licensors and is protected by law. These Terms don't give you any rights to them except the right to use the Service as described here. If you send us feedback, we may use it without any obligation to you.
 
-## 13. Third-party services
+## 14. Third-party services
 
 The Service relies on third parties, including Cloudflare for hosting, AI model providers for generation, Stripe for payments, and GitHub if you choose to export. Your use of a third-party service may also be governed by its own terms. We aren't responsible for third-party services.
 
-## 14. Suspension and termination
+## 15. Suspension and termination
 
 You can stop using the Service at any time and ask us to delete your account at {{contact.privacy}}.
 
 We may suspend or terminate your account, remove content, or limit features if you break these Terms, if we must by law, or if your use creates risk or harm for us, other users or third parties. We'll try to give notice when we reasonably can. We terminate the accounts of repeat copyright infringers under our [Copyright Policy](/copyright).
 
-Sections 4 (the license for copies already made), 5, 6, 8, 9, 10, 12 and 15 to 19 survive termination.
+Sections 4 (the license for copies already made), 5, 6, 8, 9, 10, 13 and 16 to 20 survive termination.
 
-## 15. Disclaimers
+## 16. Disclaimers
 
 THE SERVICE AND ALL CONTENT, INCLUDING AI OUTPUT AND SITES BOUGHT FROM OTHER USERS, ARE PROVIDED "AS IS" AND "AS AVAILABLE". TO THE FULLEST EXTENT THE LAW ALLOWS, WE DISCLAIM ALL WARRANTIES, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE AND NON-INFRINGEMENT. WE DON'T WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, SECURE OR ERROR-FREE, OR THAT ANY CONTENT IS ACCURATE.
 
-## 16. Limitation of liability
+## 17. Limitation of liability
 
 TO THE FULLEST EXTENT THE LAW ALLOWS, GLOBALINK WILL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA OR GOODWILL, ARISING FROM OR RELATED TO THE SERVICE OR THESE TERMS, EVEN IF WE WERE TOLD THEY WERE POSSIBLE.
 
 OUR TOTAL LIABILITY FOR ALL CLAIMS ARISING FROM OR RELATED TO THE SERVICE OR THESE TERMS IS LIMITED TO THE GREATER OF US$100 OR THE AMOUNT YOU PAID US IN THE 12 MONTHS BEFORE THE EVENT GIVING RISE TO THE CLAIM. These limits apply to every theory of liability and don't limit liability that can't be limited by law.
 
-## 17. Indemnity
+## 18. Indemnity
 
 You will defend, indemnify and hold harmless Globalink and its officers, employees and agents from any claims, damages, losses and costs, including reasonable attorneys' fees, arising from your content, your sites, your sales, your use of the Service, or your breach of these Terms or of anyone's rights.
 
-## 18. Governing law and disputes
+## 19. Governing law and disputes
 
 These Terms are governed by the laws of the State of Texas and applicable US federal law, without regard to conflict-of-law rules. Any dispute arising from or related to these Terms or the Service will be brought only in the state or federal courts located in Harris County, Texas, and you and we consent to their jurisdiction. Either party may seek urgent relief in any competent court to protect its intellectual property.
 
-## 19. Changes to these Terms
+## 20. Changes to these Terms
 
 We may update these Terms. If a change is material, we'll tell you through the Service or by email before it takes effect, and we'll ask you to agree to the updated Terms the next time you sign in. If you don't agree, stop using the Service. The date at the top shows when these Terms last changed.
 
-## 20. General
+## 21. General
 
 These Terms, together with the policies they link to, are the entire agreement between you and us about the Service. If any part is found unenforceable, the rest stays in effect. Our not enforcing a right isn't a waiver of it. You may not assign these Terms without our consent; we may assign them in a merger, acquisition or sale of assets. Nothing in these Terms creates a partnership, employment or agency relationship.
 
-## 21. Contact
+## 22. Contact
 
 {{entity.name}}, {{entity.address}}.
 

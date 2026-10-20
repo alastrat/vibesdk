@@ -1,6 +1,6 @@
 ---
 title: Privacy Policy
-version: 2026-10-16
+version: 2026-10-19
 updated: October 18, 2026
 ---
 
