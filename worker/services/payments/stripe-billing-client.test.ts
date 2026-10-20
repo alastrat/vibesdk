@@ -142,6 +142,22 @@ describe('Stripe billing calls', () => {
 		expect(calls.map((call) => call.key)).toEqual([`billing-card-u1-pay-pm_1-${BUCKET}`, `billing-card-u1-pay-pm_1-${BUCKET}`, `billing-card-u1-pay-pm_2-${BUCKET}`, `billing-card-u1-pay-none-${BUCKET}`]);
 	});
 
+	it('every billing session takes cards only and never offers Link; the plan and credits sessions also charge in dollars, as the store does', async () => {
+		const subscription = recordingFetch({ id: 'cs_1' });
+		const credits = recordingFetch({ id: 'cs_c' });
+		const card = recordingFetch({ id: 'cs_card' });
+		await subscription.client.createSubscriptionCheckoutSession({ customerId: 'cus_1', priceId: 'price_pro', userId: 'u1', plan: 'pro', returnUrl: 'https://estori.app/r', nowMs: NOW });
+		await credits.client.createCreditsCheckoutSession({ customerId: 'cus_1', priceId: 'price_credits', userId: 'u1', credits: 5_000, returnUrl: 'https://estori.app/r', nowMs: NOW, idempotencyKey: 'k' });
+		await card.client.createCardSetupSession({ customerId: 'cus_1', userId: 'u1', mode: 'save', afterCardId: null, returnUrl: 'https://estori.app/r', nowMs: NOW });
+		for (const { calls } of [subscription, credits, card]) {
+			expect(calls[0].params).toEqual(expect.arrayContaining(['payment_method_types[0]=card', 'wallet_options[link][display]=never']));
+			expect(calls[0].params.filter((param) => param.startsWith('payment_method_types'))).toEqual(['payment_method_types[0]=card']);
+		}
+		for (const { calls } of [subscription, credits]) expect(calls[0].params).toContain('adaptive_pricing[enabled]=false');
+		// A setup has no price to show in another currency.
+		expect(card.calls[0].params.some((param) => param.startsWith('adaptive_pricing'))).toBe(false);
+	});
+
 	it('sends the same checkout twice within a key bucket, closing at least 30 minutes after either call', async () => {
 		const nineMinutes = 9 * 60_000;
 		const lastMoment = NOW + 600_000 - 1;

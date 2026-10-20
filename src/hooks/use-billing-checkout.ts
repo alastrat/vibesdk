@@ -5,7 +5,7 @@ import { BILLING_PATH, TERMS_VERSION, type CheckoutClientStart } from '@/api-typ
 import { apiClient } from '@/lib/api-client';
 import { loadWithin, singleFlight } from '@/lib/async';
 import { queryKeys } from '@/lib/query-keys';
-import { loadStripe, type StripeCheckoutActionResult, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
+import { CARD_ONLY_PAYMENT_ELEMENT, loadStripe, type StripeCheckoutActionResult, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
 import { unwrap } from '@/lib/unwrap-response';
 import {
 	CODE_FAILED_MESSAGE,
@@ -109,7 +109,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 				const target = container.current;
 				if (!target) throw new Error('The card form has nowhere to open');
 				// The form is mounted before its actions load, as the store checkout does, so it shows while they are fetched.
-				payment = checkout.createPaymentElement();
+				payment = checkout.createPaymentElement(CARD_ONLY_PAYMENT_ELEMENT);
 				payment.on('change', ({ complete }) => dispatch({ type: 'cardChanged', complete }));
 				payment.mount(target);
 				const loaded = await loadWithin(checkout.loadActions());

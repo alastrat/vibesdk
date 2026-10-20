@@ -18,14 +18,19 @@ const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
 
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 
+/** Cards only, and no Link, which would also offer bank payments and its own sign-up; billing's card setup takes this alone. */
+const CARD_ONLY_CHECKOUT: Record<string, FormValue> = {
+	payment_method_types: ['card'],
+	wallet_options: { link: { display: 'never' } },
+};
+
 /**
- * Every Checkout session charges in US dollars by card or a card wallet (Apple Pay, Google Pay): no prices in the
- * shopper's local currency, and no Link, which would also offer bank payments. Estori's fees assume Stripe's card rate.
+ * Every Checkout session that charges does so in US dollars by card or a card wallet (Apple Pay, Google Pay; billing's
+ * page hides those too): no prices in the buyer's local currency, and no Link. Estori's fees assume Stripe's card rate.
  */
 const USD_CARD_CHECKOUT: Record<string, FormValue> = {
-	payment_method_types: ['card'],
+	...CARD_ONLY_CHECKOUT,
 	adaptive_pricing: { enabled: false },
-	wallet_options: { link: { display: 'never' } },
 };
 
 export class StripeApiError extends Error {
@@ -684,7 +689,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					customer: input.customerId,
 					client_reference_id: input.userId,
 					line_items: [{ price: input.priceId, quantity: 1 }],
-					payment_method_types: ['card'],
+					...USD_CARD_CHECKOUT,
 					allow_promotion_codes: true,
 					subscription_data: { metadata: { estori_user_id: input.userId } },
 					metadata: { estori_user_id: input.userId, plan: input.plan },
@@ -705,7 +710,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					customer: input.customerId,
 					client_reference_id: input.userId,
 					line_items: [{ price: input.priceId, quantity: input.credits / EXTRA_CREDITS.creditsPerUnit }],
-					payment_method_types: ['card'],
+					...USD_CARD_CHECKOUT,
 					metadata,
 					payment_intent_data: { metadata },
 					// The purchase's invoice is its receipt in billing history.
@@ -727,7 +732,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					ui_mode: 'elements',
 					customer: input.customerId,
 					currency: 'usd',
-					payment_method_types: ['card'],
+					...CARD_ONLY_CHECKOUT,
 					metadata: { kind: CHECKOUT_KIND_CARD, estori_user_id: input.userId, card_mode: input.mode },
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),

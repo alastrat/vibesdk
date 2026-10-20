@@ -4,7 +4,7 @@ import type { CardSetupMode, CardSetupStart } from '@/api-types';
 import { apiClient } from '@/lib/api-client';
 import { loadWithin, singleFlight } from '@/lib/async';
 import { sessionStatusOf } from '@/lib/stripe/session';
-import { loadStripe, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
+import { CARD_ONLY_PAYMENT_ELEMENT, loadStripe, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
 import { unwrap } from '@/lib/unwrap-response';
 import { CARD_FAILED_MESSAGE, canSaveNow, cardReducer, cardRefusalOf, cardReturnPathOf, initialCardState, submitCard } from '@/routes/settings/card-state';
 import { FORM_NOT_LOADED_MESSAGE } from '@/routes/settings/checkout-state';
@@ -56,7 +56,7 @@ export function useBillingCard(mode: CardSetupMode) {
 				checkout.on('change', (session) => dispatch({ type: 'sessionStatus', sessionId, status: sessionStatusOf(session) }));
 				const target = container.current;
 				if (!target) throw new Error('The card form has nowhere to open');
-				payment = checkout.createPaymentElement();
+				payment = checkout.createPaymentElement(CARD_ONLY_PAYMENT_ELEMENT);
 				payment.on('change', ({ complete }) => dispatch({ type: 'cardChanged', complete }));
 				payment.mount(target);
 				const loaded = await loadWithin(checkout.loadActions());

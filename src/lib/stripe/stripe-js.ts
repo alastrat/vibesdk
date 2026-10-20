@@ -57,6 +57,17 @@ export interface StripePaymentElement {
 	on(event: 'change', handler: (change: StripePaymentElementChange) => void): void;
 }
 
+export type StripeWalletDisplay = 'auto' | 'never';
+
+/** Only the Payment Element options Estori sets are typed. */
+export interface StripePaymentElementOptions {
+	/** Apple Pay, Google Pay and Link show whenever the session takes cards and the buyer's device has one, unless `never`. */
+	wallets?: { applePay?: StripeWalletDisplay; googlePay?: StripeWalletDisplay; link?: StripeWalletDisplay };
+}
+
+/** Billing takes cards only, whatever wallets the Stripe account and its registered domains allow. */
+export const CARD_ONLY_PAYMENT_ELEMENT: StripePaymentElementOptions = { wallets: { applePay: 'never', googlePay: 'never', link: 'never' } };
+
 export interface StripeCheckoutSdkOptions {
 	clientSecret: string;
 	elementsOptions: { appearance: StripeAppearance };
@@ -65,7 +76,7 @@ export interface StripeCheckoutSdkOptions {
 export interface StripeCheckoutSdk {
 	on(event: 'change', handler: (session: StripeCheckoutSession) => void): void;
 	loadActions(): Promise<StripeCheckoutLoadActionsResult>;
-	createPaymentElement(): StripePaymentElement;
+	createPaymentElement(options?: StripePaymentElementOptions): StripePaymentElement;
 	/** Re-applies the look to the mounted elements, for a theme switch. */
 	changeAppearance(appearance: StripeAppearance): void;
 }

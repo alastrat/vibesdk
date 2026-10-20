@@ -131,6 +131,14 @@ describe("estori's own card page", () => {
 });
 
 describe('stripe.js in the app', () => {
+	it('opens both billing payment forms for cards only, with no Apple Pay, Google Pay or Link', () => {
+		for (const hook of [HOOK, '/src/hooks/use-billing-checkout.ts']) {
+			expect(source(hook), hook).toContain('checkout.createPaymentElement(CARD_ONLY_PAYMENT_ELEMENT)');
+			expect(source(hook), hook).not.toContain('createPaymentElement()');
+		}
+		expect(source('/src/lib/stripe/stripe-js.ts')).toContain("wallets: { applePay: 'never', googlePay: 'never', link: 'never' }");
+	});
+
 	it('loads only where a payment is made: the checkout page, the card page and the confirmation of a payment', () => {
 		const loaders = Object.entries(app)
 			.filter(([path, text]) => path !== '/src/lib/stripe/stripe-js.ts' && /\bloadStripe\b/.test(text))
