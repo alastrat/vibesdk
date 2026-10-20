@@ -226,7 +226,7 @@ export async function applyCardSetup(deps: BillingEventDeps, input: { eventId: s
 		return 'ignored';
 	}
 	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
-	await setDefaultCard(deps.stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId);
+	await setDefaultCard(deps.stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId, now.getTime());
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), now });
 	return recorded === 'duplicate' ? 'duplicate' : 'applied';
 }

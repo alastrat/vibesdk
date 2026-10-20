@@ -293,8 +293,9 @@ export interface CardSetupInput {
 	userId: string;
 	mode: CardSetupMode;
 	/**
-	 * The customer's default payment method when the setup starts. A finished setup changes it, so the next setup gets a new
-	 * session instead of the finished one replayed, while a retry of an unfinished setup shares its session.
+	 * The card Stripe charges when the setup starts: the subscription's own default, else the customer's
+	 * `invoice_settings.default_payment_method`. A finished setup changes it, so the next setup gets a new session instead
+	 * of the finished one replayed, while a retry of an unfinished setup shares its session.
 	 */
 	afterCardId: string | null;
 	returnUrl: string;
@@ -386,7 +387,7 @@ export interface StripeClient {
 	/** Saves a new card for the customer's invoices, on Estori's own page. */
 	createCardSetupSession(input: CardSetupInput): Promise<StripeCheckoutSession>;
 	/** The card the customer's next invoices are charged to, and the subscription's own when it has one. */
-	setDefaultPaymentMethod(input: { customerId: string; subscriptionId: string | null; paymentMethodId: string }): Promise<void>;
+	setDefaultPaymentMethod(input: { customerId: string; subscriptionId: string | null; paymentMethodId: string; nowMs: number }): Promise<void>;
 	/** Adds or replaces only the keys given; Stripe leaves the subscription's other metadata as it is. */
 	updateSubscriptionMetadata(subscriptionId: string, metadata: Record<string, string>, idempotencyKey: string): Promise<void>;
 	retrievePaymentMethod(id: string): Promise<StripePaymentMethod>;
@@ -733,20 +734,22 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				},
 				`billing-card-${input.userId}-${input.mode}-${input.afterCardId ?? 'none'}-${idempotencyBucket(input.nowMs)}`,
 			),
-		// Each key names the payment method, which a card setup creates new every time, so a retry replays and a later change is a new request.
-		setDefaultPaymentMethod: async ({ customerId, subscriptionId, paymentMethodId }) => {
+		// Each key names the payment method, which a card setup creates new every time, so a retry replays and a later change is
+		// a new request. It rotates with the bucket, so a failure Stripe saved under it is retried in the next one.
+		setDefaultPaymentMethod: async ({ customerId, subscriptionId, paymentMethodId, nowMs }) => {
+			const bucket = idempotencyBucket(nowMs);
 			await request<StripeCustomer>(
 				'POST',
 				`/customers/${encodeURIComponent(customerId)}`,
 				{ invoice_settings: { default_payment_method: paymentMethodId } },
-				`billing-default-card-${customerId}-${paymentMethodId}`,
+				`billing-default-card-${customerId}-${paymentMethodId}-${bucket}`,
 			);
 			if (subscriptionId === null) return;
 			await request<StripeSubscription>(
 				'POST',
 				`/subscriptions/${encodeURIComponent(subscriptionId)}`,
 				{ default_payment_method: paymentMethodId },
-				`billing-default-card-${subscriptionId}-${paymentMethodId}`,
+				`billing-default-card-${subscriptionId}-${paymentMethodId}-${bucket}`,
 			);
 		},
 		updateSubscriptionMetadata: async (subscriptionId, metadata, idempotencyKey) => {
@@ -765,9 +768,9 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 		payInvoice: (id, paymentMethodId, idempotencyKey) =>
 			request<StripeInvoice>('POST', `/invoices/${encodeURIComponent(id)}/pay`, { payment_method: paymentMethodId, off_session: false }, idempotencyKey),
 		fetchInvoicePdf: async (url) => {
-			// The key goes only to Stripe: an address read from an object is checked before it is sent anything.
+			// `invoice_pdf` is a signed address that needs no key, so none is sent, and a redirect carries nothing; it is still checked to be Stripe's.
 			if (!isStripeUrl(url)) throw new Error('The invoice PDF is not on a Stripe address');
-			return fetchImpl(url, { headers: { Authorization: `Bearer ${secretKey}` } });
+			return fetchImpl(url);
 		},
 		retrieveSubscription: (subscriptionId) =>
 			request<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}?${encodeForm({ expand: ['schedule'] })}`),

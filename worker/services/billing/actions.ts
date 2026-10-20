@@ -500,7 +500,7 @@ export async function completeCardSetup(deps: BillingActionDeps, userId: string,
 	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
 	return askStripe(async () => {
 		try {
-			await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId);
+			await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId, deps.nowMs);
 		} catch (error) {
 			// The webhook sets the same card under the same keys; an overlap means it is being set, and a payment names its card itself.
 			if (!isConcurrentRequest(error)) throw error;

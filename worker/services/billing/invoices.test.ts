@@ -149,14 +149,14 @@ describe('the card Stripe charges', () => {
 });
 
 describe('the default card', () => {
-	it("is set on the customer and the subscription through one call, or the customer alone with no subscription", async () => {
+	it("is set on the customer and the subscription through one call, or the customer alone with no subscription, keyed to the caller's time", async () => {
 		const sent: unknown[] = [];
 		const stripe: Pick<StripeClient, 'setDefaultPaymentMethod'> = { setDefaultPaymentMethod: async (input) => void sent.push(input) };
-		await setDefaultCard(stripe, 'cus_1', 'sub_1', 'pm_9');
-		await setDefaultCard(stripe, 'cus_1', null, 'pm_9');
+		await setDefaultCard(stripe, 'cus_1', 'sub_1', 'pm_9', 1_800_000_000_000);
+		await setDefaultCard(stripe, 'cus_1', null, 'pm_9', 1_800_000_000_000);
 		expect(sent).toEqual([
-			{ customerId: 'cus_1', subscriptionId: 'sub_1', paymentMethodId: 'pm_9' },
-			{ customerId: 'cus_1', subscriptionId: null, paymentMethodId: 'pm_9' },
+			{ customerId: 'cus_1', subscriptionId: 'sub_1', paymentMethodId: 'pm_9', nowMs: 1_800_000_000_000 },
+			{ customerId: 'cus_1', subscriptionId: null, paymentMethodId: 'pm_9', nowMs: 1_800_000_000_000 },
 		]);
 	});
 });

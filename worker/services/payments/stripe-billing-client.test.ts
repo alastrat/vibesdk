@@ -272,17 +272,33 @@ describe('Stripe billing calls', () => {
 
 	it('setting the default card updates the customer and the subscription', async () => {
 		const { calls, client } = recordingFetch({ id: 'x' });
-		await client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: 'sub_1', paymentMethodId: 'pm_9' });
+		await client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: 'sub_1', paymentMethodId: 'pm_9', nowMs: NOW });
 		expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual(['POST https://api.stripe.com/v1/customers/cus_1', 'POST https://api.stripe.com/v1/subscriptions/sub_1']);
 		expect(calls[0].params).toEqual(['invoice_settings[default_payment_method]=pm_9']);
 		expect(calls[1].params).toEqual(['default_payment_method=pm_9']);
-		expect(calls[0].key).toBe('billing-default-card-cus_1-pm_9');
-		expect(calls[1].key).toBe('billing-default-card-sub_1-pm_9');
+		expect(calls[0].key).toBe(`billing-default-card-cus_1-pm_9-${BUCKET}`);
+		expect(calls[1].key).toBe(`billing-default-card-sub_1-pm_9-${BUCKET}`);
+	});
+
+	it('sets the same card under the same keys within a bucket, and under new ones in a later bucket, so a failure Stripe saved is not replayed for a day', async () => {
+		const { calls, client } = recordingFetch({ id: 'x' });
+		const set = (nowMs: number) => client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: 'sub_1', paymentMethodId: 'pm_9', nowMs });
+		await set(NOW);
+		await set(NOW + 60_000);
+		await set(NOW + 600_000);
+		expect(calls.map((call) => call.key)).toEqual([
+			`billing-default-card-cus_1-pm_9-${BUCKET}`,
+			`billing-default-card-sub_1-pm_9-${BUCKET}`,
+			`billing-default-card-cus_1-pm_9-${BUCKET}`,
+			`billing-default-card-sub_1-pm_9-${BUCKET}`,
+			`billing-default-card-cus_1-pm_9-${BUCKET + 1}`,
+			`billing-default-card-sub_1-pm_9-${BUCKET + 1}`,
+		]);
 	});
 
 	it('setting the default card with no subscription updates only the customer', async () => {
 		const { calls, client } = recordingFetch({ id: 'x' });
-		await client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: null, paymentMethodId: 'pm_9' });
+		await client.setDefaultPaymentMethod({ customerId: 'cus_1', subscriptionId: null, paymentMethodId: 'pm_9', nowMs: NOW });
 		expect(calls.map((call) => call.url)).toEqual(['https://api.stripe.com/v1/customers/cus_1']);
 	});
 
@@ -340,7 +356,7 @@ describe('Stripe billing calls', () => {
 		await expect(client.payInvoice('in_1', null, 'k')).rejects.toMatchObject({ status: 402, code: 'invoice_payment_intent_requires_action' });
 	});
 
-	it("fetches an invoice's pdf with the secret key, and refuses an address that isn't Stripe's", async () => {
+	it("fetches an invoice's pdf from its signed address without the secret key, and refuses an address that isn't Stripe's", async () => {
 		const seen: Array<{ url: string; method: string; authorization: string | null }> = [];
 		const fakeFetch: typeof fetch = async (input, init) => {
 			seen.push({ url: String(input), method: init?.method ?? 'GET', authorization: new Headers(init?.headers).get('Authorization') });
@@ -349,7 +365,7 @@ describe('Stripe billing calls', () => {
 		const client = createStripeClient('sk_test_fake', fakeFetch);
 		const response = await client.fetchInvoicePdf('https://pay.stripe.com/invoice/acct_1/test_x/pdf?s=ap');
 		expect(await response.text()).toBe('%PDF-1.7');
-		expect(seen).toEqual([{ url: 'https://pay.stripe.com/invoice/acct_1/test_x/pdf?s=ap', method: 'GET', authorization: 'Bearer sk_test_fake' }]);
+		expect(seen).toEqual([{ url: 'https://pay.stripe.com/invoice/acct_1/test_x/pdf?s=ap', method: 'GET', authorization: null }]);
 		for (const url of ['https://evil.example/invoice.pdf', 'http://pay.stripe.com/invoice.pdf', 'https://stripe.com.evil.example/x', 'not a url']) {
 			await expect(client.fetchInvoicePdf(url)).rejects.toThrow('The invoice PDF is not on a Stripe address');
 		}

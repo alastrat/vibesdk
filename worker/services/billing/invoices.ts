@@ -68,13 +68,14 @@ export async function cardOnFile(
 
 /**
  * Makes `paymentMethodId` the card the customer's invoices are charged to, and the subscription's own when there is one.
- * Idempotent, so the seller's return and the webhook can both run it.
+ * Idempotent within `nowMs`'s key bucket, so the seller's return and the webhook can both run it.
  */
 export async function setDefaultCard(
 	stripe: Pick<StripeClient, 'setDefaultPaymentMethod'>,
 	customerId: string,
 	subscriptionId: string | null,
 	paymentMethodId: string,
+	nowMs: number,
 ): Promise<void> {
-	await stripe.setDefaultPaymentMethod({ customerId, subscriptionId, paymentMethodId });
+	await stripe.setDefaultPaymentMethod({ customerId, subscriptionId, paymentMethodId, nowMs });
 }
