@@ -548,3 +548,15 @@ export {
 } from '../shared/types/contact.js';
 export type { CompanySize, ContactRequestBody, ContactTopic } from '../shared/types/contact.js';
 export type { PublicPlanLimits } from '../shared/types/plan.js';
+export type { AmountBand, PersonProperties, ServerEventName, ServerEventProperties } from '../shared/types/analytics-events.js';
+export type { ClientFlagKey, ClientFlagValues, FlagKey, FlagKind, FlagValues } from '../shared/types/feature-flags.js';
+export { FEATURE_FLAGS, FLAG_KEYS } from '../shared/types/feature-flags.js';
+export type {
+	AdminFlagRow,
+	AdminFlagsData,
+	AnalyticsOptOutSource,
+	AnalyticsPreferenceData,
+	SessionTelemetry,
+	TelemetryConfigData,
+} from '../shared/types/telemetry.js';
+export { GPC_ANALYTICS_MESSAGE } from '../shared/types/telemetry.js';
