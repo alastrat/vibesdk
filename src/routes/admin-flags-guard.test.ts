@@ -16,7 +16,7 @@ describe('the flags admin page', () => {
 	});
 
 	it('says when every flag is off, and why, and when rollouts are hidden', () => {
-		expect(page).toContain("PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused.");
+		expect(page).toContain("PostHog isn't set up on this deployment, so its flags are off. Billing's own switches and any overrides still apply.");
 		expect(page).toContain("PostHog didn't answer, so every flag is off: nothing is rolled out or paused.");
 		expect(page).toContain('Rollouts show once a PostHog personal API key is added.');
 	});

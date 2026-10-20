@@ -6,7 +6,7 @@ import { useAdminFlags } from '@/hooks/use-telemetry';
 import { isForbiddenError } from '@/lib/security-error';
 
 const SOURCE_NOTES: Partial<Record<AdminFlagsData['source'], string>> = {
-	off: "PostHog isn't set up on this deployment, so every flag is off: nothing is rolled out or paused.",
+	off: "PostHog isn't set up on this deployment, so its flags are off. Billing's own switches and any overrides still apply.",
 	defaults: "PostHog didn't answer, so every flag is off: nothing is rolled out or paused.",
 };
 
@@ -89,7 +89,7 @@ function Flags({ data }: { data: AdminFlagsData }) {
 								<td className="py-2.5 pr-4">{row.clientVisible ? 'Yes' : 'No'}</td>
 								<td className="py-2.5 pr-4">{valueLabel(row)}</td>
 								<td className="py-2.5 pr-4">{row.rolloutPercent === null ? 'Not shown' : `${row.rolloutPercent}%`}</td>
-								<td className="py-2.5">{row.inPostHog ? 'Yes' : 'No, so off'}</td>
+								<td className="py-2.5">{row.inPostHog ? 'Yes' : 'No'}</td>
 							</tr>
 						))}
 					</tbody>
