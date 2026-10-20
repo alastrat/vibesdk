@@ -58,6 +58,122 @@ export const EXTRA_CREDITS_DISCLOSURE = 'Extra credits are used after your month
 /** The answer to a billing action from an account outside the billing flag. */
 export const BILLING_NOT_OPEN_MESSAGE = "Plans aren't open for your account yet.";
 
+/** The answer to a billing action while Stripe's publishable key isn't configured. */
+export const PAYMENTS_NOT_SET_UP_MESSAGE = "Payments aren't set up yet.";
+
+/** Shown when a checkout session has closed before the seller paid. */
+export const CHECKOUT_EXPIRED_MESSAGE = 'This checkout timed out.';
+
+/** What a promotion code does to a subscription's price, as Stripe's coupon reports it. `discountedCents` is the discounted monthly price, or the first payment for `once`. */
+export interface PromotionTerms {
+	duration: 'once' | 'repeating' | 'forever';
+	/** Set for `repeating`, null otherwise. */
+	durationInMonths: number | null;
+	discountedCents: number;
+}
+
+/** What the seller pays and when, such as "$24.50 today, then $49 a month". */
+export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const price = `${formatUsd(PLAN_PRICES_CENTS[plan])} a month`;
+	if (!promotion) return price;
+	const discounted = formatUsd(promotion.discountedCents);
+	switch (promotion.duration) {
+		case 'once':
+			return `${discounted} today, then ${price}`;
+		case 'repeating': {
+			// Stripe always sends a month count for a repeating coupon; consent text must never guess it.
+			if (promotion.durationInMonths === null) throw new Error('A repeating promotion needs a month count.');
+			const months = promotion.durationInMonths;
+			return `${discounted} a month for ${months} ${months === 1 ? 'month' : 'months'}, then ${price}`;
+		}
+		case 'forever':
+			return `${discounted} a month`;
+	}
+}
+
+/** The sentence the seller agrees to beside the Subscribe button; the page links "Terms" to /terms. */
+export function subscriptionConsentText(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const phrase = renewalTermsPhrase(plan, promotion);
+	return promotion
+		? `I agree to the Terms, and that Estori ${planName(plan)} costs ${phrase}, until I cancel.`
+		: `I agree to the Terms, and that Estori ${planName(plan)} renews at ${phrase} until I cancel.`;
+}
+
+export function subscribeButtonText(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	return `Subscribe: ${renewalTermsPhrase(plan, promotion)}`;
+}
+
+/** What a checkout page sells: a plan with what it includes, or extra credits. */
+export type CheckoutOrder =
+	| { kind: 'plan'; plan: PaidPlanId; priceCents: number; includes: string[] }
+	| { kind: 'credits'; credits: number; amountCents: number };
+
+/** The consent sentence and button the subscription checkout shows, and what the first payment is. */
+export interface CheckoutTermsView {
+	consentText: string;
+	buttonText: string;
+	dueTodayCents: number;
+}
+
+/** POST answer that opens an embedded checkout; `terms` is null for credits, which have no renewal. */
+export interface CheckoutClientStart {
+	clientSecret: string;
+	publishableKey: string;
+	sessionId: string;
+	order: CheckoutOrder;
+	terms: CheckoutTermsView | null;
+}
+
+/** The seller's agreement to the terms shown, sent before the payment is confirmed. */
+export interface CheckoutConsentRequest {
+	sessionId: string;
+	termsVersion: string;
+	consentText: string;
+}
+
+export type CheckoutSessionState = 'paid' | 'processing' | 'open' | 'expired';
+
+export interface CheckoutStatusView {
+	state: CheckoutSessionState;
+	kind: 'plan' | 'credits';
+}
+
+/** `save` keeps a card for the next invoice; `pay` also pays the invoice that failed. */
+export type CardSetupMode = 'save' | 'pay';
+
+export interface CardSetupStart {
+	clientSecret: string;
+	publishableKey: string;
+	sessionId: string;
+	mode: CardSetupMode;
+}
+
+/** What happened when a saved card was used on an invoice. */
+export type InvoicePaymentResult =
+	| { state: 'paid' }
+	| { state: 'saved' }
+	| { state: 'nothing_due' }
+	| { state: 'requires_action'; clientSecret: string }
+	| { state: 'declined'; message: string };
+
+/** The card a subscription renews on; never more than Stripe's display fields. */
+export interface CardOnFile {
+	brand: string;
+	last4: string;
+	expMonth: number;
+	expYear: number;
+}
+
+/** One invoice in the billing history; `date` is in ms. */
+export interface InvoiceView {
+	id: string;
+	date: number;
+	description: string;
+	amountCents: number;
+	currency: string;
+	status: 'paid' | 'open' | 'void' | 'uncollectible';
+}
+
 /** This period's AI credits on the billing page; `renewsAt` is when the period ends, in ms. */
 export interface BillingCreditsView {
 	pool: number;
@@ -98,6 +214,8 @@ export interface BillingView {
 	limits: PlanLimits;
 	canManageBilling: boolean;
 	canBuyCredits: boolean;
+	/** The card on file, or null when there is none. */
+	card: CardOnFile | null;
 }
 
 export interface CheckoutStarted {

@@ -6,6 +6,7 @@
 import { CHECKOUT_KIND_CREDITS, EXTRA_CREDITS_DISCLOSURE, renewalDisclosure, type SubscriptionStatus } from '../../../shared/types/billing';
 import { EXTRA_CREDITS, type PaidPlanId } from '../../../shared/types/plans';
 import type { SellerReadiness } from '../../../shared/types/seller-setup';
+import { STRIPE_API_VERSION } from '../../../shared/types/stripe';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
@@ -14,9 +15,6 @@ export const IDEMPOTENCY_BUCKET_MS = 600_000;
 
 /** A Checkout session closes 35 minutes after it opens, so a buyer can't pay long after the listing changed. Stripe's minimum is 30. */
 const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
-/** Every request names its API version, so a new account default can't change what Stripe returns; Stripe.js on the
- * store checkout page loads the same version. */
-export const STRIPE_API_VERSION = '2026-03-25.dahlia';
 
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 

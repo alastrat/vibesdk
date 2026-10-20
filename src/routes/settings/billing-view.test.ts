@@ -41,6 +41,7 @@ function view(plan: PlanId, overrides: Partial<BillingView> = {}): BillingView {
 		limits: PLAN_LIMITS[plan],
 		canManageBilling: plan !== 'basic',
 		canBuyCredits: plan === 'premium',
+		card: null,
 		...overrides,
 	};
 }

@@ -49,5 +49,6 @@ export function billingView(account: BillingAccount, credits: CreditBalance | nu
 		limits: account.limits,
 		canManageBilling: account.billing && hasCustomer,
 		canBuyCredits: account.billing && assertWithinLimit(account, 'extraCredits') === null,
+		card: null,
 	};
 }
