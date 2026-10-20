@@ -26,9 +26,7 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),
 		account: (userId, nowMs) => loadAccount(env, userId, nowMs),
 		accountWith: (userId, row, nowMs) => loadAccountWith(env, userId, row, nowMs),
-		notify: async (userId, notices) => {
-			await sendBillingEmails(mail, userId, notices);
-		},
+		notify: async (userId, notices) => (await sendBillingEmails(mail, userId, notices)).failed,
 		alert: platformAlertsFromEnv(env),
 		nowMs: () => Date.now(),
 	};

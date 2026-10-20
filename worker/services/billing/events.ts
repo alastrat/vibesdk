@@ -31,7 +31,8 @@ export interface BillingEventDeps {
 	account(userId: string, nowMs: number): Promise<EventAccount>;
 	/** The same, as it will be once `row` is written. */
 	accountWith(userId: string, row: SubscriptionRecord, nowMs: number): Promise<EventAccount>;
-	notify(userId: string, notices: readonly PlannedNotice[]): Promise<void>;
+	/** Sends the notices; answers those that didn't go out, though a resend could reach the seller. */
+	notify(userId: string, notices: readonly PlannedNotice[]): Promise<readonly PlannedNotice[]>;
 	alert(alert: PlatformAlert): Promise<void>;
 	nowMs(): number;
 }
@@ -80,6 +81,26 @@ async function accountOf(deps: BillingEventDeps, metadataUserId: string | null, 
 	if (expectedUserId !== null && expectedUserId !== metadataUserId) return null;
 	const customerUserId = customerId ? await deps.store.userOfCustomer(customerId) : null;
 	return customerUserId === metadataUserId ? metadataUserId : null;
+}
+
+/**
+ * Sends an event's notices once its batch has committed. Each was claimed in that batch, and Stripe's own emails are
+ * off, so one that couldn't go out is raised for someone to send by hand.
+ */
+async function notifyOrAlert(deps: BillingEventDeps, userId: string, notices: readonly PlannedNotice[]): Promise<void> {
+	for (const notice of await deps.notify(userId, notices)) {
+		const { kind } = notice.email;
+		await deps.alert({
+			kind: 'billing-email-failed',
+			subject: notice.key,
+			message: `The ${kind.replace(/_/g, ' ')} email to account ${userId} couldn't be sent, and it is recorded as sent, so it won't be tried again. Send it by hand.`,
+			details: [
+				['Account', userId],
+				['Email', kind],
+				['Notice key', notice.key],
+			],
+		});
+	}
 }
 
 /** Records the event with its effects; a concurrent delivery of the same event that wrote first makes this one a duplicate. */
@@ -163,7 +184,7 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	const pool = poolMayChange(previous, next, input.eventType) ? await poolWith(deps, userId, next, now.getTime()) : null;
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
 	if (recorded === 'duplicate') return 'duplicate';
-	await deps.notify(userId, notices);
+	await notifyOrAlert(deps, userId, notices);
 	return 'applied';
 }
 
@@ -204,7 +225,7 @@ export async function applyCreditPurchase(deps: BillingEventDeps, input: { event
 		now,
 	});
 	if (recorded === 'duplicate') return 'duplicate';
-	await deps.notify(userId, [notice]);
+	await notifyOrAlert(deps, userId, [notice]);
 	return 'applied';
 }
 
@@ -237,7 +258,7 @@ export async function applyCreditRefund(deps: BillingEventDeps, input: { eventId
 	});
 	if (recorded === 'duplicate') return 'duplicate';
 	const after = (await deps.ledger.purchaseByPaymentIntent(charge.payment_intent)) ?? before;
-	await deps.notify(before.userId, [
+	await notifyOrAlert(deps, before.userId, [
 		{ key, email: { kind: 'credits_refunded', credits: Math.max(0, after.removedCredits - before.removedCredits), amountCents: charge.amount_refunded - before.refundedCents } },
 	]);
 	return 'applied';

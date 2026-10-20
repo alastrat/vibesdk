@@ -188,6 +188,28 @@ describe('subscription webhooks', () => {
 		expect(subjects()).toEqual(['Pro ends on November 5', 'Your account is on Basic now']);
 	});
 
+	it("alerts the people who run Estori when a webhook's email can't go out, naming the account, the email and its key", async () => {
+		const failingFor = (code: string | null) => ({
+			EMAIL: {
+				send: async (message: { to: string; subject: string; text: string }) => {
+					if (!PLATFORM_ALERT_EMAILS.includes(message.to)) throw Object.assign(new Error('Email Service unavailable'), code ? { code } : {});
+					sent.push({ to: message.to, subject: message.subject, text: message.text });
+					return { messageId: 'm1' };
+				},
+			},
+		});
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const customer = await seller('u_mail');
+		stripeServes({ sub_u_mail: subscription('u_mail', customer), sub_u_gone: subscription('u_gone', await seller('u_gone')) });
+		expect(await deliver('evt_mail', 'customer.subscription.created', { id: 'sub_u_mail' }, failingFor(null))).toBe(200);
+		expect(sent).toHaveLength(1);
+		expect(sent[0].subject).toBe("Estori alert: A billing email couldn't be sent (plan_started:sub_u_mail)");
+		for (const named of ['u_mail', 'plan_started', 'plan_started:sub_u_mail']) expect(sent[0].text).toContain(named);
+		// An address that refuses mail would refuse a resend too.
+		expect(await deliver('evt_gone', 'customer.subscription.created', { id: 'sub_u_gone' }, failingFor('E_RECIPIENT_SUPPRESSED'))).toBe(200);
+		expect(sent).toHaveLength(1);
+	});
+
 	it("refuses a subscription whose account doesn't match its customer, and alerts", async () => {
 		const customer = await seller('u_a');
 		await insertUser(db, 'u_b');

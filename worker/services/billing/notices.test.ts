@@ -23,18 +23,22 @@ describe('sending billing emails', () => {
 
 	it("sends each planned notice to the account's email", async () => {
 		const { deps, sent } = mail();
-		expect(await sendBillingEmails(deps, 'u1', [STARTED, ENDING])).toBe(2);
+		expect(await sendBillingEmails(deps, 'u1', [STARTED, ENDING])).toEqual({ sent: 2, failed: [] });
 		expect(sent.map((email) => email.subject)).toEqual(['Welcome to Estori Pro', 'Pro ends on November 5']);
 		expect(sent.every((email) => email.to === 'ana@example.test')).toBe(true);
 	});
 
-	it('sends nothing without a sender or an address, and never throws', async () => {
-		expect(await sendBillingEmails(mail({ sender: null }).deps, 'u1', [STARTED])).toBe(0);
-		expect(await sendBillingEmails(mail({ userEmail: async () => null }).deps, 'u1', [STARTED])).toBe(0);
+	it('sends nothing without a sender or an address, never throws, and names what failed in a way a resend could get past', async () => {
+		expect(await sendBillingEmails(mail({ sender: null }).deps, 'u1', [STARTED])).toEqual({ sent: 0, failed: [] });
+		expect(await sendBillingEmails(mail({ userEmail: async () => null }).deps, 'u1', [STARTED])).toEqual({ sent: 0, failed: [] });
 		const failing = mail({ sender: { send: async () => { throw new Error('Email Service unavailable'); } } });
-		await expect(sendBillingEmails(failing.deps, 'u1', [STARTED, ENDING])).resolves.toBe(0);
+		await expect(sendBillingEmails(failing.deps, 'u1', [STARTED, ENDING])).resolves.toEqual({ sent: 0, failed: [STARTED, ENDING] });
+		const rejected = mail({ sender: { send: async () => { throw Object.assign(new Error('bad request'), { code: 'E_VALIDATION_ERROR' }); } } });
+		await expect(sendBillingEmails(rejected.deps, 'u1', [STARTED])).resolves.toEqual({ sent: 0, failed: [STARTED] });
+		const suppressed = mail({ sender: { send: async () => { throw Object.assign(new Error('suppressed'), { code: 'E_RECIPIENT_SUPPRESSED' }); } } });
+		await expect(sendBillingEmails(suppressed.deps, 'u1', [STARTED])).resolves.toEqual({ sent: 0, failed: [] });
 		const noAddress = mail({ userEmail: async () => { throw new Error('D1 unavailable'); } });
-		await expect(sendBillingEmails(noAddress.deps, 'u1', [STARTED])).resolves.toBe(0);
+		await expect(sendBillingEmails(noAddress.deps, 'u1', [STARTED])).resolves.toEqual({ sent: 0, failed: [STARTED] });
 	});
 
 	it('keeps sending the rest when one email fails', async () => {
@@ -47,7 +51,7 @@ describe('sending billing emails', () => {
 				},
 			},
 		});
-		expect(await sendBillingEmails(deps, 'u1', [STARTED, ENDING])).toBe(1);
+		expect(await sendBillingEmails(deps, 'u1', [STARTED, ENDING])).toEqual({ sent: 1, failed: [STARTED] });
 		expect(sent).toEqual(['Pro ends on November 5']);
 	});
 
@@ -55,8 +59,9 @@ describe('sending billing emails', () => {
 		const delivered: Array<{ to: string; subject: string }> = [];
 		const env = { ENVIRONMENT: 'staging', EMAIL_RECIPIENT_ALLOWLIST: '@pluriza.com', EMAIL: { send: async (message: { to: string; subject: string }) => { delivered.push({ to: message.to, subject: message.subject }); return { messageId: 'm1' }; } } } as unknown as Env;
 		const sender = createEmailSender(env);
-		expect(await sendBillingEmails({ sender, userEmail: async () => 'team@pluriza.com', baseUrl: null }, 'u1', [STARTED])).toBe(1);
-		expect(await sendBillingEmails({ sender, userEmail: async () => 'ana@example.test', baseUrl: null }, 'u2', [STARTED])).toBe(0);
+		expect(await sendBillingEmails({ sender, userEmail: async () => 'team@pluriza.com', baseUrl: null }, 'u1', [STARTED])).toEqual({ sent: 1, failed: [] });
+		// Staging refuses addresses off its allowlist on purpose: nothing for anyone to resend.
+		expect(await sendBillingEmails({ sender, userEmail: async () => 'ana@example.test', baseUrl: null }, 'u2', [STARTED])).toEqual({ sent: 0, failed: [] });
 		expect(delivered).toEqual([{ to: 'team@pluriza.com', subject: '[Staging] Welcome to Estori Pro' }]);
 	});
 

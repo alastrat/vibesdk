@@ -36,6 +36,7 @@ export const PLATFORM_ALERT_KINDS = [
 	'billing-mismatch',
 	'billing-second-subscription',
 	'billing-unknown-price',
+	'billing-email-failed',
 ] as const;
 export type PlatformAlertKind = (typeof PLATFORM_ALERT_KINDS)[number];
 
@@ -78,6 +79,7 @@ const ALERT_LABELS: Readonly<Record<PlatformAlertKind, string>> = {
 	'billing-mismatch': "A billing event didn't match its account",
 	'billing-second-subscription': 'An account pays through two subscriptions',
 	'billing-unknown-price': 'A subscription has an unknown price',
+	'billing-email-failed': "A billing email couldn't be sent",
 };
 
 export interface PlatformAlert {

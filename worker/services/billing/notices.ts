@@ -98,39 +98,48 @@ export function billingEmail(to: string, email: BillingEmail, baseUrl: string | 
 	}
 }
 
-/** How a send went: how many emails left, and whether a failure was one a later attempt could get past (an outage, a rate limit, a lookup that failed). */
-interface Delivery {
+/** How a send went: how many emails left, and the notices that didn't go out to an address that takes mail. */
+export interface BillingSend {
 	sent: number;
+	/** Not sent through an outage, a rate limit, a failed lookup or a rejected request; a resend could reach the seller. */
+	failed: PlannedNotice[];
+}
+
+/** How a send went, and whether a later attempt could get past its failures (an outage, a rate limit, a lookup that failed). */
+interface Delivery extends BillingSend {
 	retryable: boolean;
 }
 
 async function deliver(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<Delivery> {
 	const { sender } = deps;
-	if (!sender || notices.length === 0) return { sent: 0, retryable: false };
+	if (!sender || notices.length === 0) return { sent: 0, failed: [], retryable: false };
 	try {
 		const to = await deps.userEmail(userId);
-		if (!to) return { sent: 0, retryable: false };
-		const delivery: Delivery = { sent: 0, retryable: false };
+		if (!to) return { sent: 0, failed: [], retryable: false };
+		const delivery: Delivery = { sent: 0, failed: [], retryable: false };
 		for (const notice of notices) {
 			try {
 				await sender.send(billingEmail(to, notice.email, deps.baseUrl));
 				delivery.sent += 1;
 			} catch (error) {
 				// A suppressed or refused address, or a request the service rejects, would fail the same way again.
-				if (classifySendError(error) === 'retry') delivery.retryable = true;
+				const outcome = classifySendError(error);
+				if (outcome === 'retry') delivery.retryable = true;
+				if (outcome !== 'suppressed') delivery.failed.push(notice);
 				logger.error('Could not send a billing email', { userId, kind: notice.email.kind, key: notice.key, error });
 			}
 		}
 		return delivery;
 	} catch (error) {
 		logger.error('Could not look up the address for billing emails', { userId, error });
-		return { sent: 0, retryable: true };
+		return { sent: 0, failed: [...notices], retryable: true };
 	}
 }
 
-/** Sends each notice to the account's address; one that fails is logged and the rest still go. Answers how many were sent. */
-export async function sendBillingEmails(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<number> {
-	return (await deliver(deps, userId, notices)).sent;
+/** Sends each notice to the account's address; one that fails is logged and the rest still go. */
+export async function sendBillingEmails(deps: BillingMailDeps, userId: string, notices: readonly PlannedNotice[]): Promise<BillingSend> {
+	const { sent, failed } = await deliver(deps, userId, notices);
+	return { sent, failed };
 }
 
 /**
