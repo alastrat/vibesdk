@@ -1,8 +1,9 @@
 /**
  * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, open
- * the customer portal and buy extra credits. Each asks Stripe and changes no row; the webhook records what Stripe did.
- * A checkout opens as an embedded session on Estori's own page; agreeing to its terms is recorded before it is paid, and
- * the seller's return may record the payment ahead of the webhook.
+ * the customer portal, buy extra credits, change their card, pay a failed renewal and read their invoices. Each asks
+ * Stripe and changes no row; the webhook records what Stripe did. A checkout opens as an embedded session on Estori's
+ * own page; agreeing to its terms is recorded before it is paid, and the seller's return may record the payment ahead of
+ * the webhook. Changing the card, paying an invoice and the history never check the billing-checkout pause.
  */
 
 import { BillingService, CreditLedgerService } from '../../database';
@@ -10,14 +11,19 @@ import type { SubscriptionRecord } from '../../database/schema';
 import {
 	BILLING_PATH,
 	CHECKOUT_EXPIRED_MESSAGE,
+	CHECKOUT_KIND_CARD,
 	PAYMENTS_NOT_SET_UP_MESSAGE,
 	type BillingChangeRequested,
 	type BillingRedirect,
+	type CardSetupMode,
+	type CardSetupStart,
 	type CheckoutClientStart,
 	type CheckoutConsentRequest,
 	type CheckoutOrder,
 	type CheckoutStatusView,
 	type CheckoutTermsView,
+	type InvoicePaymentResult,
+	type InvoiceView,
 } from '../../../shared/types/billing';
 import { isCurrentTermsVersion, TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
 import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
@@ -26,10 +32,11 @@ import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
 import { isFlagOn } from '../posthog/flags';
-import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
+import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeInvoice, type StripePaymentMethodRef, type StripeSubscription } from '../payments/stripe-client';
 import { liveSubscription, type BillingAccount } from './account';
 import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
 import { checkoutReturnRecorders, type CheckoutReturnRecorder } from './events';
+import { HISTORY_LIMIT, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
 import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 import { cancelAtPeriodEndReleasingSchedule, pendingScheduleId, releaseSchedule } from './schedules';
 import { billingEventDepsFromEnv } from './wiring';
@@ -51,6 +58,10 @@ export const BILLING_MESSAGES = {
 	checkoutFinished: 'This checkout is already finished.',
 	consentRequest: 'Agree to the terms shown, then try again.',
 	priceChanged: 'The price changed. Check it and agree again.',
+	cardMode: 'Choose whether to save the card or pay with it.',
+	cardNotSaved: "Your card wasn't saved. Try again.",
+	noInvoice: "We couldn't find that invoice.",
+	noInvoicePdf: "That invoice doesn't have a PDF yet.",
 } as const;
 
 export type BillingActionResult<T> =
@@ -72,6 +83,12 @@ export type BillingStripe = Pick<
 	| 'resumeSubscription'
 	| 'createBillingPortalSession'
 	| 'retrieveCheckoutSession'
+	| 'createCardSetupSession'
+	| 'setDefaultPaymentMethod'
+	| 'listInvoices'
+	| 'retrieveInvoice'
+	| 'payInvoice'
+	| 'fetchInvoicePdf'
 >;
 
 export interface BillingActionDeps {
@@ -125,12 +142,12 @@ function paymentMethodId(ref: StripePaymentMethodRef | null | undefined): string
 	return typeof ref === 'string' ? ref : ref.id;
 }
 
-/** The payment method Stripe charges the subscription's invoices with: its own default, else the customer's. */
-async function chargedPaymentMethod(stripe: BillingStripe, subscription: StripeSubscription): Promise<string> {
+/** The payment method Stripe charges the subscription's invoices with: its own default, else the customer's; null with neither. */
+async function chargedPaymentMethod(stripe: BillingStripe, subscription: StripeSubscription): Promise<string | null> {
 	const own = paymentMethodId(subscription.default_payment_method);
 	if (own) return own;
 	const customer = await stripe.retrieveCustomer(subscription.customer);
-	return paymentMethodId(customer.invoice_settings?.default_payment_method) ?? 'none';
+	return paymentMethodId(customer.invoice_settings?.default_payment_method);
 }
 
 /** Stripe's answer for a card it couldn't charge, for any other refusal, or the error itself when it isn't Stripe's. */
@@ -168,13 +185,22 @@ function termsOf(plan: PaidPlanId, session: StripeCheckoutSession): BillingActio
 	}
 }
 
+/** What Stripe.js starts a session's form with; null, with a warning, for a session that has none and so can't be paid. */
+function clientSecretOf(session: StripeCheckoutSession): string | null {
+	if (session.client_secret) return session.client_secret;
+	logger.warn('Stripe made a checkout session without a client secret', { sessionId: session.id });
+	return null;
+}
+
 /** What the checkout page starts from; `terms` is null for extra credits, which have no renewal. */
 function clientStart(session: StripeCheckoutSession, publishableKey: string, order: CheckoutOrder, terms: CheckoutTermsView | null): BillingActionResult<CheckoutClientStart> {
-	if (!session.client_secret) {
-		logger.warn('Stripe made a checkout session without a client secret', { sessionId: session.id });
-		return STRIPE_FAILED;
-	}
-	return ok({ clientSecret: session.client_secret, publishableKey, sessionId: session.id, order, terms });
+	const clientSecret = clientSecretOf(session);
+	return clientSecret ? ok({ clientSecret, publishableKey, sessionId: session.id, order, terms }) : STRIPE_FAILED;
+}
+
+/** Where Stripe sends the seller once a new card is saved; Stripe fills in the session id. */
+function cardReturnUrl(deps: BillingActionDeps): string {
+	return `${deps.baseUrl}${BILLING_PATH}/card/return?session_id={CHECKOUT_SESSION_ID}`;
 }
 
 function endsOn(row: SubscriptionRecord): string {
@@ -249,7 +275,7 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 			subscription = released;
 		}
 		// Keyed on the card too: a retry after a decline and a new card in Manage billing must reach Stripe again, not replay the 402.
-		const card = await chargedPaymentMethod(stripe, subscription);
+		const card = (await chargedPaymentMethod(stripe, subscription)) ?? 'none';
 		const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, card, rowVersion(row)]);
 		await stripe.changeSubscriptionPrice({ subscription, priceId: priceIds.premium, idempotencyKey: idempotency });
 		return ok(REQUESTED);
@@ -332,24 +358,30 @@ interface OwnCheckout {
 	sold: NonNullable<ReturnType<typeof billingSessionOf>>;
 }
 
-/** A billing session of this seller's, read back from Stripe with its discounts; one that isn't theirs reads as missing. */
-async function ownCheckout(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<OwnCheckout>> {
-	const { stripe } = deps;
-	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+/** A session read back from Stripe with its discounts and SetupIntent; one Stripe doesn't have reads as missing. */
+async function readCheckout(stripe: BillingStripe, sessionId: unknown): Promise<BillingActionResult<StripeCheckoutSession>> {
 	if (typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) return fail(400, BILLING_MESSAGES.noCheckout);
 	return askStripe(async () => {
-		let session: StripeCheckoutSession;
 		try {
-			session = await stripe.retrieveCheckoutSession(sessionId, BILLING_CHECKOUT_EXPAND);
+			return ok(await stripe.retrieveCheckoutSession(sessionId, BILLING_CHECKOUT_EXPAND));
 		} catch (error) {
 			if (error instanceof StripeApiError && error.status === 404) return fail(404, BILLING_MESSAGES.noCheckout);
 			throw error;
 		}
-		const sold = billingSessionOf(session);
-		// Other sessions on the Stripe account, a paid-site purchase among them, can carry this seller's id as their reference; only billing's own are answered.
-		if (!sold || session.client_reference_id !== userId) return fail(404, BILLING_MESSAGES.noCheckout);
-		return ok({ session, sold });
 	});
+}
+
+/** A billing session of this seller's, read back from Stripe with its discounts; one that isn't theirs reads as missing. */
+async function ownCheckout(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<OwnCheckout>> {
+	const { stripe } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	const read = await readCheckout(stripe, sessionId);
+	if (!read.ok) return read;
+	const { value: session } = read;
+	const sold = billingSessionOf(session);
+	// Other sessions on the Stripe account, a paid-site purchase among them, can carry this seller's id as their reference; only billing's own are answered.
+	if (!sold || session.client_reference_id !== userId) return fail(404, BILLING_MESSAGES.noCheckout);
+	return ok({ session, sold });
 }
 
 /** The seller's own subscription checkout that can still be paid. */
@@ -413,6 +445,183 @@ async function recordReturn(deps: BillingActionDeps, userId: string, session: St
 	} catch (error) {
 		logger.warn("Could not record a paid checkout on the seller's return; the webhook will", { sessionId: session.id, error });
 	}
+}
+
+const INVOICE_ID = /^in_[A-Za-z0-9_]+$/;
+
+/** Stripe's code for an invoice payment that needs the cardholder to authenticate with their bank, which the page does. */
+const INVOICE_REQUIRES_ACTION = 'invoice_payment_intent_requires_action';
+
+const PAID: InvoicePaymentResult = { state: 'paid' };
+const SAVED: InvoicePaymentResult = { state: 'saved' };
+const NOTHING_DUE: InvoicePaymentResult = { state: 'nothing_due' };
+
+function isCardSetupMode(mode: unknown): mode is CardSetupMode {
+	return mode === 'save' || mode === 'pay';
+}
+
+/** Opens the form for a new card on the seller's customer; `pay` also pays the failed invoice with the card once it is saved. */
+export async function startCardSetup(deps: BillingActionDeps, user: { id: string }, mode: unknown): Promise<BillingActionResult<CardSetupStart>> {
+	const { stripe, publishableKey } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	if (!publishableKey) return fail(503, PAYMENTS_NOT_SET_UP_MESSAGE);
+	if (!isCardSetupMode(mode)) return fail(400, BILLING_MESSAGES.cardMode);
+	const customerId = await deps.store.customerOf(user.id);
+	if (!customerId) return fail(404, BILLING_MESSAGES.noCustomer);
+	return askStripe(async () => {
+		// The card they have now is part of the session's key: a finished setup changes it, so the next setup is a new session, not the finished one replayed.
+		const customer = await stripe.retrieveCustomer(customerId);
+		const session = await stripe.createCardSetupSession({
+			customerId,
+			userId: user.id,
+			mode,
+			afterCardId: paymentMethodId(customer.invoice_settings?.default_payment_method),
+			returnUrl: cardReturnUrl(deps),
+			nowMs: deps.nowMs,
+		});
+		const clientSecret = clientSecretOf(session);
+		return clientSecret ? ok({ clientSecret, publishableKey, sessionId: session.id, mode }) : STRIPE_FAILED;
+	});
+}
+
+/** The card a finished setup saved, from its SetupIntent; null, with a warning, when Stripe doesn't say. */
+function savedCardOf(session: StripeCheckoutSession): string | null {
+	const intent = session.setup_intent;
+	const card = typeof intent === 'object' && intent !== null ? intent.payment_method : null;
+	if (!card) logger.warn('A finished card setup does not say which card it saved', { sessionId: session.id });
+	return card;
+}
+
+/**
+ * Makes the card the seller just saved their default, on the customer and on the live subscription, and in `pay` mode
+ * pays the failed invoice with it. Repeating it is safe: the page can retry and the webhook can set the same card.
+ */
+export async function completeCardSetup(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<InvoicePaymentResult>> {
+	const { stripe } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	const read = await readCheckout(stripe, sessionId);
+	if (!read.ok) return read;
+	const { value: session } = read;
+	const customerId = await deps.store.customerOf(userId);
+	// A card setup has no client reference; billing's own tags name the seller, and the customer must be the one this seller has.
+	const ownSetup = session.mode === 'setup' && session.metadata?.kind === CHECKOUT_KIND_CARD && session.metadata.estori_user_id === userId;
+	if (!customerId || !ownSetup || session.customer !== customerId) return fail(404, BILLING_MESSAGES.noCheckout);
+	if (session.status === 'expired') return fail(400, CHECKOUT_EXPIRED_MESSAGE);
+	if (session.status !== 'complete') return fail(400, BILLING_MESSAGES.cardNotSaved);
+	const cardId = savedCardOf(session);
+	if (!cardId) return STRIPE_FAILED;
+	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
+	return askStripe(async () => {
+		await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId);
+		// Only a pay setup, from the failed-payment banner, pays; with no live subscription there is nothing to pay.
+		if (session.metadata?.card_mode !== 'pay' || !subscription) return ok(SAVED);
+		return payNewestOpenInvoice(deps, stripe, userId, customerId, subscription, cardId);
+	});
+}
+
+/** The secret that lets the page finish a payment the bank asked the seller to authenticate; an invoice paid meanwhile needs none. */
+async function confirmationNeeded(stripe: BillingStripe, invoiceId: string): Promise<BillingActionResult<InvoicePaymentResult>> {
+	const invoice = await stripe.retrieveInvoice(invoiceId);
+	if (invoice.status === 'paid') return ok(PAID);
+	const clientSecret = invoice.confirmation_secret?.client_secret;
+	if (!clientSecret) {
+		logger.warn('Stripe asked for authentication on an invoice but gave no secret to finish it with', { invoiceId });
+		return STRIPE_FAILED;
+	}
+	return ok({ state: 'requires_action', clientSecret });
+}
+
+/**
+ * Pays the subscription's newest open invoice with `paymentMethod`, else with the card it renews on. No open invoice is
+ * `nothing_due`: Stripe's own retry or an earlier press paid it. Stripe errors other than a card refusal or an
+ * authentication need are thrown for `askStripe`.
+ */
+async function payNewestOpenInvoice(
+	deps: BillingActionDeps,
+	stripe: BillingStripe,
+	userId: string,
+	customerId: string,
+	subscription: SubscriptionRecord,
+	paymentMethod: string | null,
+): Promise<BillingActionResult<InvoicePaymentResult>> {
+	const invoices = await stripe.listInvoices(customerId, HISTORY_LIMIT);
+	const open = invoices.find((invoice) => invoice.status === 'open' && invoiceSubscriptionId(invoice) === subscription.stripeSubscriptionId);
+	if (!open) return ok(NOTHING_DUE);
+	// Keyed on the card charged: a retry after a decline with another card must reach Stripe, not replay the decline.
+	const card = paymentMethod ?? (await chargedPaymentMethod(stripe, await stripe.retrieveSubscription(subscription.stripeSubscriptionId)));
+	try {
+		const paid = await stripe.payInvoice(open.id, card, idempotencyKey(deps, 'pay-invoice', userId, [open.id, card ?? 'none']));
+		if (paid.status === 'paid') return ok(PAID);
+		logger.warn('Stripe answered an invoice payment without the invoice being paid', { invoiceId: open.id, status: paid.status });
+		return STRIPE_FAILED;
+	} catch (error) {
+		if (!(error instanceof StripeApiError)) throw error;
+		// By code alone: the status and type that carry an authentication need are Stripe's to change.
+		if (error.code === INVOICE_REQUIRES_ACTION) return confirmationNeeded(stripe, open.id);
+		if (error.type === 'card_error') return ok({ state: 'declined', message: error.message });
+		throw error;
+	}
+}
+
+/** Pays the failed invoice with `paymentMethod`, or with the card on file when null; a bank that wants the seller's confirmation answers `requires_action`. */
+export async function payOpenInvoice(deps: BillingActionDeps, userId: string, paymentMethod: string | null): Promise<BillingActionResult<InvoicePaymentResult>> {
+	const { stripe } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	const customerId = await deps.store.customerOf(userId);
+	if (!customerId) return fail(404, BILLING_MESSAGES.noCustomer);
+	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
+	if (!subscription) return fail(404, BILLING_MESSAGES.noPlan);
+	return askStripe(() => payNewestOpenInvoice(deps, stripe, userId, customerId, subscription, paymentMethod));
+}
+
+/** The seller's last 24 invoices, newest first; a seller with no billing details has none. */
+export async function billingHistory(deps: BillingActionDeps, userId: string): Promise<BillingActionResult<InvoiceView[]>> {
+	const { stripe } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	const customerId = await deps.store.customerOf(userId);
+	if (!customerId) return ok([]);
+	return askStripe(async () => ok(historyOf(await stripe.listInvoices(customerId, HISTORY_LIMIT))));
+}
+
+/** The file name of an invoice's PDF: its number, else its id, with nothing that could break the header it is sent in. */
+function pdfFilename(invoice: StripeInvoice): string {
+	return `estori-invoice-${(invoice.number ?? invoice.id).replace(/[^A-Za-z0-9_-]/g, '-')}.pdf`;
+}
+
+/** The PDF of the seller's own invoice, streamed through Estori so Stripe's address never reaches the browser. Another customer's invoice reads as missing. */
+export async function invoicePdf(deps: BillingActionDeps, userId: string, invoiceId: unknown): Promise<BillingActionResult<Response>> {
+	const { stripe } = deps;
+	if (!stripe) return fail(503, BILLING_MESSAGES.notSetUp);
+	if (typeof invoiceId !== 'string' || !INVOICE_ID.test(invoiceId)) return fail(404, BILLING_MESSAGES.noInvoice);
+	const customerId = await deps.store.customerOf(userId);
+	if (!customerId) return fail(404, BILLING_MESSAGES.noInvoice);
+	return askStripe(async () => {
+		let invoice: StripeInvoice;
+		try {
+			invoice = await stripe.retrieveInvoice(invoiceId);
+		} catch (error) {
+			if (error instanceof StripeApiError && error.status === 404) return fail(404, BILLING_MESSAGES.noInvoice);
+			throw error;
+		}
+		if (invoice.customer !== customerId) return fail(404, BILLING_MESSAGES.noInvoice);
+		if (!invoice.invoice_pdf) return fail(404, BILLING_MESSAGES.noInvoicePdf);
+		let upstream: Response;
+		try {
+			upstream = await stripe.fetchInvoicePdf(invoice.invoice_pdf);
+		} catch (error) {
+			logger.warn("Could not fetch an invoice's PDF", { invoiceId: invoice.id, error });
+			return STRIPE_FAILED;
+		}
+		if (!upstream.ok || !upstream.body) {
+			logger.warn('Stripe did not serve an invoice PDF', { invoiceId: invoice.id, status: upstream.status });
+			return STRIPE_FAILED;
+		}
+		return ok(
+			new Response(upstream.body, {
+				headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${pdfFilename(invoice)}"`, 'Cache-Control': 'private, no-store' },
+			}),
+		);
+	});
 }
 
 export function billingActionDepsFromEnv(env: Env, request: Request): BillingActionDeps {

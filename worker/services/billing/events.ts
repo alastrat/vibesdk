@@ -16,6 +16,7 @@ import type { StripeCharge, StripeClient, StripeInvoice, StripeSubscriptionSched
 import type { StripeEvent } from '../payments/webhook';
 import { subscriptionEventsFor, type BillingAnalyticsEvent } from '../posthog/billing-events';
 import { heldPeriodKey, type BillingAccount } from './account';
+import { invoiceSubscriptionId } from './invoices';
 import type { PlannedNotice } from './notices';
 import { addMonths } from './periods';
 import type { StripePriceIds } from './prices';
@@ -71,11 +72,6 @@ function isStripeSchedule(value: unknown): value is Pick<StripeSubscriptionSched
 
 function isStripeCharge(value: unknown): value is StripeCharge {
 	return hasStringId(value) && (typeof value.payment_intent === 'string' || value.payment_intent === null) && typeof value.amount_refunded === 'number';
-}
-
-function invoiceSubscriptionId(invoice: StripeInvoice): string | null {
-	const subscription = invoice.parent?.subscription_details?.subscription;
-	return typeof subscription === 'string' ? subscription : null;
 }
 
 /** The account named by Stripe's metadata, when the stored customer and the checkout agree; otherwise null. */

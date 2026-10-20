@@ -37,6 +37,12 @@ describe('billing while checkout is paused', () => {
 		for (const name of ['cancelPlan', 'resumePlan', 'openPortal']) expect(action(name), name).not.toContain('checkoutPaused');
 	});
 
+	it('keeps changing the card, paying a failed invoice, the history and the invoice PDFs open', () => {
+		for (const name of ['startCardSetup', 'completeCardSetup', 'payOpenInvoice', 'billingHistory', 'invoicePdf']) {
+			expect(action(name), name).not.toContain('checkoutPaused');
+		}
+	});
+
 	it('asks the pause flag for the signed-in seller', () => {
 		expect(actions).toContain("checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId)");
 	});

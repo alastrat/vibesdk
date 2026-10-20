@@ -1,7 +1,24 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BILLING_CHECKOUT_EXPAND, StripeApiError, type StripeCheckoutSession, type StripeCoupon, type StripeSubscription } from '../payments/stripe-client';
+import { BILLING_CHECKOUT_EXPAND, StripeApiError, type StripeCheckoutSession, type StripeCoupon, type StripeInvoice, type StripeSubscription } from '../payments/stripe-client';
 import { STRIPE_REQUEST_FAILED_MESSAGE } from '../payments/config';
-import { BILLING_MESSAGES, buyCredits, cancelPlan, changePlan, checkoutStatus, checkoutTerms, openPortal, recordCheckoutConsent, resumePlan, startCheckout, type BillingActionDeps } from './actions';
+import {
+	BILLING_MESSAGES,
+	billingHistory,
+	buyCredits,
+	cancelPlan,
+	changePlan,
+	checkoutStatus,
+	checkoutTerms,
+	completeCardSetup,
+	invoicePdf,
+	openPortal,
+	payOpenInvoice,
+	recordCheckoutConsent,
+	resumePlan,
+	startCardSetup,
+	startCheckout,
+	type BillingActionDeps,
+} from './actions';
 import type { BillingConsentInput } from '../../database/services/BillingService';
 import type { CreditPurchaseRecord, SubscriptionRecord } from '../../database/schema';
 import type { BillingAccount } from './account';
@@ -111,11 +128,18 @@ function fake(
 		/** `null` is a deployment without Stripe's publishable key. */
 		publishableKey?: string | null;
 		recordFails?: boolean;
+		/** The customer's invoices as Stripe lists them, newest first; a retrieve finds one by id. */
+		invoices?: StripeInvoice[];
+		/** What paying an invoice does instead of paying it. */
+		payFails?: Error;
+		/** What Stripe answers for an invoice's PDF; an error is a request that never got an answer. */
+		pdf?: Error | { status: number; body?: string };
 	} = {},
 ) {
 	const calls: string[] = [];
 	const keys: string[] = [];
 	const expands: Array<readonly string[] | undefined> = [];
+	const returnUrls: string[] = [];
 	const consents: BillingConsentInput[] = [];
 	const recorded: string[] = [];
 	const deps: BillingActionDeps = {
@@ -179,6 +203,37 @@ function fake(
 				if (!found) throw new StripeApiError(`No such checkout.session: '${id}'`, 404, 'resource_missing', 'invalid_request_error');
 				return found;
 			},
+			createCardSetupSession: async (input) => {
+				calls.push(`card-session:${input.customerId}:${input.mode}:${input.afterCardId ?? 'none'}`);
+				returnUrls.push(input.returnUrl);
+				return { ...SESSION, id: 'cs_card', mode: 'setup', client_secret: 'cs_card_secret_x' };
+			},
+			setDefaultPaymentMethod: async ({ customerId, subscriptionId, paymentMethodId }) => {
+				calls.push(`default-card:${customerId}:${subscriptionId ?? 'none'}:${paymentMethodId}`);
+			},
+			listInvoices: async (customerId, limit) => {
+				calls.push(`list:${customerId}:${limit}`);
+				return state.invoices ?? [];
+			},
+			retrieveInvoice: async (id) => {
+				calls.push(`read-invoice:${id}`);
+				const found = state.invoices?.find((candidate) => candidate.id === id);
+				if (!found) throw new StripeApiError(`No such invoice: '${id}'`, 404, 'resource_missing', 'invalid_request_error');
+				return found;
+			},
+			payInvoice: async (id, paymentMethodId, idempotencyKey) => {
+				calls.push(`pay:${id}:${paymentMethodId ?? 'default'}`);
+				keys.push(idempotencyKey);
+				if (state.payFails) throw state.payFails;
+				const found = state.invoices?.find((candidate) => candidate.id === id);
+				if (!found) throw new StripeApiError(`No such invoice: '${id}'`, 404, 'resource_missing', 'invalid_request_error');
+				return { ...found, status: 'paid', amount_paid: found.amount_due };
+			},
+			fetchInvoicePdf: async (url) => {
+				calls.push(`pdf:${url}`);
+				if (state.pdf instanceof Error) throw state.pdf;
+				return new Response(state.pdf?.body ?? '%PDF-1.7 estori', { status: state.pdf?.status ?? 200 });
+			},
 		},
 		store: {
 			customerOf: async () => state.customer ?? null,
@@ -210,7 +265,7 @@ function fake(
 		nowMs: Date.parse('2026-10-19T15:00:00Z'),
 		checkoutPaused: vi.fn(async () => state.paused === true),
 	};
-	return { deps, calls, keys, expands, consents, recorded, state };
+	return { deps, calls, keys, expands, returnUrls, consents, recorded, state };
 }
 
 describe('starting a plan', () => {
@@ -651,5 +706,428 @@ describe('the status of a checkout', () => {
 		expect(await checkoutStatus(deps, 'u1', undefined)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.noCheckout });
 		expect(calls).toEqual([]);
 		expect(await checkoutStatus({ ...deps, stripe: null }, 'u1', 'cs_plan')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+	});
+});
+
+/** An invoice of the seller's subscription that Stripe could not collect: open, with the secret that finishes its payment. */
+function invoice(overrides: Partial<StripeInvoice> = {}): StripeInvoice {
+	return {
+		id: 'in_1',
+		customer: 'cus_1',
+		status: 'open',
+		created: 1_760_000_000,
+		amount_due: 4_900,
+		amount_paid: 0,
+		total: 4_900,
+		currency: 'usd',
+		hosted_invoice_url: 'https://invoice.stripe.com/i/acct/x',
+		invoice_pdf: 'https://pay.stripe.com/invoice/x/pdf',
+		number: 'ABCD-0001',
+		description: null,
+		lines: { data: [{ description: '1 x Estori Pro (at $49.00 / month)' }] },
+		billing_reason: 'subscription_cycle',
+		parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } },
+		confirmation_secret: { client_secret: 'in_1_secret_x', type: 'payment_intent' },
+		...overrides,
+	};
+}
+
+/** A card setup the seller finished on the page: Stripe has the new card on its SetupIntent. */
+const SETUP_SESSION: StripeCheckoutSession = {
+	id: 'cs_card',
+	mode: 'setup',
+	url: null,
+	client_secret: null,
+	customer: 'cus_1',
+	payment_status: 'no_payment_required',
+	status: 'complete',
+	client_reference_id: null,
+	metadata: { kind: 'card', estori_user_id: 'u1', card_mode: 'save' },
+	amount_total: null,
+	currency: 'usd',
+	payment_intent: null,
+	setup_intent: { id: 'seti_1', payment_method: 'pm_new' },
+};
+
+const PAY_SETUP_SESSION: StripeCheckoutSession = { ...SETUP_SESSION, metadata: { kind: 'card', estori_user_id: 'u1', card_mode: 'pay' } };
+
+const PAST_DUE = row({ status: 'past_due' });
+
+const DECLINED = new StripeApiError('Your card has insufficient funds.', 402, 'card_declined', 'card_error');
+const NEEDS_AUTHENTICATION = new StripeApiError('This payment needs the cardholder to authenticate.', 402, 'invoice_payment_intent_requires_action', 'card_error');
+
+describe('starting a card setup', () => {
+	it('a card setup needs a customer', async () => {
+		const { deps, calls } = fake();
+		expect(await startCardSetup(deps, USER, 'save')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCustomer });
+		expect(calls).toEqual([]);
+	});
+
+	it("opens a setup session for the seller's customer, with the page to come back to, started from the card they have now", async () => {
+		const { deps, calls, returnUrls } = fake({ customer: 'cus_1', customerCard: 'pm_old' });
+		expect(await startCardSetup(deps, USER, 'pay')).toEqual({ ok: true, value: { clientSecret: 'cs_card_secret_x', publishableKey: 'pk_test_1', sessionId: 'cs_card', mode: 'pay' } });
+		expect(calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:pay:pm_old']);
+		expect(returnUrls).toEqual(['https://estori.app/settings/billing/card/return?session_id={CHECKOUT_SESSION_ID}']);
+	});
+
+	it('names no earlier card only when the customer has none, and reads one Stripe sent as an object', async () => {
+		const none = fake({ customer: 'cus_1' });
+		await startCardSetup(none.deps, USER, 'save');
+		expect(none.calls).toEqual(['read-customer:cus_1', 'card-session:cus_1:save:none']);
+		const asObject = fake({ customer: 'cus_1' });
+		const stripe = asObject.deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		asObject.deps.stripe = { ...stripe, retrieveCustomer: async (id) => ({ id, email: null, metadata: null, invoice_settings: { default_payment_method: { id: 'pm_obj' } } }) };
+		await startCardSetup(asObject.deps, USER, 'save');
+		expect(asObject.calls).toEqual(['card-session:cus_1:save:pm_obj']);
+	});
+
+	it('answers 400 for any mode but save or pay, asking Stripe nothing', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1' });
+		for (const mode of ['change', '', 'PAY', null, undefined, 1]) {
+			expect(await startCardSetup(deps, USER, mode)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.cardMode });
+		}
+		expect(calls).toEqual([]);
+	});
+
+	it('answers 503 without Stripe, and 503 PAYMENTS_NOT_SET_UP_MESSAGE without the publishable key', async () => {
+		expect(await startCardSetup({ ...fake({ customer: 'cus_1' }).deps, stripe: null }, USER, 'save')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+		const noKey = fake({ customer: 'cus_1', publishableKey: null });
+		expect(await startCardSetup(noKey.deps, USER, 'save')).toEqual({ ok: false, status: 503, message: PAYMENTS_NOT_SET_UP_MESSAGE });
+		expect(noKey.calls).toEqual([]);
+	});
+
+	it('answers 502 and warns when Stripe made a session without a client secret', async () => {
+		const warnings = quietWarnings();
+		const { deps } = fake({ customer: 'cus_1' });
+		const stripe = deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		deps.stripe = { ...stripe, createCardSetupSession: async () => ({ ...SESSION, client_secret: null }) };
+		expect(await startCardSetup(deps, USER, 'save')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('finishing a card setup', () => {
+	it('completing a save setup sets the default card on the customer and the subscription', async () => {
+		const { deps, calls, expands } = fake({ customer: 'cus_1', row: row(), sessions: [SETUP_SESSION] });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+		expect(calls).toEqual(['session:cs_card', 'default-card:cus_1:sub_1:pm_new']);
+		expect(expands).toEqual([BILLING_CHECKOUT_EXPAND]);
+	});
+
+	it("sets only the customer's card when the seller has no live subscription", async () => {
+		const none = fake({ customer: 'cus_1', sessions: [SETUP_SESSION] });
+		expect(await completeCardSetup(none.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+		expect(none.calls).toEqual(['session:cs_card', 'default-card:cus_1:none:pm_new']);
+		const ended = fake({ customer: 'cus_1', row: row({ status: 'canceled' }), sessions: [SETUP_SESSION] });
+		await completeCardSetup(ended.deps, 'u1', 'cs_card');
+		expect(ended.calls).toEqual(['session:cs_card', 'default-card:cus_1:none:pm_new']);
+	});
+
+	it('finishing twice sets the same card twice and pays nothing, since a save never pays', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', row: row(), sessions: [SETUP_SESSION], invoices: [invoice()] });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+		expect(calls.filter((call) => call.startsWith('default-card:'))).toEqual(Array(2).fill('default-card:cus_1:sub_1:pm_new'));
+		expect(calls.some((call) => call.startsWith('pay:'))).toBe(false);
+	});
+
+	it('a setup session that names no mode of its own saves the card and pays nothing', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [{ ...SETUP_SESSION, metadata: { kind: 'card', estori_user_id: 'u1' } }], invoices: [invoice()] });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+		expect(calls).toEqual(['session:cs_card', 'default-card:cus_1:sub_1:pm_new']);
+	});
+
+	it('completing a pay setup pays the open invoice with the new card', async () => {
+		const { deps, calls, keys } = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()] });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'paid' } });
+		expect(calls).toEqual(['session:cs_card', 'default-card:cus_1:sub_1:pm_new', 'list:cus_1:24', 'pay:in_1:pm_new']);
+		expect(keys[0]).toMatch(/^billing-pay-invoice-u1-in_1-pm_new-\d+$/);
+	});
+
+	it('a pay setup with no live subscription saves the card and has nothing to pay', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', sessions: [PAY_SETUP_SESSION], invoices: [invoice()] });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+		expect(calls).toEqual(['session:cs_card', 'default-card:cus_1:none:pm_new']);
+	});
+
+	it('a pay setup keeps the saved card when the invoice was already paid, when the bank declines it and when it needs authentication', async () => {
+		const settled = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice({ status: 'paid', amount_paid: 4_900 })] });
+		expect(await completeCardSetup(settled.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'nothing_due' } });
+		expect(settled.calls.some((call) => call.startsWith('pay:'))).toBe(false);
+		const declined = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()], payFails: DECLINED });
+		expect(await completeCardSetup(declined.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'declined', message: 'Your card has insufficient funds.' } });
+		expect(declined.calls).toContain('default-card:cus_1:sub_1:pm_new');
+		const confirm = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()], payFails: NEEDS_AUTHENTICATION });
+		expect(await completeCardSetup(confirm.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x' } });
+		expect(confirm.calls).toContain('default-card:cus_1:sub_1:pm_new');
+	});
+
+	it("answers 404 for another seller's setup, for a session that isn't a card setup and for a customer that isn't the seller's, setting no card", async () => {
+		const sessions: StripeCheckoutSession[] = [
+			{ ...SETUP_SESSION, id: 'cs_other', metadata: { kind: 'card', estori_user_id: 'u2', card_mode: 'save' } },
+			{ ...SETUP_SESSION, id: 'cs_plan', mode: 'subscription', metadata: { estori_user_id: 'u1', plan: 'pro' }, client_reference_id: 'u1' },
+			{ ...SETUP_SESSION, id: 'cs_kind', metadata: { kind: 'credits', estori_user_id: 'u1' } },
+			{ ...SETUP_SESSION, id: 'cs_payment', mode: 'payment' },
+			{ ...SETUP_SESSION, id: 'cs_cus', customer: 'cus_other' },
+		];
+		const { deps, calls } = fake({ customer: 'cus_1', row: row(), sessions });
+		for (const { id } of sessions) {
+			expect(await completeCardSetup(deps, 'u1', id), id).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		}
+		expect(await completeCardSetup(deps, 'u1', 'cs_gone')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		expect(calls.some((call) => call.startsWith('default-card:'))).toBe(false);
+	});
+
+	it("answers 404 when the seller has no Stripe customer, since no setup session can be theirs", async () => {
+		const { deps, calls } = fake({ sessions: [SETUP_SESSION] });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCheckout });
+		expect(calls.some((call) => call.startsWith('default-card:'))).toBe(false);
+	});
+
+	it('answers 400 for a setup that is still open or has timed out, setting no card', async () => {
+		const open = fake({ customer: 'cus_1', sessions: [{ ...SETUP_SESSION, status: 'open', setup_intent: null }] });
+		expect(await completeCardSetup(open.deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.cardNotSaved });
+		const expired = fake({ customer: 'cus_1', sessions: [{ ...SETUP_SESSION, status: 'expired', setup_intent: null }] });
+		expect(await completeCardSetup(expired.deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 400, message: CHECKOUT_EXPIRED_MESSAGE });
+		expect([...open.calls, ...expired.calls].some((call) => call.startsWith('default-card:'))).toBe(false);
+	});
+
+	it("answers 502 and warns when Stripe doesn't say which card was saved, setting no card", async () => {
+		const warnings = quietWarnings();
+		for (const setup_intent of [null, 'seti_1', { id: 'seti_1', payment_method: null }]) {
+			const { deps, calls } = fake({ customer: 'cus_1', row: row(), sessions: [{ ...SETUP_SESSION, setup_intent }] });
+			expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+			expect(calls.some((call) => call.startsWith('default-card:'))).toBe(false);
+		}
+		expect(warnings).toHaveBeenCalledTimes(3);
+	});
+
+	it('answers 400 for a malformed session id, asking Stripe nothing, and 503 without Stripe', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1' });
+		for (const id of [undefined, null, 7, '', 'sub_1', 'cs_a/../b']) {
+			expect(await completeCardSetup(deps, 'u1', id)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.noCheckout });
+		}
+		expect(calls).toEqual([]);
+		expect(await completeCardSetup({ ...deps, stripe: null }, 'u1', 'cs_card')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+	});
+
+	it('answers 502 and warns when Stripe refuses to set the default card', async () => {
+		const warnings = quietWarnings();
+		const { deps } = fake({ customer: 'cus_1', row: row(), sessions: [SETUP_SESSION] });
+		const stripe = deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		deps.stripe = { ...stripe, setDefaultPaymentMethod: async () => Promise.reject(new StripeApiError('The subscription is canceled.', 400, null, 'invalid_request_error')) };
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('paying a failed invoice', () => {
+	it('pays the newest open invoice of the live subscription with the card it renews on', async () => {
+		const invoices = [
+			invoice({ id: 'in_credits', parent: null }),
+			invoice({ id: 'in_other', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_other' } } }),
+			invoice({ id: 'in_2' }),
+			invoice({ id: 'in_old', created: 1_750_000_000 }),
+		];
+		const { deps, calls, keys } = fake({ customer: 'cus_1', row: PAST_DUE, invoices });
+		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'paid' } });
+		expect(calls).toEqual(['list:cus_1:24', 'read:sub_1', 'pay:in_2:pm_1']);
+		expect(keys[0]).toMatch(/^billing-pay-invoice-u1-in_2-pm_1-\d+$/);
+	});
+
+	it("charges the customer's default card when the subscription names none, and a card the caller names without asking Stripe which", async () => {
+		const customerDefault = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], card: null, customerCard: 'pm_9' });
+		await payOpenInvoice(customerDefault.deps, 'u1', null);
+		expect(customerDefault.calls).toEqual(['list:cus_1:24', 'read:sub_1', 'read-customer:cus_1', 'pay:in_1:pm_9']);
+		const named = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()] });
+		await payOpenInvoice(named.deps, 'u1', 'pm_x');
+		expect(named.calls).toEqual(['list:cus_1:24', 'pay:in_1:pm_x']);
+	});
+
+	it('leaves the card to Stripe when there is none on file', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], card: null });
+		await payOpenInvoice(deps, 'u1', null);
+		expect(calls).toEqual(['list:cus_1:24', 'read:sub_1', 'read-customer:cus_1', 'pay:in_1:default']);
+	});
+
+	it('paying when nothing is open answers nothing_due', async () => {
+		const settled = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice({ status: 'paid', amount_paid: 4_900 }), invoice({ id: 'in_void', status: 'void' })] });
+		expect(await payOpenInvoice(settled.deps, 'u1', null)).toEqual({ ok: true, value: { state: 'nothing_due' } });
+		const empty = fake({ customer: 'cus_1', row: PAST_DUE });
+		expect(await payOpenInvoice(empty.deps, 'u1', 'pm_x')).toEqual({ ok: true, value: { state: 'nothing_due' } });
+		expect([...settled.calls, ...empty.calls].some((call) => call.startsWith('pay:'))).toBe(false);
+	});
+
+	it("a declined invoice payment answers declined with the bank's message", async () => {
+		const { deps } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: DECLINED });
+		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'declined', message: 'Your card has insufficient funds.' } });
+	});
+
+	it('an invoice that needs authentication answers requires_action with the client secret', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: NEEDS_AUTHENTICATION });
+		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x' } });
+		expect(calls).toEqual(['list:cus_1:24', 'read:sub_1', 'pay:in_1:pm_1', 'read-invoice:in_1']);
+	});
+
+	it('knows an authentication need by its code alone, whatever the status or type of the error', async () => {
+		for (const [status, type] of [[402, 'card_error'], [402, 'invalid_request_error'], [400, 'invalid_request_error'], [409, null]] as const) {
+			const error = new StripeApiError('This payment needs the cardholder to authenticate.', status, 'invoice_payment_intent_requires_action', type);
+			const { deps } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: error });
+			expect(await payOpenInvoice(deps, 'u1', null), `${status} ${type}`).toEqual({ ok: true, value: { state: 'requires_action', clientSecret: 'in_1_secret_x' } });
+		}
+	});
+
+	it('answers paid when the invoice was paid in between, and 502 when Stripe has no secret to confirm it with', async () => {
+		const warnings = quietWarnings();
+		const settled = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: NEEDS_AUTHENTICATION });
+		const stripe = settled.deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		settled.deps.stripe = { ...stripe, retrieveInvoice: async () => invoice({ status: 'paid', amount_paid: 4_900 }) };
+		expect(await payOpenInvoice(settled.deps, 'u1', null)).toEqual({ ok: true, value: { state: 'paid' } });
+		const bare = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice({ confirmation_secret: null })], payFails: NEEDS_AUTHENTICATION });
+		expect(await payOpenInvoice(bare.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+
+	it('answers 502 and warns for any other refusal, and when Stripe answers an invoice that is still not paid', async () => {
+		const warnings = quietWarnings();
+		const refused = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: new StripeApiError('Something went wrong.', 500, null, 'api_error') });
+		expect(await payOpenInvoice(refused.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		const unpaid = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()] });
+		const stripe = unpaid.deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		unpaid.deps.stripe = { ...stripe, payInvoice: async (id) => invoice({ id, status: 'open' }) };
+		expect(await payOpenInvoice(unpaid.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(2);
+	});
+
+	it('reaches Stripe again once the card changed after a decline, and replays a retry with the same card', async () => {
+		const { deps, keys, state } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: DECLINED });
+		await payOpenInvoice(deps, 'u1', null);
+		await payOpenInvoice(deps, 'u1', null);
+		state.card = 'pm_2';
+		await payOpenInvoice(deps, 'u1', null);
+		expect(keys[0]).toBe(keys[1]);
+		expect(keys[2]).not.toBe(keys[0]);
+		expect(keys[2]).toContain('-in_1-pm_2-');
+	});
+
+	it('needs a customer and a live subscription, and Stripe', async () => {
+		expect(await payOpenInvoice(fake({ row: PAST_DUE }).deps, 'u1', null)).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noCustomer });
+		const ended = fake({ customer: 'cus_1', row: row({ status: 'canceled' }), invoices: [invoice()] });
+		expect(await payOpenInvoice(ended.deps, 'u1', null)).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noPlan });
+		expect(ended.calls).toEqual([]);
+		expect(await payOpenInvoice({ ...fake().deps, stripe: null }, 'u1', null)).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+	});
+});
+
+describe('the billing history', () => {
+	it('lists the last 24 invoices newest first, leaving drafts out', async () => {
+		const invoices = [invoice({ id: 'in_3', status: 'draft' }), invoice({ id: 'in_2', status: 'open' }), invoice({ id: 'in_1', status: 'paid', amount_paid: 4_900 })];
+		const { deps, calls } = fake({ customer: 'cus_1', invoices });
+		const answer = await billingHistory(deps, 'u1');
+		expect(answer).toEqual({
+			ok: true,
+			value: [
+				{ id: 'in_2', date: 1_760_000_000_000, description: '1 x Estori Pro (at $49.00 / month)', amountCents: 4_900, currency: 'usd', status: 'open' },
+				{ id: 'in_1', date: 1_760_000_000_000, description: '1 x Estori Pro (at $49.00 / month)', amountCents: 4_900, currency: 'usd', status: 'paid' },
+			],
+		});
+		expect(calls).toEqual(['list:cus_1:24']);
+	});
+
+	it('is empty for a seller who has never had billing details, asking Stripe nothing', async () => {
+		const { deps, calls } = fake();
+		expect(await billingHistory(deps, 'u1')).toEqual({ ok: true, value: [] });
+		expect(calls).toEqual([]);
+	});
+
+	it('answers 503 without Stripe, and 502 with a warning when Stripe fails', async () => {
+		const warnings = quietWarnings();
+		expect(await billingHistory({ ...fake({ customer: 'cus_1' }).deps, stripe: null }, 'u1')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+		const { deps } = fake({ customer: 'cus_1' });
+		const stripe = deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		deps.stripe = { ...stripe, listInvoices: async () => Promise.reject(new StripeApiError('Something went wrong.', 500, null, 'api_error')) };
+		expect(await billingHistory(deps, 'u1')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(1);
+	});
+});
+
+describe('an invoice as a PDF', () => {
+	const NOT_FOUND = { ok: false, status: 404, message: BILLING_MESSAGES.noInvoice };
+
+	it("the pdf of another customer's invoice answers 404", async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', invoices: [invoice({ customer: 'cus_other' })] });
+		expect(await invoicePdf(deps, 'u1', 'in_1')).toEqual(NOT_FOUND);
+		expect(calls).toEqual(['read-invoice:in_1']);
+	});
+
+	it('answers 404 for an invoice Stripe does not know, a malformed id and a seller with no customer, as for another customer', async () => {
+		const unknown = fake({ customer: 'cus_1', invoices: [] });
+		expect(await invoicePdf(unknown.deps, 'u1', 'in_gone')).toEqual(NOT_FOUND);
+		const malformed = fake({ customer: 'cus_1', invoices: [invoice()] });
+		for (const id of [undefined, null, 5, '', 'cs_1', 'in_1/../x', 'in_ 1']) expect(await invoicePdf(malformed.deps, 'u1', id)).toEqual(NOT_FOUND);
+		expect(malformed.calls).toEqual([]);
+		const noCustomer = fake({ invoices: [invoice()] });
+		expect(await invoicePdf(noCustomer.deps, 'u1', 'in_1')).toEqual(NOT_FOUND);
+		expect(noCustomer.calls).toEqual([]);
+	});
+
+	it('the pdf streams with an estori filename', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', invoices: [invoice()], pdf: { status: 200, body: '%PDF-1.7 invoice' } });
+		const answer = await invoicePdf(deps, 'u1', 'in_1');
+		if (!answer.ok) throw new Error('the pdf was refused');
+		expect(answer.value.status).toBe(200);
+		expect(answer.value.headers.get('Content-Type')).toBe('application/pdf');
+		expect(answer.value.headers.get('Content-Disposition')).toBe('attachment; filename="estori-invoice-ABCD-0001.pdf"');
+		expect(await answer.value.text()).toBe('%PDF-1.7 invoice');
+		expect(calls).toEqual(['read-invoice:in_1', 'pdf:https://pay.stripe.com/invoice/x/pdf']);
+	});
+
+	it("names the file by the invoice's id when it has no number, and keeps anything unsafe out of the name", async () => {
+		const numbered = fake({ customer: 'cus_1', invoices: [invoice({ number: null })] });
+		const byId = await invoicePdf(numbered.deps, 'u1', 'in_1');
+		if (!byId.ok) throw new Error('the pdf was refused');
+		expect(byId.value.headers.get('Content-Disposition')).toBe('attachment; filename="estori-invoice-in_1.pdf"');
+		const odd = fake({ customer: 'cus_1', invoices: [invoice({ number: 'A/B "C"\r\nD' })] });
+		const sanitized = await invoicePdf(odd.deps, 'u1', 'in_1');
+		if (!sanitized.ok) throw new Error('the pdf was refused');
+		expect(sanitized.value.headers.get('Content-Disposition')).toBe('attachment; filename="estori-invoice-A-B--C---D.pdf"');
+	});
+
+	it('answers 404 for an invoice with no PDF yet', async () => {
+		const { deps, calls } = fake({ customer: 'cus_1', invoices: [invoice({ invoice_pdf: null })] });
+		expect(await invoicePdf(deps, 'u1', 'in_1')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noInvoicePdf });
+		expect(calls).toEqual(['read-invoice:in_1']);
+	});
+
+	it('answers 502 with a warning, not an error, for an address the client will not fetch, a failed request and a refusing Stripe', async () => {
+		const warnings = quietWarnings();
+		const failures: Array<Error | { status: number }> = [new Error('The invoice PDF is not on a Stripe address'), new TypeError('fetch failed'), { status: 500 }, { status: 403 }];
+		for (const pdf of failures) {
+			const { deps } = fake({ customer: 'cus_1', invoices: [invoice()], pdf });
+			expect(await invoicePdf(deps, 'u1', 'in_1')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		}
+		expect(warnings).toHaveBeenCalledTimes(4);
+	});
+
+	it('answers 503 without Stripe', async () => {
+		expect(await invoicePdf({ ...fake({ customer: 'cus_1' }).deps, stripe: null }, 'u1', 'in_1')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
+	});
+});
+
+describe('card changes and invoices while billing checkout is paused', () => {
+	it('card changes and invoice payment stay open while billing checkout is paused', async () => {
+		const { deps } = fake({ paused: true, customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()] });
+		expect(await startCardSetup(deps, USER, 'pay')).toMatchObject({ ok: true });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'paid' } });
+		expect(await payOpenInvoice(deps, 'u1', null)).toMatchObject({ ok: true });
+		expect(await billingHistory(deps, 'u1')).toMatchObject({ ok: true });
+		expect(await invoicePdf(deps, 'u1', 'in_1')).toMatchObject({ ok: true });
+		expect(deps.checkoutPaused).not.toHaveBeenCalled();
 	});
 });
