@@ -137,13 +137,18 @@ function rowVersion(row: SubscriptionRecord): string {
 	return String(Math.floor(row.updatedAt.getTime() / 1000));
 }
 
+/** Stripe refusing to charge a card: a card error, or any 402. */
+function isCardRefusal(error: StripeApiError): boolean {
+	return error.type === 'card_error' || error.status === 402;
+}
+
 /** Stripe's answer for a card it couldn't charge, for any other refusal, or the error itself when it isn't Stripe's. */
 async function askStripe<T>(call: () => Promise<BillingActionResult<T>>): Promise<BillingActionResult<T>> {
 	try {
 		return await call();
 	} catch (error) {
 		if (!(error instanceof StripeApiError)) throw error;
-		if (error.type === 'card_error' || error.status === 402) return fail(409, BILLING_MESSAGES.declined);
+		if (isCardRefusal(error)) return fail(409, BILLING_MESSAGES.declined);
 		logger.warn('Stripe refused a billing request', { status: error.status, code: error.code, type: error.type, message: error.message });
 		return STRIPE_FAILED;
 	}
@@ -261,7 +266,7 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 			if (!released) return STRIPE_FAILED;
 			subscription = released;
 		}
-		// Keyed on the card too: a retry after a decline and a new card in Manage billing must reach Stripe again, not replay the 402.
+		// Keyed on the card too: a retry after a decline and a new card on the billing page must reach Stripe again, not replay the 402.
 		const card = (await chargedPaymentMethod(stripe, subscription.customer, subscription)) ?? 'none';
 		const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, card, rowVersion(row)]);
 		await stripe.changeSubscriptionPrice({ subscription, priceId: priceIds.premium, idempotencyKey: idempotency });
@@ -439,6 +444,13 @@ const INVOICE_ID = /^in_[A-Za-z0-9_]+$/;
 /** Stripe's code for an invoice payment that needs the cardholder to authenticate with their bank, which the page does. */
 const INVOICE_REQUIRES_ACTION = 'invoice_payment_intent_requires_action';
 
+/** Stripe's codes for a request that overlaps another on the same idempotency key or object. */
+const CONCURRENT_REQUEST_CODES: readonly string[] = ['idempotency_key_in_use', 'lock_timeout'];
+
+function isConcurrentRequest(error: unknown): boolean {
+	return error instanceof StripeApiError && error.code !== null && CONCURRENT_REQUEST_CODES.includes(error.code);
+}
+
 const PAID: InvoicePaymentResult = { state: 'paid' };
 const SAVED: InvoicePaymentResult = { state: 'saved' };
 const NOTHING_DUE: InvoicePaymentResult = { state: 'nothing_due' };
@@ -500,7 +512,12 @@ export async function completeCardSetup(deps: BillingActionDeps, userId: string,
 	if (!cardId) return STRIPE_FAILED;
 	const subscription = liveSubscription(await deps.store.subscriptionOf(userId));
 	return askStripe(async () => {
-		await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId);
+		try {
+			await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId);
+		} catch (error) {
+			// The webhook sets the same card under the same keys; an overlap means it is being set, and a payment names its card itself.
+			if (!isConcurrentRequest(error)) throw error;
+		}
 		// Only a pay setup, from the failed-payment banner, pays; with no live subscription there is nothing to pay.
 		if (session.metadata?.card_mode !== 'pay' || !subscription) return ok(SAVED);
 		return payNewestOpenInvoice(deps, stripe, userId, customerId, subscription, cardId);
@@ -521,8 +538,8 @@ async function confirmationNeeded(stripe: BillingStripe, invoiceId: string): Pro
 
 /**
  * Pays the subscription's newest open invoice with `paymentMethod`, else with the card it renews on. No open invoice is
- * `nothing_due`: Stripe's own retry or an earlier press paid it. Stripe errors other than a card refusal or an
- * authentication need are thrown for `askStripe`.
+ * `nothing_due`: Stripe's own retry or an earlier press paid it, and so is one it paid between the list and the payment.
+ * A card refusal is `declined` and an authentication need `requires_action`; any other Stripe error is thrown for `askStripe`.
  */
 async function payNewestOpenInvoice(
 	deps: BillingActionDeps,
@@ -546,7 +563,13 @@ async function payNewestOpenInvoice(
 		if (!(error instanceof StripeApiError)) throw error;
 		// By code alone: the status and type that carry an authentication need are Stripe's to change.
 		if (error.code === INVOICE_REQUIRES_ACTION) return confirmationNeeded(stripe, open.id);
-		if (error.type === 'card_error') return ok({ state: 'declined', message: error.message });
+		if (isCardRefusal(error)) return ok({ state: 'declined', message: error.message });
+		// Stripe's own retry can pay the invoice after the list and refuse this payment; the seller's invoice is paid, which is what they asked for.
+		const settled = await stripe.retrieveInvoice(open.id).then(
+			(invoice) => invoice.status === 'paid',
+			() => false,
+		);
+		if (settled) return ok(PAID);
 		throw error;
 	}
 }

@@ -936,6 +936,40 @@ describe('finishing a card setup', () => {
 		expect(await completeCardSetup({ ...deps, stripe: null }, 'u1', 'cs_card')).toEqual({ ok: false, status: 503, message: BILLING_MESSAGES.notSetUp });
 	});
 
+	it('a concurrent webhook setting the same card does not stop the payment or the save: a key in use or a lock timeout is taken as set', async () => {
+		const overlaps = [
+			new StripeApiError('Keys for idempotent requests can only be used for one request at a time.', 409, 'idempotency_key_in_use', 'invalid_request_error'),
+			new StripeApiError('This object cannot be accessed right now because another API request is accessing it.', 429, 'lock_timeout', 'invalid_request_error'),
+		];
+		for (const overlap of overlaps) {
+			const pay = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()] });
+			const save = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [SETUP_SESSION], invoices: [invoice()] });
+			for (const { deps } of [pay, save]) {
+				const stripe = deps.stripe;
+				if (!stripe) throw new Error('the fake has Stripe');
+				deps.stripe = { ...stripe, setDefaultPaymentMethod: async () => Promise.reject(overlap) };
+			}
+			expect(await completeCardSetup(pay.deps, 'u1', 'cs_card'), overlap.code ?? '').toEqual({ ok: true, value: { state: 'paid' } });
+			expect(pay.calls).toEqual(['session:cs_card', 'list:cus_1:24', 'pay:in_1:pm_new']);
+			expect(await completeCardSetup(save.deps, 'u1', 'cs_card')).toEqual({ ok: true, value: { state: 'saved' } });
+			expect(save.calls.some((call) => call.startsWith('pay:'))).toBe(false);
+		}
+	});
+
+	it('any other failure to set the default card, a rate limit among them, still fails the setup and pays nothing', async () => {
+		const warnings = quietWarnings();
+		const refusals = [new StripeApiError('Too many requests.', 429, 'rate_limit', 'invalid_request_error'), new StripeApiError('Something went wrong.', 500, null, 'api_error')];
+		for (const refusal of refusals) {
+			const { deps, calls } = fake({ customer: 'cus_1', row: PAST_DUE, sessions: [PAY_SETUP_SESSION], invoices: [invoice()] });
+			const stripe = deps.stripe;
+			if (!stripe) throw new Error('the fake has Stripe');
+			deps.stripe = { ...stripe, setDefaultPaymentMethod: async () => Promise.reject(refusal) };
+			expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+			expect(calls.some((call) => call.startsWith('pay:'))).toBe(false);
+		}
+		expect(warnings).toHaveBeenCalledTimes(2);
+	});
+
 	it('answers 502 and warns when Stripe refuses to set the default card', async () => {
 		const warnings = quietWarnings();
 		const { deps } = fake({ customer: 'cus_1', row: row(), sessions: [SETUP_SESSION] });
@@ -1025,6 +1059,38 @@ describe('paying a failed invoice', () => {
 		unpaid.deps.stripe = { ...stripe, payInvoice: async (id) => invoice({ id, status: 'open' }) };
 		expect(await payOpenInvoice(unpaid.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
 		expect(warnings).toHaveBeenCalledTimes(2);
+	});
+
+	it("a 402 that is neither a card error nor an authentication need is declined with Stripe's message, as a card error is", async () => {
+		const refusal = new StripeApiError('Payment required.', 402, 'billing_not_active', 'invalid_request_error');
+		const { deps } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: refusal });
+		expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'declined', message: 'Payment required.' } });
+	});
+
+	it("answers paid when Stripe's own retry paid the invoice between the list and the payment", async () => {
+		for (const refusal of [new StripeApiError('This invoice is already paid.', 400, null, 'invalid_request_error'), new StripeApiError('Something went wrong.', 500, null, 'api_error')]) {
+			const { deps, calls } = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: refusal });
+			const stripe = deps.stripe;
+			if (!stripe) throw new Error('the fake has Stripe');
+			deps.stripe = { ...stripe, retrieveInvoice: async (id) => invoice({ id, status: 'paid', amount_paid: 4_900 }) };
+			expect(await payOpenInvoice(deps, 'u1', null)).toEqual({ ok: true, value: { state: 'paid' } });
+			expect(calls).toEqual(['list:cus_1:24', 'read:sub_1', 'pay:in_1:pm_1']);
+		}
+	});
+
+	it('keeps the original refusal when the invoice is still open or cannot be read again', async () => {
+		const warnings = quietWarnings();
+		const refusal = new StripeApiError('Invoice cannot be paid right now.', 400, null, 'invalid_request_error');
+		const open = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: refusal });
+		expect(await payOpenInvoice(open.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(open.calls).toContain('read-invoice:in_1');
+		const unreadable = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: refusal });
+		const stripe = unreadable.deps.stripe;
+		if (!stripe) throw new Error('the fake has Stripe');
+		unreadable.deps.stripe = { ...stripe, retrieveInvoice: async () => Promise.reject(new StripeApiError('Something went wrong.', 500, null, 'api_error')) };
+		expect(await payOpenInvoice(unreadable.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(warnings).toHaveBeenCalledTimes(2);
+		expect(JSON.stringify(warnings.mock.calls)).toContain('Invoice cannot be paid right now.');
 	});
 
 	it('reaches Stripe again once the card changed after a decline, and replays a retry with the same card', async () => {
