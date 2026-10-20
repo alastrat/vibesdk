@@ -90,12 +90,19 @@ describe('plan limits at Go live', () => {
 		expect(published).toEqual([{ appId: 'app_next', refuseNewCatalogProducts: false }]);
 	});
 
-	it('allows Pro one own domain per store, and refuses a second on the same store', async () => {
+	it("leaves a Pro store's second domain to the domain checks, and refuses own domains when an override zeroes them", async () => {
 		await new LiveStoreService(envWith(db)).addDomain({ appId: 'app_pro_2', hostname: 'shop.pro.example', provider: 'local', providerId: null, records: [], now: new Date() });
 		const { namespace } = spaces();
-		const second = await call('addDomain', 'app_pro_2', 'u_pro', namespace);
-		expect(second.status).toBe(402);
-		expect((await second.json()).error.planLimit).toMatchObject({ limit: 'ownDomainsPerLiveStore', plan: 'pro', message: 'Your plan includes 1 own domain per live store. Talk to us to add more.' });
+		const second = await call('addDomain', 'app_pro_2', 'u_pro', namespace, { BILLING: 'on', ENVIRONMENT: 'dev' });
+		expect(second.status).toBe(400);
+		expect((await second.json()).error).toMatchObject({ message: 'This store already has a domain. Remove it to connect another.' });
 		expect((await call('addDomain', 'app_pro_1', 'u_pro', namespace)).status).not.toBe(402);
+		await db
+			.prepare("INSERT INTO plan_overrides (id, user_id, plan, limits, until, admin_user_id, reason, created_at) VALUES ('po_domains', 'u_pro', 'pro', ?, NULL, 'u_basic', 'No own domains', ?)")
+			.bind(JSON.stringify({ ownDomainsPerLiveStore: 0 }), Math.floor(Date.now() / 1000))
+			.run();
+		const zeroed = await call('addDomain', 'app_pro_1', 'u_pro', namespace);
+		expect(zeroed.status).toBe(402);
+		expect((await zeroed.json()).error.planLimit).toMatchObject({ limit: 'ownDomainsPerLiveStore', plan: 'pro', message: "Own domains aren't on your plan. Talk to us to add them." });
 	});
 });

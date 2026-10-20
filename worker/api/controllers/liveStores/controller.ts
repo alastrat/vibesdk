@@ -143,12 +143,11 @@ export class LiveStoreController extends BaseController {
         const appId = context.pathParams.id;
         if (!appId) return this.createErrorResponse<LiveStoreView>('Store not found', 404);
         try {
+            // Refused only on a plan without own domains. A store holds one at most, so with an allowance the domain
+            // checks below answer a store that already has one.
             const account = await liveStoreAccount(env, context);
-            if (account?.billing) {
-                const stores = new LiveStoreService(env);
-                const refusal = assertWithinLimit(account, 'ownDomainsPerLiveStore', await stores.domainCountOf(appId));
-                if (refusal) return this.createPlanLimitResponse<LiveStoreView>(refusal);
-            }
+            const refusal = account ? assertWithinLimit(account, 'ownDomainsPerLiveStore', 0) : null;
+            if (refusal) return this.createPlanLimitResponse<LiveStoreView>(refusal);
             const body = await this.parseJsonBody<{ hostname?: unknown }>(request);
             const hostname = body.success && typeof body.data?.hostname === 'string' ? body.data.hostname : '';
             const added = await addStoreDomain(domainFlowDepsFromEnv(env), appId, hostname);

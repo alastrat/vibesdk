@@ -53,6 +53,26 @@ describe('checkStoreStart', () => {
 		expect(await checkStoreStart(deps, account('basic', false))).toBeNull();
 		expect(calls).toEqual(['reserve:null']);
 	});
+
+	it('lets a start through when the count fails while billing is off, logging it, but fails it while billing is on', async () => {
+		const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const failing: StoreStartDeps = {
+			reserveStore: async () => {
+				throw new Error('D1 unavailable');
+			},
+			takeDailyStore: async () => true,
+		};
+		try {
+			expect(await checkStoreStart(failing, account('basic', false))).toBeNull();
+			const lines = JSON.stringify(logged.mock.calls);
+			expect(lines).toContain('A new store could not be counted');
+			expect(lines).toContain('u1');
+			await expect(checkStoreStart(failing, account('basic'))).rejects.toThrow('D1 unavailable');
+			await expect(checkStoreStart(failing, account('pro'))).rejects.toThrow('D1 unavailable');
+		} finally {
+			logged.mockRestore();
+		}
+	});
 });
 
 describe('storeStartDepsFromEnv', () => {

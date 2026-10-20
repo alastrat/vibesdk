@@ -124,12 +124,6 @@ export class LiveStoreService extends BaseService {
         return row ? { ...row, records: recordsOf(row.records) } : null;
     }
 
-    /** The store's own domains in any state: a pending claim holds a place too. */
-    async domainCountOf(appId: string): Promise<number> {
-        const row = await this.database.select({ domains: count() }).from(schema.storeDomains).where(eq(schema.storeDomains.appId, appId)).get();
-        return row?.domains ?? 0;
-    }
-
     /** The claim on a hostname, in any state. */
     async domainByHostname(hostname: string): Promise<StoreDomainRow | null> {
         const row = await this.database.select().from(schema.storeDomains).where(eq(schema.storeDomains.hostname, hostname)).get();

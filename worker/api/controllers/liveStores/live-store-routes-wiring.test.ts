@@ -44,7 +44,7 @@ describe('live store routes', () => {
 		expect(publish.indexOf("assertWithinLimit(account, 'liveStores'")).toBeLessThan(publish.indexOf('space.publishDraft('));
 		expect(publish).toContain('published.error === NEW_CATALOG_PRODUCTS_ERROR');
 		const addDomain = controller.slice(controller.indexOf('static async addDomain('), controller.indexOf('static async checkDomain('));
-		const check = addDomain.indexOf("assertWithinLimit(account, 'ownDomainsPerLiveStore', await stores.domainCountOf(appId))");
+		const check = addDomain.indexOf("assertWithinLimit(account, 'ownDomainsPerLiveStore', 0)");
 		expect(check).toBeGreaterThan(-1);
 		expect(check).toBeLessThan(addDomain.indexOf('addStoreDomain('));
 	});
