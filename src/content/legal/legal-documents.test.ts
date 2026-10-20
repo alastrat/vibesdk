@@ -140,4 +140,25 @@ describe('legal documents', () => {
 		expect(terms).toContain(EXTRA_CREDITS_DISCLOSURE.replace(/\.$/, ''));
 		expect(renewalDisclosure('pro')).toContain('until you cancel');
 	});
+
+	it('names PostHog and Cloudflare Web Analytics, says no email or name goes to PostHog, and how to turn analytics off', () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain('**Usage information.**');
+		expect(privacy).toContain("We record layouts and clicks, not what's written on the page or what you type.");
+		expect(privacy).toContain('without the part of the address after a question mark');
+		expect(privacy).toContain('**Page view counts.**');
+		expect(privacy).toContain('Cloudflare Web Analytics counts page views');
+		expect(privacy).toContain('previews and stores served on estori.app addresses');
+		expect(privacy).toContain('**PostHog** (hosted in the United States): product analytics, session recordings and error reports');
+		expect(privacy).toContain("We don't send it your email address or name.");
+		expect(privacy).toContain('page view counts through Cloudflare Web Analytics, which uses no cookies');
+		expect(privacy).toContain("We use PostHog's analytics cookie and browser storage on estori.app");
+		expect(privacy).toContain("We don't use advertising cookies.");
+		expect(privacy).not.toContain("We don't use advertising or analytics cookies.");
+		expect(privacy).toContain("Stores built with Estori don't load PostHog.");
+		expect(privacy).toContain('You can turn analytics off at any time with the Analytics setting in Settings.');
+		expect(privacy).toContain('we still count the AI credits your builds use, without anything that identifies you');
+		expect(privacy).toContain('Global Privacy Control');
+		expect(LEGAL_DOCUMENTS.privacy.version).toBe(TERMS_VERSION);
+	});
 });
