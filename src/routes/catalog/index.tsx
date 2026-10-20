@@ -100,7 +100,7 @@ export default function CatalogPage() {
 				{catalogPaused ? (
 					<Empty
 						title="The catalog is paused"
-						description="Catalog products can't be added to stores right now. Stores that already sell them keep taking and shipping orders."
+						description="Catalog products can't be added to stores or bought right now. Orders already paid for still ship."
 					/>
 				) : (
 					<>

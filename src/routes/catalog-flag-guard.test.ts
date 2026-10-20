@@ -9,9 +9,10 @@ describe('the catalog pause in the app', () => {
 		expect(sidebar.match(/\{user && !catalogPaused && \(/g)?.length).toBe(2);
 	});
 
-	it('shows the catalog page as paused', () => {
+	it('shows the catalog page as paused, saying catalog products can\'t be bought either, as checkout refuses them', () => {
 		const page = sources['/src/routes/catalog/index.tsx'] ?? '';
 		expect(page).toContain("useFlag('catalog-paused')");
 		expect(page).toContain('title="The catalog is paused"');
+		expect(page).toContain(`description="Catalog products can't be added to stores or bought right now. Orders already paid for still ship."`);
 	});
 });
