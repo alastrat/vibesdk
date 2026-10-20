@@ -1,0 +1,345 @@
+/**
+ * Billing webhooks on real SQL: signed deliveries, Stripe's API stood in by fetch serving each object's latest copy,
+ * and Estori's emails captured. Each test's writes roll back after it.
+ */
+
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
+import { CreditLedgerService } from '../../../database/services/CreditLedgerService';
+import { PLATFORM_ALERT_EMAILS } from '../../../services/alerts/platform-alerts';
+import { applyCreditRefund, type BillingEventDeps } from '../../../services/billing/events';
+import { billingEventDepsFromEnv } from '../../../services/billing/wiring';
+import type { StripeSubscription } from '../../../services/payments/stripe-client';
+import { handleStripeWebhook } from './webhook';
+
+const SECRET = 'whsec_billing_test';
+const PRICES = { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' };
+const DAY = 86_400;
+const START = Date.parse('2026-10-05T10:00:00Z') / 1000;
+const END = Date.parse('2026-11-05T10:00:00Z') / 1000;
+
+let db: D1Database;
+const sent: Array<{ to: string; subject: string; text: string }> = [];
+
+beforeAll(async () => {
+	db = await migratedD1();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	sent.length = 0;
+});
+
+async function signatureFor(payload: string): Promise<string> {
+	const timestamp = Math.floor(Date.now() / 1000);
+	const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+	const signature = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${timestamp}.${payload}`));
+	return `t=${timestamp},v1=${Array.from(new Uint8Array(signature), (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}
+
+function env(extra: Record<string, unknown> = {}): Env {
+	return envWith(db, {
+		STRIPE_WEBHOOK_SECRET: SECRET,
+		STRIPE_SECRET_KEY: 'sk_test_fake',
+		STRIPE_PRICE_IDS: JSON.stringify(PRICES),
+		CUSTOM_DOMAIN: 'estori.app',
+		ENVIRONMENT: 'prod',
+		EMAIL: {
+			send: async (message: { to: string; subject: string; text: string }) => {
+				sent.push({ to: message.to, subject: message.subject, text: message.text });
+				return { messageId: 'm1' };
+			},
+		},
+		VibecoderStore: { get: async () => null, put: async () => undefined },
+		...extra,
+	});
+}
+
+/** Stripe's API: the latest copy of each object by id. Tests change the map to move Stripe's state on. */
+function stripeServes(objects: Record<string, unknown>): Record<string, unknown> {
+	vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+		const id = new URL(String(input)).pathname.split('/').pop() ?? '';
+		const object = objects[id];
+		return object ? Response.json(object) : Response.json({ error: { message: `No such object: ${id}` } }, { status: 404 });
+	});
+	return objects;
+}
+
+async function deliver(id: string, type: string, object: unknown, extra: Record<string, unknown> = {}): Promise<number> {
+	const payload = JSON.stringify({ id, type, data: { object } });
+	const request = new Request('https://estori.app/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': await signatureFor(payload) }, body: payload });
+	return (await handleStripeWebhook(request, env(extra))).status;
+}
+
+function subscription(userId: string, customer: string, overrides: Partial<StripeSubscription> = {}, price = 'price_pro'): StripeSubscription {
+	return {
+		id: `sub_${userId}`,
+		customer,
+		status: 'active',
+		created: START,
+		cancel_at_period_end: false,
+		cancel_at: null,
+		metadata: { estori_user_id: userId },
+		items: { data: [{ id: 'si_1', price: { id: price, metadata: null }, current_period_start: START, current_period_end: END }] },
+		schedule: null,
+		...overrides,
+	};
+}
+
+async function seller(userId: string): Promise<string> {
+	await insertUser(db, userId);
+	await insertBillingCustomer(db, userId, `cus_${userId}`);
+	return `cus_${userId}`;
+}
+
+const rowOf = (userId: string) =>
+	db.prepare('SELECT stripe_subscription_id AS id, status, plan, cancel_at_period_end AS ending, pending_plan AS pending FROM subscriptions WHERE user_id = ?').bind(userId).first();
+const resultOf = (eventId: string) => db.prepare('SELECT result FROM billing_events WHERE stripe_event_id = ?').bind(eventId).first('result');
+const subjects = () => sent.filter((email) => !PLATFORM_ALERT_EMAILS.includes(email.to)).map((email) => email.subject);
+const alerted = () => sent.some((email) => PLATFORM_ALERT_EMAILS.includes(email.to));
+
+describe('subscription webhooks', () => {
+	it('records a checkout and its subscription once, welcoming the seller once', async () => {
+		const customer = await seller('u_new');
+		stripeServes({ sub_u_new: subscription('u_new', customer) });
+		const session = { id: 'cs_new', mode: 'subscription', subscription: 'sub_u_new', customer, client_reference_id: 'u_new', payment_status: 'paid', status: 'complete', metadata: { estori_user_id: 'u_new', plan: 'pro' } };
+		expect(await deliver('evt_1', 'checkout.session.completed', session)).toBe(200);
+		expect(await deliver('evt_2', 'customer.subscription.created', { id: 'sub_u_new' })).toBe(200);
+		expect(await deliver('evt_2', 'customer.subscription.created', { id: 'sub_u_new' })).toBe(200);
+		expect(await rowOf('u_new')).toEqual({ id: 'sub_u_new', status: 'active', plan: 'pro', ending: 0, pending: null });
+		expect(subjects()).toEqual(['Welcome to Estori Pro']);
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM billing_events WHERE object_id = 'sub_u_new'").first()).toEqual({ n: 2 });
+	});
+
+	it("ends at Stripe's latest state when updated arrives before created", async () => {
+		const customer = await seller('u_order');
+		stripeServes({ sub_u_order: subscription('u_order', customer, {}, 'price_premium') });
+		await deliver('evt_u', 'customer.subscription.updated', { id: 'sub_u_order' });
+		await deliver('evt_c', 'customer.subscription.created', { id: 'sub_u_order' });
+		expect(await rowOf('u_order')).toMatchObject({ plan: 'premium', status: 'active' });
+		expect(subjects()).toEqual(['Welcome to Estori Premium']);
+	});
+
+	it('moves Pro to Premium with its invoice, and shows a scheduled move back to Pro until the renewal', async () => {
+		const customer = await seller('u_up');
+		await insertSubscription(db, { userId: 'u_up', stripeSubscriptionId: 'sub_u_up', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		const stripe = stripeServes({ sub_u_up: subscription('u_up', customer, {}, 'price_premium') });
+		await deliver('evt_up', 'customer.subscription.updated', { id: 'sub_u_up' });
+		const prorated = { id: 'in_up', customer, amount_paid: 7_500, currency: 'usd', hosted_invoice_url: null, number: 'EST-0002', billing_reason: 'subscription_update', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_up' } } };
+		await deliver('evt_inv', 'invoice.paid', prorated);
+		expect(await rowOf('u_up')).toMatchObject({ plan: 'premium' });
+		const schedule = { id: 'sub_sched_up', status: 'active', subscription: 'sub_u_up', current_phase: { start_date: START, end_date: END }, phases: [{ start_date: START, end_date: END, items: [{ price: 'price_premium', quantity: 1 }] }, { start_date: END, end_date: END + 30 * DAY, items: [{ price: 'price_pro', quantity: 1 }] }] };
+		stripe.sub_u_up = subscription('u_up', customer, { schedule }, 'price_premium');
+		await deliver('evt_sched', 'subscription_schedule.created', schedule);
+		expect(await rowOf('u_up')).toMatchObject({ plan: 'premium', pending: 'pro' });
+		const renewed = { id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: END, current_period_end: END + 30 * DAY };
+		stripe.sub_u_up = subscription('u_up', customer, { items: { data: [renewed] } });
+		await deliver('evt_renew', 'customer.subscription.updated', { id: 'sub_u_up' });
+		expect(await rowOf('u_up')).toMatchObject({ plan: 'pro', pending: null });
+		expect(subjects()).toEqual(["You're on Premium now", 'Your Estori receipt: $75.00', 'Your plan moves to Pro at renewal']);
+	});
+
+	it('warns once when a renewal fails, keeps the plan through the grace period, and restores it when paid', async () => {
+		const customer = await seller('u_due');
+		await insertSubscription(db, { userId: 'u_due', stripeSubscriptionId: 'sub_u_due', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
+		const stripe = stripeServes({ sub_u_due: subscription('u_due', customer, { status: 'past_due' }) });
+		const failed = { id: 'in_due', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0003', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_due' } } };
+		await deliver('evt_f1', 'invoice.payment_failed', failed);
+		await deliver('evt_f2', 'invoice.payment_failed', { ...failed, attempt_count: 2 });
+		expect(await rowOf('u_due')).toMatchObject({ status: 'past_due', plan: 'pro' });
+		stripe.sub_u_due = subscription('u_due', customer);
+		await deliver('evt_paid', 'invoice.paid', { ...failed, amount_paid: 4_900 });
+		expect(await rowOf('u_due')).toMatchObject({ status: 'active' });
+		expect(subjects()).toEqual(["Your Pro payment didn't go through", 'Your Estori receipt: $49.00', 'Your AI credits are renewed']);
+	});
+
+	it('says when a cancelled plan ends, keeps it when the seller changes their mind, and says when it has ended', async () => {
+		const customer = await seller('u_end');
+		await insertSubscription(db, { userId: 'u_end', stripeSubscriptionId: 'sub_u_end', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		const stripe = stripeServes({ sub_u_end: subscription('u_end', customer, { cancel_at_period_end: true }) });
+		await deliver('evt_e1', 'customer.subscription.updated', { id: 'sub_u_end' });
+		expect(await rowOf('u_end')).toMatchObject({ ending: 1 });
+		stripe.sub_u_end = subscription('u_end', customer);
+		await deliver('evt_e2', 'customer.subscription.updated', { id: 'sub_u_end' });
+		expect(await rowOf('u_end')).toMatchObject({ ending: 0 });
+		stripe.sub_u_end = subscription('u_end', customer, { status: 'canceled' });
+		await deliver('evt_e3', 'customer.subscription.deleted', { id: 'sub_u_end' });
+		expect(await rowOf('u_end')).toMatchObject({ status: 'canceled' });
+		expect(subjects()).toEqual(['Pro ends on November 5', 'Your account is on Basic now']);
+	});
+
+	it("refuses a subscription whose account doesn't match its customer, and alerts", async () => {
+		const customer = await seller('u_a');
+		await insertUser(db, 'u_b');
+		stripeServes({ sub_x: subscription('u_b', customer, { id: 'sub_x' }) });
+		expect(await deliver('evt_x', 'customer.subscription.created', { id: 'sub_x' })).toBe(200);
+		expect(await rowOf('u_a')).toBeNull();
+		expect(await rowOf('u_b')).toBeNull();
+		expect(await resultOf('evt_x')).toBe('refused');
+		expect(alerted()).toBe(true);
+	});
+
+	it('keeps the first subscription when a second starts from another tab, and ignores a late event from an ended one', async () => {
+		const customer = await seller('u_two');
+		await insertSubscription(db, { userId: 'u_two', stripeSubscriptionId: 'sub_first', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		stripeServes({
+			sub_second: subscription('u_two', customer, { id: 'sub_second', created: START + 60 }, 'price_premium'),
+			sub_old: subscription('u_two', customer, { id: 'sub_old', status: 'canceled', created: START - 60 * DAY }),
+		});
+		await deliver('evt_s2', 'customer.subscription.created', { id: 'sub_second' });
+		expect(await resultOf('evt_s2')).toBe('refused');
+		expect(alerted()).toBe(true);
+		await deliver('evt_old', 'customer.subscription.deleted', { id: 'sub_old' });
+		expect(await resultOf('evt_old')).toBe('ignored');
+		expect(await rowOf('u_two')).toMatchObject({ id: 'sub_first', status: 'active', plan: 'pro' });
+	});
+
+	it("moves the row's version with every rebuild, even two in the same second", async () => {
+		vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-20T12:00:00.250Z'));
+		const customer = await seller('u_ver');
+		await insertSubscription(db, { userId: 'u_ver', stripeSubscriptionId: 'sub_u_ver', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		const stripe = stripeServes({ sub_u_ver: subscription('u_ver', customer, { cancel_at_period_end: true }) });
+		const version = async () => Number(await db.prepare("SELECT updated_at FROM subscriptions WHERE user_id = 'u_ver'").first('updated_at'));
+		await deliver('evt_v1', 'customer.subscription.updated', { id: 'sub_u_ver' });
+		const first = await version();
+		stripe.sub_u_ver = subscription('u_ver', customer);
+		await deliver('evt_v2', 'customer.subscription.updated', { id: 'sub_u_ver' });
+		const second = await version();
+		await deliver('evt_v3', 'customer.subscription.updated', { id: 'sub_u_ver' });
+		expect(first).toBe(Date.parse('2026-10-20T12:00:00Z') / 1000);
+		expect(second).toBe(first + 1);
+		expect(await version()).toBe(first + 2);
+	});
+
+	it('keeps the plan and warns of nothing when a move to Premium is declined', async () => {
+		const customer = await seller('u_declined');
+		await insertSubscription(db, { userId: 'u_declined', stripeSubscriptionId: 'sub_u_declined', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		stripeServes({ sub_u_declined: subscription('u_declined', customer) });
+		const declined = { id: 'in_declined', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0004', billing_reason: 'subscription_update', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_declined' } } };
+		await deliver('evt_declined', 'invoice.payment_failed', declined);
+		expect(await rowOf('u_declined')).toMatchObject({ status: 'active', plan: 'pro' });
+		expect(await resultOf('evt_declined')).toBe('applied');
+		expect(subjects()).toEqual([]);
+	});
+
+	it("stores the plan's pool once a renewal is paid after its grace hold, so usage during the hold isn't taken from purchases", async () => {
+		const customer = await seller('u_hold');
+		const start = Math.floor(Date.now() / 1000) - 2 * DAY;
+		const end = start + 30 * DAY;
+		await insertSubscription(db, { userId: 'u_hold', stripeSubscriptionId: 'sub_u_hold', status: 'past_due', currentPeriodStart: new Date(start * 1000), currentPeriodEnd: new Date(end * 1000) });
+		await insertPurchase(db, { id: 'cp_hold', userId: 'u_hold', credits: 5_000, purchasedAt: new Date((start - 10 * DAY) * 1000), expiresAt: new Date((start + 300 * DAY) * 1000) });
+		const billingOn = env({ BILLING: 'on' });
+		const ledger = new CreditLedgerService(billingOn);
+		const period = { key: `sub:sub_u_hold:${start}`, startMs: start * 1000, endMs: end * 1000 };
+		// During the hold the account's pool is 0, so the step was stored against a pool of 0.
+		await ledger.recordUse({ userId: 'u_hold', period, pool: 0, useKey: 'k_hold', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date() });
+		const renewed = { id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: start, current_period_end: end };
+		stripeServes({ sub_u_hold: subscription('u_hold', customer, { items: { data: [renewed] } }) });
+		const paid = { id: 'in_hold', customer, amount_paid: 4_900, currency: 'usd', hosted_invoice_url: null, number: 'EST-0005', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_hold' } } };
+		await deliver('evt_hold_paid', 'invoice.paid', paid, { BILLING: 'on' });
+		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_hold'").first('pool')).toBe(20_000);
+		expect(await ledger.settle('u_hold', Date.now())).toBe('nothing');
+		expect(await db.prepare("SELECT used FROM credit_purchases WHERE id = 'cp_hold'").first('used')).toBe(0);
+	});
+
+	it('leaves the stored pool alone when a renewal fails, so usage from before the failure stays on the pool', async () => {
+		const customer = await seller('u_fail');
+		const start = Math.floor(Date.now() / 1000) - 2 * DAY;
+		const end = start + 30 * DAY;
+		await insertSubscription(db, { userId: 'u_fail', stripeSubscriptionId: 'sub_u_fail', status: 'active', currentPeriodStart: new Date(start * 1000), currentPeriodEnd: new Date(end * 1000) });
+		const period = { key: `sub:sub_u_fail:${start}`, startMs: start * 1000, endMs: end * 1000 };
+		await new CreditLedgerService(env({ BILLING: 'on' })).recordUse({ userId: 'u_fail', period, pool: 20_000, useKey: 'k_fail', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date() });
+		const renewed = { id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: start, current_period_end: end };
+		stripeServes({ sub_u_fail: subscription('u_fail', customer, { status: 'past_due', items: { data: [renewed] } }) });
+		const failed = { id: 'in_fail', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0006', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_fail' } } };
+		await deliver('evt_fail', 'invoice.payment_failed', failed, { BILLING: 'on' });
+		expect(await rowOf('u_fail')).toMatchObject({ status: 'past_due' });
+		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_fail'").first('pool')).toBe(20_000);
+	});
+});
+
+describe('extra credit webhooks', () => {
+	const session = (userId: string, customer: string, overrides: Record<string, unknown> = {}) => ({
+		id: `cs_${userId}`,
+		mode: 'payment',
+		customer,
+		client_reference_id: userId,
+		payment_status: 'paid',
+		status: 'complete',
+		amount_total: 1_800,
+		currency: 'usd',
+		payment_intent: `pi_${userId}`,
+		metadata: { kind: 'credits', estori_user_id: userId, credits: '12000' },
+		...overrides,
+	});
+
+	it('records a paid purchase once, even when its session is delivered twice, with one receipt', async () => {
+		const customer = await seller('u_buy');
+		stripeServes({ cs_u_buy: session('u_buy', customer) });
+		const event = { id: 'cs_u_buy', payment_status: 'paid', metadata: { kind: 'credits' } };
+		await deliver('evt_b1', 'checkout.session.completed', event);
+		await deliver('evt_b2', 'checkout.session.completed', event);
+		const purchases = await db.prepare("SELECT credits, amount_cents, stripe_payment_intent_id AS pi, expires_at - purchased_at AS valid FROM credit_purchases WHERE user_id = 'u_buy'").all();
+		expect(purchases.results).toEqual([{ credits: 12_000, amount_cents: 1_800, pi: 'pi_u_buy', valid: expect.any(Number) }]);
+		expect(Number(purchases.results[0].valid)).toBeGreaterThanOrEqual(365 * DAY);
+		expect(subjects()).toEqual(['Your Estori receipt: 12,000 AI credits']);
+	});
+
+	it("refuses a purchase whose amount doesn't match the credits, and alerts", async () => {
+		const customer = await seller('u_cheap');
+		stripeServes({ cs_u_cheap: session('u_cheap', customer, { amount_total: 100 }) });
+		await deliver('evt_cheap', 'checkout.session.completed', { id: 'cs_u_cheap', payment_status: 'paid', metadata: { kind: 'credits' } });
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_purchases WHERE user_id = 'u_cheap'").first()).toEqual({ n: 0 });
+		expect(await resultOf('evt_cheap')).toBe('refused');
+		expect(alerted()).toBe(true);
+	});
+
+	it('removes the refunded share of the unused credits, after taking the usage so far', async () => {
+		await seller('u_ref');
+		stripeServes({});
+		const now = Date.now();
+		await insertPurchase(db, { id: 'cp_ref', userId: 'u_ref', credits: 5_000, amountCents: 750, purchasedAt: new Date(now - DAY * 1000), expiresAt: new Date(now + 300 * DAY * 1000), paymentIntentId: 'pi_ref' });
+		const period = { key: 'acct:1', startMs: now - DAY * 1000, endMs: now + 29 * DAY * 1000 };
+		await new CreditLedgerService(env()).recordUse({ userId: 'u_ref', period, pool: 5_000, useKey: 'k_ref', credits: 6_000, source: 'think', model: 'm', usage: null, now: new Date(now) });
+		await deliver('evt_r1', 'charge.refunded', { id: 'ch_ref', object: 'charge', payment_intent: 'pi_ref', amount: 750, amount_refunded: 375 });
+		const purchase = () => db.prepare("SELECT used, refunded_cents AS refunded, removed_credits AS removed FROM credit_purchases WHERE id = 'cp_ref'").first();
+		// 1,000 credits of overrun were used first; half of the 4,000 left is removed.
+		expect(await purchase()).toEqual({ used: 1_000, refunded: 375, removed: 2_000 });
+		await deliver('evt_r2', 'charge.refunded', { id: 'ch_ref', object: 'charge', payment_intent: 'pi_ref', amount: 750, amount_refunded: 750 });
+		expect(await purchase()).toEqual({ used: 1_000, refunded: 750, removed: 4_000 });
+		expect(subjects()).toEqual(['We refunded your extra credits', 'We refunded your extra credits']);
+		expect(await deliver('evt_r3', 'charge.refunded', { id: 'ch_store', object: 'charge', payment_intent: 'pi_store_sale', amount: 4_600, amount_refunded: 4_600 })).toBe(200);
+		expect(await resultOf('evt_r3')).toBeNull();
+	});
+
+	it("removes the refunded share of what's unused when it writes, when a settle lands between the refund's read and its write", async () => {
+		await seller('u_race');
+		const now = Date.now();
+		await insertPurchase(db, { id: 'cp_race', userId: 'u_race', credits: 5_000, amountCents: 750, purchasedAt: new Date(now - DAY * 1000), expiresAt: new Date(now + 300 * DAY * 1000), paymentIntentId: 'pi_race' });
+		const ledger = new CreditLedgerService(env());
+		const period = { key: 'acct:race', startMs: now - DAY * 1000, endMs: now + 29 * DAY * 1000 };
+		const use = (useKey: string, credits: number) => ledger.recordUse({ userId: 'u_race', period, pool: 5_000, useKey, credits, source: 'think', model: 'm', usage: null, now: new Date(now) });
+		await use('k_race_1', 6_000);
+		const deps = billingEventDepsFromEnv(env());
+		const racing: BillingEventDeps = {
+			...deps,
+			ledger: {
+				purchaseBySession: (sessionId) => ledger.purchaseBySession(sessionId),
+				purchaseByPaymentIntent: (paymentIntentId) => ledger.purchaseByPaymentIntent(paymentIntentId),
+				refreshPool: (userId, refreshed, pool) => ledger.refreshPool(userId, refreshed, pool),
+				settle: async (userId, nowMs) => {
+					const settled = await ledger.settle(userId, nowMs);
+					// Another run settles 1,000 more credits of overrun after the refund has read the purchase.
+					await use('k_race_2', 1_000);
+					await ledger.settle(userId, nowMs);
+					return settled;
+				},
+			},
+		};
+		const charge = { id: 'ch_race', payment_intent: 'pi_race', amount: 750, amount_refunded: 375 };
+		expect(await applyCreditRefund(racing, { eventId: 'evt_race', eventType: 'charge.refunded', charge })).toBe('applied');
+		// 2,000 credits are used by the time the refund writes, so half of the 3,000 left is removed.
+		expect(await db.prepare("SELECT used, refunded_cents AS refunded, removed_credits AS removed FROM credit_purchases WHERE id = 'cp_race'").first()).toEqual({ used: 2_000, refunded: 375, removed: 1_500 });
+		expect(sent.map((email) => email.text).join('\n')).toContain('We refunded $3.75 for extra AI credits, and removed 1,500 unused credits from your account.');
+	});
+});

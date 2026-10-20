@@ -23,6 +23,7 @@ import { resolveStoreHost } from './services/live-stores/hosts';
 import { handleLiveStore } from './api/handlers/live-store';
 import { runLiveStoresSchedule } from './services/live-stores/wiring';
 import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
+import { runBillingSchedule } from './services/billing/wiring';
 import { stagingGate } from './services/staging-gate';
 import {
 	buildOwnerPreviewCookie,
@@ -372,6 +373,7 @@ const worker = {
 		ctx.waitUntil(runStorePaymentsSchedule(controller.cron, env));
 		ctx.waitUntil(runLiveStoresSchedule(controller.cron, env));
 		ctx.waitUntil(runShopperEmailSchedule(controller.cron, env));
+		ctx.waitUntil(runBillingSchedule(controller.cron, env));
 	},
 } satisfies ExportedHandler<Env>;
 

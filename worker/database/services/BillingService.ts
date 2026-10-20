@@ -1,6 +1,6 @@
 /** D1 for billing: Stripe customers, subscriptions, handled events, sent notices and the lifetime store counter. */
 
-import { and, eq, inArray, lt, lte, or, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, lte, notExists, or, sql } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
@@ -12,7 +12,8 @@ export interface BillingEventInput {
     event: { id: string; type: string; objectId: string | null; userId: string | null; result: BillingEventResult };
     row?: schema.SubscriptionRecord | null;
     purchase?: typeof schema.creditPurchases.$inferInsert | null;
-    refund?: { purchaseId: string; refundedCents: number; removedCredits: number } | null;
+    /** A purchase's refund to date; its removed credits are worked out in the write, from what the purchase has used by then. */
+    refund?: { purchaseId: string; refundedCents: number } | null;
     notices?: ReadonlyArray<{ key: string; kind: BillingNoticeKind }>;
     now: Date;
 }
@@ -109,11 +110,17 @@ export class BillingService extends BaseService {
         }
         if (purchase) rest.push(this.database.insert(schema.creditPurchases).values(purchase));
         if (refund) {
+            const purchases = schema.creditPurchases;
+            // The refunded share of what's unused at the write, so a settle landing after the caller read the purchase still counts.
+            const unused = sql`(${purchases.credits} - ${purchases.used})`;
             rest.push(
                 this.database
-                    .update(schema.creditPurchases)
-                    .set({ refundedCents: refund.refundedCents, removedCredits: refund.removedCredits })
-                    .where(and(eq(schema.creditPurchases.id, refund.purchaseId), lt(schema.creditPurchases.refundedCents, refund.refundedCents))),
+                    .update(purchases)
+                    .set({
+                        refundedCents: refund.refundedCents,
+                        removedCredits: sql`MAX(${purchases.removedCredits}, MIN(${unused}, CAST((${unused} * ${refund.refundedCents}) / ${purchases.amountCents} AS INTEGER)))`,
+                    })
+                    .where(and(eq(purchases.id, refund.purchaseId), lt(purchases.refundedCents, refund.refundedCents))),
             );
         }
         for (const notice of notices) {
@@ -124,6 +131,43 @@ export class BillingService extends BaseService {
             this.database.insert(schema.billingEvents).values({ stripeEventId: event.id, type: event.type, objectId: event.objectId, userId: event.userId, result: event.result, receivedAt: now }),
             ...rest,
         ]);
+    }
+
+    /**
+     * Accounts without a live subscription whose monthly credits renew on `dayStartMs`, with a verified email and no
+     * renewal notice yet. Sign-up dates stored as text (the column's old default) renew on the 1st, as the period does.
+     */
+    async accountsRenewing(input: { dayStartMs: number; days: readonly number[]; userIds: readonly string[] | null; limit: number }): Promise<string[]> {
+        if (input.days.length === 0 || input.userIds?.length === 0) return [];
+        const users = schema.users;
+        const dayStartSeconds = Math.floor(input.dayStartMs / 1000);
+        const signupDay = sql`(CASE WHEN typeof(${users.createdAt}) = 'integer' THEN CAST(strftime('%d', ${users.createdAt}, 'unixepoch') AS INTEGER) ELSE 1 END)`;
+        const rows = await this.database
+            .select({ id: users.id })
+            .from(users)
+            .where(
+                and(
+                    eq(users.emailVerified, true),
+                    isNull(users.deletedAt),
+                    inArray(signupDay, [...input.days]),
+                    sql`(typeof(${users.createdAt}) <> 'integer' OR ${users.createdAt} < ${dayStartSeconds})`,
+                    notExists(
+                        this.database
+                            .select({ userId: schema.subscriptions.userId })
+                            .from(schema.subscriptions)
+                            .where(and(eq(schema.subscriptions.userId, users.id), inArray(schema.subscriptions.status, [...LIVE_SUBSCRIPTION_STATUSES]))),
+                    ),
+                    notExists(
+                        this.database
+                            .select({ userId: schema.billingNotices.userId })
+                            .from(schema.billingNotices)
+                            .where(and(eq(schema.billingNotices.userId, users.id), eq(schema.billingNotices.noticeKey, `credits_renewed:acct:${dayStartSeconds}`))),
+                    ),
+                    input.userIds ? inArray(users.id, [...input.userIds]) : undefined,
+                ),
+            )
+            .limit(input.limit);
+        return rows.map((row) => row.id);
     }
 
     async sentNoticeKeys(userId: string, keys: readonly string[]): Promise<Set<string>> {

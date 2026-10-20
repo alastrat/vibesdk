@@ -219,6 +219,28 @@ export class CreditLedgerService extends BaseService {
         return found ?? null;
     }
 
+    async purchaseBySession(sessionId: string): Promise<schema.CreditPurchaseRecord | null> {
+        const [found] = await this.database
+            .select()
+            .from(schema.creditPurchases)
+            .where(eq(schema.creditPurchases.stripeCheckoutSessionId, sessionId))
+            .limit(1);
+        return found ?? null;
+    }
+
+    /**
+     * Stores the pool the account's plan gives `period` now, as the next step would. A paid renewal ends the grace
+     * hold's pool of 0, so a settle before that step doesn't take the hold's usage from purchases. A period with no
+     * row yet needs nothing; a closed one keeps its pool.
+     */
+    async refreshPool(userId: string, period: LedgerPeriod, pool: number): Promise<void> {
+        const periods = schema.creditPeriods;
+        await this.database
+            .update(periods)
+            .set({ pool })
+            .where(and(eq(periods.userId, userId), eq(periods.periodKey, period.key), isNull(periods.closedAt)));
+    }
+
     /** Accounts with a period that has ended but isn't closed, or a purchase past its expiry but not yet expired. */
     async usersToSettle(nowMs: number, limit: number): Promise<string[]> {
         const periods = schema.creditPeriods;

@@ -33,6 +33,9 @@ export const PLATFORM_ALERT_KINDS = [
 	'seller-charge-unpaid',
 	'shopper-email-failed',
 	'shopper-email-capped',
+	'billing-mismatch',
+	'billing-second-subscription',
+	'billing-unknown-price',
 ] as const;
 export type PlatformAlertKind = (typeof PLATFORM_ALERT_KINDS)[number];
 
@@ -72,6 +75,9 @@ const ALERT_LABELS: Readonly<Record<PlatformAlertKind, string>> = {
 	'seller-charge-unpaid': 'A seller owes Estori',
 	'shopper-email-failed': "A shopper email couldn't be sent",
 	'shopper-email-capped': 'A store reached its daily email limit',
+	'billing-mismatch': "A billing event didn't match its account",
+	'billing-second-subscription': 'An account pays through two subscriptions',
+	'billing-unknown-price': 'A subscription has an unknown price',
 };
 
 export interface PlatformAlert {
