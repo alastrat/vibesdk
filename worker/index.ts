@@ -25,6 +25,7 @@ import { runLiveStoresSchedule } from './services/live-stores/wiring';
 import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
 import { runBillingSchedule } from './services/billing/wiring';
 import { stagingGate } from './services/staging-gate';
+import { runInRequestScope } from './services/posthog/request-scope';
 import {
 	buildOwnerPreviewCookie,
 	readOwnerPreviewCookie,
@@ -248,132 +249,139 @@ async function handleUserAppRequest(request: Request, env: Env): Promise<Respons
 /**
  * Main Worker fetch handler with robust, secure routing.
  */
-const worker = {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-        // logger.info(`Received request: ${request.method} ${request.url}`);
-		// --- Pre-flight Checks ---
+async function handleFetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // logger.info(`Received request: ${request.method} ${request.url}`);
+	// --- Pre-flight Checks ---
 
-		// 1. Critical configuration check: Ensure custom domain is set.
-        const previewDomain = getPreviewDomain(env);
-		const separatePreviewDomain = isSeparatePreviewDomain(env);
-		if (!previewDomain || previewDomain.trim() === '') {
-			logger.error('FATAL: env.CUSTOM_DOMAIN is not configured in wrangler.toml or the Cloudflare dashboard.');
-			return new Response('Server configuration error: Application domain is not set.', { status: 500 });
+	// 1. Critical configuration check: Ensure custom domain is set.
+    const previewDomain = getPreviewDomain(env);
+	const separatePreviewDomain = isSeparatePreviewDomain(env);
+	if (!previewDomain || previewDomain.trim() === '') {
+		logger.error('FATAL: env.CUSTOM_DOMAIN is not configured in wrangler.toml or the Cloudflare dashboard.');
+		return new Response('Server configuration error: Application domain is not set.', { status: 500 });
+	}
+
+	const url = new URL(request.url);
+	const { hostname, pathname } = url;
+
+	// 2. Security: Immediately reject any requests made via an IP address.
+	const ipRegex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+	if (ipRegex.test(hostname)) {
+		return new Response('Access denied. Please use the assigned domain name.', { status: 403 });
+	}
+
+	// 3. Staging locks itself with STAGING_GATE_KEY until Cloudflare Access protects it; unset in production.
+	const gated = await stagingGate(request, env, { previewDomain, separatePreviewDomain });
+	if (gated) return gated;
+
+	// --- Domain-based Routing ---
+
+	// Normalize hostnames for both local development (localhost) and production.
+	const isMainDomainRequest =
+		hostname === env.CUSTOM_DOMAIN || hostname === 'localhost';
+	const isSubdomainRequest =
+		hostname.endsWith(`.${previewDomain}`) ||
+		(hostname.endsWith('.localhost') && hostname !== 'localhost');
+
+	// Live stores: a store's own subdomain, or a seller's connected domain, decided before any other host routing
+	// and never for Estori's own hosts. A lookup failure falls through to the usual routing.
+	if (!isMainDomainRequest && !(separatePreviewDomain && hostname === previewDomain)) {
+		let store = null;
+		try {
+			store = await resolveStoreHost(env, hostname);
+		} catch (error) {
+			logger.error('Live store lookup failed', { hostname, error });
 		}
+		if (store) return handleLiveStore(request, env, ctx, store);
+	}
 
-		const url = new URL(request.url);
-		const { hostname, pathname } = url;
-
-		// 2. Security: Immediately reject any requests made via an IP address.
-		const ipRegex = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-		if (ipRegex.test(hostname)) {
-			return new Response('Access denied. Please use the assigned domain name.', { status: 403 });
+	if (separatePreviewDomain && hostname === previewDomain) {
+		const params = matchSpacePreviewParams(pathname);
+		if (!params) {
+			return new Response('Not Found', { status: 404 });
 		}
+		const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
+		return withPreviewCorsHeaders(env, request, response);
+	}
 
-		// 3. Staging locks itself with STAGING_GATE_KEY until Cloudflare Access protects it; unset in production.
-		const gated = await stagingGate(request, env, { previewDomain, separatePreviewDomain });
-		if (gated) return gated;
-
-		// --- Domain-based Routing ---
-
-		// Normalize hostnames for both local development (localhost) and production.
-		const isMainDomainRequest =
-			hostname === env.CUSTOM_DOMAIN || hostname === 'localhost';
-		const isSubdomainRequest =
-			hostname.endsWith(`.${previewDomain}`) ||
-			(hostname.endsWith('.localhost') && hostname !== 'localhost');
-
-		// Live stores: a store's own subdomain, or a seller's connected domain, decided before any other host routing
-		// and never for Estori's own hosts. A lookup failure falls through to the usual routing.
-		if (!isMainDomainRequest && !(separatePreviewDomain && hostname === previewDomain)) {
-			let store = null;
-			try {
-				store = await resolveStoreHost(env, hostname);
-			} catch (error) {
-				logger.error('Live store lookup failed', { hostname, error });
-			}
-			if (store) return handleLiveStore(request, env, ctx, store);
-		}
-
-		if (separatePreviewDomain && hostname === previewDomain) {
-			const params = matchSpacePreviewParams(pathname);
-			if (!params) {
+	// Route 1: Main Platform Request (e.g., build.cloudflare.dev or localhost)
+	if (isMainDomainRequest) {
+		const params = matchSpacePreviewParams(pathname);
+		if (params) {
+			if (separatePreviewDomain) {
 				return new Response('Not Found', { status: 404 });
 			}
 			const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
 			return withPreviewCorsHeaders(env, request, response);
 		}
 
-		// Route 1: Main Platform Request (e.g., build.cloudflare.dev or localhost)
-		if (isMainDomainRequest) {
-			const params = matchSpacePreviewParams(pathname);
-			if (params) {
-				if (separatePreviewDomain) {
-					return new Response('Not Found', { status: 404 });
-				}
-				const response = await handleSpacePreview(request, env, params.spaceName, params.branch, ctx);
-				return withPreviewCorsHeaders(env, request, response);
-			}
-
-			// Handle Git protocol endpoints directly
-			// Route: /apps/:id.git/info/refs or /apps/:id.git/git-upload-pack
-			if (isGitProtocolRequest(pathname)) {
-				return handleGitProtocolRequest(request, env, ctx);
-			}
-			
-			// Cloudflare OAuth connect routes: handle via Hono app even though they are not under /api
-			if (pathname.startsWith('/oauth/') || pathname === '/auth/callback') {
-				// Do not log the full URL: /auth/callback carries sensitive
-				// query params (code, state) that must not end up in logs.
-				logger.info(`Handling Cloudflare OAuth request for: ${pathname}`);
-				const app = createApp(env);
-				return app.fetch(request, env, ctx);
-			}
-			
-			// Serve static assets and the app for all other non-API routes, with the public pages' heads,
-			// the sitemap and robots.txt for crawlers.
-			if (!pathname.startsWith('/api/')) {
-				return servePublicSite(request, env.ASSETS);
-			}
-			// AI Gateway proxy for generated apps
-			if (pathname.startsWith('/api/proxy/openai')) {
-                // Browser-originated requests must come from a preview-domain
-                // subdomain or an explicitly allowed origin. Server-side calls
-                // from generated apps carry no Origin header and are allowed
-                // through (auth is enforced by the app-proxy JWT downstream).
-                const origin = request.headers.get('Origin');
-                if (origin) {
-                    const previewDomain = getPreviewDomain(env);
-                    const originAllowed = isOriginAllowed(env, origin) || origin.endsWith(`.${previewDomain}`);
-                    if (!originAllowed) {
-                        logger.warn(`Access denied. Invalid origin: ${origin}, preview domain: ${previewDomain}`);
-                        return new Response('Access denied. Invalid origin.', { status: 403 });
-                    }
-                }
-                return proxyToAiGateway(request, env, ctx);
-			}
-
-			// Handle all API requests with the main Hono application.
-			// Log pathname only: some API routes (e.g. /api/auth/callback/:provider)
-			// carry sensitive query params like `code`/`state`.
-			logger.info(`Handling API request for: ${pathname}`);
+		// Handle Git protocol endpoints directly
+		// Route: /apps/:id.git/info/refs or /apps/:id.git/git-upload-pack
+		if (isGitProtocolRequest(pathname)) {
+			return handleGitProtocolRequest(request, env, ctx);
+		}
+		
+		// Cloudflare OAuth connect routes: handle via Hono app even though they are not under /api
+		if (pathname.startsWith('/oauth/') || pathname === '/auth/callback') {
+			// Do not log the full URL: /auth/callback carries sensitive
+			// query params (code, state) that must not end up in logs.
+			logger.info(`Handling Cloudflare OAuth request for: ${pathname}`);
 			const app = createApp(env);
 			return app.fetch(request, env, ctx);
 		}
-
-		// Route 2: User App Request (e.g., xyz.build.cloudflare.dev or test.localhost)
-		if (isSubdomainRequest) {
-			return handleUserAppRequest(request, env);
+		
+		// Serve static assets and the app for all other non-API routes, with the public pages' heads,
+		// the sitemap and robots.txt for crawlers.
+		if (!pathname.startsWith('/api/')) {
+			return servePublicSite(request, env.ASSETS);
+		}
+		// AI Gateway proxy for generated apps
+		if (pathname.startsWith('/api/proxy/openai')) {
+            // Browser-originated requests must come from a preview-domain
+            // subdomain or an explicitly allowed origin. Server-side calls
+            // from generated apps carry no Origin header and are allowed
+            // through (auth is enforced by the app-proxy JWT downstream).
+            const origin = request.headers.get('Origin');
+            if (origin) {
+                const previewDomain = getPreviewDomain(env);
+                const originAllowed = isOriginAllowed(env, origin) || origin.endsWith(`.${previewDomain}`);
+                if (!originAllowed) {
+                    logger.warn(`Access denied. Invalid origin: ${origin}, preview domain: ${previewDomain}`);
+                    return new Response('Access denied. Invalid origin.', { status: 403 });
+                }
+            }
+            return proxyToAiGateway(request, env, ctx);
 		}
 
-		return new Response('Not Found', { status: 404 });
+		// Handle all API requests with the main Hono application.
+		// Log pathname only: some API routes (e.g. /api/auth/callback/:provider)
+		// carry sensitive query params like `code`/`state`.
+		logger.info(`Handling API request for: ${pathname}`);
+		const app = createApp(env);
+		return app.fetch(request, env, ctx);
+	}
+
+	// Route 2: User App Request (e.g., xyz.build.cloudflare.dev or test.localhost)
+	if (isSubdomainRequest) {
+		return handleUserAppRequest(request, env);
+	}
+
+	return new Response('Not Found', { status: 404 });
+}
+
+/** Every request and scheduled run happens in the request scope, so analytics sends after the response. */
+const worker = {
+	fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		return runInRequestScope(ctx, () => handleFetch(request, env, ctx));
 	},
 	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-		ctx.waitUntil(runCatalogSchedule(controller.cron, env));
-		ctx.waitUntil(runStorePaymentsSchedule(controller.cron, env));
-		ctx.waitUntil(runLiveStoresSchedule(controller.cron, env));
-		ctx.waitUntil(runShopperEmailSchedule(controller.cron, env));
-		ctx.waitUntil(runBillingSchedule(controller.cron, env));
+		runInRequestScope(ctx, () => {
+			ctx.waitUntil(runCatalogSchedule(controller.cron, env));
+			ctx.waitUntil(runStorePaymentsSchedule(controller.cron, env));
+			ctx.waitUntil(runLiveStoresSchedule(controller.cron, env));
+			ctx.waitUntil(runShopperEmailSchedule(controller.cron, env));
+			ctx.waitUntil(runBillingSchedule(controller.cron, env));
+		});
 	},
 } satisfies ExportedHandler<Env>;
 

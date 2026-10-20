@@ -8,6 +8,7 @@ export { DatabaseService, createDatabaseService } from './database';
 
 // Domain-specific services
 export { AnalyticsService } from './services/AnalyticsService';
+export { AnalyticsPersonService } from './services/AnalyticsPersonService';
 export { BaseService } from './services/BaseService';
 export { UserService } from './services/UserService';
 export { AppService } from './services/AppService';

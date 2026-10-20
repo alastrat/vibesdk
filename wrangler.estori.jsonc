@@ -140,7 +140,10 @@
 		},
 		"CUSTOM_DOMAIN": "estori.app",
 		"CUSTOM_PREVIEW_DOMAIN": "preview.estori.app",
-		"ENVIRONMENT": "prod"
+		"ENVIRONMENT": "prod",
+		// PostHog's production project: the token is public and write-only, so it's a plain var, not a secret.
+		"POSTHOG_PROJECT_KEY": "phc_A96M8y8nVJTwpJoFJAwcis2JVsjWYTBVKghz38WCFHiC",
+		"POSTHOG_PROJECT_ID": "675096"
 	},
 	"workers_dev": false,
 	"preview_urls": false
