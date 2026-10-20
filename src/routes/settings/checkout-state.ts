@@ -202,16 +202,19 @@ function consentRefusal(error: unknown): PaymentOutcome {
 	return status === 409 ? { kind: 'price-changed', message } : { kind: 'failed', message };
 }
 
-/** A confirm that came back as an error is told apart by where the checkout stands: it may have expired, or been paid. */
-async function settleFailedConfirm(steps: PaymentSteps, message: string): Promise<PaymentOutcome> {
+/**
+ * A confirm that failed, by an error result or by throwing, is told apart by where the checkout stands: it may have
+ * expired (credits have no consent call to find that out first) or been paid. Otherwise `otherwise` is what to show.
+ */
+async function settleFailedConfirm(steps: PaymentSteps, otherwise: PaymentOutcome): Promise<PaymentOutcome> {
 	try {
 		const status = await steps.readStatus();
 		if (status.state === 'expired') return { kind: 'expired' };
 		if (status.state === 'paid' || status.state === 'processing') return { kind: 'finished', target: returnTargetOf(status) };
 	} catch {
-		// Without the status, the card's own message is all there is to show.
+		// Without the status, the failure's own message is all there is to show.
 	}
-	return { kind: 'declined', message: message || PAYMENT_FAILED_MESSAGE };
+	return otherwise;
 }
 
 /** Records consent for a plan, and only then confirms; nothing is confirmed on a refused consent. */
@@ -227,9 +230,10 @@ export async function submitPayment(steps: PaymentSteps): Promise<PaymentOutcome
 	try {
 		result = await steps.confirm();
 	} catch {
-		return { kind: 'failed', message: PAYMENT_FAILED_MESSAGE };
+		return settleFailedConfirm(steps, { kind: 'failed', message: PAYMENT_FAILED_MESSAGE });
 	}
-	return result.type === 'success' ? { kind: 'redirecting' } : settleFailedConfirm(steps, result.error.message);
+	if (result.type === 'success') return { kind: 'redirecting' };
+	return settleFailedConfirm(steps, { kind: 'declined', message: result.error.message || PAYMENT_FAILED_MESSAGE });
 }
 
 export type CheckoutPhase = { name: 'starting' } | { name: 'ready' } | { name: 'expired' } | { name: 'refused'; message: string; retryable: boolean };
@@ -271,23 +275,24 @@ export function initialCheckoutState(expired: boolean): CheckoutState {
 	};
 }
 
+/** Events from a call that finishes later carry the session they were made for, so a replaced session's answers are dropped. */
 export type CheckoutEvent =
 	| { type: 'start' }
 	| { type: 'started'; start: CheckoutClientStart }
 	| { type: 'refused'; message: string; retryable: boolean }
-	| { type: 'expired' }
+	| { type: 'expired'; sessionId: string }
 	| { type: 'formReady' }
-	| { type: 'sessionChanged'; status: 'open' | 'expired' | 'complete'; amount: string }
+	| { type: 'sessionChanged'; sessionId: string; status: 'open' | 'expired' | 'complete'; amount: string }
 	| { type: 'cardChanged'; complete: boolean }
 	| { type: 'consentToggled'; consented: boolean }
 	| { type: 'codeSubmitted' }
-	| { type: 'codeRejected'; message: string }
-	| { type: 'codeChanged'; applied: string | null }
+	| { type: 'codeRejected'; sessionId: string; message: string }
+	| { type: 'codeChanged'; sessionId: string; applied: string | null }
 	| { type: 'termsRequested' }
-	| { type: 'termsLoaded'; view: CheckoutTermsView }
-	| { type: 'termsFailed' }
+	| { type: 'termsLoaded'; sessionId: string; view: CheckoutTermsView }
+	| { type: 'termsFailed'; sessionId: string }
 	| { type: 'payStarted' }
-	| { type: 'payOutcome'; outcome: PaymentOutcome };
+	| { type: 'payOutcome'; sessionId: string; outcome: PaymentOutcome };
 
 /** True when pressing pay is allowed: the form is up and every condition of `canPay` holds. */
 export function canPayNow(state: CheckoutState): boolean {
@@ -322,6 +327,7 @@ function afterPayment(state: CheckoutState, outcome: PaymentOutcome): CheckoutSt
 }
 
 export function checkoutReducer(state: CheckoutState, event: CheckoutEvent): CheckoutState {
+	if ('sessionId' in event && event.sessionId !== state.sessionId) return state;
 	switch (event.type) {
 		case 'start':
 			return initialCheckoutState(false);

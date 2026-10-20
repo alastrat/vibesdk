@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { Badge, Banner, Button, Empty, Input, LayerCard, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
-import { CheckCircleIcon, CoinsIcon, InfoIcon, MinusIcon, PlusIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { Badge, Banner, Button, Empty, LayerCard, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
+import { CheckCircleIcon, CoinsIcon, InfoIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
 	BILLING_NOT_OPEN_MESSAGE,
 	EXTRA_CREDITS,
@@ -18,6 +18,8 @@ import {
 	type PaidPlanId,
 } from '@/api-types';
 import { pageTitle } from '@/brand';
+import { CreditsStepper } from '@/components/billing/CreditsStepper';
+import { SectionTitle } from '@/components/billing/SectionTitle';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CHANGE_FAILED_MESSAGE, showBillingError, useBilling, useBuyCredits, usePlanChange, usePlanCheckout, type PlanChange } from '@/hooks/use-billing';
 import { EXTRA_CREDITS_PRICE, limitFeatures } from '@/lib/plans';
@@ -28,7 +30,6 @@ import {
 	canCancel,
 	checkoutBaselineOf,
 	checkoutReturnOf,
-	clampExtraCredits,
 	confirmationFor,
 	creditsSummaryFor,
 	isConfirmed,
@@ -85,17 +86,6 @@ function forgetBaseline(): void {
 	} catch {
 		// Nothing was kept.
 	}
-}
-
-function SectionTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-	return (
-		<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-			<div className="flex items-center gap-2">
-				<span className="flex items-center">{icon}</span>
-				<span>{children}</span>
-			</div>
-		</LayerCard.Secondary>
-	);
 }
 
 function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => void }) {
@@ -219,47 +209,6 @@ function Credits({ view }: { view: BillingView }) {
 				</div>
 			</LayerCard.Primary>
 		</LayerCard>
-	);
-}
-
-/** Whole thousands of extra credits, typed or stepped; the field settles on the nearest amount when it's left. */
-function CreditsStepper({ value, onChange }: { value: number; onChange: (credits: number) => void }) {
-	const [draft, setDraft] = useState<string | null>(null);
-	const step = (delta: number) => {
-		setDraft(null);
-		onChange(clampExtraCredits(value + delta));
-	};
-	return (
-		<div className="flex items-center gap-2">
-			<Button
-				variant="secondary"
-				shape="square"
-				aria-label="Fewer credits"
-				icon={<MinusIcon />}
-				disabled={value <= EXTRA_CREDITS.minCredits}
-				onClick={() => step(-EXTRA_CREDITS.creditsPerUnit)}
-			/>
-			<Input
-				aria-label="Extra credits"
-				inputMode="numeric"
-				value={draft ?? formatCredits(value)}
-				onChange={(event) => setDraft(event.target.value)}
-				onBlur={() => {
-					if (draft === null) return;
-					onChange(clampExtraCredits(Number(draft.replace(/\D/g, ''))));
-					setDraft(null);
-				}}
-				className="w-32 text-center"
-			/>
-			<Button
-				variant="secondary"
-				shape="square"
-				aria-label="More credits"
-				icon={<PlusIcon />}
-				disabled={value >= EXTRA_CREDITS.maxCredits}
-				onClick={() => step(EXTRA_CREDITS.creditsPerUnit)}
-			/>
-		</div>
 	);
 }
 

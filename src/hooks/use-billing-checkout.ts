@@ -115,7 +115,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 				const checkout = stripe.initCheckoutElementsSdk({ clientSecret: start.clientSecret, elementsOptions: { appearance: appearanceFor(theme.current) } });
 				sdk.current = checkout;
 				// Stripe.js refuses to confirm until the page has read the total, so every change reads it.
-				checkout.on('change', (session) => dispatch({ type: 'sessionChanged', status: session.status.type, amount: session.total.total.amount }));
+				checkout.on('change', (session) => dispatch({ type: 'sessionChanged', sessionId: start.sessionId, status: session.status.type, amount: session.total.total.amount }));
 				const target = container.current;
 				if (!target) throw new Error('The card form has nowhere to open');
 				// The form is mounted before its actions load, as the store checkout does, so it shows while they are fetched.
@@ -126,7 +126,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 				if (!current) return;
 				if (loaded.type !== 'success') throw new Error('The card form could not open');
 				const session = loaded.actions.getSession();
-				dispatch({ type: 'sessionChanged', status: session.status.type, amount: session.total.total.amount });
+				dispatch({ type: 'sessionChanged', sessionId: start.sessionId, status: session.status.type, amount: session.total.total.amount });
 				actions.current = loaded.actions;
 				dispatch({ type: 'formReady' });
 			} catch {
@@ -153,10 +153,9 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 	const refreshTerms = useCallback(async (sessionId: string) => {
 		try {
 			const view = await unwrap(apiClient.getCheckoutTerms(sessionId), CHECKOUT_FAILED_MESSAGE);
-			if (latest.current.sessionId === sessionId) dispatch({ type: 'termsLoaded', view });
+			dispatch({ type: 'termsLoaded', sessionId, view });
 		} catch (failure) {
-			if (latest.current.sessionId !== sessionId) return;
-			dispatch(isExpiredRefusal(failure) ? { type: 'expired' } : { type: 'termsFailed' });
+			dispatch(isExpiredRefusal(failure) ? { type: 'expired', sessionId } : { type: 'termsFailed', sessionId });
 		}
 	}, []);
 
@@ -180,11 +179,13 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 			} catch {
 				result = null;
 			}
+			// A session replaced while the call ran has nothing to learn from its answer.
+			if (actions.current !== checkoutActions) return;
 			if (result?.type !== 'success') {
-				dispatch({ type: 'codeRejected', message: result?.error.message || CODE_FAILED_MESSAGE });
+				dispatch({ type: 'codeRejected', sessionId, message: result?.error.message || CODE_FAILED_MESSAGE });
 				return;
 			}
-			dispatch({ type: 'codeChanged', applied });
+			dispatch({ type: 'codeChanged', sessionId, applied });
 			await refreshTerms(sessionId);
 		},
 		[refreshTerms],
@@ -218,7 +219,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 					confirm: () => checkoutActions.confirm(),
 					readStatus: () => unwrap(apiClient.getCheckoutStatus(sessionId), CHECKOUT_FAILED_MESSAGE),
 				});
-				dispatch({ type: 'payOutcome', outcome });
+				dispatch({ type: 'payOutcome', sessionId, outcome });
 				if (outcome.kind === 'price-changed') await refreshTerms(sessionId);
 				if (outcome.kind === 'finished') navigate(outcome.target, { replace: true });
 			}),

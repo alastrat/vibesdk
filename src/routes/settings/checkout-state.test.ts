@@ -142,10 +142,12 @@ describe('what the page says', () => {
 	});
 });
 
+const SESSION = 'cs_test_1';
+
 const PLAN_START: CheckoutClientStart = {
 	clientSecret: 'cs_secret',
 	publishableKey: 'pk_test_1',
-	sessionId: 'cs_test_1',
+	sessionId: SESSION,
 	order: { kind: 'plan', plan: 'pro', priceCents: 4900, includes: ['5,000 AI credits a month'] },
 	terms: { consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.', buttonText: 'Subscribe: $49 a month', dueTodayCents: 4900 },
 };
@@ -198,14 +200,14 @@ describe('the checkout page state', () => {
 
 	it('unticks the box when a code applies or comes off, and waits for the new terms', () => {
 		for (const applied of ['SAVE50', null]) {
-			const changed = run(readyToPay(), { type: 'codeChanged', applied });
+			const changed = run(readyToPay(), { type: 'codeChanged', sessionId: SESSION, applied });
 			expect(changed.consented).toBe(false);
 			expect(changed.terms).toEqual({ status: 'loading' });
 			expect(changed.code).toEqual({ applied, busy: false, error: null });
 			expect(canPayNow(changed)).toBe(false);
 			// Ticking while the price is being checked changes nothing.
 			expect(run(changed, { type: 'consentToggled', consented: true }).consented).toBe(false);
-			const loaded = run(changed, { type: 'termsLoaded', view: DISCOUNTED_TERMS });
+			const loaded = run(changed, { type: 'termsLoaded', sessionId: SESSION, view: DISCOUNTED_TERMS });
 			expect(loaded.terms).toEqual({ status: 'ready', view: DISCOUNTED_TERMS });
 			expect(loaded.consented).toBe(false);
 			expect(canPayNow(loaded)).toBe(false);
@@ -214,15 +216,15 @@ describe('the checkout page state', () => {
 	});
 
 	it('asks for the terms again on request, unticked, and lets a failed ask be asked again', () => {
-		const failed = run(readyToPay(), { type: 'termsFailed' });
+		const failed = run(readyToPay(), { type: 'termsFailed', sessionId: SESSION });
 		const asking = run(failed, { type: 'termsRequested' });
 		expect(asking.terms).toEqual({ status: 'loading' });
 		expect(asking.consented).toBe(false);
-		expect(run(asking, { type: 'termsLoaded', view: PLAN_START.terms as NonNullable<typeof PLAN_START.terms> }).terms?.status).toBe('ready');
+		expect(run(asking, { type: 'termsLoaded', sessionId: SESSION, view: PLAN_START.terms as NonNullable<typeof PLAN_START.terms> }).terms?.status).toBe('ready');
 	});
 
 	it('keeps the buyer from paying on terms it could not refresh', () => {
-		const failed = run(readyToPay(), { type: 'codeChanged', applied: 'SAVE50' }, { type: 'termsFailed' });
+		const failed = run(readyToPay(), { type: 'codeChanged', sessionId: SESSION, applied: 'SAVE50' }, { type: 'termsFailed', sessionId: SESSION });
 		expect(failed.terms).toEqual({ status: 'failed' });
 		expect(canPayNow(run(failed, { type: 'consentToggled', consented: true }))).toBe(false);
 	});
@@ -231,20 +233,20 @@ describe('the checkout page state', () => {
 		const busy = run(readyToPay(), { type: 'codeSubmitted' });
 		expect(busy.code.busy).toBe(true);
 		expect(canPayNow(busy)).toBe(false);
-		const refused = run(busy, { type: 'codeRejected', message: 'That code is not valid.' });
+		const refused = run(busy, { type: 'codeRejected', sessionId: SESSION, message: 'That code is not valid.' });
 		expect(refused.code).toEqual({ applied: null, busy: false, error: 'That code is not valid.' });
 		expect(refused.consented).toBe(true);
 		expect(canPayNow(refused)).toBe(true);
 	});
 
 	it("reads what Stripe will charge from the session's changes", () => {
-		const changed = run(readyToPay(), { type: 'sessionChanged', status: 'open', amount: '$24.50' });
+		const changed = run(readyToPay(), { type: 'sessionChanged', sessionId: SESSION, status: 'open', amount: '$24.50' });
 		expect(changed.dueToday).toBe('$24.50');
 		expect(changed.phase).toEqual({ name: 'ready' });
 	});
 
 	it('replaces the form with the timed-out message when Stripe says the session expired', () => {
-		const expired = run(readyToPay(), { type: 'sessionChanged', status: 'expired', amount: '$49.00' });
+		const expired = run(readyToPay(), { type: 'sessionChanged', sessionId: SESSION, status: 'expired', amount: '$49.00' });
 		expect(expired.phase).toEqual({ name: 'expired' });
 		expect(canPayNow(expired)).toBe(false);
 	});
@@ -253,7 +255,7 @@ describe('the checkout page state', () => {
 		const paying = run(readyToPay(), { type: 'payStarted' });
 		expect(paying.paying).toBe(true);
 		expect(canPayNow(paying)).toBe(false);
-		const leaving = run(paying, { type: 'payOutcome', outcome: { kind: 'redirecting' } });
+		const leaving = run(paying, { type: 'payOutcome', sessionId: SESSION, outcome: { kind: 'redirecting' } });
 		expect(leaving.paying).toBe(true);
 		expect(canPayNow(leaving)).toBe(false);
 	});
@@ -264,7 +266,7 @@ describe('the checkout page state', () => {
 	});
 
 	it("a declined card shows the bank's message with the box still ticked", () => {
-		const declined = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', outcome: { kind: 'declined', message: 'Your card was declined.' } });
+		const declined = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', sessionId: SESSION, outcome: { kind: 'declined', message: 'Your card was declined.' } });
 		expect(declined.paying).toBe(false);
 		expect(declined.notice).toBe('Your card was declined.');
 		expect(declined.consented).toBe(true);
@@ -274,13 +276,13 @@ describe('the checkout page state', () => {
 	});
 
 	it('an expired payment shows the timed-out message', () => {
-		const expired = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', outcome: { kind: 'expired' } });
+		const expired = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', sessionId: SESSION, outcome: { kind: 'expired' } });
 		expect(expired.phase).toEqual({ name: 'expired' });
 		expect(expired.paying).toBe(false);
 	});
 
 	it('a changed price shows the message and unticks the box', () => {
-		const changed = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', outcome: { kind: 'price-changed', message: 'The price changed. Check it and agree again.' } });
+		const changed = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', sessionId: SESSION, outcome: { kind: 'price-changed', message: 'The price changed. Check it and agree again.' } });
 		expect(changed.notice).toBe('The price changed. Check it and agree again.');
 		expect(changed.consented).toBe(false);
 		expect(changed.terms).toEqual({ status: 'loading' });
@@ -288,7 +290,7 @@ describe('the checkout page state', () => {
 	});
 
 	it('a failed consent call shows its message and lets the buyer try again', () => {
-		const failed = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', outcome: { kind: 'failed', message: PAYMENT_FAILED_MESSAGE } });
+		const failed = run(readyToPay(), { type: 'payStarted' }, { type: 'payOutcome', sessionId: SESSION, outcome: { kind: 'failed', message: PAYMENT_FAILED_MESSAGE } });
 		expect(failed.notice).toBe(PAYMENT_FAILED_MESSAGE);
 		expect(canPayNow(failed)).toBe(true);
 	});
@@ -300,8 +302,56 @@ describe('the checkout page state', () => {
 	});
 
 	it('starts clean again, forgetting the box, the code and the old session', () => {
-		const again = run(readyToPay(), { type: 'codeChanged', applied: 'SAVE50' }, { type: 'sessionChanged', status: 'expired', amount: '$1.00' }, { type: 'start' });
+		const again = run(readyToPay(), { type: 'codeChanged', sessionId: SESSION, applied: 'SAVE50' }, { type: 'sessionChanged', sessionId: SESSION, status: 'expired', amount: '$1.00' }, { type: 'start' });
 		expect(again).toEqual(initialCheckoutState(false));
+	});
+});
+
+describe('a replaced session', () => {
+	const OLD = SESSION;
+	const NEW = CREDITS_START.sessionId;
+
+	/** The old session's page was replaced by a credits checkout that is starting up, then ready. */
+	function replaced(): CheckoutState {
+		return run(readyToPay(), { type: 'start' }, { type: 'started', start: CREDITS_START }, { type: 'formReady' }, { type: 'cardChanged', complete: true });
+	}
+
+	it("ignores the old session's change, so a stale total or expiry never reaches the new one", () => {
+		const now = replaced();
+		expect(run(now, { type: 'sessionChanged', sessionId: OLD, status: 'expired', amount: '$49.00' })).toEqual(now);
+		expect(run(now, { type: 'sessionChanged', sessionId: OLD, status: 'open', amount: '$49.00' }).dueToday).toBeNull();
+		const own = run(now, { type: 'sessionChanged', sessionId: NEW, status: 'open', amount: '$7.50' });
+		expect(own.dueToday).toBe('$7.50');
+	});
+
+	it("ignores the old session's change while the new one is still starting", () => {
+		const starting = run(readyToPay(), { type: 'start' });
+		expect(run(starting, { type: 'sessionChanged', sessionId: OLD, status: 'expired', amount: '$49.00' })).toEqual(starting);
+	});
+
+	it("ignores a code, terms or timed-out answer for the old session", () => {
+		const now = replaced();
+		const stale: CheckoutEvent[] = [
+			{ type: 'codeChanged', sessionId: OLD, applied: 'SAVE50' },
+			{ type: 'codeRejected', sessionId: OLD, message: 'That code is not valid.' },
+			{ type: 'termsLoaded', sessionId: OLD, view: DISCOUNTED_TERMS },
+			{ type: 'termsFailed', sessionId: OLD },
+			{ type: 'expired', sessionId: OLD },
+		];
+		for (const event of stale) expect(run(now, event), event.type).toEqual(now);
+	});
+
+	it("ignores the old session's payment result, so it can't replace or mark the new form", () => {
+		const now = replaced();
+		for (const outcome of [{ kind: 'expired' }, { kind: 'declined', message: 'Your card was declined.' }, { kind: 'price-changed', message: 'The price changed.' }] as const) {
+			expect(run(now, { type: 'payOutcome', sessionId: OLD, outcome }), outcome.kind).toEqual(now);
+		}
+	});
+
+	it("still takes the current session's answers", () => {
+		const now = run(replaced(), { type: 'payStarted' });
+		expect(run(now, { type: 'payOutcome', sessionId: NEW, outcome: { kind: 'declined', message: 'Declined.' } }).notice).toBe('Declined.');
+		expect(run(readyToPay(), { type: 'expired', sessionId: OLD }).phase).toEqual({ name: 'expired' });
 	});
 });
 
@@ -450,6 +500,45 @@ describe('confirming the payment', () => {
 		const { steps: plan } = steps({
 			confirm: async () => {
 				throw new Error('socket closed');
+			},
+		});
+		expect(await submitPayment(plan)).toEqual({ kind: 'failed', message: PAYMENT_FAILED_MESSAGE });
+	});
+
+	it('finds an expired checkout when confirming throws, so credits never loop on the plain failure', async () => {
+		const { steps: credits, calls } = steps({
+			kind: 'credits',
+			confirm: async () => {
+				calls.push('confirm');
+				throw new Error('The session has expired');
+			},
+			readStatus: async () => {
+				calls.push('status');
+				return { state: 'expired', kind: 'credits' };
+			},
+		});
+		expect(await submitPayment(credits)).toEqual({ kind: 'expired' });
+		expect(calls).toEqual(['confirm', 'status']);
+	});
+
+	it('leaves for billing when confirming throws on a checkout that was in fact paid', async () => {
+		const { steps: credits } = steps({
+			kind: 'credits',
+			confirm: async () => {
+				throw new Error('socket closed');
+			},
+			readStatus: async () => ({ state: 'processing', kind: 'credits' }),
+		});
+		expect(await submitPayment(credits)).toEqual({ kind: 'finished', target: '/settings/billing?confirm=credits' });
+	});
+
+	it('shows the plain failure when confirming throws and the status cannot be read', async () => {
+		const { steps: plan } = steps({
+			confirm: async () => {
+				throw new Error('socket closed');
+			},
+			readStatus: async () => {
+				throw new Error('offline');
 			},
 		});
 		expect(await submitPayment(plan)).toEqual({ kind: 'failed', message: PAYMENT_FAILED_MESSAGE });

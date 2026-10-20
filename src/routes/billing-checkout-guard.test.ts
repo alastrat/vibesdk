@@ -117,6 +117,34 @@ describe("estori's own checkout page", () => {
 		expect(back).toContain("get('session_id')");
 	});
 
+	it('locks the amount picker from the press until the result, so a payment is never replaced by a new session', () => {
+		const page = source(PAGE);
+		expect(page).toContain('disabled={state.paying}');
+		expect(page).toContain('<CreditsStepper value={credits} onChange={onChange} disabled={disabled} />');
+		const stepper = source('/src/components/billing/CreditsStepper.tsx');
+		expect(stepper).toContain('disabled={disabled || value <= EXTRA_CREDITS.minCredits}');
+		expect(stepper).toContain('disabled={disabled || value >= EXTRA_CREDITS.maxCredits}');
+		expect(stepper).toMatch(/<Input[^>]*disabled=\{disabled\}/s);
+	});
+
+	it('shares the amount picker and the section title with the billing page, with no local copies', () => {
+		const billing = source('/src/routes/settings/billing.tsx');
+		const page = source(PAGE);
+		for (const text of [billing, page]) {
+			expect(text).toContain("from '@/components/billing/CreditsStepper'");
+			expect(text).toContain("from '@/components/billing/SectionTitle'");
+			expect(text).not.toMatch(/function (CreditsStepper|SectionTitle|PanelTitle)\(/);
+		}
+	});
+
+	it("carries the session's id on every answer that comes back later, and the hook sends it", () => {
+		const hook = source(HOOK);
+		expect(hook).toContain("type: 'sessionChanged', sessionId:");
+		expect(hook).toContain("type: 'payOutcome', sessionId");
+		expect(hook).toContain("type: 'codeChanged', sessionId");
+		expect(hook).toContain("type: 'termsLoaded', sessionId");
+	});
+
 	it('keeps the two paths to the checkout page the same', () => {
 		expect(source('/src/hooks/use-billing.ts')).toContain('const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;');
 		expect(source(STATE)).toContain('export const CHECKOUT_PATH = `${BILLING_PATH}/checkout`;');

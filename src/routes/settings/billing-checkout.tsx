@@ -15,6 +15,7 @@ import {
 } from '@/api-types';
 import { pageTitle } from '@/brand';
 import { CreditsStepper } from '@/components/billing/CreditsStepper';
+import { SectionTitle } from '@/components/billing/SectionTitle';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useBillingCheckout } from '@/hooks/use-billing-checkout';
 import { EXTRA_CREDITS_PRICE } from '@/lib/plans';
@@ -24,17 +25,6 @@ import { canPayNow, checkoutExpiredOf, checkoutPathOf, checkoutRequestOf, consen
 const CREDITS_SETTLE_MS = 500;
 
 const TERMS_LINK_CLASS = 'underline hover:text-kumo-strong';
-
-function PanelTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
-	return (
-		<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-			<div className="flex items-center gap-2">
-				<span className="flex items-center">{icon}</span>
-				<span>{children}</span>
-			</div>
-		</LayerCard.Secondary>
-	);
-}
 
 function BackToBilling() {
 	return (
@@ -134,7 +124,21 @@ function PlanOrder({ order, state, onApply, onRemove }: { order: Extract<Checkou
 	);
 }
 
-function CreditsOrder({ credits, amountCents, dueToday, changing, onChange }: { credits: number; amountCents: number; dueToday: string | null; changing: boolean; onChange: (credits: number) => void }) {
+function CreditsOrder({
+	credits,
+	amountCents,
+	dueToday,
+	changing,
+	disabled,
+	onChange,
+}: {
+	credits: number;
+	amountCents: number;
+	dueToday: string | null;
+	changing: boolean;
+	disabled: boolean;
+	onChange: (credits: number) => void;
+}) {
 	return (
 		<div className="grid gap-4">
 			<div className="grid gap-1">
@@ -142,7 +146,7 @@ function CreditsOrder({ credits, amountCents, dueToday, changing, onChange }: { 
 				<p className="text-sm text-kumo-subtle">{EXTRA_CREDITS_PRICE}</p>
 			</div>
 			<div className="flex flex-wrap items-center gap-4">
-				<CreditsStepper value={credits} onChange={onChange} />
+				<CreditsStepper value={credits} onChange={onChange} disabled={disabled} />
 				<p className="text-sm text-kumo-subtle">{formatCredits(credits)} credits</p>
 			</div>
 			<DueToday label={changing ? formatUsd(amountCents) : dueTodayLabel(dueToday, amountCents)} />
@@ -241,10 +245,17 @@ export default function BillingCheckoutPage() {
 			<div className="grid gap-6 md:grid-cols-5">
 				<div className="md:col-span-2">
 					<LayerCard>
-						<PanelTitle icon={<ReceiptIcon className="size-4" aria-hidden />}>Your order</PanelTitle>
+						<SectionTitle icon={<ReceiptIcon className="size-4" aria-hidden />}>Your order</SectionTitle>
 						<LayerCard.Primary>
 							{credits !== null ? (
-								<CreditsOrder credits={credits} amountCents={creditsCents} dueToday={state.dueToday} changing={changing} onChange={setPendingCredits} />
+								<CreditsOrder
+									credits={credits}
+									amountCents={creditsCents}
+									dueToday={state.dueToday}
+									changing={changing}
+									disabled={state.paying}
+									onChange={setPendingCredits}
+								/>
 							) : state.order?.kind === 'plan' ? (
 								<PlanOrder order={state.order} state={state} onApply={checkout.applyCode} onRemove={checkout.removeCode} />
 							) : (
@@ -257,7 +268,7 @@ export default function BillingCheckoutPage() {
 				</div>
 				<div className="md:col-span-3">
 					<LayerCard>
-						<PanelTitle icon={<CreditCardIcon className="size-4" aria-hidden />}>Payment</PanelTitle>
+						<SectionTitle icon={<CreditCardIcon className="size-4" aria-hidden />}>Payment</SectionTitle>
 						<LayerCard.Primary>
 							<div className="grid gap-4">
 								<div className="relative min-h-40" aria-busy={!state.formReady}>
