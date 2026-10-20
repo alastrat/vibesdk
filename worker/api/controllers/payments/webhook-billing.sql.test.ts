@@ -10,7 +10,7 @@ import { CreditLedgerService } from '../../../database/services/CreditLedgerServ
 import { PLATFORM_ALERT_EMAILS } from '../../../services/alerts/platform-alerts';
 import { applyCreditRefund, type BillingEventDeps } from '../../../services/billing/events';
 import { billingEventDepsFromEnv } from '../../../services/billing/wiring';
-import type { StripeSubscription } from '../../../services/payments/stripe-client';
+import { idempotencyBucket, type StripeSubscription } from '../../../services/payments/stripe-client';
 import { handleStripeWebhook } from './webhook';
 
 const SECRET = 'whsec_billing_test';
@@ -92,6 +92,14 @@ function stripeWrites(): string[] {
 		.mocked(globalThis.fetch)
 		.mock.calls.filter(([, init]) => init?.method === 'POST')
 		.map(([input, init]) => `${new URL(String(input)).pathname} ${decodeURIComponent(String(init?.body ?? ''))}`);
+}
+
+/** The idempotency key of each write Estori sent Stripe, in order. */
+function stripeWriteKeys(): Array<string | null> {
+	return vi
+		.mocked(globalThis.fetch)
+		.mock.calls.filter(([, init]) => init?.method === 'POST')
+		.map(([, init]) => new Headers(init?.headers).get('Idempotency-Key'));
 }
 
 async function deliver(id: string, type: string, object: unknown, extra: Record<string, unknown> = {}): Promise<number> {
@@ -443,6 +451,7 @@ describe('card and consent webhooks', () => {
 		expect(await deliver('evt_consent', 'checkout.session.completed', subscriptionSession('u_consent', customer))).toBe(200);
 		expect(await rowOf('u_consent')).toMatchObject({ id: 'sub_u_consent', status: 'active' });
 		expect(stripeWrites()).toEqual(['/v1/subscriptions/sub_u_consent metadata[terms_version]=2026-10-20&metadata[renewal_consent_at]=2026-10-20T10:00:00.000Z']);
+		expect(stripeWriteKeys()).toEqual([expect.stringMatching(/^billing-consent-sub_u_consent-\d+$/)]);
 	});
 
 	it('leaves a subscription that already carries its terms alone', async () => {
@@ -454,23 +463,36 @@ describe('card and consent webhooks', () => {
 		expect(stripeWrites()).toEqual([]);
 	});
 
-	it("stamps on the retry when Stripe refused the stamp after the checkout was recorded, so the seller's agreement isn't lost", async () => {
+	it("stamps on a retry in a later bucket when Stripe refused the stamp, and gets the replayed refusal in the same bucket, so the seller's agreement isn't lost", async () => {
 		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-20T12:00:00Z'));
 		const customer = await seller('u_retry');
 		await consentFor('u_retry');
 		stripeServes({ sub_u_retry: subscription('u_retry', customer) });
+		// Stripe answers a reused idempotency key with its first response, a failure included, instead of running the request again.
 		const serve = vi.mocked(globalThis.fetch).getMockImplementation();
+		const answered = new Map<string, { status: number; body: string }>();
 		let refusing = true;
 		vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
-			if (refusing && init?.method === 'POST') return Response.json({ error: { message: 'Stripe is down' } }, { status: 500 });
-			return serve ? serve(input, init) : Response.error();
+			const key = new Headers(init?.headers).get('Idempotency-Key');
+			const first = key ? answered.get(key) : undefined;
+			if (first) return new Response(first.body, { status: first.status });
+			const response = refusing && init?.method === 'POST' ? Response.json({ error: { message: 'Stripe is down' } }, { status: 500 }) : serve ? await serve(input, init) : Response.error();
+			if (key) answered.set(key, { status: response.status, body: await response.clone().text() });
+			return response;
 		});
-		expect(await deliver('evt_retry', 'checkout.session.completed', subscriptionSession('u_retry', customer))).toBe(500);
+		const checkout = subscriptionSession('u_retry', customer);
+		const bucket = idempotencyBucket(Date.now());
+		expect(await deliver('evt_retry', 'checkout.session.completed', checkout)).toBe(500);
 		expect(await resultOf('evt_retry')).toBe('applied');
 		refusing = false;
-		expect(await deliver('evt_retry', 'checkout.session.completed', subscriptionSession('u_retry', customer))).toBe(200);
-		const stamp = '/v1/subscriptions/sub_u_retry metadata[terms_version]=2026-10-20&metadata[renewal_consent_at]=2026-10-20T10:00:00.000Z';
-		expect(stripeWrites()).toEqual([stamp, stamp]);
+		clock.mockReturnValue(Date.parse('2026-10-20T12:05:00Z'));
+		expect(await deliver('evt_retry', 'checkout.session.completed', checkout)).toBe(500);
+		clock.mockReturnValue(Date.parse('2026-10-20T12:11:00Z'));
+		expect(await deliver('evt_retry', 'checkout.session.completed', checkout)).toBe(200);
+		const now = `billing-consent-sub_u_retry-${bucket}`;
+		expect(stripeWriteKeys()).toEqual([now, now, `billing-consent-sub_u_retry-${bucket + 1}`]);
+		expect(await deliver('evt_retry', 'checkout.session.completed', checkout)).toBe(200);
 		expect(subjects()).toEqual(['Welcome to Estori Pro']);
 	});
 

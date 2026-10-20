@@ -13,7 +13,7 @@ import { createLogger } from '../../logger';
 import { generateId } from '../../utils/idGenerator';
 import type { PlatformAlert } from '../alerts/platform-alerts';
 import { isCheckoutSession } from '../payments/fulfill';
-import type { StripeCharge, StripeClient, StripeInvoice, StripeSubscriptionSchedule } from '../payments/stripe-client';
+import { idempotencyBucket, type StripeCharge, type StripeClient, type StripeInvoice, type StripeSubscriptionSchedule } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
 import { subscriptionEventsFor, type BillingAnalyticsEvent } from '../posthog/billing-events';
 import { heldPeriodKey, liveSubscription, type BillingAccount } from './account';
@@ -233,7 +233,8 @@ export async function applyCardSetup(deps: BillingEventDeps, input: { eventId: s
 
 /**
  * Copies the seller's stored agreement to the renewal terms onto the subscription, unless it already carries one. A
- * subscription that started with no stored agreement is recorded all the same, since it has been paid.
+ * subscription that started with no stored agreement is recorded all the same, since it has been paid. The key rotates
+ * with the bucket: Stripe replays a failed request under the same key, so a retry in a later bucket is a new request.
  */
 async function stampConsent(deps: BillingEventDeps, sessionId: string, subscriptionId: string): Promise<void> {
 	const consent = await deps.store.consentFor(sessionId);
@@ -246,7 +247,7 @@ async function stampConsent(deps: BillingEventDeps, sessionId: string, subscript
 	await deps.stripe.updateSubscriptionMetadata(
 		subscriptionId,
 		{ terms_version: consent.termsVersion, renewal_consent_at: consent.createdAt.toISOString() },
-		`billing-consent-${subscriptionId}`,
+		`billing-consent-${subscriptionId}-${idempotencyBucket(deps.nowMs())}`,
 	);
 }
 
