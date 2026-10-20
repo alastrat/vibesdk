@@ -57,7 +57,14 @@ function world(options: { recordFails?: boolean; stored?: SubscriptionRecord } =
 	let row: SubscriptionRecord | null = options.stored ?? null;
 	const tracked: Array<[string, readonly BillingAnalyticsEvent[]]> = [];
 	const deps: BillingEventDeps = {
-		stripe: { retrieveSubscription: async () => PRO, retrieveCheckoutSession: notRead, setDefaultPaymentMethod: notRead, updateSubscriptionMetadata: async () => undefined },
+		stripe: {
+			retrieveSubscription: async () => PRO,
+			retrieveCheckoutSession: notRead,
+			setDefaultPaymentMethod: notRead,
+			updateSubscriptionMetadata: async () => undefined,
+			retrieveInvoice: notRead,
+			retrievePaymentIntent: notRead,
+		},
 		store: {
 			eventSeen: async (eventId) => recorded.has(eventId),
 			userOfCustomer: async (customerId) => (customerId === 'cus_1' ? 'u1' : null),

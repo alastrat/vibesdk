@@ -123,6 +123,13 @@ function subscription(userId: string, customer: string, overrides: Partial<Strip
 	};
 }
 
+/** A failed invoice as Stripe reads it back, with the payment it declined as `pi_{invoice id}`. */
+function declinedInvoice(invoice: { id: string }): Record<string, unknown> {
+	return { ...invoice, status: 'open', payments: { data: [{ status: 'open', payment: { type: 'payment_intent', payment_intent: `pi_${invoice.id}` } }] } };
+}
+
+const DECLINED_INTENT = { id: 'pi_declined', status: 'requires_payment_method', last_payment_error: { code: 'card_declined' }, latest_charge: null };
+
 async function seller(userId: string): Promise<string> {
 	await insertUser(db, userId);
 	await insertBillingCustomer(db, userId, `cus_${userId}`);
@@ -180,8 +187,8 @@ describe('subscription webhooks', () => {
 	it('warns once when a renewal fails, keeps the plan through the grace period, and restores it when paid', async () => {
 		const customer = await seller('u_due');
 		await insertSubscription(db, { userId: 'u_due', stripeSubscriptionId: 'sub_u_due', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
-		const stripe = stripeServes({ sub_u_due: subscription('u_due', customer, { status: 'past_due' }) });
 		const failed = { id: 'in_due', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0003', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_due' } } };
+		const stripe = stripeServes({ sub_u_due: subscription('u_due', customer, { status: 'past_due' }), in_due: declinedInvoice(failed), pi_in_due: DECLINED_INTENT });
 		await deliver('evt_f1', 'invoice.payment_failed', failed);
 		await deliver('evt_f2', 'invoice.payment_failed', { ...failed, attempt_count: 2 });
 		expect(await rowOf('u_due')).toMatchObject({ status: 'past_due', plan: 'pro' });
@@ -204,15 +211,53 @@ describe('subscription webhooks', () => {
 		expect(customerEmails()[0].text).not.toContain('declined');
 	});
 
-	it("words a failed invoice's one notice by whichever of its two events arrives first", async () => {
+	it('asks to confirm when the bank wants it, though Stripe sends payment_failed before payment_action_required, and sends nothing more for the second', async () => {
 		const customer = await seller('u_first');
 		await insertSubscription(db, { userId: 'u_first', stripeSubscriptionId: 'sub_u_first', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
-		stripeServes({ sub_u_first: subscription('u_first', customer, { status: 'past_due' }) });
 		const invoice = { id: 'in_first', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0021', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_first' } } };
+		stripeServes({
+			sub_u_first: subscription('u_first', customer, { status: 'past_due' }),
+			in_first: { ...invoice, status: 'open', payments: { data: [{ status: 'open', payment: { type: 'payment_intent', payment_intent: 'pi_first' } }] } },
+			pi_first: { id: 'pi_first', status: 'requires_action', last_payment_error: null, latest_charge: null },
+		});
 		await deliver('evt_first_failed', 'invoice.payment_failed', invoice);
 		await deliver('evt_first_action', 'invoice.payment_action_required', invoice);
 		expect(customerEmails()).toHaveLength(1);
-		expect(customerEmails()[0].text).toContain('Your card was declined. Open billing to pay with this card again or a new one.');
+		expect(customerEmails()[0].text).toContain('Your bank asked you to confirm this payment. Open billing and choose Pay now.');
+		expect(customerEmails()[0].text).not.toContain('declined');
+	});
+
+	it('asks to confirm when the payment failed for want of authentication, and says declined when the card was declined', async () => {
+		const cases = [
+			{ userId: 'u_auth', error: 'authentication_required', says: 'Your bank asked you to confirm this payment. Open billing and choose Pay now.' },
+			{ userId: 'u_decl', error: 'card_declined', says: 'Your card was declined. Open billing to pay with this card again or a new one.' },
+		];
+		for (const { userId, error, says } of cases) {
+			sent.length = 0;
+			const customer = await seller(userId);
+			await insertSubscription(db, { userId, stripeSubscriptionId: `sub_${userId}`, status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
+			const invoice = { id: `in_${userId}`, customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0022', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: `sub_${userId}` } } };
+			stripeServes({
+				[`sub_${userId}`]: subscription(userId, customer, { status: 'past_due' }),
+				[`in_${userId}`]: { ...invoice, status: 'open', payments: { data: [{ status: 'open', payment: { type: 'payment_intent', payment_intent: `pi_${userId}` } }] } },
+				[`pi_${userId}`]: { id: `pi_${userId}`, status: 'requires_payment_method', last_payment_error: { code: error }, latest_charge: null },
+			});
+			await deliver(`evt_${userId}`, 'invoice.payment_failed', invoice);
+			expect(customerEmails(), userId).toHaveLength(1);
+			expect(customerEmails()[0].text, userId).toContain(says);
+		}
+	});
+
+	it("words the notice by the event, with a warning, when Stripe can't say how the payment failed", async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const customer = await seller('u_unread');
+		await insertSubscription(db, { userId: 'u_unread', stripeSubscriptionId: 'sub_u_unread', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
+		stripeServes({ sub_u_unread: subscription('u_unread', customer, { status: 'past_due' }) });
+		const invoice = { id: 'in_unread', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0023', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_unread' } } };
+		expect(await deliver('evt_unread', 'invoice.payment_failed', invoice)).toBe(200);
+		expect(customerEmails()).toHaveLength(1);
+		expect(customerEmails()[0].text).toContain('Your card was declined.');
+		expect(JSON.stringify(warn.mock.calls)).toContain('in_unread');
 	});
 
 	it('says when a cancelled plan ends, keeps it when the seller changes their mind, and says when it has ended', async () => {
@@ -360,8 +405,8 @@ describe('subscription webhooks', () => {
 		const period = { key: `sub:sub_u_fail:${start}`, startMs: start * 1000, endMs: end * 1000 };
 		await new CreditLedgerService(env({ BILLING: 'on' })).recordUse({ userId: 'u_fail', period, pool: 20_000, useKey: 'k_fail', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date() });
 		const renewed = { id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: start, current_period_end: end };
-		stripeServes({ sub_u_fail: subscription('u_fail', customer, { status: 'past_due', items: { data: [renewed] } }) });
 		const failed = { id: 'in_fail', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0006', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_fail' } } };
+		stripeServes({ sub_u_fail: subscription('u_fail', customer, { status: 'past_due', items: { data: [renewed] } }), in_fail: declinedInvoice(failed), pi_in_fail: DECLINED_INTENT });
 		await deliver('evt_fail', 'invoice.payment_failed', failed, { BILLING: 'on' });
 		expect(await rowOf('u_fail')).toMatchObject({ status: 'past_due' });
 		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_fail'").first('pool')).toBe(20_000);

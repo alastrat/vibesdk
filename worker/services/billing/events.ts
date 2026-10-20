@@ -28,7 +28,7 @@ const logger = createLogger('BillingEvents');
 export type BillingEventOutcome = 'applied' | 'duplicate' | 'ignored' | 'refused';
 
 export interface BillingEventDeps {
-	stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession' | 'setDefaultPaymentMethod' | 'updateSubscriptionMetadata'>;
+	stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession' | 'setDefaultPaymentMethod' | 'updateSubscriptionMetadata' | 'retrieveInvoice' | 'retrievePaymentIntent'>;
 	store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent' | 'consentFor'>;
 	ledger: Pick<CreditLedgerService, 'purchaseBySession' | 'purchaseByPaymentIntent' | 'settle'>;
 	priceIds: StripePriceIds | null;
@@ -134,6 +134,47 @@ function poolMayChange(previous: SubscriptionRecord | null, next: SubscriptionRe
 	return previous?.stripeSubscriptionId === next.stripeSubscriptionId && previous.status === 'past_due' && (next.status === 'active' || next.status === 'trialing');
 }
 
+/**
+ * Whether the bank asked the seller to confirm a failed invoice's payment, read from its PaymentIntent; null, with a
+ * warning, when Stripe can't say.
+ */
+async function bankWantsConfirmation(deps: BillingEventDeps, invoiceId: string): Promise<boolean | null> {
+	try {
+		const payments = (await deps.stripe.retrieveInvoice(invoiceId)).payments?.data ?? [];
+		const payment = payments.find((entry) => entry.status === 'open' && entry.payment.payment_intent) ?? payments.find((entry) => entry.payment.payment_intent);
+		const intentId = payment?.payment.payment_intent;
+		if (intentId) {
+			const intent = await deps.stripe.retrievePaymentIntent(intentId);
+			return intent.status === 'requires_action' || intent.last_payment_error?.code === 'authentication_required';
+		}
+		logger.warn('A failed invoice has no payment to read how it failed', { invoiceId });
+	} catch (error) {
+		logger.warn('Could not read how an invoice payment failed', { invoiceId, error });
+	}
+	return null;
+}
+
+/**
+ * Stripe sends payment_failed before payment_action_required, and both claim one notice, so a payment_failed notice is
+ * worded from the invoice's payment rather than the event; it is read only when the notice is about to go out. A
+ * payment_action_required is the bank's request itself, and a failed read keeps the event's wording.
+ */
+async function wordedByPayment(deps: BillingEventDeps, notices: readonly PlannedNotice[], input: SubscriptionTarget): Promise<PlannedNotice[]> {
+	const { invoice } = input;
+	if (input.eventType !== 'invoice.payment_failed' || invoice === null) return [...notices];
+	const worded: PlannedNotice[] = [];
+	for (const notice of notices) {
+		const { email } = notice;
+		if (email.kind !== 'payment_failed') {
+			worded.push(notice);
+			continue;
+		}
+		const needsConfirmation = await bankWantsConfirmation(deps, invoice.id);
+		worded.push(needsConfirmation === null ? notice : { ...notice, email: { ...email, needsConfirmation } });
+	}
+	return worded;
+}
+
 /** The pool the account's open period takes once `next` is written, as the next charged step would store it. */
 async function poolWith(deps: BillingEventDeps, userId: string, next: SubscriptionRecord, nowMs: number): Promise<BillingEventInput['pool']> {
 	const account = await deps.accountWith(userId, next, nowMs);
@@ -182,7 +223,11 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	}
 	const planned = replacing ? [] : noticesFor(previous, next, { eventType: input.eventType, invoice: input.invoice });
 	const alreadySent = await deps.store.sentNoticeKeys(userId, planned.map((notice) => notice.key));
-	const notices = planned.filter((notice) => !alreadySent.has(notice.key));
+	const notices = await wordedByPayment(
+		deps,
+		planned.filter((notice) => !alreadySent.has(notice.key)),
+		input,
+	);
 	const pool = poolMayChange(previous, next, input.eventType) ? await poolWith(deps, userId, next, now.getTime()) : null;
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
 	if (recorded === 'duplicate') return 'duplicate';

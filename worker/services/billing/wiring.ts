@@ -26,6 +26,8 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 			retrieveCheckoutSession: stripeNotConfigured,
 			setDefaultPaymentMethod: stripeNotConfigured,
 			updateSubscriptionMetadata: stripeNotConfigured,
+			retrieveInvoice: stripeNotConfigured,
+			retrievePaymentIntent: stripeNotConfigured,
 		},
 		store: new BillingService(env),
 		ledger: new CreditLedgerService(env),

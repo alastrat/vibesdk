@@ -92,7 +92,8 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 		notices.push({ key: `downgrade_scheduled:${next.stripeScheduleId}`, email: { kind: 'downgrade_scheduled', plan: next.pendingPlan, at: next.pendingPlanAt.getTime() } });
 	}
 	const graceEnd = graceEndsAt(next);
-	// Stripe sends payment_failed and payment_action_required for one failed invoice and they share this key, so whichever arrives first words the email.
+	// Stripe sends payment_failed and payment_action_required for one failed invoice and they share this key. The event words
+	// the email here; the webhook rewords a payment_failed one from the invoice's payment before it goes out.
 	if ((eventType === 'invoice.payment_failed' || eventType === 'invoice.payment_action_required') && invoice && graceEnd !== null) {
 		notices.push({
 			key: `payment_failed:${invoice.id}`,

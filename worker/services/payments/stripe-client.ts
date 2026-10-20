@@ -137,6 +137,9 @@ export interface StripeTransferSummary {
 
 export interface StripePaymentIntent {
 	id: string;
+	status?: 'requires_payment_method' | 'requires_confirmation' | 'requires_action' | 'processing' | 'requires_capture' | 'canceled' | 'succeeded';
+	/** Why the last confirmation failed; `code` is Stripe's error code, such as `card_declined` or `authentication_required`. */
+	last_payment_error?: { code?: string | null } | null;
 	/** What the Checkout session put on it; a store payment carries its kind and checkout id. */
 	metadata?: Record<string, string> | null;
 	/** Expanded on request: the charge, with the transfer that paid the seller and the balance transaction Stripe's fee is on. */
