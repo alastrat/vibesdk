@@ -83,11 +83,14 @@ describe('assertWithinLimit', () => {
 		expect(assertWithinLimit(pro, 'newStoresPerDay', 10)).toMatchObject({ upgradeTo: 'premium', message: "You've started 10 new stores today. Start more tomorrow, or move to Premium for up to 25 a day." });
 		expect(assertWithinLimit(pro, 'liveStores', 3)).toMatchObject({ upgradeTo: 'premium', message: 'Pro includes 3 live stores. Move to Premium for up to 10.' });
 		expect(assertWithinLimit(pro, 'supplierCatalog')).toBeNull();
+		expect(assertWithinLimit(pro, 'ownDomainsPerLiveStore', 0)).toBeNull();
+		expect(assertWithinLimit(pro, 'ownDomainsPerLiveStore', 1)).toMatchObject({ message: 'Your plan includes 1 own domain per live store. Talk to us to add more.' });
 		const premium = account({ plan: 'premium' });
 		expect(assertWithinLimit(premium, 'aiCredits', 100_000)).toMatchObject({ upgradeTo: 'credits', message: "You've used this month's AI credits. Buy more credits now, or wait until November 19." });
 		expect(assertWithinLimit(premium, 'newStoresPerDay', 25)).toMatchObject({ upgradeTo: 'enterprise', message: "You've started 25 new stores today. Start more tomorrow, or talk to us about Enterprise." });
 		expect(assertWithinLimit(premium, 'liveStores', 10)).toMatchObject({ upgradeTo: 'enterprise', message: 'Premium includes 10 live stores. Talk to us about Enterprise for more.' });
 		expect(assertWithinLimit(premium, 'extraCredits')).toBeNull();
+		expect(assertWithinLimit(premium, 'ownDomainsPerLiveStore', 1)).toMatchObject({ upgradeTo: 'enterprise', message: 'Your plan includes 1 own domain per live store. Talk to us to add more.' });
 		expect(assertWithinLimit(account({ plan: 'enterprise', adminLimits: { liveStores: 3 } }), 'liveStores', 3)).toMatchObject({ upgradeTo: null, message: 'Enterprise includes 3 live stores. Talk to us to raise it.' });
 		expect(assertWithinLimit(account({ plan: 'enterprise' }), 'aiCredits', 100_000)).toMatchObject({ upgradeTo: null, message: "You've used this month's AI credits. Talk to us about more, or wait until November 19." });
 	});

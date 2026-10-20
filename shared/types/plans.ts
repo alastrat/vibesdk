@@ -223,6 +223,13 @@ function storesLifetimeMessage(account: PlanAccount): string {
 	return `Your plan includes ${stores}. Talk to us to raise it.`;
 }
 
+/** With an allowance the refusal is for one more than it covers; with none, the plan lacks own domains. */
+function ownDomainsMessage(account: PlanAccount): string {
+	const allowed = account.limits.ownDomainsPerLiveStore;
+	if (allowed > 0) return `Your plan includes ${count(allowed, 'own domain')} per live store. Talk to us to add more.`;
+	return account.plan === 'basic' ? 'Own domains come with Pro and Premium.' : "Own domains aren't on your plan. Talk to us to add them.";
+}
+
 function messageFor(account: PlanAccount, key: PlanLimitKey, upgradeTo: PlanLimitRefusal['upgradeTo']): string {
 	switch (key) {
 		case 'aiCredits':
@@ -234,7 +241,7 @@ function messageFor(account: PlanAccount, key: PlanLimitKey, upgradeTo: PlanLimi
 		case 'liveStores':
 			return liveStoresMessage(account);
 		case 'ownDomainsPerLiveStore':
-			return account.plan === 'basic' ? 'Own domains come with Pro and Premium.' : "Own domains aren't on your plan. Talk to us to add them.";
+			return ownDomainsMessage(account);
 		case 'supplierCatalog':
 			return 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.';
 		case 'extraCredits':
