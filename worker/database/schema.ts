@@ -65,7 +65,7 @@ export const users = sqliteTable('users', {
     passwordChangedAt: integer('password_changed_at', { mode: 'timestamp' }),
     
     // User Preferences and Settings
-    preferences: text('preferences', { mode: 'json' }).default('{}'),
+    preferences: text('preferences', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
     theme: text('theme', { enum: ['light', 'dark', 'system'] }).default('system'),
     timezone: text('timezone').default('UTC'),
     // Whether the user's own Cloudflare AI Gateway should be used for inference.

@@ -10,6 +10,8 @@ import type { SellerLevel } from '../../../shared/types/seller-levels';
 const ID_CHUNK = 50;
 const OPT_OUT = sql`json_extract(${schema.users.preferences}, '$.analyticsOptOut')`;
 const OPT_OUT_SOURCE = sql`json_extract(${schema.users.preferences}, '$.analyticsOptOutSource')`;
+/** The stored preferences when they are a JSON object; a NULL, a JSON string or invalid JSON starts over from `{}`. */
+const PREFERENCES_OBJECT = sql`CASE WHEN json_valid(${schema.users.preferences}) AND json_type(${schema.users.preferences}) = 'object' THEN ${schema.users.preferences} ELSE '{}' END`;
 
 export class AnalyticsPersonService extends BaseService {
 	async optedOutAmong(userIds: readonly string[]): Promise<Set<string>> {
@@ -64,7 +66,7 @@ export class AnalyticsPersonService extends BaseService {
 		await this.database
 			.update(schema.users)
 			.set({
-				preferences: sql`json_set(coalesce(${schema.users.preferences}, '{}'), '$.analyticsOptOut', json(${optedOut ? 'true' : 'false'}), '$.analyticsOptOutSource', ${optedOut ? source : null})`,
+				preferences: sql`json_set(${PREFERENCES_OBJECT}, '$.analyticsOptOut', json(${optedOut ? 'true' : 'false'}), '$.analyticsOptOutSource', ${optedOut ? source : null})`,
 				updatedAt: now,
 			})
 			.where(eq(schema.users.id, userId))
