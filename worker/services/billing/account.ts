@@ -3,7 +3,7 @@
 import { BillingService, PlanAdminService, UserService } from '../../database';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/schema';
-import { LIVE_SUBSCRIPTION_STATUSES, type BillingSource } from '../../../shared/types/billing';
+import { LIVE_SUBSCRIPTION_STATUSES, type BillingSource, type SubscriptionStatus } from '../../../shared/types/billing';
 import { GRACE_PERIOD_DAYS, isPaidPlanId, limitsFor, planLimitOverridesFrom, type PlanAccount, type PlanId, type PlanLimitOverrides, type PlanLimits } from '../../../shared/types/plans';
 import type { CreditBalance, LedgerPeriod } from './credit-ledger';
 import { isBillingOn } from './flag';
@@ -34,9 +34,16 @@ export function graceEndsAt(subscription: SubscriptionRecord): number | null {
 	return subscription.status === 'past_due' ? subscription.currentPeriodStart.getTime() + GRACE_PERIOD_DAYS * DAY_MS : null;
 }
 
-/** The period of a renewal still unpaid, whose usage isn't settled from purchases while the hold lasts; else null. */
-export function heldPeriodKey(account: Pick<BillingAccount, 'period' | 'graceEndsAtMs'>): string | null {
-	return account.graceEndsAtMs !== null ? account.period.key : null;
+/** Renewals Stripe is still retrying (or gave up on without cancelling): their period's pool comes only if one is paid. */
+const UNPAID_RENEWAL_STATUSES: readonly SubscriptionStatus[] = ['past_due', 'unpaid'];
+
+/**
+ * The period of a renewal still unpaid, whose usage isn't settled from purchases while Stripe may still collect it, past
+ * the grace too: a late payment restores that period's pool, which then covers the usage. Else null.
+ */
+export function heldPeriodKey(account: Pick<BillingAccount, 'subscription'>): string | null {
+	const { subscription } = account;
+	return subscription !== null && UNPAID_RENEWAL_STATUSES.includes(subscription.status) ? subscriptionPeriod(subscription).key : null;
 }
 
 /** The subscription while it still holds a plan (a failing payment's included), else null. */

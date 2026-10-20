@@ -36,7 +36,7 @@ export interface BillingEventDeps {
 	nowMs(): number;
 }
 
-type EventAccount = Pick<BillingAccount, 'billing' | 'period' | 'limits' | 'graceEndsAtMs'>;
+type EventAccount = Pick<BillingAccount, 'billing' | 'period' | 'limits' | 'subscription'>;
 
 export interface SubscriptionTarget {
 	eventId: string;
