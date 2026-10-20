@@ -2,6 +2,7 @@
 
 import {
 	CHECKOUT_KIND_CREDITS,
+	renewalDisclosure,
 	subscribeButtonText,
 	subscriptionConsentText,
 	type CheckoutOrder,
@@ -72,12 +73,13 @@ export function creditsOrder(credits: number): CheckoutOrder {
 	return { kind: 'credits', credits, amountCents: extraCreditsPriceCents(credits) };
 }
 
-/** The consent sentence, button and first payment for a plan session, following its promotion code. Throws as `promotionTermsOf` does. */
+/** The consent sentence, button, small print and first payment for a plan session, following its promotion code. Throws as `promotionTermsOf` does. */
 export function termsViewOf(plan: PaidPlanId, session: StripeCheckoutSession): CheckoutTermsView {
 	const promotion = promotionTermsOf(session);
 	return {
 		consentText: subscriptionConsentText(plan, promotion),
 		buttonText: subscribeButtonText(plan, promotion),
 		dueTodayCents: promotion ? promotion.discountedCents : (session.amount_total ?? PLAN_PRICES_CENTS[plan]),
+		disclosure: renewalDisclosure(plan, promotion),
 	};
 }

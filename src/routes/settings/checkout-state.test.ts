@@ -146,7 +146,12 @@ const PLAN_START: CheckoutClientStart = {
 	publishableKey: 'pk_test_1',
 	sessionId: SESSION,
 	order: { kind: 'plan', plan: 'pro', priceCents: 4900, includes: ['5,000 AI credits a month'] },
-	terms: { consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.', buttonText: 'Subscribe: $49 a month', dueTodayCents: 4900 },
+	terms: {
+		consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.',
+		buttonText: 'Subscribe: $49 a month',
+		dueTodayCents: 4900,
+		disclosure: 'Pro renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
+	},
 };
 
 const CREDITS_START: CheckoutClientStart = {
@@ -157,7 +162,12 @@ const CREDITS_START: CheckoutClientStart = {
 	terms: null,
 };
 
-const DISCOUNTED_TERMS = { consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month, until I cancel.', buttonText: 'Subscribe: $24.50 today, then $49 a month', dueTodayCents: 2450 };
+const DISCOUNTED_TERMS = {
+	consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month, until I cancel.',
+	buttonText: 'Subscribe: $24.50 today, then $49 a month',
+	dueTodayCents: 2450,
+	disclosure: 'Pro costs $24.50 today, then renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
+};
 
 function run(initial: CheckoutState, ...events: CheckoutEvent[]): CheckoutState {
 	return events.reduce(checkoutReducer, initial);

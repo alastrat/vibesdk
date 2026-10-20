@@ -50,11 +50,6 @@ export const PLAN_LIMIT_ERROR_CODE = 'PLAN_LIMIT';
 /** SpaceDO's answer to a publish that adds catalog products for an account without the catalog. Mirrored in space/src/space/store-manifest.ts. */
 export const NEW_CATALOG_PRODUCTS_ERROR = 'This version adds catalog products, which need Pro or Premium.';
 
-/** Shown above the pay button of a subscription checkout; the Terms say the same. */
-export function renewalDisclosure(plan: PaidPlanId): string {
-	return `${planName(plan)} renews every month at ${formatUsd(PLAN_PRICES_CENTS[plan])} until you cancel. Cancel any time in Estori; it ends at the end of the period.`;
-}
-
 /** Shown above the pay button of an extra-credits checkout. */
 export const EXTRA_CREDITS_DISCLOSURE = 'Extra credits are used after your monthly credits and expire 12 months after purchase.';
 
@@ -75,23 +70,42 @@ export interface PromotionTerms {
 	discountedCents: number;
 }
 
-/** What the seller pays and when, such as "$24.50 today, then $49 a month". */
-export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms | null): string {
-	const price = `${formatUsd(PLAN_PRICES_CENTS[plan])} a month`;
-	if (!promotion) return price;
+/** What the promotion charges while it lasts, such as "$24.50 today" or "$24.50 a month for 3 months". */
+function discountedPhrase(promotion: PromotionTerms): string {
 	const discounted = formatUsd(promotion.discountedCents);
 	switch (promotion.duration) {
 		case 'once':
-			return `${discounted} today, then ${price}`;
+			return `${discounted} today`;
 		case 'repeating': {
 			// Stripe always sends a month count for a repeating coupon; consent text must never guess it.
 			if (promotion.durationInMonths === null) throw new Error('A repeating promotion needs a month count.');
 			const months = promotion.durationInMonths;
-			return `${discounted} a month for ${months} ${months === 1 ? 'month' : 'months'}, then ${price}`;
+			return `${discounted} a month for ${months} ${months === 1 ? 'month' : 'months'}`;
 		}
 		case 'forever':
 			return `${discounted} a month`;
 	}
+}
+
+/** What the seller pays and when, such as "$24.50 today, then $49 a month". */
+export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const price = `${formatUsd(PLAN_PRICES_CENTS[plan])} a month`;
+	if (!promotion) return price;
+	return promotion.duration === 'forever' ? discountedPhrase(promotion) : `${discountedPhrase(promotion)}, then ${price}`;
+}
+
+const CANCEL_NOTE = 'Cancel any time in Estori; it ends at the end of the period.';
+
+/**
+ * Shown above the pay button of a subscription checkout, from the same promotion as the consent; the Terms say the same.
+ * A forever code renews at the discounted price, and any other code states its price before the plain renewal.
+ */
+export function renewalDisclosure(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const name = planName(plan);
+	const renews = (cents: number) => `renews every month at ${formatUsd(cents)} until you cancel. ${CANCEL_NOTE}`;
+	if (!promotion) return `${name} ${renews(PLAN_PRICES_CENTS[plan])}`;
+	if (promotion.duration === 'forever') return `${name} ${renews(promotion.discountedCents)}`;
+	return `${name} costs ${discountedPhrase(promotion)}, then ${renews(PLAN_PRICES_CENTS[plan])}`;
 }
 
 /** The sentence the seller agrees to beside the Subscribe button; the page links "Terms" to /terms. */
@@ -111,11 +125,13 @@ export type CheckoutOrder =
 	| { kind: 'plan'; plan: PaidPlanId; priceCents: number; includes: string[] }
 	| { kind: 'credits'; credits: number; amountCents: number };
 
-/** The consent sentence and button the subscription checkout shows, and what the first payment is. */
+/** The consent sentence, button and small print the subscription checkout shows, and what the first payment is. */
 export interface CheckoutTermsView {
 	consentText: string;
 	buttonText: string;
 	dueTodayCents: number;
+	/** The renewal the small print by the button states, worded from the same promotion as the consent. */
+	disclosure: string;
 }
 
 /** POST answer that opens an embedded checkout; `terms` is null for credits, which have no renewal. */

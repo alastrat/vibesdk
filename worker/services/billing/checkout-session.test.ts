@@ -104,6 +104,7 @@ describe('the terms of a plan checkout', () => {
 			consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.',
 			buttonText: 'Subscribe: $49 a month',
 			dueTodayCents: 4_900,
+			disclosure: 'Pro renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 		});
 		expect(termsViewOf('premium', { ...SESSION, amount_total: null }).dueTodayCents).toBe(19_900);
 	});
@@ -113,6 +114,7 @@ describe('the terms of a plan checkout', () => {
 			consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month, until I cancel.',
 			buttonText: 'Subscribe: $24.50 today, then $49 a month',
 			dueTodayCents: 2_450,
+			disclosure: 'Pro costs $24.50 today, then renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 		});
 		const repeating = viaPromotionCode(coupon({ duration: 'repeating', duration_in_months: 3 }));
 		expect(termsViewOf('pro', repeating).buttonText).toBe('Subscribe: $24.50 a month for 3 months, then $49 a month');

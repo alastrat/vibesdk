@@ -43,6 +43,15 @@ describe("estori's own checkout page", () => {
 		}
 	});
 
+	it("shows the small print the server wrote for the session's terms, and the extra-credits note once, by the button", () => {
+		const page = source(PAGE);
+		expect(page).toContain('terms.view.disclosure');
+		expect(page).not.toContain('renewalDisclosure');
+		const order = page.slice(page.indexOf('function CreditsOrder('), page.indexOf('function ConsentText('));
+		expect(order).not.toContain('EXTRA_CREDITS_DISCLOSURE');
+		expect(page.split('{smallPrint}').length - 1).toBe(1);
+	});
+
 	it('shows the order from the server and the amount Stripe reports, so the page and the charge cannot disagree', () => {
 		const page = source(PAGE);
 		expect(page).toContain('state.order');

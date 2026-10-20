@@ -9,7 +9,6 @@ import {
 	formatCredits,
 	formatUsd,
 	planName,
-	renewalDisclosure,
 	type CheckoutOrder,
 } from '@/api-types';
 import { pageTitle } from '@/brand';
@@ -121,7 +120,6 @@ function CreditsOrder({
 				<p className="text-sm text-kumo-subtle">{formatCredits(credits)} credits</p>
 			</div>
 			<DueToday label={changing ? formatUsd(amountCents) : dueTodayLabel(dueToday, amountCents)} />
-			<p className="text-xs text-kumo-subtle">{EXTRA_CREDITS_DISCLOSURE}</p>
 		</div>
 	);
 }
@@ -168,6 +166,12 @@ function ConsentRow({ state, onToggle, onRetry }: { state: CheckoutState; onTogg
 	);
 }
 
+/** The small print by the button: what extra credits are, or the renewal the server worded with the plan's terms. */
+function smallPrintOf(request: CheckoutRequest, state: CheckoutState): string | null {
+	if (request.kind === 'credits') return EXTRA_CREDITS_DISCLOSURE;
+	return state.terms?.status === 'ready' ? state.terms.view.disclosure : null;
+}
+
 /** The pay button's words: the server's for a plan, and the amount for credits. */
 function payLabel(request: CheckoutRequest, state: CheckoutState, creditsCents: number): string {
 	if (request.kind === 'credits') return `Pay ${formatUsd(creditsCents)}`;
@@ -202,6 +206,7 @@ export default function BillingCheckoutPage() {
 	const changing = pendingCredits !== null;
 	const creditsCents = state.order?.kind === 'credits' && !changing ? state.order.amountCents : extraCreditsPriceCents(credits ?? 0);
 
+	const smallPrint = request && smallPrintOf(request, state);
 	// A stopped checkout carries its own way back, so the header's isn't repeated.
 	const stopped = request === null || state.phase.name === 'expired' || state.phase.name === 'refused';
 	let body: ReactNode;
@@ -252,7 +257,7 @@ export default function BillingCheckoutPage() {
 								</div>
 								{state.notice && <Banner variant="alert" icon={<WarningCircleIcon />} description={state.notice} />}
 								<ConsentRow state={state} onToggle={checkout.toggleConsent} onRetry={checkout.retryTerms} />
-								<p className="text-xs text-kumo-subtle">{state.order?.kind === 'plan' ? renewalDisclosure(state.order.plan) : EXTRA_CREDITS_DISCLOSURE}</p>
+								{smallPrint && <p className="text-xs text-kumo-subtle">{smallPrint}</p>}
 								<Button variant="primary" className="w-full justify-center" loading={state.paying} disabled={!canPayNow(state) || changing} onClick={() => void checkout.pay()}>
 									{payLabel(request, state, creditsCents)}
 								</Button>

@@ -68,6 +68,7 @@ function purchase(id: string): CreditPurchaseRecord {
 const SESSION: StripeCheckoutSession = { id: 'cs_1', url: null, client_secret: 'cs_1_secret_x', payment_status: 'unpaid', status: 'open', client_reference_id: 'u1', metadata: null, amount_total: null, currency: 'usd', payment_intent: null };
 
 const NO_CODE_CONSENT = 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.';
+const NO_CODE_DISCLOSURE = 'Pro renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.';
 
 /** A subscription checkout the seller has open, as Stripe returns it read back with its discounts. */
 const PLAN_SESSION: StripeCheckoutSession = {
@@ -469,7 +470,7 @@ describe('opening an embedded checkout', () => {
 					priceCents: 4_900,
 					includes: ['20,000 AI credits a month', 'Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog'],
 				},
-				terms: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900 },
+				terms: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900, disclosure: NO_CODE_DISCLOSURE },
 			},
 		});
 		expect(await startCheckout(deps, USER, 'premium')).toMatchObject({ ok: true, value: { order: { plan: 'premium', priceCents: 19_900 }, terms: { buttonText: 'Subscribe: $199 a month', dueTodayCents: 19_900 } } });
@@ -569,7 +570,7 @@ describe('starting again within a key bucket', () => {
 describe('the terms of an open checkout', () => {
 	it('answers the wording of the session as Stripe reads it back, asking for its discounts', async () => {
 		const plain = fake({ sessions: [PLAN_SESSION] });
-		expect(await checkoutTerms(plain.deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900 } });
+		expect(await checkoutTerms(plain.deps, 'u1', 'cs_plan')).toEqual({ ok: true, value: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900, disclosure: NO_CODE_DISCLOSURE } });
 		expect(plain.expands).toEqual([BILLING_CHECKOUT_EXPAND]);
 		const coded = fake({ sessions: [withCode({ duration: 'repeating', duration_in_months: 3 })] });
 		expect(await checkoutTerms(coded.deps, 'u1', 'cs_plan')).toEqual({
@@ -578,6 +579,7 @@ describe('the terms of an open checkout', () => {
 				consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 a month for 3 months, then $49 a month, until I cancel.',
 				buttonText: 'Subscribe: $24.50 a month for 3 months, then $49 a month',
 				dueTodayCents: 2_450,
+				disclosure: 'Pro costs $24.50 a month for 3 months, then renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 			},
 		});
 	});
