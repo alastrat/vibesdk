@@ -145,4 +145,25 @@ describe('plan overrides', () => {
 			{ user_id: 'u_admin', entity_type: 'billing_plan', action: 'plan_override' },
 		]);
 	});
+
+	it('reads the last override written when several share a second, as a scripted reset does, whichever way SQLite reads them', async () => {
+		const admin = new PlanAdminService(envWith(db));
+		const second = at('2026-10-21T00:00:00Z');
+		const write = (userId: string, plan: 'premium' | null, reason: string) => admin.addOverride({ userId, plan, limits: {}, until: null, adminUserId: 'u_admin', reason, now: second });
+		const scenario = async (userId: string) => {
+			await write(userId, 'premium', 'Comp for a partner');
+			await write(userId, null, 'Billing scenarios');
+			expect(await admin.latestOverride(userId)).toMatchObject({ plan: null, reason: 'Billing scenarios' });
+			await write(userId, 'premium', 'Comp again');
+			expect(await admin.latestOverride(userId)).toMatchObject({ plan: 'premium', reason: 'Comp again' });
+		};
+		await scenario('u_old');
+		// Without the index, the sort leaves rows of one second in the order it read them: the answer can't rest on the plan.
+		await db.exec('DROP INDEX plan_overrides_user_created_idx');
+		try {
+			await scenario('u_fresh');
+		} finally {
+			await db.exec('CREATE INDEX plan_overrides_user_created_idx ON plan_overrides (user_id, created_at)');
+		}
+	});
 });

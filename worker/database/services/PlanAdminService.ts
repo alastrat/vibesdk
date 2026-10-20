@@ -1,6 +1,6 @@
 /** D1 for admin plan overrides: each decision is a row, written with an audit entry naming the admin. */
 
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { generateId } from '../../utils/idGenerator';
@@ -18,13 +18,13 @@ export interface PlanOverrideInput {
 }
 
 export class PlanAdminService extends BaseService {
-    /** The newest override row, which rules even when it ends the override (plan null). */
+    /** The newest override row, which rules even when it ends the override (plan null); of rows written in one second, the last. */
     async latestOverride(userId: string): Promise<schema.PlanOverrideRecord | null> {
         const [latest] = await this.database
             .select()
             .from(schema.planOverrides)
             .where(eq(schema.planOverrides.userId, userId))
-            .orderBy(desc(schema.planOverrides.createdAt))
+            .orderBy(desc(schema.planOverrides.createdAt), desc(sql`rowid`))
             .limit(1);
         return latest ?? null;
     }
