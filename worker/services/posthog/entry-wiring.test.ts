@@ -41,4 +41,9 @@ describe('the Worker entry and the request scope', () => {
 		expect(fetchHandler).toContain("logger.error('Unhandled request error'");
 		expect(fetchHandler).toContain('throw error;');
 	});
+
+	it("registers PostHog's error reporter with the logger, which can't import it", () => {
+		expect(index).toContain('setErrorReporter(reportServerError);');
+		expect(index).toContain("from './services/posthog/server-errors'");
+	});
 });

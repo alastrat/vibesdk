@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { reportServerError } = vi.hoisted(() => ({ reportServerError: vi.fn() }));
-vi.mock('../services/posthog/server-errors', () => ({ reportServerError }));
+import { createLogger, setErrorReporter } from './core';
 
-const { createLogger } = await import('./core');
+/** The frontend's type check reaches the logger, so it must import nothing that only the Worker can resolve. */
+const sources = import.meta.glob<string>(['/worker/logger/core.ts'], { query: '?raw', import: 'default', eager: true });
 
-describe('the logger and PostHog', () => {
+const reportServerError = vi.fn();
+setErrorReporter(reportServerError);
+
+describe('the logger and its error reporter', () => {
 	beforeEach(() => {
 		reportServerError.mockClear();
 		for (const method of ['log', 'warn', 'error'] as const) vi.spyOn(console, method).mockImplementation(() => undefined);
@@ -30,6 +33,19 @@ describe('the logger and PostHog', () => {
 	it('reports an error logged without one', () => {
 		createLogger('StripeWebhook').error('Stripe webhook rejected: STRIPE_WEBHOOK_SECRET is not set');
 		expect(reportServerError).toHaveBeenCalledWith({ component: 'StripeWebhook', message: 'Stripe webhook rejected: STRIPE_WEBHOOK_SECRET is not set', error: undefined });
+	});
+
+	it('logs an error without a reporter registered', async () => {
+		vi.resetModules();
+		const fresh = await import('./core');
+		expect(() => fresh.createLogger('Alone').error('nobody listening', new Error('kaput'))).not.toThrow();
+		expect(reportServerError).not.toHaveBeenCalled();
+	});
+
+	it('imports nothing Worker-only, so the frontend can type-check it', () => {
+		const text = sources['/worker/logger/core.ts'] ?? '';
+		expect(text).not.toBe('');
+		expect(text).not.toMatch(/from '[^']*(services|cloudflare:)/);
 	});
 
 	it('reports nothing for warnings and info', () => {

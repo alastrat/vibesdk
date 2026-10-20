@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SecurityError, SecurityErrorType, UsageLimitExceededError } from 'shared/types/errors';
+import { setErrorReporter } from '../logger';
+import { ControllerErrorHandler, ErrorFactory, ErrorHandler } from './ErrorHandling';
 
-const { reportServerError } = vi.hoisted(() => ({ reportServerError: vi.fn() }));
-vi.mock('../services/posthog/server-errors', () => ({ reportServerError }));
-
-const { ControllerErrorHandler, ErrorFactory, ErrorHandler } = await import('./ErrorHandling');
+const reportServerError = vi.fn();
+setErrorReporter(reportServerError);
 
 describe('what the error handler logs', () => {
 	let consoleWarn: ReturnType<typeof vi.spyOn>;

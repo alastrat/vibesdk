@@ -2,20 +2,18 @@
  * Worker errors to PostHog as `$exception` events. The logger's error path and unhandled API errors report here.
  * A repeated error goes once a minute, and at most 30 go a minute per isolate, so a loop can't flood PostHog. Email
  * addresses are removed, and the logger's structured data is never sent. It reads its key from the Worker's env, so
- * Durable Objects report too. Never imports the logger, which imports this.
+ * Durable Objects report too. The logger reaches it through the hook worker/index.ts registers, and this never imports
+ * the logger: it would report its own failures to itself.
  */
 
 import { env } from 'cloudflare:workers';
 import { SYSTEM_DISTINCT_ID } from '../../../shared/types/analytics-events';
+import type { ServerErrorInput } from '../../../shared/types/server-errors';
 import { PostHogClient, type CaptureInput, type EventValue } from './client';
 import { posthogConfig } from './config';
 import { keepAlive } from './request-scope';
 
-export interface ServerErrorInput {
-	component: string;
-	message: string;
-	error?: Error;
-}
+export type { ServerErrorInput };
 
 /** A type, not an interface, so frames fit the event's JSON properties. */
 export type ExceptionFrame = {

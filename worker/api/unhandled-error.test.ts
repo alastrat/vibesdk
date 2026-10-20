@@ -2,13 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { RateLimitExceededError, SecurityError, SecurityErrorType } from 'shared/types/errors';
+import { setErrorReporter } from '../logger';
 import { RateLimitType } from '../services/rate-limit/config';
 import type { AppEnv } from '../types/appenv';
+import { unhandledApiError } from './unhandled-error';
 
-const { reportServerError } = vi.hoisted(() => ({ reportServerError: vi.fn() }));
-vi.mock('../services/posthog/server-errors', () => ({ reportServerError }));
-
-const { unhandledApiError } = await import('./unhandled-error');
+const reportServerError = vi.fn();
+setErrorReporter(reportServerError);
 
 function app() {
 	const routes = new Hono<AppEnv>();

@@ -1,4 +1,4 @@
-import { createLogger } from './logger';
+import { createLogger, setErrorReporter } from './logger';
 import { isDispatcherAvailable } from './utils/dispatcherUtils';
 import { createApp } from './app';
 // import * as Sentry from '@sentry/cloudflare';
@@ -26,6 +26,7 @@ import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
 import { runBillingSchedule } from './services/billing/wiring';
 import { stagingGate } from './services/staging-gate';
 import { runInRequestScope } from './services/posthog/request-scope';
+import { reportServerError } from './services/posthog/server-errors';
 import { isIngestPath, proxyPostHog } from './services/posthog/proxy';
 import {
 	buildOwnerPreviewCookie,
@@ -51,6 +52,9 @@ export { ThinkAgent } from './agents/think/ThinkAgent';
 // export const CodeGeneratorAgent = Sentry.instrumentDurableObjectWithSentry(sentryOptions, CodeGeneratorAgent);
 // export const DORateLimitStore = Sentry.instrumentDurableObjectWithSentry(sentryOptions, BaseDORateLimitStore);
 export const DORateLimitStore = BaseDORateLimitStore;
+
+// Every logged error is also reported to PostHog; Durable Objects share this bundle, so they report too.
+setErrorReporter(reportServerError);
 
 // Logger for the main application and handlers
 const logger = createLogger('App');
