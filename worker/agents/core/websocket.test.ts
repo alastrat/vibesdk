@@ -170,6 +170,14 @@ describe('while AI builds are paused', () => {
 		expect(sent).toEqual([NOTICE]);
 	});
 
+	it.each(['generate_all', 'resume_generation'])('sends no notice for %s while a build is already running, and starts no second one', async (type) => {
+		const generateAllFiles = vi.fn(async () => undefined);
+		const { agent, connection, sent } = fakes({ generateAllFiles, isCodeGenerating: () => true }, [], 'think', PAUSED);
+		await handleWebSocketMessage(agent, connection, JSON.stringify({ type }), allowAll);
+		expect(generateAllFiles).not.toHaveBeenCalled();
+		expect(sent).toEqual([]);
+	});
+
 	it('lets a new message through once the pause is off', async () => {
 		const { agent, connection, sent, calls } = fakes({}, [], 'think', { FEATURE_FLAG_OVERRIDES: 'ai-builds-paused=off' });
 		await handleWebSocketMessage(agent, connection, suggestion, allowAll);

@@ -52,7 +52,7 @@ export async function handleWebSocketMessage(
                 break;
             }
             case WebSocketMessageRequests.GENERATE_ALL:
-                if (await refuseWhileBuildsPaused(agent, connection)) return;
+                if (await refuseBuildStartWhilePaused(agent, connection)) return;
                 // Set shouldBeGenerating flag to indicate persistent intent
                 agent.setState({ 
                     ...agent.state, 
@@ -198,7 +198,7 @@ export async function handleWebSocketMessage(
                 break;
             }
             case WebSocketMessageRequests.RESUME_GENERATION:
-                if (await refuseWhileBuildsPaused(agent, connection)) return;
+                if (await refuseBuildStartWhilePaused(agent, connection)) return;
                 // Set shouldBeGenerating and restart generation
                 logger.info('Resuming code generation');
                 agent.setState({ 
@@ -343,6 +343,15 @@ async function refuseWhileBuildsPaused(agent: CodeGeneratorAgent, connection: Co
     if (!(await isFlagOn(agent.env, 'ai-builds-paused', agent.state.metadata.userId ?? null))) return false;
     sendToConnection(connection, WebSocketMessageResponses.ERROR, { error: AI_BUILDS_PAUSED_MESSAGE, code: AI_BUILDS_PAUSED_CODE, showAsPopup: true });
     return true;
+}
+
+/**
+ * Refuses starting a build while builds are paused. A build that is already running isn't refused: a reload re-joins
+ * it by sending `generate_all`, and a refusal would show the pause notice over work that carries on.
+ */
+async function refuseBuildStartWhilePaused(agent: CodeGeneratorAgent, connection: Connection): Promise<boolean> {
+    if (agent.getBehavior().isCodeGenerating()) return false;
+    return refuseWhileBuildsPaused(agent, connection);
 }
 
 /**
