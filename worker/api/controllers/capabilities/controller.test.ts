@@ -58,7 +58,7 @@ describe('CapabilitiesController.getCapabilities', () => {
 			'anthropic/claude-sonnet-5-5',
 			'anthropic/claude-opus-5-5',
 		]);
-		expect(capabilities.thinkModels[3]).toEqual({ id: 'anthropic/claude-opus-5-5', label: 'Claude Opus 5.5', provider: 'anthropic', creditCost: 16 });
+		expect(capabilities.thinkModels[3]).toEqual({ id: 'anthropic/claude-opus-5-5', label: 'Claude Opus 5.5', provider: 'anthropic', creditsPerStep: 445 });
 		expect(capabilities.defaultThinkModel).toBe('anthropic/claude-sonnet-5-5');
 	});
 });

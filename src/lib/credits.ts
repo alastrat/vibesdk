@@ -1,10 +1,11 @@
+import { EXTRA_CREDITS, PLAN_LIMITS } from '@/api-types';
 import type { CapabilityId } from './capabilities';
-import { premiumTierFor, type PremiumTier } from './plans';
 
 /**
- * Credits pay for the AI's work. The builder charges each AI step at the chosen model's rate (the `creditCost` the
- * platform publishes with its models), so building and changing a store are priced as typical steps times that rate.
- * The coming-soon actions have a fixed estimate. All are estimates: bigger stores and longer requests take more steps.
+ * Credits pay for the AI's work. The builder charges each AI step from its real cost, and the steps here are priced at
+ * each model's typical credits per step (the `creditsPerStep` the platform publishes with its models), so building and
+ * changing a store are typical steps times that. The coming-soon actions have a fixed estimate. All are estimates:
+ * bigger stores and longer requests take more steps.
  */
 export type UsageCategory = 'build' | 'change' | 'assistant' | 'personalization';
 
@@ -13,7 +14,7 @@ export interface CreditAction {
 	name: string;
 	description: string;
 	unit: string;
-	/** Typical AI steps for one unit, charged at the model's rate. */
+	/** Typical AI steps for one unit, at the model's typical credits per step. */
 	steps?: number;
 	/** Typical credits for one unit, whatever the model. */
 	credits?: number;
@@ -42,10 +43,10 @@ export const CREDIT_ACTIONS: readonly CreditAction[] = [
 	},
 ];
 
-/** The free daily allowance becomes a month of credits with this many days. */
+/** With billing off, the free daily allowance becomes a month of credits with this many days. */
 export const DAYS_PER_MONTH = 30;
 
-/** Typical credits for one unit of an action at a model's rate per step. */
+/** Typical credits for one unit of an action at a model's typical credits per step. */
 export function actionCredits(action: CreditAction, creditsPerStep: number): number {
 	return action.steps !== undefined ? action.steps * creditsPerStep : (action.credits ?? 0);
 }
@@ -58,7 +59,7 @@ export function actionCreditsRange(action: CreditAction, rates: readonly number[
 
 /** What a visitor tells the calculator about a typical month. */
 export interface Usage {
-	/** The chosen model's credits per AI step. */
+	/** The chosen model's typical credits per AI step. */
 	creditsPerStep: number;
 	stores: number;
 	categories: Readonly<Record<UsageCategory, boolean>>;
@@ -109,14 +110,21 @@ export function typicalUsage(stores: number, creditsPerStep: number): Usage {
 	};
 }
 
-export type Recommendation = { plan: 'basic' } | { plan: 'premium'; tier: PremiumTier } | { plan: 'enterprise' };
+export type Recommendation = { plan: 'basic' } | { plan: 'pro' } | { plan: 'premium'; extraCredits: number } | { plan: 'enterprise' };
+
+/** Above this many credits a month, Premium with extra credits gives way to Enterprise. */
+export const ENTERPRISE_FROM_CREDITS = 500_000;
 
 /**
- * Basic while its free allowance covers the month, else the smallest Premium pool, else Enterprise. With the allowance
- * unknown (null), only a month that needs no credits is Basic.
+ * The smallest plan whose monthly credits cover `credits`: Basic, Pro, then Premium, which adds extra credits (in
+ * thousands, at least the minimum) for the shortfall up to `ENTERPRISE_FROM_CREDITS`, then Enterprise. `basicCredits` is
+ * Basic's monthly credits; with billing off it is today's daily allowance over a month.
  */
-export function recommendPlan(credits: number, freeMonthlyCredits: number | null): Recommendation {
-	if (credits <= 0 || (freeMonthlyCredits !== null && credits <= freeMonthlyCredits)) return { plan: 'basic' };
-	const tier = premiumTierFor(credits);
-	return tier ? { plan: 'premium', tier } : { plan: 'enterprise' };
+export function recommendPlan(credits: number, basicCredits: number = PLAN_LIMITS.basic.aiCredits): Recommendation {
+	if (credits <= basicCredits) return { plan: 'basic' };
+	if (credits <= PLAN_LIMITS.pro.aiCredits) return { plan: 'pro' };
+	if (credits <= PLAN_LIMITS.premium.aiCredits) return { plan: 'premium', extraCredits: 0 };
+	if (credits > ENTERPRISE_FROM_CREDITS) return { plan: 'enterprise' };
+	const shortfall = Math.ceil((credits - PLAN_LIMITS.premium.aiCredits) / EXTRA_CREDITS.creditsPerUnit) * EXTRA_CREDITS.creditsPerUnit;
+	return { plan: 'premium', extraCredits: Math.max(EXTRA_CREDITS.minCredits, shortfall) };
 }

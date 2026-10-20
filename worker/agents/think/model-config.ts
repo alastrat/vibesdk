@@ -2,29 +2,58 @@ import { ModelSize, type AIModelConfig } from '../inferutils/config.types';
 import type { ThinkModelOption } from '../core/features/types';
 import type { ProviderFailure, ProviderFailureReason } from './model-transport';
 
+/** Prices in US dollars per 1M tokens. */
+export interface TokenPrices {
+	inputUsd: number;
+	outputUsd: number;
+	cacheReadUsd: number;
+	cacheWriteUsd: number;
+}
+
 /** A model users can pick to build a think app. Ids are AI Gateway `provider/model` slugs. */
 export interface ThinkModel {
 	id: string;
 	config: AIModelConfig;
+	prices: TokenPrices;
+	/** Typical credits per step, from measured usage; each step is charged from its real cost. */
+	creditsPerStep: number;
+	/** The day to re-check `prices` (a promotional price ends), or null when they have no end date. */
+	pricesReviewBy: string | null;
 }
 
-// Credits: $0.25 per 1M input tokens = 1 credit. Gemini Flash input is $0.75 through 2026-12-31.
+/**
+ * List prices per 1M tokens, from 589 AI Gateway log rows (2026-10-19). Cache reads cost 10% of input on Anthropic and
+ * 25% on Gemini; Anthropic cache writes cost 125%. Gemini Flash input is promotional through 2026-12-31: review its
+ * prices then. `config.creditCost` is the older flat cost per call, which billing-off metering still uses.
+ */
 export const THINK_MODELS: readonly ThinkModel[] = [
 	{
 		id: 'google-ai-studio/gemini-3.6-flash',
 		config: { name: 'Gemini 3.6 Flash', size: ModelSize.REGULAR, provider: 'google-ai-studio', creditCost: 3, contextSize: 1_048_576 },
+		prices: { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 },
+		creditsPerStep: 16,
+		pricesReviewBy: '2026-12-31',
 	},
 	{
 		id: 'google-ai-studio/gemini-3.8-flash',
 		config: { name: 'Gemini 3.8 Flash', size: ModelSize.REGULAR, provider: 'google-ai-studio', creditCost: 3, contextSize: 1_048_576 },
+		prices: { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 },
+		creditsPerStep: 16,
+		pricesReviewBy: '2026-12-31',
 	},
 	{
 		id: 'anthropic/claude-sonnet-5-5',
 		config: { name: 'Claude Sonnet 5.5', size: ModelSize.LARGE, provider: 'anthropic', creditCost: 8, contextSize: 1_000_000 },
+		prices: { inputUsd: 2, outputUsd: 10, cacheReadUsd: 0.2, cacheWriteUsd: 2.5 },
+		creditsPerStep: 136,
+		pricesReviewBy: null,
 	},
 	{
 		id: 'anthropic/claude-opus-5-5',
 		config: { name: 'Claude Opus 5.5', size: ModelSize.LARGE, provider: 'anthropic', creditCost: 16, contextSize: 1_000_000 },
+		prices: { inputUsd: 4, outputUsd: 20, cacheReadUsd: 0.4, cacheWriteUsd: 5 },
+		creditsPerStep: 445,
+		pricesReviewBy: null,
 	},
 ];
 
@@ -54,7 +83,7 @@ export function thinkModelOptions(): ThinkModelOption[] {
 		id: model.id,
 		label: model.config.name,
 		provider: model.config.provider,
-		creditCost: model.config.creditCost,
+		creditsPerStep: model.creditsPerStep,
 	}));
 }
 

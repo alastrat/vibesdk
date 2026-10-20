@@ -60,8 +60,21 @@ describe('think model catalog', () => {
 			id: 'anthropic/claude-sonnet-5-5',
 			label: 'Claude Sonnet 5.5',
 			provider: 'anthropic',
-			creditCost: 8,
+			creditsPerStep: 136,
 		});
+	});
+
+	it('pins each model to its list prices per 1M tokens and its typical credits per step', () => {
+		expect(THINK_MODELS.map((model) => [model.id, model.prices, model.creditsPerStep, model.pricesReviewBy])).toEqual([
+			['google-ai-studio/gemini-3.6-flash', { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 }, 16, '2026-12-31'],
+			['google-ai-studio/gemini-3.8-flash', { inputUsd: 0.75, outputUsd: 3.75, cacheReadUsd: 0.1875, cacheWriteUsd: 0.75 }, 16, '2026-12-31'],
+			['anthropic/claude-sonnet-5-5', { inputUsd: 2, outputUsd: 10, cacheReadUsd: 0.2, cacheWriteUsd: 2.5 }, 136, null],
+			['anthropic/claude-opus-5-5', { inputUsd: 4, outputUsd: 20, cacheReadUsd: 0.4, cacheWriteUsd: 5 }, 445, null],
+		]);
+	});
+
+	it('publishes the typical credits per step to the pricing page and the model picker', () => {
+		expect(thinkModelOptions().map((option) => [option.id, option.creditsPerStep])).toEqual(THINK_MODELS.map((model) => [model.id, model.creditsPerStep]));
 	});
 });
 

@@ -5,6 +5,7 @@ import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
 import { useModelRates } from '@/hooks/use-model-rates';
 import { usePublicPlan } from '@/hooks/use-public-plan';
+import { PLAN_LIMITS, PLAN_PRICES_CENTS, extraCreditsPriceCents } from '@/api-types';
 import { contactPath } from '@/lib/contact';
 import {
 	CREDIT_ACTIONS,
@@ -84,8 +85,23 @@ function CategoryCard({
 /** The plan's monthly price as one short figure. */
 function planPrice(recommendation: Recommendation): string {
 	if (recommendation.plan === 'basic') return '$0';
-	if (recommendation.plan === 'premium') return formatUsd(recommendation.tier.priceCents);
+	if (recommendation.plan === 'pro') return formatUsd(PLAN_PRICES_CENTS.pro);
+	if (recommendation.plan === 'premium') return formatUsd(PLAN_PRICES_CENTS.premium);
 	return 'Custom';
+}
+
+/** The credits a month the recommended plan covers, extra credits included; Enterprise covers whatever is needed. */
+function includedCredits(recommendation: Recommendation, basicCredits: number, needed: number): number {
+	switch (recommendation.plan) {
+		case 'basic':
+			return basicCredits;
+		case 'pro':
+			return PLAN_LIMITS.pro.aiCredits;
+		case 'premium':
+			return PLAN_LIMITS.premium.aiCredits + recommendation.extraCredits;
+		case 'enterprise':
+			return needed;
+	}
 }
 
 /**
@@ -100,11 +116,12 @@ export function Calculator() {
 	const recommendationRef = useRef<HTMLElement>(null);
 
 	const model = models.find((entry) => entry.id === modelId) ?? defaultModel;
-	const usage: Usage = { ...amounts, creditsPerStep: model?.creditCost ?? 0 };
+	const usage: Usage = { ...amounts, creditsPerStep: model?.creditsPerStep ?? 0 };
 	const freeMonthly = plan.data?.aiCreditsPerDay != null ? plan.data.aiCreditsPerDay * DAYS_PER_MONTH : null;
+	const basicCredits = freeMonthly ?? PLAN_LIMITS.basic.aiCredits;
 	const needed = monthlyCredits(usage);
-	const recommendation = recommendPlan(needed, freeMonthly);
-	const included = recommendation.plan === 'basic' ? (freeMonthly ?? 0) : recommendation.plan === 'premium' ? recommendation.tier.credits : needed;
+	const recommendation = recommendPlan(needed, basicCredits);
+	const included = includedCredits(recommendation, basicCredits, needed);
 	const fill = included > 0 ? Math.min(1, needed / included) : 0;
 	const recommendedName = planById(recommendation.plan).name;
 	// Until the live rates and the free allowance arrive, any recommendation would be a guess.
@@ -163,7 +180,7 @@ export function Calculator() {
 											{entry.label}
 											{entry.id === defaultModel?.id && <span className="ml-2 text-[12px] text-public-muted">Default</span>}
 										</span>
-										<span className="block text-[13px] text-public-muted">{entry.creditCost} credits per AI step</span>
+										<span className="block text-[13px] text-public-muted">about {entry.creditsPerStep} credits per step</span>
 									</span>
 								</label>
 							))}
@@ -302,16 +319,23 @@ export function Calculator() {
 								<div className="flex items-baseline justify-between gap-3">
 									<span className="text-public-ink">
 										{recommendation.plan === 'basic' && 'Basic, the free daily allowance'}
-										{recommendation.plan === 'premium' && `Premium, ${formatCredits(recommendation.tier.credits)} credits a month`}
+										{recommendation.plan === 'pro' && `Pro, ${formatCredits(PLAN_LIMITS.pro.aiCredits)} credits a month`}
+										{recommendation.plan === 'premium' && `Premium, ${formatCredits(PLAN_LIMITS.premium.aiCredits)} credits a month`}
 										{recommendation.plan === 'enterprise' && 'Enterprise, credits and terms for your volume'}
 									</span>
 									<span className="shrink-0 text-public-ink">{planPrice(recommendation)}</span>
 								</div>
+								{recommendation.plan === 'premium' && recommendation.extraCredits > 0 && (
+									<div className="flex items-baseline justify-between gap-3">
+										<span className="text-public-ink">Plus {formatCredits(recommendation.extraCredits)} extra credits</span>
+										<span className="shrink-0 text-public-ink">{formatUsd(extraCreditsPriceCents(recommendation.extraCredits))}</span>
+									</div>
+								)}
 								<div className="flex items-baseline justify-between gap-3 border-t border-public-line pt-3">
 									<span className="text-public-ink">Total</span>
 									<span className="text-2xl font-light text-public-ink">
 										{recommendation.plan === 'basic' && '$0 a month'}
-										{recommendation.plan === 'premium' && `${formatUsd(recommendation.tier.priceCents)} a month`}
+										{(recommendation.plan === 'pro' || recommendation.plan === 'premium') && `${planPrice(recommendation)} a month`}
 										{recommendation.plan === 'enterprise' && "Let's talk"}
 									</span>
 								</div>
@@ -319,12 +343,12 @@ export function Calculator() {
 									{recommendation.plan === 'basic' && (
 										<StartBuildingButton variant="blue" />
 									)}
-									{recommendation.plan === 'premium' && (
+									{(recommendation.plan === 'pro' || recommendation.plan === 'premium') && (
 										<>
-											<PillLink to={contactPath('premium', recommendation.tier.credits)} variant="charcoal">
-												Get Premium
+											<PillLink to={contactPath('premium')} variant="charcoal">
+												Get {recommendedName}
 											</PillLink>
-											<p className="text-center text-xs text-public-muted">Premium is coming soon. We'll set you up as it opens.</p>
+											<p className="text-center text-xs text-public-muted">{recommendedName} is coming soon. We'll set you up as it opens.</p>
 										</>
 									)}
 									<PillLink to={contactPath('enterprise')} variant={recommendation.plan === 'enterprise' ? 'charcoal' : 'outline-on-light'}>

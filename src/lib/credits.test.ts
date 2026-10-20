@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { CAPABILITIES } from './capabilities';
 import {
 	CREDIT_ACTIONS,
-	DAYS_PER_MONTH,
 	actionById,
 	actionCredits,
 	actionCreditsRange,
@@ -12,10 +11,9 @@ import {
 	typicalUsage,
 	type Usage,
 } from './credits';
-import { PREMIUM_TIERS } from './plans';
 
-/** Claude Sonnet 5.5's rate, the builder's default today. */
-const DEFAULT_RATE = 8;
+/** Claude Sonnet 5.5's typical credits per step, the builder's default. */
+const DEFAULT_RATE = 136;
 
 const USAGE: Usage = {
 	creditsPerStep: DEFAULT_RATE,
@@ -37,8 +35,8 @@ describe('credits', () => {
 	it('prices building and changing by AI steps at the model rate, and the coming-soon actions at a fixed cost', () => {
 		expect(CREDIT_ACTIONS.map((entry) => entry.id)).toEqual(['build', 'change', 'assistant', 'personalization']);
 		expect(actionCredits(action('build'), DEFAULT_RATE)).toBe(action('build').steps! * DEFAULT_RATE);
-		expect(actionCredits(action('change'), 3)).toBe(action('change').steps! * 3);
-		expect(actionCredits(action('assistant'), DEFAULT_RATE)).toBe(actionCredits(action('assistant'), 16));
+		expect(actionCredits(action('change'), 16)).toBe(action('change').steps! * 16);
+		expect(actionCredits(action('assistant'), DEFAULT_RATE)).toBe(actionCredits(action('assistant'), 445));
 		for (const entry of CREDIT_ACTIONS) {
 			expect(actionCredits(entry, DEFAULT_RATE), entry.id).toBeGreaterThan(0);
 			if (entry.capability) expect(CAPABILITIES[entry.capability].status, entry.id).not.toBe('available');
@@ -46,8 +44,8 @@ describe('credits', () => {
 	});
 
 	it('gives the range across the models a visitor can pick', () => {
-		expect(actionCreditsRange(action('build'), [3, 8, 16])).toEqual({ min: action('build').steps! * 3, max: action('build').steps! * 16 });
-		expect(actionCreditsRange(action('assistant'), [3, 8, 16])).toEqual({ min: action('assistant').credits!, max: action('assistant').credits! });
+		expect(actionCreditsRange(action('build'), [16, 136, 445])).toEqual({ min: action('build').steps! * 16, max: action('build').steps! * 445 });
+		expect(actionCreditsRange(action('assistant'), [16, 136, 445])).toEqual({ min: action('assistant').credits!, max: action('assistant').credits! });
 	});
 
 	it('works out each category from its own inputs', () => {
@@ -64,7 +62,7 @@ describe('credits', () => {
 	});
 
 	it('costs less with a lighter model', () => {
-		expect(monthlyCredits({ ...USAGE, creditsPerStep: 3 })).toBeLessThan(monthlyCredits(USAGE));
+		expect(monthlyCredits({ ...USAGE, creditsPerStep: 16 })).toBeLessThan(monthlyCredits(USAGE));
 	});
 
 	it('suggests typical amounts that grow with the number of stores', () => {
@@ -73,29 +71,23 @@ describe('credits', () => {
 		expect(typicalUsage(0, DEFAULT_RATE).stores).toBe(1);
 	});
 
-	it('recommends Basic while the free daily allowance covers the month', () => {
-		const free = 200 * DAYS_PER_MONTH;
-		expect(recommendPlan(free, free)).toEqual({ plan: 'basic' });
-		expect(recommendPlan(0, free)).toEqual({ plan: 'basic' });
-	});
-
-	it('recommends the smallest Premium pool past the free allowance, and Enterprise past the largest', () => {
-		const free = 200 * DAYS_PER_MONTH;
-		expect(recommendPlan(free + 1, free)).toEqual({ plan: 'premium', tier: PREMIUM_TIERS[0] });
-		expect(recommendPlan(PREMIUM_TIERS[1].credits, free)).toEqual({ plan: 'premium', tier: PREMIUM_TIERS[1] });
-		expect(recommendPlan(PREMIUM_TIERS[PREMIUM_TIERS.length - 1].credits + 1, free)).toEqual({ plan: 'enterprise' });
-	});
-
-	it('recommends Basic when nothing needs credits, even before the free allowance is known', () => {
-		expect(recommendPlan(0, null)).toEqual({ plan: 'basic' });
-		expect(recommendPlan(0, 200 * DAYS_PER_MONTH)).toEqual({ plan: 'basic' });
+	it('recommends the smallest plan whose monthly credits cover the need, then Premium with extra credits, then Enterprise', () => {
+		expect(recommendPlan(0)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(5_000)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(5_001)).toEqual({ plan: 'pro' });
+		expect(recommendPlan(20_000)).toEqual({ plan: 'pro' });
+		expect(recommendPlan(100_000)).toEqual({ plan: 'premium', extraCredits: 0 });
+		// Extra credits come in thousands, at least 5,000.
+		expect(recommendPlan(101_200)).toEqual({ plan: 'premium', extraCredits: 5_000 });
+		expect(recommendPlan(112_300)).toEqual({ plan: 'premium', extraCredits: 13_000 });
+		expect(recommendPlan(500_000)).toEqual({ plan: 'premium', extraCredits: 400_000 });
+		expect(recommendPlan(500_001)).toEqual({ plan: 'enterprise' });
+		// With billing off, Basic is today's daily allowance over a month.
+		expect(recommendPlan(5_500, 6_000)).toEqual({ plan: 'basic' });
+		expect(recommendPlan(6_001, 6_000)).toEqual({ plan: 'pro' });
 	});
 
 	it('looks an action up by its category', () => {
 		expect(actionById('change')).toBe(CREDIT_ACTIONS.find((action) => action.id === 'change'));
-	});
-
-	it("doesn't recommend Basic when the free allowance isn't known", () => {
-		expect(recommendPlan(10, null)).toEqual({ plan: 'premium', tier: PREMIUM_TIERS[0] });
 	});
 });
