@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BILLING_CHECKOUT_EXPAND, StripeApiError, type StripeCheckoutSession, type StripeCoupon, type StripeInvoice, type StripeSubscription } from '../payments/stripe-client';
-import { STRIPE_REQUEST_FAILED_MESSAGE } from '../payments/config';
 import {
 	BILLING_MESSAGES,
 	billingHistory,
@@ -27,6 +26,9 @@ import { CHECKOUT_EXPIRED_MESSAGE, PAYMENTS_NOT_SET_UP_MESSAGE } from '../../../
 import { TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
 
 const USER = { id: 'u1', email: 'ana@example.test' };
+
+/** What billing answers when Stripe fails, in Estori's words. */
+const PAYMENTS_UNREACHABLE = "We couldn't reach payments. Try again in a moment.";
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -272,6 +274,13 @@ function fake(
 	return { deps, calls, keys, expands, returnUrls, consents, recorded, state };
 }
 
+describe("billing's own words", () => {
+	it('names no payment provider in anything it tells the seller', () => {
+		expect(BILLING_MESSAGES.paymentsUnreachable).toBe(PAYMENTS_UNREACHABLE);
+		for (const [name, message] of Object.entries(BILLING_MESSAGES)) expect(message, name).not.toMatch(/stripe/i);
+	});
+});
+
 describe('starting a plan', () => {
 	it('makes the Stripe customer on the first checkout and reuses it after', async () => {
 		const { deps, calls } = fake();
@@ -312,7 +321,7 @@ describe('moving between Pro and Premium', () => {
 		const declined = fake({ row: row(), failWith: new StripeApiError('Your card was declined.', 402, 'card_declined', 'card_error') });
 		expect(await changePlan(declined.deps, 'u1', 'premium')).toEqual({ ok: false, status: 409, message: BILLING_MESSAGES.declined });
 		const failed = fake({ row: row(), failWith: new StripeApiError('Something went wrong.', 500, null, 'api_error') });
-		expect(await changePlan(failed.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await changePlan(failed.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 		expect(await changePlan(fake({ row: row() }).deps, 'u1', 'enterprise')).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.pickPlan });
 	});
@@ -351,10 +360,10 @@ describe('moving between Pro and Premium', () => {
 		expect(await changePlan(attached.deps, 'u1', 'premium')).toMatchObject({ ok: true });
 		expect(attached.calls).toEqual(['read:sub_1', 'release:sub_sched_9', 'read:sub_1', 'now:price_premium']);
 		const stuck = fake({ row: row(), schedule: 'sub_sched_9', stuck: true });
-		expect(await changePlan(stuck.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await changePlan(stuck.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(stuck.calls).toEqual(['read:sub_1', 'release:sub_sched_9', 'read:sub_1']);
 		const keep = fake({ row: row({ plan: 'premium', pendingPlan: 'pro', pendingPlanAt: new Date('2026-11-05T10:00:00Z'), stripeScheduleId: 'sub_sched_1' }), schedule: 'sub_sched_1', stuck: true });
-		expect(await changePlan(keep.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await changePlan(keep.deps, 'u1', 'premium')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(2);
 	});
 });
@@ -368,7 +377,7 @@ describe('cancelling, keeping the plan and extra credits', () => {
 		expect(await cancelPlan(fake({ row: row({ cancelAtPeriodEnd: true }) }).deps, 'u1')).toEqual({ ok: false, status: 409, message: 'Pro already ends on November 5.' });
 		expect(await cancelPlan(fake().deps, 'u1')).toEqual({ ok: false, status: 404, message: BILLING_MESSAGES.noPlan });
 		const stuck = fake({ row: row({ stripeScheduleId: 'sub_sched_1' }), schedule: 'sub_sched_1', stuck: true });
-		expect(await cancelPlan(stuck.deps, 'u1')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await cancelPlan(stuck.deps, 'u1')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(stuck.calls).toEqual(['read:sub_1', 'release:sub_sched_1', 'read:sub_1']);
 		expect(warnings).toHaveBeenCalledTimes(1);
 	});
@@ -519,7 +528,7 @@ describe('opening an embedded checkout', () => {
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, createSubscriptionCheckoutSession: async () => ({ ...SESSION, client_secret: null }) };
-		expect(await startCheckout(deps, USER, 'pro')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await startCheckout(deps, USER, 'pro')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 	});
 });
@@ -616,7 +625,7 @@ describe('the terms of an open checkout', () => {
 	it('answers 502 and warns, naming the coupon, for a repeating coupon without months', async () => {
 		const warnings = quietWarnings();
 		const broken = fake({ sessions: [withCode({ id: 'broken_coupon', duration: 'repeating', duration_in_months: null })] });
-		expect(await checkoutTerms(broken.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await checkoutTerms(broken.deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 		expect(JSON.stringify(warnings.mock.calls)).toContain('broken_coupon');
 	});
@@ -631,7 +640,7 @@ describe('the terms of an open checkout', () => {
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, retrieveCheckoutSession: async () => Promise.reject(new StripeApiError('Something went wrong.', 500, null, 'api_error')) };
-		expect(await checkoutTerms(deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await checkoutTerms(deps, 'u1', 'cs_plan')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 	});
 });
 
@@ -691,7 +700,7 @@ describe('agreeing to the terms before paying', () => {
 	it('answers 502 and stores nothing for a promotion it cannot state exactly', async () => {
 		quietWarnings();
 		const { deps, consents } = fake({ sessions: [withCode({ duration: 'repeating', duration_in_months: null })] });
-		expect(await recordCheckoutConsent(deps, 'u1', AGREED)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await recordCheckoutConsent(deps, 'u1', AGREED)).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(consents).toEqual([]);
 	});
 });
@@ -871,7 +880,7 @@ describe('starting a card setup', () => {
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, createCardSetupSession: async () => ({ ...SESSION, client_secret: null }) };
-		expect(await startCardSetup(deps, USER, 'save')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await startCardSetup(deps, USER, 'save')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 	});
 });
@@ -966,7 +975,7 @@ describe('finishing a card setup', () => {
 		const warnings = quietWarnings();
 		for (const setup_intent of [null, 'seti_1', { id: 'seti_1', payment_method: null }]) {
 			const { deps, calls } = fake({ customer: 'cus_1', row: row(), sessions: [{ ...SETUP_SESSION, setup_intent }] });
-			expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+			expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 			expect(calls.some((call) => call.startsWith('default-card:'))).toBe(false);
 		}
 		expect(warnings).toHaveBeenCalledTimes(3);
@@ -1009,7 +1018,7 @@ describe('finishing a card setup', () => {
 			const stripe = deps.stripe;
 			if (!stripe) throw new Error('the fake has Stripe');
 			deps.stripe = { ...stripe, setDefaultPaymentMethod: async () => Promise.reject(refusal) };
-			expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+			expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 			expect(calls.some((call) => call.startsWith('pay:'))).toBe(false);
 		}
 		expect(warnings).toHaveBeenCalledTimes(2);
@@ -1021,7 +1030,7 @@ describe('finishing a card setup', () => {
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, setDefaultPaymentMethod: async () => Promise.reject(new StripeApiError('The subscription is canceled.', 400, null, 'invalid_request_error')) };
-		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await completeCardSetup(deps, 'u1', 'cs_card')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 	});
 });
@@ -1090,7 +1099,7 @@ describe('paying a failed invoice', () => {
 		settled.deps.stripe = { ...stripe, retrieveInvoice: async () => invoice({ status: 'paid', amount_paid: 4_900 }) };
 		expect(await payOpenInvoice(settled.deps, 'u1', null)).toEqual({ ok: true, value: { state: 'paid' } });
 		const bare = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice({ confirmation_secret: null })], payFails: NEEDS_AUTHENTICATION });
-		expect(await payOpenInvoice(bare.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await payOpenInvoice(bare.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 	});
 
@@ -1102,12 +1111,12 @@ describe('paying a failed invoice', () => {
 	it('answers 502 and warns for any other refusal, and when Stripe answers an invoice that is still not paid', async () => {
 		const warnings = quietWarnings();
 		const refused = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: new StripeApiError('Something went wrong.', 500, null, 'api_error') });
-		expect(await payOpenInvoice(refused.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await payOpenInvoice(refused.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		const unpaid = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()] });
 		const stripe = unpaid.deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		unpaid.deps.stripe = { ...stripe, payInvoice: async (id) => invoice({ id, status: 'open' }) };
-		expect(await payOpenInvoice(unpaid.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await payOpenInvoice(unpaid.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(2);
 	});
 
@@ -1132,13 +1141,13 @@ describe('paying a failed invoice', () => {
 		const warnings = quietWarnings();
 		const refusal = new StripeApiError('Invoice cannot be paid right now.', 400, null, 'invalid_request_error');
 		const open = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: refusal });
-		expect(await payOpenInvoice(open.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await payOpenInvoice(open.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(open.calls).toContain('read-invoice:in_1');
 		const unreadable = fake({ customer: 'cus_1', row: PAST_DUE, invoices: [invoice()], payFails: refusal });
 		const stripe = unreadable.deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		unreadable.deps.stripe = { ...stripe, retrieveInvoice: async () => Promise.reject(new StripeApiError('Something went wrong.', 500, null, 'api_error')) };
-		expect(await payOpenInvoice(unreadable.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await payOpenInvoice(unreadable.deps, 'u1', null)).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(2);
 		expect(JSON.stringify(warnings.mock.calls)).toContain('Invoice cannot be paid right now.');
 	});
@@ -1204,7 +1213,7 @@ describe('the billing history', () => {
 		const stripe = deps.stripe;
 		if (!stripe) throw new Error('the fake has Stripe');
 		deps.stripe = { ...stripe, listInvoices: async () => Promise.reject(new StripeApiError('Something went wrong.', 500, null, 'api_error')) };
-		expect(await billingHistory(deps, 'u1')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+		expect(await billingHistory(deps, 'u1')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		expect(warnings).toHaveBeenCalledTimes(1);
 	});
 });
@@ -1262,7 +1271,7 @@ describe('an invoice as a PDF', () => {
 		const failures: Array<Error | { status: number }> = [new Error('The invoice PDF is not on a Stripe address'), new TypeError('fetch failed'), { status: 500 }, { status: 403 }];
 		for (const pdf of failures) {
 			const { deps } = fake({ customer: 'cus_1', invoices: [invoice()], pdf });
-			expect(await invoicePdf(deps, 'u1', 'in_1')).toEqual({ ok: false, status: 502, message: STRIPE_REQUEST_FAILED_MESSAGE });
+			expect(await invoicePdf(deps, 'u1', 'in_1')).toEqual({ ok: false, status: 502, message: PAYMENTS_UNREACHABLE });
 		}
 		expect(warnings).toHaveBeenCalledTimes(4);
 	});

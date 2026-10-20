@@ -30,7 +30,7 @@ import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanI
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
-import { STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv } from '../payments/config';
+import { stripeFromEnv } from '../payments/config';
 import { isFlagOn } from '../posthog/flags';
 import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeInvoice } from '../payments/stripe-client';
 import { liveSubscription, payableSubscription, type BillingAccount } from './account';
@@ -62,6 +62,8 @@ export const BILLING_MESSAGES = {
 	cardNotSaved: "Your card wasn't saved. Try again.",
 	noInvoice: "We couldn't find that invoice.",
 	noInvoicePdf: "That invoice doesn't have a PDF yet.",
+	/** Any Stripe failure, in Estori's words: billing is Estori's own page. */
+	paymentsUnreachable: "We couldn't reach payments. Try again in a moment.",
 } as const;
 
 export type BillingActionResult<T> =
@@ -115,7 +117,7 @@ interface Configured {
 
 const ok = <T>(value: T): BillingActionResult<T> => ({ ok: true, value });
 const fail = (status: Failure['status'], message: string): Failure => ({ ok: false, status, message });
-const STRIPE_FAILED = fail(502, STRIPE_REQUEST_FAILED_MESSAGE);
+const STRIPE_FAILED = fail(502, BILLING_MESSAGES.paymentsUnreachable);
 const REQUESTED: BillingChangeRequested = { requested: true };
 
 function configured(deps: BillingActionDeps): Configured | null {
