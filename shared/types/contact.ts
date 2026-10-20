@@ -25,6 +25,14 @@ export function isContactTopic(value: unknown): value is ContactTopic {
 	return typeof value === 'string' && CONTACT_TOPICS.some((topic) => topic.id === value);
 }
 
+/** The most AI credits a month a Premium request can name; anything past it is a typo or a probe. */
+export const MAX_PREMIUM_CREDITS = 10_000_000;
+
+/** The credits a month a Premium request can carry: a whole number from 1 to MAX_PREMIUM_CREDITS. */
+export function isPremiumCredits(value: unknown): value is number {
+	return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_PREMIUM_CREDITS;
+}
+
 export function isCompanySize(value: unknown): value is CompanySize {
 	return typeof value === 'string' && (COMPANY_SIZES as readonly string[]).includes(value);
 }
@@ -43,7 +51,7 @@ export interface ContactRequestBody {
 	companySize: CompanySize;
 	topic: ContactTopic;
 	message: string;
-	/** The Premium credit pool the visitor picked on the pricing page, if any. */
+	/** The AI credits a month the visitor needs, from the pricing calculator, if any. */
 	premiumCredits: number | null;
 	website: string;
 }

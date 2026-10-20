@@ -48,18 +48,16 @@ describe('pricing page', () => {
 	});
 
 	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
-		const order = ['<PlanCards />', '<ComparePlans />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={PRICING_FAQ} />'];
+		const order = ['<PlanCards />', '<ComparePlans billing={billing} />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={pricingFaq(billing, rates)} />'];
 		const positions = order.map((tag) => page.indexOf(tag));
 		expect(positions.every((position) => position > -1)).toBe(true);
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 	});
 
-	it('shows Basic and Premium side by side in one frame, with Enterprise on its own band', () => {
+	it('shows Basic, Pro and Premium side by side in one frame, with Enterprise on its own band', () => {
 		const cards = source(CARDS);
-		expect(cards).toContain('md:grid-cols-2');
-		expect(cards).toContain('<BasicPlan />');
-		expect(cards).toContain('<PremiumPlan />');
-		expect(cards).toContain('<EnterpriseBand />');
+		expect(cards).toContain('md:grid-cols-3');
+		for (const card of ['<BasicPlan billing={billing} />', '<PaidPlan plan="pro" billing={billing} />', '<PaidPlan plan="premium" billing={billing} />', '<EnterpriseBand />']) expect(cards).toContain(card);
 	});
 
 	it('states the free allowance from the live limits, never typed in', () => {
@@ -69,16 +67,18 @@ describe('pricing page', () => {
 		expect(source('/src/components/marketing/PlanLimits.tsx')).toContain('fallback');
 	});
 
-	it('lets visitors pick a Premium credit pool, with the price following it', () => {
+	it('prices Pro and Premium from the plan table, never typed in', () => {
 		const cards = source(CARDS);
-		expect(cards).toContain('PREMIUM_TIERS.map');
-		expect(cards).toContain('<Price cents={tier.priceCents} />');
-		expect(cards).not.toMatch(/\$(99|199|349|599)\b/);
+		expect(cards).toContain('<Price cents={PLAN_PRICES_CENTS[plan]} />');
+		expect(cards).not.toMatch(/\$(49|199)\b/);
+		// Credits and store counts come from the limits table too.
+		expect(cards).not.toMatch(/\b(5|20|100),000\b|Up to \d/);
 	});
 
-	it("doesn't sell Premium before subscriptions exist: it leads to sales with the chosen pool, marked coming soon", () => {
+	it("sells Pro and Premium once billing is on, and until then marks them coming soon and leads to sales", () => {
 		const cards = source(CARDS);
-		expect(cards).toContain("contactPath('premium', tier.credits)");
+		expect(cards).toContain('billing ? <PlanButton plan={plan}');
+		expect(cards).toContain("contactPath('premium')");
 		expect(cards).toContain('<ComingSoon />');
 		expect(cards).toContain('Paid plans are coming soon');
 		expect(cards).not.toMatch(/Buy now|Subscribe|checkout/i);
@@ -90,6 +90,17 @@ describe('pricing page', () => {
 		expect(band).toContain("contactPath('enterprise')");
 		expect(band).toContain('Talk to sales');
 		expect(band).not.toMatch(/\$\d/);
+	});
+
+	it("adds the Pro column, the limit rows and the plan buttons only once billing is on, and keeps today's table until then", () => {
+		const compare = source(COMPARE);
+		expect(compare).toContain('comparisonFor(billing)');
+		const paid = compare.slice(compare.indexOf("case 'pro':"), compare.indexOf("case 'enterprise':"));
+		expect(paid).toContain("case 'premium':");
+		expect(paid).toContain('action: billing ? (');
+		expect(paid).toContain('<PlanButton plan={id}');
+		expect(paid).toContain("contactPath('premium')");
+		expect(compare).not.toContain('PREMIUM_TIERS');
 	});
 
 	it('shows phones one plan beside the labels, picked from the corner of the header', () => {
@@ -141,7 +152,8 @@ describe('pricing page', () => {
 
 	it('answers the credit questions', () => {
 		const copy = source('/src/content/positioning.ts');
-		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I change my Premium credits?', 'Is Premium available now?']) {
+		expect(copy).toContain('export function pricingFaq(billing: boolean');
+		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I buy more credits?', 'Can I change or cancel my plan?', 'Are Pro and Premium available now?']) {
 			expect(copy, question).toContain(question);
 		}
 	});

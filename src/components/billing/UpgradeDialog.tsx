@@ -4,10 +4,9 @@ import { Button, buttonVariants, cn } from '@cloudflare/kumo';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { BILLING_PATH, type PaidPlanId, type PlanLimitRefusal } from '@/api-types';
 import { apiClient, ApiError } from '@/lib/api-client';
+import { CHECKOUT_FAILED_MESSAGE } from '@/hooks/use-billing';
 import { onPlanLimit } from '@/lib/plan-limit-events';
 import { upgradeActionFor, upgradeTitleFor } from './upgrade-action';
-
-const CHECKOUT_FAILED_MESSAGE = "Couldn't open the checkout. Try again in a moment.";
 
 /** One plan-limit refusal: its title and message, and the next step it offers. */
 export function UpgradeDialog({ refusal, onClose }: { refusal: PlanLimitRefusal; onClose: () => void }) {

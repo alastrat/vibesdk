@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
 import { CAPABILITIES } from './capabilities';
-import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, SELLER_LEVEL_LIMITS, comparisonFor, formatCredits, formatUsd, planById, premiumTierFor } from './plans';
+import { PLANS, PLAN_COMPARISON, SELLER_LEVEL_LIMITS, comparisonFor, formatCredits, formatUsd, limitFeatures, planById, storeAllowance } from './plans';
 
 describe('plans', () => {
 	it('looks a plan up by id', () => {
@@ -13,23 +13,12 @@ describe('plans', () => {
 		expect(PLANS.map((plan) => plan.id)).toEqual(['basic', 'pro', 'premium', 'enterprise']);
 	});
 
-	it('starts Premium at 99 USD, with larger credit pools at higher prices', () => {
-		expect(PREMIUM_TIERS[0]).toEqual({ credits: 20_000, priceCents: 9_900 });
-		for (let index = 1; index < PREMIUM_TIERS.length; index++) {
-			expect(PREMIUM_TIERS[index].credits).toBeGreaterThan(PREMIUM_TIERS[index - 1].credits);
-			expect(PREMIUM_TIERS[index].priceCents).toBeGreaterThan(PREMIUM_TIERS[index - 1].priceCents);
-			// Bigger pools cost less per credit.
-			expect(PREMIUM_TIERS[index].priceCents / PREMIUM_TIERS[index].credits).toBeLessThan(PREMIUM_TIERS[index - 1].priceCents / PREMIUM_TIERS[index - 1].credits);
-		}
-	});
-
-	it('picks the smallest Premium pool that covers a need, and none past the largest', () => {
-		expect(premiumTierFor(1)).toEqual(PREMIUM_TIERS[0]);
-		expect(premiumTierFor(20_000)).toEqual(PREMIUM_TIERS[0]);
-		expect(premiumTierFor(20_001)).toEqual(PREMIUM_TIERS[1]);
-		const largest = PREMIUM_TIERS[PREMIUM_TIERS.length - 1];
-		expect(premiumTierFor(largest.credits)).toEqual(largest);
-		expect(premiumTierFor(largest.credits + 1)).toBeNull();
+	it("states each paid plan's store allowance from the limits table", () => {
+		expect(storeAllowance('pro')).toBe('Up to 3 live stores, 10 new stores a day');
+		expect(storeAllowance('premium')).toBe('Up to 10 live stores, 25 new stores a day');
+		expect(limitFeatures('pro')).toEqual(['Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog']);
+		// Premium's card starts from "Everything in Pro", so it lists only what Pro doesn't have.
+		expect(limitFeatures('premium', 'pro')).toEqual(['Up to 10 live stores, 25 new stores a day', 'Buy extra credits any time']);
 	});
 
 	it('formats prices and credits for the cards', () => {

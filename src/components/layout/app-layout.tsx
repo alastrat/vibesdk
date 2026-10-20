@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router';
 import { SidebarProvider, useSidebar } from '@cloudflare/kumo';
+import { BillingBanner } from '@/components/billing/BillingBanner';
 import { AppSidebar } from './app-sidebar';
 import { GlobalHeader } from './global-header';
 import { HeaderProvider } from './header-context';
@@ -68,6 +69,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 					<AppSidebar />
 					<main className="bg-kumo-canvas flex flex-col h-full relative flex-1 min-w-0 overflow-hidden">
 						<GlobalHeader />
+						<BillingBanner />
 						<div className="flex-1 min-h-0 overflow-auto bg-kumo-canvas">
 							{children || <Outlet />}
 						</div>

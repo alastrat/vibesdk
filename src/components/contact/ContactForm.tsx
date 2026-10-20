@@ -132,7 +132,7 @@ export function ContactForm() {
 				</Field>
 				{topic === 'premium' && prefill.premiumCredits !== null && (
 					<p className="-mt-2 text-[14px] text-public-muted sm:col-span-2">
-						You picked Premium with {formatCredits(prefill.premiumCredits)} AI credits a month.
+						You need about {formatCredits(prefill.premiumCredits)} AI credits a month.
 					</p>
 				)}
 				<Field label="Message" className="sm:col-span-2">

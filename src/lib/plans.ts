@@ -1,4 +1,4 @@
-import { DEFAULT_SELLER_LIMITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, type PlanId } from '@/api-types';
+import { DEFAULT_SELLER_LIMITS, EXTRA_CREDITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, type PaidPlanId, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
 export { formatCredits, formatUsd };
@@ -23,23 +23,28 @@ export function planById(id: PlanId): Plan {
 	return plan;
 }
 
-/** A Premium credit pool and its monthly price. */
-export interface PremiumTier {
-	credits: number;
-	priceCents: number;
+/** "$1.50 per 1,000", the price of extra credits. */
+export const EXTRA_CREDITS_PRICE = `${formatUsd(EXTRA_CREDITS.unitPriceCents)} per ${formatCredits(EXTRA_CREDITS.creditsPerUnit)}`;
+
+/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. */
+export function storeAllowance(plan: PaidPlanId): string {
+	const { liveStores, newStoresPerDay } = PLAN_LIMITS[plan];
+	const parts: string[] = [];
+	if (liveStores !== null) parts.push(`Up to ${liveStores} live stores`);
+	if (newStoresPerDay !== null) parts.push(`${newStoresPerDay} new stores a day`);
+	return parts.join(', ');
 }
 
-/** Premium's monthly credit pools, smallest first; the first sets the advertised price. Bigger pools cost less per credit. */
-export const PREMIUM_TIERS: readonly PremiumTier[] = [
-	{ credits: 20_000, priceCents: 9_900 },
-	{ credits: 50_000, priceCents: 19_900 },
-	{ credits: 100_000, priceCents: 34_900 },
-	{ credits: 200_000, priceCents: 59_900 },
-];
-
-/** The smallest Premium pool that covers `credits` a month, or null when only Enterprise can. */
-export function premiumTierFor(credits: number): PremiumTier | null {
-	return PREMIUM_TIERS.find((tier) => tier.credits >= credits) ?? null;
+/** A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. */
+export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId): string[] {
+	const limits = PLAN_LIMITS[plan];
+	const lines = [storeAllowance(plan)];
+	if (limits.ownDomainsPerLiveStore > 0) lines.push('Your own domain on each live store');
+	if (limits.supplierCatalog) lines.push('The supplier catalog');
+	if (limits.extraCredits) lines.push('Buy extra credits any time');
+	if (over === undefined) return lines;
+	const already = limitFeatures(over);
+	return lines.filter((line) => !already.includes(line));
 }
 
 /** A check (true), a dash (false) or a short text. */
@@ -115,7 +120,7 @@ function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRo
 	return { title: CAPABILITIES[capability].name, capability, rows, ...options };
 }
 
-/** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PREMIUM_TIERS. */
+/** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PLAN_LIMITS. */
 export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 	capabilitySection('store-builder', [
 		{ label: 'Build and change stores just by asking', cells: ALL },
@@ -141,7 +146,7 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 			billingOnly: true,
 		},
 		{ label: 'Your own domain', cells: { basic: false, pro: 'One per live store', premium: 'One per live store', enterprise: 'One per live store' }, billingOnly: true },
-		{ label: 'Extra AI credits', cells: { basic: false, pro: false, premium: '$1.50 per 1,000', enterprise: true }, billingOnly: true },
+		{ label: 'Extra AI credits', cells: { basic: false, pro: false, premium: EXTRA_CREDITS_PRICE, enterprise: true }, billingOnly: true },
 		{ label: 'Start from templates in Discover', cells: ALL },
 		{ label: 'Sell your stores as templates', cells: ALL },
 		{ label: 'Fee on template sales', cells: onEveryPlan(PLATFORM_FEE_LABEL) },

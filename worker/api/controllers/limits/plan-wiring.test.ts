@@ -20,5 +20,7 @@ describe('public plan limits', () => {
 		const controller = source('/worker/api/controllers/limits/controller.ts');
 		expect(controller).toContain('enforcePublicAppsRateLimit(');
 		expect(controller).toContain('publicPlanFromSettings(context.config.security.rateLimit)');
+		// Visitors see paid plans once BILLING=on; an account billing is on for alone sees them through its own billing answer.
+		expect(controller).toContain('billing: isBillingOn(env, context.user?.id ?? null)');
 	});
 });

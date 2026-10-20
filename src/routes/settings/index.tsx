@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import {
 	useMutation,
 	useQuery,
@@ -16,8 +16,9 @@ import {
 	Eye,
 	EyeOff,
 	Mail,
+	CreditCard,
 } from 'lucide-react';
-import { LEGAL_CONTACT, type ActiveSessionsData, type ApiKeysData } from '@/api-types';
+import { BILLING_PATH, LEGAL_CONTACT, planName, type ActiveSessionsData, type ApiKeysData } from '@/api-types';
 import {
 	Button,
 	DeleteResource,
@@ -31,6 +32,7 @@ import {
 	Input,
 	LinkButton,
 	Table,
+	buttonVariants,
 } from '@cloudflare/kumo';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/auth-context';
@@ -39,6 +41,7 @@ import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { useBilling } from '@/hooks/use-billing';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
 import { ConnectedAccounts } from '@/components/connected-accounts';
 import { BRAND, pageTitle } from '@/brand';
@@ -93,6 +96,7 @@ async function fetchApiKeys(): Promise<ApiKeysData> {
 
 export default function SettingsPage() {
 	const { user, authProviders } = useAuth();
+	const billing = useBilling();
 	const queryClient = useQueryClient();
 	const [searchParams, setSearchParams] = useSearchParams();
 
@@ -345,6 +349,37 @@ export default function SettingsPage() {
 							</div>
 						</LayerCard.Primary>
 					</LayerCard>
+
+					{billing.data?.enabled && (
+						<LayerCard id="billing">
+							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
+								<div className="flex items-center gap-2">
+									<span className="flex items-center">
+										<CreditCard className="size-4" />
+									</span>
+									<span>Plan and billing</span>
+								</div>
+							</LayerCard.Secondary>
+							<LayerCard.Primary>
+								<div className="flex flex-wrap items-center justify-between gap-4">
+									<div className="grid gap-1.5">
+										<h4 className="text-sm font-medium text-kumo-default">
+											Your plan
+										</h4>
+										<p className="text-sm text-kumo-subtle">
+											{planName(billing.data.plan)}
+										</p>
+									</div>
+									<Link
+										to={BILLING_PATH}
+										className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+									>
+										Plan, credits and billing
+									</Link>
+								</div>
+							</LayerCard.Primary>
+						</LayerCard>
+					)}
 
 					{/* Cloudflare Account & Gateway Selection */}
 					<CloudflareAccountSelector />

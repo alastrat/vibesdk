@@ -42,7 +42,7 @@ export class LimitsController extends BaseController {
 
 	/**
 	 * GET /api/limits/plan
-	 * The free plan's daily limits for the public pricing page.
+	 * The free plan's daily limits for the public pricing page, and whether Pro and Premium are on sale.
 	 */
 	static async getPublicPlan(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<Response> {
 		try {
@@ -51,7 +51,10 @@ export class LimitsController extends BaseController {
 			if (error instanceof RateLimitExceededError) return LimitsController.createErrorResponse('Too many requests', 429);
 			throw error;
 		}
-		return LimitsController.createSuccessResponse(publicPlanFromSettings(context.config.security.rateLimit));
+		return LimitsController.createSuccessResponse({
+			...publicPlanFromSettings(context.config.security.rateLimit),
+			billing: isBillingOn(env, context.user?.id ?? null),
+		});
 	}
 
 	/**

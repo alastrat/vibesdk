@@ -5,6 +5,7 @@ import RootIndex, { AppShell } from './routes/root-index';
 import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
+import BillingPage from './routes/settings/billing';
 import AppsPage from './routes/apps';
 import CatalogPage from './routes/catalog';
 import AppView from './routes/app';
@@ -74,6 +75,14 @@ const routes = [
 						element: (
 							<ProtectedRoute>
 								<Settings />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: 'settings/billing',
+						element: (
+							<ProtectedRoute>
+								<BillingPage />
 							</ProtectedRoute>
 						),
 					},

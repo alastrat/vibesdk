@@ -1,12 +1,9 @@
-import { CONTACT_FIELD_LIMITS, isCompanySize, isContactTopic, type ContactRequestInput } from '../../../../shared/types/contact';
+import { CONTACT_FIELD_LIMITS, isCompanySize, isContactTopic, isPremiumCredits, type ContactRequestInput } from '../../../../shared/types/contact';
 import type { ContactRequestRow } from '../../../database/services/ContactService';
 import { validateEmail } from '../../../utils/validationUtils';
 import type { ContactAdminData } from './types';
 
 export type ParsedContactRequest = { ok: true; value: ContactRequestInput } | { ok: false; error: string };
-
-/** The largest Premium pool a request can name; anything past it is a typo or a probe. */
-const MAX_PREMIUM_CREDITS = 10_000_000;
 
 function field(body: unknown, key: string): unknown {
 	return typeof body === 'object' && body !== null && !Array.isArray(body) ? (body as Record<string, unknown>)[key] : undefined;
@@ -31,7 +28,7 @@ function hasControlCharacters(value: string, allowed: readonly string[] = []): b
 
 function premiumCredits(body: unknown): number | null {
 	const value = field(body, 'premiumCredits');
-	return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= MAX_PREMIUM_CREDITS ? value : null;
+	return isPremiumCredits(value) ? value : null;
 }
 
 /** Checks the form field by field and names the first one to fix, in the order the form shows them. */

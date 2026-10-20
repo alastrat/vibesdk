@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { PLATFORM_FEE_LABEL } from '@/api-types';
+import { EXTRA_CREDITS, PLATFORM_FEE_LABEL, formatCredits } from '@/api-types';
+import { EXTRA_CREDITS_PRICE } from '@/lib/plans';
 
 export interface CardCopy {
 	title: string;
@@ -264,23 +265,53 @@ export const STORE_FEATURES: readonly StoreFeature[] = [
 	},
 ];
 
-/** The pricing page's questions, shown before the launch questions. */
-export const PRICING_FAQ: readonly FaqItem[] = [
-	{
-		question: 'What are AI credits?',
-		answer: "Credits pay for the AI's work. Each step it takes while building or changing your store uses credits at the rate of the model you pick, so lighter models go further.",
-	},
-	{
-		question: 'What happens when I run out of credits?',
-		answer: 'On Basic, building and chatting pause until your allowance refills at midnight UTC. Your stores and their previews keep working.',
-	},
-	{
-		question: 'Can I change my Premium credits?',
-		answer: 'Yes. When Premium launches you can move to a bigger or smaller pool at any time, and the new price applies from your next month.',
-	},
-	{
-		question: 'Is Premium available now?',
-		answer: "Not yet, it's coming soon. Tell us what you need and we'll set you up as it opens.",
-	},
-	{ question: 'Do unused credits roll over?', answer: "No. Basic's allowance refills every day, and Premium's pool will refill every month." },
-];
+/** "A typical step takes about 16 to 445 credits.", from the models' typical credits per step; empty until they're known. */
+function typicalStep(rates: readonly number[]): string {
+	if (rates.length === 0) return '';
+	const low = Math.min(...rates);
+	const high = Math.max(...rates);
+	return ` A typical step takes about ${low === high ? formatCredits(low) : `${formatCredits(low)} to ${formatCredits(high)}`} credits.`;
+}
+
+/**
+ * The pricing page's questions, shown before the launch questions: the plans and extra credits once billing is on, and
+ * today's free allowance with Pro and Premium coming soon until then. `rates` are the models' typical credits per step.
+ */
+export function pricingFaq(billing: boolean, rates: readonly number[]): readonly FaqItem[] {
+	if (!billing) {
+		return [
+			{
+				question: 'What are AI credits?',
+				answer: "Credits pay for the AI's work. Each step it takes while building or changing your store uses credits at the rate of the model you pick, so lighter models go further.",
+			},
+			{
+				question: 'What happens when I run out of credits?',
+				answer: 'On Basic, building and chatting pause until your allowance refills at midnight UTC. Your stores and their previews keep working.',
+			},
+			{
+				question: 'Are Pro and Premium available now?',
+				answer: "Not yet, they're coming soon. Tell us what you need and we'll set you up as they open.",
+			},
+			{ question: 'Do unused credits roll over?', answer: "No. Basic's allowance refills every day." },
+		];
+	}
+	return [
+		{
+			question: 'What are AI credits?',
+			answer: `Credits pay for the AI's work. Each step is charged from the work it really does, at the price of the model you pick, so lighter models go further.${typicalStep(rates)}`,
+		},
+		{
+			question: 'What happens when I run out of credits?',
+			answer: 'Building and chatting pause until your credits renew, and your stores keep working. On Premium you can buy extra credits at once.',
+		},
+		{
+			question: 'Can I buy more credits?',
+			answer: `On Premium, yes: ${EXTRA_CREDITS_PRICE}, from ${formatCredits(EXTRA_CREDITS.minCredits)} at a time. They're used after your monthly credits and last ${EXTRA_CREDITS.monthsValid} months.`,
+		},
+		{
+			question: 'Can I change or cancel my plan?',
+			answer: 'Any time, from your billing page. Moving to Premium happens at once; moving to Pro or cancelling happens at the end of the month you paid for.',
+		},
+		{ question: 'Do unused credits roll over?', answer: `Monthly credits don't; extra credits you buy do, for ${EXTRA_CREDITS.monthsValid} months.` },
+	];
+}

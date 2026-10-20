@@ -276,7 +276,7 @@ export type {
 	PurchaseView,
 	SubscriptionStatus,
 } from '../shared/types/billing.js';
-export { BILLING_NOT_OPEN_MESSAGE, BILLING_PATH, PLAN_LIMIT_ERROR_CODE } from '../shared/types/billing.js';
+export { BILLING_NOT_OPEN_MESSAGE, BILLING_PATH, EXTRA_CREDITS_DISCLOSURE, PLAN_LIMIT_ERROR_CODE } from '../shared/types/billing.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
@@ -544,6 +544,7 @@ export {
 	contactTopicLabel,
 	isCompanySize,
 	isContactTopic,
+	isPremiumCredits,
 } from '../shared/types/contact.js';
 export type { CompanySize, ContactRequestBody, ContactTopic } from '../shared/types/contact.js';
 export type { PublicPlanLimits } from '../shared/types/plan.js';
