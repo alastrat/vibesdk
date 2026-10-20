@@ -15,8 +15,18 @@ export function envWith(db: D1Database, extra: Record<string, unknown> = {}): En
 
 const seconds = (at: Date): number => Math.floor(at.getTime() / 1000);
 
-export async function insertUser(db: D1Database, id: string): Promise<void> {
-	await db.prepare('INSERT INTO users (id, email, display_name, provider, provider_id) VALUES (?, ?, ?, ?, ?)').bind(id, `${id}@example.test`, id, 'email', id).run();
+export async function insertUser(db: D1Database, id: string, options: { createdAt?: Date; emailVerified?: boolean } = {}): Promise<void> {
+	const columns = ['id', 'email', 'display_name', 'provider', 'provider_id'];
+	const values: (string | number)[] = [id, `${id}@example.test`, id, 'email', id];
+	if (options.createdAt) {
+		columns.push('created_at');
+		values.push(seconds(options.createdAt));
+	}
+	if (options.emailVerified !== undefined) {
+		columns.push('email_verified');
+		values.push(options.emailVerified ? 1 : 0);
+	}
+	await db.prepare(`INSERT INTO users (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`).bind(...values).run();
 }
 
 /** An app owned by `userId`, with only the columns a store needs. */
@@ -75,5 +85,57 @@ export async function insertCheckout(db: D1Database, checkout: { id: string; sel
 			 VALUES (?, ?, 'app_1', 'c0ffee', ?, 'US', '{}', 0, 0, 0, 0, ?, '/', '/', ?, ?, ?)`,
 		)
 		.bind(checkout.id, checkout.mode ?? 'test', checkout.sellerUserId, checkout.status, checkout.weightedCents, seconds(checkout.createdAt), seconds(checkout.createdAt) + 35 * 60)
+		.run();
+}
+
+/** A subscription row with only the columns billing reads; Stripe created it when its current period began. */
+export async function insertSubscription(
+	db: D1Database,
+	subscription: { userId: string; stripeSubscriptionId: string; status: string; plan?: 'pro' | 'premium'; currentPeriodStart: Date; currentPeriodEnd: Date; cancelAtPeriodEnd?: boolean },
+): Promise<void> {
+	await db
+		.prepare(
+			`INSERT INTO subscriptions (user_id, stripe_subscription_id, status, plan, current_period_start, current_period_end, cancel_at_period_end, stripe_created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		)
+		.bind(
+			subscription.userId,
+			subscription.stripeSubscriptionId,
+			subscription.status,
+			subscription.plan ?? 'pro',
+			seconds(subscription.currentPeriodStart),
+			seconds(subscription.currentPeriodEnd),
+			subscription.cancelAtPeriodEnd ? 1 : 0,
+			seconds(subscription.currentPeriodStart),
+			seconds(subscription.currentPeriodStart),
+		)
+		.run();
+}
+
+export async function insertBillingCustomer(db: D1Database, userId: string, stripeCustomerId: string): Promise<void> {
+	await db.prepare('INSERT INTO billing_customers (user_id, stripe_customer_id, created_at) VALUES (?, ?, ?)').bind(userId, stripeCustomerId, seconds(new Date())).run();
+}
+
+/** An extra-credits purchase; `amountCents` defaults to the standard $1.50 per 1,000 credits. */
+export async function insertPurchase(
+	db: D1Database,
+	purchase: { id: string; userId: string; credits: number; amountCents?: number; purchasedAt: Date; expiresAt: Date; used?: number; sessionId?: string; paymentIntentId?: string },
+): Promise<void> {
+	await db
+		.prepare(
+			`INSERT INTO credit_purchases (id, user_id, credits, amount_cents, stripe_checkout_session_id, stripe_payment_intent_id, purchased_at, expires_at, used)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		)
+		.bind(
+			purchase.id,
+			purchase.userId,
+			purchase.credits,
+			purchase.amountCents ?? (purchase.credits / 1000) * 150,
+			purchase.sessionId ?? `cs_${purchase.id}`,
+			purchase.paymentIntentId ?? `pi_${purchase.id}`,
+			seconds(purchase.purchasedAt),
+			seconds(purchase.expiresAt),
+			purchase.used ?? 0,
+		)
 		.run();
 }

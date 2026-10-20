@@ -30,6 +30,8 @@ import {
 import { SELLER_LEVELS } from '../../shared/types/seller-levels';
 import { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_STATUSES } from '../../shared/types/shopper-emails';
 import { LIVE_STORE_STATUSES, STORE_DOMAIN_PROVIDERS, STORE_DOMAIN_STATUSES } from '../../shared/types/live-stores';
+import { BILLING_EVENT_RESULTS, BILLING_NOTICE_KINDS, CREDIT_USE_SOURCES, SUBSCRIPTION_STATUSES } from '../../shared/types/billing';
+import { PAID_PLAN_IDS, PLAN_IDS } from '../../shared/types/plans';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -1234,3 +1236,149 @@ export const shopperEmails = sqliteTable('shopper_emails', {
     dueIdx: index('shopper_emails_due_idx').on(table.status, table.nextAttemptAt),
 }));
 
+// ========================================
+// BILLING AND SUBSCRIPTIONS
+// ========================================
+
+/** An account's Stripe customer on the platform account; one per account. */
+export const billingCustomers = sqliteTable('billing_customers', {
+    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    stripeCustomerId: text('stripe_customer_id').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    customerUnique: uniqueIndex('billing_customers_stripe_customer_unique_idx').on(table.stripeCustomerId),
+}));
+
+/** An account's Pro or Premium subscription as Stripe last reported it; one row per account, rebuilt from Stripe on each event. */
+export const subscriptions = sqliteTable('subscriptions', {
+    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    stripeSubscriptionId: text('stripe_subscription_id').notNull(),
+    status: text('status', { enum: SUBSCRIPTION_STATUSES }).notNull(),
+    plan: text('plan', { enum: PAID_PLAN_IDS }).notNull(),
+    currentPeriodStart: integer('current_period_start', { mode: 'timestamp' }).notNull(),
+    currentPeriodEnd: integer('current_period_end', { mode: 'timestamp' }).notNull(),
+    cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).notNull().default(false),
+    pendingPlan: text('pending_plan', { enum: PAID_PLAN_IDS }),
+    pendingPlanAt: integer('pending_plan_at', { mode: 'timestamp' }),
+    stripeScheduleId: text('stripe_schedule_id'),
+    stripeCreatedAt: integer('stripe_created_at', { mode: 'timestamp' }).notNull(),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    subscriptionUnique: uniqueIndex('subscriptions_stripe_subscription_unique_idx').on(table.stripeSubscriptionId),
+    statusIdx: index('subscriptions_status_idx').on(table.status),
+}));
+export type SubscriptionRecord = typeof subscriptions.$inferSelect;
+
+/** A Stripe event the billing webhook has handled, written in the same batch as its effects so a retry is a no-op. */
+export const billingEvents = sqliteTable('billing_events', {
+    stripeEventId: text('stripe_event_id').primaryKey(),
+    type: text('type').notNull(),
+    objectId: text('object_id'),
+    userId: text('user_id'),
+    result: text('result', { enum: BILLING_EVENT_RESULTS }).notNull(),
+    receivedAt: integer('received_at', { mode: 'timestamp' }).notNull(),
+});
+
+/** A billing email or banner already sent, keyed by what it is about, so it goes out once. */
+export const billingNotices = sqliteTable('billing_notices', {
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    noticeKey: text('notice_key').notNull(),
+    kind: text('kind', { enum: BILLING_NOTICE_KINDS }).notNull(),
+    sentAt: integer('sent_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.noticeKey] }),
+}));
+
+/** One admin decision on an account's plan: a plan and limits over its own, or, with no plan, the end of the last override. The latest row rules. */
+export const planOverrides = sqliteTable('plan_overrides', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    plan: text('plan', { enum: PLAN_IDS }),
+    /** JSON `PlanLimitOverrides`. */
+    limits: text('limits').notNull().default('{}'),
+    until: integer('until', { mode: 'timestamp' }),
+    adminUserId: text('admin_user_id').notNull(),
+    reason: text('reason').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    userCreatedIdx: index('plan_overrides_user_created_idx').on(table.userId, table.createdAt),
+}));
+export type PlanOverrideRecord = typeof planOverrides.$inferSelect;
+
+/** Credits an admin added to one credit period, shown to the seller as "Added by Estori". */
+export const creditGrants = sqliteTable('credit_grants', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    credits: integer('credits').notNull(),
+    periodKey: text('period_key').notNull(),
+    adminUserId: text('admin_user_id').notNull(),
+    reason: text('reason').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    userPeriodIdx: index('credit_grants_user_period_idx').on(table.userId, table.periodKey),
+}));
+export type CreditGrantRecord = typeof creditGrants.$inferSelect;
+
+/** How many stores an account has ever started, deleted ones included; Basic's lifetime cap reads it. */
+export const accountStoreCounts = sqliteTable('account_store_counts', {
+    userId: text('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+    storesStarted: integer('stores_started').notNull().default(0),
+    updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+});
+
+/** One credit period of one account: its pool and admin grants, the credits used (`used` counts every charged credit; `settled` is the part of the overrun already taken from purchases) and the overrun forgiven when it closed. */
+export const creditPeriods = sqliteTable('credit_periods', {
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    periodKey: text('period_key').notNull(),
+    periodStart: integer('period_start', { mode: 'timestamp' }).notNull(),
+    periodEnd: integer('period_end', { mode: 'timestamp' }).notNull(),
+    pool: integer('pool').notNull(),
+    granted: integer('granted').notNull().default(0),
+    used: integer('used').notNull().default(0),
+    settled: integer('settled').notNull().default(0),
+    forgiven: integer('forgiven').notNull().default(0),
+    closedAt: integer('closed_at', { mode: 'timestamp' }),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.userId, table.periodKey] }),
+    closeIdx: index('credit_periods_close_idx').on(table.closedAt, table.periodEnd),
+}));
+export type CreditPeriodRecord = typeof creditPeriods.$inferSelect;
+
+/** One charged AI step or call, keyed by what it was so a retried write charges nothing twice; also the usage log. Token counts are null when the provider reported none. */
+export const creditUses = sqliteTable('credit_uses', {
+    useKey: text('use_key').primaryKey(),
+    userId: text('user_id').notNull(),
+    periodKey: text('period_key').notNull(),
+    credits: integer('credits').notNull(),
+    source: text('source', { enum: CREDIT_USE_SOURCES }).notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cacheReadTokens: integer('cache_read_tokens'),
+    cacheWriteTokens: integer('cache_write_tokens'),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    userCreatedIdx: index('credit_uses_user_created_idx').on(table.userId, table.createdAt),
+}));
+
+/** One extra-credits purchase: what was bought, how much is used, refunded or removed, and when it expires. */
+export const creditPurchases = sqliteTable('credit_purchases', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    credits: integer('credits').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    stripeCheckoutSessionId: text('stripe_checkout_session_id').notNull(),
+    stripePaymentIntentId: text('stripe_payment_intent_id').notNull(),
+    purchasedAt: integer('purchased_at', { mode: 'timestamp' }).notNull(),
+    expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),
+    used: integer('used').notNull().default(0),
+    refundedCents: integer('refunded_cents').notNull().default(0),
+    removedCredits: integer('removed_credits').notNull().default(0),
+    expiredAt: integer('expired_at', { mode: 'timestamp' }),
+}, (table) => ({
+    sessionUnique: uniqueIndex('credit_purchases_checkout_session_unique_idx').on(table.stripeCheckoutSessionId),
+    paymentIntentIdx: index('credit_purchases_payment_intent_idx').on(table.stripePaymentIntentId),
+    userPurchasedIdx: index('credit_purchases_user_purchased_idx').on(table.userId, table.purchasedAt),
+    expiryIdx: index('credit_purchases_expiry_idx').on(table.expiredAt, table.expiresAt),
+}));
+export type CreditPurchaseRecord = typeof creditPurchases.$inferSelect;

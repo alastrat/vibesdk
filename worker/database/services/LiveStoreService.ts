@@ -3,6 +3,7 @@
 import { and, asc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
+import { isUniqueViolation } from './unique-violation';
 import type { LiveStoreStatus, StoreDomainProvider, StoreDomainRecord, StoreDomainStatus } from '../../../shared/types/live-stores';
 
 export interface LiveStoreRow {
@@ -32,14 +33,6 @@ export interface StoreDomainRow {
     createdAt: Date;
     checkedAt: Date | null;
     verifiedAt: Date | null;
-}
-
-/** Drizzle wraps D1's error, so the constraint is named in a cause. */
-function isUniqueViolation(error: unknown): boolean {
-    for (let current: unknown = error, depth = 0; current instanceof Error && depth < 4; current = current.cause, depth++) {
-        if (current.message.includes('UNIQUE constraint failed')) return true;
-    }
-    return false;
 }
 
 function isRecord(value: unknown): value is StoreDomainRecord {
