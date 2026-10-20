@@ -1,6 +1,6 @@
 /** Billing and subscriptions (spec 2026-10-19): the statuses, notice kinds and copy shared by the worker and the app. */
 
-import { PLAN_PRICES_CENTS, formatUsd, planName, type PaidPlanId, type PlanId, type PlanLimits } from './plans';
+import { PLAN_PRICES_CENTS, formatUsd, planName, type PaidPlanId, type PlanId, type PlanLimitOverrides, type PlanLimits } from './plans';
 
 /** Stripe's subscription statuses. */
 export const SUBSCRIPTION_STATUSES = ['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused'] as const;
@@ -120,4 +120,26 @@ export interface PlanRequest {
 
 export interface CreditsRequest {
 	credits: number;
+}
+
+/** An admin's read of one account: its billing page, the override that rules it, this period's grants, and the Stripe pages for it. Times in ms. */
+export type AdminBillingView = BillingView & {
+	userId: string;
+	override: { plan: PlanId | null; limits: PlanLimitOverrides; until: number | null; reason: string; createdAt: number } | null;
+	grants: Array<{ credits: number; reason: string; createdAt: number }>;
+	stripeCustomerUrl: string | null;
+	stripeSubscriptionUrl: string | null;
+};
+
+/** `until` is an ISO date in the future; a null plan ends the account's override. */
+export interface PlanOverrideRequest {
+	plan: PlanId | null;
+	limits?: PlanLimitOverrides;
+	until?: string | null;
+	reason: string;
+}
+
+export interface CreditGrantRequest {
+	credits: number;
+	reason: string;
 }

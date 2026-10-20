@@ -51,7 +51,7 @@ function paysForItsPlan(subscription: SubscriptionRecord | null, nowMs: number):
 	return graceEnd !== null && nowMs < graceEnd;
 }
 
-function overrideLimitsOf(override: PlanOverrideRecord): PlanLimitOverrides | null {
+export function overrideLimitsOf(override: PlanOverrideRecord): PlanLimitOverrides | null {
 	try {
 		return planLimitOverridesFrom(JSON.parse(override.limits));
 	} catch {

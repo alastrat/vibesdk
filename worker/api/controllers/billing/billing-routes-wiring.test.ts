@@ -20,4 +20,13 @@ describe('billing routes', () => {
 		expect(sellerRoutes).not.toContain(':userId');
 		expect(source('/worker/api/routes/index.ts')).toContain('setupBillingRoutes(app);');
 	});
+
+	it('keeps account billing changes to admins', () => {
+		const routes = source('/worker/api/routes/billingRoutes.ts');
+		for (const route of ["'/api/admin/users/:userId/billing'", "'/api/admin/users/:userId/plan'", "'/api/admin/users/:userId/credits'", "'/api/admin/users/:userId/stripe-customer'"]) {
+			const start = routes.indexOf(route);
+			expect(start, route).toBeGreaterThan(-1);
+			expect(routes.slice(start, start + 160), route).toContain('setAuthLevel(AuthConfig.admin)');
+		}
+	});
 });

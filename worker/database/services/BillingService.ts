@@ -4,6 +4,7 @@ import { and, eq, inArray, isNull, lt, lte, notExists, or, sql } from 'drizzle-o
 import type { BatchItem } from 'drizzle-orm/batch';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
+import { generateId } from '../../utils/idGenerator';
 import { LIVE_SUBSCRIPTION_STATUSES, type BillingEventResult, type BillingNoticeKind } from '../../../shared/types/billing';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,6 +46,30 @@ export class BillingService extends BaseService {
         const kept = await this.customerOf(userId);
         if (kept === null) throw new Error(`No Stripe customer stored for account ${userId}`);
         return kept;
+    }
+
+    /**
+     * Points the account at `stripeCustomerId` in place of any customer it has, and logs the admin who did it in the same
+     * batch. A customer already stored for another account breaks the unique key and writes nothing.
+     */
+    async linkCustomer(userId: string, stripeCustomerId: string, adminUserId: string, now: Date): Promise<void> {
+        const previous = await this.customerOf(userId);
+        await this.database.batch([
+            this.database
+                .insert(schema.billingCustomers)
+                .values({ userId, stripeCustomerId, createdAt: now })
+                .onConflictDoUpdate({ target: schema.billingCustomers.userId, set: { stripeCustomerId, createdAt: now } }),
+            this.database.insert(schema.auditLogs).values({
+                id: generateId(),
+                userId: adminUserId,
+                entityType: 'billing_customer',
+                entityId: userId,
+                action: 'link_test_customer',
+                oldValues: { stripeCustomerId: previous },
+                newValues: { stripeCustomerId },
+                createdAt: now,
+            }),
+        ]);
     }
 
     async subscriptionOf(userId: string): Promise<schema.SubscriptionRecord | null> {
