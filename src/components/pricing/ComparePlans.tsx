@@ -7,7 +7,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePublicPlan } from '@/hooks/use-public-plan';
 import { CAPABILITIES, STATUS_LABELS, type CapabilityId } from '@/lib/capabilities';
 import { contactPath } from '@/lib/contact';
-import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, formatCredits, formatUsd, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
+import { PLAN_LIMITS, PLAN_PRICES_CENTS } from '@/api-types';
+import { PREMIUM_TIERS, comparisonFor, formatCredits, formatUsd, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 
 const SMALLEST = PREMIUM_TIERS[0];
@@ -24,6 +25,15 @@ const HEADERS: Readonly<Record<PlanId, { price: string; note: string; action: Re
 			<StartBuildingButton variant="blue" className={ACTION}>
 				Start building
 			</StartBuildingButton>
+		),
+	},
+	pro: {
+		price: formatUsd(PLAN_PRICES_CENTS.pro),
+		note: `${formatCredits(PLAN_LIMITS.pro.aiCredits)} AI credits a month`,
+		action: (
+			<PillLink to={contactPath('premium')} variant="charcoal" className={ACTION}>
+				Get Pro
+			</PillLink>
 		),
 	},
 	premium: {
@@ -105,11 +115,12 @@ function Row({
  * Apollo's comparison: the plan headers stay pinned under the top bar while the rows scroll by, and each group of
  * rows folds away. Phones show one plan at a time beside the labels, picked from the corner of the header.
  */
-export function ComparePlans() {
+export function ComparePlans({ billing = false }: { billing?: boolean }) {
 	const plan = usePublicPlan();
 	const isPhone = useIsMobile();
+	const { plans, sections } = comparisonFor(billing);
 	const [phonePlan, setPhonePlan] = useState<PlanId>('premium');
-	const shown = isPhone ? PLANS.filter((entry) => entry.id === phonePlan) : PLANS;
+	const shown = isPhone ? plans.filter((entry) => entry.id === phonePlan) : plans;
 	const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
 	const freeCredits = plan.data?.aiCreditsPerDay == null ? 'A daily allowance' : `${formatCredits(plan.data.aiCreditsPerDay)} a day`;
 	const toggle = (title: string) =>
@@ -140,12 +151,12 @@ export function ComparePlans() {
 												aria-label="Plan to compare"
 												value={phonePlan}
 												onChange={(event) => {
-													const next = PLANS.find((entry) => entry.id === event.target.value);
+													const next = plans.find((entry) => entry.id === event.target.value);
 													if (next) setPhonePlan(next.id);
 												}}
 												className="w-full cursor-pointer appearance-none rounded-xl bg-[#f5f6f8] py-2.5 pr-8 pl-3 text-sm text-public-ink outline-none focus-visible:ring-2 focus-visible:ring-public-blue"
 											>
-												{PLANS.map((entry) => (
+												{plans.map((entry) => (
 													<option key={entry.id} value={entry.id}>
 														{entry.name}
 													</option>
@@ -172,7 +183,7 @@ export function ComparePlans() {
 								})}
 							</tr>
 						</thead>
-						{PLAN_COMPARISON.map((section, sectionIndex) => {
+						{sections.map((section, sectionIndex) => {
 							const isFolded = folded.has(section.title);
 							const rowsId = `compare-rows-${sectionIndex}`;
 							return (
@@ -201,6 +212,7 @@ export function ComparePlans() {
 											plans={shown}
 											cells={{
 												basic: freeCredits,
+												pro: `${formatCredits(PLAN_LIMITS.pro.aiCredits)} a month`,
 												premium: `${formatCredits(SMALLEST.credits)} to ${formatCredits(LARGEST.credits)} a month`,
 												enterprise: 'Custom',
 											}}

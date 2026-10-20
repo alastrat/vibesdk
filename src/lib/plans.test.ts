@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
 import { CAPABILITIES } from './capabilities';
-import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, SELLER_LEVEL_LIMITS, formatCredits, formatUsd, planById, premiumTierFor } from './plans';
+import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, SELLER_LEVEL_LIMITS, comparisonFor, formatCredits, formatUsd, planById, premiumTierFor } from './plans';
 
 describe('plans', () => {
 	it('looks a plan up by id', () => {
-		expect(planById('premium')).toBe(PLANS[1]);
+		expect(planById('premium')).toBe(PLANS[2]);
 		expect(planById('enterprise').name).toBe('Enterprise');
 	});
 
-	it('offers Basic, Premium and Enterprise, in that order', () => {
-		expect(PLANS.map((plan) => plan.id)).toEqual(['basic', 'premium', 'enterprise']);
+	it('offers Basic, Pro, Premium and Enterprise, in that order', () => {
+		expect(PLANS.map((plan) => plan.id)).toEqual(['basic', 'pro', 'premium', 'enterprise']);
 	});
 
 	it('starts Premium at 99 USD, with larger credit pools at higher prices', () => {
@@ -42,7 +42,7 @@ describe('plans', () => {
 	it('fills every comparison row for every plan, grouped by real capabilities', () => {
 		for (const section of PLAN_COMPARISON) {
 			if (section.capability) expect(CAPABILITIES[section.capability]).toBeDefined();
-			for (const row of section.rows) expect(Object.keys(row.cells).sort()).toEqual(['basic', 'enterprise', 'premium']);
+			for (const row of section.rows) expect(Object.keys(row.cells).sort()).toEqual(['basic', 'enterprise', 'premium', 'pro']);
 		}
 	});
 
@@ -71,9 +71,9 @@ describe('plans', () => {
 		expect(cells("Estori's fee on your own products")?.premium).toBe('Card processing');
 		expect(cells("Estori's fee on catalog products")?.premium).toBe('Card processing and the catalog price');
 		expect(cells('Refunds and disputes')?.premium).toBe('Paid by the seller');
-		expect(cells('Delivery checks on orders you ship')).toEqual({ basic: false, premium: true, enterprise: true });
+		expect(cells('Delivery checks on orders you ship')).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
 		// Checkout weighs own products twice toward the weekly cap, so the table says so beside the cap.
-		expect(cells('Own products in weekly sales')).toEqual({ basic: 'Count twice', premium: 'Count twice', enterprise: 'Count twice' });
+		expect(cells('Own products in weekly sales')).toEqual({ basic: 'Count twice', pro: 'Count twice', premium: 'Count twice', enterprise: 'Count twice' });
 		expect(SELLER_LEVEL_LIMITS.map((level) => level.largestOrder)).toEqual([formatUsd(fresh.largestOrderCents), formatUsd(established.largestOrderCents)]);
 	});
 
@@ -85,6 +85,7 @@ describe('plans', () => {
 			if (row.label === 'Delivery checks on orders you ship' || row.label === "Estori's fee on catalog products") continue;
 			expect(row.cells.basic, row.label).not.toBe(false);
 			expect(row.cells.basic, row.label).toEqual(row.cells.premium);
+			expect(row.cells.pro, row.label).toEqual(row.cells.premium);
 			expect(row.cells.enterprise, row.label).toEqual(row.cells.premium);
 		}
 	});
@@ -92,21 +93,58 @@ describe('plans', () => {
 	it("states the catalog fee only on the plans that have the catalog", () => {
 		const catalog = PLAN_COMPARISON.find((section) => section.capability === 'product-catalog')?.rows[0]?.cells;
 		const fee = PLAN_COMPARISON.find((section) => section.capability === 'payments')?.rows.find((row) => row.label === "Estori's fee on catalog products")?.cells;
-		for (const plan of ['basic', 'premium', 'enterprise'] as const) expect(fee?.[plan], plan).toBe(catalog?.[plan] ? 'Card processing and the catalog price' : false);
+		for (const plan of ['basic', 'pro', 'premium', 'enterprise'] as const) expect(fee?.[plan], plan).toBe(catalog?.[plan] ? 'Card processing and the catalog price' : false);
 	});
 
 	it('charges the template fee on every plan, since selling templates works today', () => {
 		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
-		expect(builder?.rows.find((row) => row.label === 'Fee on template sales')?.cells).toEqual({ basic: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL });
+		expect(builder?.rows.find((row) => row.label === 'Fee on template sales')?.cells).toEqual({ basic: PLATFORM_FEE_LABEL, pro: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL });
 	});
 
 	it('lists the emails Estori sends today: the new-order email, the shopper order emails and template receipts, on every plan', () => {
-		const every = { basic: true, premium: true, enterprise: true };
+		const every = { basic: true, pro: true, premium: true, enterprise: true };
 		const row = (capability: string, label: string) => PLAN_COMPARISON.find((section) => section.capability === capability)?.rows.find((entry) => entry.label === label)?.cells;
 		expect(row('payments', 'An email to you for every new order')).toEqual(every);
-		expect(row('payments', 'Order emails to your shoppers')).toEqual({ basic: 'Confirmation, shipped and refund', premium: 'Confirmation, shipped and refund', enterprise: 'Confirmation, shipped and refund' });
+		expect(row('payments', 'Order emails to your shoppers')).toEqual({
+			basic: 'Confirmation, shipped and refund',
+			pro: 'Confirmation, shipped and refund',
+			premium: 'Confirmation, shipped and refund',
+			enterprise: 'Confirmation, shipped and refund',
+		});
 		expect(row('payments', 'Edit each shopper email, or turn it off')).toEqual(every);
 		expect(row('payments', "Shopper emails from your store's own address")).toEqual(every);
 		expect(row('store-builder', 'Email receipts for your template buyers')).toEqual(every);
+	});
+
+	it('takes the store, live-store, domain, catalog and extra-credit cells from the shared limits table', () => {
+		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
+		const cells = (label: string) => builder?.rows.find((row) => row.label === label)?.cells;
+		expect(cells('Stores')).toEqual({ basic: '3', pro: '10 new a day', premium: '25 new a day', enterprise: 'Custom' });
+		expect(cells('Live stores at once')).toEqual({ basic: '1', pro: '3', premium: '10', enterprise: 'Custom' });
+		expect(cells('Extra AI credits')).toEqual({ basic: false, pro: false, premium: '$1.50 per 1,000', enterprise: true });
+		expect(PLAN_COMPARISON.find((section) => section.capability === 'product-catalog')?.rows[0]?.cells).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
+	});
+
+	it("shows today's table while billing is off: no Pro column and none of the limit rows", () => {
+		const off = comparisonFor(false);
+		expect(off.plans.map((plan) => plan.id)).toEqual(['basic', 'premium', 'enterprise']);
+		const builder = off.sections.find((section) => section.capability === 'store-builder');
+		expect(builder?.rows.map((row) => row.label)).toEqual([
+			'Build and change stores just by asking',
+			'Live preview on desktop and phone',
+			'Start from templates in Discover',
+			'Sell your stores as templates',
+			'Fee on template sales',
+			'Email receipts for your template buyers',
+		]);
+		expect(off.sections.flatMap((section) => section.rows).some((row) => row.billingOnly)).toBe(false);
+	});
+
+	it('adds the Pro column and the limit rows once billing is on', () => {
+		const on = comparisonFor(true);
+		expect(on.plans).toBe(PLANS);
+		expect(on.sections).toBe(PLAN_COMPARISON);
+		const labels = on.sections.flatMap((section) => section.rows).filter((row) => row.billingOnly).map((row) => row.label);
+		expect(labels).toEqual(['Stores', 'Live stores at once', 'Your own domain', 'Extra AI credits']);
 	});
 });

@@ -95,7 +95,7 @@ describe('pricing page', () => {
 	it('shows phones one plan beside the labels, picked from the corner of the header', () => {
 		const compare = source(COMPARE);
 		expect(compare).toContain('const isPhone = useIsMobile();');
-		expect(compare).toContain('const shown = isPhone ? PLANS.filter((entry) => entry.id === phonePlan) : PLANS;');
+		expect(compare).toContain('const shown = isPhone ? plans.filter((entry) => entry.id === phonePlan) : plans;');
 		expect(compare).toContain('colSpan={shown.length + 1}');
 		expect(compare).toMatch(/<select[^>]*aria-label="Plan to compare"/);
 	});
@@ -111,7 +111,7 @@ describe('pricing page', () => {
 
 	it('compares plans with pinned headers, and groups that fold', () => {
 		const compare = source(COMPARE);
-		expect(compare).toContain('PLAN_COMPARISON.map');
+		expect(compare).toContain('sections.map');
 		expect(compare).toContain('sticky top-[var(--public-header-h)] z-10');
 		// No scrolling box around the table at any width: it would stop the headers from pinning to the page.
 		expect(compare).not.toContain('overflow-x-auto');

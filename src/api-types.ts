@@ -232,7 +232,37 @@ export type {
   DraftSummary,
   DraftsSnapshot,
 } from 'worker/api/controllers/drafts/types';
-export { MAIN_DRAFT_ID, DRAFT_NAME_MAX_LENGTH } from '../shared/types/drafts.js';
+export { MAIN_DRAFT_ID, DRAFT_NAME_MAX_LENGTH, DRAFT_LIMIT } from '../shared/types/drafts.js';
+export type {
+	PaidPlanId,
+	PlanAccount,
+	PlanAccountInput,
+	PlanId,
+	PlanLimitKey,
+	PlanLimitOverrides,
+	PlanLimitRefusal,
+	PlanLimits,
+} from '../shared/types/plans.js';
+export {
+	EXTRA_CREDITS,
+	GRACE_PERIOD_DAYS,
+	PAID_PLAN_IDS,
+	PLAN_IDS,
+	PLAN_LIMIT_CODE,
+	PLAN_LIMITS,
+	PLAN_PRICES_CENTS,
+	assertWithinLimit,
+	extraCreditsPriceCents,
+	formatBillingDate,
+	formatCredits,
+	formatUsd,
+	isExtraCreditsAmount,
+	isPaidPlanId,
+	isPlanLimitRefusal,
+	limitsFor,
+	planLimitOverridesFrom,
+	planName,
+} from '../shared/types/plans.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
