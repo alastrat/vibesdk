@@ -44,6 +44,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useBilling } from '@/hooks/use-billing';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
 import { ConnectedAccounts } from '@/components/connected-accounts';
+import { AnalyticsPreferenceCard } from '@/components/analytics/AnalyticsPreferenceCard';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
 
@@ -349,6 +350,8 @@ export default function SettingsPage() {
 							</div>
 						</LayerCard.Primary>
 					</LayerCard>
+
+					<AnalyticsPreferenceCard />
 
 					{billing.data?.enabled && (
 						<LayerCard id="billing">

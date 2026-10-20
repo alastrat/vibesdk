@@ -57,6 +57,7 @@ import type{
 	PlatformStatusData,
 	RateLimitError,
 	CapabilitiesData,
+	AnalyticsPreferenceData,
 	TelemetryConfigData,
 	VaultConfigResponse,
 	VaultStatusResponse,
@@ -539,6 +540,15 @@ class ApiClient {
 	/** Visitors' replay pause, and the local opt-in token; quiet, since the app works without it. */
 	async getTelemetryConfig(): Promise<ApiResponse<TelemetryConfigData>> {
 		return this.request<TelemetryConfigData>('/api/telemetry/config', undefined, true);
+	}
+
+	async getAnalyticsPreference(): Promise<ApiResponse<AnalyticsPreferenceData>> {
+		return this.request<AnalyticsPreferenceData>('/api/user/analytics');
+	}
+
+	/** Quiet: the settings card shows its own error. */
+	async setAnalyticsPreference(optedOut: boolean): Promise<ApiResponse<AnalyticsPreferenceData>> {
+		return this.request<AnalyticsPreferenceData>('/api/user/analytics', { method: 'PUT', body: { optedOut } }, true);
 	}
 
 	// ===============================

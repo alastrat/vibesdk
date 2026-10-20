@@ -132,6 +132,8 @@ export const queryKeys = {
 			mine: (userId?: string | null) => [...queryKeys.account.earlyAccess.all(), 'mine', userId ?? 'anonymous'] as const,
 			admin: () => [...queryKeys.account.earlyAccess.all(), 'admin'] as const,
 		},
+		/** The user's analytics setting: never persisted, like the rest of `account`. */
+		analytics: (userId?: string | null) => [...queryKeys.account.all, 'analytics', userId ?? 'anonymous'] as const,
 		contactRequests: {
 			admin: () => [...queryKeys.account.all, 'contact-requests', 'admin'] as const,
 		},
