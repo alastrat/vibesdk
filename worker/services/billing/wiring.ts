@@ -21,7 +21,12 @@ const stripeNotConfigured = (): Promise<never> => Promise.reject(new Error('Stri
 export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 	const mail = billingMailFromEnv(env);
 	return {
-		stripe: stripeFromEnv(env) ?? { retrieveSubscription: stripeNotConfigured, retrieveCheckoutSession: stripeNotConfigured },
+		stripe: stripeFromEnv(env) ?? {
+			retrieveSubscription: stripeNotConfigured,
+			retrieveCheckoutSession: stripeNotConfigured,
+			setDefaultPaymentMethod: stripeNotConfigured,
+			updateSubscriptionMetadata: stripeNotConfigured,
+		},
 		store: new BillingService(env),
 		ledger: new CreditLedgerService(env),
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),

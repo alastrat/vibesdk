@@ -45,12 +45,12 @@ export function planStartedEmail(to: string, email: EmailOf<'plan_started'>, lin
 		subject: `Welcome to Estori ${plan}`,
 		heading: `Welcome to ${plan}`,
 		body: `Your account now has ${formatCredits(limits.aiCredits)} AI credits a month, up to ${stores(limits.liveStores, 'live store')}, your own domains and the supplier catalog. ${plan} renews on ${formatBillingDate(email.renewsAt)} at ${formatUsd(PLAN_PRICES_CENTS[email.plan])} a month until you cancel.${more}`,
-		...action('Manage billing', links.billing),
+		...action('Open billing', links.billing),
 		footer: `Cancel any time in Estori; ${plan} then runs to the end of the month you paid for.`,
 	});
 }
 
-export function planReceiptEmail(to: string, email: EmailOf<'receipt'>): OutgoingEmail {
+export function planReceiptEmail(to: string, email: EmailOf<'receipt'>, links: BillingLinks): OutgoingEmail {
 	const plan = planName(email.plan);
 	const amount = paid(email.amountCents, email.currency);
 	return renderEmail({
@@ -58,7 +58,7 @@ export function planReceiptEmail(to: string, email: EmailOf<'receipt'>): Outgoin
 		subject: `Your Estori receipt: ${amount}`,
 		heading: 'Thanks for your payment',
 		body: `We received ${amount} for Estori ${plan}, ${formatBillingDate(email.periodStart)} to ${formatBillingDate(email.periodEnd)}.`,
-		...action('View invoice', email.invoiceUrl),
+		...action('View invoice', links.billing && `${links.billing}#history`),
 		details: [
 			['Amount', amount],
 			['Period', `${formatBillingDate(email.periodStart)} to ${formatBillingDate(email.periodEnd)}`],
@@ -75,7 +75,7 @@ export function planUpgradedEmail(to: string, email: EmailOf<'plan_upgraded'>, l
 		subject: `You're on ${plan} now`,
 		heading: `You're on ${plan}`,
 		body: `You now have ${formatCredits(PLAN_LIMITS[email.plan].aiCredits)} AI credits a month, and the credits you've used this month count against them. We charged the difference for the rest of this month; your receipt follows.`,
-		...action('Manage billing', links.billing),
+		...action('Open billing', links.billing),
 		footer: STORES_STAY_LIVE,
 	});
 }
@@ -88,7 +88,7 @@ export function downgradeScheduledEmail(to: string, email: EmailOf<'downgrade_sc
 		subject: `Your plan moves to ${plan} at renewal`,
 		heading: `Your plan moves to ${plan}`,
 		body: `On ${formatBillingDate(email.at)} your plan moves to ${plan}, with ${formatCredits(PLAN_LIMITS[email.plan].aiCredits)} AI credits a month at ${formatUsd(PLAN_PRICES_CENTS[email.plan])}. Until then you keep ${planName('premium')}. Extra credits you bought stay yours.`,
-		...action('Manage billing', links.billing),
+		...action('Open billing', links.billing),
 		footer: STORES_STAY_LIVE,
 	});
 }
@@ -96,12 +96,15 @@ export function downgradeScheduledEmail(to: string, email: EmailOf<'downgrade_sc
 /** The plan's features keep working through the grace period, but the new month's credits wait for the payment. */
 export function paymentFailedEmail(to: string, email: EmailOf<'payment_failed'>, links: BillingLinks): OutgoingEmail {
 	const plan = planName(email.plan);
+	const next = email.needsConfirmation
+		? 'Your bank asked you to confirm this payment. Open billing and choose Pay now.'
+		: 'Your card was declined. Open billing to pay with this card again or a new one.';
 	return renderEmail({
 		to,
 		subject: `Your ${plan} payment didn't go through`,
 		heading: "Your payment didn't go through",
-		body: `We couldn't charge your card for Estori ${plan}. Your stores and the features of ${plan} keep working until ${formatBillingDate(email.graceEndsAt)} while we retry. Your new month's AI credits start as soon as the payment goes through. Credits you bought still work. Update your card to keep ${plan}.`,
-		...action('Update your card', links.billing),
+		body: `We couldn't charge your card for Estori ${plan}. Your stores and the features of ${plan} keep working until ${formatBillingDate(email.graceEndsAt)} while we retry. Your new month's AI credits start as soon as the payment goes through. Credits you bought still work. ${next}`,
+		...action('Open billing', links.billing),
 		footer: STORES_STAY_LIVE,
 	});
 }

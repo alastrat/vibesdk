@@ -387,6 +387,8 @@ export interface StripeClient {
 	createCardSetupSession(input: CardSetupInput): Promise<StripeCheckoutSession>;
 	/** The card the customer's next invoices are charged to, and the subscription's own when it has one. */
 	setDefaultPaymentMethod(input: { customerId: string; subscriptionId: string | null; paymentMethodId: string }): Promise<void>;
+	/** Adds or replaces only the keys given; Stripe leaves the subscription's other metadata as it is. */
+	updateSubscriptionMetadata(subscriptionId: string, metadata: Record<string, string>, idempotencyKey: string): Promise<void>;
 	retrievePaymentMethod(id: string): Promise<StripePaymentMethod>;
 	/** Newest first. */
 	listInvoices(customerId: string, limit: number): Promise<StripeInvoice[]>;
@@ -747,6 +749,9 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				{ default_payment_method: paymentMethodId },
 				`billing-default-card-${subscriptionId}-${paymentMethodId}`,
 			);
+		},
+		updateSubscriptionMetadata: async (subscriptionId, metadata, idempotencyKey) => {
+			await request<StripeSubscription>('POST', `/subscriptions/${encodeURIComponent(subscriptionId)}`, { metadata }, idempotencyKey);
 		},
 		retrievePaymentMethod: async (id) => {
 			const method = await request<{ id: string; card?: StripePaymentMethod['card'] }>('GET', `/payment_methods/${encodeURIComponent(id)}`);

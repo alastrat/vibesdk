@@ -5,6 +5,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
+import { BillingService } from '../../../database/services/BillingService';
 import { CreditLedgerService } from '../../../database/services/CreditLedgerService';
 import { PLATFORM_ALERT_EMAILS } from '../../../services/alerts/platform-alerts';
 import { applyCreditRefund, type BillingEventDeps } from '../../../services/billing/events';
@@ -85,6 +86,14 @@ function stripeServes(objects: Record<string, unknown>): Record<string, unknown>
 	return objects;
 }
 
+/** What Estori asked Stripe to change, in order, as "path body". */
+function stripeWrites(): string[] {
+	return vi
+		.mocked(globalThis.fetch)
+		.mock.calls.filter(([, init]) => init?.method === 'POST')
+		.map(([input, init]) => `${new URL(String(input)).pathname} ${decodeURIComponent(String(init?.body ?? ''))}`);
+}
+
 async function deliver(id: string, type: string, object: unknown, extra: Record<string, unknown> = {}): Promise<number> {
 	const payload = JSON.stringify({ id, type, data: { object } });
 	const request = new Request('https://estori.app/api/stripe/webhook', { method: 'POST', headers: { 'Stripe-Signature': await signatureFor(payload) }, body: payload });
@@ -116,6 +125,7 @@ const rowOf = (userId: string) =>
 	db.prepare('SELECT stripe_subscription_id AS id, status, plan, cancel_at_period_end AS ending, pending_plan AS pending FROM subscriptions WHERE user_id = ?').bind(userId).first();
 const resultOf = (eventId: string) => db.prepare('SELECT result FROM billing_events WHERE stripe_event_id = ?').bind(eventId).first('result');
 const subjects = () => sent.filter((email) => !PLATFORM_ALERT_EMAILS.includes(email.to)).map((email) => email.subject);
+const customerEmails = () => sent.filter((email) => !PLATFORM_ALERT_EMAILS.includes(email.to));
 const alerted = () => sent.some((email) => PLATFORM_ALERT_EMAILS.includes(email.to));
 
 describe('subscription webhooks', () => {
@@ -171,6 +181,30 @@ describe('subscription webhooks', () => {
 		await deliver('evt_paid', 'invoice.paid', { ...failed, amount_paid: 4_900 });
 		expect(await rowOf('u_due')).toMatchObject({ status: 'active' });
 		expect(subjects()).toEqual(["Your Pro payment didn't go through", 'Your Estori receipt: $49.00', 'Your AI credits are renewed']);
+	});
+
+	it('an action-required invoice sends a payment failed notice that asks to confirm', async () => {
+		const customer = await seller('u_sca');
+		await insertSubscription(db, { userId: 'u_sca', stripeSubscriptionId: 'sub_u_sca', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
+		stripeServes({ sub_u_sca: subscription('u_sca', customer, { status: 'past_due' }) });
+		const invoice = { id: 'in_sca', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0020', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_sca' } } };
+		expect(await deliver('evt_sca', 'invoice.payment_action_required', invoice)).toBe(200);
+		expect(await resultOf('evt_sca')).toBe('applied');
+		expect(await rowOf('u_sca')).toMatchObject({ status: 'past_due' });
+		expect(subjects()).toEqual(["Your Pro payment didn't go through"]);
+		expect(customerEmails()[0].text).toContain('Your bank asked you to confirm this payment. Open billing and choose Pay now.');
+		expect(customerEmails()[0].text).not.toContain('declined');
+	});
+
+	it("words a failed invoice's one notice by whichever of its two events arrives first", async () => {
+		const customer = await seller('u_first');
+		await insertSubscription(db, { userId: 'u_first', stripeSubscriptionId: 'sub_u_first', status: 'active', currentPeriodStart: new Date((START - 31 * DAY) * 1000), currentPeriodEnd: new Date(START * 1000) });
+		stripeServes({ sub_u_first: subscription('u_first', customer, { status: 'past_due' }) });
+		const invoice = { id: 'in_first', customer, amount_paid: 0, currency: 'usd', hosted_invoice_url: null, number: 'EST-0021', billing_reason: 'subscription_cycle', attempt_count: 1, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_u_first' } } };
+		await deliver('evt_first_failed', 'invoice.payment_failed', invoice);
+		await deliver('evt_first_action', 'invoice.payment_action_required', invoice);
+		expect(customerEmails()).toHaveLength(1);
+		expect(customerEmails()[0].text).toContain('Your card was declined. Open billing to pay with this card again or a new one.');
 	});
 
 	it('says when a cancelled plan ends, keeps it when the seller changes their mind, and says when it has ended', async () => {
@@ -323,6 +357,145 @@ describe('subscription webhooks', () => {
 		await deliver('evt_fail', 'invoice.payment_failed', failed, { BILLING: 'on' });
 		expect(await rowOf('u_fail')).toMatchObject({ status: 'past_due' });
 		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_fail'").first('pool')).toBe(20_000);
+	});
+});
+
+describe('card and consent webhooks', () => {
+	const cardSession = (userId: string, customer: string, overrides: Record<string, unknown> = {}) => ({
+		id: `cs_${userId}`,
+		mode: 'setup',
+		status: 'complete',
+		customer,
+		client_reference_id: null,
+		payment_status: 'no_payment_required',
+		metadata: { kind: 'card', estori_user_id: userId, card_mode: 'save' },
+		setup_intent: { id: 'seti_1', payment_method: 'pm_new' },
+		...overrides,
+	});
+	const cardEvent = (userId: string) => ({ id: `cs_${userId}`, mode: 'setup', payment_status: 'no_payment_required', metadata: { kind: 'card' } });
+
+	it('a completed card session sets the default card once', async () => {
+		const customer = await seller('u_card');
+		await insertSubscription(db, { userId: 'u_card', stripeSubscriptionId: 'sub_u_card', status: 'active', currentPeriodStart: new Date(START * 1000), currentPeriodEnd: new Date(END * 1000) });
+		stripeServes({ cs_u_card: cardSession('u_card', customer), [customer]: { id: customer }, sub_u_card: subscription('u_card', customer) });
+		expect(await deliver('evt_card', 'checkout.session.completed', cardEvent('u_card'))).toBe(200);
+		expect(await deliver('evt_card', 'checkout.session.completed', cardEvent('u_card'))).toBe(200);
+		expect(await resultOf('evt_card')).toBe('applied');
+		expect(stripeWrites()).toEqual(['/v1/customers/cus_u_card invoice_settings[default_payment_method]=pm_new', '/v1/subscriptions/sub_u_card default_payment_method=pm_new']);
+		expect(subjects()).toEqual([]);
+	});
+
+	it("sets only the customer's card when the seller has no live subscription, and never pays an invoice, even in pay mode", async () => {
+		const customer = await seller('u_nosub');
+		stripeServes({ cs_u_nosub: cardSession('u_nosub', customer, { metadata: { kind: 'card', estori_user_id: 'u_nosub', card_mode: 'pay' } }), [customer]: { id: customer } });
+		expect(await deliver('evt_nosub', 'checkout.session.completed', cardEvent('u_nosub'))).toBe(200);
+		expect(await resultOf('evt_nosub')).toBe('applied');
+		expect(stripeWrites()).toEqual(['/v1/customers/cus_u_nosub invoice_settings[default_payment_method]=pm_new']);
+		const paths = vi.mocked(globalThis.fetch).mock.calls.map(([input]) => new URL(String(input)).pathname);
+		expect(paths.some((path) => path.includes('/invoices'))).toBe(false);
+	});
+
+	it("refuses a card session whose seller isn't the customer's, changing nothing and alerting", async () => {
+		const customer = await seller('u_owner');
+		await insertUser(db, 'u_other');
+		stripeServes({ cs_u_other: cardSession('u_other', customer), [customer]: { id: customer } });
+		expect(await deliver('evt_other', 'checkout.session.completed', cardEvent('u_other'))).toBe(200);
+		expect(await resultOf('evt_other')).toBe('refused');
+		expect(stripeWrites()).toEqual([]);
+		expect(alerted()).toBe(true);
+	});
+
+	it("ignores a card session Stripe doesn't show as complete", async () => {
+		const customer = await seller('u_open');
+		stripeServes({ cs_u_open: cardSession('u_open', customer, { status: 'open' }), [customer]: { id: customer } });
+		expect(await deliver('evt_open', 'checkout.session.completed', cardEvent('u_open'))).toBe(200);
+		expect(await resultOf('evt_open')).toBe('ignored');
+		expect(stripeWrites()).toEqual([]);
+	});
+
+	it('records a card session that names no saved card without changing anything', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const customer = await seller('u_nocard');
+		stripeServes({ cs_u_nocard: cardSession('u_nocard', customer, { setup_intent: { id: 'seti_2', payment_method: null } }), [customer]: { id: customer } });
+		expect(await deliver('evt_nocard', 'checkout.session.completed', cardEvent('u_nocard'))).toBe(200);
+		expect(await resultOf('evt_nocard')).toBe('ignored');
+		expect(stripeWrites()).toEqual([]);
+		expect(JSON.stringify(warn.mock.calls)).toContain('cs_u_nocard');
+	});
+
+	const subscriptionSession = (userId: string, customer: string) => ({
+		id: `cs_sub_${userId}`,
+		mode: 'subscription',
+		subscription: `sub_${userId}`,
+		customer,
+		client_reference_id: userId,
+		payment_status: 'paid',
+		status: 'complete',
+		metadata: { estori_user_id: userId, plan: 'pro' },
+	});
+	const consentFor = (userId: string, termsVersion = '2026-10-20') =>
+		new BillingService(env()).recordConsent({ sessionId: `cs_sub_${userId}`, userId, plan: 'pro', termsVersion, consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.', now: new Date('2026-10-20T10:00:00Z') });
+
+	it('a subscription checkout stamps the stored consent onto the subscription', async () => {
+		const customer = await seller('u_consent');
+		await consentFor('u_consent');
+		stripeServes({ sub_u_consent: subscription('u_consent', customer) });
+		expect(await deliver('evt_consent', 'checkout.session.completed', subscriptionSession('u_consent', customer))).toBe(200);
+		expect(await rowOf('u_consent')).toMatchObject({ id: 'sub_u_consent', status: 'active' });
+		expect(stripeWrites()).toEqual(['/v1/subscriptions/sub_u_consent metadata[terms_version]=2026-10-20&metadata[renewal_consent_at]=2026-10-20T10:00:00.000Z']);
+	});
+
+	it('leaves a subscription that already carries its terms alone', async () => {
+		const customer = await seller('u_stamped');
+		await consentFor('u_stamped');
+		stripeServes({ sub_u_stamped: subscription('u_stamped', customer, { metadata: { estori_user_id: 'u_stamped', terms_version: '2026-10-20' } }) });
+		expect(await deliver('evt_stamped', 'checkout.session.completed', subscriptionSession('u_stamped', customer))).toBe(200);
+		expect(await resultOf('evt_stamped')).toBe('applied');
+		expect(stripeWrites()).toEqual([]);
+	});
+
+	it("stamps on the retry when Stripe refused the stamp after the checkout was recorded, so the seller's agreement isn't lost", async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const customer = await seller('u_retry');
+		await consentFor('u_retry');
+		stripeServes({ sub_u_retry: subscription('u_retry', customer) });
+		const serve = vi.mocked(globalThis.fetch).getMockImplementation();
+		let refusing = true;
+		vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+			if (refusing && init?.method === 'POST') return Response.json({ error: { message: 'Stripe is down' } }, { status: 500 });
+			return serve ? serve(input, init) : Response.error();
+		});
+		expect(await deliver('evt_retry', 'checkout.session.completed', subscriptionSession('u_retry', customer))).toBe(500);
+		expect(await resultOf('evt_retry')).toBe('applied');
+		refusing = false;
+		expect(await deliver('evt_retry', 'checkout.session.completed', subscriptionSession('u_retry', customer))).toBe(200);
+		const stamp = '/v1/subscriptions/sub_u_retry metadata[terms_version]=2026-10-20&metadata[renewal_consent_at]=2026-10-20T10:00:00.000Z';
+		expect(stripeWrites()).toEqual([stamp, stamp]);
+		expect(subjects()).toEqual(['Welcome to Estori Pro']);
+	});
+
+	it('a subscription without a stored consent is still recorded and warns', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const customer = await seller('u_noconsent');
+		stripeServes({ sub_u_noconsent: subscription('u_noconsent', customer) });
+		expect(await deliver('evt_noconsent', 'checkout.session.completed', subscriptionSession('u_noconsent', customer))).toBe(200);
+		expect(await rowOf('u_noconsent')).toMatchObject({ id: 'sub_u_noconsent', status: 'active', plan: 'pro' });
+		expect(await resultOf('evt_noconsent')).toBe('applied');
+		expect(stripeWrites()).toEqual([]);
+		const logged = JSON.stringify(warn.mock.calls);
+		expect(logged).toContain('A subscription started without a stored consent');
+		expect(logged).toContain('cs_sub_u_noconsent');
+		expect(subjects()).toEqual(['Welcome to Estori Pro']);
+	});
+
+	it("doesn't stamp a subscription whose account the checkout doesn't match", async () => {
+		const customer = await seller('u_mine');
+		await insertUser(db, 'u_thief');
+		await consentFor('u_thief');
+		stripeServes({ sub_u_thief: subscription('u_thief', customer) });
+		await deliver('evt_thief', 'checkout.session.completed', subscriptionSession('u_thief', customer));
+		expect(await resultOf('evt_thief')).toBe('refused');
+		expect(stripeWrites()).toEqual([]);
 	});
 });
 

@@ -283,6 +283,14 @@ describe('Stripe billing calls', () => {
 		expect(calls.map((call) => call.url)).toEqual(['https://api.stripe.com/v1/customers/cus_1']);
 	});
 
+	it("updating a subscription's metadata sends only the keys given, under the caller's key", async () => {
+		const { calls, client } = recordingFetch({ id: 'sub_1' });
+		await client.updateSubscriptionMetadata('sub_1', { terms_version: '2026-10-20', renewal_consent_at: '2026-10-20T10:00:00.000Z' }, 'billing-consent-sub_1');
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscriptions/sub_1', method: 'POST', key: 'billing-consent-sub_1' });
+		expect(calls[0].params).toEqual(['metadata[terms_version]=2026-10-20', 'metadata[renewal_consent_at]=2026-10-20T10:00:00.000Z']);
+	});
+
 	it('reads a payment method as its card summary, and as no card when it is not a card', async () => {
 		const card = recordingFetch({ id: 'pm_1', type: 'card', card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030, funding: 'credit', country: 'US' } });
 		expect(await card.client.retrievePaymentMethod('pm_1')).toEqual({ id: 'pm_1', card: { brand: 'visa', last4: '4242', exp_month: 4, exp_year: 2030 } });

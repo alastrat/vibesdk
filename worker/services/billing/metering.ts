@@ -43,7 +43,7 @@ export interface TurnAccount {
 const TRIES = 3;
 
 /** While a renewal is unpaid its pool is 0, so running out means the card needs fixing, not a bigger plan. */
-const PAYMENT_FAILED_MESSAGE = "Your last payment didn't go through, so this month's AI credits haven't started. Update your card in Manage billing to keep building.";
+const PAYMENT_FAILED_MESSAGE = "Your last payment didn't go through, so this month's AI credits haven't started. Pay it on the billing page to keep building.";
 
 const logger = createLogger('CreditMetering');
 

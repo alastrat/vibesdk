@@ -29,10 +29,11 @@ const PRICING_PATH = '/pricing';
 /** One email per kind of notice, with what its copy needs. */
 export type BillingEmail =
 	| { kind: 'plan_started'; plan: PaidPlanId; renewsAt: number }
-	| { kind: 'receipt'; plan: PaidPlanId; amountCents: number; currency: string; periodStart: number; periodEnd: number; invoiceNumber: string | null; invoiceUrl: string | null }
+	| { kind: 'receipt'; plan: PaidPlanId; amountCents: number; currency: string; periodStart: number; periodEnd: number; invoiceNumber: string | null }
 	| { kind: 'plan_upgraded'; plan: PaidPlanId }
 	| { kind: 'downgrade_scheduled'; plan: PaidPlanId; at: number }
-	| { kind: 'payment_failed'; plan: PaidPlanId; graceEndsAt: number }
+	/** `needsConfirmation`: the bank asked the seller to confirm the payment, so billing's Pay now can finish it; otherwise the card was declined. */
+	| { kind: 'payment_failed'; plan: PaidPlanId; graceEndsAt: number; needsConfirmation: boolean }
 	| { kind: 'plan_ending'; plan: PaidPlanId; endsAt: number }
 	| { kind: 'plan_ended'; plan: PaidPlanId; reason: 'cancelled' | 'payment-failed' }
 	| { kind: 'credits_renewed'; credits: number; renewsAt: number }
@@ -73,7 +74,7 @@ export function billingEmail(to: string, email: BillingEmail, baseUrl: string | 
 		case 'plan_started':
 			return planStartedEmail(to, email, links);
 		case 'receipt':
-			return planReceiptEmail(to, email);
+			return planReceiptEmail(to, email, links);
 		case 'plan_upgraded':
 			return planUpgradedEmail(to, email, links);
 		case 'downgrade_scheduled':
