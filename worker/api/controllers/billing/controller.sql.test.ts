@@ -344,8 +344,8 @@ describe("the checkout's wording follows the seller's language", () => {
 	};
 
 	it("words the terms in the seller's saved language", async () => {
-		expect(await consentFor('es')).toBe('Acepto los Términos (en inglés) y que Estori Pro se renueva a USD 49 al mes hasta que yo cancele.');
-		expect(await consentFor('pt-BR')).toBe('Concordo com os Termos (em inglês) e com o fato de que o Estori Pro renova a US$ 49 por mês até eu cancelar.');
+		expect(await consentFor('es')).toBe('Acepto los Términos (en inglés) y que Estori Pro se renueva por USD 49 al mes hasta que yo cancele.');
+		expect(await consentFor('pt-BR')).toBe('Concordo com os Termos (em inglês) e com o fato de que o Estori Pro é renovado por US$ 49 por mês até que eu cancele.');
 		expect(await consentFor('en')).toBe('I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.');
 	});
 

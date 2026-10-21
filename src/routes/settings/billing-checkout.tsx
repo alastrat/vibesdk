@@ -18,7 +18,7 @@ import { SectionTitle } from '@/components/billing/SectionTitle';
 import { Stopped } from '@/components/billing/Stopped';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useBillingCheckout } from '@/hooks/use-billing-checkout';
-import { getLocale, t, useI18n } from '@/lib/i18n';
+import { getLocale, msg, t, useI18n } from '@/lib/i18n';
 import { extraCreditsPriceLabel } from '@/lib/plans';
 import { canPayNow, checkoutExpiredOf, checkoutPathOf, checkoutRequestOf, consentPartsOf, dueTodayLabel, type CheckoutRequest, type CheckoutState } from './checkout-state';
 
@@ -213,7 +213,7 @@ export default function BillingCheckoutPage() {
 	const stopped = request === null || state.phase.name === 'expired' || state.phase.name === 'refused';
 	let body: ReactNode;
 	if (request === null) {
-		body = <Stopped message={t('Choose a plan, or an amount of extra credits, on the billing page.')} action={null} />;
+		body = <Stopped message={msg('Choose a plan, or an amount of extra credits, on the billing page.')} action={null} />;
 	} else if (state.phase.name === 'expired') {
 		body = <Stopped message={CHECKOUT_EXPIRED_MESSAGE} action={{ label: t('Start again'), onClick: checkout.restart }} />;
 	} else if (state.phase.name === 'refused') {

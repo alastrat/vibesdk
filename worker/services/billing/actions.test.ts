@@ -1302,8 +1302,8 @@ const plain = (text: string): string => text.replace(/\u00a0/g, ' ');
 const withNoBreakSpaces = (text: string): string => text.replace(/(USD|US\$) (?=\d)/g, '$1\u00a0');
 
 describe("the checkout's wording in the seller's language", () => {
-	const SPANISH_CONSENT = 'Acepto los Términos (en inglés) y que Estori Pro se renueva a USD 49 al mes hasta que yo cancele.';
-	const PORTUGUESE_CONSENT = 'Concordo com os Termos (em inglês) e com o fato de que o Estori Pro renova a US$ 49 por mês até eu cancelar.';
+	const SPANISH_CONSENT = 'Acepto los Términos (en inglés) y que Estori Pro se renueva por USD 49 al mes hasta que yo cancele.';
+	const PORTUGUESE_CONSENT = 'Concordo com os Termos (em inglês) e com o fato de que o Estori Pro é renovado por US$ 49 por mês até que eu cancele.';
 
 	it('words the terms a plan checkout opens with, and what it includes, in Spanish and Portuguese', async () => {
 		const spanish = fake({ customer: 'cus_1', sessions: [PLAN_SESSION] });
@@ -1314,7 +1314,7 @@ describe("the checkout's wording in the seller's language", () => {
 			consentText: withNoBreakSpaces(SPANISH_CONSENT),
 			buttonText: withNoBreakSpaces('Suscribirse: USD 49 al mes'),
 			dueTodayCents: 4_900,
-			disclosure: withNoBreakSpaces('Pro se renueva cada mes a USD 49 hasta que canceles. Cancela cuando quieras en Estori; termina al final del período.'),
+			disclosure: withNoBreakSpaces('Pro se renueva cada mes por USD 49 hasta que canceles. Cancela cuando quieras en Estori; termina al final del período.'),
 		});
 		expect(started.value.order).toMatchObject({ kind: 'plan', includes: ['20,000 créditos de IA al mes', 'Hasta 3 tiendas publicadas, 10 tiendas nuevas al día', 'Tu propio dominio en cada tienda publicada', 'El catálogo de proveedores'] });
 
@@ -1342,9 +1342,9 @@ describe("the checkout's wording in the seller's language", () => {
 		const answered = await checkoutTerms(once.deps, 'u1', 'cs_plan');
 		if (!answered.ok) throw new Error('the terms are answered');
 		expect(plain(answered.value.buttonText)).toBe('Assinar: US$ 24,50 por mês durante 1 mês, depois US$ 49 por mês');
-		expect(plain(answered.value.consentText)).toBe('Concordo com os Termos (em inglês) e com o fato de que o Estori Pro custa US$ 24,50 por mês durante 1 mês, depois US$ 49 por mês, até eu cancelar.');
+		expect(plain(answered.value.consentText)).toBe('Concordo com os Termos (em inglês) e com o fato de que o Estori Pro custa US$ 24,50 por mês durante 1 mês, depois US$ 49 por mês, até que eu cancele.');
 		expect(plain(answered.value.disclosure)).toBe(
-			'O plano Pro custa US$ 24,50 por mês durante 1 mês, depois renova todo mês a US$ 49 até você cancelar. Cancele quando quiser no Estori; termina no fim do período.',
+			'O plano Pro custa US$ 24,50 por mês durante 1 mês, depois é renovado todo mês por US$ 49 até que você cancele. Cancele quando quiser no Estori; termina no fim do período.',
 		);
 	});
 

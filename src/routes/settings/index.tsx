@@ -47,6 +47,7 @@ import { AnalyticsPreferenceCard } from '@/components/analytics/AnalyticsPrefere
 import { LanguageCard } from '@/components/settings/LanguageCard';
 import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 import { formatNumericDate } from '@/lib/format-date';
+import { capitalizeFirstLetter } from '@/lib/utils';
 import { getLocale, t } from '@/lib/i18n';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
@@ -485,7 +486,8 @@ export default function SettingsPage() {
 												<div className="grid gap-4">
 													<div className="grid gap-1.5">
 														<p className="text-sm font-medium text-kumo-default">
-															{t('API key')}
+															{/* The same message as the dialog's noun, which reads in a sentence; a label starts with a capital. */}
+															{capitalizeFirstLetter(t('API key'))}
 														</p>
 														<div className="relative">
 															<Input

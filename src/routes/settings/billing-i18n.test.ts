@@ -92,7 +92,7 @@ describe('plan choices and confirmations', () => {
 	it('says what a change charges or ends before the seller confirms it', async () => {
 		await applyAccountLocale('es');
 		expect(plain(confirmationFor(view('pro'), 'upgrade').body)).toBe(
-			'Tendrás 100,000 créditos de IA al mes de inmediato, y los créditos que ya usaste este mes se descuentan de ellos. Cobraremos la diferencia por el resto de este mes y después Premium se renueva a USD 199 al mes.',
+			'Tendrás 100,000 créditos de IA al mes de inmediato, y los créditos que ya usaste este mes se descuentan de ellos. Cobraremos la diferencia por el resto de este mes y después Premium se renueva por USD 199 al mes.',
 		);
 		expect(confirmationFor(view('premium'), 'downgrade').title).toBe('¿Quieres cambiar a Pro en la renovación?');
 		expect(confirmationFor(view('pro'), 'cancel')).toEqual({
@@ -107,7 +107,7 @@ describe('plan choices and confirmations', () => {
 			confirm: 'Cancelar Pro',
 		});
 		expect(plain(confirmationFor(view('premium'), 'downgrade').body)).toBe(
-			'Você mantém o plano Premium até 5 de novembro. Depois, o plano Pro renova a US$ 49 por mês, com 20.000 créditos de IA por mês. Não há reembolso pelo restante deste mês.',
+			'Você mantém o plano Premium até 5 de novembro. Depois, o plano Pro é renovado por US$ 49 por mês, com 20.000 créditos de IA por mês. Não há reembolso pelo restante deste mês.',
 		);
 	});
 });

@@ -23,6 +23,7 @@ import {
 	type CheckoutRequest,
 } from '@/routes/settings/checkout-state';
 import { CHECKOUT_FAILED_MESSAGE } from './use-billing';
+import { useAccountLocaleChange } from './use-account-locale-change';
 import { useStripeAppearance } from './use-stripe-appearance';
 
 /** Where the page keeps what it asked for, so the return route can send an open or expired checkout back to it. */
@@ -151,6 +152,18 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 		dispatch({ type: 'termsRequested' });
 		void refreshTerms(sessionId);
 	}, [refreshTerms]);
+
+	/**
+	 * The terms are worded in the seller's saved language. When they switch it mid-checkout the terms are read again and
+	 * the box is unticked, so what they agree to is the wording they can now read.
+	 */
+	const refreshTermsForLanguage = useCallback(() => {
+		const { sessionId, terms } = latest.current;
+		if (sessionId === null || terms === null) return;
+		dispatch({ type: 'termsRequested' });
+		void refreshTerms(sessionId);
+	}, [refreshTerms]);
+	useAccountLocaleChange(refreshTermsForLanguage);
 
 	/** A code applied or removed changes the price, so the terms are fetched again and the box is unticked. */
 	const changeCode = useCallback(

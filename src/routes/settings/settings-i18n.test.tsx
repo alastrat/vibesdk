@@ -11,7 +11,8 @@ import { BackToBilling } from '@/components/billing/BackToBilling';
 import { CreditsStepper } from '@/components/billing/CreditsStepper';
 import { PaymentMethodCard } from '@/components/billing/PaymentMethodCard';
 import { Stopped } from '@/components/billing/Stopped';
-import { applyAccountLocale } from '@/lib/i18n';
+import { applyAccountLocale, t } from '@/lib/i18n';
+import { capitalizeFirstLetter } from '@/lib/utils';
 import { queryKeys } from '@/lib/query-keys';
 import { CARD_EXPIRED_MESSAGE } from './card-state';
 import Profile from '../profile';
@@ -103,6 +104,8 @@ describe('Settings', () => {
 			'Correo electrónico confirmado',
 			'Compartir analíticas de uso con Estori',
 			'La opción Global Privacy Control de tu navegador está activada',
+			// What the analytics card says is recorded must cover everything written on the page, not only what is typed.
+			'grabaciones de algunas sesiones que muestran diseños y clics pero no lo que está escrito',
 			'Plan y facturación',
 			'Tu plan',
 			'Plan, créditos y facturación',
@@ -129,6 +132,7 @@ describe('Settings', () => {
 			'Gerencie as configurações e as preferências da sua conta',
 			'E-mail confirmado',
 			'Compartilhar análises de uso com o Estori',
+			'gravações de algumas sessões que mostram layouts e cliques, mas não o que está escrito',
 			'Plano e cobrança',
 			'Seu plano',
 			'Chaves de API do Estori',
@@ -214,5 +218,22 @@ describe('the pieces the billing pages share', () => {
 		expect(html).toContain('aria-label="Mais créditos"');
 		expect(html).toContain('aria-label="Créditos extras"');
 		expect(html).toContain('25.000');
+	});
+});
+
+describe('the API key label and the dialog noun that share one message', () => {
+	const source = import.meta.glob<string>('/src/routes/settings/index.tsx', { query: '?raw', import: 'default', eager: true })['/src/routes/settings/index.tsx'];
+
+	it('starts the label with a capital in each language, while the noun in the delete dialog stays as the sentence needs it', async () => {
+		expect(capitalizeFirstLetter(t('API key'))).toBe('API key');
+		await applyAccountLocale('es');
+		expect([t('API key'), capitalizeFirstLetter(t('API key'))]).toEqual(['clave de API', 'Clave de API']);
+		await applyAccountLocale('pt-BR');
+		expect([t('API key'), capitalizeFirstLetter(t('API key'))]).toEqual(['chave de API', 'Chave de API']);
+	});
+
+	it('shows the capitalized one above the key field, and the noun as it is in the dialog', () => {
+		expect(source).toContain("{capitalizeFirstLetter(t('API key'))}");
+		expect(source).toContain("resourceType={t('API key')}");
 	});
 });

@@ -52,6 +52,7 @@ const COVERED: string[] = [
 	'src/components/analytics/',
 	'src/hooks/use-telemetry.ts',
 	'src/hooks/use-billing*.ts',
+	'src/lib/stripe/next-action.ts',
 	'src/components/connected-accounts.tsx',
 	'src/components/cloudflare-account-selector.tsx',
 	'shared/types/billing.ts',
