@@ -5,6 +5,7 @@
  */
 
 import type { RouteContext } from '../../types/route-context';
+import { formatNumber } from '../../../../shared/i18n/format';
 import { isLocale, LOCALE_NAMES, type Locale } from '../../../../shared/i18n/locales';
 import { msg } from '../../../../shared/i18n/translate';
 import {
@@ -105,9 +106,10 @@ export class StoreTranslationsController extends TranslationsApiController {
 			if (!facts) return this.refusal<StoreTranslationRun>(env, user, 404, STORE_NOT_FOUND);
 			if (facts.lastDeployedAt === null && live === null) return this.refusal<StoreTranslationRun>(env, user, 409, NEVER_DEPLOYED);
 
-			if (!settings.targets[locale]?.enabled) await new StoreTranslationService(env).saveSettings(appId, { targets: { [locale]: { enabled: true } } });
 			const queued = await new TaskService(env).enqueue({ userId: user.id, appId, kind: 'store.translate', payload: { appId, locale }, dedupeKey: translationDedupeKey(appId, locale) });
 			if ('refused' in queued) return this.refusal<StoreTranslationRun>(env, user, 429, TASK_LIMIT);
+			// Turned on only once the task is queued, so a refused or failed run leaves the language as it was.
+			if (!settings.targets[locale]?.enabled) await new StoreTranslationService(env).saveSettings(appId, { targets: { [locale]: { enabled: true } } });
 			await wakeTaskRunner(env, user.id);
 			const task = taskView(queued.task);
 			if (!task) throw new Error(`Task ${queued.task.id} has a payload its kind can't read`);
@@ -145,7 +147,7 @@ export class StoreTranslationsController extends TranslationsApiController {
 			if (!TEXT_HASH.test(hash)) return this.refusal<StoreTranslationRow>(env, user, 404, NO_SUCH_TEXT);
 			const body = await this.parseJsonBody<unknown>(request);
 			const parsed: Parsed<string> = parseSellerText(body.success ? body.data : undefined);
-			if (!parsed.ok) return this.refusal<StoreTranslationRow>(env, user, 400, parsed.message, { max: MAX_TEXT_CHARS });
+			if (!parsed.ok) return this.refusal<StoreTranslationRow>(env, user, 400, parsed.message, (language) => ({ max: formatNumber(MAX_TEXT_CHARS, language) }));
 			const service = new StoreTranslationService(env);
 			if (!(await service.setSellerText(appId, locale, hash, parsed.value))) return this.refusal<StoreTranslationRow>(env, user, 404, NO_SUCH_TEXT);
 			return this.rowReply(env, target, hash);

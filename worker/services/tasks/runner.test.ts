@@ -144,7 +144,7 @@ function memoryStore(initial: TaskRecord[]) {
 type Payload = { appId: string; locale: string };
 type Scripted = TaskStepResult | Error | ((ctx: TaskStepContext) => TaskStepResult);
 
-function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepContext) => void; describeError?: (error: unknown) => string } = {}) {
+function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepContext) => void; describeError?: (error: unknown) => string; hold?: (ctx: TaskStepContext) => number | null } = {}) {
 	const stepped: Array<{ taskId: string; now: number; payload: Payload }> = [];
 	const finished: string[] = [];
 	const finishedWith: Array<TaskStepResult | undefined> = [];
@@ -168,6 +168,7 @@ function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepCont
 			options.onFinished?.(ctx);
 		},
 		describeError: options.describeError,
+		hold: options.hold === undefined ? undefined : async (ctx) => options.hold?.(ctx) ?? null,
 	};
 	return { handler, stepped, finished, finishedWith };
 }
@@ -224,6 +225,57 @@ describe('runTaskTick', () => {
 		expect(queue.task('later')).toMatchObject({ status: 'queued', steps: 0, startedAt: null });
 		// More work is due, so the runner goes again at once.
 		expect(result.nextAlarmAt).toBe(NOW);
+	});
+
+	it('holds a task its kind will not run now: no credit check, no step, no charge, and it comes back at the time the kind named', async () => {
+		let holdUntil: number | null = NOW + 15 * 60_000;
+		const queue = setup([task('a')], [stepOf(40, 100)], [], { hold: () => holdUntil });
+
+		const held = await queue.tick(NOW);
+
+		expect(held).toEqual({ nextAlarmAt: NOW + 15 * 60_000 });
+		expect(queue.stepped).toEqual([]);
+		expect(queue.gated()).toBe(0);
+		expect(queue.charges).toEqual([]);
+		// Back to waiting, as before its first claim: no step, no credits, no start time, no reason to show.
+		expect(queue.task('a')).toMatchObject({ status: 'queued', runAt: NOW + 15 * 60_000, steps: 0, creditsUsed: 0, attempts: 0, startedAt: null, pauseReason: null, leaseUntil: null });
+
+		// Not due yet, so nothing runs; once the hold is lifted, the task takes its first step.
+		expect(await queue.tick(NOW + 60_000)).toEqual({ nextAlarmAt: NOW + 15 * 60_000 });
+		holdUntil = null;
+		await queue.tick(NOW + 15 * 60_000);
+		expect(queue.stepped.map((step) => step.taskId)).toEqual(['a']);
+		expect(queue.task('a')).toMatchObject({ steps: 1, creditsUsed: 7, progress: progress(40, 100) });
+	});
+
+	it('asks the kind about each step, so a task already under way is held between steps too', async () => {
+		let paused = false;
+		const queue = setup([task('a')], [stepOf(40, 100), stepOf(100, 100, true)], [], { hold: (ctx) => (paused ? ctx.now + 900_000 : null) });
+		await queue.tick(NOW);
+		expect(queue.task('a')).toMatchObject({ steps: 1, progress: progress(40, 100), creditsUsed: 7 });
+
+		paused = true;
+		const held = await queue.tick(NOW + 1_000);
+		expect(held.nextAlarmAt).toBe(NOW + 1_000 + 900_000);
+		expect(queue.task('a')).toMatchObject({ status: 'queued', steps: 1, progress: progress(40, 100), creditsUsed: 7 });
+		expect(queue.charges).toHaveLength(1);
+
+		paused = false;
+		await queue.tick(NOW + 1_000 + 900_000);
+		expect(queue.task('a')).toMatchObject({ status: 'done', steps: 2, creditsUsed: 14 });
+		expect(queue.charges.map((charge) => charge.step)).toEqual([0, 1]);
+	});
+
+	it('counts a kind whose hold throws as a failed step, with its own message', async () => {
+		const queue = setup([task('a')], [stepOf(40, 100)], [], {
+			hold: () => {
+				throw new Error('The flag service gave nonsense');
+			},
+			describeError: () => 'Something with the flag went wrong.',
+		});
+		await queue.tick(NOW);
+		expect(queue.stepped).toEqual([]);
+		expect(queue.task('a')).toMatchObject({ status: 'queued', attempts: 1, lastError: 'Something with the flag went wrong.', runAt: NOW + TASK_RETRY_DELAYS_MS[0] });
 	});
 
 	it('finishes a task whose step says finished and calls onFinished once', async () => {

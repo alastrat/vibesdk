@@ -15,6 +15,7 @@ import { TASK_FAILED_MESSAGE, type TaskProgress } from '../../../shared/types/ta
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
 import { createLogger } from '../../logger';
 import type { ModelCall, TaskKindHandler, TaskStepContext, TaskStepResult } from '../tasks/kinds';
+import { isFlagOn } from '../posthog/flags';
 import { createTaskModel, isAnswerProblem, type TaskModel } from '../tasks/task-model';
 import { CHARS_PER_TOKEN } from './estimate';
 import { normalizeText } from './extract';
@@ -33,6 +34,8 @@ export function translationDedupeKey(appId: string, locale: Locale): string {
 	return `store.translate:${appId}:${locale}`;
 }
 
+/** How long a task waits before checking again while translations are paused. */
+export const PAUSED_RECHECK_MS = 15 * 60_000;
 /** Most texts a task gives up on and remembers; at this many it stops, since something is wrong with all of them. */
 const MAX_SKIPPED_HASHES = 500;
 /** The JSON around a text takes tokens too, and a very small batch still needs room for it. */
@@ -215,6 +218,10 @@ export function createStoreTranslateKind(deps: TranslateKindDeps): TaskKindHandl
 			if (typeof raw !== 'object' || raw === null) return null;
 			const { appId, locale } = raw as Record<string, unknown>;
 			return typeof appId === 'string' && appId !== '' && isLocale(locale) ? { appId, locale } : null;
+		},
+		/** The kill switch: while translations are paused no read, model call or charge is made, and the task waits to be asked again. */
+		async hold(ctx) {
+			return (await isFlagOn(ctx.env, 'store-translations-paused', ctx.task.userId)) ? ctx.now + PAUSED_RECHECK_MS : null;
 		},
 		async step(ctx, payload) {
 			// The queue's owner checks were made when the task was queued; a task that names another store is not run.

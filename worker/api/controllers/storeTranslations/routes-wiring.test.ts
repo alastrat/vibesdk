@@ -67,13 +67,17 @@ describe('translation routes', () => {
 		}
 	});
 
-	it('answers 503 under the pause flag from one place both controllers share, before touching anything else', () => {
+	it('answers 503 under the pause flag from one place both controllers share, before touching anything else, except for cancel', () => {
 		expect(source('/worker/api/controllers/storeTranslations/translations-api.ts')).toContain("isFlagOn(env, 'store-translations-paused', user.id)");
 		for (const path of ['/worker/api/controllers/storeTranslations/controller.ts', '/worker/api/controllers/tasks/controller.ts']) {
-			const controller = source(path);
-			const methods = controller.split(/\n\tstatic async /).slice(1);
+			const methods = source(path).split(/\n\tstatic async /).slice(1);
 			expect(methods.length).toBeGreaterThan(0);
-			for (const method of methods) expect(method, method.split('(')[0]).toMatch(/pausedReply|targetOf/);
+			for (const method of methods) {
+				const name = method.split('(')[0];
+				// A seller can always stop a task, so the pause never refuses a cancel.
+				if (path.includes('/tasks/') && name === 'cancel') expect(method).not.toMatch(/pausedReply/);
+				else expect(method, name).toMatch(/pausedReply|targetOf/);
+			}
 		}
 	});
 

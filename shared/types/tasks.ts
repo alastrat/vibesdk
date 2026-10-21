@@ -12,6 +12,11 @@ export type TaskStatus = (typeof TASK_STATUSES)[number];
 /** A task in one of these holds its dedupe key and counts toward the seller's limit. */
 export const UNFINISHED_TASK_STATUSES = ['queued', 'running', 'paused'] as const satisfies readonly TaskStatus[];
 
+/** Whether a task in this status is still queued, running or paused. */
+export function isUnfinishedStatus(status: TaskStatus): boolean {
+	return UNFINISHED_TASK_STATUSES.some((unfinished) => unfinished === status);
+}
+
 export const TASK_KINDS = ['store.translate'] as const;
 export type TaskKind = (typeof TASK_KINDS)[number];
 

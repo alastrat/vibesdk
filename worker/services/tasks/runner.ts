@@ -65,6 +65,13 @@ async function runStep(deps: TaskRunnerDeps, task: TaskRecord, now: number): Pro
 
 	// Any error here, the meter's and the save's included, counts toward the task's failures, so it backs off and stops.
 	try {
+		const ctx: TaskStepContext = { env: deps.env, task, now };
+		const holdUntil = await fromKind(async () => (await handler.hold?.(ctx, payload)) ?? null);
+		if (holdUntil !== null) {
+			await deps.store.defer(task.id, holdUntil, null);
+			return;
+		}
+
 		const gate = await deps.meter.gate(task.userId);
 		if (!gate.ok) {
 			if (gate.resumeAt === null) await deps.store.pause(task.id, gate.reason);
@@ -72,7 +79,6 @@ async function runStep(deps: TaskRunnerDeps, task: TaskRecord, now: number): Pro
 			return;
 		}
 
-		const ctx: TaskStepContext = { env: deps.env, task, now };
 		const result = await fromKind(() => handler.step(ctx, payload));
 		// A failed save leaves `steps` as it was, so the repeated step is charged under the same keys and counts once.
 		const credits = await deps.meter.charge({ userId: task.userId, taskId: task.id, step: task.steps, calls: result.calls });

@@ -908,8 +908,8 @@ class ApiClient {
 		const params = new URLSearchParams();
 		if (options.query) params.set('query', options.query);
 		if (options.cursor) params.set('cursor', options.cursor);
-		const search = params.size > 0 ? `?${params}` : '';
-		return this.request<StoreTranslationPage>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts${search}`);
+		const query = params.toString();
+		return this.request<StoreTranslationPage>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts${query ? `?${query}` : ''}`);
 	}
 
 	/** Saves the seller's own words for a text; no translation task overwrites them. */

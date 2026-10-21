@@ -106,7 +106,7 @@ function reading(texts: StoreText[]) {
 const meter: TaskMeter = { gate: async () => ({ ok: true }), charge: async ({ calls }) => calls.length };
 
 function queue(deps: { model: TaskModel; refresh: (env: Env, appId: string) => Promise<RefreshedStoreTexts> }) {
-	const env = envWith(db);
+	let env = envWith(db);
 	const tasks = new TaskService(env);
 	const kind = createStoreTranslateKind({ model: () => deps.model, refresh: deps.refresh });
 	let now = NOW;
@@ -139,7 +139,12 @@ function queue(deps: { model: TaskModel; refresh: (env: Env, appId: string) => P
 		return task;
 	}
 
-	return { kind, read, start, tick, finish };
+	/** Sets the flags the seller's runner sees from the next alarm on, as `FEATURE_FLAG_OVERRIDES` does: "store-translations-paused=on". */
+	function useFlags(overrides: string): void {
+		env = envWith(db, { FEATURE_FLAG_OVERRIDES: overrides });
+	}
+
+	return { kind, read, start, tick, finish, useFlags };
 }
 
 const rowsOf = async (locale: Locale = 'es') => (await service().listRows('app_1', locale, { limit: 200 })).rows;
@@ -156,6 +161,49 @@ describe('the store.translate kind', () => {
 			expect(storeTranslateKind.parsePayload(bad), JSON.stringify(bad)).toBeNull();
 		}
 		expect(translationDedupeKey('app_1', 'pt-BR')).toBe('store.translate:app_1:pt-BR');
+	});
+
+	it('a paused flag holds the task a quarter of an hour with no read, no model call and no charge, and it runs on once the flag is off', async () => {
+		const model = fakeModel();
+		const store = reading(numbered(5));
+		const run = queue({ model: model.model, refresh: store.refresh });
+		await run.start();
+		run.useFlags('store-translations-paused=on');
+
+		const held = await run.tick();
+		expect(held).toMatchObject({ status: 'queued', steps: 0, creditsUsed: 0, attempts: 0, runAt: NOW + 15 * 60_000, pauseReason: null, startedAt: null, lastError: null });
+		// Still paused at the next alarm: held again, and nothing is spent.
+		const again = await run.tick();
+		expect(again).toMatchObject({ status: 'queued', steps: 0, creditsUsed: 0, runAt: NOW + HOURS_3 + 15 * 60_000 });
+		expect(store.reads).toEqual([]);
+		expect(model.requests).toEqual([]);
+
+		run.useFlags('');
+		const done = await run.finish();
+		expect(done).toMatchObject({ status: 'done', progress: { done: 5, total: 5, skipped: 0 } });
+		expect(store.reads).toEqual(['app_1']);
+		expect(model.requests).toHaveLength(1);
+		expect(done.creditsUsed).toBe(1);
+	});
+
+	it('a task under way is held between steps while the flag is on, keeps what it translated, and finishes after', async () => {
+		const model = fakeModel();
+		const run = queue({ model: model.model, refresh: reading(numbered(100)).refresh });
+		await run.start();
+		await run.tick();
+		const first = await run.tick();
+		expect(first).toMatchObject({ steps: 2, creditsUsed: 1, progress: { done: 40, total: 100, skipped: 0 } });
+
+		run.useFlags('store-translations-paused=on');
+		for (let alarms = 0; alarms < 3; alarms += 1) expect(await run.tick()).toMatchObject({ status: 'queued', steps: 2, creditsUsed: 1, progress: { done: 40, total: 100, skipped: 0 } });
+		expect(model.requests).toHaveLength(1);
+		expect((await translated()).size).toBe(40);
+
+		run.useFlags('');
+		const last = await run.finish();
+		expect(last).toMatchObject({ status: 'done', creditsUsed: 3, progress: { done: 100, total: 100, skipped: 0 } });
+		// The 40 texts of the first batch were not sent again.
+		expect(model.requests.map((request) => request.items.length)).toEqual([40, 40, 20]);
 	});
 
 	it('the first step refreshes texts and sets total to the missing count', async () => {

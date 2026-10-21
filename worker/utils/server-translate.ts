@@ -19,7 +19,11 @@ export async function localeOfUser(env: Env, userId: string): Promise<Locale> {
 	return (await new LocalePreferenceService(env).locale(userId)) ?? 'en';
 }
 
-/** `english` in the user's saved language. */
-export async function translateForUser(env: Env, userId: string, english: string, values?: MessageValues): Promise<string> {
-	return translateFor(await localeOfUser(env, userId), english, values);
+/**
+ * `english` in the user's saved language. `values` may be a function of that language, for a value written its way, such
+ * as a number grouped as the language groups it.
+ */
+export async function translateForUser(env: Env, userId: string, english: string, values?: MessageValues | ((locale: Locale) => MessageValues)): Promise<string> {
+	const locale = await localeOfUser(env, userId);
+	return translateFor(locale, english, typeof values === 'function' ? values(locale) : values);
 }

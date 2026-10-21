@@ -208,8 +208,8 @@ export class TaskService extends BaseService {
 			.run();
 	}
 
-	/** Holds a task until `runAt`, showing why; it runs again then on its own. */
-	async defer(id: string, runAt: number, reason: TaskPauseReason): Promise<void> {
+	/** Holds a task until `runAt`, showing why when there is a reason to show; it runs again then on its own. */
+	async defer(id: string, runAt: number, reason: TaskPauseReason | null): Promise<void> {
 		const tasks = schema.tasks;
 		await this.database
 			.update(tasks)

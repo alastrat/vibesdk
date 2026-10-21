@@ -16,6 +16,7 @@ import { loadAccount, loadCredits } from '../../../services/billing/account';
 import { textHash } from '../../../services/store-translations/extract';
 import { translationDedupeKey } from '../../../services/store-translations/translate-kind';
 import { translateFor } from '../../../utils/server-translate';
+import { formatNumber } from '../../../../shared/i18n/format';
 import { msg } from '../../../../shared/i18n/translate';
 import { STORE_TRANSLATIONS_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
 import { MAX_TEXT_CHARS, STORE_TRANSLATION_PAGE_SIZE, type StoreTranslationOverview } from '../../../../shared/types/store-translations';
@@ -360,7 +361,23 @@ describe('starting a translation', () => {
 		const refused = await answer(await run(env, 'app_limit', 'pt-BR', 'seller_4'));
 		expect(refused.status).toBe(429);
 		expect(refused.body.error?.message).toContain('too many unfinished tasks');
+		// The refused language was not turned on; the one that was queued was.
+		expect((await new StoreTranslationService(envWith(db)).settingsOf('app_limit')).targets).toEqual({ es: { enabled: true, ready: false } });
 		expect((await answer<{ created: boolean }>(await run(env, 'app_limit', 'es', 'seller_4'))).body.data?.created).toBe(false);
+	});
+
+	it('leaves the language as it was when queuing the task throws, and wakes nothing', async () => {
+		await store('app_throws', 'seller_1');
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		vi.spyOn(TaskService.prototype, 'enqueue').mockRejectedValueOnce(new Error('D1 is down'));
+		const failed = await answer(await run(envFor(space()), 'app_throws', 'es'));
+		expect(failed.status).toBe(500);
+		const service = new StoreTranslationService(envWith(db));
+		expect((await service.settingsOf('app_throws')).targets).toEqual({});
+		expect(woke).toEqual([]);
+		// The seller's next click goes through, and only then is the language on.
+		expect((await run(envFor(space()), 'app_throws', 'es')).status).toBe(200);
+		expect((await service.settingsOf('app_throws')).targets).toEqual({ es: { enabled: true, ready: false } });
 	});
 
 	it("words a refusal in the seller's saved language", async () => {
@@ -381,6 +398,26 @@ describe('starting a translation', () => {
 		expect(reply.status).toBe(400);
 		expect(reply.body.error?.message).toContain('Español');
 		expect(reply.body.error?.message).toContain('idioma original');
+	});
+
+	it("shows a language its unfinished task, even an older one that was resumed, and otherwise its newest", async () => {
+		await store('app_resumed', 'seller_1');
+		const env = envFor(space({ main: deployment('c1', WELCOME) }));
+		const tasks = new TaskService(envWith(db));
+		const first = (await answer<{ task: { id: string } }>(await run(env, 'app_resumed', 'es'))).body.data?.task.id ?? '';
+		await db.prepare("UPDATE tasks SET status = 'failed', finished_at = 1 WHERE id = ?").bind(first).run();
+		const second = (await answer<{ task: { id: string } }>(await run(env, 'app_resumed', 'es'))).body.data?.task.id ?? '';
+		await db.prepare('UPDATE tasks SET created_at = created_at + 1000 WHERE id = ?').bind(second).run();
+		await tasks.cancel(second, 'seller_1');
+
+		// Neither is unfinished: the newest shows.
+		const taskOf = async () => (await overviewOf(env, 'app_resumed')).languages.find((language) => language.locale === 'es')?.task;
+		expect(await taskOf()).toMatchObject({ id: second, status: 'canceled' });
+		// The older one is picked up again: it is the one that is working, so it shows.
+		expect(await tasks.resume(first, 'seller_1')).not.toBeNull();
+		expect(await taskOf()).toMatchObject({ id: first, status: 'queued' });
+		// A newer finished one doesn't hide it, and the other language is unaffected.
+		expect((await overviewOf(env, 'app_resumed')).languages.find((language) => language.locale === 'pt-BR')?.task).toBeNull();
 	});
 
 	it('shows each language its latest task in the overview', async () => {
@@ -491,13 +528,32 @@ describe("a store's texts and the seller's own words", () => {
 		expect((await edit('app_refuse', welcome, {})).status).toBe(400);
 		const tooLong = await answer(await edit('app_refuse', welcome, { text: 'x'.repeat(MAX_TEXT_CHARS + 1) }));
 		expect(tooLong.status).toBe(400);
-		expect(tooLong.body.error?.message).toContain(String(MAX_TEXT_CHARS));
+		expect(tooLong.body.error?.message).toContain('5,000');
 		expect((await edit('app_refuse', welcome, { text: 'x'.repeat(MAX_TEXT_CHARS) })).status).toBe(200);
 		expect((await edit('app_refuse', 'f'.repeat(64), { text: 'Hola' })).status).toBe(404);
 		for (const hash of ['hash-a', '', 'F'.repeat(64), 'g'.repeat(64), 'a'.repeat(63)]) {
 			expect((await edit('app_refuse', hash, { text: 'Hola' })).status, hash).toBe(404);
 			expect((await revert('app_refuse', hash)).status, hash).toBe(404);
 		}
+	});
+
+	it("writes the limit's number the way the seller's language does", async () => {
+		const tooLong = { text: 'x'.repeat(MAX_TEXT_CHARS + 1) };
+		// Each store is written in its owner's language, so each is translated into another.
+		const limitFor = async (appId: string, userId: string, locale: string): Promise<string | undefined> => {
+			await store(appId, userId);
+			const reply = await answer(await edit(appId, welcome, tooLong, locale, userId));
+			expect(reply.status).toBe(400);
+			return reply.body.error?.message;
+		};
+		const english = await limitFor('app_max_en', 'seller_1', 'es');
+		const spanish = await limitFor('app_max_es', 'seller_2', 'pt-BR');
+		const portuguese = await limitFor('app_max_pt', 'seller_3', 'es');
+		expect(english).toContain('5,000');
+		expect(spanish).toContain(formatNumber(MAX_TEXT_CHARS, 'es'));
+		expect(portuguese).toContain('5.000');
+		expect(spanish).not.toContain('{max}');
+		expect(portuguese).toContain('caracteres');
 	});
 
 	it("refuses the store's own language and a language that isn't one", async () => {
@@ -573,7 +629,7 @@ describe('who may reach the translations API', () => {
 		expect((await call('GET', '/api/stores/app_acl/translations', 'seller_1')).status).toBe(200);
 	});
 
-	it('paused flag answers 503 on every route of the API, in the seller\'s language, doing nothing', async () => {
+	it('paused flag answers 503 on every route of the API but cancel, in the seller\'s language, doing nothing', async () => {
 		await store('app_paused', 'seller_2');
 		const env = envFor(space({ main: deployment('c1', WELCOME) }), { FEATURE_FLAG_OVERRIDES: 'store-translations-paused=on' });
 		const call = api(env);
@@ -581,7 +637,6 @@ describe('who may reach the translations API', () => {
 			['GET', '/api/translations/stores'],
 			...routes.map(([method, path]): [string, string] => [method, path.replace('app_acl', 'app_paused')]),
 			['GET', '/api/tasks'],
-			['POST', '/api/tasks/task_1/cancel'],
 			['POST', '/api/tasks/task_1/resume'],
 		];
 		for (const [method, path] of all) {
@@ -592,6 +647,8 @@ describe('who may reach the translations API', () => {
 		expect(await db.prepare('SELECT count(*) AS n FROM tasks').first()).toEqual({ n: 0 });
 		expect(await db.prepare("SELECT count(*) AS n FROM store_translation_settings WHERE app_id = 'app_paused'").first()).toEqual({ n: 0 });
 		expect(woke).toEqual([]);
+		// A seller can always cancel: a task that isn't there is not found, not paused.
+		expect((await call('POST', '/api/tasks/task_1/cancel', 'seller_2')).status).toBe(404);
 
 		// With the flag off, the same request is served.
 		const open = api(envFor(space({ main: deployment('c1', WELCOME) })));

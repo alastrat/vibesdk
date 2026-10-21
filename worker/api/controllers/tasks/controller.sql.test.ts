@@ -7,7 +7,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { TaskService } from '../../../database/services/TaskService';
 import { translationDedupeKey } from '../../../services/store-translations/translate-kind';
-import { MAX_UNFINISHED_TASKS } from '../../../../shared/types/tasks';
+import { MAX_UNFINISHED_TASKS, type TaskView } from '../../../../shared/types/tasks';
 import type { RouteContext } from '../../types/route-context';
 import { TasksController } from './controller';
 
@@ -41,13 +41,24 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-const env = (): Env => envWith(db, { TASK_RUNNER: { idFromName: (name: string) => name, get: () => ({ wake: async (userId: string) => void woke.push(userId) }) } });
+const env = (extra: Record<string, unknown> = {}): Env => envWith(db, { ...extra, TASK_RUNNER: { idFromName: (name: string) => name, get: () => ({ wake: async (userId: string) => void woke.push(userId) }) } });
 const as = (userId: string, pathParams: Record<string, string> = {}, query = '') => ({ user: { id: userId, email: `${userId}@example.test` }, pathParams, queryParams: new URLSearchParams(query) }) as unknown as RouteContext;
 const ctx = {} as ExecutionContext;
-const call = async (method: 'list' | 'cancel' | 'resume', context: RouteContext) => {
-	const response = await TasksController[method](new Request('https://estori.app/api/tasks', { method: method === 'list' ? 'GET' : 'POST' }), env(), ctx, context);
-	return { status: response.status, body: (await response.json()) as { data?: any; error?: { message?: string } } };
+type Body<T> = { data?: T; error?: { message?: string } };
+
+async function send<T>(method: 'list' | 'cancel' | 'resume', context: RouteContext, extra: Record<string, unknown> = {}): Promise<{ status: number; body: Body<T> }> {
+	const response = await TasksController[method](new Request('https://estori.app/api/tasks', { method: method === 'list' ? 'GET' : 'POST' }), env(extra), ctx, context);
+	return { status: response.status, body: (await response.json()) as Body<T> };
+}
+
+/** One task's answer: what cancel and resume reply with. */
+const call = (method: 'cancel' | 'resume', context: RouteContext, extra?: Record<string, unknown>) => send<TaskView>(method, context, extra);
+/** The task list's answer, which is always a list when it succeeds. */
+const list = async (context: RouteContext, extra?: Record<string, unknown>) => {
+	const answer = await send<TaskView[]>('list', context, extra);
+	return { status: answer.status, tasks: answer.body.data ?? [], body: answer.body };
 };
+const idsOf = (tasks: readonly TaskView[]) => tasks.map((task) => task.id);
 
 async function queue(userId: string, appId: string, locale: 'es' | 'pt-BR' = 'es', at = Date.now()): Promise<string> {
 	const queued = await new TaskService(envWith(db)).enqueue({ userId, appId, kind: 'store.translate', payload: { appId, locale }, dedupeKey: translationDedupeKey(appId, locale), now: at });
@@ -63,18 +74,17 @@ describe("the seller's tasks", () => {
 		const [oldest, newest, otherStore] = [await queue('seller_1', 'app_a', 'es', 1_000), await queue('seller_1', 'app_a', 'pt-BR', 2_000), await queue('seller_1', 'app_b', 'es', 3_000)];
 		const others = await queue('seller_2', 'app_c', 'es', 4_000);
 
-		const all = await call('list', as('seller_1'));
+		const all = await list(as('seller_1'));
 		expect(all.status).toBe(200);
-		expect(all.body.data.map((task: { id: string }) => task.id)).toEqual([otherStore, newest, oldest]);
-		expect(all.body.data[0]).toMatchObject({ kind: 'store.translate', appId: 'app_b', status: 'queued', payload: { locale: 'es' }, progress: { done: 0, total: 0, skipped: 0 } });
-		expect(JSON.stringify(all.body.data)).not.toContain('skippedHashes');
+		expect(idsOf(all.tasks)).toEqual([otherStore, newest, oldest]);
+		expect(all.tasks[0]).toMatchObject({ kind: 'store.translate', appId: 'app_b', status: 'queued', payload: { locale: 'es' }, progress: { done: 0, total: 0, skipped: 0 } });
+		expect(JSON.stringify(all.tasks)).not.toContain('skippedHashes');
 
-		const oneStore = await call('list', as('seller_1', {}, 'appId=app_a'));
-		expect(oneStore.body.data.map((task: { id: string }) => task.id)).toEqual([newest, oldest]);
-		expect((await call('list', as('seller_2'))).body.data.map((task: { id: string }) => task.id)).toEqual([others]);
+		expect(idsOf((await list(as('seller_1', {}, 'appId=app_a'))).tasks)).toEqual([newest, oldest]);
+		expect(idsOf((await list(as('seller_2'))).tasks)).toEqual([others]);
 		// Asking for a store that is not theirs shows nothing of it.
-		expect((await call('list', as('seller_2', {}, 'appId=app_a'))).body.data).toEqual([]);
-		expect((await call('list', as('seller_1', {}, 'appId=app_gone'))).body.data).toEqual([]);
+		expect((await list(as('seller_2', {}, 'appId=app_a'))).tasks).toEqual([]);
+		expect((await list(as('seller_1', {}, 'appId=app_gone'))).tasks).toEqual([]);
 	});
 
 	it('lists at most the latest 50, and a task whose payload cannot be read is left out', async () => {
@@ -86,9 +96,9 @@ describe("the seller's tasks", () => {
 				.run();
 		}
 		await db.prepare(`UPDATE tasks SET payload = '{"locale":"fr"}' WHERE id = 'task_54'`).run();
-		const listed = await call('list', as('seller_1'));
-		expect(listed.body.data).toHaveLength(49);
-		expect(listed.body.data[0].id).toBe('task_53');
+		const listed = await list(as('seller_1'));
+		expect(listed.tasks).toHaveLength(49);
+		expect(listed.tasks[0].id).toBe('task_53');
 		expect(await service.listForUser('seller_1', { limit: 100 })).toHaveLength(55);
 	});
 
@@ -98,7 +108,7 @@ describe("the seller's tasks", () => {
 		const canceled = await call('cancel', as('seller_1', { id }));
 		expect(canceled.status).toBe(200);
 		expect(canceled.body.data).toMatchObject({ id, status: 'canceled' });
-		expect(canceled.body.data.finishedAt).toMatch(/^\d{4}-/);
+		expect(canceled.body.data?.finishedAt).toMatch(/^\d{4}-/);
 		expect(await statusOf(id)).toBe('canceled');
 		expect(analytics.events).toEqual([['task_finished', 'seller_1', { kind: 'store.translate', status: 'canceled', credits_used: 12, steps: 3 }]]);
 		expect(woke).toEqual([]);
@@ -117,6 +127,26 @@ describe("the seller's tasks", () => {
 		// The other seller can't touch mine either.
 		expect((await call('cancel', as('seller_2', { id: mine }))).status).toBe(404);
 		expect(await statusOf(mine)).toBe('queued');
+	});
+
+	it('cancel works while translations are paused, so a seller can always stop a task, and is still reported', async () => {
+		const paused = { FEATURE_FLAG_OVERRIDES: 'store-translations-paused=on' };
+		const id = await queue('seller_1', 'app_a');
+		const canceled = await call('cancel', as('seller_1', { id }), paused);
+		expect(canceled.status).toBe(200);
+		expect(canceled.body.data).toMatchObject({ id, status: 'canceled' });
+		expect(await statusOf(id)).toBe('canceled');
+		expect(analytics.events).toHaveLength(1);
+		// Another seller's task and an unknown one are still not found, not refused as paused.
+		expect((await call('cancel', as('seller_2', { id }), paused)).status).toBe(404);
+
+		// Everything else of the API is paused: no list, and nothing is resumed or woken.
+		const stopped = await queue('seller_1', 'app_b');
+		await setStatus(stopped, 'paused', ", pause_reason = 'credits'");
+		expect((await list(as('seller_1'), paused)).status).toBe(503);
+		expect((await call('resume', as('seller_1', { id: stopped }), paused)).status).toBe(503);
+		expect(await statusOf(stopped)).toBe('paused');
+		expect(woke).toEqual([]);
 	});
 
 	it('a failing analytics call cannot fail the cancel', async () => {

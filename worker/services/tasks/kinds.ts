@@ -35,6 +35,11 @@ export interface TaskKindHandler<P> {
 	/** The payload, or null when it can't be read; the task then fails without retrying. */
 	parsePayload(raw: unknown): P | null;
 	/**
+	 * Asked before each step, ahead of any credit check or model call: the time to ask again when the kind won't take a
+	 * step now, such as while its pause flag is on, or null to go ahead. A held task keeps its progress and spends nothing.
+	 */
+	hold?(ctx: TaskStepContext, payload: P): Promise<number | null>;
+	/**
 	 * One bounded piece of work, such as one model call. It must be safe to repeat: a step whose save was lost runs
 	 * again under the same step number.
 	 */

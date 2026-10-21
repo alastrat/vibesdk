@@ -31,11 +31,10 @@ export class TasksController extends TranslationsApiController {
 		}
 	}
 
+	/** Not under the pause: a seller can always stop a task. */
 	static async cancel(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<Reply<TaskView>> {
 		const user = context.user!;
 		try {
-			const paused = await this.pausedReply<TaskView>(env, user);
-			if (paused) return paused;
 			const canceled = await new TaskService(env).cancel(context.pathParams.id ?? '', user.id);
 			if (!canceled) return this.refusal<TaskView>(env, user, 404, TASK_NOT_FOUND);
 			this.trackEnded(env, canceled);
