@@ -54,6 +54,16 @@ export interface BranchDeploymentBundle {
 	compatibilityDate: string;
 }
 
+/** The text files of a deployment's stored bundle (mirrors src/space/deploy-engine.ts), read for translation. */
+export interface DeploymentTexts {
+	branch: string;
+	commitHash: string;
+	/** Text assets, then server modules. Asset paths start with a slash; module names don't. */
+	files: { path: string; kind: 'html' | 'script'; text: string }[];
+	/** The raw `estori-store.json` the deployment was built from, or null when it has none. */
+	manifest: string | null;
+}
+
 // ── Draft types (mirror src/space/drafts-store.ts and src/space/draft-git.ts) ──
 export type DraftStart = 'main' | 'live';
 

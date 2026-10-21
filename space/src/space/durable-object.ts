@@ -12,8 +12,10 @@ import {
   servedUrl,
   publishLiveDeployment,
   publishedVersion,
+  readDeploymentTexts,
   type BranchDeploymentBundle,
   type DeployContext,
+  type DeploymentTexts,
   type PublishedVersion,
 } from "./deploy-engine"
 import { globInfos, readDirInfos, toFileInfo } from "./fileinfo"
@@ -754,6 +756,12 @@ export class SpaceDO extends DurableObject<Env> {
   async getStoreManifest(branch: string): Promise<{ commitHash: string; manifest: string | null } | null> {
     await this.ensureInit()
     return this.readStoreManifest(branch)
+  }
+
+  /** The text files of a deployed branch, `live` included. It reads the stored bundle alone, so a cold start works. */
+  async getDeploymentTexts(branch: string): Promise<DeploymentTexts | null> {
+    await this.ensureInit()
+    return readDeploymentTexts(this.ctx.storage.sql, branch)
   }
 
   private readStoreManifest(branch: string): { commitHash: string; manifest: string | null } | null {

@@ -7,7 +7,7 @@ export type {
   AppDatabaseColumn,
   AppDatabaseReadResult,
 } from "./space/durable-object"
-export type { BranchDeploymentBundle } from "./space/deploy-engine"
+export type { BranchDeploymentBundle, DeploymentTexts } from "./space/deploy-engine"
 
 // ── Draft types ──────────────────────────────────────────────────
 export type {
