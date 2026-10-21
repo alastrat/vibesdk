@@ -336,6 +336,20 @@ export type {
 export { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_LABELS, SHOPPER_EMAIL_LIMITS, SHOPPER_EMAIL_STATUSES, SHOPPER_EMAILS_PATH } from '../shared/types/shopper-emails';
 export type { TaskKind, TaskPauseReason, TaskProgressView, TaskStatus, TaskView, TaskViewPayloads } from '../shared/types/tasks';
 export { TASK_KINDS, TASK_STATUSES, UNFINISHED_TASK_STATUSES } from '../shared/types/tasks';
+export type {
+	StoreLanguageStatus,
+	StoreText,
+	StoreTranslationOrigin,
+	StoreTranslationOverview,
+	StoreTranslationPage,
+	StoreTranslationRow,
+	StoreTranslationRun,
+	StoreTranslationSettings,
+	StoreTranslationSettingsPatch,
+	StoreTranslationStoreSummary,
+	StoreTranslationTextRequest,
+} from '../shared/types/store-translations';
+export { MAX_TEXT_CHARS, STORE_TRANSLATION_ORIGINS, STORE_TRANSLATION_PAGE_SIZE } from '../shared/types/store-translations';
 export type { CatalogProductsData, CatalogProductView, CatalogVariantView } from '../shared/types/catalog';
 export type {
 	AdminCatalogOrderDetail,

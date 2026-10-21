@@ -1,4 +1,5 @@
 import type { Locale } from '../i18n/locales';
+import type { TaskView } from './tasks';
 
 /** Where a store text came from: page markup, scripts and server modules, or the product manifest. */
 export const STORE_TEXT_KINDS = ['page', 'script', 'product'] as const;
@@ -77,4 +78,71 @@ export interface MachineTranslation {
 	hash: string;
 	source: string;
 	text: string;
+}
+
+/** What the last read of a store's deployments noticed besides its texts. */
+export interface StoreExtractionNotes {
+	/** The read stopped at `MAX_STORE_TEXTS`. */
+	truncated: boolean;
+	/** The store's product file couldn't be understood, so its products weren't read. */
+	manifestInvalid: boolean;
+}
+
+/** The seller's own words for a text. */
+export interface StoreTranslationTextRequest {
+	text: string;
+}
+
+/** A page of the translations editor lists this many texts. */
+export const STORE_TRANSLATION_PAGE_SIZE = 50;
+
+/** A language the store can be translated into, and how far it is; `left` is the texts with no translation yet. */
+export interface StoreLanguageStatus {
+	locale: Locale;
+	enabled: boolean;
+	ready: boolean;
+	total: number;
+	translated: number;
+	edited: number;
+	left: number;
+	/** About how many AI credits translating what's left costs. */
+	estimateCredits: number;
+	/** The language's latest translation task, in any status; null when none was ever started. */
+	task: TaskView | null;
+}
+
+/** GET /api/stores/:id/translations: a store's settings, one status per language it isn't written in, and where to see it. */
+export interface StoreTranslationOverview {
+	settings: StoreTranslationSettings;
+	languages: StoreLanguageStatus[];
+	/** When the store's text was last read from its deployments, as an ISO time; null before the first read. */
+	extractedAt: string | null;
+	/** The last read stopped at the store's text limit. */
+	truncated: boolean;
+	/** The last read couldn't understand the store's product file, so its products weren't read. */
+	manifestInvalid: boolean;
+	/** The store has been deployed. False means there's nothing to translate yet. */
+	deployed: boolean;
+	/** The store's deployments couldn't be read just now; the texts and counts are as they were last read. */
+	textsUnavailable: boolean;
+	/** AI credits the seller has left; null while billing is off. */
+	creditsLeft: number | null;
+	/** The store's preview, which any language can be tried in; null before it has one. */
+	previewUrl: string | null;
+	/** The live store's address; null while it isn't live. */
+	liveUrl: string | null;
+}
+
+/** A store in the Translations page's picker, with where each of its other languages stands. */
+export interface StoreTranslationStoreSummary {
+	appId: string;
+	title: string;
+	sourceLocale: Locale;
+	languages: Array<{ locale: Locale; enabled: boolean; ready: boolean }>;
+}
+
+/** POST /api/stores/:id/translations/:locale/run: the language's task, which `created` says this call queued. */
+export interface StoreTranslationRun {
+	task: TaskView;
+	created: boolean;
 }

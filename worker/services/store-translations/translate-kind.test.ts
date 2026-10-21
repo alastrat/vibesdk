@@ -98,7 +98,7 @@ function reading(texts: StoreText[]) {
 	const refresh = async (env: Env, appId: string): Promise<RefreshedStoreTexts> => {
 		reads.push(appId);
 		await new StoreTranslationService(env).replaceTexts(appId, texts, NOW);
-		return { count: texts.length, truncated: false, deployed: true };
+		return { count: texts.length, truncated: false, manifestInvalid: false, deployed: true };
 	};
 	return { refresh, reads };
 }
@@ -368,8 +368,8 @@ describe('the store.translate kind', () => {
 
 	it('a store with no texts finishes at once with total 0', async () => {
 		for (const refreshed of [
-			{ count: 0, truncated: false, deployed: false },
-			{ count: 0, truncated: false, deployed: true },
+			{ count: 0, truncated: false, manifestInvalid: false, deployed: false },
+			{ count: 0, truncated: false, manifestInvalid: false, deployed: true },
 		]) {
 			const model = fakeModel();
 			const run = queue({ model: model.model, refresh: async () => refreshed });
@@ -400,7 +400,7 @@ describe('the store.translate kind', () => {
 
 	it('a store whose texts cannot be read is not finished: the step throws, and nothing is sent', async () => {
 		const model = fakeModel();
-		const refresh = async (): Promise<RefreshedStoreTexts> => ({ count: 0, truncated: false, deployed: false, error: 'unavailable' });
+		const refresh = async (): Promise<RefreshedStoreTexts> => ({ count: 0, truncated: false, manifestInvalid: false, deployed: false, error: 'unavailable' });
 		const run = queue({ model: model.model, refresh });
 		const task = await run.start();
 		const context: TaskStepContext = { env: envWith(db), task, now: NOW };

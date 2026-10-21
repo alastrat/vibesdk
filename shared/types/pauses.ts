@@ -20,6 +20,7 @@ export const STORE_PUBLISHING_PAUSED_MESSAGE = 'Publishing is paused for a few m
 export const CUSTOM_DOMAINS_PAUSED_MESSAGE = 'Connecting a new domain is paused right now. Domains already connected keep working.';
 export const TEMPLATE_SALES_PAUSED_MESSAGE = 'Buying paid templates is paused right now. Free templates still work.';
 export const BILLING_CHECKOUT_PAUSED_MESSAGE = 'Plan changes and credit purchases are paused for a few minutes. Your current plan keeps working.';
+export const STORE_TRANSLATIONS_PAUSED_MESSAGE = msg('Store translations are paused for a few minutes. Stores already translated keep working.');
 
 /** A new account refused while sign-ups are paused; existing accounts still sign in. */
 export class SignupsPausedError extends SecurityError {

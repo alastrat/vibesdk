@@ -10,6 +10,7 @@ import { withDurableObjectResetRetry } from '../../agents/think/space-workspace-
 import { LiveStoreService } from '../../database/services/LiveStoreService';
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
 import { extractStoreTexts } from './extract';
+import { hasSpaceBinding, spaceStubOf } from './space';
 
 const logger = createLogger('StoreTexts');
 
@@ -24,17 +25,15 @@ export interface RefreshedStoreTexts {
 	count: number;
 	/** The store has more texts than the limit, so the extraction stopped at it. */
 	truncated: boolean;
+	/** The store's product file couldn't be understood, so its products weren't read. */
+	manifestInvalid: boolean;
 	/** False when the store was never deployed, or when its deployments couldn't be read; `error` says which. */
 	deployed: boolean;
 	/** SpaceDO couldn't answer, so the stored texts are as they were. */
 	error?: 'unavailable';
 }
 
-const UNAVAILABLE: RefreshedStoreTexts = { count: 0, truncated: false, deployed: false, error: 'unavailable' };
-
-function spaceNamespace(env: Env): DurableObjectNamespace | undefined {
-	return (env as unknown as { SPACE_DO?: DurableObjectNamespace }).SPACE_DO;
-}
+const UNAVAILABLE: RefreshedStoreTexts = { count: 0, truncated: false, manifestInvalid: false, deployed: false, error: 'unavailable' };
 
 /** The deployments to read, live first so its text is translated before the draft's. */
 async function readDeployments(space: TextsSpaceStub, includeLive: boolean): Promise<DeploymentTexts[]> {
@@ -56,8 +55,7 @@ async function readDeployments(space: TextsSpaceStub, includeLive: boolean): Pro
  */
 export async function refreshStoreTexts(env: Env, appId: string, now: number = Date.now()): Promise<RefreshedStoreTexts> {
 	const live = await new LiveStoreService(env).getByApp(appId);
-	const namespace = spaceNamespace(env);
-	if (!namespace) {
+	if (!hasSpaceBinding(env)) {
 		logger.warn('SPACE_DO binding is not configured', { appId });
 		return UNAVAILABLE;
 	}
@@ -65,16 +63,16 @@ export async function refreshStoreTexts(env: Env, appId: string, now: number = D
 	let deployments: DeploymentTexts[];
 	try {
 		deployments = await withDurableObjectResetRetry(
-			() => namespace.get(namespace.idFromName(appId)) as unknown as TextsSpaceStub,
+			() => spaceStubOf<TextsSpaceStub>(env, appId),
 			(space) => readDeployments(space, live?.status === 'live'),
 		);
 	} catch (error) {
 		logger.warn('Could not read the store deployments', { appId, error });
 		return UNAVAILABLE;
 	}
-	if (deployments.length === 0) return { count: 0, truncated: false, deployed: false };
+	if (deployments.length === 0) return { count: 0, truncated: false, manifestInvalid: false, deployed: false };
 
-	const { texts, truncated } = await extractStoreTexts(deployments);
-	await new StoreTranslationService(env).replaceTexts(appId, texts, now);
-	return { count: texts.length, truncated, deployed: true };
+	const { texts, truncated, manifestInvalid } = await extractStoreTexts(deployments);
+	await new StoreTranslationService(env).replaceTexts(appId, texts, now, { truncated, manifestInvalid });
+	return { count: texts.length, truncated, manifestInvalid, deployed: true };
 }

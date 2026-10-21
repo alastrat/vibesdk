@@ -76,11 +76,11 @@ describe('refreshing a store\'s texts', () => {
 			main: deployment('main', 'draft02', '<h1>Welcome to the shop</h1><p>New spring blends</p>'),
 		});
 
-		expect(await refreshStoreTexts(envFor(fake), 'app_1', NOW)).toEqual({ count: 3, truncated: false, deployed: true });
+		expect(await refreshStoreTexts(envFor(fake), 'app_1', NOW)).toEqual({ count: 3, truncated: false, manifestInvalid: false, deployed: true });
 		// Live first, then what only the draft has; a text both have is kept once.
 		expect(await stored()).toEqual(['Welcome to the shop', 'Fresh tea every day', 'New spring blends']);
 		expect(fake.calls).toEqual(['getDeploymentTexts:live', 'getActiveDraft', 'getDeploymentTexts:main']);
-		expect(await new StoreTranslationService(envWith(db)).extractedAt('app_1')).toBe(NOW);
+		expect((await new StoreTranslationService(envWith(db)).extraction('app_1')).extractedAt).toBe(NOW);
 	});
 
 	it('reads the draft the preview serves, and skips it when it is the published version', async () => {
@@ -97,7 +97,7 @@ describe('refreshing a store\'s texts', () => {
 	it('reads only the draft when the store is not live, or is offline', async () => {
 		const draft = { main: deployment('main', 'draft02', '<p>Only the draft</p>') };
 		const unpublished = space(draft);
-		expect(await refreshStoreTexts(envFor(unpublished), 'app_1', NOW)).toEqual({ count: 1, truncated: false, deployed: true });
+		expect(await refreshStoreTexts(envFor(unpublished), 'app_1', NOW)).toEqual({ count: 1, truncated: false, manifestInvalid: false, deployed: true });
 		expect(unpublished.calls).toEqual(['getActiveDraft', 'getDeploymentTexts:main']);
 
 		await publish('offline');
@@ -109,7 +109,7 @@ describe('refreshing a store\'s texts', () => {
 
 	it('reads a live store whose draft was never deployed', async () => {
 		await publish();
-		expect(await refreshStoreTexts(envFor(space({ live: deployment('live', 'live01', '<p>Live only</p>') })), 'app_1', NOW)).toEqual({ count: 1, truncated: false, deployed: true });
+		expect(await refreshStoreTexts(envFor(space({ live: deployment('live', 'live01', '<p>Live only</p>') })), 'app_1', NOW)).toEqual({ count: 1, truncated: false, manifestInvalid: false, deployed: true });
 	});
 
 	it('replaces the stored texts, and a store with no text finishes with none', async () => {
@@ -117,19 +117,19 @@ describe('refreshing a store\'s texts', () => {
 		await refreshStoreTexts(envFor(space({ main: deployment('main', 'c2', '<p>First version</p><p>Second version</p>') })), 'app_1', NOW + 1);
 		expect(await stored()).toEqual(['First version', 'Second version']);
 
-		expect(await refreshStoreTexts(envFor(space({ main: deployment('main', 'c3', '<div><img src="a.png"></div>') })), 'app_1', NOW + 2)).toEqual({ count: 0, truncated: false, deployed: true });
+		expect(await refreshStoreTexts(envFor(space({ main: deployment('main', 'c3', '<div><img src="a.png"></div>') })), 'app_1', NOW + 2)).toEqual({ count: 0, truncated: false, manifestInvalid: false, deployed: true });
 		expect(await stored()).toEqual([]);
 	});
 
 	it('a store never deployed gives deployed false and no texts', async () => {
 		const fake = space({});
-		expect(await refreshStoreTexts(envFor(fake), 'app_1', NOW)).toEqual({ count: 0, truncated: false, deployed: false });
+		expect(await refreshStoreTexts(envFor(fake), 'app_1', NOW)).toEqual({ count: 0, truncated: false, manifestInvalid: false, deployed: false });
 		expect(await stored()).toEqual([]);
-		expect(await new StoreTranslationService(envWith(db)).extractedAt('app_1')).toBeNull();
+		expect((await new StoreTranslationService(envWith(db)).extraction('app_1')).extractedAt).toBeNull();
 
 		// A live store whose published copy is gone, with no draft deployed either.
 		await publish();
-		expect(await refreshStoreTexts(envFor(space({})), 'app_1', NOW)).toEqual({ count: 0, truncated: false, deployed: false });
+		expect(await refreshStoreTexts(envFor(space({})), 'app_1', NOW)).toEqual({ count: 0, truncated: false, manifestInvalid: false, deployed: false });
 	});
 
 	it('a cold SpaceDO error is reported, not thrown past the caller', async () => {
@@ -137,21 +137,21 @@ describe('refreshing a store\'s texts', () => {
 
 		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 		const down = space({ main: deployment('main', 'c2', '<p>Other text</p>') }, { failures: [new Error('Something went wrong')] });
-		expect(await refreshStoreTexts(envFor(down), 'app_1', NOW + 1)).toEqual({ count: 0, truncated: false, deployed: false, error: 'unavailable' });
+		expect(await refreshStoreTexts(envFor(down), 'app_1', NOW + 1)).toEqual({ count: 0, truncated: false, manifestInvalid: false, deployed: false, error: 'unavailable' });
 		expect(warn).toHaveBeenCalledTimes(1);
 		// What was stored stays, and the extraction time with it.
 		expect(await stored()).toEqual(['Kept text']);
-		expect(await new StoreTranslationService(envWith(db)).extractedAt('app_1')).toBe(NOW);
+		expect((await new StoreTranslationService(envWith(db)).extraction('app_1')).extractedAt).toBe(NOW);
 
 		// No SpaceDO binding at all.
-		expect(await refreshStoreTexts(envFor(null), 'app_1', NOW + 2)).toEqual({ count: 0, truncated: false, deployed: false, error: 'unavailable' });
+		expect(await refreshStoreTexts(envFor(null), 'app_1', NOW + 2)).toEqual({ count: 0, truncated: false, manifestInvalid: false, deployed: false, error: 'unavailable' });
 		expect(warn).toHaveBeenCalledTimes(2);
 	});
 
 	it('retries once when the SpaceDO was reset, and reports it when it fails again', async () => {
 		const reset = () => new Error('Durable Object reset because its code was updated.');
 		const once = space({ main: deployment('main', 'c1', '<p>After the reset</p>') }, { failures: [reset()] });
-		expect(await refreshStoreTexts(envFor(once), 'app_1', NOW)).toEqual({ count: 1, truncated: false, deployed: true });
+		expect(await refreshStoreTexts(envFor(once), 'app_1', NOW)).toEqual({ count: 1, truncated: false, manifestInvalid: false, deployed: true });
 		expect(once.calls).toEqual(['getActiveDraft', 'getActiveDraft', 'getDeploymentTexts:main']);
 
 		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
@@ -163,6 +163,23 @@ describe('refreshing a store\'s texts', () => {
 	it('reports a store with more texts than the limit as truncated', async () => {
 		const paragraphs = Array.from({ length: 5_001 }, (_, index) => `<p>Item number ${index} here</p>`).join('');
 		const result = await refreshStoreTexts(envFor(space({ main: deployment('main', 'c1', paragraphs) })), 'app_1', NOW);
-		expect(result).toEqual({ count: 5_000, truncated: true, deployed: true });
+		expect(result).toEqual({ count: 5_000, truncated: true, manifestInvalid: false, deployed: true });
+		expect(await new StoreTranslationService(envWith(db)).extraction('app_1')).toEqual({ extractedAt: NOW, truncated: true, manifestInvalid: false });
+	});
+
+	it('reports a product file it cannot read, keeps what it noted, and clears it at the next good read', async () => {
+		const broken = space({ main: deployment('main', 'c1', '<p>Fresh tea</p>', '{"version":2}') });
+		expect(await refreshStoreTexts(envFor(broken), 'app_1', NOW)).toEqual({ count: 1, truncated: false, manifestInvalid: true, deployed: true });
+		expect(await new StoreTranslationService(envWith(db)).extraction('app_1')).toEqual({ extractedAt: NOW, truncated: false, manifestInvalid: true });
+
+		// A failed read changes nothing, so the note stays.
+		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const down = space({}, { failures: [new Error('SpaceDO is down'), new Error('SpaceDO is down')] });
+		expect(await refreshStoreTexts(envFor(down), 'app_1', NOW + 1)).toMatchObject({ error: 'unavailable' });
+		expect((await new StoreTranslationService(envWith(db)).extraction('app_1')).manifestInvalid).toBe(true);
+
+		const fixed = space({ main: deployment('main', 'c2', '<p>Fresh tea</p>') });
+		expect(await refreshStoreTexts(envFor(fixed), 'app_1', NOW + 2)).toMatchObject({ manifestInvalid: false });
+		expect(await new StoreTranslationService(envWith(db)).extraction('app_1')).toEqual({ extractedAt: NOW + 2, truncated: false, manifestInvalid: false });
 	});
 });

@@ -4,7 +4,7 @@
  * shoppers would see, so caches and the overlay script key on it. Times are epoch milliseconds.
  */
 
-import { and, asc, count, eq, isNotNull, notExists, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, exists, isNotNull, notExists, or, sql, type AnyColumn, type SQL } from 'drizzle-orm';
 import type { BatchItem } from 'drizzle-orm/batch';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
@@ -12,12 +12,14 @@ import { LocalePreferenceService } from './LocalePreferenceService';
 import { DEFAULT_LOCALE, LOCALES, type Locale } from '../../../shared/i18n/locales';
 import type {
 	MachineTranslation,
+	StoreExtractionNotes,
 	StoreText,
 	StoreTranslationCounts,
 	StoreTranslationPage,
 	StoreTranslationRow,
 	StoreTranslationSettings,
 	StoreTranslationSettingsPatch,
+	StoreTranslationStoreSummary,
 } from '../../../shared/types/store-translations';
 
 /** D1 binds at most 100 parameters per statement, so a bulk insert goes in chunks of whole rows under it. */
@@ -72,6 +74,11 @@ function settingsFromRow(row: SettingsRow): StoreTranslationSettings {
 /** A list page ends at its last row's read time and rowid, so rows read at the same time are neither skipped nor repeated. */
 const CURSOR = /^(\d{1,16}):(\d{1,16})$/;
 
+/** Whether `cursor` is one `listRows` handed out; any other cursor starts the list over, so callers refuse it first. */
+export function isRowsCursor(cursor: string): boolean {
+	return CURSOR.test(cursor);
+}
+
 export class StoreTranslationService extends BaseService {
 	/** The store's settings; the defaults, with the owner's language as the source, when it has none yet. */
 	async settingsOf(appId: string): Promise<StoreTranslationSettings> {
@@ -80,11 +87,56 @@ export class StoreTranslationService extends BaseService {
 		return { sourceLocale: await this.defaultSourceLocale(appId), targets: {}, ...DEFAULT_SETTINGS };
 	}
 
-	/** When the store's texts were last read from its deployments; null before the first time. */
-	async extractedAt(appId: string): Promise<number | null> {
+	/** When the store's texts were last read from its deployments, null before the first time, and what that read noticed. */
+	async extraction(appId: string): Promise<{ extractedAt: number | null } & StoreExtractionNotes> {
 		const settings = schema.storeTranslationSettings;
-		const row = await this.database.select({ extractedAt: settings.extractedAt }).from(settings).where(eq(settings.appId, appId)).get();
-		return row?.extractedAt ?? null;
+		const row = await this.database
+			.select({ extractedAt: settings.extractedAt, truncated: settings.textsTruncated, manifestInvalid: settings.manifestInvalid })
+			.from(settings)
+			.where(eq(settings.appId, appId))
+			.get();
+		return row ?? { extractedAt: null, truncated: false, manifestInvalid: false };
+	}
+
+	/** The store's title, owner and last deploy time: what the Translations page needs to know before reading its deployments. */
+	async storeFacts(appId: string): Promise<{ title: string; ownerId: string | null; lastDeployedAt: number | null } | null> {
+		const apps = schema.apps;
+		const row = await this.database.select({ title: apps.title, ownerId: apps.userId, lastDeployedAt: apps.lastDeployedAt }).from(apps).where(eq(apps.id, appId)).get();
+		return row ? { title: row.title, ownerId: row.ownerId, lastDeployedAt: row.lastDeployedAt?.getTime() ?? null } : null;
+	}
+
+	/**
+	 * The user's stores that have been deployed, or are live, for the page's picker, with each language's state. A store
+	 * with no settings yet is written in its owner's language and has no language on.
+	 */
+	async storesOf(userId: string): Promise<StoreTranslationStoreSummary[]> {
+		const apps = schema.apps;
+		const settings = schema.storeTranslationSettings;
+		const [rows, ownerLocale] = await Promise.all([
+			this.database
+				.select({ appId: apps.id, title: apps.title, sourceLocale: settings.sourceLocale, targets: settings.targets })
+				.from(apps)
+				.leftJoin(settings, eq(settings.appId, apps.id))
+				.where(
+					and(
+						eq(apps.userId, userId),
+						or(isNotNull(apps.lastDeployedAt), exists(this.database.select({ one: sql`1` }).from(schema.liveStores).where(eq(schema.liveStores.appId, apps.id)))),
+					),
+				)
+				.orderBy(asc(apps.title), asc(apps.id))
+				.all(),
+			new LocalePreferenceService(this.env).locale(userId),
+		]);
+		return rows.map((row) => {
+			const sourceLocale = row.sourceLocale ?? ownerLocale ?? DEFAULT_LOCALE;
+			const targets = targetsOf(row.targets);
+			return {
+				appId: row.appId,
+				title: row.title,
+				sourceLocale,
+				languages: LOCALES.filter((locale) => locale !== sourceLocale).map((locale) => ({ locale, enabled: targets[locale]?.enabled ?? false, ready: targets[locale]?.ready ?? false })),
+			};
+		});
 	}
 
 	/** Applies the seller's changes and returns the settings. A language the patch names keeps its `ready` flag. */
@@ -131,10 +183,11 @@ export class StoreTranslationService extends BaseService {
 	}
 
 	/**
-	 * Replaces the store's texts with a new extraction and records when it was made, in one batch. Translations are never
-	 * deleted, so a text that goes away keeps its translation for when it comes back. What shoppers see is unchanged.
+	 * Replaces the store's texts with a new extraction and records when it was made and what it noticed, in one batch.
+	 * Translations are never deleted, so a text that goes away keeps its translation for when it comes back. What shoppers
+	 * see is unchanged.
 	 */
-	async replaceTexts(appId: string, texts: readonly StoreText[], now: number): Promise<void> {
+	async replaceTexts(appId: string, texts: readonly StoreText[], now: number, notes: StoreExtractionNotes = { truncated: false, manifestInvalid: false }): Promise<void> {
 		const stored = schema.storeTexts;
 		const settings = schema.storeTranslationSettings;
 		const inserts = chunked(texts, Math.floor(D1_MAX_PARAMETERS / TEXT_COLUMNS)).map((chunk) =>
@@ -148,7 +201,7 @@ export class StoreTranslationService extends BaseService {
 			now,
 			this.database.delete(stored).where(eq(stored.appId, appId)),
 			...inserts,
-			this.database.update(settings).set({ extractedAt: now }).where(eq(settings.appId, appId)),
+			this.database.update(settings).set({ extractedAt: now, textsTruncated: notes.truncated, manifestInvalid: notes.manifestInvalid }).where(eq(settings.appId, appId)),
 		);
 	}
 
@@ -171,6 +224,17 @@ export class StoreTranslationService extends BaseService {
 	async countMissing(appId: string, locale: Locale, exclude: readonly string[] = []): Promise<number> {
 		const row = await this.database.select({ missing: count() }).from(schema.storeTexts).where(this.missing(appId, locale, exclude)).get();
 		return row?.missing ?? 0;
+	}
+
+	/** How many texts `missingTexts` would list and how many characters they hold, which is what translating them is priced on. */
+	async missingSize(appId: string, locale: Locale): Promise<{ count: number; chars: number }> {
+		const texts = schema.storeTexts;
+		const row = await this.database
+			.select({ count: count(), chars: sql<number>`coalesce(sum(length(${texts.sourceText})), 0)` })
+			.from(texts)
+			.where(this.missing(appId, locale, []))
+			.get();
+		return { count: row?.count ?? 0, chars: row?.chars ?? 0 };
 	}
 
 	/** How far each language is against the store's current texts. */
@@ -282,6 +346,17 @@ export class StoreTranslationService extends BaseService {
 			rows: page.map(({ hash, source, text, origin, machineText }): StoreTranslationRow => ({ hash, source, text, origin, machineText })),
 			nextCursor: rows.length > limit && last ? `${last.seenAt}:${last.rowid}` : null,
 		};
+	}
+
+	/** One text's translation into `locale`, as the editor lists it; null when the language has none of it. */
+	async translationOf(appId: string, locale: Locale, hash: string): Promise<StoreTranslationRow | null> {
+		const translations = schema.storeTranslations;
+		const row = await this.database
+			.select({ hash: translations.sourceHash, source: translations.sourceText, text: translations.text, origin: translations.origin, machineText: translations.machineText })
+			.from(translations)
+			.where(and(eq(translations.appId, appId), eq(translations.locale, locale), eq(translations.sourceHash, hash)))
+			.get();
+		return row ?? null;
 	}
 
 	/** Every translation into `locale` by source hash, including those of texts the store no longer shows: what serving reads. */

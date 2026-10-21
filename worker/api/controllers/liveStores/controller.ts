@@ -22,6 +22,7 @@ import { CUSTOM_DOMAINS_PAUSED_MESSAGE, STORE_PUBLISHING_PAUSED_MESSAGE } from '
 import { isFlagOn } from '../../../services/posthog/flags';
 import { serverAnalytics } from '../../../services/posthog/analytics';
 import { personUpdateOf } from '../../../services/posthog/person';
+import { translateAfterPublish } from '../../../services/store-translations/auto-translate';
 import { MAIN_DRAFT_ID } from '../../../../shared/types/drafts';
 import type { PublishContext, PublishDraftOptions, PublishDraftResult } from '@space-do/space';
 
@@ -78,7 +79,7 @@ export class LiveStoreController extends BaseController {
     }
 
     /** Publishes a draft (the one being edited unless the body names another) at the slug, which the first publish takes and a later one may change. */
-    static async publish(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<LiveStoreView>>> {
+    static async publish(request: Request, env: Env, ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<LiveStoreView>>> {
         const appId = context.pathParams.id;
         if (!appId) return this.createErrorResponse<LiveStoreView>('Store not found', 404);
         try {
@@ -125,6 +126,8 @@ export class LiveStoreController extends BaseController {
             if (ownerId) {
                 const draft = published.draftId === MAIN_DRAFT_ID ? 'main' : 'other';
                 serverAnalytics(env).capture('store_published', ownerId, { app_id: appId, first_publish: firstPublish, draft }, await personUpdateOf(env, ownerId));
+                // After the response, so translating the new text never delays or fails the publish.
+                ctx.waitUntil(translateAfterPublish(env, appId, ownerId));
             }
             return this.createSuccessResponse(await viewOf(env, appId));
         } catch (error) {

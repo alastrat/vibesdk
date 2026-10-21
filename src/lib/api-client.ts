@@ -113,6 +113,14 @@ import type{
 	ShopperEmailTemplateFields,
 	ShopperEmailTemplateView,
 	ShopperEmailTestResult,
+	StoreTranslationOverview,
+	StoreTranslationPage,
+	StoreTranslationRow,
+	StoreTranslationRun,
+	StoreTranslationSettings,
+	StoreTranslationSettingsPatch,
+	StoreTranslationStoreSummary,
+	TaskView,
 	StoreRefundRequest,
 	StoreRefundResponse,
 	LiveStoreView,
@@ -874,6 +882,58 @@ class ApiClient {
 	/** Sends a template, saved or not, filled in with a sample order, to the signed-in seller. */
 	async sendShopperEmailTest(appId: string, kind: ShopperEmailKind, fields: ShopperEmailTemplateFields): Promise<ApiResponse<ShopperEmailTestResult>> {
 		return this.request<ShopperEmailTestResult>(`/api/stores/${encodeURIComponent(appId)}/emails/${kind}/test`, { method: 'POST', body: fields });
+	}
+
+	/** The signed-in seller's stores that have been deployed, with where each language of each stands. */
+	async getTranslationStores(): Promise<ApiResponse<StoreTranslationStoreSummary[]>> {
+		return this.request<StoreTranslationStoreSummary[]>('/api/translations/stores');
+	}
+
+	/** A store's translation settings and languages. Its texts are read again first when a deploy or publish is newer. */
+	async getStoreTranslations(appId: string): Promise<ApiResponse<StoreTranslationOverview>> {
+		return this.request<StoreTranslationOverview>(`/api/stores/${encodeURIComponent(appId)}/translations`);
+	}
+
+	async saveStoreTranslationSettings(appId: string, patch: StoreTranslationSettingsPatch): Promise<ApiResponse<StoreTranslationSettings>> {
+		return this.request<StoreTranslationSettings>(`/api/stores/${encodeURIComponent(appId)}/translations/settings`, { method: 'PUT', body: patch });
+	}
+
+	/** Translates the store into a language, turning it on first. `created` is false when that language was already queued or running. */
+	async runStoreTranslation(appId: string, locale: Locale): Promise<ApiResponse<StoreTranslationRun>> {
+		return this.request<StoreTranslationRun>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/run`, { method: 'POST' });
+	}
+
+	/** A page of the store's texts with their translations into a language; `query` searches both. */
+	async getStoreTranslationTexts(appId: string, locale: Locale, options: { query?: string; cursor?: string } = {}): Promise<ApiResponse<StoreTranslationPage>> {
+		const params = new URLSearchParams();
+		if (options.query) params.set('query', options.query);
+		if (options.cursor) params.set('cursor', options.cursor);
+		const search = params.size > 0 ? `?${params}` : '';
+		return this.request<StoreTranslationPage>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts${search}`);
+	}
+
+	/** Saves the seller's own words for a text; no translation task overwrites them. */
+	async saveStoreTranslationText(appId: string, locale: Locale, hash: string, text: string): Promise<ApiResponse<StoreTranslationRow>> {
+		return this.request<StoreTranslationRow>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts/${encodeURIComponent(hash)}`, { method: 'PUT', body: { text } });
+	}
+
+	/** Gives a text back its machine translation. */
+	async revertStoreTranslationText(appId: string, locale: Locale, hash: string): Promise<ApiResponse<StoreTranslationRow>> {
+		return this.request<StoreTranslationRow>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts/${encodeURIComponent(hash)}`, { method: 'DELETE' });
+	}
+
+	/** The seller's background tasks, newest first; `appId` narrows them to one store's. */
+	async getTasks(appId?: string): Promise<ApiResponse<TaskView[]>> {
+		return this.request<TaskView[]>(appId ? `/api/tasks?appId=${encodeURIComponent(appId)}` : '/api/tasks');
+	}
+
+	async cancelTask(taskId: string): Promise<ApiResponse<TaskView>> {
+		return this.request<TaskView>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' });
+	}
+
+	/** Queues a paused or failed task again where it stopped. */
+	async resumeTask(taskId: string): Promise<ApiResponse<TaskView>> {
+		return this.request<TaskView>(`/api/tasks/${encodeURIComponent(taskId)}/resume`, { method: 'POST' });
 	}
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {

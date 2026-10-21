@@ -8,7 +8,7 @@ import type { Locale } from '../../../shared/i18n/locales';
 import type { StoreText } from '../../../shared/types/store-translations';
 import { envWith, insertApp, insertUser, migratedD1 } from '../test-support/real-d1';
 import { LocalePreferenceService } from './LocalePreferenceService';
-import { StoreTranslationService } from './StoreTranslationService';
+import { StoreTranslationService, isRowsCursor } from './StoreTranslationService';
 
 const NOW = 1_800_000_000_000;
 let db: D1Database;
@@ -86,15 +86,15 @@ describe('store texts', () => {
 	});
 
 	it('replaceTexts saves when the texts were read, and stores any number of texts under the bound-parameter limit', async () => {
-		expect(await service().extractedAt('app_1')).toBeNull();
+		expect((await service().extraction('app_1')).extractedAt).toBeNull();
 		const many = Array.from({ length: 5_000 }, (_, index) => text(`n${index}`, index % 3 === 0 ? 'script' : 'page'));
 		await service().replaceTexts('app_1', many, NOW);
-		expect(await service().extractedAt('app_1')).toBe(NOW);
+		expect((await service().extraction('app_1')).extractedAt).toBe(NOW);
 		expect((await service().counts('app_1')).es.total).toBe(5_000);
 
 		await service().replaceTexts('app_1', [], NOW + 5);
 		expect((await service().counts('app_1')).es.total).toBe(0);
-		expect(await service().extractedAt('app_1')).toBe(NOW + 5);
+		expect((await service().extraction('app_1')).extractedAt).toBe(NOW + 5);
 	});
 
 	it('missingTexts lists only untranslated texts for the locale, oldest first', async () => {
@@ -273,5 +273,69 @@ describe('store translations', () => {
 		expect(await service().dictionary('app_1', 'pt-BR')).toEqual(new Map([['hash-a', 'Texto pt a']]));
 		expect(await service().dictionary('app_1', 'en')).toEqual(new Map());
 		expect(await service().dictionary('app_other', 'es')).toEqual(new Map());
+	});
+});
+
+describe('what the translations page reads', () => {
+	it('extraction keeps when the texts were read and what the read noticed, and a read with no notes clears them', async () => {
+		expect(await service().extraction('app_1')).toEqual({ extractedAt: null, truncated: false, manifestInvalid: false });
+		await service().replaceTexts('app_1', [text('a')], NOW, { truncated: true, manifestInvalid: true });
+		expect(await service().extraction('app_1')).toEqual({ extractedAt: NOW, truncated: true, manifestInvalid: true });
+		await service().replaceTexts('app_1', [text('a')], NOW + 1);
+		expect(await service().extraction('app_1')).toEqual({ extractedAt: NOW + 1, truncated: false, manifestInvalid: false });
+	});
+
+	it('missingSize counts the texts with no translation and their characters, so the estimate is of what is left', async () => {
+		await service().replaceTexts('app_1', [text('a'), text('bb'), text('ccc')], NOW);
+		expect(await service().missingSize('app_1', 'es')).toEqual({ count: 3, chars: 'Text a'.length + 'Text bb'.length + 'Text ccc'.length });
+		await service().upsertMachine('app_1', 'es', [machine('bb')], NOW);
+		expect(await service().missingSize('app_1', 'es')).toEqual({ count: 2, chars: 'Text a'.length + 'Text ccc'.length });
+		expect(await service().missingSize('app_1', 'pt-BR')).toMatchObject({ count: 3 });
+		expect(await service().missingSize('app_none', 'es')).toEqual({ count: 0, chars: 0 });
+	});
+
+	it('storeFacts gives a store its title, owner and last deploy time, and nothing for an unknown store', async () => {
+		await db.prepare("UPDATE apps SET last_deployed_at = 1700000000 WHERE id = 'app_es'").run();
+		expect(await service().storeFacts('app_es')).toEqual({ title: 'app_es', ownerId: 'seller_es', lastDeployedAt: 1_700_000_000_000 });
+		expect(await service().storeFacts('app_en')).toMatchObject({ lastDeployedAt: null });
+		expect(await service().storeFacts('app_gone')).toBeNull();
+	});
+
+	it('storesOf lists the deployed or live stores of one user, with each other language and its state', async () => {
+		await insertUser(db, 'seller_two');
+		await insertApp(db, { id: 'app_b', userId: 'seller_two', title: 'Beta' });
+		await insertApp(db, { id: 'app_a', userId: 'seller_two', title: 'Alpha' });
+		await insertApp(db, { id: 'app_c', userId: 'seller_two', title: 'Never deployed' });
+		await insertApp(db, { id: 'app_live', userId: 'seller_two', title: 'Live only' });
+		await db.prepare("UPDATE apps SET last_deployed_at = 1700000000 WHERE id IN ('app_a', 'app_b')").run();
+		await db.prepare(`INSERT INTO live_stores (app_id, slug, status, published_commit, published_at, created_at, updated_at) VALUES ('app_live', 'live-only', 'offline', 'c1', 0, 0, 0)`).run();
+		await service().saveSettings('app_b', { sourceLocale: 'es', targets: { en: { enabled: true } } }, NOW);
+		await service().markReady('app_b', 'en', NOW);
+
+		expect(await service().storesOf('seller_two')).toEqual([
+			{ appId: 'app_a', title: 'Alpha', sourceLocale: 'en', languages: [{ locale: 'es', enabled: false, ready: false }, { locale: 'pt-BR', enabled: false, ready: false }] },
+			{ appId: 'app_b', title: 'Beta', sourceLocale: 'es', languages: [{ locale: 'en', enabled: true, ready: true }, { locale: 'pt-BR', enabled: false, ready: false }] },
+			{ appId: 'app_live', title: 'Live only', sourceLocale: 'en', languages: [{ locale: 'es', enabled: false, ready: false }, { locale: 'pt-BR', enabled: false, ready: false }] },
+		]);
+		expect(await service().storesOf('seller_nobody')).toEqual([]);
+	});
+
+	it("storesOf writes a store with no settings in its owner's language", async () => {
+		await db.prepare("UPDATE apps SET last_deployed_at = 1700000000 WHERE id = 'app_es'").run();
+		expect(await service().storesOf('seller_es')).toEqual([
+			{ appId: 'app_es', title: 'app_es', sourceLocale: 'es', languages: [{ locale: 'en', enabled: false, ready: false }, { locale: 'pt-BR', enabled: false, ready: false }] },
+		]);
+	});
+
+	it("translationOf gives one text as the editor lists it, and nothing for a text the language lacks", async () => {
+		await service().replaceTexts('app_1', [text('a')], NOW);
+		await service().upsertMachine('app_1', 'es', [machine('a')], NOW);
+		expect(await service().translationOf('app_1', 'es', 'hash-a')).toEqual({ hash: 'hash-a', source: 'Text a', text: 'Texto a', origin: 'machine', machineText: 'Texto a' });
+		expect(await service().translationOf('app_1', 'pt-BR', 'hash-a')).toBeNull();
+	});
+
+	it('knows a list cursor from anything else, since a cursor it does not know starts the list over', () => {
+		expect(isRowsCursor('1800000000000:42')).toBe(true);
+		for (const cursor of ['', 'abc', '1:', ':2', '1:2:3', '-1:2', '1.5:2', '12345678901234567:1']) expect(isRowsCursor(cursor), cursor).toBe(false);
 	});
 });

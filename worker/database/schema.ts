@@ -1456,6 +1456,10 @@ export const storeTranslationSettings = sqliteTable('store_translation_settings'
     version: integer('version').notNull().default(1),
     /** When the store's texts were last read from its deployments. */
     extractedAt: integer('extracted_at'),
+    /** The last read stopped at the limit of texts a store yields. */
+    textsTruncated: integer('texts_truncated', { mode: 'boolean' }).notNull().default(false),
+    /** The last read couldn't understand the store's product file. */
+    manifestInvalid: integer('manifest_invalid', { mode: 'boolean' }).notNull().default(false),
     updatedAt: integer('updated_at').notNull(),
 });
 

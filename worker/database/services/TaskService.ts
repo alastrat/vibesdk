@@ -252,6 +252,11 @@ export class TaskService extends BaseService {
 		return row ? recordOf(row) : null;
 	}
 
+	/** The seller's own task; null when there is none with this id, such as another seller's. */
+	async findForUser(id: string, userId: string): Promise<TaskRecord | null> {
+		return this.find(and(eq(schema.tasks.id, id), eq(schema.tasks.userId, userId)));
+	}
+
 	/** When the seller's runner can next take a step: the earliest run_at, after any live lease; null with nothing to run. */
 	async nextRunAt(userId: string): Promise<number | null> {
 		const tasks = schema.tasks;

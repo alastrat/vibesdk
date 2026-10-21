@@ -38,11 +38,16 @@ function spaces(addsCatalog = false) {
 	return { namespace, published };
 }
 
-function call(method: 'publish' | 'addDomain', appId: string, userId: string, namespace: unknown, extra: Record<string, unknown> = { BILLING: 'on' }) {
+async function call(method: 'publish' | 'addDomain', appId: string, userId: string, namespace: unknown, extra: Record<string, unknown> = { BILLING: 'on' }) {
 	const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-billing-test-secret-0123', SPACE_DO: namespace, ...extra });
 	const body = method === 'publish' ? { slug: appId.replace(/_/g, '-') } : { hostname: 'shop.example.com' };
 	const request = new Request(`https://estori.app/api/stores/${appId}/live/${method === 'publish' ? 'publish' : 'domain'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-	return LiveStoreController[method](request, env, {} as ExecutionContext, { pathParams: { id: appId }, user: { id: userId } } as unknown as RouteContext);
+	// A publish queues translations after its response; they finish before the next test starts.
+	const afterResponse: Promise<unknown>[] = [];
+	const ctx = { waitUntil: (work: Promise<unknown>) => void afterResponse.push(work) } as unknown as ExecutionContext;
+	const response = await LiveStoreController[method](request, env, ctx, { pathParams: { id: appId }, user: { id: userId } } as unknown as RouteContext);
+	await Promise.all(afterResponse);
+	return response;
 }
 
 describe('plan limits at Go live', () => {

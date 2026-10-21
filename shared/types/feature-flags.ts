@@ -43,6 +43,11 @@ export const FEATURE_FLAGS = {
 		kind: 'pause',
 		clientVisible: false,
 	},
+	'store-translations-paused': {
+		description: 'Pauses the Translations page and starting store translations, including after a publish. Translated stores keep serving.',
+		kind: 'pause',
+		clientVisible: true,
+	},
 } as const satisfies Record<string, FlagDefinition>;
 
 export type FlagKey = keyof typeof FEATURE_FLAGS;
