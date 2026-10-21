@@ -18,7 +18,8 @@ The dashboards and alerts are built by hand in PostHog's UI once events flow in 
    - the sum of `credits_used` on `build_finished`, by day, broken down by `model`;
    - Estori's cost in dollars, as a formula on that sum: credits ÷ 1.5 × $0.001;
    - no gateway filter: every Think build runs on Estori's gateway, so every credit is Estori's cost;
-   - opted-out builds show under the model "none", since they carry only their credits.
+   - opted-out builds show under the model "none", since they carry only their credits;
+   - seller tasks, such as translations, add their own line: the sum of `credits_used` on `task_finished`, by day, broken down by `kind` and `status`. Task calls run on Estori's gateway too, so their credits count toward the same cost.
 4. **Errors:** `$exception` count by day, broken down by `component` (Worker) and by exception type. It links to PostHog's error tracking.
 5. **Revenue:** from the Stripe data warehouse source:
    - gross store sales by day;
@@ -46,7 +47,7 @@ PostHog insight alerts, emailed to the owner's email address unless the owner na
 | Health check failing | `heartbeat` where `healthy = false`, hourly | more than 0 | hourly |
 | Error spike | `$exception` count, hourly | more than 25 | hourly |
 | No signups | `account_created` count, daily | less than 1 | daily, turned on at public launch |
-| AI cost over budget | sum of `credits_used` on `build_finished`, daily, every build including opted-out ones | more than 150,000 credits, about $100 of Estori's cost, until two weeks of data exist | daily |
+| AI cost over budget | sum of `credits_used` on `build_finished` and `task_finished`, daily, every build and task including opted-out ones | more than 150,000 credits, about $100 of Estori's cost, until two weeks of data exist | daily |
 
 - **"Heartbeat missing"** fires when the Worker, its cron or PostHog stops.
 - **"Health check failing"** fires when the Worker runs but something inside is down.

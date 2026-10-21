@@ -7,8 +7,8 @@
 import { resolveThinkModel } from '../../agents/think/model-config';
 import { TaskService } from '../../database';
 import { createLogger } from '../../logger';
-import { dailyCreditsLeft, countDailyCall, loadDailyAllowance } from '../rate-limit/daily-allowance';
-import { chargeStep, checkCreditsBeforeTurn, loadTurnAccount, meteringDepsFromEnv, type CreditCheck, type StepCharge, type TurnAccount } from '../billing/metering';
+import { countDailyCall, dailyCreditsLeft, loadDailyAllowance } from '../rate-limit/daily-allowance';
+import { chargeStep, checkCreditsBeforeTurn, creditCheck, loadTurnAccount, meteringDepsFromEnv, type CreditCheck, type StepCharge, type TurnAccount } from '../billing/metering';
 import { DAY_MS } from '../billing/periods';
 import { stepCredits } from '../billing/step-credits';
 import { isFlagOn } from '../posthog/flags';
@@ -26,7 +26,8 @@ export interface TaskMeterDeps {
 	chargeStep(charge: StepCharge): Promise<unknown>;
 	/** What's left of today's allowance; null when no limit applies. */
 	dailyCreditsLeft(userId: string): Promise<number | null>;
-	countDailyCall(userId: string, creditCost: number): Promise<void>;
+	/** Counts a step's calls, each at its model's flat cost, reading the user's limits once. */
+	countDailyCalls(userId: string, creditCosts: readonly number[]): Promise<void>;
 	now(): number;
 }
 
@@ -52,7 +53,7 @@ export function createTaskMeter(deps: TaskMeterDeps): TaskMeter {
 
 			if (!(await deps.billingOn(userId))) {
 				// The old counter keeps no per-call key: a step repeated after a lost save counts again, which costs the seller no credits.
-				for (const { model } of priced) await deps.countDailyCall(userId, model.config.creditCost);
+				await deps.countDailyCalls(userId, priced.map(({ model }) => model.config.creditCost));
 				return total;
 			}
 			const account = await deps.loadAccount(userId);
@@ -68,13 +69,21 @@ export function createTaskMeter(deps: TaskMeterDeps): TaskMeter {
 	};
 }
 
+export interface TaskMeterOptions {
+	/** False for a check that isn't a step being refused, such as the daily resume: a refusal then sends no analytics. */
+	trackRefusals?: boolean;
+	now?: () => number;
+}
+
 /** Tasks run on Estori's own keys, so a seller's connected Cloudflare account never exempts them from the daily allowance. */
-export function taskMeterFromEnv(env: Env): TaskMeter {
+export function taskMeterFromEnv(env: Env, options: TaskMeterOptions = {}): TaskMeter {
 	const metering = meteringDepsFromEnv(env);
+	const now = options.now ?? Date.now;
+	const check = options.trackRefusals === false ? creditCheck : checkCreditsBeforeTurn;
 	const allowance = (userId: string) => loadDailyAllowance(env, userId, { ownAccountPays: false });
 	return createTaskMeter({
 		billingOn: (userId) => isFlagOn(env, 'billing', userId),
-		checkCredits: (userId) => checkCreditsBeforeTurn(env, userId),
+		checkCredits: (userId) => check(env, userId, now()),
 		loadAccount: (userId) => loadTurnAccount(env, userId),
 		chargeStep: (charge) => chargeStep(metering, charge),
 		// A lookup that fails lets the step run and go uncounted, as the agent's does.
@@ -86,34 +95,45 @@ export function taskMeterFromEnv(env: Env): TaskMeter {
 				return null;
 			}
 		},
-		countDailyCall: async (userId, creditCost) => {
+		countDailyCalls: async (userId, creditCosts) => {
 			try {
-				await countDailyCall(env, await allowance(userId), userId, creditCost);
+				const limits = await allowance(userId);
+				for (const creditCost of creditCosts) await countDailyCall(env, limits, userId, creditCost, 'Task');
 			} catch (error) {
-				logger.warn('A task call was not counted against the daily allowance', { userId, error });
+				logger.warn('A task step was not counted against the daily allowance', { userId, error });
 			}
 		},
-		now: () => Date.now(),
+		now,
 	});
 }
 
+export interface ResumeDeps {
+	tasks: Pick<TaskService, 'pausedUserIds' | 'pausedTaskIds' | 'resume'>;
+	meter: TaskMeter;
+	wake(userId: string): Promise<void>;
+	nowMs: number;
+}
+
 /**
- * Daily: sellers whose tasks paused for credits and whose gate now passes (a new period, a purchase) get them back where
- * they stopped, and their runner is woken. Answers how many tasks resumed. Never throws.
+ * Sellers whose tasks paused for credits and whose gate now passes (a new period, a purchase) get them back where they
+ * stopped, and their runner is woken. Answers how many tasks resumed. One seller's or task's failure is logged and leaves
+ * the rest alone; never throws.
  */
-export async function resumeCreditPausedTasks(env: Env): Promise<number> {
+export async function resumePausedTasks(deps: ResumeDeps): Promise<number> {
 	let resumed = 0;
 	try {
-		const tasks = new TaskService(env);
-		const meter = taskMeterFromEnv(env);
-		for (const userId of await tasks.pausedUserIds('credits', CREDIT_PAUSED_SELLERS_PER_RUN)) {
+		for (const userId of await deps.tasks.pausedUserIds('credits', CREDIT_PAUSED_SELLERS_PER_RUN)) {
 			try {
-				if (!(await meter.gate(userId)).ok) continue;
+				if (!(await deps.meter.gate(userId)).ok) continue;
 				let sellerResumed = 0;
-				for (const id of await tasks.pausedTaskIds(userId, 'credits')) {
-					if (await tasks.resume(id, userId)) sellerResumed += 1;
+				for (const id of await deps.tasks.pausedTaskIds(userId, 'credits')) {
+					try {
+						if (await deps.tasks.resume(id, userId, deps.nowMs)) sellerResumed += 1;
+					} catch (error) {
+						logger.error('Could not resume a credit-paused task', { userId, taskId: id, error });
+					}
 				}
-				if (sellerResumed > 0) await wakeTaskRunner(env, userId);
+				if (sellerResumed > 0) await deps.wake(userId);
 				resumed += sellerResumed;
 			} catch (error) {
 				logger.error("Could not resume a seller's credit-paused tasks", { userId, error });
@@ -123,4 +143,14 @@ export async function resumeCreditPausedTasks(env: Env): Promise<number> {
 		logger.error('Could not look for credit-paused tasks', { error });
 	}
 	return resumed;
+}
+
+/** The daily resume with its production dependencies. Its gate sends no analytics: it is not a step being refused. */
+export function resumeCreditPausedTasks(env: Env, nowMs: number = Date.now()): Promise<number> {
+	return resumePausedTasks({
+		tasks: new TaskService(env),
+		meter: taskMeterFromEnv(env, { trackRefusals: false, now: () => nowMs }),
+		wake: (userId) => wakeTaskRunner(env, userId),
+		nowMs,
+	});
 }

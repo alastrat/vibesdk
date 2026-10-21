@@ -165,35 +165,37 @@ export class TaskService extends BaseService {
 		return row?.status ?? null;
 	}
 
-	async finish(id: string, now: number): Promise<void> {
-		await this.updateRunning(id, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null, attempts: 0, lastError: null });
+	/** Ends the task as done. Answers it, or null when it was no longer running and nothing changed. */
+	async finish(id: string, now: number): Promise<TaskRecord | null> {
+		return this.updateRunning(id, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null, attempts: 0, lastError: null });
 	}
 
-	/** Fails a task for good, without retries, such as one whose payload can't be read. */
-	async fail(id: string, message: string, now: number): Promise<void> {
-		await this.updateRunning(id, { status: 'failed', lastError: message, finishedAt: now, leaseUntil: null });
+	/** Fails a task for good, without retries, such as one whose payload can't be read. Answers it, or null when nothing changed. */
+	async fail(id: string, message: string, now: number): Promise<TaskRecord | null> {
+		return this.updateRunning(id, { status: 'failed', lastError: message, finishedAt: now, leaseUntil: null });
 	}
 
 	/**
 	 * A step failed: the task waits out its backoff showing `messages.retry`, or fails at the last failure in a row showing
-	 * `messages.failed`. 'failed' also when the task was no longer running, since it won't run again.
+	 * `messages.failed`. Answers the task as it now is, `failed` or `queued`; null when it was no longer running, since
+	 * nothing changed and it won't run again.
 	 */
-	async recordFailure(id: string, messages: { retry: string; failed: string }, now: number): Promise<'retry' | 'failed'> {
+	async recordFailure(id: string, messages: { retry: string; failed: string }, now: number): Promise<TaskRecord | null> {
 		const tasks = schema.tasks;
 		const current = await this.database.select({ attempts: tasks.attempts }).from(tasks).where(and(eq(tasks.id, id), eq(tasks.status, 'running'))).get();
-		if (!current) return 'failed';
+		if (!current) return null;
 		const failures = current.attempts + 1;
 		const retryAt = taskRetryAt(failures, now);
 		const update =
 			retryAt === null
 				? { status: 'failed' as const, attempts: failures, lastError: messages.failed, finishedAt: now, leaseUntil: null }
 				: { status: 'queued' as const, attempts: failures, lastError: messages.retry, runAt: retryAt, leaseUntil: null };
-		await this.database
+		const [row] = await this.database
 			.update(tasks)
 			.set(update)
 			.where(and(eq(tasks.id, id), eq(tasks.status, 'running'), eq(tasks.attempts, current.attempts)))
-			.run();
-		return retryAt === null ? 'failed' : 'retry';
+			.returning();
+		return row ? recordOf(row) : null;
 	}
 
 	/** Stops a task until it's resumed; its progress is kept. */
@@ -323,12 +325,13 @@ export class TaskService extends BaseService {
 	}
 
 	/** The runner's writes after a step apply only while the task is still running, so a seller's cancel stands. */
-	private async updateRunning(id: string, update: Partial<typeof schema.tasks.$inferInsert>): Promise<void> {
+	private async updateRunning(id: string, update: Partial<typeof schema.tasks.$inferInsert>): Promise<TaskRecord | null> {
 		const tasks = schema.tasks;
-		await this.database
+		const [row] = await this.database
 			.update(tasks)
 			.set(update)
 			.where(and(eq(tasks.id, id), eq(tasks.status, 'running')))
-			.run();
+			.returning();
+		return row ? recordOf(row) : null;
 	}
 }

@@ -86,24 +86,28 @@ function memoryStore(initial: TaskRecord[]) {
 		},
 		async finish(id, now) {
 			const record = get(id);
-			if (record.status === 'running') Object.assign(record, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null, attempts: 0, lastError: null });
+			if (record.status !== 'running') return null;
+			Object.assign(record, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null, attempts: 0, lastError: null });
+			return { ...record };
 		},
 		async fail(id, message, now) {
 			const record = get(id);
-			if (record.status === 'running') Object.assign(record, { status: 'failed', lastError: message, finishedAt: now, leaseUntil: null });
+			if (record.status !== 'running') return null;
+			Object.assign(record, { status: 'failed', lastError: message, finishedAt: now, leaseUntil: null });
+			return { ...record };
 		},
 		async recordFailure(id, messages, now) {
 			unavailable('recordFailure');
 			const record = get(id);
-			if (record.status !== 'running') return 'failed';
+			if (record.status !== 'running') return null;
 			const failures = record.attempts + 1;
 			const retryAt = taskRetryAt(failures, now);
 			if (retryAt === null) {
 				Object.assign(record, { status: 'failed', attempts: failures, lastError: messages.failed, finishedAt: now, leaseUntil: null });
-				return 'failed';
+			} else {
+				Object.assign(record, { status: 'queued', attempts: failures, lastError: messages.retry, runAt: retryAt, leaseUntil: null });
 			}
-			Object.assign(record, { status: 'queued', attempts: failures, lastError: messages.retry, runAt: retryAt, leaseUntil: null });
-			return 'retry';
+			return { ...record };
 		},
 		async pause(id, reason) {
 			const record = get(id);
@@ -188,8 +192,9 @@ function setup(tasks: TaskRecord[], script: Scripted[], gates: MeterGate[] = [],
 	const memory = memoryStore(tasks);
 	const kind = fakeKind(script, options);
 	const metering = fakeMeter(gates, options);
-	const deps = { store: memory.store, meter: metering.meter, kinds: (name: string) => (name === kind.handler.kind ? kind.handler : null), env: ENV };
-	return { ...memory, ...kind, ...metering, tick: (now: number) => runTaskTick(deps, 'seller_1', now) };
+	const ended: TaskRecord[] = [];
+	const deps = { store: memory.store, meter: metering.meter, kinds: (name: string) => (name === kind.handler.kind ? kind.handler : null), env: ENV, ended: (record: TaskRecord) => void ended.push(record) };
+	return { ...memory, ...kind, ...metering, ended, tick: (now: number) => runTaskTick(deps, 'seller_1', now) };
 }
 
 /** Ticks at each alarm the runner asks for until it asks for none, or `limit` ticks. */
@@ -357,8 +362,9 @@ describe('runTaskTick', () => {
 
 	it('an unknown kind or unparsable payload fails the task without retrying', async () => {
 		const unknown = setup([task('a')], [stepOf(1, 1, true)]);
-		const result = await runTaskTick({ store: unknown.store, meter: unknown.meter, kinds: () => null, env: ENV }, 'seller_1', NOW);
+		const result = await runTaskTick({ store: unknown.store, meter: unknown.meter, kinds: () => null, env: ENV, ended: (record) => void unknown.ended.push(record) }, 'seller_1', NOW);
 		expect(result).toEqual({ nextAlarmAt: null });
+		expect(unknown.ended.map((record) => record.id)).toEqual(['a']);
 		expect(unknown.task('a')).toMatchObject({ status: 'failed', finishedAt: NOW, attempts: 0, lastError: TASK_FAILED_MESSAGE });
 		expect(unknown.stepped).toEqual([]);
 
@@ -462,5 +468,76 @@ describe('runTaskTick', () => {
 
 		expect(queue.finished).toEqual([]);
 		expect(queue.task('a')).toMatchObject({ status: 'canceled', finishedAt: NOW, progress: progress(10, 10), steps: 1, creditsUsed: 7 });
+	});
+});
+
+describe('task spend events', () => {
+	const summary = (record: TaskRecord) => ({ id: record.id, status: record.status, creditsUsed: record.creditsUsed, steps: record.steps });
+
+	it('reports a finished task once, with its steps and credits including the last step', async () => {
+		const queue = setup([task('a')], [stepOf(40, 80), stepOf(80, 80, true)]);
+
+		await queue.tick(NOW);
+		expect(queue.ended).toEqual([]);
+		await queue.tick(NOW + 1_000);
+		await queue.tick(NOW + 2_000);
+
+		expect(queue.ended.map(summary)).toEqual([{ id: 'a', status: 'done', creditsUsed: 14, steps: 2 }]);
+	});
+
+	it('reports a task that fails for good once, and a failure that will be retried not at all', async () => {
+		const queue = setup([task('a')], [stepOf(40, 80), new Error('The batch could not be read')]);
+
+		await queue.tick(NOW);
+		let now = NOW + 1_000;
+		for (let failure = 1; failure < TASK_MAX_FAILURES; failure += 1) {
+			const { nextAlarmAt } = await queue.tick(now);
+			expect(queue.ended, `after failure ${failure}`).toEqual([]);
+			now = nextAlarmAt ?? now;
+		}
+		await queue.tick(now);
+
+		expect(queue.ended.map(summary)).toEqual([{ id: 'a', status: 'failed', creditsUsed: 7, steps: 1 }]);
+		await queue.tick(now + 1_000);
+		expect(queue.ended).toHaveLength(1);
+	});
+
+	it('reports a task whose kind or payload is unusable once, as failed', async () => {
+		const queue = setup([task('a', { payload: 'unreadable' })], [stepOf(1, 1, true)]);
+
+		await queue.tick(NOW);
+		await queue.tick(NOW + 1_000);
+
+		expect(queue.ended.map(summary)).toEqual([{ id: 'a', status: 'failed', creditsUsed: 0, steps: 0 }]);
+	});
+
+	it("leaves a canceled task to the seller's cancel: a step finishing or failing after it reports nothing", async () => {
+		const seller: { cancel?: (id: string, now: number) => void } = {};
+		const finishing = setup([task('a')], [(ctx) => {
+			seller.cancel?.(ctx.task.id, NOW + 1);
+			return stepOf(80, 80, true);
+		}]);
+		seller.cancel = finishing.cancel;
+		await finishing.tick(NOW);
+		expect(finishing.ended).toEqual([]);
+		expect(finishing.task('a')).toMatchObject({ status: 'canceled', steps: 1, creditsUsed: 7 });
+
+		const failing = setup([task('b')], [(ctx) => {
+			seller.cancel?.(ctx.task.id, NOW + 1);
+			throw new Error('The batch could not be read');
+		}]);
+		seller.cancel = failing.cancel;
+		await failing.tick(NOW);
+		expect(failing.ended).toEqual([]);
+		expect(failing.task('b')).toMatchObject({ status: 'canceled' });
+	});
+
+	it('reports nothing for a task the credits or the daily limit hold back', async () => {
+		const queue = setup([task('a'), task('b', { runAt: NOW + 1 })], [stepOf(1, 1, true)], [{ ok: false, reason: 'credits', resumeAt: null }, { ok: false, reason: 'daily-limit', resumeAt: NOW + 60_000 }]);
+
+		await queue.tick(NOW);
+		await queue.tick(NOW + 1);
+
+		expect(queue.ended).toEqual([]);
 	});
 });

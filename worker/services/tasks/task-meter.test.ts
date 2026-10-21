@@ -6,7 +6,8 @@ import { TASK_MODEL_ID } from '../../../shared/types/store-translations';
 import type { PlanLimitRefusal } from '../../../shared/types/plans';
 import type { CreditCheck, StepCharge, TurnAccount } from '../billing/metering';
 import type { ModelCall } from './kinds';
-import { createTaskMeter, type TaskMeterDeps } from './task-meter';
+import type { TaskMeter } from './meter';
+import { createTaskMeter, resumePausedTasks, type ResumeDeps, type TaskMeterDeps } from './task-meter';
 
 const NOW = Date.parse('2026-10-21T15:30:00Z');
 const MIDNIGHT = Date.parse('2026-10-22T00:00:00Z');
@@ -15,7 +16,7 @@ const REFUSAL: PlanLimitRefusal = { code: 'plan_limit', limit: 'aiCredits', plan
 
 function fakes(overrides: Partial<TaskMeterDeps> = {}) {
 	const charges: StepCharge[] = [];
-	const counted: { userId: string; creditCost: number }[] = [];
+	const counted: { userId: string; creditCosts: readonly number[] }[] = [];
 	const deps: TaskMeterDeps = {
 		billingOn: async () => true,
 		checkCredits: async (): Promise<CreditCheck> => ({ billing: true, refusal: null }),
@@ -25,8 +26,8 @@ function fakes(overrides: Partial<TaskMeterDeps> = {}) {
 			return null;
 		},
 		dailyCreditsLeft: async () => 100,
-		countDailyCall: async (userId, creditCost) => {
-			counted.push({ userId, creditCost });
+		countDailyCalls: async (userId, creditCosts) => {
+			counted.push({ userId, creditCosts });
 		},
 		now: () => NOW,
 		...overrides,
@@ -120,15 +121,81 @@ describe('the task meter', () => {
 		it("charge counts calls against the daily allowance the way the Think agent's daily mode does", async () => {
 			const { deps, charges, counted } = fakes(off);
 			const credits = await createTaskMeter(deps).charge({ userId: 'seller_1', taskId: 't', step: 0, calls: [call({ inputTokens: 1_000, outputTokens: 500 }), call(null)] });
-			// Each call counts the model's flat cost (3 for Gemini Flash), as the agent's daily mode does per step.
-			expect(counted).toEqual([
-				{ userId: 'seller_1', creditCost: 3 },
-				{ userId: 'seller_1', creditCost: 3 },
-			]);
+			// Each call counts the model's flat cost (3 for Gemini Flash), as the agent's daily mode does per step, in one go.
+			expect(counted).toEqual([{ userId: 'seller_1', creditCosts: [3, 3] }]);
 			expect(FLASH?.config.creditCost).toBe(3);
 			expect(charges).toEqual([]);
 			// The task still shows what its calls cost at the model's prices.
 			expect(credits).toBe(20);
 		});
+	});
+});
+
+describe('resumePausedTasks', () => {
+	function resumeFakes(options: { paused?: Record<string, string[]>; gates?: Record<string, 'ok' | 'refused' | 'throws'>; listFails?: boolean; resumeFails?: string[] } = {}) {
+		const paused = options.paused ?? { seller_a: ['a1', 'a2'], seller_b: ['b1'] };
+		const resumed: string[] = [];
+		const resumedAt: (number | undefined)[] = [];
+		const woken: string[] = [];
+		const asked: string[] = [];
+		const meter: TaskMeter = {
+			gate: async (userId) => {
+				asked.push(userId);
+				const gate = options.gates?.[userId] ?? 'ok';
+				if (gate === 'throws') throw new Error('The ledger is unavailable');
+				return gate === 'ok' ? { ok: true } : { ok: false, reason: 'credits', resumeAt: null };
+			},
+			charge: async () => 0,
+		};
+		const deps: ResumeDeps = {
+			tasks: {
+				pausedUserIds: async () => {
+					if (options.listFails) throw new Error('D1 is unavailable');
+					return Object.keys(paused);
+				},
+				pausedTaskIds: async (userId) => paused[userId] ?? [],
+				resume: async (id, _userId, now) => {
+					if (options.resumeFails?.includes(id)) throw new Error('D1 is unavailable');
+					resumed.push(id);
+					resumedAt.push(now);
+					return {} as never;
+				},
+			},
+			meter,
+			wake: async (userId) => {
+				woken.push(userId);
+			},
+			nowMs: NOW,
+		};
+		return { deps, resumed, resumedAt, woken, asked };
+	}
+
+	it("resumes every credit-paused task of a seller whose gate passes and wakes their runner once, and leaves the others", async () => {
+		const { deps, resumed, resumedAt, woken } = resumeFakes({ gates: { seller_b: 'refused' } });
+		expect(await resumePausedTasks(deps)).toBe(2);
+		expect(resumed).toEqual(['a1', 'a2']);
+		expect(resumedAt).toEqual([NOW, NOW]);
+		expect(woken).toEqual(['seller_a']);
+	});
+
+	it("one seller's gate throwing doesn't stop another seller's resume, and nothing is thrown", async () => {
+		const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { deps, resumed, woken, asked } = resumeFakes({ gates: { seller_a: 'throws' } });
+		await expect(resumePausedTasks(deps)).resolves.toBe(1);
+		expect(asked).toEqual(['seller_a', 'seller_b']);
+		expect(resumed).toEqual(['b1']);
+		expect(woken).toEqual(['seller_b']);
+		expect(errorLog).toHaveBeenCalled();
+		errorLog.mockRestore();
+	});
+
+	it("a failing resume write for one task doesn't stop the rest, and a failing list answers zero", async () => {
+		const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const writes = resumeFakes({ resumeFails: ['a1'] });
+		await expect(resumePausedTasks(writes.deps)).resolves.toBe(2);
+		expect(writes.resumed).toEqual(['a2', 'b1']);
+		expect(writes.woken).toEqual(['seller_a', 'seller_b']);
+		await expect(resumePausedTasks(resumeFakes({ listFails: true }).deps)).resolves.toBe(0);
+		errorLog.mockRestore();
 	});
 });

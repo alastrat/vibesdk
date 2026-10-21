@@ -57,13 +57,18 @@ export function creditRefusal(account: BillingAccount, balance: CreditBalance): 
 	return refusal;
 }
 
-/** Before a turn: some credit must be left. A started turn always finishes; its overrun is settled later. */
-export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
+/** Whether some credit is left, sending no analytics: for checks that aren't a turn being refused. */
+export async function creditCheck(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
 	if (!(await isFlagOn(env, 'billing', userId))) return { billing: false };
 	const account = await loadAccount(env, userId, nowMs);
-	const refusal = creditRefusal(account, await loadCredits(env, account));
-	if (refusal) await trackBilling(env, account.userId, [{ name: 'credits_limit_reached', properties: { plan: account.plan } }]);
-	return { billing: true, refusal };
+	return { billing: true, refusal: creditRefusal(account, await loadCredits(env, account)) };
+}
+
+/** Before a turn: some credit must be left. A started turn always finishes; its overrun is settled later. */
+export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
+	const check = await creditCheck(env, userId, nowMs);
+	if (check.billing && check.refusal) await trackBilling(env, userId, [{ name: 'credits_limit_reached', properties: { plan: check.refusal.plan } }]);
+	return check;
 }
 
 async function withTries<T>(attempt: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {

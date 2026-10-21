@@ -27,9 +27,15 @@ describe('the server event catalog', () => {
 		expect(SERVER_EVENT_NAMES.filter((name) => SERVER_EVENTS[name].subject === 'system')).toEqual(['heartbeat']);
 	});
 
-	it("keeps only a build's credits for people who turned analytics off", () => {
-		expect(SERVER_EVENT_NAMES.filter((name) => SERVER_EVENTS[name].costFields !== undefined)).toEqual(['build_finished']);
+	it("keeps only a build's and a task's credits for people who turned analytics off", () => {
+		expect(SERVER_EVENT_NAMES.filter((name) => SERVER_EVENTS[name].costFields !== undefined)).toEqual(['build_finished', 'task_finished']);
 		expect(SERVER_EVENTS.build_finished.costFields).toEqual(['credits_used']);
+		expect(SERVER_EVENTS.task_finished.costFields).toEqual(['credits_used']);
+	});
+
+	it('lists the task event next to the build events', () => {
+		expect(SERVER_EVENT_NAMES.indexOf('task_finished')).toBe(SERVER_EVENT_NAMES.indexOf('build_finished') + 1);
+		expect(SERVER_EVENTS.task_finished.subject).toBe('person');
 	});
 });
 

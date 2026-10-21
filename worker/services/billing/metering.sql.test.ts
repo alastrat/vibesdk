@@ -4,7 +4,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { loadAccount } from './account';
-import { chargeLegacyCall, chargeStep, checkCreditsBeforeTurn, loadTurnAccount, type MeteringDeps } from './metering';
+import { BATCH_URL } from '../posthog/client';
+import { chargeLegacyCall, chargeStep, checkCreditsBeforeTurn, creditCheck, loadTurnAccount, type MeteringDeps } from './metering';
 
 let db: D1Database;
 const NOW = Date.parse('2026-10-19T15:00:00Z');
@@ -66,6 +67,38 @@ describe('checkCreditsBeforeTurn', () => {
 		});
 		await insertPurchase(db, { id: 'cp_grace', userId: 'u_grace', credits: 5_000, purchasedAt: new Date(NOW - 2 * DAY), expiresAt: new Date(NOW + 300 * DAY) });
 		expect(await checkCreditsBeforeTurn(on(), 'u_grace', NOW)).toEqual({ billing: true, refusal: null });
+	});
+});
+
+describe('creditCheck', () => {
+	/** The event names sent to PostHog while `run` works, with PostHog configured. */
+	async function eventsDuring(run: (env: Env) => Promise<unknown>): Promise<string[]> {
+		const names: string[] = [];
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+			if (String(input) === BATCH_URL) names.push(...(JSON.parse(String(init?.body)) as { batch: { event: string }[] }).batch.map((event) => event.event));
+			return Response.json({ flags: {} });
+		});
+		await run(envWith(db, { BILLING: 'on', POSTHOG_PROJECT_KEY: 'phc_test' }));
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		return names;
+	}
+
+	it('answers what the prompt gate does, for a seller with credits and one without, and nothing while billing is off', async () => {
+		await insertUser(db, 'u_quiet_has', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		await insertUser(db, 'u_quiet_out', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		await use('u_quiet_out', 5_000);
+		expect(await creditCheck(envWith(db), 'u_quiet_has', NOW)).toEqual({ billing: false });
+		expect(await creditCheck(on(), 'u_quiet_has', NOW)).toEqual({ billing: true, refusal: null });
+		expect(await creditCheck(on(), 'u_quiet_out', NOW)).toEqual(await checkCreditsBeforeTurn(on(), 'u_quiet_out', NOW));
+		expect(await creditCheck(on(), 'u_quiet_out', NOW)).toMatchObject({ billing: true, refusal: { limit: 'aiCredits', plan: 'basic' } });
+	});
+
+	it('sends no credits_limit_reached for a seller out of credits, which only the prompt gate sends', async () => {
+		await insertUser(db, 'u_quiet_event', { createdAt: new Date('2026-03-12T09:00:00Z') });
+		await use('u_quiet_event', 5_000);
+		expect(await eventsDuring((env) => creditCheck(env, 'u_quiet_event', NOW))).toEqual([]);
+		vi.restoreAllMocks();
+		expect(await eventsDuring((env) => checkCreditsBeforeTurn(env, 'u_quiet_event', NOW))).toEqual(['credits_limit_reached']);
 	});
 });
 

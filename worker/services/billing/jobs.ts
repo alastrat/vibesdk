@@ -12,7 +12,6 @@ import { DAY_MS, renewalDaysOf } from './periods';
 import { billingEventDepsFromEnv } from './wiring';
 import { posthogConfig } from '../posthog/config';
 import { flagOverridesOf } from '../posthog/flags';
-import { resumeCreditPausedTasks } from '../tasks/task-meter';
 
 const logger = createLogger('BillingJobs');
 
@@ -22,7 +21,7 @@ const RENEWALS_PER_RUN = 100;
 const RENEWALS_SCANNED_PER_RUN = 1_000;
 const KEEP_USES_MS = 90 * DAY_MS;
 
-/** Daily: re-read suspicious subscriptions, settle and close credit periods, expire purchases, forget old usage, and resume tasks that paused for credits. */
+/** Daily: re-read suspicious subscriptions, settle and close credit periods, expire purchases, forget old usage. */
 export async function runDailyBilling(env: Env, nowMs: number): Promise<void> {
 	const deps = { ...billingEventDepsFromEnv(env), nowMs: () => nowMs };
 	const day = new Date(nowMs).toISOString().slice(0, 10);
@@ -44,8 +43,6 @@ export async function runDailyBilling(env: Env, nowMs: number): Promise<void> {
 		}
 	}
 	await ledger.pruneUses(nowMs - KEEP_USES_MS);
-	// Settling and renewals come first, so a seller's new credits are counted when their paused tasks are checked.
-	await resumeCreditPausedTasks(env);
 }
 
 /** The week's notice before limits start. It goes out whatever the billing flag says, since it comes before the flag turns on. */

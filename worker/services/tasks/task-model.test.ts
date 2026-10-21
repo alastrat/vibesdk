@@ -13,13 +13,14 @@ const ANSWER = { items: [{ id: '0', text: 'Hola' }] };
 interface Seen {
 	url: string;
 	headers: Headers;
-	body: { model: string; messages: { role: string; content: string }[]; max_tokens?: number; max_completion_tokens?: number };
+	body: { model: string; messages: { role: string; content: string }[]; max_tokens?: number; max_completion_tokens?: number; reasoning_effort?: string };
+	raw: string;
 }
 
 function gateway(reply: (n: number) => Response = () => completion(JSON.stringify(ANSWER))) {
 	const seen: Seen[] = [];
 	const fetchImpl: typeof fetch = async (input, init) => {
-		seen.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) });
+		seen.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)), raw: String(init?.body) });
 		return reply(seen.length);
 	};
 	return { seen, fetchImpl };
@@ -58,6 +59,17 @@ describe('the task model', () => {
 			{ role: 'user', content: '[{"id":"0","text":"Hello"}]' },
 		]);
 		expect(seen[0].body.max_completion_tokens ?? seen[0].body.max_tokens).toBe(800);
+	});
+
+	it('always asks for minimal reasoning, since the model otherwise thinks first: its thinking tokens would cut the answer off and go uncharged', async () => {
+		const { seen, fetchImpl } = gateway();
+		await createTaskModel(storedKeys, { fetch: fetchImpl }).generate(input);
+		await createTaskModel(providerKey, { fetch: fetchImpl }).generate({ ...input, maxOutputTokens: 4_000 });
+		expect(seen).toHaveLength(2);
+		for (const request of seen) {
+			expect(request.raw).toContain('"reasoning_effort":"minimal"');
+			expect(request.body.reasoning_effort).toBe('minimal');
+		}
 	});
 
 	it("authorizes with the platform's gateway token alone when the gateway holds the provider keys", async () => {

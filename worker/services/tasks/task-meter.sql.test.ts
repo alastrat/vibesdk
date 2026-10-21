@@ -1,22 +1,25 @@
 /** Resuming tasks that paused for credits, and charging a task's calls to the ledger, on real SQL. */
 
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TASK_MODEL_ID } from '../../../shared/types/store-translations';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { TaskService, type TaskRecord } from '../../database/services/TaskService';
 import { envWith, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { loadAccount } from '../billing/account';
+import { BATCH_URL } from '../posthog/client';
 import { resumeCreditPausedTasks, taskMeterFromEnv } from './task-meter';
 
 let db: D1Database;
 const NOW = Date.now();
-const SELLERS = ['seller_credits', 'seller_empty', 'seller_progress', 'seller_charge', 'seller_daily'];
+const SELLERS = ['seller_credits', 'seller_empty', 'seller_progress', 'seller_charge', 'seller_daily', 'seller_quiet'];
 const DAY = 86_400_000;
 
 beforeAll(async () => {
 	db = await migratedD1();
 	for (const id of SELLERS) await insertUser(db, id);
 });
+
+afterEach(() => vi.restoreAllMocks());
 
 function fakeRunners() {
 	const woken: string[] = [];
@@ -72,6 +75,26 @@ describe('resumeCreditPausedTasks', () => {
 		expect(woken).toEqual(['seller_credits']);
 	});
 
+	it("sends no credits_limit_reached for a seller who is still out of credits, which the step gate does send", async () => {
+		await queuePaused('seller_quiet', 'store.translate:app_q:es', 'credits');
+		await spend('seller_quiet', 5_000);
+		const sent: string[] = [];
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+			if (String(input) === BATCH_URL) sent.push(...(JSON.parse(String(init?.body)) as { batch: { event: string }[] }).batch.map((event) => event.event));
+			return Response.json({ flags: {} });
+		});
+		const { runners } = fakeRunners();
+		const env = billed({ TASK_RUNNER: runners, POSTHOG_PROJECT_KEY: 'phc_test' });
+
+		expect(await resumeCreditPausedTasks(env)).toBe(0);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(sent).toEqual([]);
+
+		expect(await taskMeterFromEnv(env).gate('seller_quiet')).toEqual({ ok: false, reason: 'credits', resumeAt: null });
+		await new Promise((resolve) => setTimeout(resolve, 50));
+		expect(sent).toEqual(['credits_limit_reached']);
+	});
+
 	it('keeps the steps a task saved, so resuming continues where it stopped', async () => {
 		const queued = await queuePaused('seller_progress', 'store.translate:app_d:es', 'seller');
 		await tasks().resume(queued.id, 'seller_progress', NOW);
@@ -119,14 +142,33 @@ describe('the task meter with billing off', () => {
 			},
 			getRemainingLimit: async (_key: string, config: { limit: number }) => Math.max(0, config.limit - used),
 		};
-		const env = envWith(db, { DORateLimitStore: { getByName: () => counter }, VibecoderStore: { get: async () => null } });
+		const configReads: string[] = [];
+		const env = envWith(db, {
+			DORateLimitStore: { getByName: () => counter },
+			VibecoderStore: {
+				get: async (key: string) => {
+					configReads.push(key);
+					return null;
+				},
+			},
+		});
 		const meter = taskMeterFromEnv(env);
 
 		expect(await meter.gate('seller_daily')).toEqual({ ok: true });
-		const credits = await meter.charge({ userId: 'seller_daily', taskId: 'task_2', step: 0, calls: [{ model: TASK_MODEL_ID, usage: { inputTokens: 1_000, outputTokens: 500 } }] });
+		const call = { model: TASK_MODEL_ID, usage: { inputTokens: 1_000, outputTokens: 500 } };
+		configReads.length = 0;
+		const credits = await meter.charge({ userId: 'seller_daily', taskId: 'task_2', step: 0, calls: [call] });
 		// The seller sees the call's cost at the model's prices; the old bucket takes the model's flat 3.
 		expect(credits).toBe(4);
 		expect(used).toBe(201);
+
+		// However many calls a step made, the user's limits are read once.
+		used = 0;
+		configReads.length = 0;
+		await meter.charge({ userId: 'seller_daily', taskId: 'task_2', step: 1, calls: [call, call, call] });
+		expect(used).toBe(9);
+		expect(configReads.filter((key) => key.startsWith('user_config:'))).toHaveLength(1);
+		used = 201;
 		const gate = await meter.gate('seller_daily');
 		expect(gate).toMatchObject({ ok: false, reason: 'daily-limit' });
 		const resumeAt = gate.ok ? 0 : (gate.resumeAt ?? 0);

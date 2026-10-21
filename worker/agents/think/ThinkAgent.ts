@@ -32,6 +32,7 @@ import { chargeStep, loadTurnAccount, meteringDepsFromEnv, type TurnAccount } fr
 import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
 import { resolveThinkModel, type TokenPrices } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
+import { storedKeysFetch } from './gateway-auth';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 import { createAssetCache, inlineAgentAssets } from './agent-assets';
 import type { BuildTurnUsage } from './build-events';
@@ -241,10 +242,9 @@ export class ThinkAgent extends Think<Env> {
 				this.providerFailure = failure;
 			},
 		});
+		const send = storedKeysFetch(model.useStoredKeys ?? false, transport);
 		const gatewayFetch: typeof fetch = async (input, init) => {
-			const headers = new Headers(init?.headers);
-			if (model.useStoredKeys) headers.delete('authorization');
-			const res = await transport(input, { ...(init ?? {}), headers });
+			const res = await send(input, init);
 			if (!res.body) return res;
 			const outHeaders = new Headers(res.headers);
 			// Body length/encoding change after transforming the stream.
@@ -388,7 +388,7 @@ export class ThinkAgent extends Think<Env> {
 		if (this.turnSteps !== null) this.turnSteps += 1;
 		const config = this.getConfig<ThinkAgentConfig>();
 		if (this.turnUsage?.mode === 'daily' && config) {
-			await countDailyCall(this.env, this.turnUsage, config.userId, this.turnUsage.creditCost);
+			await countDailyCall(this.env, this.turnUsage, config.userId, this.turnUsage.creditCost, 'Think');
 		}
 		if (ctx.stepNumber >= this.maxSteps - 1) {
 			return {

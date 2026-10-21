@@ -5,9 +5,12 @@
 
 import { DurableObject } from 'cloudflare:workers';
 import { createLogger } from '../../logger';
+import { serverAnalytics } from '../posthog/analytics';
 import { TaskService } from '../../database';
+import type { TaskRecord } from '../../database/services/TaskService';
 import { taskKind } from './kinds';
 import { runTaskTick } from './runner';
+import { trackTaskEnded } from './task-events';
 import { taskMeterFromEnv } from './task-meter';
 
 const logger = createLogger('TaskRunner');
@@ -26,7 +29,9 @@ export class TaskRunner extends DurableObject<Env> {
 		const userId = await this.ctx.storage.get<string>(USER_KEY);
 		if (!userId) return;
 		try {
-			const { nextAlarmAt } = await runTaskTick({ store: new TaskService(this.env), meter: taskMeterFromEnv(this.env), kinds: taskKind, env: this.env }, userId, Date.now());
+			const analytics = serverAnalytics(this.env);
+			const deps = { store: new TaskService(this.env), meter: taskMeterFromEnv(this.env), kinds: taskKind, env: this.env, ended: (task: TaskRecord) => trackTaskEnded(analytics, task) };
+			const { nextAlarmAt } = await runTaskTick(deps, userId, Date.now());
 			if (nextAlarmAt !== null) await this.ctx.storage.setAlarm(nextAlarmAt);
 		} catch (error) {
 			logger.error('Task runner alarm failed; trying again later', { userId, error });

@@ -20,9 +20,12 @@ export async function loadDailyAllowance(env: Env, userId: string, options: { ow
 	return { config: userConfig.security.rateLimit, hasCloudflareConfigured: options.ownAccountPays && (await hasCloudflareConfigured(env, userId)) };
 }
 
-/** Counts one call at `creditCost` against the allowance. Never throws for a spent allowance. */
-export async function countDailyCall(env: Env, allowance: DailyAllowance, userId: string, creditCost: number): Promise<void> {
-	await RateLimitService.enforceLLMCallsRateLimit(env, allowance.config, userId, 'Think', '', false, allowance.hasCloudflareConfigured, {
+/**
+ * Counts one call at `creditCost` against the allowance. Never throws for a spent allowance. `label` names the caller in
+ * the limiter's logs; the limiter reads nothing else from it while a flat `creditCost` is given.
+ */
+export async function countDailyCall(env: Env, allowance: DailyAllowance, userId: string, creditCost: number, label: 'Think' | 'Task'): Promise<void> {
+	await RateLimitService.enforceLLMCallsRateLimit(env, allowance.config, userId, label, '', false, allowance.hasCloudflareConfigured, {
 		creditCost,
 		throwOnExceeded: false,
 	});

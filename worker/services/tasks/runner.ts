@@ -16,6 +16,8 @@ export interface TaskRunnerDeps {
 	meter: TaskMeter;
 	kinds: (kind: TaskKind) => TaskKindHandler<unknown> | null;
 	env: Env;
+	/** Told once with the task as it was stored when this run moved it to `done` or `failed`; a cancel is the seller's to report. Never throws. */
+	ended(task: TaskRecord): void;
 }
 
 const logger = createLogger('TaskRunner');
@@ -56,7 +58,8 @@ async function runStep(deps: TaskRunnerDeps, task: TaskRecord, now: number): Pro
 	const payload = handler ? handler.parsePayload(task.payload) : null;
 	if (!handler || payload === null) {
 		logger.error(handler ? "A task's payload could not be read; failing it" : "A task's kind is not registered; failing it", { taskId: task.id, kind: task.kind });
-		await deps.store.fail(task.id, TASK_FAILED_MESSAGE, now);
+		const failed = await deps.store.fail(task.id, TASK_FAILED_MESSAGE, now);
+		if (failed) deps.ended(failed);
 		return;
 	}
 
@@ -78,11 +81,13 @@ async function runStep(deps: TaskRunnerDeps, task: TaskRecord, now: number): Pro
 		if (!result.finished || status !== 'running') return;
 
 		await fromKind(async () => handler.onFinished?.(ctx, payload));
-		await deps.store.finish(task.id, now);
+		const finished = await deps.store.finish(task.id, now);
+		if (finished) deps.ended(finished);
 	} catch (error) {
 		const original = error instanceof KindError ? error.original : error;
 		logger.error('A task step failed', { taskId: task.id, kind: task.kind, error: original });
 		const described = error instanceof KindError ? describedByKind(handler, original) : null;
-		await deps.store.recordFailure(task.id, { retry: described ?? TASK_RETRY_MESSAGE, failed: described ?? TASK_FAILED_MESSAGE }, now);
+		const recorded = await deps.store.recordFailure(task.id, { retry: described ?? TASK_RETRY_MESSAGE, failed: described ?? TASK_FAILED_MESSAGE }, now);
+		if (recorded?.status === 'failed') deps.ended(recorded);
 	}
 }

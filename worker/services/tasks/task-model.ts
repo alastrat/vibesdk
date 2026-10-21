@@ -4,9 +4,9 @@
  */
 
 import { createOpenAI } from '@ai-sdk/openai';
-import { generateObject } from 'ai';
+import { generateText, Output } from 'ai';
 import type { ZodType } from 'zod';
-import { resolveThinkGateway } from '../../agents/think/gateway-auth';
+import { resolveThinkGateway, storedKeysFetch } from '../../agents/think/gateway-auth';
 import { getConfigurationForModel } from '../../agents/inferutils/core';
 import { resolveThinkModel } from '../../agents/think/model-config';
 import { TASK_MODEL_ID } from '../../../shared/types/store-translations';
@@ -32,25 +32,26 @@ export function createTaskModel(env: Env, options: TaskModelOptions = {}): TaskM
 			// Platform keys only: no seller key, gateway or token is passed.
 			const conf = await getConfigurationForModel(model.config, env, '', undefined, false, null, null);
 			const gateway = resolveThinkGateway(conf, env);
-			const gatewayFetch: typeof fetch = async (input, init) => {
-				const headers = new Headers(init?.headers);
-				// With the gateway holding the provider keys, a forwarded Authorization would override its stored key.
-				if (gateway.useStoredKeys) headers.delete('authorization');
-				return (options.fetch ?? fetch)(input, { ...(init ?? {}), headers });
-			};
-			const provider = createOpenAI({ baseURL: gateway.baseURL, apiKey: gateway.apiKey, headers: gateway.headers, fetch: gatewayFetch });
+			const provider = createOpenAI({
+				baseURL: gateway.baseURL,
+				apiKey: gateway.apiKey,
+				headers: gateway.headers,
+				fetch: storedKeysFetch(gateway.useStoredKeys, options.fetch ?? ((input, init) => fetch(input, init))),
+			});
 			// Chat Completions, as the Think agent does: the gateway's Responses path rejects these models' auth.
-			const result = await generateObject({
+			const result = await generateText({
 				model: provider.chat(model.id),
 				system,
 				prompt,
-				schema,
+				output: Output.object({ schema }),
 				maxOutputTokens,
+				// Without it the model thinks first: its thinking tokens eat the output limit and are missing from the usage.
+				providerOptions: { openai: { reasoningEffort: 'minimal' } },
 				// A failed call is the task's to retry with backoff, so it is not retried here.
 				maxRetries: 0,
 				abortSignal: AbortSignal.timeout(MODEL_CALL_TIMEOUT_MS),
 			});
-			return { object: result.object, call: { model: model.id, usage: stepUsageFrom(result.usage) } };
+			return { object: result.output, call: { model: model.id, usage: stepUsageFrom(result.totalUsage) } };
 		},
 	};
 }

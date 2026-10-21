@@ -7,7 +7,9 @@ import { CreditLedgerService } from '../../database/services/CreditLedgerService
 import { TaskService } from '../../database/services/TaskService';
 import { handleBillingEvent } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
-import { billingEventDepsFromEnv } from './wiring';
+import { CATALOG_HEALTH_CRON } from '../catalog/health';
+import { CATALOG_SWEEP_CRON } from '../catalog/scheduler';
+import { billingEventDepsFromEnv, runBillingSchedule } from './wiring';
 import { FLAGS_URL } from '../posthog/flags';
 
 let db: D1Database;
@@ -137,19 +139,50 @@ describe('the daily billing run', () => {
 		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_uses WHERE user_id = 'u_day'").first()).toEqual({ n: 0 });
 	});
 
-	it("resumes a seller's tasks that paused for credits once they have credits again, and wakes their runner", async () => {
-		await insertUser(db, 'u_task');
-		const tasks = new TaskService(env());
-		const queued = await tasks.enqueue({ userId: 'u_task', appId: null, kind: 'store.translate', payload: {}, dedupeKey: 'store.translate:app_t:es' });
-		if (!('task' in queued)) throw new Error('Refused');
-		await tasks.pause(queued.task.id, 'credits');
-		const woken: string[] = [];
-		const runners = { idFromName: (name: string) => name, get: () => ({ wake: async (userId: string) => void woken.push(userId) }) };
+	describe('the daily schedule and tasks paused for credits', () => {
+		async function pausedTask(userId: string, key: string) {
+			await insertUser(db, userId);
+			const tasks = new TaskService(env());
+			const queued = await tasks.enqueue({ userId, appId: null, kind: 'store.translate', payload: {}, dedupeKey: key });
+			if (!('task' in queued)) throw new Error('Refused');
+			await tasks.pause(queued.task.id, 'credits');
+			return { tasks, id: queued.task.id };
+		}
+		function runners() {
+			const woken: string[] = [];
+			return { woken, runners: { idFromName: (name: string) => name, get: () => ({ wake: async (userId: string) => void woken.push(userId) }) } };
+		}
 
-		await runDailyBilling(env({ TASK_RUNNER: runners }), Date.parse('2026-10-19T06:35:00Z'));
+		it("resumes a seller's tasks that paused for credits once they have credits again, and wakes their runner", async () => {
+			const { tasks, id } = await pausedTask('u_task', 'store.translate:app_t:es');
+			const { woken, runners: fake } = runners();
 
-		expect((await tasks.listForUser('u_task', { limit: 10 }))[0]).toMatchObject({ status: 'queued', pauseReason: null });
-		expect(woken).toEqual(['u_task']);
+			await runBillingSchedule(CATALOG_HEALTH_CRON, env({ TASK_RUNNER: fake }));
+
+			expect((await tasks.listForUser('u_task', { limit: 10 })).find((task) => task.id === id)).toMatchObject({ status: 'queued', pauseReason: null });
+			expect(woken).toEqual(['u_task']);
+		});
+
+		it('still resumes them when the daily run itself fails, and not on the other schedules', async () => {
+			const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+			const { tasks, id } = await pausedTask('u_task_fail', 'store.translate:app_f:es');
+			const { woken, runners: fake } = runners();
+			vi.spyOn(BillingService.prototype, 'subscriptionsToRepair').mockRejectedValue(new Error('D1 is unavailable'));
+
+			await runBillingSchedule(CATALOG_SWEEP_CRON, env({ TASK_RUNNER: fake }));
+			expect(woken).toEqual([]);
+			await runBillingSchedule(CATALOG_HEALTH_CRON, env({ TASK_RUNNER: fake }));
+
+			expect(errorLog).toHaveBeenCalled();
+			expect((await tasks.listForUser('u_task_fail', { limit: 10 })).find((task) => task.id === id)).toMatchObject({ status: 'queued' });
+			expect(woken).toEqual(['u_task_fail']);
+		});
+
+		it("is not part of settling: the daily run alone leaves tasks paused", async () => {
+			const { tasks, id } = await pausedTask('u_task_alone', 'store.translate:app_s:es');
+			await runDailyBilling(env(), Date.parse('2026-10-19T06:35:00Z'));
+			expect((await tasks.listForUser('u_task_alone', { limit: 10 })).find((task) => task.id === id)).toMatchObject({ status: 'paused' });
+		});
 	});
 });
 

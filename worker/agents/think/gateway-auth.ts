@@ -55,3 +55,15 @@ export function resolveThinkGateway(conf: GatewayModelConfig & { baseURL: string
 			: conf.baseURL;
 	return { ...auth, baseURL };
 }
+
+/**
+ * `base` for a gateway that may hold the provider keys: then a forwarded `Authorization` would override the gateway's
+ * stored key, so it is never sent. `cf-aig-authorization` and everything else go through.
+ */
+export function storedKeysFetch(useStoredKeys: boolean, base: typeof fetch): typeof fetch {
+	return (input, init) => {
+		const headers = new Headers(init?.headers);
+		if (useStoredKeys) headers.delete('authorization');
+		return base(input, { ...(init ?? {}), headers });
+	};
+}

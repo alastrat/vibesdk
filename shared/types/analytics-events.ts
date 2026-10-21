@@ -7,6 +7,7 @@
 import type { PlanId } from './plans';
 import type { SellerLevel } from './seller-levels';
 import type { StoreMode } from './store-payments';
+import type { TaskKind } from './tasks';
 
 /** The distinct id of events about Estori itself, such as the heartbeat and Worker errors. */
 export const SYSTEM_DISTINCT_ID = 'estori-system';
@@ -55,6 +56,13 @@ export type ServerEventCatalog = {
 		 */
 		credits_used: number;
 		duration_ms: number;
+	};
+	task_finished: {
+		kind: TaskKind;
+		status: 'done' | 'failed' | 'canceled';
+		/** Charged like a build's: real token cost times billing's CREDIT_MARGIN, at its CREDIT_USD a credit, on Estori's gateway. */
+		credits_used: number;
+		steps: number;
 	};
 	store_published: { app_id: string; first_publish: boolean; draft: 'main' | 'other' };
 	store_unpublished: { app_id: string };
@@ -111,6 +119,7 @@ export const SERVER_EVENTS: Readonly<Record<ServerEventName, ServerEventDefiniti
 	signed_in: { description: 'A sign-in to an existing account.', subject: 'person' },
 	build_started: { description: 'The AI started a turn on a store.', subject: 'person' },
 	build_finished: { description: 'An AI turn ended, with its steps and the credits billing charged.', subject: 'person', costFields: ['credits_used'] },
+	task_finished: { description: "A seller's background task ended, done, failed or canceled, with its steps and the credits it used.", subject: 'person', costFields: ['credits_used'] },
 	store_published: { description: 'A store was published to its live address.', subject: 'person' },
 	store_unpublished: { description: 'A live store was taken offline.', subject: 'person' },
 	payments_ready: { description: "The seller's Stripe account can take store payments.", subject: 'person' },

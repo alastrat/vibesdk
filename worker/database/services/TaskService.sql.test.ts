@@ -180,7 +180,7 @@ describe('the task queue on real SQL', () => {
 		const messages = (text: string) => ({ retry: `${text}, retrying`, failed: `${text}, stopped` });
 		const flaky = await queued('seller_1', 'flaky');
 		await service().claimNext('seller_1', NOW, TASK_LEASE_MS);
-		expect(await service().recordFailure(flaky.id, messages('Timed out'), NOW)).toBe('retry');
+		expect(await service().recordFailure(flaky.id, messages('Timed out'), NOW)).toMatchObject({ id: flaky.id, status: 'queued', attempts: 1 });
 		expect(await read(flaky.id)).toMatchObject({ status: 'queued', attempts: 1, lastError: 'Timed out, retrying', runAt: NOW + TASK_RETRY_DELAYS_MS[0], leaseUntil: null });
 
 		let now = NOW + TASK_RETRY_DELAYS_MS[0];
@@ -190,18 +190,38 @@ describe('the task queue on real SQL', () => {
 
 		for (let failure = 1; failure < TASK_MAX_FAILURES; failure += 1) {
 			await service().claimNext('seller_1', now, TASK_LEASE_MS);
-			expect(await service().recordFailure(flaky.id, messages(`Failure ${failure}`), now)).toBe('retry');
+			expect(await service().recordFailure(flaky.id, messages(`Failure ${failure}`), now)).toMatchObject({ status: 'queued', attempts: failure });
 			const task = await read(flaky.id);
 			expect(task).toMatchObject({ attempts: failure, runAt: now + TASK_RETRY_DELAYS_MS[failure - 1], lastError: `Failure ${failure}, retrying` });
 			now = task.runAt;
 		}
 		await service().claimNext('seller_1', now, TASK_LEASE_MS);
-		expect(await service().recordFailure(flaky.id, messages('Last failure'), now)).toBe('failed');
+		expect(await service().recordFailure(flaky.id, messages('Last failure'), now)).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES, lastError: 'Last failure, stopped' });
 		expect(await read(flaky.id)).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES, lastError: 'Last failure, stopped', finishedAt: now, progress: progress(40, 80), steps: 1 });
 
-		// A task that isn't running is left alone.
-		expect(await service().recordFailure(flaky.id, messages('Late'), now + 1)).toBe('failed');
+		// A task that isn't running is left alone, and nothing is answered for it.
+		expect(await service().recordFailure(flaky.id, messages('Late'), now + 1)).toBeNull();
 		expect(await read(flaky.id)).toMatchObject({ lastError: 'Last failure, stopped', attempts: TASK_MAX_FAILURES });
+	});
+
+	it('finish and fail answer the task they ended, and null for one that is no longer running', async () => {
+		const done = await queued('seller_1', 'ends-done');
+		await service().claimNext('seller_1', NOW, TASK_LEASE_MS);
+		expect(await service().finish(done.id, NOW + 1)).toMatchObject({ id: done.id, status: 'done', finishedAt: NOW + 1 });
+		expect(await service().finish(done.id, NOW + 2)).toBeNull();
+		expect(await service().fail(done.id, 'Too late', NOW + 2)).toBeNull();
+
+		const broken = await queued('seller_1', 'ends-failed');
+		await service().claimNext('seller_1', NOW, TASK_LEASE_MS);
+		expect(await service().fail(broken.id, 'Could not be read', NOW + 3)).toMatchObject({ id: broken.id, status: 'failed', lastError: 'Could not be read' });
+
+		// A seller's cancel during a step stands: the runner's later write changes nothing and answers nothing.
+		const canceled = await queued('seller_1', 'ends-canceled');
+		await service().claimNext('seller_1', NOW, TASK_LEASE_MS);
+		await service().cancel(canceled.id, 'seller_1', NOW + 4);
+		expect(await service().finish(canceled.id, NOW + 5)).toBeNull();
+		expect(await service().recordFailure(canceled.id, { retry: 'Retrying', failed: 'Stopped' }, NOW + 5)).toBeNull();
+		expect(await read(canceled.id)).toMatchObject({ status: 'canceled', finishedAt: NOW + 4 });
 	});
 
 	it('the save of a finished step keeps the failure count, so a finish that keeps failing still fails; finish clears it', async () => {
