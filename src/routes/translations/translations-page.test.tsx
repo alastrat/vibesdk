@@ -7,7 +7,7 @@ import { act, createElement, type ReactNode } from 'react';
 import type TestRenderer from 'react-test-renderer';
 import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider, environmentManager } from '@tanstack/react-query';
-import type { ApiResponse, StoreLanguageStatus, StoreTranslationOverview, StoreTranslationStoreSummary, TaskView } from '@/api-types';
+import type { ApiResponse, StoreLanguageStatus, StoreTranslationOverview, StoreTranslationRow, StoreTranslationStoreSummary, TaskView } from '@/api-types';
 import { apiClient } from '@/lib/api-client';
 import { applyAccountLocale } from '@/lib/i18n';
 import { mountElement, silenceTestRendererDeprecation, textOf, unmountAll } from '@/test-support/mounted';
@@ -16,9 +16,11 @@ import TranslationsPage from './translations';
 const flags = vi.hoisted((): { paused: boolean } => ({ paused: false }));
 
 vi.mock('@/lib/api-client', () => ({
+	ApiError: class ApiError extends Error {},
 	apiClient: {
 		getTranslationStores: vi.fn(),
 		getStoreTranslations: vi.fn(),
+		getStoreTranslationTexts: vi.fn(),
 		getTasks: vi.fn(),
 		runStoreTranslation: vi.fn(),
 		saveStoreTranslationSettings: vi.fn(),
@@ -60,6 +62,7 @@ beforeEach(() => {
 	flags.paused = false;
 	vi.mocked(apiClient.getTranslationStores).mockResolvedValue(ok(STORES));
 	vi.mocked(apiClient.getStoreTranslations).mockResolvedValue(ok(overview()));
+	vi.mocked(apiClient.getStoreTranslationTexts).mockResolvedValue(ok({ rows: [CANDLES], nextCursor: null }));
 	vi.mocked(apiClient.getTasks).mockResolvedValue(ok([task({ status: 'done', progress: { done: 150, total: 150, skipped: 0 }, finishedAt: '2026-10-21T10:05:00.000Z' })]));
 });
 
@@ -67,7 +70,7 @@ afterEach(async () => {
 	await unmountAll();
 	await applyAccountLocale('en');
 	vi.useRealTimers();
-	for (const method of [apiClient.getTranslationStores, apiClient.getStoreTranslations, apiClient.getTasks, apiClient.runStoreTranslation, apiClient.saveStoreTranslationSettings, apiClient.cancelTask, apiClient.resumeTask]) {
+	for (const method of [apiClient.getTranslationStores, apiClient.getStoreTranslations, apiClient.getStoreTranslationTexts, apiClient.getTasks, apiClient.runStoreTranslation, apiClient.saveStoreTranslationSettings, apiClient.cancelTask, apiClient.resumeTask]) {
 		vi.mocked(method).mockReset();
 	}
 });
@@ -80,6 +83,8 @@ const STORES: StoreTranslationStoreSummary[] = [
 	{ appId: 'app1', title: 'Lucia Candles', sourceLocale: 'en', languages: [{ locale: 'es', enabled: true, ready: true }] },
 	{ appId: 'app2', title: 'Open Shop', sourceLocale: 'es', languages: [] },
 ];
+
+const CANDLES: StoreTranslationRow = { hash: 'h1', source: 'Hand-poured candles', text: 'Velas hechas a mano', origin: 'machine', machineText: 'Velas hechas a mano' };
 
 function task(overrides: Partial<TaskView> = {}): TaskView {
 	return {
@@ -207,6 +212,14 @@ describe('the Translations page', () => {
 		expect(screen).toContain('Translate to Español');
 		expect(screen).toContain('60 credits used');
 		expect(screen).toContain('Task done');
+
+		// The editor comes last, with the texts of the language that is on.
+		expect(screen.indexOf('Activity')).toBeLessThan(screen.indexOf('Review translations'));
+		expect(apiClient.getStoreTranslationTexts).toHaveBeenCalledTimes(1);
+		expect(apiClient.getStoreTranslationTexts).toHaveBeenCalledWith('app1', 'es', { query: undefined, cursor: undefined });
+		expect(screen).toContain('Hand-poured candles');
+		const tabs = renderer.root.find((node) => Array.isArray(node.props.tabs) && typeof node.props.onValueChange === 'function');
+		expect(tabs.props.tabs.map((tab: { value: string }) => tab.value)).toEqual(['es']);
 	});
 
 	it('loads without sending any settings, and each control saves only its own field', async () => {
@@ -414,6 +427,7 @@ describe('the Translations page', () => {
 		expect(screen).toContain('Tarea terminada');
 		expect(textIn(card(renderer, 'pt-BR'))).toContain('Desactivado');
 		expect(screen).not.toContain('texts left');
+		for (const text of ['Revisar traducciones', 'Original', 'Traducción automática']) expect(screen).toContain(text);
 	});
 
 	it('says when a store was never deployed, and when it has no text', async () => {
@@ -421,7 +435,10 @@ describe('the Translations page', () => {
 		expect(textOf(await mountPage())).toContain('Publish or preview your store first');
 		await unmountAll();
 		vi.mocked(apiClient.getStoreTranslations).mockResolvedValue(ok(overview({ languages: [spanish({ total: 0, translated: 0, left: 0, edited: 0, task: null }), portuguese({ total: 0, left: 0 })] })));
-		expect(textOf(await mountPage())).toContain('No text to translate');
+		const empty = textOf(await mountPage());
+		expect(empty).toContain('No text to translate');
+		expect(empty).not.toContain('Review translations');
+		expect(apiClient.getStoreTranslationTexts).not.toHaveBeenCalled();
 		await unmountAll();
 		vi.mocked(apiClient.getTranslationStores).mockResolvedValue(ok([]));
 		expect(textOf(await mountPage())).toContain('Publish or preview your store first');

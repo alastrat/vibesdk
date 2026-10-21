@@ -1,5 +1,5 @@
 import { formatDistanceStrict } from 'date-fns';
-import { LOCALE_NAMES, formatCredits, isUnfinishedStatus, type Locale, type StoreLanguageStatus, type TaskStatus, type TaskView } from '@/api-types';
+import { LOCALE_NAMES, formatCredits, isUnfinishedStatus, type Locale, type StoreLanguageStatus, type StoreTranslationRow, type TaskStatus, type TaskView } from '@/api-types';
 import { msg, t, tn } from '@/lib/i18n';
 import { dateFnsLocale } from '@/lib/i18n/date-locale';
 
@@ -155,4 +155,19 @@ export function previewHref(base: string, locale: Locale): string {
 	const url = new URL(base, 'https://relative.invalid');
 	url.searchParams.set('lang', locale);
 	return absolute ? url.toString() : `${url.pathname}${url.search}${url.hash}`;
+}
+
+/** Whether what the seller typed differs from what is saved. The server keeps text trimmed, so whitespace alone is no change. */
+export function draftChanged(draft: string | null, saved: string | null): boolean {
+	return draft !== null && draft.trim() !== (saved ?? '');
+}
+
+/** A text with a translation the seller didn't write: the automatic translation's. */
+export function isAutomatic(row: Pick<StoreTranslationRow, 'text' | 'origin'>): boolean {
+	return row.text !== null && row.origin !== 'seller';
+}
+
+/** Only an edit of a text the automatic translation wrote can go back to it. */
+export function canUseAutomatic(row: Pick<StoreTranslationRow, 'origin' | 'machineText'>): boolean {
+	return row.origin === 'seller' && row.machineText !== null;
 }

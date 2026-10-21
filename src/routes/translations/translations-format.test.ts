@@ -5,8 +5,11 @@ import {
 	LANGUAGE_STATE_LABELS,
 	LANGUAGE_STATE_VARIANTS,
 	TASK_POLL_MS,
+	canUseAutomatic,
 	creditsLeftText,
+	draftChanged,
 	estimateText,
+	isAutomatic,
 	languageState,
 	languagesDisagreeWithTasks,
 	previewHref,
@@ -174,5 +177,39 @@ describe('the preview link', () => {
 		['/preview/abc?t=signed', 'es', '/preview/abc?t=signed&lang=es'],
 	])('opens %s in %s', (base, locale, expected) => {
 		expect(previewHref(base, locale)).toBe(expected);
+	});
+});
+
+describe('the translations editor', () => {
+	it.each<[string, string | null, string | null, boolean]>([
+		['nothing typed', null, 'Velas', false],
+		['the same text', 'Velas', 'Velas', false],
+		['the same text with spaces around it, which the server trims', '  Velas \n', 'Velas', false],
+		['other words', 'Velas de soya', 'Velas', true],
+		['a translation cleared', '', 'Velas', true],
+		['a text with no translation, left empty', '', null, false],
+		['a text with no translation, written', 'Velas', null, true],
+		['a text with no translation, left with spaces', '   ', null, false],
+	])('sees %s as changed or not', (_name, draft, saved, changed) => {
+		expect(draftChanged(draft, saved)).toBe(changed);
+	});
+
+	it.each<[string, 'machine' | 'seller' | null, string | null, boolean]>([
+		['an automatic translation', 'machine', 'Velas', false],
+		['a text with no translation', null, null, false],
+		['an edit of an automatic translation', 'seller', 'Velas', true],
+		['an edit of a text the automatic translation never wrote', 'seller', null, false],
+	])('lets the seller go back to the automatic translation of %s: %s', (_name, origin, machineText, can) => {
+		expect(canUseAutomatic({ origin, machineText })).toBe(can);
+	});
+});
+
+describe('whose translation a text has', () => {
+	it.each<[string, string | null, 'machine' | 'seller' | null, boolean]>([
+		['the automatic translation', 'Velas', 'machine', true],
+		['the seller', 'Velas', 'seller', false],
+		['nobody yet', null, null, false],
+	])('says a text with %s is automatic: %s', (_name, text, origin, automatic) => {
+		expect(isAutomatic({ text, origin })).toBe(automatic);
 	});
 });

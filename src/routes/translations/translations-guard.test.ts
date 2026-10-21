@@ -13,7 +13,14 @@ function source(path: string): string {
 	return text;
 }
 
-const PAGE_FILES = ['/src/routes/translations/translations.tsx', '/src/routes/translations/language-card.tsx', '/src/routes/translations/task-activity.tsx', '/src/routes/translations/translations-format.ts', '/src/hooks/use-store-translations.ts'];
+const PAGE_FILES = [
+	'/src/routes/translations/translations.tsx',
+	'/src/routes/translations/language-card.tsx',
+	'/src/routes/translations/task-activity.tsx',
+	'/src/routes/translations/translation-editor.tsx',
+	'/src/routes/translations/translations-format.ts',
+	'/src/hooks/use-store-translations.ts',
+];
 
 describe('the Translations page', () => {
 	it('is routed for signed-in users', () => {
@@ -68,6 +75,25 @@ describe('the Translations page', () => {
 		const format = source('/src/routes/translations/translations-format.ts');
 		expect(format).toContain("'About {credits} credits'");
 		expect(format).toContain('formatCredits(credits, locale)');
+	});
+
+	it('puts the editor last, after the activity, and only for a store that has text', () => {
+		const page = source('/src/routes/translations/translations.tsx');
+		expect(page.indexOf('<TaskActivity')).toBeGreaterThan(-1);
+		expect(page.indexOf('<TaskActivity')).toBeLessThan(page.indexOf('<TranslationEditor'));
+		expect(page).toContain('{!noText && <TranslationEditor');
+	});
+
+	it('edits in a tab per language, with a debounced search, paging, boxes that grow, and a row that stacks on phones', () => {
+		const editor = source('/src/routes/translations/translation-editor.tsx');
+		for (const part of ['<Tabs', 'useDebouncedValue(search.trim(), SEARCH_DELAY_MS)', 'texts.fetchNextPage()', 'useAutoGrow(', "CSS.supports('field-sizing', 'content')", 'onBlur={commit}', "t('Use the automatic translation')", "t('Edited by you')"]) {
+			expect(editor, part).toContain(part);
+		}
+		// One column on a phone, source and translation side by side from `md`.
+		expect(editor).toMatch(/<li data-hash=\{row\.hash\} className="grid [^"]*\bmd:grid-cols-2\b/);
+		expect(editor).not.toMatch(/(?<![:\w-])grid-cols-2\b/);
+		const hooks = source('/src/hooks/use-store-translations.ts');
+		for (const part of ['useInfiniteQuery', 'getNextPageParam: (page) => page.nextCursor', 'keepPreviousData', 'setQueriesData<TextPages>']) expect(hooks, part).toContain(part);
 	});
 
 	it('shows task errors in the language of the seller', () => {

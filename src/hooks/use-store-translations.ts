@@ -1,11 +1,12 @@
 import { useEffect, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Locale, StoreTranslationOverview, StoreTranslationSettingsPatch, TaskView } from '@/api-types';
-import { apiClient } from '@/lib/api-client';
-import { t } from '@/lib/i18n';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData, type QueryClient } from '@tanstack/react-query';
+import { MAX_TEXT_CHARS, type Locale, type StoreTranslationOverview, type StoreTranslationPage, type StoreTranslationRow, type StoreTranslationSettingsPatch, type TaskView } from '@/api-types';
+import { ApiError, apiClient } from '@/lib/api-client';
+import { getLocale, t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 import { languagesDisagreeWithTasks, taskRefetchDelay } from '@/routes/translations/translations-format';
+import { formatNumber } from '../../shared/i18n/format';
 
 /** The seller's stores that have been deployed, for the picker. Nothing is read while `enabled` is false. */
 export function useTranslationStores(enabled: boolean) {
@@ -37,7 +38,8 @@ function statusesOf(tasks: readonly TaskView[]): string {
 /**
  * The store's tasks, newest first: read again every few seconds while one moves, and once when a waiting one is due. The
  * store's languages are read again once when a task's status changes, such as from running to done, and once when the
- * first read of each disagrees about a language's task.
+ * first read of each disagrees about a language's task. A status change also reads the editor's texts again, which a
+ * translation fills in.
  */
 export function useStoreTasks(appId: string) {
 	const queryClient = useQueryClient();
@@ -58,6 +60,7 @@ export function useStoreTasks(appId: string) {
 		const stale = !reconciled.current && overview !== undefined && languagesDisagreeWithTasks(overview.languages, tasks.data);
 		if (overview !== undefined) reconciled.current = true;
 		if (changed || stale) void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.store(appId) });
+		if (changed) void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.textsOf(appId) });
 	}, [appId, queryClient, statuses, tasks.data]);
 	return tasks;
 }
@@ -113,5 +116,55 @@ export function useResumeTask(appId: string) {
 	return useMutation({
 		mutationFn: (taskId: string) => unwrap(apiClient.resumeTask(taskId), t("Couldn't resume it")),
 		onSuccess: refresh,
+	});
+}
+
+type TextPages = InfiniteData<StoreTranslationPage, string | null>;
+
+/** A language's texts for a search, a page at a time. The list stays on screen while the next search loads. */
+export function useTranslationTexts(appId: string, locale: Locale, query: string) {
+	return useInfiniteQuery({
+		queryKey: queryKeys.account.storeTranslations.texts(appId, locale, query),
+		queryFn: ({ pageParam }) => unwrap(apiClient.getStoreTranslationTexts(appId, locale, { query: query || undefined, cursor: pageParam ?? undefined }), t("Couldn't load your store's text")),
+		initialPageParam: null as string | null,
+		getNextPageParam: (page) => page.nextCursor,
+		placeholderData: keepPreviousData,
+		retry: false,
+	});
+}
+
+/**
+ * A saved or reverted text, put where it stands in every list of its language so the list doesn't move, and the store's
+ * languages read again, since their counts of edits and translated texts changed.
+ */
+function textChanged(queryClient: QueryClient, appId: string, locale: Locale, row: StoreTranslationRow): void {
+	queryClient.setQueriesData<TextPages>({ queryKey: queryKeys.account.storeTranslations.languageTexts(appId, locale) }, (data) =>
+		data && { ...data, pages: data.pages.map((page) => ({ ...page, rows: page.rows.map((current) => (current.hash === row.hash ? row : current)) })) },
+	);
+	void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.store(appId) });
+}
+
+/** Saves the seller's own words for a text. A 400 is a text that is empty or too long, which the message says. */
+export function useSaveTranslationText(appId: string, locale: Locale) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ hash, text }: { hash: string; text: string }) => {
+			try {
+				return await unwrap(apiClient.saveStoreTranslationText(appId, locale, hash, text), t("Couldn't save this translation"));
+			} catch (error) {
+				if (error instanceof ApiError && error.status === 400) throw new Error(t('Write the translation, up to {max} characters.', { max: formatNumber(MAX_TEXT_CHARS, getLocale()) }));
+				throw error;
+			}
+		},
+		onSuccess: (row) => textChanged(queryClient, appId, locale, row),
+	});
+}
+
+/** Gives a text back the automatic translation. */
+export function useRevertTranslationText(appId: string, locale: Locale) {
+	const queryClient = useQueryClient();
+	return useMutation({
+		mutationFn: (hash: string) => unwrap(apiClient.revertStoreTranslationText(appId, locale, hash), t("Couldn't go back to the automatic translation")),
+		onSuccess: (row) => textChanged(queryClient, appId, locale, row),
 	});
 }

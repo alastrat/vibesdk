@@ -126,6 +126,8 @@ These set the voice. Translate new copy to match them.
 | translation | traducción | tradução |
 | automatic translation (never "machine translation") | traducción automática | tradução automática |
 | your edits (a seller's own wording of a text) | tus ediciones | suas edições |
+| edited by you (the badge on a text the seller wrote) | editado por ti | editado por você |
+| original (a text as the store is written, beside its translation) | original | original |
 | store language (the one the store is written in) | idioma de la tienda | idioma da loja |
 | language switcher | selector de idioma | seletor de idioma |
 | task (background work, such as a translation) | tarea | tarefa |

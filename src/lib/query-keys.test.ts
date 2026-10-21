@@ -64,6 +64,20 @@ describe('store translation and task query keys', () => {
 		expect(queryKeys.account.storeTranslations.store('app1')).not.toEqual(queryKeys.account.storeTranslations.store('app2'));
 		expect(queryKeys.account.tasks.store('app1')).not.toEqual(queryKeys.account.tasks.store('app2'));
 	});
+
+	it("keeps the editor's texts out of storage, nested by store, language and search, and apart from the store's languages", () => {
+		const keys = queryKeys.account.storeTranslations;
+		const texts = keys.texts('app1', 'es', 'velas');
+		expect(texts.slice(0, keys.languageTexts('app1', 'es').length)).toEqual(keys.languageTexts('app1', 'es'));
+		expect(keys.languageTexts('app1', 'es').slice(0, keys.textsOf('app1').length)).toEqual(keys.textsOf('app1'));
+		expect(keys.textsOf('app1').slice(0, keys.all().length)).toEqual(keys.all());
+		expect(persisted(texts)).toBe(false);
+		expect(keys.texts('app1', 'es', 'velas')).not.toEqual(keys.texts('app1', 'es', ''));
+		expect(keys.languageTexts('app1', 'es')).not.toEqual(keys.languageTexts('app1', 'pt-BR'));
+		expect(keys.textsOf('app1')).not.toEqual(keys.textsOf('app2'));
+		// Reading a store's languages again (a prefix match on `store`) must not touch the editor's lists.
+		expect(texts.slice(0, keys.store('app1').length)).not.toEqual(keys.store('app1'));
+	});
 });
 
 describe('billing query key', () => {

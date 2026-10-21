@@ -162,6 +162,10 @@ export const queryKeys = {
 			all: () => [...queryKeys.account.all, 'store-translations'] as const,
 			stores: () => [...queryKeys.account.storeTranslations.all(), 'stores'] as const,
 			store: (appId: string) => [...queryKeys.account.storeTranslations.all(), 'store', appId] as const,
+			/** The editor's texts, beside `store` rather than under it: reading a store's languages again leaves a list the seller is working in alone. */
+			textsOf: (appId: string) => [...queryKeys.account.storeTranslations.all(), 'texts', appId] as const,
+			languageTexts: (appId: string, locale: string) => [...queryKeys.account.storeTranslations.textsOf(appId), locale] as const,
+			texts: (appId: string, locale: string, query: string) => [...queryKeys.account.storeTranslations.languageTexts(appId, locale), query] as const,
 		},
 		/** The seller's background tasks: never persisted, like the rest of `account`. */
 		tasks: {

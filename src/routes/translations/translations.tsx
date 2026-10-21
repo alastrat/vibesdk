@@ -11,6 +11,7 @@ import { useI18n } from '@/lib/i18n';
 import { LanguageCard } from './language-card';
 import { StoreLanguageSelect } from './store-language-select';
 import { Notice, TaskActivity } from './task-activity';
+import { TranslationEditor } from './translation-editor';
 
 /** Where this browser remembers the store the seller last chose. */
 const CHOSEN_STORE_KEY = 'estori:translations-store';
@@ -116,7 +117,7 @@ function StorePicker({ stores, value, onChange }: { stores: StoreTranslationStor
 	);
 }
 
-/** The chosen store: its settings, a card per language, then what was translated and is translating. */
+/** The chosen store: its settings, a card per language, what is translating, then every text to review. */
 function StoreTranslations({ appId }: { appId: string }) {
 	const { t } = useI18n();
 	const overview = useStoreTranslations(appId);
@@ -157,6 +158,7 @@ function StoreTranslations({ appId }: { appId: string }) {
 				</section>
 			)}
 			<TaskActivity appId={appId} />
+			{!noText && <TranslationEditor appId={appId} sourceLocale={data.settings.sourceLocale} languages={data.languages} />}
 		</>
 	);
 }
