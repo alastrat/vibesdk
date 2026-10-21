@@ -44,7 +44,10 @@ const LETTER = /\p{L}/u;
 /** Stands for a `${...}` span in a template literal. Text that holds it is never a rendered text node. */
 const SUBSTITUTION = '\u0000';
 
-/** Distinct texts in first-seen order, up to MAX_STORE_TEXTS. */
+/**
+ * Distinct texts in first-seen order, up to MAX_STORE_TEXTS. A page text that a script also renders becomes a script
+ * text, so the overlay that translates what scripts render carries it; a product stays a product.
+ */
 class TextCollector {
 	private readonly found = new Map<string, StoreTextKind>();
 	truncated = false;
@@ -53,7 +56,13 @@ class TextCollector {
 	add(raw: string, kind: StoreTextKind): void {
 		if (this.truncated) return;
 		const text = normalizeText(raw);
-		if (text.length > MAX_TEXT_CHARS || !LETTER.test(text) || text.includes(SUBSTITUTION) || this.found.has(text)) return;
+		if (text.length > MAX_TEXT_CHARS || !LETTER.test(text) || text.includes(SUBSTITUTION)) return;
+		const seen = this.found.get(text);
+		if (seen !== undefined) {
+			// Setting an existing key keeps its place in the order.
+			if (seen === 'page' && kind === 'script') this.found.set(text, kind);
+			return;
+		}
 		if (this.found.size >= MAX_STORE_TEXTS) {
 			this.truncated = true;
 			return;

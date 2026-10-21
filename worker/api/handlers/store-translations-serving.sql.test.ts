@@ -9,7 +9,7 @@ import type { StoreInfo, StoreManifest } from '../../../shared/types/store-payme
 import type { StoreTextKind } from '../../../shared/types/store-translations';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
-import { normalizeText, textHash } from '../../services/store-translations/extract';
+import { extractStoreTexts, normalizeText, textHash } from '../../services/store-translations/extract';
 import type { StoreHost } from '../../services/live-stores/hosts';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { signSpacePreviewToken } from '../../utils/spacePreviewToken';
@@ -296,6 +296,28 @@ describe('the overlay script', () => {
 		// Pages are translated on the server and products come translated in the store's data.
 		expect(payload).toEqual([['Add to cart', 'Agregar al carrito']]);
 		expect(script).not.toContain('Ya no está');
+	});
+
+	it('includes a text the page shows and its script renders again, as the extractor reads the store', async () => {
+		const appId = await storeWith(['es']);
+		const { texts } = await extractStoreTexts([
+			{
+				branch: 'live',
+				commitHash: 'c0ffee',
+				files: [
+					{ path: '/index.html', kind: 'html', text: '<h1>Fresh tea</h1><button>Add to cart</button>' },
+					{ path: '/app.js', kind: 'script', text: 'button.textContent = added ? "Added" : "Add to cart";' },
+				],
+				manifest: null,
+			},
+		]);
+		expect(texts.find((text) => text.text === 'Add to cart')?.kind).toBe('script');
+		const service = new StoreTranslationService(envWith(db));
+		await service.replaceTexts(appId, texts, NOW);
+		const { version } = await service.settingsOf(appId);
+		const response = await handleStorePlatform(new Request(`${ORIGIN}/__estori/i18n.js?lang=es&v=${version}`), spaceEnv().env, liveTarget(appId, '/__estori/i18n.js'), CTX);
+		const payload = JSON.parse(/new Map\((\[.*?\])\);/.exec(await response.text())?.[1] ?? 'null') as [string, string][];
+		expect(payload).toEqual([['Add to cart', 'Agregar al carrito']]);
 	});
 
 	it('answers a failure with an empty script, never JSON', async () => {

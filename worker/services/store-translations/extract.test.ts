@@ -465,10 +465,16 @@ var App = class {
 		for (const { text, hash } of texts) expect(hash).toBe(await textHash(text));
 	});
 
-	it('de-duplicates by hash across sources and kinds, keeping the first kind', async () => {
-		const live = deployment([page('<p>Open daily</p>'), script('const cta = "Open daily";')], null, 'live');
-		const draft = deployment([script('const cta = "Open daily";'), page('<p>  Open&nbsp;daily </p>')], null, 'draft-aaaa1111');
-		expect((await extractStoreTexts([live, draft])).texts.map(({ text, kind }) => ({ text, kind }))).toEqual(pages('Open daily'));
+	it('de-duplicates by hash across sources in first-seen order, and a text a script also renders is a script text', async () => {
+		// The overlay carries only script texts, so a page text that a script renders later must be one.
+		const live = deployment([page('<p>Add to cart</p><p>Open daily</p>'), script('render("Add to cart");')], null, 'live');
+		const draft = deployment([script('const cta = "Open daily";'), page('<p>  Open&nbsp;daily </p><p>Add to cart</p>')], null, 'draft-aaaa1111');
+		expect((await extractStoreTexts([live, draft])).texts.map(({ text, kind }) => ({ text, kind }))).toEqual(scripts('Add to cart', 'Open daily'));
+		// Products stay products: their words reach shoppers in the translated store data.
+		const withProducts = deployment([script('const title = "Ceramic Mug"; const cta = "Add to cart";'), page('<p>Add to cart</p>')], MANIFEST);
+		const kinds = new Map((await extractStoreTexts([withProducts])).texts.map(({ text, kind }) => [text, kind]));
+		expect(kinds.get('Ceramic Mug')).toBe('product');
+		expect(kinds.get('Add to cart')).toBe('script');
 	});
 
 	it('keeps products when a store has too many texts: the manifest is read first and noise drops first', async () => {
