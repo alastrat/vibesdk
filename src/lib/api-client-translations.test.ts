@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiClient } from './api-client';
+import { applyAccountLocale } from './i18n';
 
 interface Sent {
 	url: string;
@@ -10,24 +11,40 @@ interface Sent {
 }
 
 let sent: Sent[];
+let sentHeaders: Headers[];
 
 beforeEach(() => {
 	sent = [];
+	sentHeaders = [];
 	vi.stubGlobal('localStorage', { getItem: () => 'anonymous', setItem: () => undefined });
-	vi.stubGlobal('document', { cookie: 'session=1' });
+	vi.stubGlobal('document', { cookie: 'session=1', documentElement: { lang: 'en' } });
 	vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+		sentHeaders.push(new Headers(init.headers));
 		sent.push({ url, method: init.method ?? 'GET', body: typeof init.body === 'string' ? JSON.parse(init.body) : undefined });
 		const data = url.includes('/csrf-token') ? { token: 'csrf', expiresIn: 3_600 } : [];
 		return new Response(JSON.stringify({ success: true, data }), { status: 200, headers: { 'Content-Type': 'application/json' } });
 	});
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(async () => {
+	await applyAccountLocale('en');
+	vi.unstubAllGlobals();
+});
 
 /** What the client sent for the call itself, leaving out the CSRF token it fetched first. */
 const calls = (): Sent[] => sent.filter((request) => !request.url.includes('/csrf-token'));
 
 describe('the translations calls', () => {
+	it('sends the active language for CSRF and API calls, including after a language change', async () => {
+		const client = new ApiClient();
+		await applyAccountLocale('es');
+		await client.saveStoreTranslationSettings('app_1', { sourceLocale: 'en' });
+		expect(sent.map(({ url }) => url)).toEqual(['/api/auth/csrf-token', '/api/stores/app_1/translations/settings']);
+		expect(sentHeaders.map((headers) => headers.get('Accept-Language'))).toEqual(['es', 'es']);
+		await applyAccountLocale('pt-BR');
+		await client.getTasks();
+		expect(sentHeaders.at(-1)?.get('Accept-Language')).toBe('pt-BR');
+	});
 	it("send a text list's search and page as a query string only when there is one, in a form older browsers also read", async () => {
 		const client = new ApiClient();
 		await client.getStoreTranslationTexts('app 1', 'es');

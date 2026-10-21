@@ -60,6 +60,14 @@ function inPieces(html: string, size: number): ReadableStream<Uint8Array> {
 }
 
 describe('translateStoreHtml', () => {
+	it('changes the overlay URL when source texts are re-extracted without changing seller settings', async () => {
+		const ctx = context();
+		const before = await (await translateStoreHtml(page('<html><body>Fresh tea</body></html>'), { locale: 'es', ctx, basePath: '', pageUrl: PAGE })).text();
+		ctx.settings.extractedAt = 200;
+		const after = await (await translateStoreHtml(page('<html><body>Fresh tea</body></html>'), { locale: 'es', ctx, basePath: '', pageUrl: PAGE })).text();
+		expect(after.match(/i18n\.js[^"]+/)?.[0]).not.toBe(before.match(/i18n\.js[^"]+/)?.[0]);
+		expect(ctx.settings.version).toBe(7);
+	});
 	it('translates text nodes and the listed attributes and sets html lang', async () => {
 		const html =
 			'<html lang="en"><p title="Fresh tea" data-note="Fresh tea">Fresh tea</p><img alt="A cup of tea" src="/cup.png">' +

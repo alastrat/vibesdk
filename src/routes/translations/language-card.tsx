@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, LinkButton, Meter } from '@cloudflare/kumo';
 import { LOCALE_NAMES, UNTOUCHED_SETTINGS_VERSION, type Locale, type StoreLanguageStatus, type StoreTranslationSettings } from '@/api-types';
@@ -48,7 +48,7 @@ export function LanguageCard({ appId, language, settings, creditsLeft, storeUrl 
 					</span>
 					<Badge variant={LANGUAGE_STATE_VARIANTS[state]}>{t(LANGUAGE_STATE_LABELS[state])}</Badge>
 				</span>
-				<Switch checked={language.enabled} disabled={save.isPending} onCheckedChange={toggle} aria-label={t('Show your store in {language}', { language: name })} />
+				<Switch checked={language.enabled} disabled={save.isPending || settings.version <= UNTOUCHED_SETTINGS_VERSION} onCheckedChange={toggle} aria-label={t('Show your store in {language}', { language: name })} />
 			</div>
 			<Meter label={t('Translated')} value={translatedPercent(language)} />
 			<div className="grid gap-0.5 text-kumo-subtle">
@@ -104,6 +104,11 @@ interface TranslateFormProps {
  */
 function TranslateForm({ appId, language, settings, creditsLeft, onDone }: TranslateFormProps) {
 	const { locale, t } = useI18n();
+	const active = useRef(true);
+	useEffect(() => {
+		active.current = true;
+		return () => { active.current = false; };
+	}, []);
 	const [source, setSource] = useState<Locale>(settings.sourceLocale);
 	const save = useSaveTranslationSettings(appId);
 	const run = useRunStoreTranslation(appId);
@@ -117,6 +122,7 @@ function TranslateForm({ appId, language, settings, creditsLeft, onDone }: Trans
 	const confirm = async () => {
 		try {
 			if (saveSource) await save.mutateAsync({ sourceLocale: source });
+			if (!active.current) return;
 			if (alreadyIn) {
 				onDone();
 				toast.success(t('Saved'));

@@ -23,6 +23,8 @@ import { configuredBaseUrl } from '../email/links';
 import { createEmailSender } from '../email/sender';
 import { classifySendError } from '../email/send-errors';
 import type { EmailSender, OutgoingEmail } from '../email/types';
+import type { Locale } from '../../../shared/i18n/locales';
+import { savedUserLocale } from '../i18n/saved-locale';
 
 const PRICING_PATH = '/pricing';
 
@@ -51,6 +53,7 @@ export interface PlannedNotice {
 export interface BillingMailDeps {
 	sender: EmailSender | null;
 	userEmail(userId: string): Promise<string | null>;
+	userLocale?(userId: string): Promise<Locale | null>;
 	/** The deployment's address for the emails' links; null drops their buttons. */
 	baseUrl: string | null;
 }
@@ -68,34 +71,34 @@ function linksFor(baseUrl: string | null): BillingLinks {
 	return { billing: baseUrl ? `${baseUrl}${BILLING_PATH}` : null, pricing: baseUrl ? `${baseUrl}${PRICING_PATH}` : null };
 }
 
-export function billingEmail(to: string, email: BillingEmail, baseUrl: string | null): OutgoingEmail {
+export function billingEmail(to: string, email: BillingEmail, baseUrl: string | null, locale: Locale = 'en'): OutgoingEmail {
 	const links = linksFor(baseUrl);
 	switch (email.kind) {
 		case 'plan_started':
-			return planStartedEmail(to, email, links);
+			return planStartedEmail(to, email, links, locale);
 		case 'receipt':
-			return planReceiptEmail(to, email, links);
+			return planReceiptEmail(to, email, links, locale);
 		case 'plan_upgraded':
-			return planUpgradedEmail(to, email, links);
+			return planUpgradedEmail(to, email, links, locale);
 		case 'downgrade_scheduled':
-			return downgradeScheduledEmail(to, email, links);
+			return downgradeScheduledEmail(to, email, links, locale);
 		case 'payment_failed':
-			return paymentFailedEmail(to, email, links);
+			return paymentFailedEmail(to, email, links, locale);
 		case 'plan_ending':
-			return planEndingEmail(to, email, links);
+			return planEndingEmail(to, email, links, locale);
 		case 'plan_ended':
-			return planEndedEmail(to, email, links);
+			return planEndedEmail(to, email, links, locale);
 		case 'credits_renewed':
-			return creditsRenewedEmail(to, email, links);
+			return creditsRenewedEmail(to, email, links, locale);
 		case 'credits_20':
 		case 'credits_5':
-			return creditsLowEmail(to, email, links);
+			return creditsLowEmail(to, email, links, locale);
 		case 'credits_receipt':
-			return creditsReceiptEmail(to, email, links);
+			return creditsReceiptEmail(to, email, links, locale);
 		case 'credits_refunded':
-			return creditsRefundedEmail(to, email, links);
+			return creditsRefundedEmail(to, email, links, locale);
 		case 'enforcement_notice':
-			return enforcementNoticeEmail(to, email, links);
+			return enforcementNoticeEmail(to, email, links, locale);
 	}
 }
 
@@ -117,10 +120,11 @@ async function deliver(deps: BillingMailDeps, userId: string, notices: readonly 
 	try {
 		const to = await deps.userEmail(userId);
 		if (!to) return { sent: 0, failed: [], retryable: false };
+		const locale = await deps.userLocale?.(userId).catch(() => null) ?? 'en';
 		const delivery: Delivery = { sent: 0, failed: [], retryable: false };
 		for (const notice of notices) {
 			try {
-				await sender.send(billingEmail(to, notice.email, deps.baseUrl));
+				await sender.send(billingEmail(to, notice.email, deps.baseUrl, locale));
 				delivery.sent += 1;
 			} catch (error) {
 				// A suppressed or refused address, or a request the service rejects, would fail the same way again.
@@ -176,6 +180,7 @@ export function billingMailFromEnv(env: Env): BillingMailDeps {
 	return {
 		sender: createEmailSender(env),
 		userEmail: async (userId) => (await new UserService(env).findUser({ id: userId }))?.email ?? null,
+		userLocale: (userId) => savedUserLocale(env, userId),
 		baseUrl: configuredBaseUrl(env),
 	};
 }

@@ -164,6 +164,15 @@ describe('Estori.order', () => {
 
 describe("store.js in the shopper's language", () => {
 	const BASE = '/space/app_1/preview/main';
+	it('keeps a single-language store request and checkout URLs unchanged', async () => {
+		const page = browser(BASE, new Map(), { locale: 'en', languages: ['en'], pageLanguage: 'en' });
+		await page.Estori.store();
+		await page.Estori.order('ord_1');
+		expect(page.requested).toEqual([`${BASE}/__estori/store`, `${BASE}/__estori/orders/ord_1`]);
+		page.Estori.cart.add('mug-blue');
+		await page.Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' });
+		expect(page.assigned).toEqual([`${BASE}/__estori/pay?success=%2Fthanks&cancel=%2Fcart`]);
+	});
 
 	it("words its own message in the language it was served for, and in English for English", async () => {
 		const empty = async (locale: Locale) => (await browser(BASE, new Map(), { locale }).Estori.checkout()).message;

@@ -1,3 +1,4 @@
+import { t, useI18n, msg } from '@/lib/i18n';
 import React from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from 'lucide-react';
@@ -16,10 +17,10 @@ const TIME_PERIODS: Array<{
   label: string;
   shortLabel: string;
 }> = [
-  { value: 'today', label: 'Today', shortLabel: 'Today' },
-  { value: 'week', label: 'This Week', shortLabel: 'Week' },
-  { value: 'month', label: 'This Month', shortLabel: 'Month' },
-  { value: 'all', label: 'All Time', shortLabel: 'All' },
+  { value: 'today', label: msg("Today"), shortLabel: msg("Today") },
+  { value: 'week', label: msg("This Week"), shortLabel: msg('Week') },
+  { value: 'month', label: msg("This Month"), shortLabel: msg('Month') },
+  { value: 'all', label: msg("All Time"), shortLabel: msg('All') },
 ];
 
 export const TimePeriodSelector: React.FC<TimePeriodSelectorProps> = ({
@@ -29,6 +30,7 @@ export const TimePeriodSelector: React.FC<TimePeriodSelectorProps> = ({
   disabled,
   showForSort = 'all'
 }) => {
+	useI18n();
   // Don't show the selector for 'recent' sort - it doesn't make sense
   if (showForSort !== 'all' && showForSort !== 'popular' && showForSort !== 'trending') {
     return null;
@@ -43,7 +45,7 @@ export const TimePeriodSelector: React.FC<TimePeriodSelectorProps> = ({
       <SelectContent>
         {TIME_PERIODS.map((period) => (
           <SelectItem key={period.value} value={period.value}>
-            {period.label}
+            {t(period.label)}
           </SelectItem>
         ))}
       </SelectContent>

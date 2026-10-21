@@ -4,6 +4,7 @@
  * Features 401 response interception to trigger authentication modals
  */
 
+import { getLocale } from '@/lib/i18n';
 import type{
 	ApiResponse,
 	AppsListData,
@@ -279,7 +280,7 @@ class ApiClient {
 	 * Get authentication headers for API requests
 	 */
 	private async getAuthHeaders(): Promise<Record<string, string>> {
-		const headers: Record<string, string> = {};
+		const headers: Record<string, string> = { 'Accept-Language': getLocale() };
 
 		// Add session token for anonymous users if not authenticated
 		// This will be handled automatically by cookies/credentials for authenticated users
@@ -316,6 +317,7 @@ class ApiClient {
 		try {
 			const response = await fetch(`${this.baseUrl}/api/auth/csrf-token`, {
 				method: 'GET',
+				headers: { 'Accept-Language': getLocale() },
 				credentials: 'include',
 			});
 

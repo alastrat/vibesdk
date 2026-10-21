@@ -211,7 +211,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'conversation_cleared': {
                 // Reset chat messages to a subtle tool-event entry indicating success
                 setMessages(() => appendToolEvent([], 'conversation_cleared', {
-                    name: message.message || 'conversation_reset',
+                    name: 'conversation_reset',
                     status: 'success'
                 }));
                 break;

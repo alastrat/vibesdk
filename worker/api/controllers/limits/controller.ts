@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Limits Controller
  * API endpoints for viewing usage limits
@@ -48,7 +49,7 @@ export class LimitsController extends BaseController {
 		try {
 			await RateLimitService.enforcePublicAppsRateLimit(env, context.config.security.rateLimit, null, request);
 		} catch (error) {
-			if (error instanceof RateLimitExceededError) return LimitsController.createErrorResponse('Too many requests', 429);
+			if (error instanceof RateLimitExceededError) return LimitsController.createErrorResponse(msg('Too many requests'), 429);
 			throw error;
 		}
 		return LimitsController.createSuccessResponse({
@@ -69,7 +70,7 @@ export class LimitsController extends BaseController {
 	): Promise<Response> {
 		const user = context.user;
 		if (!user) {
-			return LimitsController.createErrorResponse('Authentication required', 401);
+			return LimitsController.createErrorResponse(msg('Authentication required'), 401);
 		}
 
 		try {

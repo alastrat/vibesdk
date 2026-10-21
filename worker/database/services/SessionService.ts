@@ -1,3 +1,4 @@
+import { msg } from '../../../shared/i18n/translate';
 /**
  * Session Service for managing user sessions in D1
  * Provides session creation, validation, and cleanup
@@ -166,7 +167,7 @@ export class SessionService extends BaseService {
             logger.error('Error creating session', error);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'Failed to create session',
+                msg('Failed to create session'),
                 500
             );
         }
@@ -196,7 +197,7 @@ export class SessionService extends BaseService {
             logger.error('Error revoking session', error);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'Failed to revoke session',
+                msg('Failed to revoke session'),
                 500
             );
         }
@@ -214,7 +215,7 @@ export class SessionService extends BaseService {
             logger.error('Error revoking user sessions', error);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'Failed to revoke sessions',
+                msg('Failed to revoke sessions'),
                 500
             );
         }

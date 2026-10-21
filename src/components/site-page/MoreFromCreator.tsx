@@ -1,12 +1,14 @@
+import { t, useI18n } from '@/lib/i18n';
 import { Link } from 'react-router';
 import type { SitePageCard } from '@/api-types';
 import { sitePriceLabel } from '@/lib/site-page-display';
 
 export function MoreFromCreator({ creatorName, sites }: { creatorName: string; sites: SitePageCard[] }) {
+	useI18n();
 	if (sites.length === 0) return null;
 	return (
 		<section className="grid gap-3">
-			<h2 className="text-lg font-semibold text-kumo-strong">More from {creatorName}</h2>
+			<h2 className="text-lg font-semibold text-kumo-strong">{t('More from {creator}', { creator: creatorName })}</h2>
 			<div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
 				{sites.map((site) => {
 					const price = sitePriceLabel(site);

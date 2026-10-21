@@ -36,6 +36,29 @@ function countingSource(current: { stored: StoreTranslationSettings | null; fail
 }
 
 describe('the store language loader', () => {
+	it('evicts dictionaries by their total characters, including a single dictionary past the budget', async () => {
+		const load = createStoreLanguageLoader(() => 0, 200);
+		const { source, reads } = countingSource({ stored: settings() });
+		for (const app of ['a', 'b', 'c']) await (await load.context(source, app)).dictionary('es');
+		await (await load.context(source, 'a')).dictionary('es');
+		expect(reads.translations).toHaveLength(4);
+		const tiny = createStoreLanguageLoader(() => 0, 1);
+		await (await tiny.context(source, 'a')).dictionary('es');
+		await (await tiny.context(source, 'a')).dictionary('es');
+		expect(reads.translations).toHaveLength(6);
+	});
+
+	it('reloads dictionaries after re-extraction without a settings version change', async () => {
+		let now = 0;
+		const load = createStoreLanguageLoader(() => now);
+		const current = { stored: { ...settings(), extractedAt: 100 } };
+		const { source, reads } = countingSource(current);
+		await (await load.context(source, 'app_1')).dictionary('es');
+		current.stored.extractedAt = 200;
+		now = 30_000;
+		await (await load.context(source, 'app_1')).dictionary('es');
+		expect(reads.translations).toHaveLength(2);
+	});
 	it("reuses a store's settings for 30 seconds", async () => {
 		let now = 1_000;
 		const load = createStoreLanguageLoader(() => now);

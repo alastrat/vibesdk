@@ -1,3 +1,4 @@
+import { t, useI18n, msg } from '@/lib/i18n';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, LinkButton, Loader } from '@cloudflare/kumo';
@@ -25,27 +26,28 @@ interface GoLiveDialogProps {
 }
 
 const PURPOSE_LABELS: Readonly<Record<StoreDomainRecord['purpose'], string>> = {
-	routing: 'Sends your domain to your store',
-	ownership: 'Proves you own the domain',
-	certificate: 'Lets the secure certificate be issued',
+	routing: msg("Sends your domain to your store"),
+	ownership: msg("Proves you own the domain"),
+	certificate: msg("Lets the secure certificate be issued"),
 };
 
 function copy(value: string) {
 	navigator.clipboard.writeText(value).then(
-		() => toast.success('Copied'),
-		() => toast.error("Couldn't copy. Select the text and copy it instead."),
+		() => toast.success(t("Copied")),
+		() => toast.error(t("Couldn't copy. Select the text and copy it instead.")),
 	);
 }
 
 /** The store's address and status, publishing, and the seller's own domain. */
 export function GoLiveDialog({ appId, open, onOpenChange }: GoLiveDialogProps) {
+	useI18n();
 	const live = useLiveStore(appId, open);
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
 				<DialogHeader>
-					<DialogTitle>Your store's address</DialogTitle>
-					<DialogDescription>Publish your store so shoppers can visit it and buy. Changes you make later go live when you publish again.</DialogDescription>
+					<DialogTitle>{t("Your store's address")}</DialogTitle>
+					<DialogDescription>{t("Publish your store so shoppers can visit it and buy. Changes you make later go live when you publish again.")}</DialogDescription>
 				</DialogHeader>
 				{live.isLoading && (
 					<div className="flex justify-center py-8">
@@ -60,12 +62,14 @@ export function GoLiveDialog({ appId, open, onOpenChange }: GoLiveDialogProps) {
 }
 
 function StatusBadge({ view }: { view: LiveStoreView }) {
-	if (view.status === 'live') return <Badge variant="success">Live</Badge>;
-	if (view.status === 'offline') return <Badge variant="secondary">Offline</Badge>;
-	return <Badge variant="outline">Not published</Badge>;
+	useI18n();
+	if (view.status === 'live') return <Badge variant="success">{t("Live")}</Badge>;
+	if (view.status === 'offline') return <Badge variant="secondary">{t("Offline")}</Badge>;
+	return <Badge variant="outline">{t("Not published")}</Badge>;
 }
 
 function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
+	useI18n();
 	const publish = usePublishLiveStore(appId);
 	const offline = useTakeLiveStoreOffline(appId);
 	const publishingPaused = useFlag('store-publishing-paused');
@@ -73,13 +77,13 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 	useEffect(() => setSlug(view.slug ?? view.suggestedSlug), [view.slug, view.suggestedSlug]);
 
 	if (!view.available) {
-		return <p className="text-sm text-kumo-subtle">Store addresses aren't set up yet. You can keep building your store in the preview.</p>;
+		return <p className="text-sm text-kumo-subtle">{t("Store addresses aren't set up yet. You can keep building your store in the preview.")}</p>;
 	}
 	const problem = slugProblem(slug);
 	const action = publishAction(view, slug);
 	const onPublish = () =>
 		publish.mutate({ slug, draftId: view.draft?.id }, {
-			onSuccess: (next) => toast.success(next.url ? `Your store is live at ${next.url}` : 'Your store is live'),
+			onSuccess: (next) => toast.success(next.url ? t("Your store is live at {value1}", { value1: next.url }) : t("Your store is live")),
 			onError: (error) => toast.error(error.message),
 		});
 
@@ -87,9 +91,7 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 		<div className="grid gap-6">
 			<section className="grid gap-3">
 				<div className="flex items-center justify-between gap-3">
-					<label htmlFor="live-store-slug" className="text-sm font-medium">
-						Address
-					</label>
+					<label htmlFor="live-store-slug" className="text-sm font-medium">{t("Address")}</label>
 					<StatusBadge view={view} />
 				</div>
 				<div className="flex items-center gap-2">
@@ -104,14 +106,14 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 					<span className="shrink-0 text-sm text-kumo-subtle">.{view.storesDomain}</span>
 				</div>
 				<p id="live-store-slug-help" className={problem ? 'text-sm text-kumo-danger' : 'text-sm text-kumo-subtle'}>
-					{problem ?? 'Lowercase letters, numbers and hyphens. Changing it moves your store to the new address.'}
+					{problem ?? t("Lowercase letters, numbers and hyphens. Changing it moves your store to the new address.")}
 				</p>
-				{view.status === 'live' && view.hasChanges && <p className="text-sm text-kumo-subtle">Your preview of '{view.draft?.name ?? 'Main'}' has changes that aren't live yet.</p>}
+				{view.status === 'live' && view.hasChanges && <p className="text-sm text-kumo-subtle">{t("Your preview of '{draft}' has changes that aren't live yet.", { draft: view.draft?.name ?? 'Main' })}</p>}
 				{view.draft && view.draft.id !== MAIN_DRAFT_ID && action.disabled === false && (
-					<p className="text-sm text-kumo-subtle">Main will be behind the live store until you bring these changes in.</p>
+					<p className="text-sm text-kumo-subtle">{t("Main will be behind the live store until you bring these changes in.")}</p>
 				)}
 				{view.status !== 'unpublished' && !view.checkoutConnected && (
-					<p className="text-sm text-kumo-danger">This store's checkout isn't connected to payments: its store file has no products.</p>
+					<p className="text-sm text-kumo-danger">{t("This store's checkout isn't connected to payments: its store file has no products.")}</p>
 				)}
 				{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}
 				<div className="flex flex-wrap gap-2">
@@ -119,17 +121,15 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 						{action.label}
 					</Button>
 					{view.status === 'live' && view.url && (
-						<LinkButton size="sm" variant="secondary" href={view.url} target="_blank" rel="noopener noreferrer">
-							Open store
-						</LinkButton>
+						<LinkButton size="sm" variant="secondary" href={view.url} target="_blank" rel="noopener noreferrer">{t("Open store")}</LinkButton>
 					)}
 					{view.status === 'live' && (
 						<ConfirmButton
-							label="Take offline"
-							title="Take your store offline?"
-							description="Shoppers will see that your store isn't open, and checkouts they have open are cancelled. Publish again to reopen it."
+							label={t("Take offline")}
+							title={t("Take your store offline?")}
+							description={t("Shoppers will see that your store isn't open, and checkouts they have open are cancelled. Publish again to reopen it.")}
 							pending={offline.isPending}
-							onConfirm={() => offline.mutate(undefined, { onSuccess: () => toast.success('Your store is offline'), onError: (error) => toast.error(error.message) })}
+							onConfirm={() => offline.mutate(undefined, { onSuccess: () => toast.success(t("Your store is offline")), onError: (error) => toast.error(error.message) })}
 						/>
 					)}
 				</div>
@@ -141,13 +141,14 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 }
 
 function DomainSection({ appId, view }: { appId: string; view: LiveStoreView }) {
+	useI18n();
 	const add = useAddStoreDomain(appId);
 	const domainsPaused = useFlag('custom-domains-paused');
 	const [hostname, setHostname] = useState('');
 	return (
 		<section className="grid gap-3 border-t border-kumo-line pt-5">
-			<h3 className="text-sm font-medium">Your own domain</h3>
-			{!view.domainsAvailable && !view.domain && <p className="text-sm text-kumo-subtle">Custom domains aren't set up yet.</p>}
+			<h3 className="text-sm font-medium">{t("Your own domain")}</h3>
+			{!view.domainsAvailable && !view.domain && <p className="text-sm text-kumo-subtle">{t("Custom domains aren't set up yet.")}</p>}
 			{view.domainsAvailable && !view.domain && domainsPaused && <p className="text-sm text-kumo-subtle">{CUSTOM_DOMAINS_PAUSED_MESSAGE}</p>}
 			{view.domainsAvailable && !view.domain && !domainsPaused && (
 				<form
@@ -157,14 +158,10 @@ function DomainSection({ appId, view }: { appId: string; view: LiveStoreView }) 
 						add.mutate(hostname, { onSuccess: () => setHostname(''), onError: (error) => toast.error(error.message) });
 					}}
 				>
-					<label htmlFor="live-store-domain" className="text-sm text-kumo-subtle">
-						Use a domain you own, such as shop.yourstore.com. You'll add a few DNS records where you bought it.
-					</label>
+					<label htmlFor="live-store-domain" className="text-sm text-kumo-subtle">{t("Use a domain you own, such as shop.yourstore.com. You'll add a few DNS records where you bought it.")}</label>
 					<div className="flex gap-2">
-						<Input id="live-store-domain" value={hostname} placeholder="shop.yourstore.com" onChange={(event) => setHostname(event.target.value)} />
-						<Button type="submit" variant="secondary" size="sm" disabled={hostname.trim() === '' || add.isPending} loading={add.isPending}>
-							Add domain
-						</Button>
+						<Input id="live-store-domain" value={hostname} placeholder="shop.yourstore.com" /* i18n-ignore */ onChange={(event) => setHostname(event.target.value)} />
+						<Button type="submit" variant="secondary" size="sm" disabled={hostname.trim() === '' || add.isPending} loading={add.isPending}>{t("Add domain")}</Button>
 					</div>
 				</form>
 			)}
@@ -174,6 +171,7 @@ function DomainSection({ appId, view }: { appId: string; view: LiveStoreView }) 
 }
 
 function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: StoreDomainView; storeStatus: LiveStoreView['status'] }) {
+	useI18n();
 	const check = useCheckStoreDomain(appId);
 	const remove = useRemoveStoreDomain(appId);
 	const connected = connectedDomainNote(storeStatus);
@@ -181,26 +179,24 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 		<div className="grid gap-3">
 			<div className="flex items-center justify-between gap-3">
 				<span className="text-sm font-medium break-all">{domain.hostname}</span>
-				{domain.status === 'active' && (domain.lastError ? <Badge variant="warning">Check DNS</Badge> : <Badge variant="success">Connected</Badge>)}
-				{domain.status === 'pending' && <Badge variant="info">Waiting for DNS</Badge>}
-				{domain.status === 'failed' && <Badge variant="outline">Not connected</Badge>}
+				{domain.status === 'active' && (domain.lastError ? <Badge variant="warning">{t("Check DNS")}</Badge> : <Badge variant="success">{t("Connected")}</Badge>)}
+				{domain.status === 'pending' && <Badge variant="info">{t("Waiting for DNS")}</Badge>}
+				{domain.status === 'failed' && <Badge variant="outline">{t("Not connected")}</Badge>}
 			</div>
 			{domain.lastError && <p className="text-sm text-kumo-danger">{domain.lastError}</p>}
 			{domainNeedsRecords(domain) && (
 				<div className="grid gap-2">
-					<p className="text-sm text-kumo-subtle">Add these records at your domain's DNS provider. It can take a few minutes, sometimes hours, before they're seen.</p>
+					<p className="text-sm text-kumo-subtle">{t("Add these records at your domain's DNS provider. It can take a few minutes, sometimes hours, before they're seen.")}</p>
 					{domain.rootDomain && (
-						<p className="text-sm text-kumo-subtle">
-							Most DNS providers, such as GoDaddy, add {domain.rootDomain} to each name for you, so enter the name as shown. If yours asks for the full name, use the one under it.
-						</p>
+						<p className="text-sm text-kumo-subtle">{t("Most DNS providers add {domain} to each name for you, so enter the name as shown. If yours asks for the full name, use the one under it.", { domain: domain.rootDomain })}</p>
 					)}
 					<div className="overflow-x-auto rounded-md border border-kumo-line">
 						<table className="w-full text-left text-sm">
 							<thead>
 								<tr className="text-kumo-subtle">
-									<th className="px-3 py-2 font-medium">Type</th>
-									<th className="px-3 py-2 font-medium">Name</th>
-									<th className="px-3 py-2 font-medium">Value</th>
+									<th className="px-3 py-2 font-medium">{t("Type")}</th>
+									<th className="px-3 py-2 font-medium">{t("Name")}</th>
+									<th className="px-3 py-2 font-medium">{t("Value")}</th>
 								</tr>
 							</thead>
 							<tbody>
@@ -210,7 +206,7 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 										<tr key={`${record.type}-${record.name}`} className="border-t border-kumo-line align-top">
 											<td className="px-3 py-2">
 												{record.type}
-												<div className="text-xs text-kumo-subtle">{PURPOSE_LABELS[record.purpose]}</div>
+												<div className="text-xs text-kumo-subtle">{t(PURPOSE_LABELS[record.purpose])}</div>
 											</td>
 											<td className="px-3 py-2">
 												<RecordValue value={host} />
@@ -227,24 +223,21 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 					</div>
 				</div>
 			)}
-			{domain.status === 'active' && connected.showAddress && <p className="text-sm break-all">Your store is also at {domain.url}</p>}
+			{domain.status === 'active' && connected.showAddress && <p className="text-sm break-all">{t("Your store is also at {url}", { url: domain.url })}</p>}
 			{domain.status === 'active' && connected.note && <p className="text-sm text-kumo-subtle">{connected.note}</p>}
 			<div className="flex flex-wrap gap-2">
 				{domainNeedsRecords(domain) && (
-					<Button variant="secondary" size="sm" onClick={() => check.mutate(undefined, { onError: (error) => toast.error(error.message) })} disabled={check.isPending} loading={check.isPending}>
-						Check now
-					</Button>
+					<Button variant="secondary" size="sm" onClick={() => check.mutate(undefined, { onError: (error) => toast.error(error.message) })} disabled={check.isPending} loading={check.isPending}>{t("Check now")}</Button>
 				)}
 				{domain.status === 'active' && connected.showAddress && (
-					<LinkButton size="sm" variant="secondary" href={domain.url} target="_blank" rel="noopener noreferrer">
-						Open {domain.hostname}
+					<LinkButton size="sm" variant="secondary" href={domain.url} target="_blank" rel="noopener noreferrer">{t("Open {domain}", { domain: domain.hostname })}
 					</LinkButton>
 				)}
 				<ConfirmButton
-					label="Remove domain"
+					label={t("Remove domain")}
 					variant="ghost"
-					title="Remove this domain?"
-					description={`Your store stops answering on ${domain.hostname}. To connect it again, you'll add new DNS records.`}
+					title={t("Remove this domain?")}
+					description={t("Your store stops answering on {value1}. To connect it again, you'll add new DNS records.", { value1: domain.hostname })}
 					pending={remove.isPending}
 					onConfirm={() => remove.mutate(undefined, { onError: (error) => toast.error(error.message) })}
 				/>
@@ -254,10 +247,11 @@ function DomainDetails({ appId, domain, storeStatus }: { appId: string; domain: 
 }
 
 function RecordValue({ value }: { value: string }) {
+	useI18n();
 	return (
 		<span className="inline-flex items-start gap-1">
 			<code className="break-all">{value}</code>
-			<button type="button" className="shrink-0 text-kumo-subtle hover:text-kumo-default" aria-label={`Copy ${value}`} onClick={() => copy(value)}>
+			<button type="button" className="shrink-0 text-kumo-subtle hover:text-kumo-default" aria-label={t("Copy {value1}", { value1: value })} onClick={() => copy(value)}>
 				<Copy className="size-3.5" />
 			</button>
 		</span>

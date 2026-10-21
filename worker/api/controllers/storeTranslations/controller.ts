@@ -10,6 +10,7 @@ import { isLocale, LOCALE_NAMES, type Locale } from '../../../../shared/i18n/loc
 import { msg } from '../../../../shared/i18n/translate';
 import {
 	MAX_TEXT_CHARS,
+	UNTOUCHED_SETTINGS_VERSION,
 	STORE_TRANSLATION_PAGE_SIZE,
 	type StoreTranslationOverview,
 	type StoreTranslationPage,
@@ -87,6 +88,9 @@ export class StoreTranslationsController extends TranslationsApiController {
 			const body = await this.parseJsonBody<unknown>(request);
 			const parsed = parseSettingsPatch(body.success ? body.data : undefined, current);
 			if (!parsed.ok) return this.refusal<StoreTranslationSettings>(env, user, 400, parsed.message);
+			if (current.version <= UNTOUCHED_SETTINGS_VERSION && parsed.value.sourceLocale === undefined) {
+				return this.refusal<StoreTranslationSettings>(env, user, 400, msg("Choose your store's language first."));
+			}
 			return this.createSuccessResponse(isEmptyPatch(parsed.value) ? current : await service.saveSettings(appId, parsed.value));
 		} catch (error) {
 			return this.handleError(error, 'save translation settings') as Reply<StoreTranslationSettings>;
@@ -105,6 +109,9 @@ export class StoreTranslationsController extends TranslationsApiController {
 			const [facts, live] = await Promise.all([new StoreTranslationService(env).storeFacts(appId), new LiveStoreService(env).getByApp(appId)]);
 			if (!facts) return this.refusal<StoreTranslationRun>(env, user, 404, STORE_NOT_FOUND);
 			if (facts.lastDeployedAt === null && live === null) return this.refusal<StoreTranslationRun>(env, user, 409, NEVER_DEPLOYED);
+			if (settings.version <= UNTOUCHED_SETTINGS_VERSION) {
+				return this.refusal<StoreTranslationRun>(env, user, 400, msg("Choose your store's language first."));
+			}
 
 			const queued = await new TaskService(env).enqueue({ userId: user.id, appId, kind: 'store.translate', payload: { appId, locale }, dedupeKey: translationDedupeKey(appId, locale) });
 			if ('refused' in queued) return this.refusal<StoreTranslationRun>(env, user, 429, TASK_LIMIT);

@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 import { BaseProjectState } from '../state';
 import {
 	ProjectType,
@@ -48,7 +50,7 @@ export class ProjectObjective<
 			return {
 				success: false,
 				target,
-				error: `Unsupported deployment target "${target}"`,
+				error: t("Unsupported deployment target \"{value1}\"", { value1: String(target) }),
 			};
 		}
 
@@ -63,13 +65,13 @@ export class ProjectObjective<
 
 				if (!this.state.sandboxInstanceId) {
 					this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_ERROR, {
-						message: 'Deployment failed: Sandbox service unavailable',
-						error: 'Sandbox service unavailable',
+						message: msg('Deployment failed: Sandbox service unavailable'),
+						error: msg('Sandbox service unavailable'),
 					});
 					return {
 						success: false,
 						target,
-						error: 'Failed to deploy to sandbox service',
+						error: msg('Failed to deploy to sandbox service'),
 					};
 				}
 			}
@@ -107,7 +109,7 @@ export class ProjectObjective<
 			const message = error instanceof Error ? error.message : 'Unknown deployment error';
 			this.logger.error('Deployment failed', error);
 			this.broadcast(WebSocketMessageResponses.CLOUDFLARE_DEPLOYMENT_ERROR, {
-				message: 'Deployment failed',
+				message: msg('Deployment failed'),
 				error: message,
 			});
 			return { success: false, target, error: message };
@@ -125,13 +127,13 @@ export class ProjectObjective<
 
 		return {
 			success: false,
-			error: `Export kind '${options.kind}' not supported for ${this.projectType}`,
+			error: t("Export kind '{value1}' not supported for {value2}", { value1: String(options.kind), value2: String(this.projectType) }),
 		};
 	}
 
 	private async exportToGitHub(options: ExportOptions): Promise<ExportResult> {
 		if (!options.github) {
-			return { success: false, error: 'GitHub export requires github options' };
+			return { success: false, error: msg('GitHub export requires github options') };
 		}
 
 		const githubOptions = options.github;
@@ -140,13 +142,13 @@ export class ProjectObjective<
 			this.logger.info('Starting GitHub export');
 
 			this.broadcast(WebSocketMessageResponses.GITHUB_EXPORT_STARTED, {
-				message: `Starting GitHub export to repository "${githubOptions.cloneUrl}"`,
+				message: t("Starting GitHub export to repository \"{value1}\"", { value1: String(githubOptions.cloneUrl) }),
 				repositoryName: githubOptions.repositoryHtmlUrl,
 				isPrivate: githubOptions.isPrivate,
 			});
 
 			this.broadcast(WebSocketMessageResponses.GITHUB_EXPORT_PROGRESS, {
-				message: 'Preparing git repository...',
+				message: msg('Preparing git repository...'),
 				step: 'preparing',
 				progress: 20,
 			});
@@ -174,7 +176,7 @@ export class ProjectObjective<
 			}
 
 			this.broadcast(WebSocketMessageResponses.GITHUB_EXPORT_PROGRESS, {
-				message: 'Uploading to GitHub repository...',
+				message: msg('Uploading to GitHub repository...'),
 				step: 'uploading_files',
 				progress: 40,
 			});
@@ -199,7 +201,7 @@ export class ProjectObjective<
 			}
 
 			this.broadcast(WebSocketMessageResponses.GITHUB_EXPORT_PROGRESS, {
-				message: 'Finalizing GitHub export...',
+				message: msg('Finalizing GitHub export...'),
 				step: 'finalizing',
 				progress: 90,
 			});
@@ -213,7 +215,7 @@ export class ProjectObjective<
 			);
 
 			this.broadcast(WebSocketMessageResponses.GITHUB_EXPORT_COMPLETED, {
-				message: `Successfully exported to GitHub repository: ${githubOptions.repositoryHtmlUrl}`,
+				message: t("Successfully exported to GitHub repository: {value1}", { value1: String(githubOptions.repositoryHtmlUrl) }),
 				repositoryUrl: githubOptions.repositoryHtmlUrl,
 				cloneUrl: githubOptions.cloneUrl,
 				commitSha: result.commitSha,
@@ -237,7 +239,7 @@ export class ProjectObjective<
 			const message = error instanceof Error ? error.message : 'Unknown error';
 			this.logger.error('GitHub export failed', error);
 			this.broadcast(WebSocketMessageResponses.GITHUB_EXPORT_ERROR, {
-				message: `GitHub export failed: ${message}`,
+				message: t("GitHub export failed: {value1}", { value1: String(message) }),
 				error: message,
 			});
 			return {

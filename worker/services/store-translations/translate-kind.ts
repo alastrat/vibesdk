@@ -186,6 +186,7 @@ async function startStep(deps: TranslateKindDeps, ctx: TaskStepContext, payload:
 async function finishedStep(store: StoreTranslationService, payload: TranslatePayload, progress: TaskProgress, calls: ModelCall[]): Promise<TaskStepResult> {
 	if (progress.total === 0) return { progress, finished: true, calls, ready: await storeHasTexts(store, payload) };
 	if (progress.done * 2 >= progress.total) return { progress, finished: true, calls, ready: true };
+	if ((await store.settingsOf(payload.appId)).targets[payload.locale]?.ready) return { progress, finished: true, calls };
 	return { progress: { ...progress, skippedHashes: [] }, finished: true, calls, failed: TRANSLATED_TOO_LITTLE };
 }
 

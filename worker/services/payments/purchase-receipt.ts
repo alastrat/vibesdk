@@ -4,6 +4,7 @@ import type { StripePurchaseRecord } from '../../database/services/TemplateServi
 import { createLogger } from '../../logger';
 import { purchaseReceiptEmail } from '../email/templates';
 import type { EmailSender } from '../email/types';
+import type { Locale } from '../../../shared/i18n/locales';
 
 export interface PurchaseReceiptDeps {
 	receiptFacts(appId: string, buyerUserId: string): Promise<{ siteTitle: string | null; buyerEmail: string | null }>;
@@ -11,6 +12,7 @@ export interface PurchaseReceiptDeps {
 	/** Estori's own address, for the site link and policy links; null leaves them out. */
 	baseUrl: string | null;
 	now(): Date;
+	buyerLocale?(userId: string): Promise<Locale | null>;
 }
 
 const logger = createLogger('PurchaseReceipt');
@@ -25,6 +27,7 @@ export async function sendPurchaseReceipt(deps: PurchaseReceiptDeps, purchase: S
 			logger.warn('A paid site was bought by someone with no email address, so no receipt was sent', { checkoutSessionId: purchase.checkoutSessionId });
 			return 'not-sent';
 		}
+		const locale = await deps.buyerLocale?.(purchase.userId).catch(() => null) ?? 'en';
 		await deps.sender.send(
 			purchaseReceiptEmail(to, {
 				siteTitle: facts.siteTitle,
@@ -34,7 +37,7 @@ export async function sendPurchaseReceipt(deps: PurchaseReceiptDeps, purchase: S
 				receiptNumber: purchase.paymentIntentId ?? purchase.checkoutSessionId,
 				siteLink: deps.baseUrl ? `${deps.baseUrl}/app/${encodeURIComponent(purchase.sourceAppId)}` : null,
 				baseUrl: deps.baseUrl,
-			}),
+			}, locale),
 		);
 		return 'sent';
 	} catch (error) {

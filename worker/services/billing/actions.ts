@@ -1,3 +1,5 @@
+import { assertWithinLimit } from '../i18n/plan-limits';
+import { msg } from '../../../shared/i18n/translate';
 /**
  * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, buy
  * extra credits, change their card, pay a failed renewal and read their invoices. Each asks Stripe and changes no row;
@@ -27,7 +29,7 @@ import {
 	type InvoiceView,
 } from '../../../shared/types/billing';
 import { isCurrentTermsVersion, TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
-import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
+import { formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 import type { Translator } from '../../../shared/i18n/translate';
 import { createLogger } from '../../logger';
@@ -46,26 +48,26 @@ import { billingEventDepsFromEnv } from './wiring';
 const logger = createLogger('BillingActions');
 
 export const BILLING_MESSAGES = {
-	notSetUp: "Plans aren't set up on this deployment yet.",
-	pickPlan: 'Pick Pro or Premium.',
-	alreadyPaying: 'You already have a plan. Change it on the billing page.',
-	noPlan: "You don't have Pro or Premium.",
-	paymentFailing: "Your last payment didn't go through. Pay it on the billing page first.",
-	declined: 'Your card was declined. Change your card on the billing page, then try again.',
-	notEnding: "Your plan isn't set to end.",
-	noCustomer: "You don't have billing details yet.",
-	creditsAmount: 'Pick 5,000 to 1,000,000 credits, in thousands.',
-	noCheckout: "We couldn't find that checkout.",
-	noRenewalTerms: 'Extra credits have no renewal to agree to.',
-	checkoutFinished: 'This checkout is already finished.',
-	consentRequest: 'Agree to the terms shown, then try again.',
-	priceChanged: 'The price changed. Check it and agree again.',
-	cardMode: 'Choose whether to save the card or pay with it.',
-	cardNotSaved: "Your card wasn't saved. Try again.",
-	noInvoice: "We couldn't find that invoice.",
-	noInvoicePdf: "That invoice doesn't have a PDF yet.",
+	notSetUp: msg("Plans aren't set up on this deployment yet."),
+	pickPlan: msg('Pick Pro or Premium.'),
+	alreadyPaying: msg('You already have a plan. Change it on the billing page.'),
+	noPlan: msg("You don't have Pro or Premium."),
+	paymentFailing: msg("Your last payment didn't go through. Pay it on the billing page first."),
+	declined: msg('Your card was declined. Change your card on the billing page, then try again.'),
+	notEnding: msg("Your plan isn't set to end."),
+	noCustomer: msg("You don't have billing details yet."),
+	creditsAmount: msg('Pick 5,000 to 1,000,000 credits, in thousands.'),
+	noCheckout: msg("We couldn't find that checkout."),
+	noRenewalTerms: msg('Extra credits have no renewal to agree to.'),
+	checkoutFinished: msg('This checkout is already finished.'),
+	consentRequest: msg('Agree to the terms shown, then try again.'),
+	priceChanged: msg('The price changed. Check it and agree again.'),
+	cardMode: msg('Choose whether to save the card or pay with it.'),
+	cardNotSaved: msg("Your card wasn't saved. Try again."),
+	noInvoice: msg("We couldn't find that invoice."),
+	noInvoicePdf: msg("That invoice doesn't have a PDF yet."),
 	/** Any Stripe failure, in Estori's words: billing is Estori's own page. */
-	paymentsUnreachable: "We couldn't reach payments. Try again in a moment.",
+	paymentsUnreachable: msg("We couldn't reach payments. Try again in a moment."),
 } as const;
 
 export type BillingActionResult<T> =

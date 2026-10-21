@@ -39,6 +39,7 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 		alert: platformAlertsFromEnv(env),
 		nowMs: () => Date.now(),
 		track: (userId, events) => trackBilling(env, userId, events),
+		resumeTasks: async (userId) => { await resumeCreditPausedTasks(env, Date.now(), userId); },
 	};
 }
 

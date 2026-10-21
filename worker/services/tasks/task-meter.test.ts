@@ -132,6 +132,14 @@ describe('the task meter', () => {
 });
 
 describe('resumePausedTasks', () => {
+	it('a purchase resumes only the paying seller without scanning every paused seller', async () => {
+		const { deps, resumed, woken, asked } = resumeFakes({ listFails: true });
+		Object.assign(deps, { userId: 'seller_b' });
+		expect(await resumePausedTasks(deps)).toBe(1);
+		expect(resumed).toEqual(['b1']);
+		expect(asked).toEqual(['seller_b']);
+		expect(woken).toEqual(['seller_b']);
+	});
 	function resumeFakes(options: { paused?: Record<string, string[]>; gates?: Record<string, 'ok' | 'refused' | 'throws'>; listFails?: boolean; resumeFails?: string[] } = {}) {
 		const paused = options.paused ?? { seller_a: ['a1', 'a2'], seller_b: ['b1'] };
 		const resumed: string[] = [];

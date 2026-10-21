@@ -155,7 +155,7 @@ The tool rows in the chat speak about what the assistant did, in the third perso
 | Task done (a task that finished) | Tarea terminada | Tarefa concluída |
 | daily limit (free AI use while billing is off) | límite diario | limite diário |
 
-The Translations page's statuses name what they qualify ("Translation failed", "Task canceled"), so they agree with "traducción"/"tradução" and "tarea"/"tarefa". The bare words ("Ready", "Done") keep the masculine defaults of the Statuses table below.
+The Translations page's statuses name what they qualify ("Translation failed", "Task canceled"), so they agree with "traducción"/"tradução" and "tarea"/"tarefa". Use "Translation ready" and "Task done" for these statuses rather than bare words.
 
 ### Plans and billing
 

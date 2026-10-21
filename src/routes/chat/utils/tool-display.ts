@@ -71,6 +71,14 @@ type VerbSet = { start: string; success: string; error: string };
 
 /** The verbs a tool row shows, marked as messages and translated where they are shown (see `verbFor`). */
 const VERBS: Record<string, VerbSet> = {
+	list_drafts: { start: msg('Listing drafts'), success: msg('Listed drafts'), error: msg('Failed to list drafts') },
+	create_draft: { start: msg('Creating draft'), success: msg('Created draft'), error: msg('Failed to create draft') },
+	switch_draft: { start: msg('Switching draft'), success: msg('Switched draft'), error: msg('Failed to switch draft') },
+	bring_in_live_changes: { start: msg('Bringing in live changes'), success: msg('Brought in live changes'), error: msg('Failed to bring in live changes') },
+	cancel_bringing_in_live_changes: { start: msg('Canceling live changes'), success: msg('Canceled live changes'), error: msg('Failed to cancel live changes') },
+	search_catalog: { start: msg('Searching catalog'), success: msg('Searched catalog'), error: msg('Failed to search catalog') },
+	get_catalog_product: { start: msg('Reading product'), success: msg('Read product'), error: msg('Failed to read product') },
+	get_payments_setup: { start: msg('Checking payments setup'), success: msg('Checked payments setup'), error: msg('Failed to check payments setup') },
 	read: { start: msg('Reading'), success: msg('Read'), error: msg('Failed to read') },
 	write: { start: msg('Writing'), success: msg('Wrote'), error: msg('Failed to write') },
 	edit: { start: msg('Editing'), success: msg('Edited'), error: msg('Failed to edit') },
@@ -281,6 +289,9 @@ export function getToolGroupSummary(events: ToolEvent[]): string {
 	const anyRunning = events.some((e) => e.status === 'start');
 	const anyError = events.some((e) => e.status === 'error');
 	const status: ToolEvent['status'] = anyRunning ? 'start' : anyError ? 'error' : 'success';
+	if (status === 'error' && (name === 'read' || name === 'read_files')) {
+		return tn('Failed to read {count} file', 'Failed to read {count} files', events.length);
+	}
 	const verb = verbFor(name, status);
 	const noun = groupNoun(name, events.length);
 	const ellipsis = status === 'start' ? '…' : '';

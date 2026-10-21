@@ -19,6 +19,8 @@ export const STORE_LANGUAGE_CACHE_MS = 30_000;
 const SETTINGS_CACHE_MAX_ENTRIES = 1_000;
 /** Translations are the larger part, so fewer stores' languages are kept. */
 const TRANSLATIONS_CACHE_MAX_ENTRIES = 50;
+/** At most about 8 MiB of UTF-16 text, including hash and source keys. */
+const TRANSLATIONS_CACHE_MAX_CHARS = 4 * 1024 * 1024;
 
 export interface StoreLanguageContext {
 	appId: string;
@@ -45,6 +47,12 @@ interface LoadedTranslations {
 	byText: ReadonlyMap<string, string>;
 }
 
+interface CachedTranslations {
+	version: string;
+	chars: number;
+	loaded: Promise<LoadedTranslations>;
+}
+
 interface CachedSettings {
 	stored: Promise<StoreTranslationSettings | null>;
 	expiresAt: number;
@@ -68,9 +76,9 @@ function remember<V>(cache: Map<string, V>, key: string, value: V, max: number):
 }
 
 /** Loaders with their own caches; the source is per call, so each request reads D1 through its own environment. */
-export function createStoreLanguageLoader(nowMs: () => number = Date.now) {
+export function createStoreLanguageLoader(nowMs: () => number = Date.now, maxTranslationChars = TRANSLATIONS_CACHE_MAX_CHARS) {
 	const settingsCache = new Map<string, CachedSettings>();
-	const translationsCache = new Map<string, { version: number; loaded: Promise<LoadedTranslations> }>();
+	const translationsCache = new Map<string, CachedTranslations>();
 
 	const cachedSettings = (source: StoreLanguageSource, appId: string): CachedSettings => {
 		const cached = settingsCache.get(appId);
@@ -82,15 +90,26 @@ export function createStoreLanguageLoader(nowMs: () => number = Date.now) {
 		return entry;
 	};
 
-	const translationsFor = (source: StoreLanguageSource, appId: string, locale: Locale, version: number): Promise<LoadedTranslations> => {
+	const translationsFor = (source: StoreLanguageSource, appId: string, locale: Locale, settings: StoreTranslationSettings): Promise<LoadedTranslations> => {
 		const key = `${appId}\n${locale}`;
+		const version = `${settings.version}:${settings.extractedAt ?? 0}`;
 		const cached = translationsCache.get(key);
 		if (cached?.version === version) return cached.loaded;
-		const loaded = source.translationsOf(appId, locale).then((rows) => ({
-			byHash: new Map(rows.map((row) => [row.hash, row.text])),
-			byText: new Map(rows.map((row) => [row.source, row.text])),
-		}));
-		const entry = { version, loaded };
+		const loaded: Promise<LoadedTranslations> = source.translationsOf(appId, locale).then((rows) => {
+			if (translationsCache.get(key) === entry) {
+				entry.chars = rows.reduce((sum, row) => sum + row.hash.length + row.source.length + row.text.length, 0);
+				while ([...translationsCache.values()].reduce((sum, value) => sum + value.chars, 0) > maxTranslationChars) {
+					const oldest = translationsCache.keys().next().value;
+					if (oldest === undefined) break;
+					translationsCache.delete(oldest);
+				}
+			}
+			return {
+				byHash: new Map(rows.map((row) => [row.hash, row.text])),
+				byText: new Map(rows.map((row) => [row.source, row.text])),
+			};
+		});
+		const entry: CachedTranslations = { version, chars: 0, loaded };
 		remember(translationsCache, key, entry, TRANSLATIONS_CACHE_MAX_ENTRIES);
 		loaded.catch(() => translationsCache.get(key) === entry && translationsCache.delete(key));
 		return loaded;
@@ -100,8 +119,8 @@ export function createStoreLanguageLoader(nowMs: () => number = Date.now) {
 		appId,
 		settings,
 		ready: readyLanguages(settings),
-		dictionary: async (locale) => (await translationsFor(source, appId, locale, settings.version)).byHash,
-		texts: async (locale) => (await translationsFor(source, appId, locale, settings.version)).byText,
+		dictionary: async (locale) => (await translationsFor(source, appId, locale, settings)).byHash,
+		texts: async (locale) => (await translationsFor(source, appId, locale, settings)).byText,
 		scriptEntries: async (locale) => (await source.scriptTranslationsOf(appId, locale)).map((row): [string, string] => [row.source, row.text]),
 	});
 

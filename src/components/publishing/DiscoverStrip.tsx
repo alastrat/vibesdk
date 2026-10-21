@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@cloudflare/kumo';
@@ -7,11 +8,12 @@ import { formatTemplatePrice, type PublicAppsData } from '@/api-types';
 
 /** Popular sites anyone can reuse now; shared by the strip and the landing page's featured stores. */
 export function useDiscoverStripSites() {
+	useI18n();
 	return useQuery({
 		queryKey: queryKeys.apps.strip(),
 		queryFn: async () => {
 			const response = await apiClient.getPublicApps({ sort: 'popular', limit: 6, reusableOnly: true });
-			if (!response.success || !response.data) throw new Error(response.error?.message || 'Failed to load sites');
+			if (!response.success || !response.data) throw new Error(response.error?.message || t("Failed to load sites"));
 			return response.data.apps;
 		},
 		staleTime: 60_000,
@@ -20,6 +22,7 @@ export function useDiscoverStripSites() {
 
 /** Screenshot tiles linking to each site's Discover page. */
 export function DiscoverSiteGrid({ apps, className }: { apps: PublicAppsData['apps']; className?: string }) {
+	const { locale } = useI18n();
 	return (
 		<div className={cn('grid grid-cols-2 gap-3 sm:grid-cols-3', className)}>
 			{apps.map((app) => (
@@ -36,7 +39,7 @@ export function DiscoverSiteGrid({ apps, className }: { apps: PublicAppsData['ap
 					<div className="flex items-center justify-between gap-2 px-1">
 						<span className="truncate text-sm text-kumo-default">{app.title}</span>
 						<span className="shrink-0 text-xs text-kumo-subtle">
-							{app.priceCents !== null ? formatTemplatePrice(app.priceCents) : 'Free'}
+							{app.priceCents !== null ? formatTemplatePrice(app.priceCents, locale, t('Free')) : t("Free")}
 						</span>
 					</div>
 				</Link>
@@ -47,6 +50,7 @@ export function DiscoverSiteGrid({ apps, className }: { apps: PublicAppsData['ap
 
 /** "Start from a published site" under the home prompt: popular sites anyone can reuse now. */
 export function DiscoverStrip() {
+	useI18n();
 	const sites = useDiscoverStripSites();
 	const apps = sites.data ?? [];
 	if (apps.length === 0) return null;
@@ -54,10 +58,8 @@ export function DiscoverStrip() {
 	return (
 		<section className="mt-8 grid w-full gap-3">
 			<div className="flex items-baseline justify-between">
-				<h2 className="text-sm font-medium text-kumo-default">Start from a published site</h2>
-				<Link to="/discover" className="text-sm text-kumo-subtle hover:text-kumo-default">
-					See all
-				</Link>
+				<h2 className="text-sm font-medium text-kumo-default">{t("Start from a published site")}</h2>
+				<Link to="/discover" className="text-sm text-kumo-subtle hover:text-kumo-default">{t("See all")}</Link>
 			</div>
 			<DiscoverSiteGrid apps={apps} />
 		</section>

@@ -1,3 +1,4 @@
+import { msg } from '../i18n/translate';
 /**
  * Page text for a Discover site's product page: its shape, limits and the one
  * validation the publish dialog, the drafting endpoint and publishing all use.
@@ -33,8 +34,8 @@ export const SITE_PAGE_LIMITS = {
 	madeFor: { min: 2, max: 5, each: 40 },
 } as const;
 
-export const SITE_PAGE_UNAVAILABLE_MESSAGE = "This site isn't available";
-export const PAGE_DRAFT_FAILED_MESSAGE = "Couldn't draft this page; write it yourself or try again";
+export const SITE_PAGE_UNAVAILABLE_MESSAGE = msg("This site isn't available");
+export const PAGE_DRAFT_FAILED_MESSAGE = msg("Couldn't draft this page; write it yourself or try again");
 
 const MALFORMED = 'Page text is malformed';
 // Control characters become spaces, then runs of whitespace collapse.

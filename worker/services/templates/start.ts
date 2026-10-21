@@ -1,3 +1,4 @@
+import { msg } from '../../../shared/i18n/translate';
 /** Resolve the site a user asked to start from into the files the new app copies. */
 
 import type { ReuseSeed } from '../../agents/core/types';
@@ -5,7 +6,7 @@ import type { Template, TemplateVersion } from '../../database/schema';
 import { buildSnapshot, bundleToFiles, type TreeFile } from './snapshot';
 import { SITE_NOT_REUSABLE_MESSAGE, SITE_UNAVAILABLE_MESSAGE, reuseDecision } from './reuse';
 
-export const SITE_READ_FAILED_MESSAGE = "Couldn't read this site's files; try again";
+export const SITE_READ_FAILED_MESSAGE = msg("Couldn't read this site's files; try again");
 
 export interface ReuseSourceApp {
 	id: string;

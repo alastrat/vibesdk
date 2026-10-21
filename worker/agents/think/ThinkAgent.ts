@@ -1,5 +1,7 @@
 import { Think } from '@cloudflare/think';
 import type { PrepareStepContext, StepConfig, StepContext, Session, TurnContext, TurnConfig } from '@cloudflare/think';
+import { savedUserLocale } from '../../services/i18n/saved-locale';
+import { sellerLanguageInstruction } from './language';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModel, ToolSet } from 'ai';
 import {
@@ -301,6 +303,7 @@ export class ThinkAgent extends Think<Env> {
 		this.turnCredits = 0;
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
+		const turnLocale = await savedUserLocale(this.env, config?.userId);
 		this.providerFailure = null;
 		// ctx.model is the model this turn runs on; the config may change before the turn ends.
 		const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
@@ -324,7 +327,9 @@ export class ThinkAgent extends Think<Env> {
 			originalMessageCount: ctx.messages.length,
 			selectedMessageCount: messages.length,
 		});
-		return { messages, maxRetries: TURN_MAX_RETRIES };
+		// Think freezes session context before beforeTurn; override the final turn system to avoid a stale preference.
+		const system = [ctx.system, sellerLanguageInstruction(turnLocale)].filter(Boolean).join('\n\n');
+		return { messages, system, maxRetries: TURN_MAX_RETRIES };
 	}
 
 	override getSkills(): SkillSource[] {

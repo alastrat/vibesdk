@@ -1,3 +1,5 @@
+import { msg } from '../../shared/i18n/translate';
+import { t } from '../services/i18n/request-locale';
 /**
  * Input Validation Middleware for Cloudflare Workers
  * Uses Zod for schema validation and sanitization
@@ -37,7 +39,7 @@ export async function validateInput<T extends z.ZodSchema>(
         } else {
             throw new SecurityError(
                 SecurityErrorType.INVALID_INPUT,
-                'Unsupported content type',
+                msg('Unsupported content type'),
                 400
             );
         }
@@ -71,7 +73,7 @@ export async function validateInput<T extends z.ZodSchema>(
         logger.error('Input validation error', error);
         throw new SecurityError(
             SecurityErrorType.INVALID_INPUT,
-            'Invalid request data',
+            msg('Invalid request data'),
             400
         );
     }
@@ -87,7 +89,7 @@ async function parseJSON(request: Request): Promise<unknown> {
     if (text.length > 1024 * 1024) {
         throw new SecurityError(
             SecurityErrorType.INVALID_INPUT,
-            'Request body too large',
+            msg('Request body too large'),
             413
         );
     }
@@ -97,7 +99,7 @@ async function parseJSON(request: Request): Promise<unknown> {
     } catch {
         throw new SecurityError(
             SecurityErrorType.INVALID_INPUT,
-            'Invalid JSON',
+            msg('Invalid JSON'),
             400
         );
     }
@@ -152,7 +154,8 @@ function parseQueryParams(request: Request): Record<string, string> {
 function formatValidationErrors(error: z.ZodError): string {
     const messages = error.issues.map(err => {
         const path = err.path.join('.');
-        return path ? `${path}: ${err.message}` : err.message;
+        const message = t(err.message);
+        return path ? `${path}: ${message}` : message;
     });
     
     return messages.join(', ');
@@ -165,26 +168,26 @@ export const commonSchemas = {
     // Email validation using centralized function
     email: z.string().refine(
         (email) => validateEmail(email).valid,
-        { error: (issue) => validateEmail(issue.input as string).error || 'Invalid email format' }
+        { error: (issue) => validateEmail(issue.input as string).error || msg('Invalid email format') }
     ).transform((email) => email.toLowerCase()),
     
     // Password validation using centralized comprehensive validation
     password: z.string().refine(
         (password) => validatePassword(password).valid,
-        { error: (issue) => validatePassword(issue.input as string).errors?.[0] || 'Password does not meet requirements' }
+        { error: (issue) => validatePassword(issue.input as string).errors?.[0] || msg('Password does not meet requirements') }
     ),
     
     // Password validation with user context (for preventing personal info in passwords)
     passwordWithUserInfo: (userInfo?: { email?: string; username?: string; name?: string }) => 
         z.string().refine(
             (password) => validatePassword(password, undefined, userInfo).valid,
-            { error: (issue) => validatePassword(issue.input as string, undefined, userInfo).errors?.[0] || 'Password does not meet requirements' }
+            { error: (issue) => validatePassword(issue.input as string, undefined, userInfo).errors?.[0] || msg('Password does not meet requirements') }
         ),
     
     // Username validation using centralized function
     username: z.string().refine(
         (username) => validateUsername(username).valid,
-        { error: (issue) => validateUsername(issue.input as string).error || 'Invalid username format' }
+        { error: (issue) => validateUsername(issue.input as string).error || msg('Invalid username format') }
     ),
     
     // UUID validation
@@ -200,7 +203,7 @@ export const commonSchemas = {
     
     // Safe string (no special chars that could be used for injection)
     safeString: z.string()
-        .regex(/^[a-zA-Z0-9\s\-_]+$/, 'Only alphanumeric characters, spaces, hyphens, and underscores allowed')
+        .regex(/^[a-zA-Z0-9\s\-_]+$/, msg('Only alphanumeric characters, spaces, hyphens, and underscores allowed'))
         .transform(val => val.trim()),
     
     // URL validation

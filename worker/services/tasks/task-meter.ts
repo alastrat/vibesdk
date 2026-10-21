@@ -108,6 +108,7 @@ export function taskMeterFromEnv(env: Env, options: TaskMeterOptions = {}): Task
 }
 
 export interface ResumeDeps {
+	userId?: string;
 	tasks: Pick<TaskService, 'pausedUserIds' | 'pausedTaskIds' | 'resume'>;
 	meter: TaskMeter;
 	wake(userId: string): Promise<void>;
@@ -122,7 +123,7 @@ export interface ResumeDeps {
 export async function resumePausedTasks(deps: ResumeDeps): Promise<number> {
 	let resumed = 0;
 	try {
-		for (const userId of await deps.tasks.pausedUserIds('credits', CREDIT_PAUSED_SELLERS_PER_RUN)) {
+		for (const userId of deps.userId ? [deps.userId] : await deps.tasks.pausedUserIds('credits', CREDIT_PAUSED_SELLERS_PER_RUN)) {
 			try {
 				if (!(await deps.meter.gate(userId)).ok) continue;
 				let sellerResumed = 0;
@@ -146,8 +147,9 @@ export async function resumePausedTasks(deps: ResumeDeps): Promise<number> {
 }
 
 /** The daily resume with its production dependencies. Its gate sends no analytics: it is not a step being refused. */
-export function resumeCreditPausedTasks(env: Env, nowMs: number = Date.now()): Promise<number> {
+export function resumeCreditPausedTasks(env: Env, nowMs: number = Date.now(), userId?: string): Promise<number> {
 	return resumePausedTasks({
+		userId,
 		tasks: new TaskService(env),
 		meter: taskMeterFromEnv(env, { trackRefusals: false, now: () => nowMs }),
 		wake: (userId) => wakeTaskRunner(env, userId),

@@ -56,7 +56,7 @@ describe('the seller Orders pages', () => {
 		const page = source('/src/routes/orders/order.tsx');
 		expect(page).toContain('SELLER_CARRIERS.map');
 		expect(page).toContain('shipment.mutate(');
-		expect(page).toMatch(/<ConfirmButton[^>]*label="Mark as not shipped"/);
+		expect(page).toMatch(/<ConfirmButton[^>]*label=\{t\(["']Mark as not shipped["']\)\}/);
 		expect(page).toContain('disabled={shipment.isPending}');
 	});
 

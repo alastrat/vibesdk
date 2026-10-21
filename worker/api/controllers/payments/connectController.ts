@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** Seller onboarding with Stripe Connect Express: start or resume onboarding, read status, open the dashboard. */
 
 import { BaseController } from '../baseController';
@@ -15,9 +16,9 @@ import { parsePayoutRequest, scheduleOf } from '../../../services/payments/payou
 import { PAYMENTS_NOT_CONFIGURED_MESSAGE, STRIPE_REQUEST_FAILED_MESSAGE, stripeFromEnv, stripeModeOf } from '../../../services/payments/config';
 import type { StripeConnectStatusData, StripeLinkData } from './types';
 
-const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';
+const FINISH_ONBOARDING_MESSAGE = msg('Finish Stripe onboarding first');
 
-const ACCEPT_TERMS_FIRST_MESSAGE = 'Accept the selling terms first';
+const ACCEPT_TERMS_FIRST_MESSAGE = msg('Accept the selling terms first');
 
 type PayoutStatus = Pick<StripeConnectStatusData, 'payoutInterval' | 'payoutAnchor' | 'payoutCostEstimates' | 'accountCosts'>;
 
@@ -111,7 +112,7 @@ export class StripeConnectController extends BaseController {
                 return StripeConnectController.createErrorResponse<StripeLinkData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error starting Stripe onboarding', error);
-            return StripeConnectController.createErrorResponse<StripeLinkData>('Failed to start Stripe onboarding', 500);
+            return StripeConnectController.createErrorResponse<StripeLinkData>(msg('Failed to start Stripe onboarding'), 500);
         }
     }
 
@@ -155,7 +156,7 @@ export class StripeConnectController extends BaseController {
             return StripeConnectController.createSuccessResponse(await StripeConnectController.loadStatus(env, context.user!.id));
         } catch (error) {
             this.logger.error('Error loading Stripe status', error);
-            return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to load your Stripe status', 500);
+            return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Failed to load your Stripe status'), 500);
         }
     }
 
@@ -168,15 +169,15 @@ export class StripeConnectController extends BaseController {
     ): Promise<ControllerResponse<ApiResponse<StripeConnectStatusData>>> {
         try {
             const body = await StripeConnectController.parseJsonBody<{ version?: unknown }>(request);
-            if (!body.success) return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Send the terms version you agreed to', 400);
+            if (!body.success) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Send the terms version you agreed to'), 400);
             const accepted = await new SellerTermsService(env).accept(context.user!.id, body.data?.version, new Date());
             if (!accepted) {
-                return StripeConnectController.createErrorResponse<StripeConnectStatusData>('The selling terms were updated; reload the page to agree to the latest version', 400);
+                return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('The selling terms were updated; reload the page to agree to the latest version'), 400);
             }
             return StripeConnectController.createSuccessResponse(await StripeConnectController.loadStatus(env, context.user!.id));
         } catch (error) {
             this.logger.error('Error recording the selling-terms agreement', error);
-            return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to record your agreement', 500);
+            return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Failed to record your agreement'), 500);
         }
     }
 
@@ -190,19 +191,19 @@ export class StripeConnectController extends BaseController {
         try {
             const body = await StripeConnectController.parseJsonBody<unknown>(request);
             const choice = body.success ? parsePayoutRequest(body.data) : null;
-            if (!choice) return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Choose daily, weekly on a weekday, or monthly on a day from 1 to 28', 400);
+            if (!choice) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Choose daily, weekly on a weekday, or monthly on a day from 1 to 28'), 400);
             const stripe = stripeFromEnv(env);
             if (!stripe) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
             const accounts = new StripeConnectService(env);
             const stored = await accounts.getByUser(context.user!.id);
-            if (!stored) return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Connect Stripe first', 400);
+            if (!stored) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Connect Stripe first'), 400);
             await stripe.updatePayoutSchedule(stored.stripeAccountId, scheduleOf(choice));
             await accounts.setPayoutSchedule(context.user!.id, choice.interval, choice.anchor);
             return StripeConnectController.createSuccessResponse(await StripeConnectController.loadStatus(env, context.user!.id));
         } catch (error) {
             if (error instanceof StripeApiError) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             this.logger.error('Error setting the payout schedule', error);
-            return StripeConnectController.createErrorResponse<StripeConnectStatusData>('Failed to change how often you are paid', 500);
+            return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Failed to change how often you are paid'), 500);
         }
     }
 
@@ -231,7 +232,7 @@ export class StripeConnectController extends BaseController {
                 return StripeConnectController.createErrorResponse<StripeLinkData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error creating Stripe dashboard link', error);
-            return StripeConnectController.createErrorResponse<StripeLinkData>('Failed to open the Stripe dashboard', 500);
+            return StripeConnectController.createErrorResponse<StripeLinkData>(msg('Failed to open the Stripe dashboard'), 500);
         }
     }
 }

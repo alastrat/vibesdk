@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { cn } from '@cloudflare/kumo';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ export function RecoveryCodesDisplay({
 	showWarning = true,
 	variant = 'card',
 }: Props) {
+	useI18n();
 	const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 	const [allCopied, setAllCopied] = useState(false);
 	const [confirmed, setConfirmed] = useState(false);
@@ -35,14 +37,14 @@ export function RecoveryCodesDisplay({
 
 	const handleDownload = () => {
 		const content = [
-			'Vault Recovery Codes',
+			t("Vault Recovery Codes"),
 			'====================',
 			'',
-			'Keep these codes safe. Each code can only be used once.',
+			t("Keep these codes safe. Each code can only be used once."),
 			'',
 			...codes.map((code, i) => `${i + 1}. ${code}`),
 			'',
-			`Generated: ${new Date().toISOString()}`,
+			t("Generated: {value1}", { value1: new Date().toISOString() }),
 		].join('\n');
 
 		const blob = new Blob([content], { type: 'text/plain' });
@@ -57,14 +59,12 @@ export function RecoveryCodesDisplay({
 	const title = (
 		<div className="flex items-center gap-2">
 			{showWarning && <AlertTriangle className="h-5 w-5 text-amber-500" />}
-			<span>Recovery Codes</span>
+			<span>{t("Recovery Codes")}</span>
 		</div>
 	);
 
 	const description = (
-		<p className="text-sm text-muted-foreground">
-			These are one-time use codes to recover your vault if you lose access. Store them securely.
-		</p>
+		<p className="text-sm text-muted-foreground">{t("These are one-time use codes to recover your vault if you lose access. Store them securely.")}</p>
 	);
 
 	const body = (
@@ -96,20 +96,14 @@ export function RecoveryCodesDisplay({
 				<Button variant="outline" onClick={handleCopyAll} className="flex-1">
 					{allCopied ? (
 						<>
-							<Check className="h-4 w-4 mr-2" />
-							Copied
-						</>
+							<Check className="h-4 w-4 mr-2" />{t("Copied")}</>
 					) : (
 						<>
-							<Copy className="h-4 w-4 mr-2" />
-							Copy All
-						</>
+							<Copy className="h-4 w-4 mr-2" />{t("Copy All")}</>
 					)}
 				</Button>
 				<Button variant="outline" onClick={handleDownload} className="flex-1">
-					<Download className="h-4 w-4 mr-2" />
-					Download
-				</Button>
+					<Download className="h-4 w-4 mr-2" />{t("Download")}</Button>
 			</div>
 
 			{onConfirm && (
@@ -122,16 +116,11 @@ export function RecoveryCodesDisplay({
 								onChange={(e) => setConfirmed(e.target.checked)}
 								className="mt-1 rounded"
 							/>
-							<span className="text-sm">
-								I understand that these codes are the only way to recover my vault if I forget my
-								password or lose my passkey. I have saved them securely.
-							</span>
+							<span className="text-sm">{t("I understand that these codes are the only way to recover my vault if I forget my password or lose my passkey. I have saved them securely.")}</span>
 						</label>
 					</div>
 
-					<Button onClick={onConfirm} disabled={!confirmed} className="w-full">
-						I've Saved My Codes
-					</Button>
+					<Button onClick={onConfirm} disabled={!confirmed} className="w-full">{t("I've Saved My Codes")}</Button>
 				</>
 			)}
 		</div>
@@ -142,9 +131,7 @@ export function RecoveryCodesDisplay({
 			<div className="space-y-4">
 				<div className="space-y-1">
 					<div className="flex items-center gap-2 text-base font-semibold">
-						{showWarning && <AlertTriangle className="h-5 w-5 text-amber-500" />}
-						Recovery Codes
-					</div>
+						{showWarning && <AlertTriangle className="h-5 w-5 text-amber-500" />}{t("Recovery Codes")}</div>
 					{description}
 				</div>
 				{body}

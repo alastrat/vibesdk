@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import type { Ref } from 'react';
 import { TEMPLATE_CATEGORY_LABELS, type SitePageData } from '@/api-types';
 import { sitePriceLabel } from '@/lib/site-page-display';
@@ -11,7 +12,8 @@ interface SiteHeaderProps {
 }
 
 export function SiteHeader({ page, actions, actionsRef }: SiteHeaderProps) {
-	const kind = page.category ? TEMPLATE_CATEGORY_LABELS[page.category] : 'Site';
+	useI18n();
+	const kind = page.category ? t(TEMPLATE_CATEGORY_LABELS[page.category]) : t('Site');
 	const price = sitePriceLabel(page);
 	return (
 		<header className="flex flex-wrap items-start justify-between gap-4">
@@ -19,7 +21,7 @@ export function SiteHeader({ page, actions, actionsRef }: SiteHeaderProps) {
 				<h1 className="text-3xl font-semibold text-kumo-strong">{page.title}</h1>
 				{page.copy?.tagline && <p className="text-lg text-kumo-default">{page.copy.tagline}</p>}
 				<p className="text-sm text-kumo-subtle">
-					{kind} template by {page.creator.displayName}
+					{t('{kind} template by {creator}', { kind, creator: page.creator.displayName })}
 				</p>
 			</div>
 			<div ref={actionsRef} className="flex flex-wrap items-center gap-3">
@@ -30,9 +32,7 @@ export function SiteHeader({ page, actions, actionsRef }: SiteHeaderProps) {
 						target="_blank"
 						rel="noopener noreferrer"
 						className="rounded-lg px-3 py-1.5 text-sm text-kumo-default ring ring-kumo-hairline hover:ring-kumo-line"
-					>
-						Open live site ↗
-					</a>
+					>{t("Open live site ↗")}</a>
 				)}
 				<SiteMainButton page={page} actions={actions} />
 			</div>

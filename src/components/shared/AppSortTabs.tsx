@@ -1,3 +1,4 @@
+import { t, useI18n, msg } from '@/lib/i18n';
 import { Tabs } from '@cloudflare/kumo';
 import { ClockIcon, TrendUpIcon, StarIcon } from '@phosphor-icons/react';
 import type { AppSortOption } from '@/api-types';
@@ -21,22 +22,22 @@ interface AppSortTabsProps {
 const SORT_CONFIGURATIONS: Record<AppSortOption, SortOption> = {
 	recent: {
 		value: 'recent',
-		label: 'Recent',
+		label: msg("Recent"),
 		icon: ClockIcon,
 	},
 	popular: {
 		value: 'popular',
-		label: 'Popular',
+		label: msg("Popular"),
 		icon: TrendUpIcon,
 	},
 	trending: {
 		value: 'trending',
-		label: 'Trending',
+		label: msg("Trending"),
 		icon: TrendUpIcon,
 	},
 	starred: {
 		value: 'starred',
-		label: 'Starred',
+		label: msg("Starred"),
 		icon: StarIcon,
 	},
 };
@@ -47,6 +48,7 @@ export function AppSortTabs({
 	availableSorts = ['recent', 'popular', 'trending'],
 	className,
 }: AppSortTabsProps) {
+	useI18n();
 	const sortOptions = availableSorts.map(
 		(sortKey) => SORT_CONFIGURATIONS[sortKey],
 	);
@@ -65,7 +67,7 @@ export function AppSortTabs({
 							<span className="h-lh flex items-center">
 								<Icon className="size-3.5" weight="duotone" />
 							</span>
-							{option.label}
+							{t(option.label)}
 						</span>
 					),
 				};

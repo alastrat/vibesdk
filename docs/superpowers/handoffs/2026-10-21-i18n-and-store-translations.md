@@ -6,6 +6,19 @@ The owner deployed this branch to production as is, partly translated, because o
 
 This document is for the next agent, for example Codex. It lists what is done, what is left, and how to verify it.
 
+## Codex continuation — 2026-10-21
+
+The continuation starts at PR head `3a0790a3`, on `codex/pr32-i18n-continuation`.
+
+- **Implemented:** the store fix pass, the app task 7 corrections, and app tasks 8–12. This includes source-language confirmation, untouched checkout URLs, extraction-aware bounded serving caches, credit-purchase task resumes, remaining seller pages, request-scoped server messages, recipient-language seller emails, and the AI's per-turn language instruction.
+- **Dialog investigation:** the actual shared dialog and Translate form were opaque in light and dark mode. At 375 px the dialog measured 343 px with no horizontal overflow. The reported transparency could not be reproduced on the PR head, so no speculative CSS change was made.
+- **Final review fixes:** localized dynamic plan refusals and individual password-validation reasons; middleware refusals retain their status codes and action identifiers; app update dates use the selected locale. The email status now says “Edited by you” to distinguish its adjective from the chat's “Edited” action verb. Seller content and raw logs remain untouched.
+- **Verification:** lint has 0 errors and the 6 existing warnings; typecheck, build and the Worker bundle dry run pass. Both catalogs are complete and sorted. All 552 root test files were exercised in small shards. Corrected failures and the port-exhausted shard were rerun as 29 files / 301 tests in ten sequential batches, all passing. The two empty tail slots in the 64-shard split were not test failures.
+- **Still pending in task 13:** the full app walkthrough in Spanish and Portuguese at 1280 px and 375 px, including the chat header, Stripe test checkout and a live AI reply. The browser tool's URL-policy gate refused access to `http://localhost:8123/`; no alternate browser or policy workaround was attempted. Mounted UI and server tests do not replace that walkthrough.
+- **Production:** no deployment or merge was performed. The owner steps at the end of this document still apply.
+
+The remaining sections record the original handoff baseline; use the continuation status above to avoid repeating completed implementation.
+
 ## Read first
 
 - **Specs:**

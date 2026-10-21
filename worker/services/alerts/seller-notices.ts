@@ -5,6 +5,8 @@ import { sellerDomainUnreachableEmail, sellerItemsRefundedEmail, sellerLimitReac
 import type { EmailSender, OutgoingEmail } from '../email/types';
 import { UserService } from '../../database';
 import { createLogger } from '../../logger';
+import type { Locale } from '../../../shared/i18n/locales';
+import { savedUserLocale } from '../i18n/saved-locale';
 
 export type SellerNotice =
 	| { sellerUserId: string; kind: 'limit-reached'; weeklySalesCents: number }
@@ -15,6 +17,7 @@ export interface SellerNoticeDeps {
 	throttle: { get(key: string): Promise<string | null>; put(key: string, value: string, options: { expirationTtl: number }): Promise<void> };
 	sender: EmailSender | null;
 	sellerEmail(sellerUserId: string): Promise<string | null>;
+	sellerLocale?(sellerUserId: string): Promise<Locale | null>;
 }
 
 const DAY_SECONDS = 24 * 60 * 60;
@@ -31,14 +34,14 @@ function subjectOf(notice: SellerNotice): string {
 	}
 }
 
-function emailFor(to: string, notice: SellerNotice): OutgoingEmail {
+function emailFor(to: string, notice: SellerNotice, locale: Locale): OutgoingEmail {
 	switch (notice.kind) {
 		case 'limit-reached':
-			return sellerLimitReachedEmail(to, notice.weeklySalesCents);
+			return sellerLimitReachedEmail(to, notice.weeklySalesCents, locale);
 		case 'items-refunded':
-			return sellerItemsRefundedEmail(to, notice.itemCount, notice.reason);
+			return sellerItemsRefundedEmail(to, notice.itemCount, notice.reason, locale);
 		case 'domain-unreachable':
-			return sellerDomainUnreachableEmail(to, notice.hostname);
+			return sellerDomainUnreachableEmail(to, notice.hostname, locale);
 	}
 }
 
@@ -47,7 +50,8 @@ export async function sendSellerNotice(deps: SellerNoticeDeps, notice: SellerNot
 	if (await deps.throttle.get(key)) return 'throttled';
 	const to = await deps.sellerEmail(notice.sellerUserId);
 	if (!deps.sender || !to) return 'not-sent';
-	await deps.sender.send(emailFor(to, notice));
+	const locale = await deps.sellerLocale?.(notice.sellerUserId).catch(() => null) ?? 'en';
+	await deps.sender.send(emailFor(to, notice, locale));
 	await deps.throttle.put(key, '1', { expirationTtl: DAY_SECONDS });
 	return 'sent';
 }
@@ -59,6 +63,7 @@ export function sellerNoticesFromEnv(env: Env): (notice: SellerNotice) => Promis
 		throttle: env.VibecoderStore,
 		sender: createEmailSender(env),
 		sellerEmail: async (userId) => (await new UserService(env).findUser({ id: userId }))?.email ?? null,
+		sellerLocale: (userId) => savedUserLocale(env, userId),
 	};
 	return async (notice) => {
 		try {

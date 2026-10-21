@@ -11,7 +11,7 @@ const items = [
 describe('the translation prompt', () => {
 	it('names the variety (Latin American Spanish with tú; Brazilian Portuguese with você) and keeps brand and product names, numbers, prices, urls and markup', () => {
 		const spanish = buildTranslationPrompt('en', 'es', items).system;
-		expect(spanish).toContain('from English to Latin American Spanish, using tú');
+		expect(spanish).toContain('neutral Latin American Spanish, using Mexican vocabulary where words differ, with tú; no voseo, no regional idioms');
 		const portuguese = buildTranslationPrompt('en', 'pt-BR', items).system;
 		expect(portuguese).toContain('from English to Brazilian Portuguese, using você');
 		expect(buildTranslationPrompt('es', 'en', items).system).toContain('from Latin American Spanish to English');

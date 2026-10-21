@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 import { 
     IDeploymentManager, 
     DeploymentParams, 
@@ -364,7 +366,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
             try {
                 // Callback: deployment starting (only on first attempt)
                 callbacks?.onStarted?.({
-                    message: "Deploying code to sandbox service",
+                    message: msg("Deploying code to sandbox service"),
                     files: files.map(f => ({ filePath: f.filePath }))
                 });
 
@@ -401,7 +403,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 };
 
                 callbacks?.onCompleted?.({
-                    message: "Deployment completed",
+                    message: msg("Deployment completed"),
                     instanceId: preview.runId,
                     previewURL: preview.previewURL ?? '',
                     tunnelURL: preview.tunnelURL ?? ''
@@ -436,7 +438,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 });
 
                 callbacks?.onError?.({
-                    error: `Deployment attempt ${attempt} failed: ${errorMsg}`
+                    error: t("Deployment attempt {value1} failed: {value2}", { value1: String(attempt), value2: String(errorMsg) })
                 });
                 
                 // Exponential backoff before retry (capped at 30 seconds)
@@ -644,7 +646,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         await this.waitForPreview();
         
         callbacks?.onStarted?.({
-            message: 'Starting deployment to Cloudflare Workers...',
+            message: msg('Starting deployment to Cloudflare Workers...'),
             instanceId: state.sandboxInstanceId ?? ''
         });
         
@@ -654,9 +656,9 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
         if (!state.generatedFilesMap || Object.keys(state.generatedFilesMap).length === 0) {
             logger.error('No generated files available for deployment');
             callbacks?.onError?.({
-                message: 'Deployment failed: No generated code available',
+                message: msg('Deployment failed: No generated code available'),
                 instanceId: state.sandboxInstanceId ?? '',
-                error: 'No files have been generated yet'
+                error: msg('No files have been generated yet')
             });
             return { deploymentUrl: null };
         }
@@ -693,7 +695,7 @@ export class DeploymentManager extends BaseAgentService<BaseProjectState> implem
                 this.deployToSandbox();
             } else {
                 callbacks?.onError?.({
-                    message: `Deployment failed: ${deploymentResult?.message || 'Unknown error'}`,
+                    message: t("Deployment failed: {value1}", { value1: String(deploymentResult?.message || 'Unknown error') }),
                     instanceId: state.sandboxInstanceId ?? '',
                     error: deploymentResult?.error || 'Unknown deployment error'
                 });

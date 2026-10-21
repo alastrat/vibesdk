@@ -1,3 +1,4 @@
+import { t } from '../services/i18n/request-locale';
 /**
  * Centralized Authentication Utilities
  */
@@ -29,7 +30,7 @@ export function enforceAllowedEmail(
 	if (email.toLowerCase() !== allowedEmail.toLowerCase()) {
 		throw new SecurityError(
 			SecurityErrorType.UNAUTHORIZED,
-			`Email Whitelisting is enabled. Please use the allowed email to ${action}.`,
+			t("Email Whitelisting is enabled. Please use the allowed email to {value1}.", { value1: String(action) }),
 			403,
 		);
 	}

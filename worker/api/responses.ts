@@ -5,6 +5,8 @@
 import { RateLimitError } from "../services/rate-limit/errors";
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
 import { PLAN_LIMIT_CODE, type PlanLimitRefusal } from 'shared/types/plans';
+import { currentLocale } from '../services/i18n/request-locale';
+import { serverT } from '../services/i18n/server-t';
 /**
  * Standard response shape for all API endpoints
  */
@@ -44,10 +46,13 @@ export interface BaseApiResponse<T = unknown> {
  * Creates a success response with standard format
  */
 export function successResponse<T = unknown>(data: T, message?: string): Response {
+    const { t } = serverT(currentLocale());
+    const translatedData = data !== null && typeof data === 'object' && 'message' in data && typeof data.message === 'string'
+        ? { ...data, message: t(data.message) } : data;
     const responseBody: BaseApiResponse<T> = {
         success: true,
-        data,
-        message,
+        data: translatedData,
+        message: message ? t(message) : message,
     };
 
     return new Response(JSON.stringify(responseBody), {
@@ -62,8 +67,9 @@ export function successResponse<T = unknown>(data: T, message?: string): Respons
  * Creates an error response with standard format
  */
 export function errorResponse(error: string | Error | SecurityError, statusCode = 500, message?: string): Response {
+    const { t } = serverT(currentLocale());
     let errorResp: ErrorResponse = {
-        message: error instanceof Error ? error.message : error,
+        message: t(error instanceof Error ? error.message : error),
         name: error instanceof Error ? error.name : 'Error',
     }
     if (error instanceof SecurityError) {
@@ -85,7 +91,7 @@ export function errorResponse(error: string | Error | SecurityError, statusCode 
     const responseBody: BaseApiResponse = {
         success: false,
         error: errorResp,
-        message: message || (error instanceof Error ? error.message : 'An error occurred'),
+        message: t(message || (error instanceof Error ? error.message : 'An error occurred')),
     };
 
     return new Response(JSON.stringify(responseBody), {
@@ -101,10 +107,11 @@ export function errorResponse(error: string | Error | SecurityError, statusCode 
  * next step in one place.
  */
 export function planLimitResponse(refusal: PlanLimitRefusal): Response {
+    const translated = { ...refusal, message: serverT(currentLocale()).t(refusal.message) };
     const responseBody: BaseApiResponse = {
         success: false,
-        error: { message: refusal.message, name: 'PlanLimit', code: PLAN_LIMIT_CODE, planLimit: refusal },
-        message: refusal.message,
+        error: { message: translated.message, name: 'PlanLimit', code: PLAN_LIMIT_CODE, planLimit: translated },
+        message: translated.message,
     };
     return new Response(JSON.stringify(responseBody), {
         status: 402,

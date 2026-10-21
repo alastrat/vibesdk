@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 import { GitHubService } from '../../../services/github';
@@ -377,7 +378,7 @@ export class GitHubExporterController extends BaseController {
         try {
             if (!context.user) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'Authentication required',
+                    msg('Authentication required'),
                     401,
                 );
             }
@@ -393,7 +394,7 @@ export class GitHubExporterController extends BaseController {
             const ownershipResult = await appService.checkAppOwnership(body.agentId, context.user.id);
             if (!ownershipResult.isOwner) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'You do not have permission to access this app',
+                    msg('You do not have permission to access this app'),
                     403
                 );
             }
@@ -402,14 +403,14 @@ export class GitHubExporterController extends BaseController {
 
             if (!body.repositoryName) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'Repository name is required',
+                    msg('Repository name is required'),
                     400,
                 );
             }
 
             if (!body.agentId) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'Instance ID is required for file pushing',
+                    msg('Instance ID is required for file pushing'),
                     400,
                 );
             }
@@ -483,7 +484,7 @@ export class GitHubExporterController extends BaseController {
         } catch (error) {
             this.logger.error('Failed to initiate GitHub export', error);
             return GitHubExporterController.createErrorResponse<never>(
-                'Failed to initiate GitHub export',
+                msg('Failed to initiate GitHub export'),
                 500,
             );
         }
@@ -498,7 +499,7 @@ export class GitHubExporterController extends BaseController {
         try {
             if (!context.user) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'Authentication required',
+                    msg('Authentication required'),
                     401
                 );
             }
@@ -510,7 +511,7 @@ export class GitHubExporterController extends BaseController {
 
             if (!body.repositoryUrl || !body.agentId) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'Repository URL and agent ID are required',
+                    msg('Repository URL and agent ID are required'),
                     400
                 );
             }
@@ -519,7 +520,7 @@ export class GitHubExporterController extends BaseController {
             const ownershipResult = await appService.checkAppOwnership(body.agentId, context.user.id);
             if (!ownershipResult.isOwner) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'You do not have permission to access this app',
+                    msg('You do not have permission to access this app'),
                     403
                 );
             }
@@ -531,7 +532,7 @@ export class GitHubExporterController extends BaseController {
             
             if (!cachedToken) {
                 return GitHubExporterController.createErrorResponse<never>(
-                    'No cached GitHub token. Please re-authenticate.',
+                    msg('No cached GitHub token. Please re-authenticate.'),
                     401
                 );
             }
@@ -565,7 +566,7 @@ export class GitHubExporterController extends BaseController {
         } catch (error) {
             this.logger.error('Failed to check remote status', error);
             return GitHubExporterController.createErrorResponse<never>(
-                'Failed to check remote status',
+                msg('Failed to check remote status'),
                 500
             );
         }

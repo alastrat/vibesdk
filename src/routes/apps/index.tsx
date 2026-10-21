@@ -1,3 +1,4 @@
+import { t, tn, useI18n } from '@/lib/i18n';
 import { useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { toggleFavorite } from '@/hooks/use-apps';
@@ -10,6 +11,7 @@ import type { AppSortOption } from '@/api-types';
 import { pageTitle } from '@/brand';
 
 export default function AppsPage() {
+	useI18n();
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 
@@ -66,7 +68,7 @@ export default function AppsPage() {
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('My Apps')}</title>
+			<title>{pageTitle(t("My Apps"))}</title>
 			<div className="container mx-auto px-4 py-8">
 				<motion.div
 					initial={{ opacity: 0, y: -20 }}
@@ -75,13 +77,11 @@ export default function AppsPage() {
 				>
 					{/* Header */}
 					<div className="mb-8">
-						<h1 className="text-6xl font-bold mb-3 font-funky-mono text-kumo-brand">
-							MY APPS
-						</h1>
+						<h1 className="text-6xl font-bold mb-3 font-funky-mono text-kumo-brand">{t("MY APPS")}</h1>
 						<p className="text-kumo-subtle text-lg">
 							{loading
-								? 'Loading...'
-								: `${totalCount} app${totalCount !== 1 ? 's' : ''} in your workspace`}
+								? t("Loading...")
+								: tn('{count} app in your workspace', '{count} apps in your workspace', totalCount)}
 						</p>
 					</div>
 
@@ -99,7 +99,7 @@ export default function AppsPage() {
 								searchQuery={searchQuery}
 								onSearchChange={setSearchQuery}
 								onSearchSubmit={handleSearchSubmit}
-								searchPlaceholder="Search your apps..."
+								searchPlaceholder={t("Search your apps...")}
 								filterFramework={filterFramework}
 								onFrameworkChange={handleFrameworkChange}
 								filterVisibility={filterVisibility}
@@ -151,9 +151,9 @@ export default function AppsPage() {
 							sortBy === 'recent' &&
 							totalCount === 0
 								? {
-										title: 'No apps yet',
+										title: t("No apps yet"),
 										description:
-											'Start building your first app with AI assistance.',
+											t("Start building your first app with AI assistance."),
 										action: <div></div>,
 									}
 								: undefined

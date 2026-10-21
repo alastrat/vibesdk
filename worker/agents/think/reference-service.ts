@@ -1,3 +1,4 @@
+import { msg } from '../../../shared/i18n/translate';
 /**
  * Captures the reference URLs of a turn in parallel and stores their
  * screenshots in R2, where the screenshot endpoint and the model transport
@@ -42,20 +43,20 @@ function withBudget<T>(promise: Promise<T>, ms: number): Promise<T> {
 
 /** A short reason for the reference card and the model. */
 export function referenceFailureReason(error: unknown): string {
-	if (error instanceof CaptureTimeout) return 'timed out';
-	if (error instanceof StorageFailure) return 'the screenshots could not be saved';
+	if (error instanceof CaptureTimeout) return msg('timed out');
+	if (error instanceof StorageFailure) return msg('the screenshots could not be saved');
 	if (error instanceof ReferenceCaptureError) return error.message;
 	const message = error instanceof Error ? error.message : String(error);
 
 	// Check for wrapped sidecar errors first, before other patterns
 	const httpMatch = message.match(/\bHTTP \d{3}\b/);
 	if (httpMatch) return httpMatch[0];
-	if (message.includes('not an HTML page')) return 'not an HTML page';
+	if (message.includes('not an HTML page')) return msg('not an HTML page');
 
-	if (/\b429\b|too many|rate limit|concurrenc/i.test(message)) return 'Browser capture busy, try again';
-	if (/timeout|timed out/i.test(message)) return 'timed out';
-	if (/net::|ERR_/.test(message)) return 'the page could not be reached';
-	return 'the page could not be loaded';
+	if (/\b429\b|too many|rate limit|concurrenc/i.test(message)) return msg('Browser capture busy, try again');
+	if (/timeout|timed out/i.test(message)) return msg('timed out');
+	if (/net::|ERR_/.test(message)) return msg('the page could not be reached');
+	return msg('the page could not be loaded');
 }
 
 async function captureOne(url: string, deps: ReferenceDeps): Promise<ReferenceOutcome> {

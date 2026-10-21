@@ -1,3 +1,4 @@
+import { msg } from '../i18n/translate';
 /** Emails Estori sends shoppers on a store's behalf, one template per order event (spec 2026-10-18). Transactional only: Cloudflare Email Service allows no marketing email. */
 
 export const SHOPPER_EMAIL_KINDS = ['order_confirmation', 'order_shipped', 'refund_issued'] as const;
@@ -8,9 +9,9 @@ export function isShopperEmailKind(value: string): value is ShopperEmailKind {
 }
 
 export const SHOPPER_EMAIL_LABELS: Readonly<Record<ShopperEmailKind, { name: string; when: string }>> = {
-	order_confirmation: { name: 'Order confirmation', when: 'When a shopper pays for an order.' },
-	order_shipped: { name: 'Order shipped', when: 'When you mark an order shipped, and when Estori ships catalog items.' },
-	refund_issued: { name: 'Refund issued', when: 'When you or Estori refund items.' },
+	order_confirmation: { name: msg('Order confirmation'), when: msg('When a shopper pays for an order.') },
+	order_shipped: { name: msg('Order shipped'), when: msg('When you mark an order shipped, and when Estori ships catalog items.') },
+	refund_issued: { name: msg('Refund issued'), when: msg('When you or Estori refund items.') },
 };
 
 const COMMON_PLACEHOLDERS = ['store_name', 'customer_name', 'customer_first_name', 'order_number', 'order_total'] as const;

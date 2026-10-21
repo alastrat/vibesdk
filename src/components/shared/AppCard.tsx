@@ -1,3 +1,6 @@
+import { dateFnsLocale } from '@/lib/i18n/date-locale';
+import { INTL_LOCALE } from 'shared/i18n/locales';
+import { getLocale, t, useI18n, msg } from '@/lib/i18n';
 import React from 'react';
 import { Badge, cn } from '@cloudflare/kumo';
 import { motion } from 'framer-motion';
@@ -68,26 +71,26 @@ const DEPLOYMENT_STATUS_CONFIG: Record<DeploymentStatus, DeploymentStatusInfo> =
 			icon: Cloud,
 			color: 'text-green-500',
 			bgColor: 'bg-green-50 dark:bg-green-950',
-			text: 'Deployed',
+			text: msg("Deployed"),
 		},
 		deploying: {
 			icon: Loader2,
 			color: 'text-green-400',
 			bgColor: 'bg-green-50 dark:bg-green-950',
-			text: 'Deploying',
+			text: msg("Deploying"),
 			animate: true,
 		},
 		failed: {
 			icon: CloudOff,
 			color: 'text-gray-500',
 			bgColor: 'bg-gray-50 dark:bg-gray-950',
-			text: 'Deploy Failed',
+			text: msg("Deploy Failed"),
 		},
 		none: {
 			icon: CloudOff,
 			color: 'text-gray-500',
 			bgColor: 'bg-gray-50 dark:bg-gray-950',
-			text: 'Not Deployed',
+			text: msg("Not Deployed"),
 		},
 	};
 
@@ -203,9 +206,7 @@ function getLayoutConfig(
 }
 
 function formatStat(value: number): string {
-	if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-	if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, '')}k`;
-	return String(value || 0);
+	return new Intl.NumberFormat(INTL_LOCALE[getLocale()], { notation: 'compact', maximumFractionDigits: 1 }).format(value || 0);
 }
 
 const StatItem = ({
@@ -227,7 +228,7 @@ const StatsDisplay = ({ stats }: { stats: StatsData }) => (
 	<div className="flex items-center gap-3">
 		<StatItem icon={STATS_ICONS.starCount} value={stats.starCount || 0} />
 		<StatItem icon={STATS_ICONS.viewCount} value={stats.viewCount || 0} />
-		<span title="Apps started from this site" className="inline-flex">
+		<span title={t("Apps started from this site")} className="inline-flex">
 			<StatItem icon={STATS_ICONS.forkCount} value={stats.forkCount || 0} />
 		</span>
 	</div>
@@ -258,7 +259,7 @@ const UserAvatar = ({
 		)}
 	>
 		{avatarUrl ? (
-			<AvatarImage src={avatarUrl} alt={name || 'User'} />
+			<AvatarImage src={avatarUrl} alt={name || t("User")} />
 		) : null}
 		<AvatarFallback className="bg-kumo-elevated text-[11px] font-semibold text-kumo-default">
 			{getUserInitials(name)}
@@ -275,6 +276,10 @@ const AppMetadata = ({
 	layoutConfig: LayoutConfig;
 	hasOverlayStatus?: boolean;
 }) => {
+	useI18n();
+	const updated = app.updatedAt
+		? formatDistanceToNow(new Date(app.updatedAt), { addSuffix: true, locale: dateFnsLocale(getLocale()) })
+		: null;
 	if (layoutConfig.primaryMetadata === 'social' && isPublicApp(app)) {
 		return (
 			<div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -339,21 +344,14 @@ const AppMetadata = ({
 											'text-gray-500' && 'text-kumo-subtle',
 									)}
 								>
-									{deploymentStatus.text}
+									{t(deploymentStatus.text)}
 								</span>
 							</div>
 							<span className="text-kumo-subtle/40">·</span>
 						</>
 					)}
 					<span className="text-xs text-kumo-subtle">
-						Updated{' '}
-						{isUserApp(app)
-							? app.updatedAtFormatted
-							: isEnhancedApp(app) && app.updatedAt
-								? formatDistanceToNow(new Date(app.updatedAt), {
-										addSuffix: true,
-									})
-								: 'Recently'}
+						{updated ? t("Updated {value1}", { value1: updated }) : t("Recently updated")}
 					</span>
 				</div>
 			</div>
@@ -366,9 +364,7 @@ const AppMetadata = ({
 				{app.title}
 			</span>
 			<span className="text-xs text-kumo-subtle">
-				{isUserApp(app)
-					? `Updated ${app.updatedAtFormatted}`
-					: 'Recently updated'}
+				{updated ? t("Updated {value1}", { value1: updated }) : t("Recently updated")}
 			</span>
 		</div>
 	);
@@ -382,6 +378,7 @@ export const AppCard = React.memo<AppCardProps>(
 		showActions = false,
 		className,
 	}) => {
+	useI18n();
 		const layoutConfig = getLayoutConfig(showUser, showActions);
 		const deploymentState = getAppDeploymentStatus(app);
 		const isDeploying = deploymentState === 'deploying';
@@ -439,7 +436,7 @@ export const AppCard = React.memo<AppCardProps>(
 							{app.screenshotUrl ? (
 								<img
 									src={app.screenshotUrl}
-									alt={`${app.title} preview`}
+									alt={t("{value1} preview", { value1: app.title })}
 									className={cn(
 										'size-full object-cover',
 										'scale-100 transition-transform duration-200 ease-out group-hover:scale-105',
@@ -477,9 +474,7 @@ export const AppCard = React.memo<AppCardProps>(
 									<div className="flex size-12 items-center justify-center rounded-2xl bg-kumo-base/70 ring-1 ring-kumo-hairline backdrop-blur-sm">
 										<Code2 className="size-5" />
 									</div>
-									<span className="text-xs font-medium">
-										Preview unavailable
-									</span>
+									<span className="text-xs font-medium">{t("Preview unavailable")}</span>
 								</div>
 							</div>
 
@@ -498,23 +493,19 @@ export const AppCard = React.memo<AppCardProps>(
 							{isDeploying && (
 								<div
 									className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-kumo-base/90 px-2 py-1 text-xs font-medium text-kumo-success shadow-sm ring-1 ring-kumo-success/20 backdrop-blur-md"
-									title="App is deploying"
-									aria-label="App deployment in progress"
+									title={t("App is deploying")}
+									aria-label={t("App deployment in progress")}
 								>
-									<Loader2 className="size-3 animate-spin" />
-									Deploying
-								</div>
+									<Loader2 className="size-3 animate-spin" />{t("Deploying")}</div>
 							)}
 
 							{isFailed && (
 								<div
 									className="absolute left-3 top-3 inline-flex items-center gap-1.5 rounded-full bg-kumo-base/90 px-2 py-1 text-xs font-medium text-kumo-subtle shadow-sm ring-1 ring-kumo-line backdrop-blur-md"
-									title="Deployment failed"
-									aria-label="App deployment failed"
+									title={t("Deployment failed")}
+									aria-label={t("App deployment failed")}
 								>
-									<CloudOff className="size-3" />
-									Failed
-								</div>
+									<CloudOff className="size-3" />{t("Failed")}</div>
 							)}
 
 							{showActions && (
@@ -568,8 +559,8 @@ export const AppCard = React.memo<AppCardProps>(
 												);
 											}
 										}}
-										title={`View on GitHub (${app.githubRepositoryVisibility || 'public'})`}
-										aria-label="View repository on GitHub"
+										title={t("View on GitHub ({value1})", { value1: app.githubRepositoryVisibility || 'public' })}
+										aria-label={t("View repository on GitHub")}
 									>
 										<Github className="size-3.5" />
 									</button>

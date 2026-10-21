@@ -1,5 +1,6 @@
 import type { Locale } from '../../../shared/i18n/locales';
-import { STRIPE_JS_URL } from '../../../shared/types/stripe';
+import { STRIPE_JS_URL, STRIPE_LOCALES, type StripeLocale } from '../../../shared/types/stripe';
+export { STRIPE_LOCALES, type StripeLocale } from '../../../shared/types/stripe';
 
 /** Appearance for Elements. Only the theme and the variables Estori sets are typed. */
 export interface StripeAppearance {
@@ -96,12 +97,6 @@ export interface StripeJs {
 	initCheckoutElementsSdk(options: StripeCheckoutSdkOptions): StripeCheckoutSdk;
 	handleNextAction(options: { clientSecret: string }): Promise<StripeNextActionResult>;
 }
-
-/** The languages of Stripe's own text (the card form, its errors) that match the app's. */
-export type StripeLocale = 'en' | 'es-419' | 'pt-BR';
-
-/** Latin American Spanish, as the app's Spanish is; Stripe's plain `es` is Spain's. */
-export const STRIPE_LOCALES: Record<Locale, StripeLocale> = { en: 'en', es: 'es-419', 'pt-BR': 'pt-BR' };
 
 type StripeFactory = (publishableKey: string, options?: { locale: StripeLocale }) => StripeJs;
 

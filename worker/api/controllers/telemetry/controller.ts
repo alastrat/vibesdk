@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** Analytics for the browser: PostHog's config, the user's analytics setting, and the flags admin view. */
 
 import { BaseController } from '../baseController';
@@ -43,7 +44,7 @@ export class TelemetryController extends BaseController {
 	/** GET /api/user/analytics. Reading it with a GPC signal stores the opt-out. */
 	static async getAnalyticsPreference(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AnalyticsPreferenceData>>> {
 		const user = context.user;
-		if (!user) return this.createErrorResponse<AnalyticsPreferenceData>('Unauthorized', 401);
+		if (!user) return this.createErrorResponse<AnalyticsPreferenceData>(msg('Unauthorized'), 401);
 		try {
 			const optedOut = await honorAnalyticsChoice(env, request, user.id);
 			const { source } = await new AnalyticsPersonService(env).preference(user.id);
@@ -56,10 +57,10 @@ export class TelemetryController extends BaseController {
 	/** PUT /api/user/analytics with `{ optedOut }`. Analytics can't be turned on while the browser sends GPC. */
 	static async setAnalyticsPreference(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AnalyticsPreferenceData>>> {
 		const user = context.user;
-		if (!user) return this.createErrorResponse<AnalyticsPreferenceData>('Unauthorized', 401);
+		if (!user) return this.createErrorResponse<AnalyticsPreferenceData>(msg('Unauthorized'), 401);
 		const body = await this.parseJsonBody<{ optedOut?: unknown }>(request);
 		const optedOut = body.success ? body.data?.optedOut : undefined;
-		if (typeof optedOut !== 'boolean') return this.createErrorResponse<AnalyticsPreferenceData>('Say whether analytics is on or off.', 400);
+		if (typeof optedOut !== 'boolean') return this.createErrorResponse<AnalyticsPreferenceData>(msg('Say whether analytics is on or off.'), 400);
 		const gpc = gpcSignal(request);
 		if (!optedOut && gpc) return this.createErrorResponse<AnalyticsPreferenceData>(GPC_ANALYTICS_MESSAGE, 409);
 		try {
@@ -73,7 +74,7 @@ export class TelemetryController extends BaseController {
 	/** GET /api/admin/flags: every flag's value for the admin asking, its rollout when known, and where to change it. Read-only. */
 	static async adminFlags(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AdminFlagsData>>> {
 		const userId = context.user?.id;
-		if (!userId) return this.createErrorResponse<AdminFlagsData>('Unauthorized', 401);
+		if (!userId) return this.createErrorResponse<AdminFlagsData>(msg('Unauthorized'), 401);
 		const [evaluation, rollouts] = await Promise.all([flagsFor(env, userId), flagRollouts(env, (input, init) => fetch(input, init))]);
 		return this.createSuccessResponse({
 			userId,

@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 import { AppService } from '../../../database/services/AppService';
 import { LiveStoreService } from '../../../database/services/LiveStoreService';
 import { releaseDeletedStoreDomain } from '../../../services/live-stores/domain-checks';
@@ -40,7 +41,7 @@ export class AppController extends BaseController {
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching user apps:', error);
-            return AppController.createErrorResponse<AppsListData>('Failed to fetch apps', 500);
+            return AppController.createErrorResponse<AppsListData>(msg('Failed to fetch apps'), 500);
         }
     }
 
@@ -59,7 +60,7 @@ export class AppController extends BaseController {
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching recent apps:', error);
-            return AppController.createErrorResponse<AppsListData>('Failed to fetch recent apps', 500);
+            return AppController.createErrorResponse<AppsListData>(msg('Failed to fetch recent apps'), 500);
         }
     }
 
@@ -78,7 +79,7 @@ export class AppController extends BaseController {
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching favorite apps:', error);
-            return AppController.createErrorResponse<AppsListData>('Failed to fetch favorite apps', 500);
+            return AppController.createErrorResponse<AppsListData>(msg('Failed to fetch favorite apps'), 500);
         }
     }
 
@@ -91,19 +92,19 @@ export class AppController extends BaseController {
             const appService = new AppService(env);
             const appId = context.pathParams.id;
             if (!appId) {
-                return AppController.createErrorResponse<FavoriteToggleData>('App ID is required', 400);
+                return AppController.createErrorResponse<FavoriteToggleData>(msg('App ID is required'), 400);
             }
 
             // Check if app exists and get ownership/visibility info
             const ownershipResult = await appService.checkAppOwnership(appId, user.id);
 
             if (!ownershipResult.exists) {
-                return AppController.createErrorResponse<FavoriteToggleData>('App not found', 404);
+                return AppController.createErrorResponse<FavoriteToggleData>(msg('App not found'), 404);
             }
 
             // Authorization: only allow favorite if user owns the app OR app is public
             if (!ownershipResult.isOwner && ownershipResult.visibility !== 'public') {
-                return AppController.createErrorResponse<FavoriteToggleData>('App not found', 404);
+                return AppController.createErrorResponse<FavoriteToggleData>(msg('App not found'), 404);
             }
 
             const result = await appService.toggleAppFavorite(user.id, appId);
@@ -112,7 +113,7 @@ export class AppController extends BaseController {
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error toggling favorite:', error);
-            return AppController.createErrorResponse<FavoriteToggleData>('Failed to toggle favorite', 500);
+            return AppController.createErrorResponse<FavoriteToggleData>(msg('Failed to toggle favorite'), 500);
         }
     }
 
@@ -124,7 +125,7 @@ export class AppController extends BaseController {
                 await RateLimitService.enforcePublicAppsRateLimit(env, context.config.security.rateLimit, user ?? null, request);
             } catch (error) {
                 if (error instanceof RateLimitExceededError) {
-                    return AppController.createErrorResponse<PublicAppsData>('Too many requests', 429);
+                    return AppController.createErrorResponse<PublicAppsData>(msg('Too many requests'), 429);
                 }
                 throw error;
             }
@@ -182,7 +183,7 @@ export class AppController extends BaseController {
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             AppController.logger.error('Error fetching public apps:', error);
-            return AppController.createErrorResponse<PublicAppsData>('Failed to fetch public apps', 500);
+            return AppController.createErrorResponse<PublicAppsData>(msg('Failed to fetch public apps'), 500);
         }
     }
 
@@ -193,21 +194,21 @@ export class AppController extends BaseController {
 
             const appId = context.pathParams.id;
             if (!appId) {
-                return AppController.createErrorResponse<SingleAppData>('App ID is required', 400);
+                return AppController.createErrorResponse<SingleAppData>(msg('App ID is required'), 400);
             }
             
             const appService = new AppService(env);
             const app = await appService.getSingleAppWithFavoriteStatus(appId, user.id);
 
             if (!app) {
-                return AppController.createErrorResponse<SingleAppData>('App not found', 404);
+                return AppController.createErrorResponse<SingleAppData>(msg('App not found'), 404);
             }
 
             const responseData: SingleAppData = { app };
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching app:', error);
-            return AppController.createErrorResponse<SingleAppData>('Failed to fetch app', 500);
+            return AppController.createErrorResponse<SingleAppData>(msg('Failed to fetch app'), 500);
         }
     }
 
@@ -218,7 +219,7 @@ export class AppController extends BaseController {
 
             const appId = context.pathParams.id;
             if (!appId) {
-                return AppController.createErrorResponse<AppDeleteData>('App ID is required', 400);
+                return AppController.createErrorResponse<AppDeleteData>(msg('App ID is required'), 400);
             }
         
             const appService = new AppService(env);
@@ -235,12 +236,12 @@ export class AppController extends BaseController {
 
             const responseData: AppDeleteData = {
                 success: true,
-                message: 'App deleted successfully'
+                message: msg('App deleted successfully')
             };
             return AppController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error deleting app:', error);
-            return AppController.createErrorResponse<AppDeleteData>('Failed to delete app', 500);
+            return AppController.createErrorResponse<AppDeleteData>(msg('Failed to delete app'), 500);
         }
     }
 }

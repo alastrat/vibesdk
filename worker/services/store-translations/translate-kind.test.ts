@@ -153,6 +153,14 @@ const translated = async (locale: Locale = 'es') => new Map((await rowsOf(locale
 const targetOf = async (locale: Locale = 'es') => (await service().settingsOf('app_1')).targets[locale];
 
 describe('the store.translate kind', () => {
+	it('finishes an already-ready language top-up with skipped texts as done', async () => {
+		await service().markReady('app_1', 'es', NOW);
+		const model = fakeModel((items) => items.map(({ id }) => ({ id, text: 'Hola' })));
+		const run = queue({ model: model.model, refresh: reading(named('Hello {name}')).refresh });
+		await run.start();
+		expect(await run.finish()).toMatchObject({ status: 'done', progress: { done: 0, total: 1, skipped: 1 } });
+		expect(await targetOf()).toMatchObject({ ready: true });
+	});
 	it('is registered, reads its payload, and keys one task per store and language', () => {
 		expect(taskKind('store.translate')).toBe(storeTranslateKind);
 		expect(storeTranslateKind.parsePayload({ appId: 'app_1', locale: 'pt-BR' })).toEqual({ appId: 'app_1', locale: 'pt-BR' });
@@ -473,7 +481,7 @@ describe('the store.translate kind', () => {
 
 		expect(task).toMatchObject({ status: 'done', progress: { done: 0, total: 0, skipped: 0 } });
 		expect(model.requests).toHaveLength(0);
-		expect(await service().settingsOf('app_1')).toEqual(before);
+		expect(await service().settingsOf('app_1')).toEqual({ ...before, extractedAt: NOW });
 	});
 
 	it('seller edits are never sent or overwritten', async () => {

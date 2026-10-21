@@ -1,3 +1,5 @@
+import { INTL_LOCALE } from 'shared/i18n/locales';
+import { t, tn, useI18n } from '@/lib/i18n';
 import React, { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -82,12 +84,12 @@ const ModalHeader: React.FC<{ mode: string; existingUrl?: string | null; onClose
             </div>
             <div>
                 <h2 className="text-lg font-semibold text-text-secondary">
-                    {mode === 'sync' ? 'Sync to GitHub' : 'Export to GitHub'}
+                    {mode === 'sync' ? t("Sync to GitHub") : t("Export to GitHub")}
                 </h2>
                 <p className="text-sm text-text-primary/60">
                     {mode === 'sync' && existingUrl
-                        ? `Update ${extractRepoName(existingUrl)} with your latest changes`
-                        : 'Create a new repository with your generated code'
+                        ? t("Update {value1} with your latest changes", { value1: extractRepoName(existingUrl) })
+                        : t("Create a new repository with your generated code")
                     }
                 </p>
             </div>
@@ -100,7 +102,7 @@ const ModalHeader: React.FC<{ mode: string; existingUrl?: string | null; onClose
     </div>
 );
 
-const StatusMessage: React.FC<{ icon: React.ComponentType<any>; iconColor: string; title: string; message: string; children?: React.ReactNode }> =
+const StatusMessage: React.FC<{ icon: React.ComponentType<{ className?: string }>; iconColor: string; title: string; message: string; children?: React.ReactNode }> =
     ({ icon: Icon, iconColor, title, message, children }) => (
     <div className="text-center py-8">
         <Icon className={`w-12 h-12 ${iconColor} mx-auto mb-4`} />
@@ -149,6 +151,7 @@ export function GitHubExportModal({
     agentId,
     appTitle
 }: GitHubExportModalProps) {
+	const { locale } = useI18n();
     const [repositoryName, setRepositoryName] = useState('');
     const [description, setDescription] = useState('');
     const [isPrivate, setIsPrivate] = useState(false);
@@ -279,24 +282,19 @@ export function GitHubExportModal({
                     {showConflictWarning && remoteStatus && remoteStatus.aheadBy > 0 ? (
                         <div className="py-6">
                             <AlertCircle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-                            <h3 className="text-lg font-semibold text-text-primary mb-2 text-center">
-                                Repository Has Different History
-                            </h3>
+                            <h3 className="text-lg font-semibold text-text-primary mb-2 text-center">{t("Repository Has Different History")}</h3>
                             <div className="text-sm text-text-primary/80 space-y-3">
-                                <p>
-                                    Remote has <strong>{remoteStatus.aheadBy} commit(s)</strong> not in your app.
-                                    Your app has <strong>{remoteStatus.behindBy} commit(s)</strong> not on GitHub.
-                                </p>
+                                <p>{tn('GitHub has {count} commit not in your app.', 'GitHub has {count} commits not in your app.', remoteStatus.aheadBy)}{' '}{tn('Your app has {count} commit not on GitHub.', 'Your app has {count} commits not on GitHub.', remoteStatus.behindBy)}</p>
 
                                 {remoteStatus.divergedCommits.length > 0 && (
                                     <div>
-                                        <p className="font-medium mb-2">Commits that will be lost:</p>
+                                        <p className="font-medium mb-2">{t("Commits that will be lost:")}</p>
                                         <div className="bg-kumo-elevated rounded-lg p-3 max-h-32 overflow-y-auto space-y-2">
                                             {remoteStatus.divergedCommits.slice(0, 5).map((commit, i) => (
                                                 <div key={i} className="text-xs">
                                                     <div className="font-medium">{commit.message}</div>
                                                     <div className="text-text-primary/50">
-                                                        {commit.author} • {new Date(commit.date).toLocaleString()}
+                                                        {commit.author} • {new Date(commit.date).toLocaleString(INTL_LOCALE[locale])}
                                                     </div>
                                                 </div>
                                             ))}
@@ -305,10 +303,7 @@ export function GitHubExportModal({
                                 )}
 
                                 <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
-                                    <p className="text-yellow-600 dark:text-yellow-400 font-medium">
-                                        ⚠️ Force pushing will replace GitHub's history with yours.
-                                        This action cannot be undone.
-                                    </p>
+                                    <p className="text-yellow-600 dark:text-yellow-400 font-medium">{t("Force pushing will replace GitHub's history with yours. This action cannot be undone.")}</p>
                                 </div>
                             </div>
 
@@ -319,18 +314,14 @@ export function GitHubExportModal({
                                         onClose();
                                     }}
                                     className={`flex-1 ${BUTTON_STYLES.secondary}`}
-                                >
-                                    Cancel
-                                </button>
+                                >{t("Cancel")}</button>
                                 <button
                                     onClick={() => {
                                         setShowConflictWarning(false);
                                         handleExport();
                                     }}
                                     className={`flex-1 ${BUTTON_STYLES.warning}`}
-                                >
-                                    Force Push Anyway
-                                </button>
+                                >{t("Force Push Anyway")}</button>
                             </div>
                         </div>
                     ) : exportResult ? (
@@ -338,8 +329,8 @@ export function GitHubExportModal({
                             <StatusMessage
                                 icon={CheckCircle}
                                 iconColor="text-green-500"
-                                title="Export Successful!"
-                                message="Your code has been successfully exported to GitHub"
+                                title={t("Export Successful!")}
+                                message={t("Your code has been successfully exported to GitHub")}
                             >
                                 <a
                                     href={exportResult.repositoryUrl}
@@ -347,16 +338,14 @@ export function GitHubExportModal({
                                     rel="noopener noreferrer"
                                     className={`inline-flex items-center gap-2 ${BUTTON_STYLES.secondary}`}
                                 >
-                                    <Github className="w-4 h-4" />
-                                    View Repository
-                                </a>
+                                    <Github className="w-4 h-4" />{t("View Repository")}</a>
                             </StatusMessage>
                         ) : exportResult.repositoryAlreadyExists && exportResult.existingRepositoryUrl ? (
                             <StatusMessage
                                 icon={AlertCircle}
                                 iconColor="text-orange-500"
-                                title="Repository Already Exists"
-                                message="A repository with this name already exists on your GitHub account:"
+                                title={t("Repository Already Exists")}
+                                message={t("A repository with this name already exists on your GitHub account:")}
                             >
                                     <a
                                         href={exportResult.existingRepositoryUrl}
@@ -366,38 +355,26 @@ export function GitHubExportModal({
                                     >
                                         {exportResult.existingRepositoryUrl}
                                     </a>
-                                    <p className="text-sm text-text-primary/60 mb-6">
-                                        Would you like to sync your changes to this existing repository?
-                                    </p>
+                                    <p className="text-sm text-text-primary/60 mb-6">{t("Would you like to sync your changes to this existing repository?")}</p>
                                 <div className="space-x-2">
-                                    <button onClick={handleExport} className={BUTTON_STYLES.primary}>
-                                        Sync to Existing
-                                    </button>
-                                    <button onClick={onRetry || onClose} className={BUTTON_STYLES.secondary}>
-                                        Change Name
-                                    </button>
-                                    <button onClick={onClose} className={BUTTON_STYLES.ghost}>
-                                        Cancel
-                                    </button>
+                                    <button onClick={handleExport} className={BUTTON_STYLES.primary}>{t("Sync to Existing")}</button>
+                                    <button onClick={onRetry || onClose} className={BUTTON_STYLES.secondary}>{t("Change Name")}</button>
+                                    <button onClick={onClose} className={BUTTON_STYLES.ghost}>{t("Cancel")}</button>
                                 </div>
                             </StatusMessage>
                         ) : (
                             <StatusMessage
                                 icon={AlertCircle}
                                 iconColor="text-red-500"
-                                title="Export Failed"
-                                message={exportResult.error || 'An error occurred during export'}
+                                title={t("Export Failed")}
+                                message={exportResult.error || t("An error occurred during export")}
                             >
                                 <div className="space-x-2">
                                     <button
                                         onClick={onRetry || (() => window.location.reload())}
                                         className={BUTTON_STYLES.secondary}
-                                    >
-                                        Try Again
-                                    </button>
-                                    <button onClick={onClose} className={BUTTON_STYLES.ghost}>
-                                        Close
-                                    </button>
+                                    >{t("Try Again")}</button>
+                                    <button onClick={onClose} className={BUTTON_STYLES.ghost}>{t("Close")}</button>
                                 </div>
                             </StatusMessage>
                         )
@@ -405,13 +382,13 @@ export function GitHubExportModal({
                         <div className="py-8">
                             <div className="text-center mb-6">
                                 <Loader className="w-8 h-8 text-brand mx-auto mb-4 animate-spin" />
-                                <h3 className="text-lg font-semibold text-text-primary mb-2">Exporting to GitHub</h3>
+                                <h3 className="text-lg font-semibold text-text-primary mb-2">{t("Exporting to GitHub")}</h3>
                                 <p className="text-sm text-text-primary/60">{exportProgress.message}</p>
                             </div>
 
                             <div className="mb-4">
                                 <div className="flex justify-between text-xs text-text-primary/60 mb-2">
-                                    <span>Progress</span>
+                                    <span>{t("Progress")}</span>
                                     <span>{exportProgress.progress}%</span>
                                 </div>
                                 <div className="w-full bg-kumo-elevated rounded-full h-2">
@@ -426,17 +403,17 @@ export function GitHubExportModal({
 
                             <div className="flex justify-between text-xs">
                                 <ProgressStep
-                                    label="Creating Repository"
+                                    label={t("Creating Repository")}
                                     isActive={exportProgress.step === 'creating_repository'}
                                     isComplete={exportProgress.progress > 30}
                                 />
                                 <ProgressStep
-                                    label="Uploading Files"
+                                    label={t("Uploading Files")}
                                     isActive={exportProgress.step === 'uploading_files'}
                                     isComplete={exportProgress.progress > 70}
                                 />
                                 <ProgressStep
-                                    label="Finalizing"
+                                    label={t("Finalizing")}
                                     isActive={exportProgress.step === 'finalizing'}
                                     isComplete={exportProgress.progress > 90}
                                 />
@@ -449,9 +426,7 @@ export function GitHubExportModal({
                                     <div className="flex items-start gap-2">
                                         <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
                                         <div className="flex-1">
-                                            <p className="text-sm font-medium text-green-600 dark:text-green-400">
-                                                Last sync successful
-                                            </p>
+                                            <p className="text-sm font-medium text-green-600 dark:text-green-400">{t("Last sync successful")}</p>
                                             <a
                                                 href={lastExportSuccess.repositoryUrl}
                                                 target="_blank"
@@ -473,14 +448,12 @@ export function GitHubExportModal({
                             )}
 
                             <div>
-                                <label className="block text-sm font-medium text-text-primary mb-2">
-                                    Repository Name *
-                                </label>
+                                <label className="block text-sm font-medium text-text-primary mb-2">{t("Repository Name *")}</label>
                                 <input
                                     type="text"
                                     value={repositoryName}
                                     onChange={(e) => setRepositoryName(e.target.value)}
-                                    placeholder="my-awesome-app"
+                                    placeholder={t("my-awesome-app")}
                                     className="w-full px-3 py-2 bg-kumo-elevated border rounded-lg text-text-primary placeholder:text-text-primary/40 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand"
                                     required
                                 />
@@ -489,16 +462,12 @@ export function GitHubExportModal({
                             {mode === 'sync' && existingGithubUrl && (
                                 <div className="p-3 bg-kumo-elevated rounded-lg space-y-2">
                                     <div className="flex items-center justify-between">
-                                        <p className="text-xs font-medium text-text-primary/60">
-                                            Remote Repository
-                                        </p>
+                                        <p className="text-xs font-medium text-text-primary/60">{t("Remote Repository")}</p>
                                         <button
                                             type="button"
                                             onClick={() => setMode('change_repo')}
                                             className="text-xs text-brand hover:text-brand/80 transition-colors"
-                                        >
-                                            Change
-                                        </button>
+                                        >{t("Change")}</button>
                                     </div>
 
                                     <a
@@ -513,26 +482,24 @@ export function GitHubExportModal({
 
                                     {isCheckingRemote ? (
                                         <div className="flex items-center gap-2 text-xs text-text-primary/60 pt-1">
-                                            <Loader className="w-3 h-3 animate-spin" />
-                                            Checking sync status...
-                                        </div>
+                                            <Loader className="w-3 h-3 animate-spin" />{t("Checking sync status...")}</div>
                                     ) : remoteStatus ? (
                                         <div className="pt-1">
                                             {remoteStatus.compatible ? (
                                                 remoteStatus.behindBy === 0 && remoteStatus.aheadBy === 0 ? (
-                                                    <StatusIndicator type="success" message="Up to date" />
+                                                    <StatusIndicator type="success" message={t("Up to date")} />
                                                 ) : (
                                                     <div className="space-y-1">
                                                         {remoteStatus.behindBy > 0 && (
                                                             <StatusIndicator
                                                                 type="warning"
-                                                                message={`Local has ${remoteStatus.behindBy} unpushed commit${remoteStatus.behindBy !== 1 ? 's' : ''}`}
+                                                                message={tn('Local has {count} unpushed commit', 'Local has {count} unpushed commits', remoteStatus.behindBy)}
                                                             />
                                                         )}
                                                         {remoteStatus.aheadBy > 0 && (
                                                             <StatusIndicator
                                                                 type="warning"
-                                                                message={`Remote has ${remoteStatus.aheadBy} newer commit${remoteStatus.aheadBy !== 1 ? 's' : ''}`}
+                                                                message={tn('Remote has {count} newer commit', 'Remote has {count} newer commits', remoteStatus.aheadBy)}
                                                             />
                                                         )}
                                                     </div>
@@ -540,7 +507,7 @@ export function GitHubExportModal({
                                             ) : (
                                                 <StatusIndicator
                                                     type="error"
-                                                    message="Incompatible histories - force push required"
+                                                    message={t("Incompatible histories - force push required")}
                                                 />
                                             )}
                                         </div>
@@ -551,13 +518,11 @@ export function GitHubExportModal({
 
                             {mode !== 'sync' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-text-primary mb-2">
-                                        Description (Optional)
-                                    </label>
+                                    <label className="block text-sm font-medium text-text-primary mb-2">{t("Description (Optional)")}</label>
                                     <textarea
                                         value={description}
                                         onChange={(e) => setDescription(e.target.value)}
-                                        placeholder="A brief description of your app..."
+                                        placeholder={t("A brief description of your app...")}
                                         rows={3}
                                         className="w-full px-3 py-2 bg-kumo-elevated border rounded-lg text-text-primary placeholder:text-text-primary/40 focus:outline-none focus:ring-2 focus:ring-brand/50 focus:border-brand resize-none"
                                     />
@@ -566,9 +531,7 @@ export function GitHubExportModal({
 
                             {mode !== 'sync' && (
                                 <div>
-                                    <label className="block text-sm font-medium text-text-primary mb-3">
-                                        Repository Privacy
-                                    </label>
+                                    <label className="block text-sm font-medium text-text-primary mb-3">{t("Repository Privacy")}</label>
                                     <div className="space-y-2">
                                         <label className="flex items-center gap-3 p-3 bg-kumo-elevated rounded-lg cursor-pointer hover:bg-border transition-colors">
                                             <input
@@ -580,8 +543,8 @@ export function GitHubExportModal({
                                             />
                                             <Globe className="w-4 h-4 text-text-primary/60" />
                                             <div>
-                                                <p className="text-sm font-medium text-text-secondary">Public</p>
-                                                <p className="text-xs text-text-primary/60">Anyone can see this repository</p>
+                                                <p className="text-sm font-medium text-text-secondary">{t("Public")}</p>
+                                                <p className="text-xs text-text-primary/60">{t("Anyone can see this repository")}</p>
                                             </div>
                                         </label>
                                         <label className="flex items-center gap-3 p-3 bg-kumo-elevated rounded-lg cursor-pointer hover:bg-border transition-colors">
@@ -594,8 +557,8 @@ export function GitHubExportModal({
                                             />
                                             <Lock className="w-4 h-4 text-text-primary/60" />
                                             <div>
-                                                <p className="text-sm font-medium text-text-secondary">Private</p>
-                                                <p className="text-xs text-text-primary/60">Only you can see this repository</p>
+                                                <p className="text-sm font-medium text-text-secondary">{t("Private")}</p>
+                                                <p className="text-xs text-text-primary/60">{t("Only you can see this repository")}</p>
                                             </div>
                                         </label>
                                     </div>
@@ -603,16 +566,14 @@ export function GitHubExportModal({
                             )}
 
                             <div className="flex gap-3 pt-4">
-                                <button type="button" onClick={handleClose} className={`flex-1 ${BUTTON_STYLES.secondary}`}>
-                                    Cancel
-                                </button>
+                                <button type="button" onClick={handleClose} className={`flex-1 ${BUTTON_STYLES.secondary}`}>{t("Cancel")}</button>
                                 <button
                                     type="submit"
                                     disabled={!repositoryName.trim() || isExporting}
                                     className={`flex-1 ${BUTTON_STYLES.primary} disabled:bg-brand/50 flex items-center justify-center gap-2`}
                                 >
                                     <Upload className="w-4 h-4" />
-                                    {mode === 'sync' ? 'Sync to GitHub' : 'Export to GitHub'}
+                                    {mode === 'sync' ? t("Sync to GitHub") : t("Export to GitHub")}
                                 </button>
                             </div>
                         </form>

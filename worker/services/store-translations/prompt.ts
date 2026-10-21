@@ -18,11 +18,15 @@ export interface TranslationItem {
 }
 
 /** How each language is written: the variety and the form of address Estori's own app uses. */
-const FORM_OF_ADDRESS: Record<Locale, string> = { en: '', es: ', using tú', 'pt-BR': ', using você' };
+const TARGET_STYLE: Record<Locale, string> = {
+	en: LOCALE_AI_NAMES.en,
+	es: 'neutral Latin American Spanish, using Mexican vocabulary where words differ, with tú; no voseo, no regional idioms',
+	'pt-BR': `${LOCALE_AI_NAMES['pt-BR']}, using você`,
+};
 
 export function buildTranslationPrompt(source: Locale, target: Locale, items: readonly TranslationItem[]): { system: string; prompt: string } {
 	const lines = [
-		`You translate a store's text for its shoppers, from ${LOCALE_AI_NAMES[source]} to ${LOCALE_AI_NAMES[target]}${FORM_OF_ADDRESS[target]}.`,
+		`You translate a store's text for its shoppers, from ${LOCALE_AI_NAMES[source]} to ${TARGET_STYLE[target]}.`,
 		'Keep brand and product names, numbers, prices and currency, URLs, email addresses, emoji, HTML tags and entities, and {placeholders} exactly as written.',
 		"Keep each text's meaning, length and tone, as a store talking to its shoppers.",
 		'Add no quotes or notes.',

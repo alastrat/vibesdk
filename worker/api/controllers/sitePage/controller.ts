@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** Public product pages for Discover sites and their approved screenshots. Drafting lives in draftController.ts. */
 
 import { BaseController } from '../baseController';
@@ -35,7 +36,7 @@ export class SitePageController extends BaseController {
                 await RateLimitService.enforcePublicAppsRateLimit(env, context.config.security.rateLimit, user ?? null, request);
             } catch (error) {
                 if (error instanceof RateLimitExceededError) {
-                    return SitePageController.createErrorResponse<SitePageData>('Too many requests', 429);
+                    return SitePageController.createErrorResponse<SitePageData>(msg('Too many requests'), 429);
                 }
                 throw error;
             }
@@ -73,7 +74,7 @@ export class SitePageController extends BaseController {
             );
         } catch (error) {
             this.logger.error('Error loading product page', error);
-            return SitePageController.createErrorResponse<SitePageData>('Failed to load this page', 500);
+            return SitePageController.createErrorResponse<SitePageData>(msg('Failed to load this page'), 500);
         }
     }
 
@@ -86,11 +87,11 @@ export class SitePageController extends BaseController {
         try {
             const { appId, kind } = context.pathParams;
             if (!appId || !kind || !isTemplateShotKind(kind)) {
-                return SitePageController.createErrorResponse('Screenshot not found', 404);
+                return SitePageController.createErrorResponse(msg('Screenshot not found'), 404);
             }
             const app = await new AppService(env).getReuseSource(appId);
             if (!app || app.visibility !== 'public' || app.removedFromDiscoverAt) {
-                return SitePageController.createErrorResponse('Screenshot not found', 404);
+                return SitePageController.createErrorResponse(msg('Screenshot not found'), 404);
             }
             const listings = new TemplateService(env);
             const listing = await listings.getListingByApp(appId);
@@ -98,12 +99,12 @@ export class SitePageController extends BaseController {
                 listing?.status === 'listed' && listing.currentVersionId ? await listings.getVersion(listing.currentVersionId) : null;
             const key = approvedShotKey(listing, version, kind);
             const image = key ? await templateImageResponse(env.TEMPLATES_BUCKET, key, SITE_SCREENSHOT_CACHE) : null;
-            if (!image) return SitePageController.createErrorResponse('Screenshot not found', 404);
+            if (!image) return SitePageController.createErrorResponse(msg('Screenshot not found'), 404);
             // Binary route: the router passes this Response through unchanged.
             return image as unknown as ControllerResponse<ApiResponse<never>>;
         } catch (error) {
             this.logger.error('Error serving product page screenshot', error);
-            return SitePageController.createErrorResponse('Internal server error', 500);
+            return SitePageController.createErrorResponse(msg('Internal server error'), 500);
         }
     }
 

@@ -171,7 +171,9 @@ function alternateLinks(languages: readonly Locale[], source: Locale, pageUrl: U
 }
 
 function overlayTag(input: TranslateHtmlInput): string {
-	const src = `${input.basePath}${STORE_OVERLAY_PATH}?lang=${input.locale}&v=${input.ctx.settings.version}`;
+	const { version, extractedAt } = input.ctx.settings;
+	const stamp = extractedAt == null ? String(version) : `${version}-${extractedAt}`;
+	const src = `${input.basePath}${STORE_OVERLAY_PATH}?lang=${input.locale}&v=${stamp}`;
 	return `<script src="${escapeHtml(src)}" defer></script>`;
 }
 

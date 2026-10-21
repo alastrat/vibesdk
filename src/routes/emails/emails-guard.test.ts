@@ -44,7 +44,7 @@ describe('the Emails page', () => {
 		// A new frame per preview: Chromium can drop a srcdoc change that lands while the last one still loads.
 		expect(editor).toContain('key={preview.dataUpdatedAt}');
 		expect(editor).toContain('Send me a test');
-		expect(editor).toMatch(/<ConfirmButton[^>]*label="Reset to default"/);
+		expect(editor).toMatch(/<ConfirmButton[^>]*label=\{t\(["']Reset to default["']\)\}/);
 		expect(editor).toContain('disabled={save.isPending}');
 	});
 

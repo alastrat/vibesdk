@@ -52,7 +52,7 @@ export function storeScript(locale: Locale, languages: readonly Locale[] = [loca
   }
 
   function withLanguage(path) {
-    var language = pageLanguage();
+    var language = LANGUAGES.length > 1 ? pageLanguage() : null;
     return language ? path + (path.indexOf('?') === -1 ? '?' : '&') + 'lang=' + encodeURIComponent(language) : path;
   }
 
@@ -221,7 +221,7 @@ export function storeScript(locale: Locale, languages: readonly Locale[] = [loca
       var query = new URLSearchParams();
       if (typeof request.successPath === 'string') query.set('success', request.successPath);
       if (typeof request.cancelPath === 'string') query.set('cancel', request.cancelPath);
-      var language = pageLanguage();
+      var language = LANGUAGES.length > 1 ? pageLanguage() : null;
       if (language) query.set('lang', language);
       var search = query.toString();
       window.location.assign(base + '/pay' + (search ? '?' + search : ''));

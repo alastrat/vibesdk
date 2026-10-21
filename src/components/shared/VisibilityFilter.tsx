@@ -1,3 +1,4 @@
+import { t, useI18n, msg } from '@/lib/i18n';
 import { Tabs } from '@cloudflare/kumo';
 import { GlobeIcon, LockIcon, SparkleIcon } from '@phosphor-icons/react';
 
@@ -10,17 +11,17 @@ interface VisibilityFilterProps {
 const visibilityOptions = [
 	{
 		value: 'all',
-		label: 'All',
+		label: msg("All"),
 		icon: SparkleIcon,
 	},
 	{
 		value: 'public',
-		label: 'Public',
+		label: msg("Public"),
 		icon: GlobeIcon,
 	},
 	{
 		value: 'private',
-		label: 'Private',
+		label: msg("Private"),
 		icon: LockIcon,
 	},
 ] as const;
@@ -30,6 +31,7 @@ export function VisibilityFilter({
 	onChange,
 	className,
 }: VisibilityFilterProps) {
+	useI18n();
 	return (
 		<Tabs
 			value={value}
@@ -45,7 +47,7 @@ export function VisibilityFilter({
 							<span className="h-lh flex items-center">
 								<Icon className="size-3" weight="duotone" />
 							</span>
-							{option.label}
+							{t(option.label)}
 						</span>
 					),
 				};

@@ -182,6 +182,19 @@ async function withPolling(run: () => Promise<void>): Promise<void> {
 }
 
 describe('the Translations page', () => {
+	it('does not start translating if dismissed while the source-language save is pending', async () => {
+		let completeSave!: (value: ApiResponse<StoreTranslationOverview['settings']>) => void;
+		vi.mocked(apiClient.saveStoreTranslationSettings).mockImplementation(() => new Promise((resolve) => { completeSave = resolve; }));
+		const renderer = await mountPage();
+		await act(async () => button(card(renderer, 'pt-BR'), 'Translate').props.onClick());
+		await act(async () => dialogOf(renderer).findByType('select').props.onChange({ target: { value: 'es' } }));
+		await act(async () => labelled(dialogOf(renderer), 'Translate to Português (Brasil)').props.onClick());
+		expect(apiClient.saveStoreTranslationSettings).toHaveBeenCalledTimes(1);
+		await act(async () => button(dialogOf(renderer), 'Cancel').props.onClick());
+		await act(async () => completeSave(ok({ ...overview().settings, sourceLocale: 'es', version: 5 })));
+		await settle();
+		expect(apiClient.runStoreTranslation).not.toHaveBeenCalled();
+	});
 	it('shows the store picker, the settings, one card per target language', async () => {
 		const renderer = await mountPage();
 		const screen = textOf(renderer);
@@ -222,13 +235,19 @@ describe('the Translations page', () => {
 		expect(tabs.props.tabs.map((tab: { value: string }) => tab.value)).toEqual(['es']);
 	});
 
-	it('loads without sending any settings, and each control saves only its own field', async () => {
+	it('requires source confirmation before switches are enabled or any settings are sent', async () => {
 		vi.mocked(apiClient.getStoreTranslations).mockResolvedValue(ok(overview({ settings: { ...overview().settings, version: 1 } })));
 		vi.mocked(apiClient.saveStoreTranslationSettings).mockResolvedValue(ok({ ...overview().settings, sourceLocale: 'es', version: 2 }));
 		const renderer = await mountPage();
 		expect(apiClient.saveStoreTranslationSettings).not.toHaveBeenCalled();
+		const switches = renderer.root.findAll((node) => node.props.role === 'switch' && typeof node.type === 'string');
+		expect(switches.length).toBeGreaterThan(0);
+		expect(switches.every((node) => node.props.disabled)).toBe(true);
 		const [, storeLanguage] = renderer.root.findAllByType('select');
 		await act(async () => storeLanguage.props.onChange({ target: { value: 'es' } }));
+		await settle();
+		expect(apiClient.saveStoreTranslationSettings).not.toHaveBeenCalled();
+		await act(async () => button(renderer.root, 'Confirm').props.onClick());
 		await settle();
 		expect(apiClient.saveStoreTranslationSettings).toHaveBeenCalledTimes(1);
 		expect(apiClient.saveStoreTranslationSettings).toHaveBeenCalledWith('app1', { sourceLocale: 'es' });

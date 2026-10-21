@@ -1,3 +1,5 @@
+import { formatUsd } from '@/api-types';
+import { getLocale, t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, Empty, LayerCard, Loader } from '@cloudflare/kumo';
@@ -7,15 +9,15 @@ import { useCatalogProducts } from '@/hooks/use-catalog';
 import { useFlag } from '@/hooks/use-flag';
 
 function money(cents: number | null): string {
-	return cents === null ? 'Unavailable' : `$${(cents / 100).toFixed(2)}`;
+	return cents === null ? t('Unavailable') : formatUsd(cents, getLocale());
 }
 
 /** A new build that sells this product: the store agent finds it in the catalog by name. */
 function startPath(product: CatalogProductView): string {
 	const variant = product.variants.find((candidate) => candidate.available);
-	const price = variant?.suggestedRetailPriceCents ? ` at ${money(variant.suggestedRetailPriceCents)}` : '';
+	const price = variant?.suggestedRetailPriceCents ? t(' at {price}', { price: money(variant.suggestedRetailPriceCents) }) : '';
 	const params = new URLSearchParams({
-		query: `Build a store that sells the "${product.title}" from the Estori catalog${price}.`,
+		query: t("Build a store that sells the \"{value1}\" from the Estori catalog{value2}.", { value1: product.title, value2: price }),
 		projectType: 'app',
 		behaviorType: 'think',
 	});
@@ -34,6 +36,7 @@ function VariantRow({ variant }: { variant: CatalogVariantView }) {
 }
 
 function ProductCard({ product }: { product: CatalogProductView }) {
+	useI18n();
 	const navigate = useNavigate();
 	const sellable = product.variants.some((variant) => variant.available);
 	return (
@@ -53,13 +56,13 @@ function ProductCard({ product }: { product: CatalogProductView }) {
 						</div>
 						<div className="overflow-x-auto">
 							<table className="w-full text-left text-sm">
-								<caption className="sr-only">Variants of {product.title}, with your cost and prices for US delivery</caption>
+								<caption className="sr-only">{t('Variants of {product}, with your cost and prices for US delivery', { product: product.title })}</caption>
 								<thead className="text-kumo-subtle">
 									<tr>
-										<th scope="col" className="py-1 pr-4 font-normal">Variant</th>
-										<th scope="col" className="py-1 pr-4 font-normal">Your cost</th>
-										<th scope="col" className="py-1 pr-4 font-normal">Lowest price</th>
-										<th scope="col" className="py-1 font-normal">Suggested price</th>
+										<th scope="col" className="py-1 pr-4 font-normal">{t("Variant")}</th>
+										<th scope="col" className="py-1 pr-4 font-normal">{t("Your cost")}</th>
+										<th scope="col" className="py-1 pr-4 font-normal">{t("Lowest price")}</th>
+										<th scope="col" className="py-1 font-normal">{t("Suggested price")}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -70,10 +73,8 @@ function ProductCard({ product }: { product: CatalogProductView }) {
 							</table>
 						</div>
 						<div className="flex flex-wrap items-center gap-3">
-							<Button variant="primary" disabled={!sellable} onClick={() => navigate(startPath(product), { state: { fromPrompt: true } })}>
-								Start a store with this
-							</Button>
-							<p className="text-xs text-kumo-subtle">Ships to the US. Your cost includes delivery.</p>
+							<Button variant="primary" disabled={!sellable} onClick={() => navigate(startPath(product), { state: { fromPrompt: true } })}>{t("Start a store with this")}</Button>
+							<p className="text-xs text-kumo-subtle">{t("Ships to the US. Your cost includes delivery.")}</p>
 						</div>
 					</div>
 				</div>
@@ -83,6 +84,7 @@ function ProductCard({ product }: { product: CatalogProductView }) {
 }
 
 export default function CatalogPage() {
+	useI18n();
 	const [query, setQuery] = useState('');
 	const products = useCatalogProducts(query);
 	const catalogPaused = useFlag('catalog-paused');
@@ -91,16 +93,13 @@ export default function CatalogPage() {
 			<title>{pageTitle('Catalog')}</title>
 			<div className="container mx-auto grid max-w-5xl gap-6 px-4 py-8">
 				<div className="grid gap-1">
-					<h1 className="text-3xl font-semibold text-kumo-strong">Catalog</h1>
-					<p className="text-kumo-subtle">
-						Products you can sell without holding stock. We ship each order straight to your shopper in plain packaging, and
-						take your cost from the sale.
-					</p>
+					<h1 className="text-3xl font-semibold text-kumo-strong">{t("Catalog")}</h1>
+					<p className="text-kumo-subtle">{t("Products you can sell without holding stock. We ship each order straight to your shopper in plain packaging, and take your cost from the sale.")}</p>
 				</div>
 				{catalogPaused ? (
 					<Empty
-						title="The catalog is paused"
-						description="Catalog products can't be added to stores or bought right now. Orders already paid for still ship."
+						title={t("The catalog is paused")}
+						description={t("Catalog products can't be added to stores or bought right now. Orders already paid for still ship.")}
 					/>
 				) : (
 					<>
@@ -108,13 +107,13 @@ export default function CatalogPage() {
 							type="search"
 							value={query}
 							onChange={(event) => setQuery(event.target.value)}
-							placeholder="Search the catalog"
-							aria-label="Search the catalog"
+							placeholder={t("Search the catalog")}
+							aria-label={t("Search the catalog")}
 							className="w-full rounded-lg border border-kumo-line bg-kumo-base px-3 py-2 text-sm"
 						/>
 						{products.data ? (
 							products.data.products.length === 0 ? (
-								<Empty title="Nothing matches" description="Try another word." />
+								<Empty title={t("Nothing matches")} description={t("Try another word.")} />
 							) : (
 								<div className="grid gap-4">
 									{products.data.products.map((product) => (
@@ -127,7 +126,7 @@ export default function CatalogPage() {
 								<Loader />
 							</div>
 						) : (
-							<Empty title="Couldn't load the catalog" description={products.error?.message} />
+							<Empty title={t("Couldn't load the catalog")} description={products.error?.message} />
 						)}
 					</>
 				)}

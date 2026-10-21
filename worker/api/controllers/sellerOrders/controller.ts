@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** The signed-in seller's orders across their stores: the list, one order, and marking it shipped. */
 
 import { BaseController } from '../baseController';
@@ -24,8 +25,8 @@ export class SellerOrdersController extends BaseController {
         const view = params.get('view') ?? 'to-ship';
         const mode = params.get('mode') ?? 'live';
         const cursor = params.get('cursor');
-        if (!isSellerOrderView(view) || !isSellerOrderModeFilter(mode)) return SellerOrdersController.createErrorResponse('Unknown view or mode', 400);
-        if (cursor && !parseKeysetCursor(cursor)) return SellerOrdersController.createErrorResponse('Invalid cursor', 400);
+        if (!isSellerOrderView(view) || !isSellerOrderModeFilter(mode)) return SellerOrdersController.createErrorResponse(msg('Unknown view or mode'), 400);
+        if (cursor && !parseKeysetCursor(cursor)) return SellerOrdersController.createErrorResponse(msg('Invalid cursor'), 400);
         try {
             const data = await new SellerOrderService(env).listOrders({ sellerUserId: context.user!.id, view, mode, appId: params.get('store'), cursor });
             return SellerOrdersController.createSuccessResponse(data);
@@ -36,10 +37,10 @@ export class SellerOrdersController extends BaseController {
 
     static async detail(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<SellerOrderDetail>>> {
         const orderId = context.pathParams.id;
-        if (!orderId) return SellerOrdersController.createErrorResponse('Missing order id', 400);
+        if (!orderId) return SellerOrdersController.createErrorResponse(msg('Missing order id'), 400);
         try {
             const detail = await SellerOrdersController.detailOf(env, context.user!.id, orderId);
-            return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse('Order not found', 404);
+            return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse(msg('Order not found'), 404);
         } catch (error) {
             return SellerOrdersController.handleError(error, 'read an order') as ControllerResponse<ApiResponse<SellerOrderDetail>>;
         }
@@ -49,7 +50,7 @@ export class SellerOrdersController extends BaseController {
         const orderId = context.pathParams.id;
         const body = await SellerOrdersController.parseJsonBody<unknown>(request);
         const shipment = body.success ? parseSellerShipmentRequest(body.data) : null;
-        if (!orderId || !shipment) return SellerOrdersController.createErrorResponse('Send shipped, and a known carrier and tracking number', 400);
+        if (!orderId || !shipment) return SellerOrdersController.createErrorResponse(msg('Send shipped, and a known carrier and tracking number'), 400);
         try {
             const sellerUserId = context.user!.id;
             const result = await new SellerOrderService(env).setShipment({
@@ -58,7 +59,7 @@ export class SellerOrdersController extends BaseController {
                 shipment: shipment.shipped ? { carrier: shipment.carrier, trackingNumber: shipment.trackingNumber } : null,
                 now: new Date(),
             });
-            if (result === 'not-found') return SellerOrdersController.createErrorResponse('Order not found', 404);
+            if (result === 'not-found') return SellerOrdersController.createErrorResponse(msg('Order not found'), 404);
             if (result !== 'updated') return SellerOrdersController.createErrorResponse(SHIPMENT_REFUSALS[result], 409);
             const detail = await SellerOrdersController.detailOf(env, sellerUserId, orderId);
             // One email per order: an edit, or shipping again after an undo, sends nothing more.
@@ -70,7 +71,7 @@ export class SellerOrdersController extends BaseController {
                     payload: { lineNos: detail.items.filter((item) => item.kind === 'own' && !item.refunded).map((item) => item.lineNo), carrier: detail.carrier, trackingNumber: detail.trackingNumber },
                 });
             }
-            return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse('Order not found', 404);
+            return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse(msg('Order not found'), 404);
         } catch (error) {
             return SellerOrdersController.handleError(error, 'update a shipment') as ControllerResponse<ApiResponse<SellerOrderDetail>>;
         }
@@ -81,10 +82,10 @@ export class SellerOrdersController extends BaseController {
         const orderId = context.pathParams.id;
         const body = await SellerOrdersController.parseJsonBody<unknown>(request);
         const refundRequest = body.success ? parseStoreRefundRequest(body.data) : null;
-        if (!orderId || !refundRequest) return SellerOrdersController.createErrorResponse('Send the lines to refund and a request id', 400);
+        if (!orderId || !refundRequest) return SellerOrdersController.createErrorResponse(msg('Send the lines to refund and a request id'), 400);
         try {
             const order = await new StoreOrderService(env).getOrder(orderId);
-            if (!order || order.sellerUserId !== context.user!.id) return SellerOrdersController.createErrorResponse('Order not found', 404);
+            if (!order || order.sellerUserId !== context.user!.id) return SellerOrdersController.createErrorResponse(msg('Order not found'), 404);
             const outcome = await refundOrderLines(env, order, refundRequest, (sending) => ctx.waitUntil(sending));
             return outcome.ok ? SellerOrdersController.createSuccessResponse({ refundedCents: outcome.refundedCents }) : SellerOrdersController.createErrorResponse(outcome.message, outcome.status);
         } catch (error) {

@@ -1,4 +1,9 @@
+import { msg } from '../../../shared/i18n/translate';
 import { Agent, AgentContext, ConnectionContext, getAgentByName } from "agents";
+import type { Locale } from '../../../shared/i18n/locales';
+import { savedUserLocale } from '../../services/i18n/saved-locale';
+import { runWithLocale, t } from '../../services/i18n/request-locale';
+import { localizeAgentStatus } from '../../services/i18n/agent-status';
 import { AgentInitArgs, AgentSummary, DeployOptions, DeployResult, ExportOptions, ExportResult, DeploymentTarget, BehaviorType } from "./types";
 import { AgenticState, AgentState, BaseProjectState, CurrentDevState, MAX_PHASES, ThinkState, PhasicState } from "./state";
 import { Blueprint } from "../schemas";
@@ -216,7 +221,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
         // Create objective based on project type
         this.objective = this.createObjective(projectType);
 
-        this.behavior.onStart(props);
+        this.sellerLocale = await savedUserLocale(this.env, this.state.metadata?.userId);
+        runWithLocale(this.sellerLocale, () => this.behavior.onStart(props));
 
         // Ignore if agent not initialized
         if (!this.state.query) {
@@ -404,13 +410,13 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
 
     /** Switches the store's workspace to a draft; refused while the AI works. Think apps only. */
     async switchDraft(draftId: string): Promise<DraftChangeResult> {
-        if (!(this.behavior instanceof ThinkCodingBehavior)) return { error: "Drafts aren't available for this project.", status: 409 };
+        if (!(this.behavior instanceof ThinkCodingBehavior)) return { error: msg("Drafts aren't available for this project."), status: 409 };
         return this.behavior.switchDraft(draftId);
     }
 
     /** Starts a draft and switches to it; refused while the AI works. Think apps only. */
     async createDraft(name: string, from: DraftStart): Promise<DraftChangeResult> {
-        if (!(this.behavior instanceof ThinkCodingBehavior)) return { error: "Drafts aren't available for this project.", status: 409 };
+        if (!(this.behavior instanceof ThinkCodingBehavior)) return { error: msg("Drafts aren't available for this project."), status: 409 };
         return this.behavior.createDraft(name, from);
     }
 
@@ -657,7 +663,7 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
             this.logger().info('Conversation history cleared successfully');
             
             this.broadcast(WebSocketMessageResponses.CONVERSATION_CLEARED, {
-                message: 'Conversation history cleared',
+                message: msg('Conversation history cleared'),
             });
         } catch (error) {
             this.logger().error('Error clearing conversation history:', error);
@@ -707,7 +713,8 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      * Delegates to centralized handler which can access both behavior and objective
      */
     async onMessage(connection: Connection, message: string): Promise<void> {
-        await handleWebSocketMessage(this, connection, message);
+        this.sellerLocale = await savedUserLocale(this.env, this.state.metadata?.userId);
+        await runWithLocale(this.sellerLocale, () => handleWebSocketMessage(this, connection, message));
     }
     
     /**
@@ -721,18 +728,19 @@ export class CodeGeneratorAgent extends Agent<Env, AgentState> implements AgentI
      * Broadcast message to all connected WebSocket clients
      * Type-safe version using proper WebSocket message types
      */
+    private sellerLocale: Locale = 'en';
     public broadcast<T extends WebSocketMessageType>(
         type: T, 
         data?: WebSocketMessageData<T>
     ): void {
-        broadcastToConnections(this, type, data || {} as WebSocketMessageData<T>);
+        broadcastToConnections(this, type, localizeAgentStatus(type, data || {} as WebSocketMessageData<T>, this.sellerLocale));
     }
 
     protected broadcastError(context: string, error: unknown): void {
         const errorMessage = error instanceof Error ? error.message : String(error);
         this.logger().error(`${context}:`, error);
         this.broadcast(WebSocketMessageResponses.ERROR, {
-            error: `${context}: ${errorMessage}`
+            error: t("{value1}: {value2}", { value1: String(context), value2: String(errorMessage) })
         });
     }
     // ==========================================

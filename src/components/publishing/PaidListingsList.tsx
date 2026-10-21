@@ -1,3 +1,4 @@
+import { t, tn, useI18n } from '@/lib/i18n';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { Badge, Button, Empty, Loader } from '@cloudflare/kumo';
@@ -7,6 +8,7 @@ import type { MyPaidListing } from '@/api-types';
 
 /** The profile's list of the owner's paid sites, with review status and buyers. */
 export function PaidListingsList() {
+	useI18n();
 	const listings = useMyPaidListings();
 	if (listings.isLoading) return <Loader />;
 	if (listings.isError) return <p className="text-sm text-kumo-subtle">{listings.error.message}</p>;
@@ -15,8 +17,8 @@ export function PaidListingsList() {
 		return (
 			<Empty
 				size="sm"
-				title="No paid sites yet"
-				description="Set a price when you make a site public, and it shows up here."
+				title={t("No paid sites yet")}
+				description={t("Set a price when you make a site public, and it shows up here.")}
 			/>
 		);
 	}
@@ -30,6 +32,7 @@ export function PaidListingsList() {
 }
 
 function PaidListingRow({ listing }: { listing: MyPaidListing }) {
+	useI18n();
 	const withdraw = useWithdrawPaidVersion(listing.appId);
 	const view = paidListingStatusView(listing);
 	const pendingVersionId = view?.pendingVersionId ?? null;
@@ -44,13 +47,12 @@ function PaidListingRow({ listing }: { listing: MyPaidListing }) {
 					{listing.appTitle}
 				</Link>
 				<p className="text-sm text-kumo-subtle">
-					{listing.buyerCount} {listing.buyerCount === 1 ? 'buyer' : 'buyers'} · Sales {formatMoney(listing.grossCents)} ·
-					Estori fee {formatMoney(listing.feeCents)} · You earn {formatMoney(listing.earningsCents)}
+					{tn('{count} buyer', '{count} buyers', listing.buyerCount)}{' · '}{t('Sales {sales} · Estori fee {fee} · You earn {earnings}', { sales: formatMoney(listing.grossCents), fee: formatMoney(listing.feeCents), earnings: formatMoney(listing.earningsCents) })}
 					{view?.detail ? ` · ${view.detail}` : ''}
 				</p>
 			</div>
 			<div className="flex items-center gap-2">
-				<Badge variant={view?.variant ?? 'secondary'}>{view?.label ?? 'Free'}</Badge>
+				<Badge variant={view?.variant ?? 'secondary'}>{view?.label ?? t("Free")}</Badge>
 				{pendingVersionId && (
 					<Button
 						size="sm"
@@ -58,13 +60,11 @@ function PaidListingRow({ listing }: { listing: MyPaidListing }) {
 						loading={withdraw.isPending}
 						onClick={() =>
 							withdraw.mutate(pendingVersionId, {
-								onSuccess: () => toast.success('The version was withdrawn'),
+								onSuccess: () => toast.success(t("The version was withdrawn")),
 								onError: (error) => toast.error(error.message),
 							})
 						}
-					>
-						Withdraw
-					</Button>
+					>{t("Withdraw")}</Button>
 				)}
 			</div>
 		</div>

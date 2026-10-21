@@ -8,6 +8,9 @@ import { SellerOrderService, StoreOrderService } from '../../database';
 import { sellerOrderPath } from '../../../shared/types/store-payments';
 import type { StoreOrderView } from './store';
 import { createLogger } from '../../logger';
+import type { Locale } from '../../../shared/i18n/locales';
+import { savedUserLocale } from '../i18n/saved-locale';
+import { serverT } from '../i18n/server-t';
 
 export const NEW_ORDER_EMAILS_PER_DAY = 100;
 const TWO_DAYS_SECONDS = 2 * 24 * 60 * 60;
@@ -20,6 +23,7 @@ export interface NewOrderEmailDeps {
 	counter: { get(key: string): Promise<string | null>; put(key: string, value: string, options: { expirationTtl: number }): Promise<void> };
 	baseUrl: string | null;
 	now(): Date;
+	sellerLocale?(userId: string): Promise<Locale | null>;
 }
 
 function storeName(title: string | null): string {
@@ -35,9 +39,10 @@ export async function notifySellerOfNewOrder(deps: NewOrderEmailDeps, orderId: s
 	const sentToday = Number((await deps.counter.get(key)) ?? '0');
 	if (sentToday >= NEW_ORDER_EMAILS_PER_DAY) return 'capped';
 	const address = order.shippingAddress;
+	const locale = await deps.sellerLocale?.(order.sellerUserId).catch(() => null) ?? 'en';
 	await deps.sender.send(
 		sellerNewOrderEmail(facts.sellerEmail, {
-			storeTitle: storeName(facts.storeTitle),
+			storeTitle: facts.storeTitle?.trim() ? storeName(facts.storeTitle) : serverT(locale).t('your store'),
 			orderNumber: order.orderNumber,
 			test: order.mode === 'test',
 			totalCents: order.totalCents,
@@ -46,7 +51,7 @@ export async function notifySellerOfNewOrder(deps: NewOrderEmailDeps, orderId: s
 			shipTo: address ? { name: address.name, city: address.city, region: address.region, countryCode: address.countryCode } : null,
 			note: order.note,
 			link: deps.baseUrl ? `${deps.baseUrl}${sellerOrderPath(order.id)}` : null,
-		}),
+		}, locale),
 	);
 	await deps.counter.put(key, String(sentToday + 1), { expirationTtl: TWO_DAYS_SECONDS });
 	return 'sent';
@@ -74,5 +79,6 @@ export function newOrderNotifierFromEnv(env: Env): (orderId: string) => Promise<
 		counter: env.VibecoderStore,
 		baseUrl: configuredBaseUrl(env),
 		now: () => new Date(),
+		sellerLocale: (userId) => savedUserLocale(env, userId),
 	});
 }

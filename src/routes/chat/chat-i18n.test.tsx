@@ -13,7 +13,8 @@ import { BuildProgressBar } from '@/components/BuildProgressBar';
 import { ReferenceCard } from '@/components/ReferenceCard';
 import { useImageUpload, type UseImageUploadReturn } from '@/hooks/use-image-upload';
 import { reasoningEffortLabel } from '@/utils/model-helpers';
-import { AIMessage } from './components/messages';
+import { AIMessage, UserMessage } from './components/messages';
+import { DebugPanel } from './components/debug-panel';
 import { createWebSocketMessageHandler, type HandleMessageDeps } from './utils/handle-websocket-message';
 import { describeBuildActivity, type BuildStatus } from './utils/build-status';
 import { skippedReferenceCard, type ChatMessage, type ToolEvent } from './utils/message-helpers';
@@ -32,6 +33,30 @@ afterEach(async () => {
 });
 
 const tool = (name: string, status: ToolEvent['status'], args?: Record<string, unknown>): ToolEvent => ({ name, status, timestamp: 1, args });
+
+describe('the handoff editor corrections', () => {
+	it('switches debug controls live while leaving the logged message untouched', async () => {
+		const renderer = await mountElement(createElement(DebugPanel, { messages: [{ id: 'log1', timestamp: 1, type: 'info', message: 'Raw English log' }], onClear: () => undefined }));
+		const toggle = renderer.root.findAllByType('button')[0];
+		await act(async () => toggle.props.onClick());
+		await act(async () => applyAccountLocale('es'));
+		expect(textOf(renderer)).toContain('Consola de depuración');
+		expect(textOf(renderer)).toContain('Raw English log');
+		expect(textOf(renderer)).toContain('Borrar');
+		await act(async () => applyAccountLocale('pt-BR'));
+		expect(textOf(renderer)).toContain('Console de depuração');
+		expect(textOf(renderer)).toContain('Raw English log');
+	});
+	it('shows the resume prompt in the seller language while ordinary messages stay as written', async () => {
+		await applyAccountLocale('es');
+		expect(textOf(await mountElement(createElement(UserMessage, { message: 'Continue where you left off.' })))).toContain('Continúa donde lo dejaste.');
+		expect(textOf(await mountElement(createElement(UserMessage, { message: 'My own English message' })))).toContain('My own English message');
+	});
+	it('uses a plural sentence for failed groups of files', async () => {
+		await applyAccountLocale('es');
+		expect(getToolGroupSummary([tool('read', 'error'), tool('read', 'error')])).toBe('No se pudieron leer 2 archivos');
+	});
+});
 
 describe('the build status line', () => {
 	const writing: BuildActivity = { kind: 'tool', toolName: 'write', path: 'src/pages/Catalog.tsx', lines: 340 };
@@ -241,7 +266,7 @@ describe('adding images', () => {
 describe('words that come from data', () => {
 	it('names a kind of project in the language, and leaves one it does not know as sent', async () => {
 		await applyAccountLocale('es');
-		expect(featureName('Application')).toBe('Aplicación');
+		expect(featureName('Application')).toBe('app');
 		expect(featureName('Presentation')).toBe('Presentación');
 		expect(featureName('Something else')).toBe('Something else');
 		expect(featureName('constructor')).toBe('constructor');

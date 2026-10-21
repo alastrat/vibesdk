@@ -44,6 +44,8 @@ export interface StoreTranslationSettings {
 	showSwitcher: boolean;
 	autoTranslate: boolean;
 	version: number;
+	/** Last source-text extraction; invalidates serving caches without marking settings as seller-confirmed. */
+	extractedAt?: number | null;
 }
 
 /** The seller's changes to the settings; what a change leaves out stays. `ready` is only set by finishing a translation. */

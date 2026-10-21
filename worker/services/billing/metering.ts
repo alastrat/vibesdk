@@ -1,8 +1,11 @@
+import { assertWithinLimit } from '../i18n/plan-limits';
+import { msg } from '../../../shared/i18n/translate';
+import { t } from '../i18n/request-locale';
 /** Credits before and after AI work: the check before a turn or a new store, and charging each step to the ledger. */
 
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import { createLogger } from '../../logger';
-import { assertWithinLimit, type PlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
+import { type PlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
 import type { CreditUseSource } from '../../../shared/types/billing';
 import { loadAccount, loadCredits, type BillingAccount } from './account';
 import { creditNoticeDepsFromEnv, noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
@@ -43,7 +46,7 @@ export interface TurnAccount {
 const TRIES = 3;
 
 /** While a renewal is unpaid its pool is 0, so running out means the card needs fixing, not a bigger plan. */
-const PAYMENT_FAILED_MESSAGE = "Your last payment didn't go through, so this month's AI credits haven't started. Pay it on the billing page to keep building.";
+const PAYMENT_FAILED_MESSAGE = msg("Your last payment didn't go through, so this month's AI credits haven't started. Pay it on the billing page to keep building.");
 
 const logger = createLogger('CreditMetering');
 
@@ -52,7 +55,7 @@ export function creditRefusal(account: BillingAccount, balance: CreditBalance): 
 	const refusal = assertWithinLimit(account, 'aiCredits', account.limits.aiCredits - balance.left);
 	// The unpaid-renewal hold zeroes only a subscription's own pool; an admin's override keeps its limits.
 	if (refusal && account.source === 'subscription' && account.graceEndsAtMs !== null) {
-		return { ...refusal, upgradeTo: null, paymentFailed: true, message: PAYMENT_FAILED_MESSAGE };
+		return { ...refusal, upgradeTo: null, paymentFailed: true, message: t(PAYMENT_FAILED_MESSAGE) };
 	}
 	return refusal;
 }

@@ -81,7 +81,7 @@ describe('store texts', () => {
 		await service().replaceTexts('app_1', [text('b'), text('c')], NOW + 1);
 		expect((await service().listRows('app_1', 'es', { limit: 10 })).rows.map((row) => row.hash)).toEqual(['hash-b', 'hash-c']);
 		// The text that went away keeps its translation for when it returns, and is served meanwhile.
-		expect((await service().dictionary('app_1', 'es')).get('hash-a')).toBe('Texto a');
+		expect(await db.prepare("SELECT text FROM store_translations WHERE app_id = 'app_1' AND locale = 'es' AND source_hash = 'hash-a'").first('text')).toBe('Texto a');
 		expect(await versionOf()).toBe(before);
 	});
 
@@ -241,7 +241,7 @@ describe('store translations', () => {
 		await service().upsertMachine('app_1', 'es', [machine('a')], NOW);
 		await service().replaceTexts('app_1', [text('b')], NOW + 1);
 		expect(await service().setSellerText('app_1', 'es', 'hash-a', 'Hola otra vez', NOW + 2)).toBe(true);
-		expect((await service().dictionary('app_1', 'es')).get('hash-a')).toBe('Hola otra vez');
+		expect(await db.prepare("SELECT text FROM store_translations WHERE app_id = 'app_1' AND locale = 'es' AND source_hash = 'hash-a'").first('text')).toBe('Hola otra vez');
 	});
 
 	it('revertToMachine restores the machine text', async () => {
@@ -273,6 +273,14 @@ describe('store translations', () => {
 		expect(await service().dictionary('app_1', 'pt-BR')).toEqual(new Map([['hash-a', 'Texto pt a']]));
 		expect(await service().dictionary('app_1', 'en')).toEqual(new Map());
 		expect(await service().dictionary('app_other', 'es')).toEqual(new Map());
+	});
+
+	it('serving forgets removed source texts while preserving their saved translations for later', async () => {
+		await service().replaceTexts('app_1', [text('a'), text('b')], NOW);
+		await service().upsertMachine('app_1', 'es', [machine('a'), machine('b')], NOW);
+		await service().replaceTexts('app_1', [text('b')], NOW + 1);
+		expect(await service().dictionary('app_1', 'es')).toEqual(new Map([['hash-b', 'Texto b']]));
+		expect(await db.prepare("SELECT count(*) AS n FROM store_translations WHERE app_id = 'app_1' AND locale = 'es'").first()).toEqual({ n: 2 });
 	});
 });
 

@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** AI drafts of product page text for a site's owner. Nothing is saved; the publish dialog saves edited text. */
 
 import { BaseController } from '../baseController';
@@ -33,7 +34,7 @@ export class PageCopyDraftController extends BaseController {
             const user = context.user!;
             await RateLimitService.enforcePageCopyDraftRateLimit(env, context.config.security.rateLimit, user);
             const app = await new AppService(env).getAppDetails(appId, user.id);
-            if (!app) return PageCopyDraftController.createErrorResponse<PageCopyDraftData>('App not found', 404);
+            if (!app) return PageCopyDraftController.createErrorResponse<PageCopyDraftData>(msg('App not found'), 404);
             const commit = await (await getAgentStubLightweight(env, appId)).getDeployedCommit();
             const space = getSpaceTemplateStub(env, appId);
             if (!commit || !space) {
@@ -56,7 +57,7 @@ export class PageCopyDraftController extends BaseController {
                 return PageCopyDraftController.createErrorResponse<PageCopyDraftData>(PAGE_DRAFT_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error drafting page text', error);
-            return PageCopyDraftController.createErrorResponse<PageCopyDraftData>('Failed to draft the page', 500);
+            return PageCopyDraftController.createErrorResponse<PageCopyDraftData>(msg('Failed to draft the page'), 500);
         }
     }
 

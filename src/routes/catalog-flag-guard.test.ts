@@ -12,7 +12,7 @@ describe('the catalog pause in the app', () => {
 	it('shows the catalog page as paused, saying catalog products can\'t be bought either, as checkout refuses them', () => {
 		const page = sources['/src/routes/catalog/index.tsx'] ?? '';
 		expect(page).toContain("useFlag('catalog-paused')");
-		expect(page).toContain('title="The catalog is paused"');
-		expect(page).toContain(`description="Catalog products can't be added to stores or bought right now. Orders already paid for still ship."`);
+		expect(page).toContain('title={t("The catalog is paused")}');
+		expect(page).toContain(`description={t("Catalog products can't be added to stores or bought right now. Orders already paid for still ship.")}`);
 	});
 });

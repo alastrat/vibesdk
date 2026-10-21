@@ -87,6 +87,10 @@ async function storeWith(options: { source?: Locale; ready?: Array<Exclude<Local
 	await insertApp(db, { id: appId, userId: 'seller_1' });
 	const service = new StoreTranslationService(envWith(db));
 	await service.saveSettings(appId, { sourceLocale: options.source ?? 'en' }, NOW);
+	// Serving only exposes translations for texts in the current extraction.
+	await service.replaceTexts(appId, await Promise.all(Object.keys(DICTIONARIES.es).map(async (text) => ({
+		hash: await textHash(normalizeText(text)), text, kind: 'product' as const,
+	}))), NOW);
 	for (const locale of options.ready ?? []) {
 		const rows = await Promise.all(Object.entries(DICTIONARIES[locale]).map(async ([source, text]) => ({ hash: await textHash(normalizeText(source)), source, text })));
 		await service.upsertMachine(appId, locale, rows, NOW);
@@ -145,6 +149,13 @@ async function payPage(appId: string, env: Env, init: { query?: string; headers?
 }
 
 describe("the checkout page in the shopper's language", () => {
+	it('preserves untouched store return paths even when a caller sends lang=en', async () => {
+		const appId = `untouched_paths_${++stores}`;
+		await insertApp(db, { id: appId, userId: 'seller_es' });
+		const { config } = await payPage(appId, spaceEnv(), { query: '?lang=en&success=%2Fthanks&cancel=%2Fcart%3Fx%3D1' });
+		expect(config.successPath).toBe('/thanks');
+		expect(config.cancelPath).toBe('/cart?x=1');
+	});
 	it('is Spanish for a shopper who chose Spanish: the document, the copy, product names from the dictionary, US dollars and the card form', async () => {
 		const appId = await storeWith({ ready: ['es'] });
 		const { response, html, config } = await payPage(appId, spaceEnv(), { query: '?lang=es' });

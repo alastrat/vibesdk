@@ -4,12 +4,13 @@ import { Button, buttonVariants, cn } from '@cloudflare/kumo';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { PlanLimitRefusal } from '@/api-types';
 import { usePlanCheckout } from '@/hooks/use-billing';
-import { t } from '@/lib/i18n';
+import { useI18n } from '@/lib/i18n';
 import { onPlanLimit } from '@/lib/plan-limit-events';
 import { upgradeActionFor, upgradeTitleFor } from './upgrade-action';
 
 /** One plan-limit refusal: its title and message, and the next step it offers. */
 export function UpgradeDialog({ refusal, onClose }: { refusal: PlanLimitRefusal; onClose: () => void }) {
+	const { t } = useI18n();
 	const checkout = usePlanCheckout();
 	const action = upgradeActionFor(refusal);
 

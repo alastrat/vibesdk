@@ -1,3 +1,4 @@
+import { msg } from '../../shared/i18n/translate';
 import { DEFAULT_SELLER_LIMITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
@@ -77,7 +78,7 @@ export const SELLER_LEVEL_LIMITS: readonly SellerLevelLimitsCopy[] = [
 ];
 
 /** How checkout weighs a cart toward the weekly limit: Estori can't prove the delivery of the seller's own products. */
-export const OWN_PRODUCTS_WEIGHTING = 'Your own products count twice toward the weekly limit; catalog products and shipping count once.';
+export const OWN_PRODUCTS_WEIGHTING = msg('Your own products count twice toward the weekly limit; catalog products and shipping count once.');
 
 /** The same value on every plan: seller levels set the payment limits, not plans. */
 function onEveryPlan(value: PlanCell): Record<PlanId, PlanCell> {

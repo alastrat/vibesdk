@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { Presentation } from 'lucide-react';
 import { PreviewIframe } from '@/routes/chat/components/preview-iframe';
 import { cn } from '@cloudflare/kumo';
@@ -25,6 +26,7 @@ export function PresentationPreview({
 	templateDetails = null,
 	featureState,
 }: PreviewComponentProps) {
+	useI18n();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
 	const [failedIframes, setFailedIframes] = useState<Set<number>>(new Set());
@@ -64,7 +66,7 @@ export function PresentationPreview({
 	if (!previewUrl) {
 		return (
 			<div className={`${className} flex items-center justify-center bg-kumo-base`}>
-				<p className="text-text-primary/50">No preview available</p>
+				<p className="text-text-primary/50">{t("No preview available")}</p>
 			</div>
 		);
 	}
@@ -78,7 +80,7 @@ export function PresentationPreview({
 			>
 				<div className={`${HEADER_STYLES.padding} ${HEADER_STYLES.container} flex items-center gap-2 ${HEADER_STYLES.textBase} font-semibold`}>
 					<Presentation className="size-4 text-kumo-brand" />
-					<span>Slides</span>
+					<span>{t("Slides")}</span>
 					<span className="ml-auto text-xs font-mono text-text-50/50">
 						{slideFiles.length}
 					</span>
@@ -94,7 +96,7 @@ export function PresentationPreview({
 									? 'border-brand shadow-md'
 									: 'border-border-primary hover:border-brand/50 hover:shadow-sm',
 							)}
-							title={`Slide ${slide.index + 1}: ${slide.fileName}`}
+							title={t("Slide {value1}: {value2}", { value1: slide.index + 1, value2: slide.fileName })}
 						>
 							{/* Slide number badge */}
 							<div
@@ -121,7 +123,7 @@ export function PresentationPreview({
 										key={`slide-${slide.index}-${timestamps.slides[slide.index] || timestamps.global}`}
 										src={`${previewUrl}?showAllFragments=true&t=${timestamps.slides[slide.index] || timestamps.global}#/${slide.index}`}
 										className="w-full h-full border-none pointer-events-none"
-										title={`Slide ${slide.index + 1} preview`}
+										title={t("Slide {value1} preview", { value1: slide.index + 1 })}
 										style={{
 											transform: 'scale(0.195) translateZ(0)',
 											transformOrigin: 'top left',
@@ -150,16 +152,14 @@ export function PresentationPreview({
 									<div className="absolute inset-0 bg-brand/20 backdrop-blur-sm flex items-center justify-center z-20">
 										<div className="flex flex-col items-center gap-2">
 											<div className="size-4 border-2 border-text-on-brand/30 border-t-text-on-brand rounded-full animate-spin" />
-											<span className="text-xs font-medium text-white">
-												Updating...
-											</span>
+											<span className="text-xs font-medium text-white">{t("Updating...")}</span>
 										</div>
 									</div>
 								)}
 
 								{failedIframes.has(slide.index) && (
 									<div className="absolute inset-0 bg-red-500/10 flex items-center justify-center z-20">
-										<span className="text-xs text-red-400">Failed to load</span>
+										<span className="text-xs text-red-400">{t("Failed to load")}</span>
 									</div>
 								)}
 							</div>
@@ -184,9 +184,7 @@ export function PresentationPreview({
 							<div className="px-3 py-2 bg-kumo-elevated border-b border-text/10">
 								<div className="flex items-center gap-2">
 									<Presentation className="size-4 text-kumo-brand" />
-									<span className="text-sm font-medium text-text-primary">
-										Current Slide
-									</span>
+									<span className="text-sm font-medium text-text-primary">{t("Current Slide")}</span>
 								</div>
 							</div>
 							<div className="flex-1 min-h-0">
@@ -194,7 +192,7 @@ export function PresentationPreview({
 									ref={iframeRef}
 									src={mainPreviewUrl}
 									className="w-full h-full"
-									title="Current Slide"
+									title={t("Current Slide")}
 									shouldRefreshPreview={shouldRefreshPreview}
 									manualRefreshTrigger={manualRefreshTrigger}
 									webSocket={websocket}
@@ -208,18 +206,12 @@ export function PresentationPreview({
 								<div className="px-3 py-2 bg-kumo-elevated border-b border-text/10">
 									<div className="flex items-center gap-2">
 										<Presentation className="size-4 text-text-primary/50" />
-										<span className="text-sm font-medium text-text-primary/70">
-											Next Slide
-										</span>
+										<span className="text-sm font-medium text-text-primary/70">{t("Next Slide")}</span>
 									</div>
 								</div>
 								<div className="flex-1 min-h-0 bg-kumo-base flex items-center justify-center">
-									<div className="text-text-primary/50 text-sm text-center p-4">
-										Next slide preview
-										<br />
-										<span className="text-xs">
-											(requires Reveal.js integration)
-										</span>
+									<div className="text-text-primary/50 text-sm text-center p-4">{t("Next slide preview")}<br />
+										<span className="text-xs">{t("(requires Reveal.js integration)")}</span>
 									</div>
 								</div>
 							</div>
@@ -227,14 +219,10 @@ export function PresentationPreview({
 							{/* Speaker Notes */}
 							<div className="flex-1 flex flex-col border border-text/10 rounded-lg overflow-hidden">
 								<div className="px-3 py-2 bg-kumo-elevated border-b border-text/10">
-									<span className="text-sm font-medium text-text-primary/70">
-										Speaker Notes
-									</span>
+									<span className="text-sm font-medium text-text-primary/70">{t("Speaker Notes")}</span>
 								</div>
 								<div className="flex-1 min-h-0 bg-kumo-base p-3 overflow-y-auto">
-									<p className="text-sm text-text-primary/50">
-										Speaker notes will appear here
-									</p>
+									<p className="text-sm text-text-primary/50">{t("Speaker notes will appear here")}</p>
 								</div>
 							</div>
 						</div>
@@ -246,9 +234,7 @@ export function PresentationPreview({
 							<div className="px-3 py-2 bg-kumo-elevated border-b border-text/10">
 								<div className="flex items-center gap-2">
 									<Presentation className="size-4 text-kumo-brand" />
-									<span className="text-sm font-medium text-text-primary">
-										Current
-									</span>
+									<span className="text-sm font-medium text-text-primary">{t("Current")}</span>
 								</div>
 							</div>
 							<div className="flex-1 min-h-0">
@@ -256,7 +242,7 @@ export function PresentationPreview({
 									ref={iframeRef}
 									src={mainPreviewUrl}
 									className="w-full h-full"
-									title="Current Slide"
+									title={t("Current Slide")}
 									shouldRefreshPreview={shouldRefreshPreview}
 									manualRefreshTrigger={manualRefreshTrigger}
 									webSocket={websocket}
@@ -269,18 +255,12 @@ export function PresentationPreview({
 							<div className="px-3 py-2 bg-kumo-elevated border-b border-text/10">
 								<div className="flex items-center gap-2">
 									<Presentation className="size-4 text-text-primary/50" />
-									<span className="text-sm font-medium text-text-primary/70">
-										Next
-									</span>
+									<span className="text-sm font-medium text-text-primary/70">{t("Next")}</span>
 								</div>
 							</div>
 							<div className="flex-1 min-h-0 bg-kumo-base flex items-center justify-center">
-								<div className="text-text-primary/50 text-sm text-center p-4">
-									Next slide preview
-									<br />
-									<span className="text-xs">
-										(requires Reveal.js integration)
-									</span>
+								<div className="text-text-primary/50 text-sm text-center p-4">{t("Next slide preview")}<br />
+									<span className="text-xs">{t("(requires Reveal.js integration)")}</span>
 								</div>
 							</div>
 						</div>
@@ -293,7 +273,7 @@ export function PresentationPreview({
 									ref={iframeRef}
 									src={mainPreviewUrl}
 									className="w-full h-full"
-									title="Presentation"
+									title={t("Presentation")}
 									shouldRefreshPreview={shouldRefreshPreview}
 									manualRefreshTrigger={manualRefreshTrigger}
 									webSocket={websocket}

@@ -1,3 +1,4 @@
+import { t } from '../../services/i18n/request-locale';
 /**
  * The platform's paths on a store's address (`/__estori/*`): the store script, store data, checkout, the return from
  * Stripe and receipts. They are answered here, before SpaceDO, so generated code never handles payments.
@@ -247,7 +248,7 @@ async function servePayPage(request: Request, env: Env, target: StorePlatformTar
 	const info = manifest ? storeInfoOf(manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test') : null;
 	const query = new URL(request.url).searchParams;
 	// A page asked for in a language sends the shopper back, and on to the confirmation page, in it.
-	const carried = (path: string): string => (isLocale(query.get(STORE_LANGUAGE_PARAM)) ? returnPathInLanguage(path, language.locale) : path);
+	const carried = (path: string): string => (language.languages.length > 1 && isLocale(query.get(STORE_LANGUAGE_PARAM)) ? returnPathInLanguage(path, language.locale) : path);
 	const returnPaths = { successPath: carried(safeReturnPath(query.get('success'), '/')), cancelPath: carried(safeReturnPath(query.get('cancel'), '/')) };
 	const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 	const appOrigin = env.CUSTOM_DOMAIN ? `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}` : null;
@@ -337,7 +338,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			limitReached: async (weeklySalesCents) => {
 				ctx.waitUntil(
 					(async () => {
-						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: sellerIdOf(target), message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
+						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: sellerIdOf(target), message: t("A store reached its weekly limit of ${value1}.", { value1: (weeklySalesCents / 100).toFixed(2) }) });
 						await sellerNoticesFromEnv(env)({ sellerUserId: sellerIdOf(target), kind: 'limit-reached', weeklySalesCents });
 					})(),
 				);

@@ -19,7 +19,8 @@ import { useState, useEffect, useRef } from 'react';
 import { DebugSessionBubble } from './debug-session-bubble';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { BRAND } from '@/brand';
-import { t } from '@/lib/i18n';
+import { t, useI18n } from '@/lib/i18n';
+import { RESUME_BUILD_MESSAGE } from '../../../../shared/think';
 
 /**
  * Strip internal system tags that should not be displayed to users
@@ -30,7 +31,8 @@ function sanitizeMessageForDisplay(message: string): string {
 }
 
 export function UserMessage({ message }: { message: string }) {
-	const sanitizedMessage = sanitizeMessageForDisplay(message);
+	const { t } = useI18n();
+	const sanitizedMessage = sanitizeMessageForDisplay(message === RESUME_BUILD_MESSAGE ? t('Continue where you left off.') : message);
 
 	return (
 		<div className="flex flex-col gap-2 min-w-0">

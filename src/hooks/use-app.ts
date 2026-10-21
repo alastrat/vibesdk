@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect } from 'react';
 import {
 	useMutation,
@@ -15,9 +16,9 @@ import { useAuth } from '@/contexts/auth-context';
 function getErrorMessage(err: unknown, fallback: string): string {
 	if (err instanceof ApiError) {
 		if (err.status === 404) {
-			return 'App not found';
+			return t("App not found");
 		}
-		return `Failed to load app: ${err.message}`;
+		return t("Failed to load app: {value1}", { value1: err.message });
 	}
 	if (err instanceof Error) {
 		return err.message;
@@ -31,13 +32,14 @@ export async function fetchAppDetails(
 	const response = await apiClient.getAppDetails(appId);
 	if (!response.success || !response.data) {
 		throw new Error(
-			response.error?.message || 'Failed to fetch app details',
+			response.error?.message || t("Failed to fetch app details"),
 		);
 	}
 	return response.data;
 }
 
 export function useApp(appId: string | undefined) {
+	useI18n();
 	const { user } = useAuth();
 	const enabled = !!appId && appId !== 'new';
 
@@ -53,7 +55,7 @@ export function useApp(appId: string | undefined) {
 		app: query.data ?? null,
 		loading: enabled && query.isLoading,
 		error: query.error
-			? getErrorMessage(query.error, 'Failed to fetch app')
+			? getErrorMessage(query.error, t("Failed to fetch app"))
 			: null,
 		refetch: () => {
 			void query.refetch();
@@ -65,6 +67,7 @@ export function useAppPreviewToken(
 	appId: string | undefined,
 	enabled: boolean,
 ) {
+	useI18n();
 	const { user } = useAuth();
 	const query = useQuery({
 		queryKey: queryKeys.account.apps.previewToken(appId ?? '', user?.id),
@@ -73,7 +76,7 @@ export function useAppPreviewToken(
 			if (!response.success || !response.data) {
 				throw new Error(
 					response.error?.message ||
-						'Failed to generate preview token',
+						t("Failed to generate preview token"),
 				);
 			}
 			return response.data.previewUrl;
@@ -91,6 +94,7 @@ export function useAppPreviewToken(
 }
 
 export function useToggleAppFavorite(appId: string | undefined) {
+	useI18n();
 	const queryClient = useQueryClient();
 	const { user } = useAuth();
 
@@ -99,7 +103,7 @@ export function useToggleAppFavorite(appId: string | undefined) {
 			const response = await apiClient.toggleFavorite(targetAppId);
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || 'Failed to toggle favorite',
+					response.error?.message || t("Failed to toggle favorite"),
 				);
 			}
 			return { appId: targetAppId, isFavorite: response.data.isFavorite };
@@ -124,7 +128,7 @@ export function useToggleAppFavorite(appId: string | undefined) {
 		...mutation,
 		mutateAsync: async () => {
 			if (!appId) {
-				throw new Error('App ID is required');
+				throw new Error(t("App ID is required"));
 			}
 			const result = await mutateAsync(appId);
 			return result.isFavorite;
@@ -133,6 +137,7 @@ export function useToggleAppFavorite(appId: string | undefined) {
 }
 
 export function useToggleAppStar(appId: string | undefined) {
+	useI18n();
 	const queryClient = useQueryClient();
 	const { user } = useAuth();
 
@@ -141,7 +146,7 @@ export function useToggleAppStar(appId: string | undefined) {
 			const response = await apiClient.toggleAppStar(targetAppId);
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || 'Failed to star app',
+					response.error?.message || t("Failed to star app"),
 				);
 			}
 			return { appId: targetAppId, ...response.data };
@@ -171,7 +176,7 @@ export function useToggleAppStar(appId: string | undefined) {
 		...mutation,
 		mutateAsync: async () => {
 			if (!appId) {
-				throw new Error('App ID is required');
+				throw new Error(t("App ID is required"));
 			}
 			const { appId: _id, ...data } = await mutateAsync(appId);
 			return data;
@@ -180,6 +185,7 @@ export function useToggleAppStar(appId: string | undefined) {
 }
 
 export function useDeleteApp() {
+	useI18n();
 	const queryClient = useQueryClient();
 
 	return useMutation({
@@ -187,7 +193,7 @@ export function useDeleteApp() {
 			const response = await apiClient.deleteApp(appId);
 			if (!response.success) {
 				throw new Error(
-					response.error?.message || 'Failed to delete app',
+					response.error?.message || t("Failed to delete app"),
 				);
 			}
 			return appId;
@@ -206,6 +212,7 @@ export function useDeleteApp() {
 }
 
 export function useDeployPreview(appId: string | undefined) {
+	useI18n();
 	const queryClient = useQueryClient();
 	const { user } = useAuth();
 
@@ -214,7 +221,7 @@ export function useDeployPreview(appId: string | undefined) {
 			const response = await apiClient.deployPreview(targetAppId);
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || 'Failed to start deployment',
+					response.error?.message || t("Failed to start deployment"),
 				);
 			}
 			return response.data;
@@ -248,7 +255,7 @@ export function useDeployPreview(appId: string | undefined) {
 		...mutation,
 		mutateAsync: async () => {
 			if (!appId) {
-				throw new Error('App ID is required');
+				throw new Error(t("App ID is required"));
 			}
 			return mutateAsync(appId);
 		},

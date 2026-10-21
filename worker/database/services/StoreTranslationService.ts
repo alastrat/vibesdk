@@ -74,6 +74,7 @@ function settingsFromRow(row: SettingsRow): StoreTranslationSettings {
 		showSwitcher: row.showSwitcher,
 		autoTranslate: row.autoTranslate,
 		version: row.version,
+		...(row.extractedAt === null ? {} : { extractedAt: row.extractedAt }),
 	};
 }
 
@@ -377,9 +378,11 @@ export class StoreTranslationService extends BaseService {
 	/** The same translations with their normalized source texts, which serving looks up without hashing. */
 	async translationsOf(appId: string, locale: Locale): Promise<StoreTranslationEntry[]> {
 		const translations = schema.storeTranslations;
+		const texts = schema.storeTexts;
 		return this.database
 			.select({ hash: translations.sourceHash, source: translations.sourceText, text: translations.text })
 			.from(translations)
+			.innerJoin(texts, and(eq(texts.appId, translations.appId), eq(texts.sourceHash, translations.sourceHash)))
 			.where(and(eq(translations.appId, appId), eq(translations.locale, locale)))
 			.all();
 	}

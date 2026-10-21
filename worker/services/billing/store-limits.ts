@@ -1,3 +1,4 @@
+import { assertWithinLimit } from '../i18n/plan-limits';
 /** Starting a new store on a plan: Pro and Premium are limited per day, Basic over the account's lifetime. */
 
 import { BillingService } from '../../database/services/BillingService';
@@ -6,7 +7,7 @@ import type { RateLimitSettings } from '../rate-limit/config';
 import type { AuthUser } from '../../types/auth-types';
 import { createLogger } from '../../logger';
 import { RateLimitExceededError } from '../../../shared/types/errors';
-import { assertWithinLimit, type PlanLimitRefusal } from '../../../shared/types/plans';
+import { type PlanLimitRefusal } from '../../../shared/types/plans';
 import type { BillingAccount } from './account';
 
 const logger = createLogger('StoreLimits');

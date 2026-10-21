@@ -8,6 +8,7 @@ import { serverAnalytics } from '../posthog/analytics';
 import { templateSoldProperties } from '../posthog/commerce-events';
 import type { FulfillDeps } from './fulfill';
 import { sendPurchaseReceipt, type PurchaseReceiptDeps } from './purchase-receipt';
+import { savedUserLocale } from '../i18n/saved-locale';
 
 const logger = createLogger('PurchaseWiring');
 
@@ -19,6 +20,7 @@ export function fulfillDepsFromEnv(env: Env, defer?: (sending: Promise<unknown>)
 		sender: createEmailSender(env),
 		baseUrl: configuredBaseUrl(env),
 		now: () => new Date(),
+		buyerLocale: (userId) => savedUserLocale(env, userId),
 	};
 	return {
 		listingExists: async (listingId) => (await listings.getListing(listingId)) !== null,

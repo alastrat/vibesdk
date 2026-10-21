@@ -71,7 +71,7 @@ export class UserController extends BaseController {
             return UserController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting user apps:', error);
-            return UserController.createErrorResponse<UserAppsData>('Failed to get user apps', 500);
+            return UserController.createErrorResponse<UserAppsData>(msg('Failed to get user apps'), 500);
         }
     }
 
@@ -104,7 +104,7 @@ export class UserController extends BaseController {
             return UserController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error updating user profile:', error);
-            return UserController.createErrorResponse<ProfileUpdateData>('Failed to update profile', 500);
+            return UserController.createErrorResponse<ProfileUpdateData>(msg('Failed to update profile'), 500);
         }
     }
 
@@ -115,7 +115,7 @@ export class UserController extends BaseController {
     static async setLocale(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<LocalePreferenceData>>> {
         const user = context.user;
         if (!user) {
-            return UserController.createErrorResponse<LocalePreferenceData>('Unauthorized', 401);
+            return UserController.createErrorResponse<LocalePreferenceData>(msg('Unauthorized'), 401);
         }
 
         const body = await UserController.parseJsonBody<{ locale?: unknown }>(request);
@@ -129,7 +129,7 @@ export class UserController extends BaseController {
             return UserController.createSuccessResponse({ locale });
         } catch (error) {
             this.logger.error('Error saving the language:', error);
-            return UserController.createErrorResponse<LocalePreferenceData>('Failed to save the language', 500);
+            return UserController.createErrorResponse<LocalePreferenceData>(msg('Failed to save the language'), 500);
         }
     }
 }

@@ -15,6 +15,8 @@ import { RateLimitExceededError } from 'shared/types/errors';
 import * as Sentry from '@sentry/cloudflare';
 import { getUserConfigurableSettings } from 'worker/config';
 import { authenticateViaTicket, hasTicketParam } from './ticketAuth';
+import { requestLocale, setRequestLocale, t } from '../../services/i18n/request-locale';
+import { msg } from '../../../shared/i18n/translate';
 
 const logger = createLogger('RouteAuth');
 
@@ -123,7 +125,7 @@ export async function routeAuthChecks(
             if (!user) {
                 return {
                     success: false,
-                    response: createAuthRequiredResponse('Account required')
+                    response: createAuthRequiredResponse(msg('Account required'))
                 };
             }
 
@@ -133,12 +135,12 @@ export async function routeAuthChecks(
                     const isOwner = await requirement.resourceOwnershipCheck(user, params, env);
                     return {
                         success: isOwner,
-                        response: isOwner ? undefined : createForbiddenResponse('You can only access your own resources')
+                        response: isOwner ? undefined : createForbiddenResponse(msg('You can only access your own resources'))
                     }
                 }
                 return {
                     success: false,
-                    response: createForbiddenResponse('Invalid resource ownership')
+                    response: createForbiddenResponse(msg('Invalid resource ownership'))
                 };
             }
 
@@ -156,7 +158,7 @@ export async function routeAuthChecks(
             const isAdmin = requirement.roleCheck ? await requirement.roleCheck(user, env) : false;
             return {
                 success: isAdmin,
-                response: isAdmin ? undefined : createForbiddenResponse('Admin access required')
+                response: isAdmin ? undefined : createForbiddenResponse(msg('Admin access required'))
             };
         }
 
@@ -168,7 +170,7 @@ export async function routeAuthChecks(
             success: false,
             response: new Response(JSON.stringify({
                 success: false,
-                error: 'Authentication check failed'
+                error: t('Authentication check failed')
             }), {
                 status: 500,
                 headers: { 'Content-Type': 'application/json' }
@@ -188,7 +190,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
     
     if (!requirement) {
         logger.error('No authentication level found');
-        return errorResponse('No authentication level found', 500);
+        return errorResponse(msg('No authentication level found'), 500);
     }
     
     // Only perform auth if we need it or don't have user yet
@@ -202,6 +204,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
             const ticketAuth = await authenticateViaTicket(request, env, authOptions.ticketAuth, params);
             if (ticketAuth) {
                 user = ticketAuth.user;
+                setRequestLocale(await requestLocale(env, request, user));
                 c.set('user', user);
                 c.set('sessionId', ticketAuth.sessionId);
                 Sentry.setUser({ id: user.id, email: user.email });
@@ -213,7 +216,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
                 logger.info('Authenticated via ticket', { userId: user.id, resourceType: authOptions.ticketAuth.resourceType });
             } else {
                 // Ticket was provided but invalid - reject immediately
-                return errorResponse('Invalid or expired ticket', 403);
+                return errorResponse(msg('Invalid or expired ticket'), 403);
             }
         }
         
@@ -221,7 +224,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
         if (!user) {
             const userSession = await authMiddleware(c.req.raw, c.env);
             if (!userSession) {
-                return errorResponse('Authentication required', 401);
+                return errorResponse(msg('Authentication required'), 401);
             }
             user = userSession.user;
             c.set('user', user);
@@ -238,7 +241,7 @@ export async function enforceAuthRequirement(c: Context<AppEnv>) : Promise<Respo
                     return errorResponse(error, 429);
                 }
                 logger.error('Error enforcing auth rate limit', error);
-                return errorResponse('Internal server error', 500);
+                return errorResponse(msg('Internal server error'), 500);
             }
         }
     }
@@ -270,7 +273,7 @@ function createAuthRequiredResponse(message?: string): Response {
         success: false,
         error: {
             type: 'AUTHENTICATION_REQUIRED',
-            message: message || 'Authentication required',
+            message: t(message || msg('Authentication required')),
             action: 'login'
         }
     }), {
@@ -290,7 +293,7 @@ function createForbiddenResponse(message: string): Response {
         success: false,
         error: {
             type: 'FORBIDDEN',
-            message,
+            message: t(message),
             action: 'insufficient_permissions'
         }
     }), {

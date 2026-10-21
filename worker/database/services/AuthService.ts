@@ -1,3 +1,5 @@
+import { t } from '../../services/i18n/request-locale';
+import { msg } from '../../../shared/i18n/translate';
 /**
  * Main Authentication Service
  * Orchestrates all auth operations including login, registration, and OAuth
@@ -51,6 +53,7 @@ import {
 } from '../../services/auth/one-time-token';
 import { resetPasswordLink, verifyEmailLink } from '../../services/email/links';
 import { passwordResetEmail, verifyEmailEmail } from '../../services/email/templates';
+import { savedUserLocale } from '../../services/i18n/saved-locale';
 import type { EmailSender } from '../../services/email/types';
 import {
     TERMS_VERSION,
@@ -93,7 +96,7 @@ export function providerLabel(provider: string | null | undefined): string {
         case 'cloudflare':
             return 'Cloudflare';
         default:
-            return 'a different sign-in method';
+            return t('a different sign-in method');
     }
 }
 
@@ -216,13 +219,13 @@ export class AuthService extends BaseService {
                     const label = providerLabel(existingUser.provider);
                     throw new SecurityError(
                         SecurityErrorType.CONFLICT,
-                        `This email is registered with ${label}. Please sign in with ${label}.`,
+                        t("This email is registered with {value1}. Please sign in with {value2}.", { value1: String(label), value2: String(label) }),
                         409
                     );
                 }
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
-                    'An account with this email already exists. Please sign in.',
+                    msg('An account with this email already exists. Please sign in.'),
                     400
                 );
             }
@@ -264,7 +267,7 @@ export class AuthService extends BaseService {
             if (!newUser) {
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
-                    'Failed to retrieve created user',
+                    msg('Failed to retrieve created user'),
                     500
                 );
             }
@@ -297,7 +300,7 @@ export class AuthService extends BaseService {
             logger.error('Registration error', error);
             throw new SecurityError(
                 SecurityErrorType.INVALID_INPUT,
-                'Registration failed',
+                msg('Registration failed'),
                 500
             );
         }
@@ -317,7 +320,7 @@ export class AuthService extends BaseService {
             .where(eq(schema.users.id, userId))
             .run();
         const user = await this.database.select().from(schema.users).where(eq(schema.users.id, userId)).get();
-        if (!user) throw new SecurityError(SecurityErrorType.UNAUTHORIZED, 'User not found', 404);
+        if (!user) throw new SecurityError(SecurityErrorType.UNAUTHORIZED, msg('User not found'), 404);
         return mapUserResponse(user);
     }
     
@@ -345,7 +348,7 @@ export class AuthService extends BaseService {
                 await this.logAuthAttempt(credentials.email, 'login', false, request);
                 throw new SecurityError(
                     SecurityErrorType.UNAUTHORIZED,
-                    'Invalid email or password',
+                    msg('Invalid email or password'),
                     401
                 );
             }
@@ -357,7 +360,7 @@ export class AuthService extends BaseService {
                 const label = providerLabel(user.provider);
                 throw new SecurityError(
                     SecurityErrorType.CONFLICT,
-                    `This account uses ${label} to sign in. Please continue with ${label}.`,
+                    t("This account uses {value1} to sign in. Please continue with {value2}.", { value1: String(label), value2: String(label) }),
                     409
                 );
             }
@@ -372,7 +375,7 @@ export class AuthService extends BaseService {
                 await this.logAuthAttempt(credentials.email, 'login', false, request);
                 throw new SecurityError(
                     SecurityErrorType.UNAUTHORIZED,
-                    'Invalid email or password',
+                    msg('Invalid email or password'),
                     401
                 );
             }
@@ -402,7 +405,7 @@ export class AuthService extends BaseService {
             logger.error('Login error', error);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'Login failed',
+                msg('Login failed'),
                 500
             );
         }
@@ -419,7 +422,7 @@ export class AuthService extends BaseService {
             logger.error('Logout error', error);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'Logout failed',
+                msg('Logout failed'),
                 500
             );
         }
@@ -468,7 +471,7 @@ export class AuthService extends BaseService {
         ]);
 
         try {
-            await sender.send(passwordResetEmail(user.email, resetPasswordLink(baseUrl, token)));
+            await sender.send(passwordResetEmail(user.email, resetPasswordLink(baseUrl, token), await savedUserLocale(this.env, user.id)));
         } catch (error) {
             logger.error('Failed to send password reset email', { userId: user.id, error });
         }
@@ -593,7 +596,7 @@ export class AuthService extends BaseService {
                     expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
                 }),
             ]);
-            await sender.send(verifyEmailEmail(user.email, verifyEmailLink(baseUrl, token)));
+            await sender.send(verifyEmailEmail(user.email, verifyEmailLink(baseUrl, token), await savedUserLocale(this.env, user.id)));
         } catch (error) {
             logger.error('Failed to send email confirmation', { userId: user.id, error });
         }
@@ -692,7 +695,7 @@ export class AuthService extends BaseService {
             default:
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
-                    `OAuth provider ${provider} not configured`,
+                    t("OAuth provider {value1} not configured", { value1: String(provider) }),
                     400
                 );
         }
@@ -713,7 +716,7 @@ export class AuthService extends BaseService {
         if (!oauthProvider) {
             throw new SecurityError(
                 SecurityErrorType.INVALID_INPUT,
-                `OAuth provider ${provider} not configured`,
+                t("OAuth provider {value1} not configured", { value1: String(provider) }),
                 400
             );
         }
@@ -809,7 +812,7 @@ export class AuthService extends BaseService {
         if (!oauthState || new Date(oauthState.expiresAt) < now) {
             throw new SecurityError(
                 SecurityErrorType.CSRF_VIOLATION,
-                'Invalid or expired OAuth state',
+                msg('Invalid or expired OAuth state'),
                 400
             );
         }
@@ -826,7 +829,7 @@ export class AuthService extends BaseService {
             });
             throw new SecurityError(
                 SecurityErrorType.CSRF_VIOLATION,
-                'Invalid or expired OAuth state',
+                msg('Invalid or expired OAuth state'),
                 400
             );
         }
@@ -876,7 +879,7 @@ export class AuthService extends BaseService {
             if (!oauthProvider) {
                 throw new SecurityError(
                     SecurityErrorType.INVALID_INPUT,
-                    `OAuth provider ${provider} not configured`,
+                    t("OAuth provider {value1} not configured", { value1: String(provider) }),
                     400
                 );
             }
@@ -889,7 +892,7 @@ export class AuthService extends BaseService {
             if (oauthState.userId) {
                 throw new SecurityError(
                     SecurityErrorType.CSRF_VIOLATION,
-                    'Invalid OAuth state for login',
+                    msg('Invalid OAuth state for login'),
                     400
                 );
             }
@@ -947,7 +950,7 @@ export class AuthService extends BaseService {
             logger.error('OAuth callback error', error);
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'OAuth authentication failed',
+                msg('OAuth authentication failed'),
                 500
             );
         }
@@ -971,7 +974,7 @@ export class AuthService extends BaseService {
         if (oauthUserInfo.emailVerified !== true) {
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'OAuth provider did not verify the email address',
+                msg('OAuth provider did not verify the email address'),
                 401
             );
         }
@@ -1018,7 +1021,7 @@ export class AuthService extends BaseService {
             if (!user) {
                 throw new SecurityError(
                     SecurityErrorType.UNAUTHORIZED,
-                    'OAuth authentication failed',
+                    msg('OAuth authentication failed'),
                     500
                 );
             }
@@ -1059,7 +1062,7 @@ export class AuthService extends BaseService {
             if (!EMAIL_VERIFYING_PROVIDERS.includes(provider)) {
                 throw new SecurityError(
                     SecurityErrorType.CONFLICT,
-                    `Sign in with your password, Google or GitHub, then connect ${providerLabel(provider)} from Settings.`,
+                    t("Sign in with your password, Google or GitHub, then connect {value1} from Settings.", { value1: String(providerLabel(provider)) }),
                     409
                 );
             }
@@ -1197,7 +1200,7 @@ export class AuthService extends BaseService {
         if (!oauthProvider) {
             throw new SecurityError(
                 SecurityErrorType.INVALID_INPUT,
-                `OAuth provider ${provider} not configured`,
+                t("OAuth provider {value1} not configured", { value1: String(provider) }),
                 400
             );
         }
@@ -1208,7 +1211,7 @@ export class AuthService extends BaseService {
         if (!oauthState.userId || oauthState.userId !== sessionUserId) {
             throw new SecurityError(
                 SecurityErrorType.CSRF_VIOLATION,
-                'Invalid account-link state',
+                msg('Invalid account-link state'),
                 403
             );
         }
@@ -1240,7 +1243,7 @@ export class AuthService extends BaseService {
         if (oauthUserInfo.emailVerified !== true) {
             throw new SecurityError(
                 SecurityErrorType.UNAUTHORIZED,
-                'OAuth provider did not verify the email address',
+                msg('OAuth provider did not verify the email address'),
                 401
             );
         }
@@ -1263,7 +1266,7 @@ export class AuthService extends BaseService {
             if (existing.userId !== userId) {
                 throw new SecurityError(
                     SecurityErrorType.CONFLICT,
-                    'This provider account is already linked to another user.',
+                    msg('This provider account is already linked to another user.'),
                     409
                 );
             }
@@ -1304,7 +1307,7 @@ export class AuthService extends BaseService {
         if (!target) {
             throw new SecurityError(
                 SecurityErrorType.INVALID_INPUT,
-                'No linked identity found for this provider.',
+                msg('No linked identity found for this provider.'),
                 404
             );
         }
@@ -1320,7 +1323,7 @@ export class AuthService extends BaseService {
         if (remainingIdentities < 1 && !hasPassword) {
             throw new SecurityError(
                 SecurityErrorType.INVALID_INPUT,
-                'Cannot remove your only login method.',
+                msg('Cannot remove your only login method.'),
                 400
             );
         }

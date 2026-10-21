@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { Zap, Settings } from 'lucide-react';
 
@@ -11,13 +12,14 @@ interface AgentModeToggleProps {
 }
 
 export function AgentModeToggle({ value, onChange, disabled = false, className = '' }: AgentModeToggleProps) {
+	useI18n();
   const [showTooltip, setShowTooltip] = useState(false);
 
   return (
     <div className={`flex items-center gap-3 ${className}`}>
       <div className="flex items-center gap-2">
         <Settings className="size-3.5 text-slate-600 dark:text-slate-400" />
-        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Mode:</span>
+        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{t("Mode:")}</span>
       </div>
       
       <div className="relative">
@@ -40,9 +42,7 @@ export function AgentModeToggle({ value, onChange, disabled = false, className =
               value === 'deterministic' 
                 ? 'bg-emerald-500' 
                 : 'bg-slate-400 dark:bg-slate-500'
-            }`} />
-            Reliable
-          </button>
+            }`} />{t("Reliable")}</button>
           <button
             type="button"
             disabled={disabled}
@@ -57,9 +57,7 @@ export function AgentModeToggle({ value, onChange, disabled = false, className =
               value === 'smart' 
                 ? 'text-violet-500' 
                 : 'text-slate-400 dark:text-slate-500'
-            }`} />
-            Smart
-          </button>
+            }`} />{t("Smart")}</button>
         </div>
         
         {/* Tooltip */}
@@ -69,13 +67,13 @@ export function AgentModeToggle({ value, onChange, disabled = false, className =
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <div className="size-2 rounded-full bg-emerald-500" />
-                  <span className="font-medium text-emerald-300">Reliable:</span>
-                  <span className="text-slate-300">Structured & consistent</span>
+                  <span className="font-medium text-emerald-300">{t("Reliable:")}</span>
+                  <span className="text-slate-300">{t("Structured & consistent")}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Zap className="size-3 text-violet-400" />
-                  <span className="font-medium text-violet-300">Smart:</span>
-                  <span className="text-slate-300">AI-orchestrated & adaptive</span>
+                  <span className="font-medium text-violet-300">{t("Smart:")}</span>
+                  <span className="text-slate-300">{t("AI-orchestrated & adaptive")}</span>
                 </div>
               </div>
               <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-slate-700"></div>

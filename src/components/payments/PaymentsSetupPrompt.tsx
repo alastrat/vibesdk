@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { LinkButton } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
@@ -17,6 +18,7 @@ function readDismissed(): string | null {
 
 /** Offers payments setup to a signed-in user until their stores can take payments, unless they dismissed this step. */
 export function PaymentsSetupPrompt() {
+	useI18n();
 	const { user } = useAuth();
 	const signedIn = !!user && !user.isAnonymous;
 	const status = useStripeConnectStatus(signedIn);
@@ -38,9 +40,7 @@ export function PaymentsSetupPrompt() {
 		<div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg px-4 py-3 ring ring-kumo-hairline">
 			<span className="text-sm text-kumo-default">{prompt.message}</span>
 			<div className="flex items-center gap-2">
-				<button type="button" className="text-sm text-kumo-subtle underline" onClick={dismiss}>
-					Not now
-				</button>
+				<button type="button" className="text-sm text-kumo-subtle underline" onClick={dismiss}>{t("Not now")}</button>
 				<LinkButton size="sm" variant="primary" href={SELLER_SETUP_PATH}>
 					{prompt.action}
 				</LinkButton>

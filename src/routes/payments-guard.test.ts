@@ -123,8 +123,11 @@ describe('getting paid', () => {
 	it('asks for Stripe before a paid publish and states the fee', () => {
 		const dialog = sellerSource('/src/components/publishing/PublishDialog.tsx');
 		expect(dialog).toContain('Connect Stripe to sell this site');
-		expect(dialog).toContain('Estori keeps {PLATFORM_FEE_LABEL} of each');
-		expect(sellerSource('/src/components/payments/PayoutsCard.tsx')).toContain("minus Estori's {PLATFORM_FEE_LABEL} fee");
+		expect(dialog).toContain('Estori keeps {fee} of each sale.');
+		expect(dialog).toContain('fee: PLATFORM_FEE_LABEL');
+		const payouts = sellerSource('/src/components/payments/PayoutsCard.tsx');
+		expect(payouts).toContain("minus Estori's {fee} fee");
+		expect(payouts).toContain('fee: PLATFORM_FEE_LABEL');
 		expect(dialog).not.toContain('test mode');
 	});
 

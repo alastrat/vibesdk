@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** A store's orders, for its owner. */
 
 import { BaseController } from '../baseController';
@@ -34,7 +35,7 @@ export class StoreOrdersController extends BaseController {
             return this.createSuccessResponse<SellerLimitsData>(limitsView({ record, settings, storedLevel: stored?.sellerLevel ?? 'new', storedPayoutDelayDays: stored?.payoutDelayDays ?? null, weeklySalesUsedCents, nowMs }));
         } catch (error) {
             this.logger.error('Failed to load store limits', error);
-            return this.createErrorResponse<SellerLimitsData>('Failed to load your store limits', 500);
+            return this.createErrorResponse<SellerLimitsData>(msg('Failed to load your store limits'), 500);
         }
     }
 
@@ -46,7 +47,7 @@ export class StoreOrdersController extends BaseController {
     ): Promise<ControllerResponse<ApiResponse<StoreOrdersData>>> {
         try {
             const appId = context.pathParams.id;
-            if (!appId) return this.createErrorResponse<StoreOrdersData>('Missing store id', 400);
+            if (!appId) return this.createErrorResponse<StoreOrdersData>(msg('Missing store id'), 400);
             const orders = await new StoreOrderService(env).listOrders(appId);
             const sessionIds = orders.flatMap((order) => order.stripeCheckoutSessionId ?? []);
             const progress = await new CatalogOrderService(env).progressForSessions(sessionIds);
@@ -70,9 +71,9 @@ export class StoreOrdersController extends BaseController {
             const orderId = context.pathParams.orderId;
             const body = await this.parseJsonBody<unknown>(request);
             const refundRequest = body.success ? parseStoreRefundRequest(body.data) : null;
-            if (!appId || !orderId || !refundRequest) return this.createErrorResponse<StoreRefundResponse>('Send the lines to refund and a request id', 400);
+            if (!appId || !orderId || !refundRequest) return this.createErrorResponse<StoreRefundResponse>(msg('Send the lines to refund and a request id'), 400);
             const order = await new StoreOrderService(env).getOrder(orderId);
-            if (!order || order.appId !== appId) return this.createErrorResponse<StoreRefundResponse>('Order not found', 404);
+            if (!order || order.appId !== appId) return this.createErrorResponse<StoreRefundResponse>(msg('Order not found'), 404);
             const outcome = await refundOrderLines(env, order, refundRequest, (sending) => ctx.waitUntil(sending));
             return outcome.ok ? this.createSuccessResponse<StoreRefundResponse>({ refundedCents: outcome.refundedCents }) : this.createErrorResponse<StoreRefundResponse>(outcome.message, outcome.status);
         } catch (error) {

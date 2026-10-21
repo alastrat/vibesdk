@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button, Empty, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
-import { STORE_TRANSLATIONS_PAUSED_MESSAGE, type StoreTranslationOverview, type StoreTranslationSettings, type StoreTranslationSettingsPatch, type StoreTranslationStoreSummary } from '@/api-types';
+import { STORE_TRANSLATIONS_PAUSED_MESSAGE, UNTOUCHED_SETTINGS_VERSION, type Locale, type StoreTranslationOverview, type StoreTranslationSettings, type StoreTranslationSettingsPatch, type StoreTranslationStoreSummary } from '@/api-types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useFlag } from '@/hooks/use-flag';
@@ -195,6 +195,8 @@ type SettingSwitch = 'matchBrowser' | 'showSwitcher' | 'autoTranslate';
 
 function SettingsCard({ appId, settings }: { appId: string; settings: StoreTranslationSettings }) {
 	const { t } = useI18n();
+	const [source, setSource] = useState<Locale>(settings.sourceLocale);
+	const untouched = settings.version <= UNTOUCHED_SETTINGS_VERSION;
 	const save = useSaveTranslationSettings(appId);
 	const change = (patch: StoreTranslationSettingsPatch) => save.mutate(patch, { onSuccess: () => toast.success(t('Saved')), onError: (error) => toast.error(error.message) });
 	const switches: Array<{ key: SettingSwitch; label: string; hint: string }> = [
@@ -207,16 +209,18 @@ function SettingsCard({ appId, settings }: { appId: string; settings: StoreTrans
 		<section className="grid gap-4 rounded-lg border border-kumo-line p-4 text-sm">
 			<h2 className="text-lg font-semibold text-kumo-strong">{t('Settings')}</h2>
 			<div className="grid gap-1.5 sm:max-w-xs">
-				<span className="font-medium text-kumo-default">{t('Store language')}</span>
+				<span className="font-medium text-kumo-default">{untouched ? t('Your store is written in') : t('Store language')}</span>
 				<StoreLanguageSelect
-					value={settings.sourceLocale}
-					label={t('Store language')}
+					value={untouched ? source : settings.sourceLocale}
+					label={untouched ? t('Your store is written in') : t('Store language')}
 					disabled={save.isPending}
 					onChange={(value) => {
+						if (untouched) { setSource(value); return; }
 						if (value !== settings.sourceLocale) change({ sourceLocale: value });
 					}}
 				/>
 				<span className="text-kumo-subtle">{t('The language your store is written in.')}</span>
+				{untouched && <Button size="sm" variant="primary" disabled={save.isPending} loading={save.isPending} onClick={() => change({ sourceLocale: source })}>{t('Confirm')}</Button>}
 			</div>
 			<ul className="grid gap-3">
 				{switches.map((setting) => (
@@ -225,7 +229,7 @@ function SettingsCard({ appId, settings }: { appId: string; settings: StoreTrans
 							<span className="font-medium text-kumo-default">{setting.label}</span>
 							<span className="text-kumo-subtle">{setting.hint}</span>
 						</span>
-						<Switch checked={settings[setting.key]} disabled={save.isPending} onCheckedChange={(checked) => change({ [setting.key]: checked })} aria-label={setting.label} className="mt-0.5" />
+							<Switch checked={settings[setting.key]} disabled={save.isPending || untouched} onCheckedChange={(checked) => change({ [setting.key]: checked })} aria-label={setting.label} className="mt-0.5" />
 					</li>
 				))}
 			</ul>

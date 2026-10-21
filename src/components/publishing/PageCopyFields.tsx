@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@cloudflare/kumo';
 import { useDraftPageCopy } from '@/hooks/use-site-page';
@@ -40,35 +41,35 @@ interface FieldSpec {
 	max: number;
 }
 
-const FIELDS: FieldSpec[] = [
+const fields = (): FieldSpec[] => [
 	{
 		key: 'about',
-		label: 'About',
-		hint: `Up to ${SITE_PAGE_LIMITS.aboutParagraphs.max} paragraphs, separated by a blank line`,
+		label: t("About"),
+		hint: t("Up to {value1} paragraphs, separated by a blank line", { value1: SITE_PAGE_LIMITS.aboutParagraphs.max }),
 		rows: 5,
 		count: (copy) => copy.about.join('').length,
 		max: SITE_PAGE_LIMITS.aboutTotal,
 	},
 	{
 		key: 'features',
-		label: 'Features',
-		hint: `One per line, ${SITE_PAGE_LIMITS.features.min} to ${SITE_PAGE_LIMITS.features.max}, each up to ${SITE_PAGE_LIMITS.features.each} characters`,
+		label: t("Features"),
+		hint: t("One per line, {value1} to {value2}, each up to {value3} characters", { value1: SITE_PAGE_LIMITS.features.min, value2: SITE_PAGE_LIMITS.features.max, value3: SITE_PAGE_LIMITS.features.each }),
 		rows: 4,
 		count: (copy) => copy.features.length,
 		max: SITE_PAGE_LIMITS.features.max,
 	},
 	{
 		key: 'includes',
-		label: "What's included",
-		hint: `One per line, as "Name: what it has", name up to ${SITE_PAGE_LIMITS.includes.name} and line up to ${SITE_PAGE_LIMITS.includes.detail} characters`,
+		label: t("What's included"),
+		hint: t("One per line, as \"Name: what it has\", name up to {value1} and line up to {value2} characters", { value1: SITE_PAGE_LIMITS.includes.name, value2: SITE_PAGE_LIMITS.includes.detail }),
 		rows: 4,
 		count: (copy) => copy.includes.length,
 		max: SITE_PAGE_LIMITS.includes.max,
 	},
 	{
 		key: 'madeFor',
-		label: 'Made for',
-		hint: `One per line, ${SITE_PAGE_LIMITS.madeFor.min} to ${SITE_PAGE_LIMITS.madeFor.max}, each up to ${SITE_PAGE_LIMITS.madeFor.each} characters`,
+		label: t("Made for"),
+		hint: t("One per line, {value1} to {value2}, each up to {value3} characters", { value1: SITE_PAGE_LIMITS.madeFor.min, value2: SITE_PAGE_LIMITS.madeFor.max, value3: SITE_PAGE_LIMITS.madeFor.each }),
 		rows: 3,
 		count: (copy) => copy.madeFor.length,
 		max: SITE_PAGE_LIMITS.madeFor.max,
@@ -77,6 +78,7 @@ const FIELDS: FieldSpec[] = [
 
 /** The product page text: drafted by AI on first open, edited by the creator, checked against the shared limits. */
 export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange, onChange }: PageCopyFieldsProps) {
+	useI18n();
 	const draft = useDraftPageCopy(appId);
 	const [form, setForm] = useState<PageCopyForm>(() => toPageCopyForm(initialCopy));
 	const [lastDraft, setLastDraft] = useState<PageCopyForm | null>(null);
@@ -106,7 +108,7 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 
 	const redraft = () => {
 		const edited = !empty && JSON.stringify(form) !== JSON.stringify(lastDraft ?? EMPTY_PAGE_COPY_FORM);
-		if (edited && !window.confirm('Replace your page text with a new draft?')) return;
+		if (edited && !window.confirm(t("Replace your page text with a new draft?"))) return;
 		requestDraft();
 	};
 
@@ -117,20 +119,18 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 	return (
 		<div className="grid gap-3 rounded-lg p-3 ring ring-kumo-hairline">
 			<div className="flex items-center justify-between gap-2">
-				<span className="text-sm font-medium text-kumo-default">Page</span>
-				<Button size="sm" variant="secondary" loading={draft.isPending} onClick={redraft}>
-					Redraft with AI
-				</Button>
+				<span className="text-sm font-medium text-kumo-default">{t("Page")}</span>
+				<Button size="sm" variant="secondary" loading={draft.isPending} onClick={redraft}>{t("Redraft with AI")}</Button>
 			</div>
-			{inReview && <p className="text-xs text-kumo-subtle">Your page text is in review</p>}
+			{inReview && <p className="text-xs text-kumo-subtle">{t("Your page text is in review")}</p>}
 			{reviewedOnChange && (
-				<p className="text-xs text-kumo-subtle">Changes to the page text go to review with the price.</p>
+				<p className="text-xs text-kumo-subtle">{t("Changes to the page text go to review with the price.")}</p>
 			)}
-			{draft.isPending && <p className="text-xs text-kumo-subtle">Drafting…</p>}
+			{draft.isPending && <p className="text-xs text-kumo-subtle">{t("Drafting…")}</p>}
 			{draft.isError && <p className="text-xs text-kumo-subtle">{draft.error.message}</p>}
 			<label className="grid gap-1">
 				<span className="flex justify-between text-xs text-kumo-subtle">
-					<span>Tagline</span>
+					<span>{t("Tagline")}</span>
 					<span>
 						{form.tagline.trim().length}/{SITE_PAGE_LIMITS.tagline}
 					</span>
@@ -143,7 +143,7 @@ export function PageCopyFields({ appId, initialCopy, inReview, reviewedOnChange,
 				/>
 				{error?.field === 'tagline' && <span className="text-xs text-kumo-danger">{error.error}</span>}
 			</label>
-			{FIELDS.map((field) => (
+			{fields().map((field) => (
 				<label key={field.key} className="grid gap-1">
 					<span className="flex justify-between text-xs text-kumo-subtle">
 						<span>

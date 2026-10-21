@@ -1,3 +1,4 @@
+import { useI18n } from '@/lib/i18n';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { cn } from '@cloudflare/kumo';
 import { useVault } from '@/hooks/use-vault';
@@ -19,6 +20,7 @@ interface Props {
 }
 
 export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
+	const { t } = useI18n();
 	const { setupVaultWithPassword, setupVaultWithPasskey } = useVault();
 
 	const passkeySupported = useMemo(() => {
@@ -50,10 +52,10 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 
 	const passwordError = useMemo(() => {
 		if (method !== 'password') return null;
-		if (password.length > 0 && password.length < 12) return 'Password must be at least 12 characters';
-		if (confirmPassword.length > 0 && password !== confirmPassword) return 'Passwords do not match';
+		if (password.length > 0 && password.length < 12) return t("Password must be at least 12 characters");
+		if (confirmPassword.length > 0 && password !== confirmPassword) return t("Passwords do not match");
 		return null;
-	}, [confirmPassword, method, password]);
+	}, [confirmPassword, method, password, t]);
 
 	const canCreate = useMemo(() => {
 		if (!method) return false;
@@ -70,15 +72,15 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 			let codes: string[];
 			if (method === 'passkey') {
 				if (!passkeySupported) {
-					throw new Error('Passkeys are not supported in this browser');
+					throw new Error(t("Passkeys are not supported in this browser"));
 				}
 				codes = await setupVaultWithPasskey();
 			} else {
 				if (password !== confirmPassword) {
-					throw new Error('Passwords do not match');
+					throw new Error(t("Passwords do not match"));
 				}
 				if (password.length < 12) {
-					throw new Error('Password must be at least 12 characters');
+					throw new Error(t("Password must be at least 12 characters"));
 				}
 				codes = await setupVaultWithPassword(password);
 			}
@@ -86,7 +88,7 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 			setRecoveryCodes(codes);
 			setStep('recovery');
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Setup failed');
+			setError(err instanceof Error ? err.message : t("Setup failed"));
 		} finally {
 			setIsCreating(false);
 		}
@@ -95,10 +97,8 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 	if (step === 'recovery' && recoveryCodes) {
 		return (
 			<div className="p-6">
-				<h2 className="text-lg font-semibold">Save your recovery codes</h2>
-				<p className="text-sm text-muted-foreground mt-1">
-					These are the only way to regain access if you lose your unlock method.
-				</p>
+				<h2 className="text-lg font-semibold">{t("Save your recovery codes")}</h2>
+				<p className="text-sm text-muted-foreground mt-1">{t("These are the only way to regain access if you lose your unlock method.")}</p>
 
 				<Separator className="my-4" />
 
@@ -116,9 +116,7 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 							setError(null);
 							setStep('setup');
 						}}
-					>
-						Back
-					</Button>
+					>{t("Back")}</Button>
 					{onCancel ? (
 						<Button
 							variant="ghost"
@@ -126,9 +124,7 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 								resetState();
 								onCancel();
 							}}
-						>
-							Cancel
-						</Button>
+						>{t("Cancel")}</Button>
 					) : (
 						<div />
 					)}
@@ -139,10 +135,8 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 
 	return (
 		<div className="p-6">
-			<h2 className="text-lg font-semibold">Set up your vault</h2>
-			<p className="text-sm text-muted-foreground mt-1">
-				Choose how you’ll unlock this vault. You’ll get recovery codes next.
-			</p>
+			<h2 className="text-lg font-semibold">{t("Set up your vault")}</h2>
+			<p className="text-sm text-muted-foreground mt-1">{t("Choose how you’ll unlock this vault. You’ll get recovery codes next.")}</p>
 
 			<Separator className="my-4" />
 
@@ -163,10 +157,8 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 							<div className="flex items-start gap-3">
 								<Fingerprint className="h-5 w-5 text-primary mt-0.5" />
 								<div>
-									<div className="font-medium">Passkey</div>
-									<div className="text-sm text-muted-foreground mt-1">
-										Touch ID / Face ID / security key.
-									</div>
+									<div className="font-medium">{t("Passkey")}</div>
+									<div className="text-sm text-muted-foreground mt-1">{t("Touch ID / Face ID / security key.")}</div>
 								</div>
 							</div>
 						</button>
@@ -184,10 +176,8 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 						<div className="flex items-start gap-3">
 							<KeyRound className="h-5 w-5 text-muted-foreground mt-0.5" />
 							<div>
-								<div className="font-medium">Password</div>
-								<div className="text-sm text-muted-foreground mt-1">
-									Works on all devices. Use at least 12 characters.
-								</div>
+								<div className="font-medium">{t("Password")}</div>
+								<div className="text-sm text-muted-foreground mt-1">{t("Works on all devices. Use at least 12 characters.")}</div>
 							</div>
 						</div>
 					</button>
@@ -196,24 +186,24 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 				{method === 'password' && (
 					<div className="space-y-3">
 						<div className="space-y-2">
-							<Label htmlFor="vault-password">Password</Label>
+							<Label htmlFor="vault-password">{t("Password")}</Label>
 							<Input
 								id="vault-password"
 								type="password"
 								value={password}
 								onChange={(e) => setPassword(e.target.value)}
-								placeholder="At least 12 characters"
+								placeholder={t("At least 12 characters")}
 								autoFocus
 							/>
 						</div>
 						<div className="space-y-2">
-							<Label htmlFor="vault-confirm">Confirm password</Label>
+							<Label htmlFor="vault-confirm">{t("Confirm password")}</Label>
 							<Input
 								id="vault-confirm"
 								type="password"
 								value={confirmPassword}
 								onChange={(e) => setConfirmPassword(e.target.value)}
-								placeholder="Re-enter your password"
+								placeholder={t("Re-enter your password")}
 								onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
 							/>
 						</div>
@@ -238,9 +228,7 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 								resetState();
 								onCancel();
 							}}
-						>
-							Cancel
-						</Button>
+						>{t("Cancel")}</Button>
 					) : (
 						<div />
 					)}
@@ -252,13 +240,11 @@ export function VaultSetupWizard({ open, onComplete, onCancel }: Props) {
 					>
 						{isCreating ? (
 							<>
-								<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-								Creating
-							</>
+								<Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Creating")}</>
 						) : method === 'passkey' ? (
-							'Create passkey'
+							t("Create passkey")
 						) : (
-							'Create vault'
+							t("Create vault")
 						)}
 					</Button>
 				</div>

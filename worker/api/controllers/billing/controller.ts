@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** The signed-in seller's own plan: the billing page's view, and the actions that ask Stripe to change it. */
 
 import { BaseController } from '../baseController';
@@ -51,7 +52,7 @@ export class BillingController extends BaseController {
 
 	static async get(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<BillingView>>> {
 		const user = context.user;
-		if (!user) return this.createErrorResponse<BillingView>('Authentication required', 401);
+		if (!user) return this.createErrorResponse<BillingView>(msg('Authentication required'), 401);
 		try {
 			const account = await loadAccount(env, user.id);
 			if (!account.billing) return this.createSuccessResponse(billingView(account, null, [], false, null));
@@ -137,7 +138,7 @@ export class BillingController extends BaseController {
 		answer: (value: T) => R,
 	): Promise<R | ControllerResponse<ApiResponse<never>>> {
 		const user = context.user;
-		if (!user) return this.createErrorResponse('Authentication required', 401);
+		if (!user) return this.createErrorResponse(msg('Authentication required'), 401);
 		if (!(await isFlagOn(env, 'billing', user.id))) return this.createErrorResponse(BILLING_NOT_OPEN_MESSAGE, 403);
 		try {
 			const result = await action(billingActionDepsFromEnv(env, request, this.translatorFor(request, user)), user);

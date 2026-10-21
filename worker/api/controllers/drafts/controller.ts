@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** A store's drafts, for its owner: list, start, switch, rename and delete. Publishing stays in the live store controller. */
 
 import { BaseController } from '../baseController';
@@ -51,9 +52,9 @@ export class DraftsController extends BaseController {
 		appId: string | undefined,
 		change: (space: DraftsSpaceStub, appId: string) => Promise<DraftsOutcome>,
 	): Promise<ControllerResponse<ApiResponse<DraftsSnapshot>>> {
-		if (!appId) return this.createErrorResponse<DraftsSnapshot>('Store not found', 404);
+		if (!appId) return this.createErrorResponse<DraftsSnapshot>(msg('Store not found'), 404);
 		const space = spaceOf(env, appId);
-		if (!space) return this.createErrorResponse<DraftsSnapshot>("Drafts aren't available right now.", 503);
+		if (!space) return this.createErrorResponse<DraftsSnapshot>(msg("Drafts aren't available right now."), 503);
 		try {
 			const result = await draftsResponse(await change(space, appId), () => space.listDrafts());
 			return 'error' in result ? this.createErrorResponse<DraftsSnapshot>(result.error, result.status) : this.createSuccessResponse(result.data);

@@ -1,3 +1,5 @@
+import { INTL_LOCALE } from 'shared/i18n/locales';
+import { t, useI18n } from '@/lib/i18n';
 /**
  * BYOK API Keys Modal - Uses vault for secure key storage
  * Tab 1: Add new keys (stores in vault with metadata.provider)
@@ -95,6 +97,7 @@ function templateToBYOKProvider(template: SecretTemplate): BYOKProvider {
 }
 
 export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysModalProps) {
+	const { locale } = useI18n();
 	const { state, isUnlocked, encryptAndStoreSecret, listSecrets, deleteSecret } = useVault();
 
 	// Tab management
@@ -130,11 +133,11 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 				const providers = response.data.templates.map(templateToBYOKProvider);
 				setBYOKProviders(providers);
 			} else {
-				toast.error('Failed to load BYOK providers');
+				toast.error(t("Failed to load BYOK providers"));
 			}
 		} catch (error) {
 			console.error('Error loading BYOK templates:', error);
-			toast.error('Failed to load BYOK providers');
+			toast.error(t("Failed to load BYOK providers"));
 		} finally {
 			setIsLoading(false);
 		}
@@ -168,7 +171,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 			setManagedSecrets(byokSecrets);
 		} catch (error) {
 			console.error('Error loading managed secrets:', error);
-			toast.error('Failed to load API keys');
+			toast.error(t("Failed to load API keys"));
 		} finally {
 			setLoadingSecrets(false);
 		}
@@ -235,7 +238,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 			});
 
 			if (secretId) {
-				toast.success(`${provider.name} API key added successfully!`);
+				toast.success(t("{value1} API key added successfully!", { value1: provider.name }));
 				onKeyAdded?.();
 
 				// Reload managed secrets and switch to manage tab
@@ -246,11 +249,11 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 				setSelectedProvider(null);
 				setApiKey('');
 			} else {
-				toast.error('Failed to save API key');
+				toast.error(t("Failed to save API key"));
 			}
 		} catch (error) {
 			console.error('Failed to save API key:', error);
-			toast.error('Failed to save API key. Please try again.');
+			toast.error(t("Failed to save API key. Please try again."));
 		} finally {
 			setIsSaving(false);
 		}
@@ -265,7 +268,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 		try {
 			const success = await deleteSecret(secretToDelete.id);
 			if (success) {
-				toast.success(`${secretToDelete.name} API key deleted successfully`);
+				toast.success(t("{value1} API key deleted successfully", { value1: secretToDelete.name }));
 
 				// Remove from local state
 				setManagedSecrets((prev) => prev.filter((secret) => secret.id !== secretToDelete.id));
@@ -273,7 +276,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 				// Notify parent about key changes
 				onKeyAdded?.();
 			} else {
-				toast.error('Failed to delete API key');
+				toast.error(t("Failed to delete API key"));
 			}
 
 			// Close dialog
@@ -281,7 +284,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 			setSecretToDelete(null);
 		} catch (error) {
 			console.error('Error deleting secret:', error);
-			toast.error('Failed to delete API key');
+			toast.error(t("Failed to delete API key"));
 		} finally {
 			setIsDeleting(false);
 		}
@@ -294,7 +297,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 
 	const formatDate = (dateString: string) => {
 		const date = new Date(dateString);
-		return date.toLocaleDateString('en-US', {
+		return date.toLocaleDateString(INTL_LOCALE[locale], {
 			year: 'numeric',
 			month: 'short',
 			day: 'numeric',
@@ -311,12 +314,10 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 	const renderVaultLockedState = () => (
 		<div className="text-center py-8 text-kumo-subtle">
 			<Lock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-			<p className="text-lg font-medium mb-2">Vault is locked</p>
-			<p className="text-sm mb-4">Unlock your vault to view and manage API keys</p>
+			<p className="text-lg font-medium mb-2">{t("Vault is locked")}</p>
+			<p className="text-sm mb-4">{t("Unlock your vault to view and manage API keys")}</p>
 			<Button onClick={() => setShowUnlockModal(true)}>
-				<Lock className="h-4 w-4 mr-2" />
-				Unlock Vault
-			</Button>
+				<Lock className="h-4 w-4 mr-2" />{t("Unlock Vault")}</Button>
 		</div>
 	);
 
@@ -324,12 +325,10 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 	const renderVaultNotSetupState = () => (
 		<div className="text-center py-8 text-kumo-subtle">
 			<Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
-			<p className="text-lg font-medium mb-2">Set up your secure vault</p>
-			<p className="text-sm mb-4">Create a vault to securely store your API keys</p>
+			<p className="text-lg font-medium mb-2">{t("Set up your secure vault")}</p>
+			<p className="text-sm mb-4">{t("Create a vault to securely store your API keys")}</p>
 			<Button onClick={() => setShowSetupModal(true)}>
-				<Key className="h-4 w-4 mr-2" />
-				Set Up Vault
-			</Button>
+				<Key className="h-4 w-4 mr-2" />{t("Set Up Vault")}</Button>
 		</div>
 	);
 
@@ -339,15 +338,9 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 				<DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
 					<DialogHeader>
 						<DialogTitle className="flex items-center gap-2">
-							<Key className="h-5 w-5" />
-							Bring Your Own Key
-							<span className="flex items-center gap-1 text-xs text-kumo-subtle font-normal">
-								via <CloudflareLogo className="h-3 w-3" /> AI Gateway
-							</span>
+							<Key className="h-5 w-5" />{t("Bring Your Own Key")}<span className="flex items-center gap-1 text-xs text-kumo-subtle font-normal">{t("via")}<CloudflareLogo className="h-3 w-3" />{t("AI Gateway")}</span>
 						</DialogTitle>
-						<DialogDescription>
-							Add your API keys to use your own provider accounts for billing, or manage existing keys
-						</DialogDescription>
+						<DialogDescription>{t("Add your API keys to use your own provider accounts for billing, or manage existing keys")}</DialogDescription>
 					</DialogHeader>
 
 					<div className="space-y-6">
@@ -359,18 +352,14 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 									value: 'add',
 									label: (
 										<span className="inline-flex items-center gap-2">
-											<Plus className="h-4 w-4" />
-											Add Keys
-										</span>
+											<Plus className="h-4 w-4" />{t("Add Keys")}</span>
 									),
 								},
 								{
 									value: 'manage',
 									label: (
 										<span className="inline-flex items-center gap-2">
-											<Settings className="h-4 w-4" />
-											Manage Keys
-										</span>
+											<Settings className="h-4 w-4" />{t("Manage Keys")}</span>
 									),
 								},
 							]}
@@ -381,7 +370,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 						<div className="space-y-6">
 							{/* Provider Selection - Clean List */}
 							<div className="space-y-3">
-								<Label className="text-sm font-medium">Select Provider</Label>
+								<Label className="text-sm font-medium">{t("Select Provider")}</Label>
 								{isLoading ? (
 									<div className="space-y-2">
 										{[1, 2, 3, 4].map((i) => (
@@ -423,9 +412,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 							{/* API Key Input - Smooth Expansion */}
 							{selectedProvider && provider && (
 								<div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
-									<Label htmlFor="apiKey" className="text-sm font-medium">
-										Enter your {provider.name} API key
-									</Label>
+									<Label htmlFor="apiKey" className="text-sm font-medium">{t('Enter your {provider} API key', { provider: provider.name })}</Label>
 									<div className="relative">
 										<Input
 											id="apiKey"
@@ -452,8 +439,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 										)}
 									</div>
 									{apiKey && !isKeyFormatValid && (
-										<p className="text-xs text-red-600">
-											Invalid format. Expected: {provider.placeholder}
+										<p className="text-xs text-red-600">{t("Invalid format. Expected:")}{provider.placeholder}
 										</p>
 									)}
 								</div>
@@ -484,14 +470,14 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 							) : managedSecrets.length === 0 ? (
 								<div className="text-center py-8 text-kumo-subtle">
 									<Key className="h-12 w-12 mx-auto mb-4 opacity-50" />
-									<p className="text-lg font-medium mb-2">No API keys configured</p>
-									<p className="text-sm">Add your first API key using the "Add Keys" tab</p>
+									<p className="text-lg font-medium mb-2">{t("No API keys configured")}</p>
+									<p className="text-sm">{t("Add your first API key using the \"Add Keys\" tab")}</p>
 								</div>
 							) : (
 								<div className="space-y-4">
 									<div className="flex items-center justify-between">
-										<Label className="text-sm font-medium">Your API Keys</Label>
-										<Badge variant="secondary">{managedSecrets.length} total</Badge>
+										<Label className="text-sm font-medium">{t("Your API Keys")}</Label>
+										<Badge variant="secondary">{managedSecrets.length}{t("total")}</Badge>
 									</div>
 
 									<div className="space-y-3">
@@ -519,7 +505,7 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 																<span>{secret.envVarName || secret.provider}</span>
 															</div>
 															<Separator orientation="vertical" className="h-3" />
-															<span>Added {formatDate(secret.createdAt)}</span>
+															<span>{t("Added")}{formatDate(secret.createdAt)}</span>
 														</div>
 													</div>
 
@@ -545,21 +531,15 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 					</div>
 
 					<DialogFooter>
-						<Button variant="outline" onClick={onClose}>
-							Close
-						</Button>
+						<Button variant="outline" onClick={onClose}>{t("Close")}</Button>
 						{activeTab === 'add' && selectedProvider && (
 							<Button onClick={handleSaveKey} disabled={!apiKey || !isKeyFormatValid || isSaving} className="gap-2">
 								{isSaving ? (
 									<>
-										<Loader2 className="h-4 w-4 animate-spin" />
-										Adding...
-									</>
+										<Loader2 className="h-4 w-4 animate-spin" />{t("Adding...")}</>
 								) : (
 									<>
-										<Plus className="h-4 w-4" />
-										Add Key
-									</>
+										<Plus className="h-4 w-4" />{t("Add Key")}</>
 								)}
 							</Button>
 						)}
@@ -571,14 +551,11 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 			<AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete API Key</AlertDialogTitle>
-						<AlertDialogDescription>
-							Are you sure you want to delete the {secretToDelete?.name} API key? This action cannot be
-							undone.
-						</AlertDialogDescription>
+						<AlertDialogTitle>{t("Delete API Key")}</AlertDialogTitle>
+						<AlertDialogDescription>{t('Delete the {name} API key? This action cannot be undone.', { name: secretToDelete?.name ?? '' })}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={handleDeleteSecret}
 							disabled={isDeleting}
@@ -586,11 +563,9 @@ export function ByokApiKeysModal({ isOpen, onClose, onKeyAdded }: ByokApiKeysMod
 						>
 							{isDeleting ? (
 								<>
-									<Loader2 className="h-4 w-4 animate-spin mr-2" />
-									Deleting...
-								</>
+									<Loader2 className="h-4 w-4 animate-spin mr-2" />{t("Deleting...")}</>
 							) : (
-								'Delete Key'
+								t("Delete Key")
 							)}
 						</AlertDialogAction>
 					</AlertDialogFooter>

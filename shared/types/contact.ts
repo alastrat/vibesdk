@@ -1,12 +1,13 @@
 import { LEGAL_CONTACT } from './legal';
+import { msg } from '../i18n/translate';
 
 /** What a contact-sales request can be about; the API accepts only these ids. */
 export const CONTACT_TOPICS = [
-	{ id: 'enterprise', label: 'the Enterprise plan' },
-	{ id: 'pro', label: 'the Pro plan' },
-	{ id: 'premium', label: 'the Premium plan' },
-	{ id: 'partnership', label: 'a partnership' },
-	{ id: 'other', label: 'something else' },
+	{ id: 'enterprise', label: msg('the Enterprise plan') },
+	{ id: 'pro', label: msg('the Pro plan') },
+	{ id: 'premium', label: msg('the Premium plan') },
+	{ id: 'partnership', label: msg('a partnership') },
+	{ id: 'other', label: msg('something else') },
 ] as const;
 
 export type ContactTopic = (typeof CONTACT_TOPICS)[number]['id'];

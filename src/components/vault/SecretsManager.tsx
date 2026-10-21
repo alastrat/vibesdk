@@ -1,3 +1,5 @@
+import { dateFnsLocale } from '@/lib/i18n/date-locale';
+import { t, tn, useI18n } from '@/lib/i18n';
 import { useState, useEffect, useCallback } from 'react';
 import { useVault, type SecretListItem } from '@/contexts/vault-context';
 import { Button } from '@/components/ui/button';
@@ -47,6 +49,7 @@ interface Props {
 }
 
 export function SecretsManager({ className, compact = false, id }: Props) {
+	const { locale } = useI18n();
 	const { state, isUnlocked, listSecrets, deleteSecret, lockVault, getSecretValue, resetVault } = useVault();
 	const [secrets, setSecrets] = useState<SecretListItem[]>([]);
 	const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
@@ -108,10 +111,10 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 
 		try {
 			const result = await getSecretValue(secret.id);
-			setViewingSecret((prev) => (prev ? { ...prev, value: result?.value || 'Unable to decrypt' } : null));
+			setViewingSecret((prev) => (prev ? { ...prev, value: result?.value || t("Unable to decrypt") } : null));
 		} catch (err) {
 			console.error('Failed to get secret value:', err);
-			setViewingSecret((prev) => (prev ? { ...prev, value: 'Error loading value' } : null));
+			setViewingSecret((prev) => (prev ? { ...prev, value: t("Error loading value") } : null));
 		} finally {
 			setIsLoadingValue(false);
 		}
@@ -124,18 +127,12 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 				<Card id={id} className={className}>
 					<CardHeader>
 						<CardTitle className="flex items-center gap-2">
-							<Shield className="h-5 w-5" />
-							Secrets Vault
-						</CardTitle>
-						<CardDescription>
-							Set up your encrypted vault to securely store API keys and secrets.
-						</CardDescription>
+							<Shield className="h-5 w-5" />{t("Secrets Vault")}</CardTitle>
+						<CardDescription>{t("Set up your encrypted vault to securely store API keys and secrets.")}</CardDescription>
 					</CardHeader>
 					<CardContent>
 						<Button onClick={() => setShowSetupModal(true)} className="w-full">
-							<Shield className="h-4 w-4 mr-2" />
-							Set Up Vault
-						</Button>
+							<Shield className="h-4 w-4 mr-2" />{t("Set Up Vault")}</Button>
 					</CardContent>
 				</Card>
 
@@ -159,23 +156,17 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 				<Card id={id} className={className}>
 					<CardHeader>
 						<CardTitle className="flex items-center gap-2">
-							<ShieldOff className="h-5 w-5" />
-							Vault Locked
-						</CardTitle>
-						<CardDescription>Unlock your vault to view and manage secrets.</CardDescription>
+							<ShieldOff className="h-5 w-5" />{t("Vault Locked")}</CardTitle>
+						<CardDescription>{t("Unlock your vault to view and manage secrets.")}</CardDescription>
 					</CardHeader>
 					<CardContent className="space-y-3">
 						<Button onClick={() => setShowUnlockModal(true)} className="w-full">
-							<Lock className="h-4 w-4 mr-2" />
-							Unlock Vault
-						</Button>
+							<Lock className="h-4 w-4 mr-2" />{t("Unlock Vault")}</Button>
 						<Button
 							variant="outline"
 							onClick={() => setResetConfirmOpen(true)}
 							className="w-full text-destructive hover:text-destructive"
-						>
-							Reset Vault
-						</Button>
+						>{t("Reset Vault")}</Button>
 						<VaultUnlockModal open={showUnlockModal} onOpenChange={setShowUnlockModal} />
 					</CardContent>
 				</Card>
@@ -183,13 +174,11 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 				<AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
-							<AlertDialogTitle>Reset vault?</AlertDialogTitle>
-							<AlertDialogDescription>
-								This deletes all vault secrets and configuration. This cannot be undone.
-							</AlertDialogDescription>
+							<AlertDialogTitle>{t("Reset vault?")}</AlertDialogTitle>
+							<AlertDialogDescription>{t("This deletes all vault secrets and configuration. This cannot be undone.")}</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
-							<AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+							<AlertDialogCancel disabled={isResetting}>{t("Cancel")}</AlertDialogCancel>
 							<AlertDialogAction
 								disabled={isResetting}
 								className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -206,11 +195,9 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 							>
 								{isResetting ? (
 									<>
-										<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-										Resetting...
-									</>
+										<Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Resetting...")}</>
 								) : (
-									'Reset'
+									t("Reset")
 								)}
 							</AlertDialogAction>
 						</AlertDialogFooter>
@@ -226,13 +213,10 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 			<CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
 				<div>
 					<CardTitle className="flex items-center gap-2">
-						<Shield className="h-5 w-5 text-green-500" />
-						Secrets Vault
-					</CardTitle>
+						<Shield className="h-5 w-5 text-green-500" />{t("Secrets Vault")}</CardTitle>
 					{!compact && (
 						<CardDescription>
-							{secrets.length} secret{secrets.length !== 1 ? 's' : ''} stored securely
-						</CardDescription>
+							{tn('{count} secret stored securely', '{count} secrets stored securely', secrets.length)}</CardDescription>
 					)}
 				</div>
 				<div className="flex items-center gap-2">
@@ -243,9 +227,7 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 						<Lock className="h-4 w-4" />
 					</Button>
 					<Button size="sm" onClick={() => setShowAddModal(true)}>
-						<Plus className="h-4 w-4 mr-1" />
-						Add
-					</Button>
+						<Plus className="h-4 w-4 mr-1" />{t("Add")}</Button>
 					<Button variant="ghost" size="icon" onClick={() => setResetConfirmOpen(true)}>
 						<Trash2 className="h-4 w-4" />
 					</Button>
@@ -259,10 +241,8 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 				) : secrets.length === 0 ? (
 					<div className="text-center py-8 text-muted-foreground">
 						<Key className="h-8 w-8 mx-auto mb-2 opacity-50" />
-						<p>No secrets stored yet</p>
-						<Button variant="link" onClick={() => setShowAddModal(true)} className="mt-2">
-							Add your first secret
-						</Button>
+						<p>{t("No secrets stored yet")}</p>
+						<Button variant="link" onClick={() => setShowAddModal(true)} className="mt-2">{t("Add your first secret")}</Button>
 					</div>
 				) : (
 					<div className="space-y-2">
@@ -295,8 +275,7 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 												)}
 											</div>
 											{!compact && (
-												<p className="text-xs text-muted-foreground">
-													Added {formatDistanceToNow(new Date(secret.createdAt), { addSuffix: true })}
+												<p className="text-xs text-muted-foreground">{t('Added {date}', { date: formatDistanceToNow(new Date(secret.createdAt), { addSuffix: true, locale: dateFnsLocale(locale) }) })}
 												</p>
 											)}
 										</div>
@@ -335,13 +314,11 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 			<AlertDialog open={resetConfirmOpen} onOpenChange={setResetConfirmOpen}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Reset vault?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This deletes all vault secrets and configuration. This cannot be undone.
-						</AlertDialogDescription>
+						<AlertDialogTitle>{t("Reset vault?")}</AlertDialogTitle>
+						<AlertDialogDescription>{t("This deletes all vault secrets and configuration. This cannot be undone.")}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={isResetting}>{t("Cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							disabled={isResetting}
 							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -358,11 +335,9 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 						>
 							{isResetting ? (
 								<>
-									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-									Resetting...
-								</>
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Resetting...")}</>
 							) : (
-								'Reset'
+								t("Reset")
 							)}
 						</AlertDialogAction>
 					</AlertDialogFooter>
@@ -372,13 +347,11 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 			<AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Delete Secret</AlertDialogTitle>
-						<AlertDialogDescription>
-							Are you sure you want to delete "{deleteConfirm?.name}"? This action cannot be undone.
-						</AlertDialogDescription>
+						<AlertDialogTitle>{t("Delete Secret")}</AlertDialogTitle>
+						<AlertDialogDescription>{t('Are you sure you want to delete "{name}"? This action cannot be undone.', { name: deleteConfirm?.name ?? '' })}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+						<AlertDialogCancel disabled={isDeleting}>{t("Cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={handleDelete}
 							disabled={isDeleting}
@@ -386,11 +359,9 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 						>
 							{isDeleting ? (
 								<>
-									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-									Deleting...
-								</>
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Deleting...")}</>
 							) : (
-								'Delete'
+								t("Delete")
 							)}
 						</AlertDialogAction>
 					</AlertDialogFooter>
@@ -401,7 +372,7 @@ export function SecretsManager({ className, compact = false, id }: Props) {
 				<DialogContent>
 					<DialogHeader>
 						<DialogTitle>{viewingSecret?.name}</DialogTitle>
-						<DialogDescription>Secret value (encrypted at rest)</DialogDescription>
+						<DialogDescription>{t("Secret value (encrypted at rest)")}</DialogDescription>
 					</DialogHeader>
 					<div className="mt-4">
 						{isLoadingValue ? (

@@ -1,3 +1,4 @@
+import { msg } from '../i18n/translate';
 /** Template catalog values shared by the database schema, the worker and the UI. */
 
 import { DEFAULT_LOCALE, type Locale } from '../i18n/locales';
@@ -15,13 +16,13 @@ export const TEMPLATE_CATEGORIES = [
 export type TemplateCategory = (typeof TEMPLATE_CATEGORIES)[number];
 
 export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
-	store: 'Store',
-	landing: 'Landing page',
-	portfolio: 'Portfolio',
-	restaurant: 'Restaurant',
-	saas: 'SaaS',
-	services: 'Services',
-	other: 'Other',
+	store: msg('Store'),
+	landing: msg('Landing page'),
+	portfolio: msg('Portfolio'),
+	restaurant: msg('Restaurant'),
+	saas: msg('SaaS'),
+	services: msg('Services'),
+	other: msg('Other'),
 };
 
 export const TEMPLATE_VERSION_STATUSES = ['pending', 'approved', 'rejected', 'withdrawn', 'superseded'] as const;

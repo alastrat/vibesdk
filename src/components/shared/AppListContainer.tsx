@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, RefreshCw, X, Code2 } from 'lucide-react';
@@ -103,8 +104,8 @@ const getEmptyStateDefaults = (sortBy: AppSortOption, totalCount: number) => {
 	if (totalCount === 0) {
 		// No apps at all
 		return {
-			title: 'No apps yet',
-			description: 'Start building your first app with AI assistance.',
+			title: t("No apps yet"),
+			description: t("Start building your first app with AI assistance."),
 		};
 	}
 
@@ -112,28 +113,28 @@ const getEmptyStateDefaults = (sortBy: AppSortOption, totalCount: number) => {
 	switch (sortBy) {
 		case 'popular':
 			return {
-				title: 'No popular apps yet',
+				title: t("No popular apps yet"),
 				description:
-					'Apps will appear here once they start getting views, stars, or forks.',
+					t("Apps will appear here once they start getting views, stars, or forks."),
 			};
 		case 'starred':
 			return {
-				title: 'No bookmarked apps yet',
+				title: t("No bookmarked apps yet"),
 				description:
-					'Apps you bookmark will appear here. Click the bookmark icon on any app to add it.',
+					t("Apps you bookmark will appear here. Click the bookmark icon on any app to add it."),
 			};
 		case 'trending':
 			return {
-				title: 'No trending apps yet',
+				title: t("No trending apps yet"),
 				description:
-					'Apps will appear here based on recent activity and engagement.',
+					t("Apps will appear here based on recent activity and engagement."),
 			};
 		case 'recent':
 		default:
 			return {
-				title: 'No apps match your filters',
+				title: t("No apps match your filters"),
 				description:
-					"Try adjusting your search or filters to find what you're looking for.",
+					t("Try adjusting your search or filters to find what you're looking for."),
 			};
 	}
 };
@@ -157,6 +158,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 	emptyState,
 	className = '',
 }) => {
+	useI18n();
 	const defaultEmptyState = getEmptyStateDefaults(sortBy, totalCount);
 
 	const { triggerRef } = useInfiniteScroll({
@@ -179,14 +181,10 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 				<div className="rounded-full bg-destructive/10 p-3 mb-4 inline-flex">
 					<X className="h-6 w-6 text-destructive" />
 				</div>
-				<h3 className="text-xl text-text-secondary font-semibold mb-2">
-					Failed to load apps
-				</h3>
+				<h3 className="text-xl text-text-secondary font-semibold mb-2">{t("Failed to load apps")}</h3>
 				<p className="text-kumo-subtle mb-6">{error}</p>
 				<Button onClick={onRetry} variant="outline">
-					<RefreshCw className="h-4 w-4 mr-2" />
-					Retry
-				</Button>
+					<RefreshCw className="h-4 w-4 mr-2" />{t("Retry")}</Button>
 			</div>
 		);
 	}
@@ -246,7 +244,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 							className="flex items-center gap-2 text-kumo-subtle"
 						>
 							<Loader size="sm" />
-							<span className="text-sm">Loading more apps...</span>
+							<span className="text-sm">{t("Loading more apps...")}</span>
 						</motion.div>
 					)}
 				</div>
@@ -256,7 +254,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 				<div className="flex justify-center mt-8">
 					<div className="flex items-center gap-2 text-kumo-subtle">
 						<Loader2 className="h-4 w-4 animate-spin" />
-						<span className="text-sm">Loading more apps...</span>
+						<span className="text-sm">{t("Loading more apps...")}</span>
 					</div>
 				</div>
 			)}
@@ -271,11 +269,9 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 					>
 						{loadingMore ? (
 							<>
-								<Loader2 className="h-4 w-4 animate-spin" />
-								Loading more...
-							</>
+								<Loader2 className="h-4 w-4 animate-spin" />{t("Loading more...")}</>
 						) : (
-							<>Load more apps</>
+							<>{t("Load more apps")}</>
 						)}
 					</Button>
 				</div>
@@ -283,9 +279,7 @@ export const AppListContainer: React.FC<AppListContainerProps> = ({
 
 			{/* Show total count */}
 			{totalCount > 0 && (
-				<div className="text-left mt-6 text-sm text-kumo-subtle">
-					Showing {apps.length} of {totalCount} apps
-				</div>
+				<div className="text-left mt-6 text-sm text-kumo-subtle">{t('Showing {shown} of {total} apps', { shown: apps.length, total: totalCount })}</div>
 			)}
 		</div>
 	);

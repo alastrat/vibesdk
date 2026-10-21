@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 
 import { BaseController } from '../baseController';
 import { ApiResponse, ControllerResponse } from '../types';
@@ -44,7 +45,7 @@ export class AppViewController extends BaseController {
         try {
             const appId = context.pathParams.id;
             if (!appId) {
-                return AppViewController.createErrorResponse<AppDetailsData>('App ID is required', 400);
+                return AppViewController.createErrorResponse<AppDetailsData>(msg('App ID is required'), 400);
             }
             
             // Try to get user if authenticated (optional for public endpoint)
@@ -55,7 +56,7 @@ export class AppViewController extends BaseController {
                 await RateLimitService.enforcePublicAppsRateLimit(env, context.config.security.rateLimit, user ?? null, request);
             } catch (error) {
                 if (error instanceof RateLimitExceededError) {
-                    return AppViewController.createErrorResponse<AppDetailsData>('Too many requests', 429);
+                    return AppViewController.createErrorResponse<AppDetailsData>(msg('Too many requests'), 429);
                 }
                 throw error;
             }
@@ -65,12 +66,12 @@ export class AppViewController extends BaseController {
             const appResult = await appService.getAppDetails(appId, userId);
 
             if (!appResult) {
-                return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
+                return AppViewController.createErrorResponse<AppDetailsData>(msg('App not found'), 404);
             }
 
             // Check if user has permission to view
             if (appResult.visibility === 'private' && appResult.userId !== userId) {
-                return AppViewController.createErrorResponse<AppDetailsData>('App not found', 404);
+                return AppViewController.createErrorResponse<AppDetailsData>(msg('App not found'), 404);
             }
 
             // Track view for all users (including owners and anonymous users).
@@ -153,7 +154,7 @@ export class AppViewController extends BaseController {
             return AppViewController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching app details:', error);
-            return AppViewController.createErrorResponse<AppDetailsData>('Internal server error', 500);
+            return AppViewController.createErrorResponse<AppDetailsData>(msg('Internal server error'), 500);
         }
     }
 
@@ -215,14 +216,14 @@ export class AppViewController extends BaseController {
 
             const appId = context.pathParams.id;
             if (!appId) {
-                return AppViewController.createErrorResponse<AppStarToggleData>('App ID is required', 400);
+                return AppViewController.createErrorResponse<AppStarToggleData>(msg('App ID is required'), 400);
             }
 
             // Check if app exists and toggle star using app service
             const appService = new AppService(env);
             const app = await appService.getSingleAppWithFavoriteStatus(appId, user.id);
             if (!app) {
-                return AppViewController.createErrorResponse<AppStarToggleData>('App not found', 404);
+                return AppViewController.createErrorResponse<AppStarToggleData>(msg('App not found'), 404);
             }
 
             // Toggle star using app service
@@ -232,7 +233,7 @@ export class AppViewController extends BaseController {
             return AppViewController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error toggling star:', error);
-            return AppViewController.createErrorResponse<AppStarToggleData>('Internal server error', 500);
+            return AppViewController.createErrorResponse<AppStarToggleData>(msg('Internal server error'), 500);
         }
     }
 
@@ -298,7 +299,7 @@ export class AppViewController extends BaseController {
             const appId = context.pathParams.id;
             
             if (!appId) {
-                return AppViewController.createErrorResponse<GitCloneTokenData>('App ID is required', 400);
+                return AppViewController.createErrorResponse<GitCloneTokenData>(msg('App ID is required'), 400);
             }
 
             // Generate short-lived JWT (1 hour)
@@ -321,7 +322,7 @@ export class AppViewController extends BaseController {
             return AppViewController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error generating git clone token:', error);
-            return AppViewController.createErrorResponse<GitCloneTokenData>('Failed to generate token', 500);
+            return AppViewController.createErrorResponse<GitCloneTokenData>(msg('Failed to generate token'), 500);
         }
     }
 
@@ -342,20 +343,20 @@ export class AppViewController extends BaseController {
             const appId = context.pathParams.id;
 
             if (!appId) {
-                return AppViewController.createErrorResponse<PreviewTokenData>('App ID is required', 400);
+                return AppViewController.createErrorResponse<PreviewTokenData>(msg('App ID is required'), 400);
             }
 
             const appService = new AppService(env);
             const app = await appService.getAppDetails(appId, user.id);
 
             if (!app) {
-                return AppViewController.createErrorResponse<PreviewTokenData>('App not found', 404);
+                return AppViewController.createErrorResponse<PreviewTokenData>(msg('App not found'), 404);
             }
             if (app.userId !== user.id) {
-                return AppViewController.createErrorResponse<PreviewTokenData>('App not found', 404);
+                return AppViewController.createErrorResponse<PreviewTokenData>(msg('App not found'), 404);
             }
             if (!app.deploymentId) {
-                return AppViewController.createErrorResponse<PreviewTokenData>('App is not deployed', 400);
+                return AppViewController.createErrorResponse<PreviewTokenData>(msg('App is not deployed'), 400);
             }
 
             const token = await signOwnerPreviewToken(env, {
@@ -376,7 +377,7 @@ export class AppViewController extends BaseController {
             return AppViewController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error generating preview token:', error);
-            return AppViewController.createErrorResponse<PreviewTokenData>('Failed to generate token', 500);
+            return AppViewController.createErrorResponse<PreviewTokenData>(msg('Failed to generate token'), 500);
         }
     }
 

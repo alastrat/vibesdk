@@ -16,6 +16,7 @@ import { loadAccount, loadCredits } from '../../../services/billing/account';
 import { textHash } from '../../../services/store-translations/extract';
 import { translationDedupeKey } from '../../../services/store-translations/translate-kind';
 import { translateFor } from '../../../utils/server-translate';
+import { shopperLanguage } from '../../../services/store-translations/serve-context';
 import { formatNumber } from '../../../../shared/i18n/format';
 import { msg } from '../../../../shared/i18n/translate';
 import { STORE_TRANSLATIONS_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
@@ -268,7 +269,36 @@ describe('reading a store\'s translations', () => {
 });
 
 describe('starting a translation', () => {
-	const run = (env: Env, appId: string, locale: string, userId = 'seller_1') => StoreTranslationsController.run(request('POST'), env, ctx, as(userId, { id: appId, locale }));
+	it('refuses a run before the seller confirms the source language, without queuing or changing checkout', async () => {
+		await store('app_unconfirmed_run', 'seller_2');
+		const env = envFor(space());
+		const reply = await answer(await StoreTranslationsController.run(request('POST'), env, ctx, as('seller_2', { id: 'app_unconfirmed_run', locale: 'en' })));
+		expect(reply.status).toBe(400);
+		expect((await new TaskService(env).listForUser('seller_2', { appId: 'app_unconfirmed_run', limit: 20 }))).toEqual([]);
+		expect((await shopperLanguage(request(), env, 'app_unconfirmed_run')).locale).toBe('en');
+		expect(woke).toEqual([]);
+	});
+
+	it('rejects a first switch save by a Spanish-speaking seller, keeping checkout English', async () => {
+		await store('app_unconfirmed_patch', 'seller_2');
+		const env = envFor(space());
+		const service = new StoreTranslationService(env);
+		await service.replaceTexts('app_unconfirmed_patch', [], Date.now());
+		const reply = await answer(await StoreTranslationsController.saveSettings(request('PUT', { showSwitcher: false }), env, ctx, as('seller_2', { id: 'app_unconfirmed_patch' })));
+		expect(reply.status).toBe(400);
+		expect((await service.settingsOf('app_unconfirmed_patch')).version).toBe(1);
+		expect((await shopperLanguage(request(), env, 'app_unconfirmed_patch')).locale).toBe('en');
+		const confirmed = await StoreTranslationsController.saveSettings(request('PUT', { sourceLocale: 'es' }), env, ctx, as('seller_2', { id: 'app_unconfirmed_patch' }));
+		expect(confirmed.status).toBe(200);
+		expect((await service.settingsOf('app_unconfirmed_patch')).sourceLocale).toBe('es');
+	});
+
+	const run = async (env: Env, appId: string, locale: string, userId = 'seller_1') => {
+		const service = new StoreTranslationService(env);
+		const current = await service.settingsOf(appId);
+		if (current.version <= 1) await service.saveSettings(appId, { sourceLocale: current.sourceLocale });
+		return StoreTranslationsController.run(request('POST'), env, ctx, as(userId, { id: appId, locale }));
+	};
 	const taskRows = async (appId: string) => (await db.prepare('SELECT id, status, dedupe_key FROM tasks WHERE app_id = ?').bind(appId).all<{ id: string; status: string; dedupe_key: string }>()).results;
 
 	it('queues one task and answers it, turns the language on, and wakes the seller\'s runner', async () => {
@@ -441,7 +471,7 @@ describe("a store's settings", () => {
 
 	it('saves the switches and the languages, and answers the settings', async () => {
 		await store('app_settings', 'seller_1');
-		const reply = await answer<{ matchBrowser: boolean; showSwitcher: boolean; targets: Record<string, unknown>; version: number }>(await save('app_settings', { matchBrowser: false, targets: { es: { enabled: true } } }));
+		const reply = await answer<{ matchBrowser: boolean; showSwitcher: boolean; targets: Record<string, unknown>; version: number }>(await save('app_settings', { sourceLocale: 'en', matchBrowser: false, targets: { es: { enabled: true } } }));
 		expect(reply.status).toBe(200);
 		expect(reply.body.data).toMatchObject({ matchBrowser: false, showSwitcher: true, targets: { es: { enabled: true, ready: false } } });
 		expect(await new StoreTranslationService(envWith(db)).settingsOf('app_settings')).toMatchObject({ matchBrowser: false, targets: { es: { enabled: true } } });
@@ -449,6 +479,7 @@ describe("a store's settings", () => {
 
 	it('answers an empty patch with the settings as they are, without changing the version', async () => {
 		await store('app_empty', 'seller_1');
+		await new StoreTranslationService(envWith(db)).saveSettings('app_empty', { sourceLocale: 'en' });
 		const before = (await new StoreTranslationService(envWith(db)).settingsOf('app_empty')).version;
 		const reply = await answer<{ version: number }>(await save('app_empty', {}));
 		expect(reply.body.data?.version).toBe(before);
@@ -468,7 +499,7 @@ describe("a store's settings", () => {
 
 	it("turns a language off when the seller makes it the store's own language", async () => {
 		await store('app_source', 'seller_1');
-		await save('app_source', { targets: { es: { enabled: true }, 'pt-BR': { enabled: true } } });
+		await save('app_source', { sourceLocale: 'en', targets: { es: { enabled: true }, 'pt-BR': { enabled: true } } });
 		const reply = await answer<{ sourceLocale: string; targets: Record<string, { enabled: boolean }> }>(await save('app_source', { sourceLocale: 'es' }));
 		expect(reply.body.data?.sourceLocale).toBe('es');
 		expect(reply.body.data?.targets.es.enabled).toBe(false);

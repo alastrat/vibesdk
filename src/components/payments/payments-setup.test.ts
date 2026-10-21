@@ -64,7 +64,7 @@ describe('payments setup', () => {
 		const limits = source('/src/components/payments/SellerLimits.tsx');
 		for (const text of ['Largest order', 'Weekly limit used', 'Payouts wait', 'completed orders', 'useSellerLimits(']) expect(limits).toContain(text);
 		// The limit counts own products twice, so the card says so rather than calling the weighted total sales.
-		expect(limits).toContain('{OWN_PRODUCTS_WEIGHTING}');
+		expect(limits).toContain('{t(OWN_PRODUCTS_WEIGHTING)}');
 		expect(OWN_PRODUCTS_WEIGHTING).toContain('Your own products count twice');
 		expect(limits).not.toContain('Sales this week');
 		expect(source('/src/components/payments/PayoutsCard.tsx')).toContain('<SellerLimits />');
@@ -72,7 +72,7 @@ describe('payments setup', () => {
 
 	it("builds the fallback fee text from the seller's configured rates, not a copy of them", () => {
 		const frequency = source('/src/components/payments/PayoutFrequency.tsx');
-		expect(frequency).toContain('stripeFeesText(status.accountCosts)');
+		expect(frequency).toContain('stripeFeesText(status.accountCosts, locale, t)');
 		expect(frequency).not.toContain('$2.00');
 	});
 });

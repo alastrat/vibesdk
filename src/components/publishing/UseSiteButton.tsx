@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@cloudflare/kumo';
@@ -15,6 +16,7 @@ interface UseSiteButtonProps {
 
 /** "Use this site", or "Buy for $X" first on a paid site the viewer doesn't own. */
 export function UseSiteButton({ app, autoOpen = false }: UseSiteButtonProps) {
+	const { locale } = useI18n();
 	const reuse = app.reuse;
 	const navigate = useNavigate();
 	const { isLoading: authLoading } = useAuth();
@@ -37,20 +39,17 @@ export function UseSiteButton({ app, autoOpen = false }: UseSiteButtonProps) {
 	if (!reuse || (!reuse.canUse && !reuse.needsPurchase)) return null;
 
 	if (reuse.needsPurchase && reuse.priceCents !== null) {
-		const price = formatTemplatePrice(reuse.priceCents);
+		const price = formatTemplatePrice(reuse.priceCents, locale, t('Free'));
 		// The product page describes the site before Stripe Checkout.
 		return (
-			<Button size="sm" variant="primary" onClick={() => navigate(`/discover/${app.id}`)}>
-				Buy for {price}
+			<Button size="sm" variant="primary" onClick={() => navigate(`/discover/${app.id}`)}>{t('Buy for {price}', { price })}
 			</Button>
 		);
 	}
 
 	return (
 		<>
-			<Button size="sm" variant="primary" onClick={startUse}>
-				Use this site
-			</Button>
+			<Button size="sm" variant="primary" onClick={startUse}>{t("Use this site")}</Button>
 			<UseSiteDialog sourceAppId={app.id} sourceTitle={app.title} open={open} onOpenChange={setOpen} />
 		</>
 	);

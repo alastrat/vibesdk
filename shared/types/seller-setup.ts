@@ -1,3 +1,4 @@
+import { msg } from '../i18n/translate';
 /** What a seller needs before their stores take payments, and the next step to show them. */
 
 export const SELLER_TERMS_VERSION = '2026-10-16';
@@ -9,9 +10,9 @@ export const SELLER_SETUP_STEPS = ['accept-terms', 'finish-stripe', 'bank-accoun
 export type SellerSetupStep = (typeof SELLER_SETUP_STEPS)[number];
 
 export const SELLER_SETUP_MESSAGES: Readonly<Record<SellerSetupStep, string>> = {
-	'accept-terms': 'Accept the selling terms',
-	'finish-stripe': 'Finish your Stripe setup',
-	'bank-account': 'Add and verify a bank account',
+	'accept-terms': msg('Accept the selling terms'),
+	'finish-stripe': msg('Finish your Stripe setup'),
+	'bank-account': msg('Add and verify a bank account'),
 };
 
 export interface SellerReadiness {

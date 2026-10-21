@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
 
@@ -20,19 +21,19 @@ export class SentryTunnelController extends BaseController {
         try {
             // Check if Sentry is configured
             if (!env.SENTRY_DSN) {
-                return SentryTunnelController.createErrorResponse('Sentry not configured', 503);
+                return SentryTunnelController.createErrorResponse(msg('Sentry not configured'), 503);
             }
 
             const envelope = await request.text();
             
             if (!envelope) {
-                return SentryTunnelController.createErrorResponse('Empty envelope', 400);
+                return SentryTunnelController.createErrorResponse(msg('Empty envelope'), 400);
             }
 
             // Parse envelope to validate it's for our DSN
             const pieces = envelope.split('\n');
             if (pieces.length < 2) {
-                return SentryTunnelController.createErrorResponse('Invalid envelope format', 400);
+                return SentryTunnelController.createErrorResponse(msg('Invalid envelope format'), 400);
             }
 
             const header = JSON.parse(pieces[0]);
@@ -40,7 +41,7 @@ export class SentryTunnelController extends BaseController {
             
             // Security: Validate the DSN matches our configured one
             if (!dsn || dsn !== env.SENTRY_DSN) {
-                return SentryTunnelController.createErrorResponse('Invalid DSN', 403);
+                return SentryTunnelController.createErrorResponse(msg('Invalid DSN'), 403);
             }
 
             // Parse our DSN to get the ingestion URL
