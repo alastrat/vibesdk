@@ -37,7 +37,7 @@ describe('think model wiring', () => {
 		const onStepFinish = agent.slice(agent.indexOf('override async onStepFinish('), agent.indexOf('turnCreditsUsed(): number'));
 		expect(beforeTurn).toContain('resolveThinkModel(');
 		expect(beforeTurn).toContain('ctx.model');
-		expect(beforeTurn).toContain('isBillingOn(this.env, config.userId)');
+		expect(beforeTurn).toContain("(await isFlagOn(this.env, 'billing', config.userId))");
 		expect(beforeTurn).toContain('prices: model.prices');
 		expect(beforeTurn).toContain('creditCost');
 		expect(beforeStep).toContain('this.turnUsage.creditCost');

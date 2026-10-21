@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { StripeApiError, STRIPE_API_VERSION } from '../worker/services/payments/stripe-client';
+import { StripeApiError } from '../worker/services/payments/stripe-client';
+import { STRIPE_API_VERSION } from '../shared/types/stripe';
 import { modeOfKey, stripeCaller } from './stripe-api';
 
 interface Seen {

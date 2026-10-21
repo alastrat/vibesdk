@@ -61,7 +61,7 @@ describe('checkCreditsBeforeTurn', () => {
 				plan: 'pro',
 				upgradeTo: null,
 				paymentFailed: true,
-				message: "Your last payment didn't go through, so this month's AI credits haven't started. Update your card in Manage billing to keep building.",
+				message: "Your last payment didn't go through, so this month's AI credits haven't started. Pay it on the billing page to keep building.",
 			},
 		});
 		await insertPurchase(db, { id: 'cp_grace', userId: 'u_grace', credits: 5_000, purchasedAt: new Date(NOW - 2 * DAY), expiresAt: new Date(NOW + 300 * DAY) });
@@ -82,7 +82,7 @@ describe('chargeStep', () => {
 					return ledger.recordUse(input);
 				},
 			},
-			notices: { readBalance: (userId, period, pool) => ledger.readBalance(userId, period, pool), mail: { sender: null, userEmail: async () => null, baseUrl: null, claim: async () => true, release: async () => undefined } },
+			notices: { readBalance: (userId, period, pool) => ledger.readBalance(userId, period, pool), mail: { sender: null, userEmail: async () => null, baseUrl: null, claim: async () => true, release: async () => undefined }, track: async () => undefined },
 			now: () => new Date(NOW),
 		};
 		const charge = { userId: 'u_retry', period: account.period, pool: 5_000, plan: 'basic' as const, useKey: 'agent:turn:1', credits: 165, source: 'think' as const, model: 'anthropic/claude-sonnet-5-5', usage: { inputTokens: 40_000, outputTokens: 3_000 } };

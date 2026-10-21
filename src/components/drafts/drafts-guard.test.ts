@@ -63,6 +63,13 @@ describe('the drafts UI', () => {
 		expect(header.slice(0, header.indexOf('{previewTitle}'))).toMatch(/className="min-w-0 truncate /);
 	});
 
+	it('hides starting drafts while drafts are paused, and the switcher when Main is the only draft', () => {
+		const switcher = source('/src/components/drafts/DraftSwitcher.tsx');
+		expect(switcher).toContain("const draftsPaused = useFlag('store-drafts-paused');");
+		expect(switcher).toContain('if (draftsPaused && snapshot.drafts.length === 1) return null;');
+		expect(switcher).toMatch(/\{!draftsPaused && \(\s*<>\s*<Button[^>]*onClick=\{\(\) => startNaming\(\)\}/);
+	});
+
 	it('keeps the drafts menu inside the pane, whatever the width of the header', () => {
 		const switcher = source('/src/components/drafts/DraftSwitcher.tsx');
 		const tag = switcher.match(/<PopoverContent[^>]*>/)?.[0] ?? '';

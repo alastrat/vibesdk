@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { Badge, Banner, Button, Empty, Input, LayerCard, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
-import { CheckCircleIcon, CoinsIcon, CreditCardIcon, InfoIcon, MinusIcon, PlusIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
+import { Badge, Banner, Button, Empty, LayerCard, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
+import { CheckCircleIcon, CoinsIcon, InfoIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
 	BILLING_NOT_OPEN_MESSAGE,
 	EXTRA_CREDITS,
@@ -18,18 +18,12 @@ import {
 	type PaidPlanId,
 } from '@/api-types';
 import { pageTitle } from '@/brand';
+import { BillingHistory } from '@/components/billing/BillingHistory';
+import { CreditsStepper } from '@/components/billing/CreditsStepper';
+import { PaymentMethodCard } from '@/components/billing/PaymentMethodCard';
+import { SectionTitle } from '@/components/billing/SectionTitle';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import {
-	CHANGE_FAILED_MESSAGE,
-	CHECKOUT_FAILED_MESSAGE,
-	showBillingError,
-	useBilling,
-	useBillingPortal,
-	useBuyCredits,
-	usePlanChange,
-	usePlanCheckout,
-	type PlanChange,
-} from '@/hooks/use-billing';
+import { CHANGE_FAILED_MESSAGE, showBillingError, useBilling, useBuyCredits, usePayNow, usePlanChange, usePlanCheckout, type PlanChange } from '@/hooks/use-billing';
 import { EXTRA_CREDITS_PRICE, limitFeatures } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 import {
@@ -38,10 +32,12 @@ import {
 	canCancel,
 	checkoutBaselineOf,
 	checkoutReturnOf,
-	clampExtraCredits,
 	confirmationFor,
 	creditsSummaryFor,
+	describePaymentResult,
 	isConfirmed,
+	isRenewalPaid,
+	pastDueActionsFor,
 	paymentNoteFor,
 	planChoicesFor,
 	planStatusFor,
@@ -53,15 +49,17 @@ import {
 	type CheckoutBaseline,
 	type Confirmation,
 	type ConfirmedAction,
+	type PastDueActions,
 	type PlanAction,
 	type PlanChoice,
 } from './billing-view';
 
 const CHANGE_REQUESTED = 'Done. It can take a few seconds to show here.';
 const CHANGE_SLOW = "Your change is taking longer than usual to show. Refresh in a minute.";
+const RENEWAL_SLOW = 'Your payment went through. It can take a few seconds to show here. Refresh in a minute.';
 
-/** What the page polls for: a payment back from Stripe, or a change Stripe took on this page. */
-type Waiting = { kind: 'payment'; paid: 'plan' | 'credits' } | { kind: 'change'; action: PlanAction };
+/** What the page polls for: a payment back from checkout, a failed renewal that was paid, or a change taken on this page. */
+type Waiting = { kind: 'payment'; paid: 'plan' | 'credits' } | { kind: 'renewal' } | { kind: 'change'; action: PlanAction };
 
 /** What each confirmed action asks Stripe for. */
 const CONFIRMED_CHANGES: Record<ConfirmedAction, PlanChange> = {
@@ -69,6 +67,9 @@ const CONFIRMED_CHANGES: Record<ConfirmedAction, PlanChange> = {
 	downgrade: { kind: 'change', plan: 'pro' },
 	cancel: { kind: 'cancel' },
 };
+
+/** Sections the address can scroll to: the Upgrade dialog links to the credits, and the billing emails to the history. */
+const SCROLL_ANCHORS: readonly string[] = ['#extra-credits', '#history'];
 
 /** Where the page keeps the view from before a credits checkout, so the return can tell the purchase landed. */
 const BASELINE_KEY = 'billing:checkout-baseline';
@@ -97,20 +98,39 @@ function forgetBaseline(): void {
 	}
 }
 
-function SectionTitle({ icon, children }: { icon: ReactNode; children: ReactNode }) {
+/** The two ways out of a failed renewal: pay with the card on file, or save another card and pay with it. */
+function PastDueButtons({ actions, paying, disabled, onPayNow }: { actions: PastDueActions; paying: boolean; disabled: boolean; onPayNow: () => void }) {
 	return (
-		<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-			<div className="flex items-center gap-2">
-				<span className="flex items-center">{icon}</span>
-				<span>{children}</span>
-			</div>
-		</LayerCard.Secondary>
+		<div className="flex flex-wrap items-center gap-2">
+			{actions.payNow && (
+				<Button variant="primary" loading={paying} disabled={disabled && !paying} onClick={onPayNow}>
+					{actions.payNow}
+				</Button>
+			)}
+			<Link to={actions.updateCard.to} className={buttonVariants({ variant: actions.payNow ? 'secondary' : 'primary' })}>
+				{actions.updateCard.label}
+			</Link>
+		</div>
 	);
 }
 
-function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => void }) {
-	const portal = useBillingPortal();
+function CurrentPlan({
+	view,
+	paying,
+	disabled,
+	declined,
+	onCancel,
+	onPayNow,
+}: {
+	view: BillingView;
+	paying: boolean;
+	disabled: boolean;
+	declined: string | null;
+	onCancel: () => void;
+	onPayNow: () => void;
+}) {
 	const paymentNote = paymentNoteFor(view);
+	const pastDue = pastDueActionsFor(view);
 	const renewal = renewalLineFor(view);
 	return (
 		<LayerCard>
@@ -126,11 +146,6 @@ function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => vo
 							{renewal && <p className="text-sm text-kumo-subtle">{renewal}</p>}
 						</div>
 						<div className="flex flex-wrap gap-2">
-							{view.canManageBilling && (
-								<Button variant="secondary" icon={<CreditCardIcon />} loading={portal.isPending} onClick={portal.open}>
-									Manage billing
-								</Button>
-							)}
 							{canCancel(view) && (
 								<Button variant="secondary-destructive" onClick={onCancel}>
 									Cancel plan
@@ -138,20 +153,9 @@ function CurrentPlan({ view, onCancel }: { view: BillingView; onCancel: () => vo
 							)}
 						</div>
 					</div>
-					{paymentNote && (
-						<Banner
-							variant="alert"
-							icon={<WarningCircleIcon />}
-							description={paymentNote}
-							action={
-								view.canManageBilling ? (
-									<Banner.Action loading={portal.isPending} onClick={portal.open}>
-										Update card
-									</Banner.Action>
-								) : undefined
-							}
-						/>
-					)}
+					{paymentNote && <Banner variant="alert" icon={<WarningCircleIcon />} description={paymentNote} />}
+					{pastDue && <PastDueButtons actions={pastDue} paying={paying} disabled={disabled} onPayNow={onPayNow} />}
+					{declined && <Banner variant="error" icon={<WarningCircleIcon />} description={declined} />}
 				</div>
 			</LayerCard.Primary>
 		</LayerCard>
@@ -251,59 +255,13 @@ function Credits({ view }: { view: BillingView }) {
 	);
 }
 
-/** Whole thousands of extra credits, typed or stepped; the field settles on the nearest amount when it's left. */
-function CreditsStepper({ value, onChange }: { value: number; onChange: (credits: number) => void }) {
-	const [draft, setDraft] = useState<string | null>(null);
-	const step = (delta: number) => {
-		setDraft(null);
-		onChange(clampExtraCredits(value + delta));
-	};
-	return (
-		<div className="flex items-center gap-2">
-			<Button
-				variant="secondary"
-				shape="square"
-				aria-label="Fewer credits"
-				icon={<MinusIcon />}
-				disabled={value <= EXTRA_CREDITS.minCredits}
-				onClick={() => step(-EXTRA_CREDITS.creditsPerUnit)}
-			/>
-			<Input
-				aria-label="Extra credits"
-				inputMode="numeric"
-				value={draft ?? formatCredits(value)}
-				onChange={(event) => setDraft(event.target.value)}
-				onBlur={() => {
-					if (draft === null) return;
-					onChange(clampExtraCredits(Number(draft.replace(/\D/g, ''))));
-					setDraft(null);
-				}}
-				className="w-32 text-center"
-			/>
-			<Button
-				variant="secondary"
-				shape="square"
-				aria-label="More credits"
-				icon={<PlusIcon />}
-				disabled={value >= EXTRA_CREDITS.maxCredits}
-				onClick={() => step(EXTRA_CREDITS.creditsPerUnit)}
-			/>
-		</div>
-	);
-}
-
 function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingView; premium: PlanChoice | undefined; busy: boolean; disabled: boolean; onAct: (choice: PlanChoice) => void }) {
 	const [credits, setCredits] = useState<number>(EXTRA_CREDITS.minCredits);
-	const buy = useBuyCredits();
-	const buying = buy.isPending || buy.isSuccess;
-	const purchase = () =>
-		buy.mutate(credits, {
-			onSuccess: ({ url }) => {
-				keepBaseline(checkoutBaselineOf(view));
-				window.location.href = url;
-			},
-			onError: (failure) => showBillingError(failure, CHECKOUT_FAILED_MESSAGE),
-		});
+	const buyCredits = useBuyCredits();
+	const purchase = () => {
+		keepBaseline(checkoutBaselineOf(view));
+		buyCredits(credits);
+	};
 
 	return (
 		<LayerCard id="extra-credits" className="scroll-mt-4">
@@ -317,7 +275,7 @@ function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingV
 						<div className="flex flex-wrap items-center gap-4">
 							<CreditsStepper value={credits} onChange={setCredits} />
 							<p className="text-lg font-medium text-kumo-default">{formatUsd(extraCreditsPriceCents(credits))}</p>
-							<Button variant="primary" loading={buying} disabled={disabled} onClick={purchase}>
+							<Button variant="primary" disabled={disabled} onClick={purchase}>
 								Buy credits
 							</Button>
 						</div>
@@ -375,8 +333,9 @@ function ConfirmDialog({ action, confirmation, pending, onClose, onConfirm }: { 
 }
 
 /**
- * Settings, Plan and billing: the plan and what's next for it, this month's credits, and extra credits. Back from a Stripe
- * checkout it polls until the webhook has recorded the payment; a `?plan=` link opens that plan's next step once.
+ * Settings, Plan and billing: the plan and what's next for it (with the ways to pay a failed renewal), this month's credits,
+ * extra credits, the card on file and the invoices. Back from checkout, or from paying a failed renewal, it polls until the
+ * webhook has recorded the payment; a `?plan=` link opens that plan's next step once.
  */
 export default function BillingPage() {
 	const location = useLocation();
@@ -390,6 +349,15 @@ export default function BillingPage() {
 	const view = billing.data;
 	const checkout = usePlanCheckout();
 	const planChange = usePlanChange();
+	const payNow = usePayNow((result) => {
+		const notice = describePaymentResult(result);
+		if (notice.tone === 'success') toast.success(notice.message);
+		if (result.state === 'paid' || result.state === 'nothing_due') {
+			setTimedOut(false);
+			setWaiting({ kind: 'renewal' });
+		}
+	});
+	const declined = payNow.data?.state === 'declined' ? describePaymentResult(payNow.data).message : null;
 	const [confirm, setConfirm] = useState<ConfirmedAction | null>(null);
 	/** What a credits return compares against: kept across the trip to Stripe, or else the first view after it. */
 	const baseline = useRef<CheckoutBaseline | null>(null);
@@ -403,6 +371,9 @@ export default function BillingPage() {
 			baseline.current = returned === 'credits' ? readCheckoutBaseline(recallBaseline()) : null;
 			setTimedOut(false);
 			setWaiting({ kind: 'payment', paid: returned });
+		} else if (returned === 'renewal') {
+			setTimedOut(false);
+			setWaiting({ kind: 'renewal' });
 		}
 		setCancelled(returned === 'cancelled');
 		const plan = requestedPlanOf(location.search);
@@ -414,6 +385,10 @@ export default function BillingPage() {
 		if (!waiting || !view) return;
 		if (waiting.kind === 'change') {
 			if (showsChange(waiting.action, view)) setWaiting(null);
+			return;
+		}
+		if (waiting.kind === 'renewal') {
+			if (isRenewalPaid(view)) setWaiting(null);
 			return;
 		}
 		baseline.current ??= checkoutBaselineOf(view);
@@ -431,6 +406,10 @@ export default function BillingPage() {
 				toast(CHANGE_SLOW);
 				return;
 			}
+			if (waiting.kind === 'renewal') {
+				toast(RENEWAL_SLOW);
+				return;
+			}
 			setTimedOut(true);
 			forgetBaseline();
 		}, CONFIRM_TIMEOUT_MS);
@@ -443,13 +422,13 @@ export default function BillingPage() {
 		setRequested(null);
 		if (!view.enabled) return;
 		const choice = planChoicesFor(view).find((entry) => entry.plan === requested);
-		if (choice?.action === 'checkout') void checkout.start(choice.plan);
+		if (choice?.action === 'checkout') checkout.start(choice.plan);
 		else if (choice?.action === 'upgrade' || choice?.action === 'downgrade') setConfirm(choice.action);
 	}, [requested, view, billing.isFetching, checkout]);
 
 	const loaded = view !== undefined;
 	useEffect(() => {
-		if (loaded && location.hash === '#extra-credits') document.getElementById('extra-credits')?.scrollIntoView({ block: 'start' });
+		if (loaded && SCROLL_ANCHORS.includes(location.hash)) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' });
 	}, [loaded, location.hash]);
 
 	const change = (action: PlanAction, request: PlanChange, onDone?: () => void) =>
@@ -466,7 +445,7 @@ export default function BillingPage() {
 	const act = (choice: PlanChoice) => {
 		switch (choice.action) {
 			case 'checkout':
-				void checkout.start(choice.plan);
+				checkout.start(choice.plan);
 				return;
 			case 'upgrade':
 			case 'downgrade':
@@ -485,13 +464,12 @@ export default function BillingPage() {
 	};
 
 	const busyFor = (choice: PlanChoice): boolean => {
-		if (choice.action === 'checkout') return checkout.pending === choice.plan;
 		if (!planChange.isPending) return false;
 		if (choice.action === 'resume') return planChange.variables?.kind === 'resume';
 		return choice.action === 'cancel-change' && planChange.variables?.kind === 'change';
 	};
 	// One request at a time, and nothing new while the last payment or change is still on its way.
-	const busy = confirming || planChange.isPending || checkout.pending !== null;
+	const busy = confirming || planChange.isPending;
 	const choices = view ? planChoicesFor(view) : [];
 	const premium = choices.find((entry) => entry.plan === 'premium');
 
@@ -504,7 +482,7 @@ export default function BillingPage() {
 					<p className="text-kumo-subtle">Your plan, this month's AI credits and extra credits.</p>
 				</div>
 
-				{waiting?.kind === 'payment' && (
+				{waiting !== null && waiting.kind !== 'change' && (
 					<Banner icon={<SpinnerGapIcon className="animate-spin motion-reduce:animate-none" />} title="Confirming your payment…" description="This takes a few seconds." />
 				)}
 				{timedOut && <Banner variant="alert" icon={<WarningCircleIcon />} description="Your payment is being confirmed. Refresh in a minute." />}
@@ -513,7 +491,14 @@ export default function BillingPage() {
 				{view ? (
 					view.enabled ? (
 						<>
-							<CurrentPlan view={view} onCancel={() => setConfirm('cancel')} />
+							<CurrentPlan
+								view={view}
+								paying={payNow.isPending}
+								disabled={busy}
+								declined={declined}
+								onCancel={() => setConfirm('cancel')}
+								onPayNow={() => payNow.mutate()}
+							/>
 							<section aria-labelledby="plans-title" className="grid gap-3">
 								<h2 id="plans-title" className="text-lg font-semibold text-kumo-strong">
 									Plans
@@ -533,6 +518,12 @@ export default function BillingPage() {
 							</section>
 							<Credits view={view} />
 							<ExtraCredits view={view} premium={premium} busy={premium ? busyFor(premium) : false} disabled={busy} onAct={act} />
+							{view.canManageBilling && (
+								<>
+									<PaymentMethodCard card={view.card} />
+									<BillingHistory />
+								</>
+							)}
 						</>
 					) : (
 						<NotOpen />

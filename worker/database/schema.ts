@@ -65,7 +65,7 @@ export const users = sqliteTable('users', {
     passwordChangedAt: integer('password_changed_at', { mode: 'timestamp' }),
     
     // User Preferences and Settings
-    preferences: text('preferences', { mode: 'json' }).default('{}'),
+    preferences: text('preferences', { mode: 'json' }).$type<Record<string, unknown>>().default({}),
     theme: text('theme', { enum: ['light', 'dark', 'system'] }).default('system'),
     timezone: text('timezone').default('UTC'),
     // Whether the user's own Cloudflare AI Gateway should be used for inference.
@@ -1247,6 +1247,18 @@ export const billingCustomers = sqliteTable('billing_customers', {
     createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 }, (table) => ({
     customerUnique: uniqueIndex('billing_customers_stripe_customer_unique_idx').on(table.stripeCustomerId),
+}));
+
+/** The Terms and auto-renewal wording a seller agreed to at a subscription Checkout session, kept as shown; one per session. */
+export const billingConsents = sqliteTable('billing_consents', {
+    stripeCheckoutSessionId: text('stripe_checkout_session_id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    plan: text('plan', { enum: PAID_PLAN_IDS }).notNull(),
+    termsVersion: text('terms_version').notNull(),
+    consentText: text('consent_text').notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    userIdx: index('billing_consents_user_idx').on(table.userId),
 }));
 
 /** An account's Pro or Premium subscription as Stripe last reported it; one row per account, rebuilt from Stripe on each event. */

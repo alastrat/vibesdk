@@ -29,10 +29,11 @@ const PRICING_PATH = '/pricing';
 /** One email per kind of notice, with what its copy needs. */
 export type BillingEmail =
 	| { kind: 'plan_started'; plan: PaidPlanId; renewsAt: number }
-	| { kind: 'receipt'; plan: PaidPlanId; amountCents: number; currency: string; periodStart: number; periodEnd: number; invoiceNumber: string | null; invoiceUrl: string | null }
+	| { kind: 'receipt'; plan: PaidPlanId; amountCents: number; currency: string; periodStart: number; periodEnd: number; invoiceNumber: string | null }
 	| { kind: 'plan_upgraded'; plan: PaidPlanId }
 	| { kind: 'downgrade_scheduled'; plan: PaidPlanId; at: number }
-	| { kind: 'payment_failed'; plan: PaidPlanId; graceEndsAt: number }
+	/** `needsConfirmation`: the bank asked the seller to confirm the payment, so billing's Pay now can finish it; otherwise the card was declined. */
+	| { kind: 'payment_failed'; plan: PaidPlanId; graceEndsAt: number; needsConfirmation: boolean }
 	| { kind: 'plan_ending'; plan: PaidPlanId; endsAt: number }
 	| { kind: 'plan_ended'; plan: PaidPlanId; reason: 'cancelled' | 'payment-failed' }
 	| { kind: 'credits_renewed'; credits: number; renewsAt: number }
@@ -73,7 +74,7 @@ export function billingEmail(to: string, email: BillingEmail, baseUrl: string | 
 		case 'plan_started':
 			return planStartedEmail(to, email, links);
 		case 'receipt':
-			return planReceiptEmail(to, email);
+			return planReceiptEmail(to, email, links);
 		case 'plan_upgraded':
 			return planUpgradedEmail(to, email, links);
 		case 'downgrade_scheduled':
@@ -143,21 +144,31 @@ export async function sendBillingEmails(deps: BillingMailDeps, userId: string, n
 }
 
 /**
+ * How a claimed send went. 'claimed': this call holds the claim but the email couldn't go out in a way a retry would
+ * get past, so it won't be tried again. 'not-sent': nothing is held, so a later run can try again.
+ */
+export type NoticeOutcome = 'sent' | 'claimed' | 'already-sent' | 'not-sent';
+
+/**
  * Claims the notice, then sends it: a notice already claimed is not sent again. Without a sender nothing can go out, so
  * the notice is left unclaimed for a later run that has one. A send that fails in a way a later attempt could get past
  * gives the claim back, so an email outage doesn't leave the notice marked sent and never delivered.
  */
-export async function claimAndSendNotice(deps: ClaimingMailDeps, userId: string, notice: PlannedNotice): Promise<'sent' | 'already-sent' | 'not-sent'> {
+export async function claimAndSendNotice(deps: ClaimingMailDeps, userId: string, notice: PlannedNotice): Promise<NoticeOutcome> {
 	if (!deps.sender) return 'not-sent';
+	let claimed = false;
 	try {
 		if (!(await deps.claim(userId, notice.key, notice.email.kind))) return 'already-sent';
+		claimed = true;
 		const delivery = await deliver(deps, userId, [notice]);
 		if (delivery.sent === 1) return 'sent';
-		if (delivery.retryable) await deps.release(userId, notice.key);
+		if (!delivery.retryable) return 'claimed';
+		await deps.release(userId, notice.key);
 		return 'not-sent';
 	} catch (error) {
 		logger.error('Could not claim or release a billing notice', { userId, kind: notice.email.kind, key: notice.key, error });
-		return 'not-sent';
+		// A claim that couldn't be given back is still held.
+		return claimed ? 'claimed' : 'not-sent';
 	}
 }
 

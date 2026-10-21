@@ -13,7 +13,8 @@ import {
 	useRemoveStoreDomain,
 	useTakeLiveStoreOffline,
 } from '@/hooks/use-live-store';
-import { MAIN_DRAFT_ID, SLUG_MAX_LENGTH, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
+import { useFlag } from '@/hooks/use-flag';
+import { CUSTOM_DOMAINS_PAUSED_MESSAGE, MAIN_DRAFT_ID, SLUG_MAX_LENGTH, STORE_PUBLISHING_PAUSED_MESSAGE, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
 import { publishAction } from './publish-action';
 import { connectedDomainNote, domainNeedsRecords } from './domain-note';
 
@@ -67,6 +68,7 @@ function StatusBadge({ view }: { view: LiveStoreView }) {
 function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 	const publish = usePublishLiveStore(appId);
 	const offline = useTakeLiveStoreOffline(appId);
+	const publishingPaused = useFlag('store-publishing-paused');
 	const [slug, setSlug] = useState(view.slug ?? view.suggestedSlug);
 	useEffect(() => setSlug(view.slug ?? view.suggestedSlug), [view.slug, view.suggestedSlug]);
 
@@ -111,8 +113,9 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 				{view.status !== 'unpublished' && !view.checkoutConnected && (
 					<p className="text-sm text-kumo-danger">This store's checkout isn't connected to payments: its store file has no products.</p>
 				)}
+				{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}
 				<div className="flex flex-wrap gap-2">
-					<Button variant="primary" size="sm" onClick={onPublish} disabled={problem !== null || action.disabled || publish.isPending} loading={publish.isPending}>
+					<Button variant="primary" size="sm" onClick={onPublish} disabled={publishingPaused || problem !== null || action.disabled || publish.isPending} loading={publish.isPending}>
 						{action.label}
 					</Button>
 					{view.status === 'live' && view.url && (
@@ -139,12 +142,14 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 
 function DomainSection({ appId, view }: { appId: string; view: LiveStoreView }) {
 	const add = useAddStoreDomain(appId);
+	const domainsPaused = useFlag('custom-domains-paused');
 	const [hostname, setHostname] = useState('');
 	return (
 		<section className="grid gap-3 border-t border-kumo-line pt-5">
 			<h3 className="text-sm font-medium">Your own domain</h3>
 			{!view.domainsAvailable && !view.domain && <p className="text-sm text-kumo-subtle">Custom domains aren't set up yet.</p>}
-			{view.domainsAvailable && !view.domain && (
+			{view.domainsAvailable && !view.domain && domainsPaused && <p className="text-sm text-kumo-subtle">{CUSTOM_DOMAINS_PAUSED_MESSAGE}</p>}
+			{view.domainsAvailable && !view.domain && !domainsPaused && (
 				<form
 					className="grid gap-2"
 					onSubmit={(event) => {

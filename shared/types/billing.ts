@@ -39,24 +39,170 @@ export type CreditUseSource = (typeof CREDIT_USE_SOURCES)[number];
 
 export const BILLING_PATH = '/settings/billing';
 
+/** Estori's own checkout page for a plan or extra credits, and where Stripe sends the seller once it is paid. */
+export const BILLING_CHECKOUT_PATH = `${BILLING_PATH}/checkout`;
+export const BILLING_CHECKOUT_RETURN_PATH = `${BILLING_CHECKOUT_PATH}/return`;
+
+/** Estori's own page for a new card, and where Stripe sends the seller once it is saved. */
+export const BILLING_CARD_PATH = `${BILLING_PATH}/card`;
+export const BILLING_CARD_RETURN_PATH = `${BILLING_CARD_PATH}/return`;
+
 /** Marks a Checkout session as an extra-credits purchase rather than a subscription. */
 export const CHECKOUT_KIND_CREDITS = 'credits';
+
+/** Marks a Checkout session as a card setup rather than a payment. */
+export const CHECKOUT_KIND_CARD = 'card';
 
 export const PLAN_LIMIT_ERROR_CODE = 'PLAN_LIMIT';
 
 /** SpaceDO's answer to a publish that adds catalog products for an account without the catalog. Mirrored in space/src/space/store-manifest.ts. */
 export const NEW_CATALOG_PRODUCTS_ERROR = 'This version adds catalog products, which need Pro or Premium.';
 
-/** Shown above the pay button of a subscription checkout; the Terms say the same. */
-export function renewalDisclosure(plan: PaidPlanId): string {
-	return `${planName(plan)} renews every month at ${formatUsd(PLAN_PRICES_CENTS[plan])} until you cancel. Cancel any time in Estori; it ends at the end of the period.`;
-}
-
 /** Shown above the pay button of an extra-credits checkout. */
 export const EXTRA_CREDITS_DISCLOSURE = 'Extra credits are used after your monthly credits and expire 12 months after purchase.';
 
 /** The answer to a billing action from an account outside the billing flag. */
 export const BILLING_NOT_OPEN_MESSAGE = "Plans aren't open for your account yet.";
+
+/** The answer to a billing action while Stripe's publishable key isn't configured. */
+export const PAYMENTS_NOT_SET_UP_MESSAGE = "Payments aren't set up yet.";
+
+/** Shown when a checkout session has closed before the seller paid. */
+export const CHECKOUT_EXPIRED_MESSAGE = 'This checkout timed out.';
+
+/** What a promotion code does to a subscription's price, as Stripe's coupon reports it. `discountedCents` is the discounted monthly price, or the first payment for `once`. */
+export interface PromotionTerms {
+	duration: 'once' | 'repeating' | 'forever';
+	/** Set for `repeating`, null otherwise. */
+	durationInMonths: number | null;
+	discountedCents: number;
+}
+
+/** What the promotion charges while it lasts, such as "$24.50 today" or "$24.50 a month for 3 months". */
+function discountedPhrase(promotion: PromotionTerms): string {
+	const discounted = formatUsd(promotion.discountedCents);
+	switch (promotion.duration) {
+		case 'once':
+			return `${discounted} today`;
+		case 'repeating': {
+			// Stripe always sends a month count for a repeating coupon; consent text must never guess it.
+			if (promotion.durationInMonths === null) throw new Error('A repeating promotion needs a month count.');
+			const months = promotion.durationInMonths;
+			return `${discounted} a month for ${months} ${months === 1 ? 'month' : 'months'}`;
+		}
+		case 'forever':
+			return `${discounted} a month`;
+	}
+}
+
+/** What the seller pays and when, such as "$24.50 today, then $49 a month". */
+export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const price = `${formatUsd(PLAN_PRICES_CENTS[plan])} a month`;
+	if (!promotion) return price;
+	return promotion.duration === 'forever' ? discountedPhrase(promotion) : `${discountedPhrase(promotion)}, then ${price}`;
+}
+
+const CANCEL_NOTE = 'Cancel any time in Estori; it ends at the end of the period.';
+
+/**
+ * Shown above the pay button of a subscription checkout, from the same promotion as the consent; the Terms say the same.
+ * A forever code renews at the discounted price, and any other code states its price before the plain renewal.
+ */
+export function renewalDisclosure(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const name = planName(plan);
+	const renews = (cents: number) => `renews every month at ${formatUsd(cents)} until you cancel. ${CANCEL_NOTE}`;
+	if (!promotion) return `${name} ${renews(PLAN_PRICES_CENTS[plan])}`;
+	if (promotion.duration === 'forever') return `${name} ${renews(promotion.discountedCents)}`;
+	return `${name} costs ${discountedPhrase(promotion)}, then ${renews(PLAN_PRICES_CENTS[plan])}`;
+}
+
+/** The sentence the seller agrees to beside the Subscribe button; the page links "Terms" to /terms. */
+export function subscriptionConsentText(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	const phrase = renewalTermsPhrase(plan, promotion);
+	return promotion
+		? `I agree to the Terms, and that Estori ${planName(plan)} costs ${phrase}, until I cancel.`
+		: `I agree to the Terms, and that Estori ${planName(plan)} renews at ${phrase} until I cancel.`;
+}
+
+export function subscribeButtonText(plan: PaidPlanId, promotion: PromotionTerms | null): string {
+	return `Subscribe: ${renewalTermsPhrase(plan, promotion)}`;
+}
+
+/** What a checkout page sells: a plan with what it includes, or extra credits. */
+export type CheckoutOrder =
+	| { kind: 'plan'; plan: PaidPlanId; priceCents: number; includes: string[] }
+	| { kind: 'credits'; credits: number; amountCents: number };
+
+/** The consent sentence, button and small print the subscription checkout shows, and what the first payment is. */
+export interface CheckoutTermsView {
+	consentText: string;
+	buttonText: string;
+	dueTodayCents: number;
+	/** The renewal the small print by the button states, worded from the same promotion as the consent. */
+	disclosure: string;
+}
+
+/** POST answer that opens an embedded checkout; `terms` is null for credits, which have no renewal. */
+export interface CheckoutClientStart {
+	clientSecret: string;
+	publishableKey: string;
+	sessionId: string;
+	order: CheckoutOrder;
+	terms: CheckoutTermsView | null;
+}
+
+/** The seller's agreement to the terms shown, sent before the payment is confirmed. */
+export interface CheckoutConsentRequest {
+	sessionId: string;
+	termsVersion: string;
+	consentText: string;
+}
+
+export type CheckoutSessionState = 'paid' | 'processing' | 'open' | 'expired';
+
+export interface CheckoutStatusView {
+	state: CheckoutSessionState;
+	kind: 'plan' | 'credits';
+}
+
+/** `save` keeps a card for the next invoice; `pay` also pays the invoice that failed. */
+export type CardSetupMode = 'save' | 'pay';
+
+export interface CardSetupStart {
+	clientSecret: string;
+	publishableKey: string;
+	sessionId: string;
+	mode: CardSetupMode;
+}
+
+/** What happened when a saved card was used on an invoice; `requires_action` carries what Stripe.js needs to finish the bank's confirmation. */
+export type InvoicePaymentResult =
+	| { state: 'paid' }
+	| { state: 'saved' }
+	| { state: 'nothing_due' }
+	| { state: 'requires_action'; clientSecret: string; publishableKey: string }
+	| { state: 'declined'; message: string };
+
+/** The card a subscription renews on; never more than Stripe's display fields. */
+export interface CardOnFile {
+	brand: string;
+	last4: string;
+	expMonth: number;
+	expYear: number;
+}
+
+/** The billing history lists this many invoices, newest first. */
+export const BILLING_HISTORY_LIMIT = 24;
+
+/** One invoice in the billing history; `date` is in ms. */
+export interface InvoiceView {
+	id: string;
+	date: number;
+	description: string;
+	amountCents: number;
+	currency: string;
+	status: 'paid' | 'open' | 'void' | 'uncollectible';
+}
 
 /** This period's AI credits on the billing page; `renewsAt` is when the period ends, in ms. */
 export interface BillingCreditsView {
@@ -98,15 +244,8 @@ export interface BillingView {
 	limits: PlanLimits;
 	canManageBilling: boolean;
 	canBuyCredits: boolean;
-}
-
-export interface CheckoutStarted {
-	url: string;
-	sessionId: string;
-}
-
-export interface BillingRedirect {
-	url: string;
+	/** The card on file, or null when there is none. */
+	card: CardOnFile | null;
 }
 
 /** Stripe took the change; the page shows it once the webhook records it. */

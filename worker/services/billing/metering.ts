@@ -7,7 +7,8 @@ import type { CreditUseSource } from '../../../shared/types/billing';
 import { loadAccount, loadCredits, type BillingAccount } from './account';
 import { creditNoticeDepsFromEnv, noticeCreditUse, type CreditNoticeDeps } from './credit-notices';
 import type { CreditBalance, LedgerPeriod, PeriodState } from './credit-ledger';
-import { isBillingOn } from './flag';
+import { trackBilling } from '../posthog/billing-events';
+import { isFlagOn } from '../posthog/flags';
 import { legacyCallCredits, type StepUsage } from './step-credits';
 
 export type CreditCheck = { billing: false } | { billing: true; refusal: PlanLimitRefusal | null };
@@ -42,7 +43,7 @@ export interface TurnAccount {
 const TRIES = 3;
 
 /** While a renewal is unpaid its pool is 0, so running out means the card needs fixing, not a bigger plan. */
-const PAYMENT_FAILED_MESSAGE = "Your last payment didn't go through, so this month's AI credits haven't started. Update your card in Manage billing to keep building.";
+const PAYMENT_FAILED_MESSAGE = "Your last payment didn't go through, so this month's AI credits haven't started. Pay it on the billing page to keep building.";
 
 const logger = createLogger('CreditMetering');
 
@@ -58,9 +59,11 @@ export function creditRefusal(account: BillingAccount, balance: CreditBalance): 
 
 /** Before a turn: some credit must be left. A started turn always finishes; its overrun is settled later. */
 export async function checkCreditsBeforeTurn(env: Env, userId: string, nowMs = Date.now()): Promise<CreditCheck> {
-	if (!isBillingOn(env, userId)) return { billing: false };
+	if (!(await isFlagOn(env, 'billing', userId))) return { billing: false };
 	const account = await loadAccount(env, userId, nowMs);
-	return { billing: true, refusal: creditRefusal(account, await loadCredits(env, account)) };
+	const refusal = creditRefusal(account, await loadCredits(env, account));
+	if (refusal) await trackBilling(env, account.userId, [{ name: 'credits_limit_reached', properties: { plan: account.plan } }]);
+	return { billing: true, refusal };
 }
 
 async function withTries<T>(attempt: () => Promise<T>): Promise<{ ok: true; value: T } | { ok: false; error: unknown }> {
@@ -109,7 +112,7 @@ export function meteringDepsFromEnv(env: Env): MeteringDeps {
  * is off, leaving the call to the daily counter. It never refuses: the turn's check came first.
  */
 export async function chargeLegacyCall(env: Env, input: { userId: string; model: string; creditCost: number }): Promise<boolean> {
-	if (!isBillingOn(env, input.userId)) return false;
+	if (!(await isFlagOn(env, 'billing', input.userId))) return false;
 	const credits = legacyCallCredits(input.creditCost);
 	if (credits <= 0) return true;
 	const account = await loadTurnAccount(env, input.userId);

@@ -21,6 +21,8 @@ import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 import { createLogger } from '../../logger';
 import { STORE_ORDER_KIND } from '../../../shared/types/store-payments';
 import { syncSellerLevelFromEnv } from '../payments/seller-level-sync';
+import { serverAnalytics } from '../posthog/analytics';
+import { catalogOrderPlacedProperties, saleCompletedProperties } from '../posthog/commerce-events';
 
 const logger = createLogger('StorePaymentsWiring');
 
@@ -29,12 +31,26 @@ export function recordStoreOrderDeps(env: Env): RecordStoreOrderDeps {
 	const orders = new StoreOrderService(env);
 	return {
 		getCheckout: (checkoutId) => checkouts.get(checkoutId),
-		recordOrder: (order) => orders.recordOrder(order),
+		recordOrder: async (order) => {
+			const recorded = await orders.recordOrder(order);
+			if (recorded === 'recorded') {
+				const sellerOrders = await orders.sellerOrderCount(order.sellerUserId, order.mode).catch((error: unknown) => {
+					logger.warn("Could not count the seller's orders; sale_completed sent with first_sale false", { sellerUserId: order.sellerUserId, error });
+					return 0;
+				});
+				const firstSale = sellerOrders === 1;
+				serverAnalytics(env).capture('sale_completed', order.sellerUserId, saleCompletedProperties(order, firstSale));
+			}
+			return recorded;
+		},
 		notifyNewOrder: newOrderNotifierFromEnv(env),
 		queueShopperEmail: shopperEmailQueueFromEnv(env),
 		handOffCatalogLines: async (paid) => {
 			const recorded = await recordPaidCatalogOrder({ store: new CatalogOrderService(env), newId: generateId, now: () => new Date() }, paid);
-			if (recorded.result === 'recorded' && recorded.orderId) await scheduleCatalogPlacement(env, recorded.orderId);
+			if (recorded.result === 'recorded' && recorded.orderId) {
+				serverAnalytics(env).capture('catalog_order_placed', paid.sellerUserId, catalogOrderPlacedProperties(paid));
+				await scheduleCatalogPlacement(env, recorded.orderId);
+			}
 		},
 		settleSale: async (orderId) => {
 			const stripe = stripeFromEnv(env);

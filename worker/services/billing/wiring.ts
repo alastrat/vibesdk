@@ -7,6 +7,7 @@ import { platformAlertsFromEnv } from '../alerts/platform-alerts';
 import { CATALOG_HEALTH_CRON } from '../catalog/health';
 import { CATALOG_SWEEP_CRON } from '../catalog/scheduler';
 import { stripeFromEnv } from '../payments/config';
+import { trackBilling } from '../posthog/billing-events';
 import { loadAccount, loadAccountWith } from './account';
 import type { BillingEventDeps } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
@@ -20,7 +21,14 @@ const stripeNotConfigured = (): Promise<never> => Promise.reject(new Error('Stri
 export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 	const mail = billingMailFromEnv(env);
 	return {
-		stripe: stripeFromEnv(env) ?? { retrieveSubscription: stripeNotConfigured, retrieveCheckoutSession: stripeNotConfigured },
+		stripe: stripeFromEnv(env) ?? {
+			retrieveSubscription: stripeNotConfigured,
+			retrieveCheckoutSession: stripeNotConfigured,
+			setDefaultPaymentMethod: stripeNotConfigured,
+			updateSubscriptionMetadata: stripeNotConfigured,
+			retrieveInvoice: stripeNotConfigured,
+			retrievePaymentIntent: stripeNotConfigured,
+		},
 		store: new BillingService(env),
 		ledger: new CreditLedgerService(env),
 		priceIds: stripePriceIds(env.STRIPE_PRICE_IDS),
@@ -29,6 +37,7 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 		notify: async (userId, notices) => (await sendBillingEmails(mail, userId, notices)).failed,
 		alert: platformAlertsFromEnv(env),
 		nowMs: () => Date.now(),
+		track: (userId, events) => trackBilling(env, userId, events),
 	};
 }
 

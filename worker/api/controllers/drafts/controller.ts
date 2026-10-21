@@ -6,6 +6,8 @@ import type { ApiResponse, ControllerResponse } from '../types';
 import type { DraftsSnapshot } from '@space-do/space';
 import { getAgentStub } from '../../../agents';
 import { draftErrorStatus } from '../../../agents/think/draft-change';
+import { isFlagOn } from '../../../services/posthog/flags';
+import { STORE_DRAFTS_PAUSED_MESSAGE } from '../../../../shared/types/drafts';
 import type { CreateDraftRequest, RenameDraftRequest } from './types';
 
 /** Starting and switching drafts go through the agent, which keeps its preview in step; the rest go to SpaceDO. */
@@ -67,9 +69,11 @@ export class DraftsController extends BaseController {
 	static async create(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<DraftsSnapshot>>> {
 		const body = await this.parseJsonBody<{ name?: unknown; from?: unknown }>(request);
 		const parsed = parseCreateDraft(body.success && body.data ? body.data : {});
-		return this.respond(env, context.pathParams.id, async (_space, appId) =>
-			'error' in parsed ? { error: parsed.error, status: 400 } : (await getAgentStub(env, appId)).createDraft(parsed.name, parsed.from),
-		);
+		return this.respond(env, context.pathParams.id, async (_space, appId) => {
+			if ('error' in parsed) return { error: parsed.error, status: 400 };
+			if (await isFlagOn(env, 'store-drafts-paused', context.user?.id ?? null)) return { error: STORE_DRAFTS_PAUSED_MESSAGE, status: 503 };
+			return (await getAgentStub(env, appId)).createDraft(parsed.name, parsed.from);
+		});
 	}
 
 	static async activate(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<DraftsSnapshot>>> {

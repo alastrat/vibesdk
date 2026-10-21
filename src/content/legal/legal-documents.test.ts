@@ -138,6 +138,44 @@ describe('legal documents', () => {
 		const terms = LEGAL_DOCUMENTS.terms.body;
 		expect(EXTRA_CREDITS_DISCLOSURE.startsWith('Extra credits are used after your monthly credits and expire 12 months after purchase')).toBe(true);
 		expect(terms).toContain(EXTRA_CREDITS_DISCLOSURE.replace(/\.$/, ''));
-		expect(renewalDisclosure('pro')).toContain('until you cancel');
+		for (const promotion of [null, { duration: 'once', durationInMonths: null, discountedCents: 2_450 }, { duration: 'forever', durationInMonths: null, discountedCents: 2_450 }] as const) {
+			expect(renewalDisclosure('pro', promotion)).toContain('until you cancel');
+		}
+	});
+
+	it('names PostHog and Cloudflare Web Analytics, says no email or name goes to PostHog, and how to turn analytics off', () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain('**Usage information.**');
+		expect(privacy).toContain("We record layouts and clicks, not what's written on the page or what you type.");
+		expect(privacy).toContain('without the part of the address after a question mark');
+		expect(privacy).toContain('**Page view counts.**');
+		expect(privacy).toContain('Cloudflare Web Analytics counts page views');
+		expect(privacy).toContain('previews and stores served on estori.app addresses');
+		expect(privacy).toContain('**PostHog** (hosted in the United States): product analytics, session recordings and error reports');
+		expect(privacy).toContain("We don't send it your email address or name.");
+		expect(privacy).toContain('page view counts through Cloudflare Web Analytics, which uses no cookies');
+		expect(privacy).toContain("We use PostHog's analytics cookie and browser storage on estori.app");
+		expect(privacy).toContain("We don't use advertising cookies.");
+		expect(privacy).not.toContain("We don't use advertising or analytics cookies.");
+		expect(privacy).toContain("Stores built with Estori don't load PostHog.");
+		expect(privacy).toContain('You can turn analytics off at any time with the Analytics setting in Settings.');
+		expect(privacy).toContain('we still count the AI credits your builds use, without anything that identifies you');
+		expect(privacy).toContain('Global Privacy Control');
+		expect(LEGAL_DOCUMENTS.privacy.version).toBe(TERMS_VERSION);
+	});
+
+	it('says PostHog receives the IP address, business events and flag checks, and what recordings leave out', () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain(
+			'your IP address and the approximate location worked out from it (such as country, region and city)',
+		);
+		expect(privacy).not.toContain('country and region, from your IP address');
+		expect(privacy).toContain(
+			'We also note what you do in Estori, such as building and publishing sites, your plan and subscription, credit purchases, and sales in your stores.',
+		);
+		expect(privacy).toContain("PostHog receives the usage information in section 1, including your IP address, linked to your account's id.");
+		expect(privacy).toContain('We also still ask PostHog which switches apply to your account, using its id and your plan.');
+		expect(privacy).toContain('Recordings show no images.');
+		expect(privacy).toContain('never show the preview of your store.');
 	});
 });

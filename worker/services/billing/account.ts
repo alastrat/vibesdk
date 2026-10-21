@@ -6,7 +6,7 @@ import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/sche
 import { LIVE_SUBSCRIPTION_STATUSES, type BillingSource, type SubscriptionStatus } from '../../../shared/types/billing';
 import { GRACE_PERIOD_DAYS, isPaidPlanId, limitsFor, planLimitOverridesFrom, type PlanAccount, type PlanId, type PlanLimitOverrides, type PlanLimits } from '../../../shared/types/plans';
 import type { CreditBalance, LedgerPeriod } from './credit-ledger';
-import { isBillingOn } from './flag';
+import { isFlagOn } from '../posthog/flags';
 import { DAY_MS, accountPeriod, subscriptionPeriod } from './periods';
 
 export interface ResolvedPlan {
@@ -51,6 +51,14 @@ export function liveSubscription(subscription: SubscriptionRecord | null): Subsc
 	return subscription !== null && LIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) ? subscription : null;
 }
 
+/** A live plan's statuses, and `unpaid`: Stripe stopped retrying, and paying the open invoice reactivates it. */
+const PAYABLE_SUBSCRIPTION_STATUSES: readonly SubscriptionStatus[] = [...LIVE_SUBSCRIPTION_STATUSES, 'unpaid'];
+
+/** The subscription while the seller can still pay its open invoice and change the card it charges, else null. */
+export function payableSubscription(subscription: SubscriptionRecord | null): SubscriptionRecord | null {
+	return subscription !== null && PAYABLE_SUBSCRIPTION_STATUSES.includes(subscription.status) ? subscription : null;
+}
+
 function paysForItsPlan(subscription: SubscriptionRecord | null, nowMs: number): subscription is SubscriptionRecord {
 	if (!subscription || !isPaidPlanId(subscription.plan)) return false;
 	if (subscription.status === 'active' || subscription.status === 'trialing') return true;
@@ -93,7 +101,7 @@ export function loadAccountWith(env: Env, userId: string, subscription: Subscrip
 }
 
 async function resolveAccount(env: Env, userId: string, nowMs: number, subscriptionOf: () => Promise<SubscriptionRecord | null>): Promise<BillingAccount> {
-	const billing = isBillingOn(env, userId);
+	const billing = await isFlagOn(env, 'billing', userId);
 	if (!billing) {
 		const period = accountPeriod(null, nowMs);
 		return {

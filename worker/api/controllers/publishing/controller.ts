@@ -39,6 +39,8 @@ import { checkoutDecision, confirmDecision, confirmResponse, type CheckoutInput 
 import { fulfillCheckoutSession } from '../../../services/payments/fulfill';
 import { fulfillDepsFromEnv } from '../../../services/payments/purchase-wiring';
 import { platformFeeCents } from '../../../../shared/types/templates';
+import { TEMPLATE_SALES_PAUSED_MESSAGE } from 'shared/types/pauses';
+import { isFlagOn } from '../../../services/posthog/flags';
 import { toOwnerPaidListing } from './publishingDto';
 import { publishMessage } from './publishMessage';
 import type {
@@ -223,6 +225,9 @@ export class PublishingController extends BaseController {
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<SiteCheckoutData>>> {
         try {
+            if (await isFlagOn(env, 'template-sales-paused', context.user?.id ?? null)) {
+                return PublishingController.createErrorResponse<SiteCheckoutData>(TEMPLATE_SALES_PAUSED_MESSAGE, 503);
+            }
             const stripe = stripeFromEnv(env);
             if (!stripe) return PublishingController.createErrorResponse<SiteCheckoutData>(PAYMENTS_NOT_CONFIGURED_MESSAGE, 400);
             const user = context.user!;

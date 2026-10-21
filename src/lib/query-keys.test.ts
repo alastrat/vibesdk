@@ -54,4 +54,9 @@ describe('billing query key', () => {
 		expect(queryKeys.billing()[0]).toBe(queryKeys.account.all[0]);
 		expect(persisted(queryKeys.billing())).toBe(false);
 	});
+
+	it("keeps the invoice history under the plan's key, so refreshing the plan refreshes it, and out of storage", () => {
+		expect(queryKeys.billingHistory().slice(0, queryKeys.billing().length)).toEqual(queryKeys.billing());
+		expect(persisted(queryKeys.billingHistory())).toBe(false);
+	});
 });

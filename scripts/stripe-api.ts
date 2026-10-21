@@ -1,6 +1,7 @@
 /** What the Stripe scripts share: a key's mode, and a caller that sends requests in the shape of the app's own client. */
 
-import { STRIPE_API_VERSION, StripeApiError, encodeForm, type FormValue } from '../worker/services/payments/stripe-client';
+import { StripeApiError, encodeForm, type FormValue } from '../worker/services/payments/stripe-client';
+import { STRIPE_API_VERSION } from '../shared/types/stripe';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 

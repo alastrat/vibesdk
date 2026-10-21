@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { graceEndsAt, planLimitsOf, resolvePlan } from './account';
+import { graceEndsAt, payableSubscription, planLimitsOf, resolvePlan } from './account';
 import { isBillingOn } from './flag';
 import type { PlanOverrideRecord, SubscriptionRecord } from '../../database/schema';
 import { PLAN_LIMITS } from '../../../shared/types/plans';
@@ -31,6 +31,14 @@ function override(overrides: Partial<PlanOverrideRecord> = {}): PlanOverrideReco
 
 const SUB_PERIOD = { key: `sub:sub_1:${Date.parse('2026-10-05T10:00:00Z') / 1000}`, startMs: Date.parse('2026-10-05T10:00:00Z'), endMs: Date.parse('2026-11-05T10:00:00Z') };
 const BASIC_PERIOD = { key: `acct:${Date.parse('2026-10-12T00:00:00Z') / 1000}`, startMs: Date.parse('2026-10-12T00:00:00Z'), endMs: Date.parse('2026-11-12T00:00:00Z') };
+
+describe('payableSubscription', () => {
+	it("is a subscription whose open invoice the seller can still pay: a live one, and an unpaid one that paying reactivates", () => {
+		for (const status of ['active', 'trialing', 'past_due', 'unpaid'] as const) expect(payableSubscription(sub({ status })), status).toMatchObject({ status });
+		for (const status of ['canceled', 'incomplete', 'incomplete_expired', 'paused'] as const) expect(payableSubscription(sub({ status })), status).toBeNull();
+		expect(payableSubscription(null)).toBeNull();
+	});
+});
 
 describe('resolvePlan', () => {
 	it('is Basic on its sign-up month without a subscription', () => {

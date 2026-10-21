@@ -33,6 +33,8 @@ import { loadAccount } from '../../../services/billing/account';
 import { checkStoreStart, storeStartDepsFromEnv } from '../../../services/billing/store-limits';
 import { readTokenCookie } from '../../../utils/oauthCookie';
 import { UsageLimitExceededError } from 'shared/types/errors';
+import { AI_BUILDS_PAUSED_MESSAGE } from 'shared/types/pauses';
+import { isFlagOn } from '../../../services/posthog/flags';
 
 const defaultCodeGenArgs: Partial<CodeGenArgs> = {
     language: 'typescript',
@@ -89,6 +91,9 @@ export class CodingAgentController extends BaseController {
                     ),
                     413,
                 );
+            }
+            if (await isFlagOn(env, 'ai-builds-paused', context.user?.id ?? null)) {
+                return CodingAgentController.createErrorResponse(AI_BUILDS_PAUSED_MESSAGE, 503);
             }
             const { readable, writable } = new TransformStream({
                 transform(chunk, controller) {

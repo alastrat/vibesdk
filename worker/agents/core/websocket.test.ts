@@ -1,13 +1,16 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Connection } from 'agents';
 import { handleWebSocketMessage } from './websocket';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { checkUsageAndBalance } from '../../services/rate-limit';
 import type { checkCreditsBeforeTurn } from '../../services/billing/metering';
 import { RESUME_BUILD_MESSAGE } from '../../../shared/think';
+import { AI_BUILDS_PAUSED_CODE, AI_BUILDS_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 
 interface FakeBehavior {
 	setModel?: (modelId: string) => Promise<void>;
+	generateAllFiles?: () => Promise<void>;
+	isCodeGenerating?: () => boolean;
 }
 
 const allowAll = (async () => ({ allowed: true })) as unknown as typeof checkUsageAndBalance;
@@ -29,13 +32,13 @@ function creditCheck(order: string[], result: Awaited<ReturnType<typeof checkCre
 
 const REFUSAL = { code: 'plan_limit' as const, limit: 'aiCredits' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: "You've used this month's free AI credits. They refill on November 12, or get Pro for 20,000 a month." };
 
-function fakes(behavior: FakeBehavior, calls: string[] = [], behaviorType: 'think' | 'phasic' = 'think') {
+function fakes(behavior: FakeBehavior, calls: string[] = [], behaviorType: 'think' | 'phasic' = 'think', env: Record<string, string> = {}) {
 	const sent: Array<{ type: string; error?: string; code?: string; showAsPopup?: boolean }> = [];
 	const connection = { id: 'c1', url: 'wss://estori.app/ws', send: (data: string) => sent.push(JSON.parse(data)) } as unknown as Connection;
 	const agent = {
 		getBehavior: () => behavior,
 		state: { metadata: { userId: 'u1' }, behaviorType },
-		env: {},
+		env,
 		setState: () => undefined,
 		handleUserInput: async (message: string) => void calls.push(`input:${message}`),
 	} as unknown as CodeGeneratorAgent;
@@ -134,5 +137,51 @@ describe('the credit check before a turn', () => {
 		await handleWebSocketMessage(agent, connection, userSuggestion('Add a cart'), recordingCheck(order, { allowed: true }), creditCheck(order, { billing: true, refusal: REFUSAL }));
 		expect(order).toEqual(['credit-check', 'usage-check', 'input:Add a cart', 'credit-check']);
 		expect(sent).toEqual([{ type: 'error', error: REFUSAL.message, code: 'PLAN_LIMIT', planLimit: REFUSAL, showAsPopup: true }]);
+	});
+});
+
+describe('while AI builds are paused', () => {
+	const PAUSED = { FEATURE_FLAG_OVERRIDES: 'ai-builds-paused=on' };
+	const NOTICE = { type: 'error', error: AI_BUILDS_PAUSED_MESSAGE, code: AI_BUILDS_PAUSED_CODE, showAsPopup: true };
+	const suggestion = JSON.stringify({ type: 'user_suggestion', message: 'Add a sale banner' });
+
+	it('refuses a new message with the notice, before the usage check and the AI', async () => {
+		const order: string[] = [];
+		const { agent, connection, sent } = fakes({}, order, 'think', PAUSED);
+		await handleWebSocketMessage(agent, connection, suggestion, recordingCheck(order, { allowed: true }));
+		expect(order).toEqual([]);
+		expect(sent).toEqual([NOTICE]);
+	});
+
+	it('switches the model but does not resume the build', async () => {
+		const switched: string[] = [];
+		const { agent, connection, sent, calls } = fakes({ setModel: async (id) => void switched.push(id) }, [], 'think', PAUSED);
+		await handleWebSocketMessage(agent, connection, setModel('anthropic/claude-opus-5-5', true), allowAll);
+		expect(switched).toEqual(['anthropic/claude-opus-5-5']);
+		expect(calls).toEqual([]);
+		expect(sent).toEqual([NOTICE]);
+	});
+
+	it.each(['generate_all', 'resume_generation'])('refuses %s without starting a build', async (type) => {
+		const generateAllFiles = vi.fn(async () => undefined);
+		const { agent, connection, sent } = fakes({ generateAllFiles, isCodeGenerating: () => false }, [], 'think', PAUSED);
+		await handleWebSocketMessage(agent, connection, JSON.stringify({ type }), allowAll);
+		expect(generateAllFiles).not.toHaveBeenCalled();
+		expect(sent).toEqual([NOTICE]);
+	});
+
+	it.each(['generate_all', 'resume_generation'])('sends no notice for %s while a build is already running, and starts no second one', async (type) => {
+		const generateAllFiles = vi.fn(async () => undefined);
+		const { agent, connection, sent } = fakes({ generateAllFiles, isCodeGenerating: () => true }, [], 'think', PAUSED);
+		await handleWebSocketMessage(agent, connection, JSON.stringify({ type }), allowAll);
+		expect(generateAllFiles).not.toHaveBeenCalled();
+		expect(sent).toEqual([]);
+	});
+
+	it('lets a new message through once the pause is off', async () => {
+		const { agent, connection, sent, calls } = fakes({}, [], 'think', { FEATURE_FLAG_OVERRIDES: 'ai-builds-paused=off' });
+		await handleWebSocketMessage(agent, connection, suggestion, allowAll);
+		expect(calls).toEqual(['input:Add a sale banner']);
+		expect(sent).toEqual([]);
 	});
 });

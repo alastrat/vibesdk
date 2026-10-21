@@ -1,7 +1,7 @@
-import { DEFAULT_SELLER_LIMITS, EXTRA_CREDITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, type PaidPlanId, type PlanId } from '@/api-types';
+import { DEFAULT_SELLER_LIMITS, EXTRA_CREDITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
-export { formatCredits, formatUsd };
+export { formatCredits, formatUsd, limitFeatures, storeAllowance };
 export type { PlanId };
 
 export interface Plan {
@@ -25,27 +25,6 @@ export function planById(id: PlanId): Plan {
 
 /** "$1.50 per 1,000", the price of extra credits. */
 export const EXTRA_CREDITS_PRICE = `${formatUsd(EXTRA_CREDITS.unitPriceCents)} per ${formatCredits(EXTRA_CREDITS.creditsPerUnit)}`;
-
-/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. */
-export function storeAllowance(plan: PaidPlanId): string {
-	const { liveStores, newStoresPerDay } = PLAN_LIMITS[plan];
-	const parts: string[] = [];
-	if (liveStores !== null) parts.push(`Up to ${liveStores} live stores`);
-	if (newStoresPerDay !== null) parts.push(`${newStoresPerDay} new stores a day`);
-	return parts.join(', ');
-}
-
-/** A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. */
-export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId): string[] {
-	const limits = PLAN_LIMITS[plan];
-	const lines = [storeAllowance(plan)];
-	if (limits.ownDomainsPerLiveStore > 0) lines.push('Your own domain on each live store');
-	if (limits.supplierCatalog) lines.push('The supplier catalog');
-	if (limits.extraCredits) lines.push('Buy extra credits any time');
-	if (over === undefined) return lines;
-	const already = limitFeatures(over);
-	return lines.filter((line) => !already.includes(line));
-}
 
 /** A check (true), a dash (false) or a short text. */
 export type PlanCell = boolean | string;

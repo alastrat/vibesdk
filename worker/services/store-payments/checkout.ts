@@ -60,7 +60,7 @@ export interface StartCheckoutInput {
 	access: 'owner' | 'public' | 'live';
 	/** From the platform's Stripe key; null when Stripe isn't configured. */
 	stripeMode: 'test' | 'live' | null;
-	/** Live stores take real payments only once Estori turns them on (`LIVE_STORE_PAYMENTS`). */
+	/** Live stores take real payments only once Estori turns them on (`LIVE_STORE_PAYMENTS`), and not while they're paused. */
 	livePayments: boolean;
 	appId: string;
 	sellerUserId: string;

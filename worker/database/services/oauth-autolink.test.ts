@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { SecurityError } from 'shared/types/errors';
+import { SignupsPausedError } from '../../../shared/types/pauses';
 import { AuthService } from './AuthService';
 import { SessionService } from './SessionService';
 import { recordingD1 } from '../test-support/recording-d1';
 import { assignedValues, lastWrite, rejection, rowsByTable, writes, type Row, type Statement } from '../test-support/recorded-statements';
 import { expectTakeoverCleanupIn, sessionRevokes, takeoverCleanupWrites } from '../test-support/takeover-cleanup';
 import type { BaseOAuthProvider } from '../../services/oauth/base';
-import type { AuthUser, OAuthProvider, OAuthUserInfo } from '../../types/auth-types';
+import type { AuthResult, AuthUser, OAuthProvider, OAuthUserInfo } from '../../types/auth-types';
 
 const NONCE = 'nonce-1';
 const CLOUDFLARE_REFUSAL = 'Sign in with your password, Google or GitHub, then connect Cloudflare from Settings.';
@@ -64,19 +65,19 @@ interface SignIn {
 	statements: Statement[];
 	batches: Statement[][];
 	batch: MockInstance<(prepared: object[]) => Promise<unknown[]>>;
+	result: Promise<AuthResult>;
 	run: Promise<AuthUser>;
 }
 
 /** Signs in through a provider with no identity linked yet, so the account is found by its email. */
-function signIn(provider: OAuthProvider, account: Row): SignIn {
+function signIn(provider: OAuthProvider, account: Row | undefined, extraEnv: Record<string, string> = {}): SignIn {
 	const { d1, statements, batches } = recordingD1(rowsByTable({ oauth_states: stateRow(provider), users: account }));
 	const batch = vi.spyOn(d1, 'batch');
 	vi.spyOn(AuthService.prototype, 'getOauthProvider').mockResolvedValue(fakeProvider(provider));
-	const env = { DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', ENVIRONMENT: 'dev' } as unknown as Env;
-	const run = new AuthService(env)
-		.handleOAuthCallback(provider, 'code-1', 'state-1', callbackRequest(provider))
-		.then((result) => result.user);
-	return { statements, batches, batch, run };
+	const env = { DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', ENVIRONMENT: 'dev', ...extraEnv } as unknown as Env;
+	const result = new AuthService(env).handleOAuthCallback(provider, 'code-1', 'state-1', callbackRequest(provider));
+	const run = result.then((signedIn) => signedIn.user);
+	return { statements, batches, batch, result, run };
 }
 
 /** Every write that takes an account away from whoever set its password. */
@@ -102,8 +103,9 @@ describe('provider sign-in to an existing account with a confirmed email', () =>
 	it.each<OAuthProvider>(['google', 'github', 'cloudflare'])(
 		'links %s and leaves the password, sessions, other identities, API keys, payouts and model routing alone',
 		async (provider) => {
-			const { statements, batches, run } = signIn(provider, existingAccount(1));
+			const { statements, batches, result, run } = signIn(provider, existingAccount(1));
 			const user = await run;
+			expect((await result).isNewUser).toBe(false);
 
 			const identity = assignedValues(lastWrite(statements, 'insert', 'user_oauth_identities'));
 			expect(identity.user_id).toBe('user-1');
@@ -188,5 +190,41 @@ describe('provider sign-in to an existing account with an unconfirmed email', ()
 		expect(batches).toEqual([]);
 		expect(claimWrites(statements)).toEqual([]);
 		expect(createSession).not.toHaveBeenCalled();
+	});
+});
+
+describe('provider sign-in that creates the account', () => {
+	it('answers that the user is new', async () => {
+		const created: Row = { ...existingAccount(1), id: 'user-new', password_hash: null, provider: 'google', provider_id: 'google-123' };
+		const states = rowsByTable({ oauth_states: stateRow('google') });
+		// The email lookup finds nobody; the read-back after the insert finds the new user.
+		const { d1 } = recordingD1((sql) => {
+			const lower = sql.toLowerCase();
+			if (lower.includes('from "users"') && lower.includes('"users"."id"')) return rowsByTable({ users: created })(sql);
+			return states(sql);
+		});
+		vi.spyOn(AuthService.prototype, 'getOauthProvider').mockResolvedValue(fakeProvider('google'));
+		const env = { DB: d1, JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', ENVIRONMENT: 'dev' } as unknown as Env;
+		const result = await new AuthService(env).handleOAuthCallback('google', 'code-1', 'state-1', callbackRequest('google'));
+		expect(result.isNewUser).toBe(true);
+		expect(result.user.id).toBe('user-new');
+	});
+});
+
+describe('provider sign-in while sign-ups are paused', () => {
+	const PAUSED = { FEATURE_FLAG_OVERRIDES: 'signups-paused=on' };
+
+	it('refuses a new account, creating no user, identity or session', async () => {
+		const { statements, run } = signIn('google', undefined, PAUSED);
+		await expect(run).rejects.toBeInstanceOf(SignupsPausedError);
+		expect(writes(statements, 'insert', 'users')).toEqual([]);
+		expect(writes(statements, 'insert', 'user_oauth_identities')).toEqual([]);
+		expect(createSession).not.toHaveBeenCalled();
+	});
+
+	it('still signs in an existing account', async () => {
+		const { run } = signIn('google', existingAccount(1), PAUSED);
+		expect((await run).id).toBe('user-1');
+		expect(createSession).toHaveBeenCalledOnce();
 	});
 });

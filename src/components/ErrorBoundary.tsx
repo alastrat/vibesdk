@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/react';
 import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
+import { captureBrowserException } from '@/lib/analytics/posthog-browser';
 
 function ErrorFallback({ error, resetError }: { error: Error | unknown; resetError: () => void; }) {
   const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
@@ -56,6 +57,7 @@ export function ErrorBoundary({
     <Sentry.ErrorBoundary
       fallback={ErrorFallback}
       showDialog={showDialog}
+      onError={(error) => captureBrowserException(error)}
     >
       {children}
     </Sentry.ErrorBoundary>

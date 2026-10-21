@@ -31,6 +31,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { SELLER_ORDERS_PATH, SHOPPER_EMAILS_PATH } from '@/api-types';
+import { useFlag } from '@/hooks/use-flag';
 
 interface App {
 	id: string;
@@ -158,6 +159,7 @@ export function AppSidebar() {
 	const { state } = useSidebar();
 	const isCollapsed = state === 'collapsed';
 	const usageLimits = useUsageLimitsBadgeState();
+	const catalogPaused = useFlag('catalog-paused');
 	// Show only when action is needed: not connected, or token without gateway.
 	// Hide when configured even if cloudflareCredits is still null, and while
 	// billing is on, where plans replace the seller's own Cloudflare account.
@@ -308,7 +310,7 @@ export function AppSidebar() {
 							)}
 							icon={<CompassIcon className="size-4" />}
 						/>
-						{user && (
+						{user && !catalogPaused && (
 							<Button
 								shape="square"
 								size="base"
@@ -395,7 +397,7 @@ export function AppSidebar() {
 							>
 								Discover
 							</Sidebar.MenuButton>
-							{user && (
+							{user && !catalogPaused && (
 								<Sidebar.MenuButton
 									active={pathname === '/catalog'}
 									icon={<PackageIcon weight="duotone" className="size-4 -mr-1" />}

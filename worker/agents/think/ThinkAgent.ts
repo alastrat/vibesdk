@@ -30,13 +30,14 @@ import { getUserConfigurableSettings } from '../../config';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
 import type { RateLimitSettings } from '../../services/rate-limit/config';
-import { isBillingOn } from '../../services/billing/flag';
+import { isFlagOn } from '../../services/posthog/flags';
 import { chargeStep, loadTurnAccount, meteringDepsFromEnv, type TurnAccount } from '../../services/billing/metering';
 import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
 import { resolveThinkModel, type TokenPrices } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 import { createAssetCache, inlineAgentAssets } from './agent-assets';
+import type { BuildTurnUsage } from './build-events';
 import { MODEL_RESPONSE_TIMEOUT_MS } from '../../../shared/think';
 
 /** Memory for conversation images already read from R2, so later steps skip the read. */
@@ -204,6 +205,8 @@ export class ThinkAgent extends Think<Env> {
 	private turnUsage: TurnUsage | null = null;
 	/** The current turn's step credits at its model's prices, billing on or off. */
 	private turnCredits = 0;
+	/** The current turn's steps; the host reads them once when the turn ends (getTurnUsage). Null until a turn starts. */
+	private turnSteps: number | null = null;
 
 	private requireConfig(): ThinkAgentConfig {
 		const cfg = this.getConfig<ThinkAgentConfig>();
@@ -297,16 +300,17 @@ export class ThinkAgent extends Think<Env> {
 	}
 
 	override async beforeTurn(ctx: TurnContext): Promise<TurnConfig> {
+		this.turnSteps = 0;
+		this.turnCredits = 0;
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
 		this.providerFailure = null;
-		this.turnCredits = 0;
 		// ctx.model is the model this turn runs on; the config may change before the turn ends.
 		const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
 		const model = resolveThinkModel(turnModelId);
 		const pricing: TurnPricing = { turnId: crypto.randomUUID(), model: model.id, prices: model.prices, typical: model.creditsPerStep };
 		this.turnUsage = { ...pricing, mode: 'unmetered' };
-		if (config && isBillingOn(this.env, config.userId)) {
+		if (config && (await isFlagOn(this.env, 'billing', config.userId))) {
 			// A billed turn is billed even if its account doesn't load now: each step loads it again.
 			this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, account: await loadTurnAccount(this.env, config.userId) };
 		} else if (config) {
@@ -340,6 +344,7 @@ export class ThinkAgent extends Think<Env> {
 
 	override getTools(): ToolSet {
 		const ops = createSpaceWorkspaceOps(() => this.getSpaceStub());
+		const userId = this.getConfig<ThinkAgentConfig>()?.userId ?? null;
 		// Same names as Think's built-in workspace tools, so these SpaceDO-backed
 		// versions win the tool-merge. Bash is disabled via `workspaceBash`.
 		return {
@@ -359,7 +364,7 @@ export class ThinkAgent extends Think<Env> {
 				// Commit + deploy the SpaceDO branch so the preview rebuilds.
 				deploy_space: createDeploySpaceTool({ getStub: () => this.getSpaceStub() }),
 				// Drafts: list, start and switch, and bring in the live store's changes.
-				...createDraftTools({ getStub: () => this.getSpaceStub() }),
+				...createDraftTools({ getStub: () => this.getSpaceStub(), draftsPaused: () => isFlagOn(this.env, 'store-drafts-paused', userId) }),
 				// Client-side debugging via a real headless browser.
 				// Reads the preview URL when it runs, so a draft switch earlier in the turn is followed.
 				get_browser_console_logs: createBrowserConsoleLogsTool({
@@ -368,8 +373,8 @@ export class ThinkAgent extends Think<Env> {
 				}),
 			}),
 			// Estori's catalog, for stores that sell catalog products.
-			...createCatalogTools(catalogToolDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
-			...createPaymentsSetupTool(paymentsSetupDepsFromEnv(this.env, this.getConfig<ThinkAgentConfig>()?.userId ?? null)),
+			...createCatalogTools(catalogToolDepsFromEnv(this.env, userId)),
+			...createPaymentsSetupTool(paymentsSetupDepsFromEnv(this.env, userId)),
 			// Set the project's short display title (host observes the output).
 			set_title: createSetTitleTool(),
 			// Ask the user clarifying questions via a frontend popup.
@@ -389,6 +394,7 @@ export class ThinkAgent extends Think<Env> {
 	 * user input.
 	 */
 	override async beforeStep(ctx: PrepareStepContext): Promise<StepConfig | void> {
+		if (this.turnSteps !== null) this.turnSteps += 1;
 		const config = this.getConfig<ThinkAgentConfig>();
 		if (this.turnUsage?.mode === 'daily' && config) {
 			await RateLimitService.enforceLLMCallsRateLimit(
@@ -442,6 +448,16 @@ export class ThinkAgent extends Think<Env> {
 	/** RPC for the host: the credits this turn's steps cost, for every build, billing on or off. */
 	turnCreditsUsed(): number {
 		return this.turnCredits;
+	}
+
+	/**
+	 * RPC for the host: the turn's steps, and the credits billing's per-step charge took for them. Read once, so a turn
+	 * that ends before beforeTurn answers null instead of the previous turn's usage.
+	 */
+	async getTurnUsage(): Promise<BuildTurnUsage | null> {
+		const steps = this.turnSteps;
+		this.turnSteps = null;
+		return steps === null ? null : { steps, credits: this.turnCreditsUsed() };
 	}
 
 	/**

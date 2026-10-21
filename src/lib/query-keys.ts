@@ -16,6 +16,8 @@ export const queryKeys = {
 	drafts: (appId: string) => ['drafts', appId] as const,
 	/** The signed-in account's plan and credits: under `account`, so it is never persisted and signing out drops it. */
 	billing: () => [...queryKeys.account.all, 'billing'] as const,
+	/** The account's invoices, under the plan's key so a refresh of the plan refreshes them. */
+	billingHistory: () => [...queryKeys.billing(), 'history'] as const,
 	auth: {
 		all: ['auth'] as const,
 		session: () => [...queryKeys.auth.all, 'session'] as const,
@@ -42,6 +44,7 @@ export const queryKeys = {
 	platform: {
 		all: ['platform'] as const,
 		plan: () => [...queryKeys.platform.all, 'plan'] as const,
+		telemetry: () => [...queryKeys.platform.all, 'telemetry'] as const,
 	},
 	account: {
 		all: ['account'] as const,
@@ -131,6 +134,10 @@ export const queryKeys = {
 			mine: (userId?: string | null) => [...queryKeys.account.earlyAccess.all(), 'mine', userId ?? 'anonymous'] as const,
 			admin: () => [...queryKeys.account.earlyAccess.all(), 'admin'] as const,
 		},
+		/** The user's analytics setting: never persisted, like the rest of `account`. */
+		analytics: (userId?: string | null) => [...queryKeys.account.all, 'analytics', userId ?? 'anonymous'] as const,
+		/** The flags admin view for the signed-in admin: never persisted. */
+		adminFlags: () => [...queryKeys.account.all, 'admin-flags'] as const,
 		contactRequests: {
 			admin: () => [...queryKeys.account.all, 'contact-requests', 'admin'] as const,
 		},

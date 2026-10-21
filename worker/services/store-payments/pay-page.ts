@@ -5,10 +5,7 @@
  */
 
 import { STORE_CHECKOUT_MESSAGES, type StoreBrand, type StoreInfo } from '../../../shared/types/store-payments';
-import { STRIPE_API_VERSION } from '../payments/stripe-client';
-
-/** Stripe.js built for the API version the server pins. */
-export const STRIPE_JS_URL = `https://js.stripe.com/${STRIPE_API_VERSION.split('.')[1]}/stripe.js`;
+import { STRIPE_JS_URL } from '../../../shared/types/stripe';
 
 const NEUTRAL_BRAND: StoreBrand = {
 	name: '',

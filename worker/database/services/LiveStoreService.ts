@@ -1,6 +1,6 @@
 /** D1 reads and writes for live stores: each store's address, its published version, and the seller's own domain. */
 
-import { and, asc, count, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { isUniqueViolation } from './unique-violation';
@@ -107,6 +107,18 @@ export class LiveStoreService extends BaseService {
             .orderBy(asc(schema.liveStores.appId))
             .all();
         return rows.map((row) => row.appId);
+    }
+
+    /** The live store published most recently, for the heartbeat's store check; null when none is live. */
+    async newestLiveSlug(): Promise<string | null> {
+        const row = await this.database
+            .select({ slug: schema.liveStores.slug })
+            .from(schema.liveStores)
+            .where(eq(schema.liveStores.status, 'live'))
+            .orderBy(desc(schema.liveStores.publishedAt))
+            .limit(1)
+            .get();
+        return row?.slug ?? null;
     }
 
     async setOffline(appId: string, now: Date): Promise<void> {
