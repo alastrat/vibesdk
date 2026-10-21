@@ -68,8 +68,10 @@ class TextCollector {
 
 // ─── HTML ───────────────────────────────────────────────────────────────────
 
-/** Containers of code, templates and form values: neither their text nor any attribute inside them or on them is read. */
-const CODE_CONTAINERS = new Set(['script', 'style', 'noscript', 'code', 'pre', 'template', 'textarea']);
+/** Containers of code and templates: neither their text nor any attribute inside them or on them is read. */
+const CODE_CONTAINERS = new Set(['script', 'style', 'noscript', 'code', 'pre', 'template']);
+/** A textarea's text is a form value, but its own placeholder, title and aria-label are copy. */
+const VALUE_CONTAINERS = new Set(['textarea']);
 const TEXT_ATTRIBUTES = new Set(['alt', 'title', 'placeholder', 'aria-label']);
 const BUTTON_INPUT_TYPES = new Set(['submit', 'button', 'reset']);
 
@@ -98,9 +100,10 @@ function textAttributes(tag: string, attributes: Record<string, string>): string
  */
 function extractHtml(html: string, kind: StoreTextKind, collector: TextCollector): void {
 	let inCode = 0;
+	let inValue = 0;
 	let node = '';
 	const endNode = () => {
-		if (inCode === 0) collector.add(htmlTextKey(node), kind);
+		if (inCode + inValue === 0) collector.add(htmlTextKey(node), kind);
 		node = '';
 	};
 	const parser = new Parser(
@@ -108,12 +111,14 @@ function extractHtml(html: string, kind: StoreTextKind, collector: TextCollector
 			onopentag(name, attributes) {
 				endNode();
 				if (CODE_CONTAINERS.has(name)) inCode++;
+				if (VALUE_CONTAINERS.has(name)) inValue++;
 				if (inCode > 0) return;
 				for (const value of textAttributes(name, attributes)) collector.add(htmlAttributeKey(value), kind);
 			},
 			onclosetag(name) {
 				endNode();
 				if (CODE_CONTAINERS.has(name)) inCode--;
+				if (VALUE_CONTAINERS.has(name)) inValue--;
 			},
 			ontext(data) {
 				node += data;

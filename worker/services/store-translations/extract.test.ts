@@ -139,9 +139,15 @@ describe('extractStoreTexts', () => {
 <noscript><img alt="Tracking pixel" src="/t.gif"></noscript>
 <script title="Script title" type="text/template"><a title="Not parsed">Nope</a></script>
 <style media="print" title="Print styles">a { color: red }</style>
-<textarea placeholder="Your message" aria-label="Message">Draft text</textarea>
 <a title="After the containers">Back</a>`;
 		expect(await extract(page(html))).toEqual(pages('Hero shot', 'After the containers', 'Back'));
+	});
+
+	it('keeps a textarea\'s own placeholder, title and aria-label, which are copy, and skips only its text', async () => {
+		const html = `<label>Message</label>
+<textarea name="note" placeholder="Tell us more" title="Your note" aria-label="Order note">Draft text &amp; more</textarea>
+<p>After the form</p>`;
+		expect(await extract(page(html))).toEqual(pages('Message', 'Tell us more', 'Your note', 'Order note', 'After the form'));
 	});
 
 	it('decodes entities and collapses whitespace', async () => {
