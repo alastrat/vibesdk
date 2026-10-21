@@ -5,13 +5,27 @@
  * `Estori.cart` is the one cart a store and Estori's checkout page share. It lives in `localStorage` under a key that
  * names the store, because stores on the preview domain share one origin. `Estori.checkout()` opens Estori's checkout
  * page on the store's own address; the store never builds a checkout page or touches a payment.
+ *
+ * The script is worded for the shopper's language. A page in one of the store's languages also names it on each request
+ * to the platform (`?lang=`), since a preview inside the app's frame may not keep the language cookie.
  */
 
+import { LOCALES, type Locale } from '../../../shared/i18n/locales';
+import { msg } from '../../../shared/i18n/translate';
 import { STORE_CART_MAX_LINES, STORE_LINE_MAX_QUANTITY, STORE_NOTE_MAX_LENGTH } from '../../../shared/types/store-payments';
+import { jsonForScript } from '../../utils/html';
+import { translateFor } from '../../utils/server-translate';
 
-const EMPTY_CART = JSON.stringify({ ok: false, reason: 'invalid_request', message: 'Your cart is empty.' });
+const EMPTY_CART_MESSAGE = msg('Your cart is empty.');
 
-export const STORE_SCRIPT = `(function () {
+/**
+ * The script for a shopper in `locale`. `languages` are the store's languages, which a page's own language is matched
+ * against; the script knows the empty-cart message in each, so a page in one of them is answered in it.
+ */
+export function storeScript(locale: Locale, languages: readonly Locale[] = [locale]): string {
+	const offered = LOCALES.filter((candidate) => candidate === locale || languages.includes(candidate));
+	const emptyCart = Object.fromEntries(offered.map((candidate) => [candidate, translateFor(candidate, EMPTY_CART_MESSAGE)]));
+	return `(function () {
   var script = document.currentScript;
   var basePath = new URL(script.src, window.location.href).pathname.replace(/\\/__estori\\/store\\.js$/i, '');
   var base = basePath + '/__estori';
@@ -22,10 +36,28 @@ export const STORE_SCRIPT = `(function () {
   var MAX_LINES = ${STORE_CART_MAX_LINES};
   var MAX_QUANTITY = ${STORE_LINE_MAX_QUANTITY};
   var MAX_NOTE = ${STORE_NOTE_MAX_LENGTH};
+  var LANGUAGES = ${jsonForScript(offered)};
+  var DEFAULT_LANGUAGE = ${jsonForScript(locale)};
+  var EMPTY_CART_MESSAGES = ${jsonForScript(emptyCart)};
   var listeners = [];
 
+  // The page's language when it is one of the store's: the root element's own spelling, matched without regard to case.
+  function pageLanguage() {
+    var root = document.documentElement;
+    var tag = root && typeof root.lang === 'string' ? root.lang.trim().toLowerCase() : '';
+    for (var i = 0; i < LANGUAGES.length; i++) {
+      if (LANGUAGES[i].toLowerCase() === tag) return LANGUAGES[i];
+    }
+    return null;
+  }
+
+  function withLanguage(path) {
+    var language = pageLanguage();
+    return language ? path + (path.indexOf('?') === -1 ? '?' : '&') + 'lang=' + encodeURIComponent(language) : path;
+  }
+
   function call(path, init) {
-    return fetch(base + path, Object.assign({ credentials: 'same-origin' }, init))
+    return fetch(base + withLanguage(path), Object.assign({ credentials: 'same-origin' }, init))
       .then(function (response) {
         return response.json();
       })
@@ -185,10 +217,12 @@ export const STORE_SCRIPT = `(function () {
       if (request.shipTo) cart.setShipTo(request.shipTo);
       // The note goes with the cart, which the checkout page reads, never in the page address.
       if (typeof request.note === 'string') cart.setNote(request.note);
-      if (cart.count() === 0) return Promise.resolve(${EMPTY_CART});
+      if (cart.count() === 0) return Promise.resolve({ ok: false, reason: 'invalid_request', message: EMPTY_CART_MESSAGES[pageLanguage() || DEFAULT_LANGUAGE] });
       var query = new URLSearchParams();
       if (typeof request.successPath === 'string') query.set('success', request.successPath);
       if (typeof request.cancelPath === 'string') query.set('cancel', request.cancelPath);
+      var language = pageLanguage();
+      if (language) query.set('lang', language);
       var search = query.toString();
       window.location.assign(base + '/pay' + (search ? '?' + search : ''));
       return Promise.resolve({ ok: true });
@@ -204,3 +238,4 @@ export const STORE_SCRIPT = `(function () {
   };
 })();
 `;
+}

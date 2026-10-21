@@ -3,7 +3,7 @@
  * each language's translations until the settings' version changes. `serveStorePage` puts a store's pages through them.
  */
 
-import { LOCALES, type Locale } from '../../../shared/i18n/locales';
+import { DEFAULT_LOCALE, LOCALES, type Locale } from '../../../shared/i18n/locales';
 import type { StoreTranslationSettings } from '../../../shared/types/store-translations';
 import { StoreTranslationService, type StoreTranslationEntry } from '../../database/services/StoreTranslationService';
 import { createLogger } from '../../logger';
@@ -103,6 +103,27 @@ const sharedLoader = createStoreLanguageLoader();
 /** The store's languages, cached per isolate. */
 export async function loadStoreLanguageContext(env: Env, appId: string): Promise<StoreLanguageContext> {
 	return sharedLoader(new StoreTranslationService(env), appId);
+}
+
+/** The language a request's shopper reads a store in, with the store's languages when they could be read. */
+export interface ShopperLanguage {
+	locale: Locale;
+	/** Null when the store's languages could not be read. */
+	ctx: StoreLanguageContext | null;
+}
+
+/**
+ * The language of Estori's own pages and data on a store's address. A store with no ready language is read in its
+ * source, which is the seller's own language unless they chose another. English when the store's languages can't be read.
+ */
+export async function shopperLanguage(request: Request, env: Env, appId: string): Promise<ShopperLanguage> {
+	try {
+		const ctx = await loadStoreLanguageContext(env, appId);
+		return { locale: resolveShopperLanguage(request, ctx).locale, ctx };
+	} catch (error) {
+		logger.warn('Store languages could not be read; the shopper is answered in English', { appId, error });
+		return { locale: DEFAULT_LOCALE, ctx: null };
+	}
 }
 
 export interface StorePage {

@@ -1,5 +1,6 @@
 /** Store payments: a store's price list (`estori-store.json`), the checkout request and answer, and the priced cart. Amounts are US cents. */
 
+import { msg } from '../i18n/translate';
 import type { CatalogItemStatus, CatalogSupplier } from './catalog';
 
 export const STORE_MANIFEST_FILE = 'estori-store.json';
@@ -165,20 +166,20 @@ export type StoreCheckoutResponse =
 	| { ok: true; checkoutId: string; clientSecret: string; summary: StoreCheckoutSummary }
 	| { ok: false; reason: StoreCheckoutRefusal; message: string };
 
-/** What the shopper reads for each refusal; never the internal reason. */
+/** What the shopper reads for each refusal, in English; never the internal reason. The checkout endpoint words it in the shopper's language. */
 export const STORE_CHECKOUT_MESSAGES: Readonly<Record<StoreCheckoutRefusal, string>> = {
-	payments_unavailable: "This store can't take payments right now.",
-	demo_only: 'This is a demo. Checkout works on the live store.',
-	invalid_request: "Your cart couldn't be read. Refresh the page and try again.",
-	unknown_item: 'An item in your cart is no longer sold here.',
-	item_unavailable: 'An item in your cart is sold out.',
-	ships_to_unsupported: "This store doesn't ship to that country.",
-	below_minimum_price: "An item in your cart can't be sold at its current price.",
-	cart_limits: "Your cart is more than one order can hold.",
-	order_over_limit: "This store can't take an order this large yet.",
-	store_paused: "This store isn't taking new orders right now. Try again later.",
-	too_many_checkouts: 'Too many checkouts were started from here. Wait a few minutes and try again.',
-	stripe_failed: "Checkout couldn't start. Try again in a moment.",
+	payments_unavailable: msg("This store can't take payments right now."),
+	demo_only: msg('This is a demo. Checkout works on the live store.'),
+	invalid_request: msg("Your cart couldn't be read. Refresh the page and try again."),
+	unknown_item: msg('An item in your cart is no longer sold here.'),
+	item_unavailable: msg('An item in your cart is sold out.'),
+	ships_to_unsupported: msg("This store doesn't ship to that country."),
+	below_minimum_price: msg("An item in your cart can't be sold at its current price."),
+	cart_limits: msg('Your cart is more than one order can hold.'),
+	order_over_limit: msg("This store can't take an order this large yet."),
+	store_paused: msg("This store isn't taking new orders right now. Try again later."),
+	too_many_checkouts: msg('Too many checkouts were started from here. Wait a few minutes and try again.'),
+	stripe_failed: msg("Checkout couldn't start. Try again in a moment."),
 };
 
 interface PricedLineBase {
