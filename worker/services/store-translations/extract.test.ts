@@ -298,6 +298,53 @@ const note = "Note: this is a sentence";`;
 		expect(await extract(script(app))).toEqual(scripts(...taken));
 	});
 
+	it('keeps shopper copy that looks like sql or tag names, and still skips statements and tag selectors', async () => {
+		const skipped = [
+			'select name from users where id = ?',
+			'SELECT * FROM orders WHERE id = ?',
+			'SELECT id, total FROM orders',
+			'UPDATE orders SET total = 1',
+			'update orders set total = 1',
+			'insert into orders (id) values (?)',
+			'INSERT INTO orders (id) VALUES (?)',
+			'DELETE FROM orders',
+			'delete from orders where id = ?',
+			'CREATE TABLE orders (id TEXT)',
+			'create table if not exists orders (id text)',
+			'CREATE TEMP TABLE scratch (id TEXT)',
+			'create unique index idx_orders on orders (id)',
+			'DROP TABLE orders',
+			'drop index idx_orders',
+			'ALTER TABLE orders ADD COLUMN note TEXT',
+			'PRAGMA foreign_keys = ON',
+			'pragma table_info(orders)',
+			'with recent as (select id from orders) select * from recent',
+			'REPLACE INTO orders (id) VALUES (?)',
+			'form input',
+			'header nav',
+		];
+		const taken = [
+			'Select a size, then add to cart',
+			'Select your size (US)',
+			'Select all (3 items)',
+			'UPDATE CART',
+			'CREATE ACCOUNT',
+			'SELECT SIZE',
+			'Create a table reservation',
+			'Update cart',
+			'Delete from wishlist',
+			'With love, Northwind',
+			'Pragma Tea Co. opens soon',
+			'Select Option',
+			'Header Nav',
+			'Form Header',
+			'Main Section',
+			'Button Label',
+		];
+		const app = [...skipped, ...taken].map((value, index) => `const v${index} = ${JSON.stringify(value)};`).join('\n');
+		expect(await extract(script(app))).toEqual(scripts(...taken));
+	});
+
 	it('leaves out library strings after a node_modules banner, sql, and vendored or minified assets, keeping the app\'s own copy', async () => {
 		const bundle = `// virtual:node_modules/hono/dist/context.js
 var Context = class {

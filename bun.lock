@@ -57,6 +57,7 @@
         "diff": "^8.0.2",
         "drizzle-orm": "^0.44.7",
         "embla-carousel-react": "^8.6.0",
+        "entities": "7.0.1",
         "esbuild": "^0.27.1",
         "eslint-import-resolver-typescript": "^4.4.4",
         "eslint-plugin-import": "^2.32.0",

@@ -154,10 +154,15 @@ const BARE_ADDRESS = /^(?:(?:mailto|tel|sms):|www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)+(
 const KEY_NAMES = new Set([
 	'Escape', 'Enter', 'Tab', 'Shift', 'Control', 'Alt', 'Meta', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete', 'Bearer',
 ]);
-/** Statements in capital letters are SQL; `Select a size` and `Create account` are copy, so other cases need a statement's shape. */
-const SQL_UPPERCASE = /^(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|WITH|REPLACE)\s/;
+/**
+ * SQL has a statement's shape: a verb and the keyword that completes it. `Select a size`, `UPDATE CART` and `Create a
+ * table reservation` are copy. A capitalized statement needs its keyword in capitals; other cases need the full shape.
+ */
+const SQL_UPPERCASE = /^(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|WITH|REPLACE)\s.*\b(?:FROM|INTO|SET|TABLE|VALUES|WHERE)\b/;
 const SQL_SHAPE =
-	/^(?:select\s.*[*,(]|insert\s+(?:or\s+\w+\s+)?into\s|update\s+\S+\s+set\s|delete\s+from\s+\S+\s+where\s|create\s+(?:\w+\s+)*?(?:table|index|view|trigger)\s|drop\s+(?:table|index|view|trigger)\s|alter\s+table\s|pragma\s+\w|with\s+(?:recursive\s+)?\S+\s+as\s*\(|replace\s+into\s)/i;
+	/^(?:select\s.*\sfrom\s|insert\s+(?:or\s+\w+\s+)?into\s|update\s+\S+\s+set\s|delete\s+from\s+\S+\s+where\s|create\s+(?:temp\s+|temporary\s+)?(?:unique\s+|virtual\s+)?(?:table|view|index|trigger)\s+(?:if\s+not\s+exists\s+)?[\w"]|drop\s+(?:table|index|view|trigger)\s|alter\s+table\s|with\s+(?:recursive\s+)?\S+\s+as\s*\(|replace\s+into\s)/i;
+/** `PRAGMA foreign_keys = ON`: the setting's name is lowercase, which a title like `Pragma Tea Co.` is not. */
+const SQL_PRAGMA = /^(?:PRAGMA|pragma|Pragma)\s+[a-z_][a-z0-9_]*\s*[=(]/;
 
 /** A space with a letter somewhere on each side of it: two words, whatever punctuation hangs on them. */
 function hasSpaceBetweenLetters(text: string): boolean {
@@ -173,7 +178,8 @@ function readsAsWords(text: string): boolean {
 
 /**
  * A selector needs a class, id, attribute, pseudo or combinator, or several tag names in a row (`form input`); every
- * tag in it must be a known HTML tag, so `Tom + Jerry` and `Visit example.com today` are prose.
+ * tag in it must be a known HTML tag, written in lowercase as selectors are, so `Tom + Jerry`, `Header Nav` and
+ * `Visit example.com today` are prose.
  */
 function isCssSelector(text: string): boolean {
 	const tokens = text.replace(/\[[^\]]*\]/g, '[]').replace(/\([^)]*\)/g, '()').split(' ');
@@ -188,7 +194,7 @@ function isCssSelector(text: string): boolean {
 		if (!match) return false;
 		const [, tag, qualifiers] = match;
 		if (!tag && !qualifiers) return false;
-		if (tag && tag !== '*' && !HTML_TAGS.has(tag.toLowerCase())) return false;
+		if (tag && tag !== '*' && !HTML_TAGS.has(tag)) return false;
 		if (!tag || tag === '*') allTagged = false;
 		if (qualifiers) qualified = true;
 	}
@@ -208,7 +214,7 @@ function isCssValue(text: string): boolean {
 }
 
 function isSqlStatement(text: string): boolean {
-	return SQL_UPPERCASE.test(text) || SQL_SHAPE.test(text);
+	return SQL_UPPERCASE.test(text) || SQL_SHAPE.test(text) || SQL_PRAGMA.test(text);
 }
 
 /** One camelCase, snake_case, kebab-case or SCREAMING_CASE token. */
