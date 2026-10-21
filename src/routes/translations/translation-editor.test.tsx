@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
-import type TestRenderer from 'react-test-renderer';
+import TestRenderer from 'react-test-renderer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ApiResponse, Locale, StoreLanguageStatus, StoreTranslationOverview, StoreTranslationPage, StoreTranslationRow } from '@/api-types';
 import { ApiError, apiClient } from '@/lib/api-client';
@@ -45,6 +45,14 @@ const MACHINE: StoreTranslationRow = { hash: 'h1', source: 'Hand-poured candles'
 const EDITED: StoreTranslationRow = { hash: 'h2', source: 'Free shipping on every order', text: 'Envío gratis en todos los pedidos', origin: 'seller', machineText: 'Envío gratuito en cada pedido' };
 const FRESH: StoreTranslationRow = { hash: 'h3', source: 'New arrivals', text: null, origin: null, machineText: null };
 const ALL = [MACHINE, EDITED, FRESH];
+
+function deferred<T>() {
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>((done) => {
+		resolve = done;
+	});
+	return { promise, resolve };
+}
 
 function page(rows: StoreTranslationRow[], nextCursor: string | null = null): StoreTranslationPage {
 	return { rows, nextCursor };
@@ -429,5 +437,221 @@ describe('the translations editor', () => {
 		await type(rowOf(renderer, 'h1'), '');
 		await leave(rowOf(renderer, 'h1'));
 		expect(textIn(rowOf(renderer, 'h1'))).toContain('Escreva a tradução, com até 5.000 caracteres.');
+	});
+
+	it('sends what was typed while a save was pending once it lands, and says Saved only then', async () => {
+		const first = deferred<ApiResponse<StoreTranslationRow>>();
+		const second = deferred<ApiResponse<StoreTranslationRow>>();
+		vi.mocked(apiClient.saveStoreTranslationText).mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+		const { renderer } = await mountEditor();
+		const row = () => rowOf(renderer, 'h1');
+
+		await type(row(), 'Velas');
+		await leave(row());
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(1);
+		// Typing on, and leaving the box, while the first save is on its way.
+		await type(row(), 'Velas de soya');
+		await leave(row());
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(1);
+
+		await act(async () => first.resolve(ok({ ...MACHINE, text: 'Velas', origin: 'seller' })));
+		await settle();
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(2);
+		expect(apiClient.saveStoreTranslationText).toHaveBeenLastCalledWith('app1', 'es', 'h1', 'Velas de soya');
+		// The newer words are not saved yet, so nothing says they are.
+		expect(textIn(row())).not.toContain('Saved');
+		expect(valueOf(row())).toBe('Velas de soya');
+
+		await act(async () => second.resolve(ok({ ...MACHINE, text: 'Velas de soya', origin: 'seller' })));
+		await settle();
+		expect(textIn(row())).toContain('Saved');
+		expect(valueOf(row())).toBe('Velas de soya');
+		expect(button(row(), 'Save').props.disabled).toBe(true);
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(2);
+	});
+
+	it('says Saved when only spaces were typed after a save began', async () => {
+		const first = deferred<ApiResponse<StoreTranslationRow>>();
+		vi.mocked(apiClient.saveStoreTranslationText).mockReturnValueOnce(first.promise);
+		const { renderer } = await mountEditor();
+		await type(rowOf(renderer, 'h1'), 'Velas');
+		await leave(rowOf(renderer, 'h1'));
+		await type(rowOf(renderer, 'h1'), 'Velas ');
+		await act(async () => first.resolve(ok({ ...MACHINE, text: 'Velas', origin: 'seller' })));
+		await settle();
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(1);
+		expect(textIn(rowOf(renderer, 'h1'))).toContain('Saved');
+	});
+
+	it('does not send a refused text again on leaving the box, only once it changes or Save is used', async () => {
+		vi.mocked(apiClient.saveStoreTranslationText).mockRejectedValue(new ApiError(500, 'Server Error', 'Something broke.', '/api/x'));
+		const { renderer } = await mountEditor();
+		const row = () => rowOf(renderer, 'h1');
+		await type(row(), 'Velas nuevas');
+		await leave(row());
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(1);
+		await leave(row());
+		await leave(row());
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(1);
+
+		await type(row(), 'Velas nuevas 2');
+		await leave(row());
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(2);
+		expect(apiClient.saveStoreTranslationText).toHaveBeenLastCalledWith('app1', 'es', 'h1', 'Velas nuevas 2');
+		await leave(row());
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(2);
+
+		// Save is the seller asking again.
+		await act(async () => button(row(), 'Save').props.onClick());
+		await settle();
+		expect(apiClient.saveStoreTranslationText).toHaveBeenCalledTimes(3);
+		expect(textIn(row())).toContain('Something broke.');
+	});
+
+	it('does not bring back stale spaces for a row that left the list while its save landed', async () => {
+		const server = new Map(ALL.map((row) => [row.hash, row]));
+		const gate = deferred<void>();
+		vi.mocked(apiClient.getStoreTranslationTexts).mockImplementation(async (_appId, _locale, options) =>
+			ok(page([...server.values()].filter((row) => !options?.query || row.source.toLowerCase().includes(options.query.toLowerCase())))),
+		);
+		vi.mocked(apiClient.saveStoreTranslationText).mockImplementation(async (_appId, _locale, hash, text) => {
+			await gate.promise;
+			const saved: StoreTranslationRow = { ...server.get(hash)!, text: text.trim(), origin: 'seller' };
+			server.set(hash, saved);
+			return ok(saved);
+		});
+		const { renderer } = await mountEditor();
+		const search = async (value: string) => {
+			await act(async () => searchBox(renderer).props.onChange({ target: { value } }));
+			await act(async () => new Promise((resolve) => setTimeout(resolve, 450)));
+			await settle();
+		};
+		await type(rowOf(renderer, 'h1'), 'Hola ');
+		await leave(rowOf(renderer, 'h1'));
+		// The row leaves the list while its save is still on its way.
+		await search('zzz');
+		expect(rowNodes(renderer)).toHaveLength(0);
+		await act(async () => gate.resolve());
+		await settle();
+
+		await search('');
+		const row = rowOf(renderer, 'h1');
+		expect(valueOf(row)).toBe('Hola');
+		expect(textIn(row)).toContain('Edited by you');
+		expect(button(row, 'Save').props.disabled).toBe(true);
+	});
+
+	it('lists a text once when a re-read of the store makes the next page repeat it', async () => {
+		const first = { ...MACHINE, hash: 'a0' };
+		const second = { ...MACHINE, hash: 'a1' };
+		vi.mocked(apiClient.getStoreTranslationTexts).mockImplementation(async (_appId, _locale, options) =>
+			ok(options?.cursor === 'c' ? page([second, { ...FRESH, hash: 'b0' }]) : page([first, second], 'c')),
+		);
+		const { renderer } = await mountEditor();
+		await act(async () => button(renderer.root, 'Load more').props.onClick());
+		await settle();
+		expect(rowNodes(renderer).map((node) => node.props['data-hash'])).toEqual(['a0', 'a1', 'b0']);
+	});
+
+	it('names each box and each action for its row, with the first words of the text', async () => {
+		const long = { ...FRESH, hash: 'h4', source: 'Sign up for our newsletter and get ten percent off your first order, plus early access to new scents' };
+		vi.mocked(apiClient.getStoreTranslationTexts).mockResolvedValue(ok(page([EDITED, long])));
+		vi.mocked(apiClient.saveStoreTranslationText).mockRejectedValue(new ApiError(500, 'Server Error', 'Something broke.', '/api/x'));
+		const { renderer } = await mountEditor();
+
+		const edited = rowOf(renderer, 'h2');
+		const sourceId = edited.find((node) => node.type === 'p' && node.props.lang === 'en').props.id;
+		expect(sourceId).toEqual(expect.any(String));
+		expect(edited.findByType('textarea').props['aria-label']).toBe('Translation into Español: Free shipping on every order');
+		expect(edited.findByType('textarea').props['aria-describedby']).toBe(sourceId);
+		// Several rows say the same thing on their buttons; the source text tells them apart.
+		for (const name of ['Save', 'Use the automatic translation']) {
+			const hostButton = edited.find((node) => node.type === 'button' && textIn(node).trim() === name);
+			expect(hostButton.props['aria-describedby'], name).toBe(sourceId);
+		}
+
+		// A long text is cut, and the box's name stays short.
+		const name: string = rowOf(renderer, 'h4').findByType('textarea').props['aria-label'];
+		expect(name.startsWith('Translation into Español: Sign up for our newsletter')).toBe(true);
+		expect(name.endsWith('…')).toBe(true);
+		expect(name.length).toBeLessThan('Translation into Español: '.length + 62);
+
+		// A failed save adds its message to what the box is described by.
+		await type(edited, 'Envío gratis');
+		await leave(edited);
+		const alert = rowOf(renderer, 'h2').find((node) => node.props.role === 'alert');
+		expect(textIn(alert)).toBe('Something broke.');
+		expect(rowOf(renderer, 'h2').findByType('textarea').props['aria-describedby']).toBe(`${sourceId} ${alert.props.id}`);
+	});
+
+	it('sizes the box to its text where the browser does not, and again when the width changes', async () => {
+		interface Box {
+			style: { height: string };
+			scrollHeight: number;
+			offsetHeight: number;
+			clientHeight: number;
+		}
+		interface Watch {
+			callback: (entries: Array<{ contentRect: { width: number } }>) => void;
+			observed: unknown[];
+			disconnected: boolean;
+		}
+		const boxes: Box[] = [];
+		const watches: Watch[] = [];
+		vi.stubGlobal(
+			'ResizeObserver',
+			class {
+				private readonly watch: Watch;
+				constructor(callback: Watch['callback']) {
+					this.watch = { callback, observed: [], disconnected: false };
+					watches.push(this.watch);
+				}
+				observe(element: unknown) {
+					this.watch.observed.push(element);
+				}
+				disconnect() {
+					this.watch.disconnected = true;
+				}
+			},
+		);
+		try {
+			vi.mocked(apiClient.getStoreTranslationTexts).mockResolvedValue(ok(page([MACHINE, EDITED])));
+			const queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+			let renderer!: TestRenderer.ReactTestRenderer;
+			await act(async () => {
+				renderer = TestRenderer.create(createElement(QueryClientProvider, { client: queries }, createElement(TranslationEditor, { appId: 'app1', sourceLocale: 'en', languages: ES_ONLY })), {
+					createNodeMock: (element) => {
+						if (element.type !== 'textarea') return null;
+						const box: Box = { style: { height: '' }, scrollHeight: 120, offsetHeight: 100, clientHeight: 98 };
+						boxes.push(box);
+						return box;
+					},
+				});
+			});
+			await settle();
+			expect(boxes).toHaveLength(2);
+			// The height of the text plus the border: scrollHeight + offsetHeight - clientHeight.
+			expect(boxes.map((box) => box.style.height)).toEqual(['122px', '122px']);
+			expect(watches).toHaveLength(2);
+			expect(watches.map((watch) => watch.observed)).toEqual([[boxes[0]], [boxes[1]]]);
+
+			// The width changed, so the text wraps differently.
+			boxes[0].scrollHeight = 200;
+			act(() => watches[0].callback([{ contentRect: { width: 300 } }]));
+			expect(boxes[0].style.height).toBe('202px');
+			// The same width again, such as the answer to the box's own new height, measures nothing.
+			boxes[0].scrollHeight = 300;
+			act(() => watches[0].callback([{ contentRect: { width: 300 } }]));
+			expect(boxes[0].style.height).toBe('202px');
+			act(() => watches[0].callback([{ contentRect: { width: 280 } }]));
+			expect(boxes[0].style.height).toBe('302px');
+			expect(boxes[1].style.height).toBe('122px');
+
+			expect(watches.map((watch) => watch.disconnected)).toEqual([false, false]);
+			await act(async () => renderer.unmount());
+			expect(watches.map((watch) => watch.disconnected)).toEqual([true, true]);
+		} finally {
+			vi.unstubAllGlobals();
+		}
 	});
 });

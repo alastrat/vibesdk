@@ -1,5 +1,5 @@
 import { formatDistanceStrict } from 'date-fns';
-import { LOCALE_NAMES, formatCredits, isUnfinishedStatus, type Locale, type StoreLanguageStatus, type StoreTranslationRow, type TaskStatus, type TaskView } from '@/api-types';
+import { LOCALE_NAMES, formatCredits, isUnfinishedStatus, type Locale, type StoreLanguageStatus, type StoreTranslationPage, type StoreTranslationRow, type TaskStatus, type TaskView } from '@/api-types';
 import { msg, t, tn } from '@/lib/i18n';
 import { dateFnsLocale } from '@/lib/i18n/date-locale';
 
@@ -170,4 +170,25 @@ export function isAutomatic(row: Pick<StoreTranslationRow, 'text' | 'origin'>): 
 /** Only an edit of a text the automatic translation wrote can go back to it. */
 export function canUseAutomatic(row: Pick<StoreTranslationRow, 'origin' | 'machineText'>): boolean {
 	return row.origin === 'seller' && row.machineText !== null;
+}
+
+/** The first words of a text, short enough for a screen reader to say: whitespace collapsed, cut with an ellipsis. */
+export function excerpt(text: string, max = 60): string {
+	const words = text.replace(/\s+/g, ' ').trim();
+	const characters = [...words];
+	return characters.length <= max ? words : `${characters.slice(0, max).join('').trimEnd()}…`;
+}
+
+/** Every text of the pages loaded so far, once, in the order it first appeared: a re-read of the store between pages can repeat one. */
+export function uniqueRows(pages: readonly StoreTranslationPage[]): StoreTranslationRow[] {
+	const seen = new Set<string>();
+	const rows: StoreTranslationRow[] = [];
+	for (const page of pages) {
+		for (const row of page.rows) {
+			if (seen.has(row.hash)) continue;
+			seen.add(row.hash);
+			rows.push(row);
+		}
+	}
+	return rows;
 }

@@ -86,9 +86,11 @@ describe('the Translations page', () => {
 
 	it('edits in a tab per language, with a debounced search, paging, boxes that grow, and a row that stacks on phones', () => {
 		const editor = source('/src/routes/translations/translation-editor.tsx');
-		for (const part of ['<Tabs', 'useDebouncedValue(search.trim(), SEARCH_DELAY_MS)', 'texts.fetchNextPage()', 'useAutoGrow(', "CSS.supports('field-sizing', 'content')", 'onBlur={commit}', "t('Use the automatic translation')", "t('Edited by you')"]) {
+		for (const part of ['<Tabs', 'useDebouncedValue(search.trim(), SEARCH_DELAY_MS)', 'texts.fetchNextPage()', 'useAutoGrow(', "CSS.supports('field-sizing', 'content')", 'new ResizeObserver(', 'watch.disconnect()', 'onBlur={() => commit(false)}', 'uniqueRows(', "t('Use the automatic translation')", "t('Edited by you')"]) {
 			expect(editor, part).toContain(part);
 		}
+		// Each row's buttons, which read the same in every row, are described by the row's text.
+		expect(editor.match(/aria-describedby=\{sourceId\}/g) ?? []).toHaveLength(2);
 		// One column on a phone, source and translation side by side from `md`.
 		expect(editor).toMatch(/<li data-hash=\{row\.hash\} className="grid [^"]*\bmd:grid-cols-2\b/);
 		expect(editor).not.toMatch(/(?<![:\w-])grid-cols-2\b/);

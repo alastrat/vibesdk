@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Locale, StoreLanguageStatus, TaskView } from '@/api-types';
+import type { Locale, StoreLanguageStatus, StoreTranslationPage, StoreTranslationRow, TaskView } from '@/api-types';
 import { applyAccountLocale, t } from '@/lib/i18n';
 import {
 	LANGUAGE_STATE_LABELS,
@@ -9,6 +9,7 @@ import {
 	creditsLeftText,
 	draftChanged,
 	estimateText,
+	excerpt,
 	isAutomatic,
 	languageState,
 	languagesDisagreeWithTasks,
@@ -18,6 +19,7 @@ import {
 	taskLabel,
 	taskRefetchDelay,
 	translatedPercent,
+	uniqueRows,
 	type LanguageState,
 } from './translations-format';
 
@@ -201,6 +203,44 @@ describe('the translations editor', () => {
 		['an edit of a text the automatic translation never wrote', 'seller', null, false],
 	])('lets the seller go back to the automatic translation of %s: %s', (_name, origin, machineText, can) => {
 		expect(canUseAutomatic({ origin, machineText })).toBe(can);
+	});
+});
+
+describe('the first words of a text', () => {
+	it('keeps a short text whole, with its whitespace collapsed', () => {
+		expect(excerpt('Free  shipping\n on every order')).toBe('Free shipping on every order');
+		expect(excerpt('   ')).toBe('');
+	});
+
+	it('cuts a long text at the limit and says so with an ellipsis', () => {
+		const cut = excerpt('Sign up for our newsletter and get ten percent off your first order, plus early access to new scents', 40);
+		expect(cut).toBe('Sign up for our newsletter and get ten p…');
+		expect([...cut]).toHaveLength(41);
+		expect(excerpt('a'.repeat(60))).toBe('a'.repeat(60));
+		expect(excerpt('a'.repeat(61))).toBe(`${'a'.repeat(60)}…`);
+	});
+
+	it('does not split a character that takes two code units, or end on a space', () => {
+		expect(excerpt('😀'.repeat(5), 3)).toBe('😀😀😀…');
+		expect(excerpt('word word', 5)).toBe('word…');
+	});
+});
+
+describe('the rows of the pages loaded so far', () => {
+	const row = (hash: string, text: string | null = null): StoreTranslationRow => ({ hash, source: `Source ${hash}`, text, origin: null, machineText: null });
+
+	it('lists each text once, in the order it first appeared, when a later page repeats it', () => {
+		const pages: StoreTranslationPage[] = [
+			{ rows: [row('a'), row('b')], nextCursor: 'c1' },
+			{ rows: [row('b', 'again'), row('c')], nextCursor: 'c2' },
+			{ rows: [row('a', 'again'), row('d')], nextCursor: null },
+		];
+		expect(uniqueRows(pages).map((entry) => entry.hash)).toEqual(['a', 'b', 'c', 'd']);
+		expect(uniqueRows(pages)[1].text).toBeNull();
+	});
+
+	it('is empty with no pages', () => {
+		expect(uniqueRows([])).toEqual([]);
 	});
 });
 

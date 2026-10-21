@@ -361,7 +361,7 @@
 	"Translating your store into {language}": "Traduzindo sua loja para {language}",
 	"Translation": "Tradução",
 	"Translation failed": "Tradução com falha",
-	"Translation into {language}": "Tradução para {language}",
+	"Translation into {language}: {text}": "Tradução para {language}: {text}",
 	"Translation ready": "Tradução pronta",
 	"Translations": "Traduções",
 	"Translations are paused": "As traduções estão em pausa",
