@@ -4,8 +4,10 @@
  */
 
 import { useLimitsContext } from '@/contexts/limits-context';
-import type { UsageSummary } from '@/hooks/use-limits';
+import type { LimitConfig, UsageSummary } from '@/hooks/use-limits';
 import { formatCredits } from '@/api-types';
+import { t, tn, useI18n } from '@/lib/i18n';
+import { formatDollars, formatNumber } from '../../shared/i18n/format';
 import { Loader2, LucideGlobeLock } from 'lucide-react';
 
 interface UsageLimitsBadgeProps {
@@ -29,9 +31,52 @@ export interface UsageLimitsBadgeState {
 	billing: boolean;
 }
 
+/** What is left of a plan's credits, which are not all free. */
+function billingUsageText(type: LimitConfig['type'], remaining: number, amount: string): string {
+	switch (type) {
+		case 'prompts':
+			return tn('{amount} prompt left', '{amount} prompts left', remaining, { amount });
+		case 'tokens':
+			return t('{amount} tokens left', { amount });
+		case 'credits':
+			return tn('{amount} credit left', '{amount} credits left', remaining, { amount });
+		case 'cost':
+			return t('{amount} left', { amount });
+	}
+}
+
+/** What is left of the free allowance. */
+function freeUsageText(type: LimitConfig['type'], remaining: number, amount: string): string {
+	switch (type) {
+		case 'prompts':
+			return tn('{amount} free prompt left', '{amount} free prompts left', remaining, { amount });
+		case 'tokens':
+			return t('{amount} free tokens left', { amount });
+		case 'credits':
+			return tn('{amount} free credit left', '{amount} free credits left', remaining, { amount });
+		case 'cost':
+			return t('{amount} free left', { amount });
+	}
+}
+
+/** The short form for narrow screens. */
+function mobileUsageLabel(type: LimitConfig['type'], remaining: number, amount: string): string {
+	switch (type) {
+		case 'prompts':
+			return tn('{amount} prompt', '{amount} prompts', remaining, { amount });
+		case 'tokens':
+			return t('{amount} tokens', { amount });
+		case 'credits':
+			return tn('{amount} credit', '{amount} credits', remaining, { amount });
+		case 'cost':
+			return amount;
+	}
+}
+
 // eslint-disable-next-line react-refresh/only-export-components -- Shared with the sidebar menu to reuse the badge's exact derived state.
 export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 	const { data, loading, error } = useLimitsContext();
+	const { locale } = useI18n();
 
 	// Get usage info
 	let usageText = '';
@@ -67,10 +112,10 @@ export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 		// account/gateway is configured; safe to show the credit balance.
 		if (hasUserToken && hasCloudflareConfigured && cloudflareCredits) {
 			showCredits = true;
-			const creditsAmount = cloudflareCredits.credits.toFixed(2);
+			const creditsAmount = formatDollars(cloudflareCredits.credits, locale, 'always');
 			creditsText = cloudflareCredits.gatewayName
-				? `$${creditsAmount} (${cloudflareCredits.gatewayName})`
-				: `$${creditsAmount} credits`;
+				? `${creditsAmount} (${cloudflareCredits.gatewayName})`
+				: t('{amount} credits', { amount: creditsAmount });
 		}
 
 		if (limit && !config.unlimited) {
@@ -80,43 +125,21 @@ export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 			isExhausted = !limitCheck.withinLimits;
 
 			// Format value
-			const formatNumber = (value: number) => {
-				const rounded = Math.round(value * 10) / 10;
-				return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
-			};
 			const formatValue = (value: number) => {
 				switch (limit.type) {
-					case 'prompts':
-						return formatNumber(value);
 					case 'tokens':
 						return `${(value / 1000).toFixed(0)}K`;
 					case 'cost':
-						return `$${value.toFixed(1)}`;
+						return formatDollars(value, locale, 'always');
 					default:
-						return formatNumber(value);
-				}
-			};
-
-			// Get unit name
-			const getUnit = () => {
-				switch (limit.type) {
-					case 'prompts':
-						return remaining === 1 ? 'prompt' : 'prompts';
-					case 'tokens':
-						return 'tokens';
-					case 'credits':
-						return remaining === 1 ? 'credit' : 'credits';
-					case 'cost':
-						return '';
-					default:
-						return '';
+						return formatNumber(Math.round(value * 10) / 10, locale);
 				}
 			};
 
 			// A plan's credits aren't all free, so billing drops the word.
-			const amount = billing ? formatCredits(remaining) : formatValue(remaining);
-			usageText = `${amount} ${billing ? '' : 'free '}${getUnit()} left`.trim();
-			mobileUsageText = `${amount} ${getUnit()}`.trim();
+			const amount = billing ? formatCredits(remaining, locale) : formatValue(remaining);
+			usageText = billing ? billingUsageText(limit.type, remaining, amount) : freeUsageText(limit.type, remaining, amount);
+			mobileUsageText = mobileUsageLabel(limit.type, remaining, amount);
 			showUsage = true;
 		}
 	}
@@ -181,8 +204,8 @@ export function UsageLimitsBadge({ onConnect }: UsageLimitsBadgeProps) {
 				{/* Red badge when exhausted and no token */}
 				{!loading && isExhausted && !hasUserToken && (
 					<div className="flex items-center px-2 py-1 bg-gradient-to-r from-red-600 to-red-500 text-white border-r border-red-500/30 font-medium">
-						<span className="hidden md:inline">Free limit exhausted</span>
-						<span className="md:hidden">Exhausted</span>
+						<span className="hidden md:inline">{t('Free limit exhausted')}</span>
+						<span className="md:hidden">{t('Exhausted')}</span>
 					</div>
 				)}
 
@@ -190,13 +213,13 @@ export function UsageLimitsBadge({ onConnect }: UsageLimitsBadgeProps) {
 				<div className="flex items-center gap-1.5 px-2 py-1 text-white bg-brand rounded-md">
 					{!showCredits && <LucideGlobeLock className="w-3 h-3" />}
 					{loading ? (
-						<span className="hidden sm:inline text-muted-foreground">Loading...</span>
+						<span className="hidden sm:inline text-muted-foreground">{t('Loading...')}</span>
 					) : needsConfiguration ? (
-						<span className="hidden sm:inline font-medium text-amber-500">Configure AI Gateway</span>
+						<span className="hidden sm:inline font-medium text-amber-500">{t('Configure AI Gateway')}</span>
 					) : showCredits ? (
 						<span className="hidden sm:inline font-medium">{creditsText}</span>
 					) : (
-						<span>Connect</span>
+						<span>{t('Connect')}</span>
 					)}
 				</div>
 			</button>

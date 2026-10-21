@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router';
 import { cn, Button, DropdownMenu } from '@cloudflare/kumo';
 import { useAuth } from '../../contexts/auth-context';
 import { getInitials } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Skeleton } from '../ui/skeleton';
 import {
@@ -22,27 +23,27 @@ interface AuthButtonProps {
 }
 
 function getLimitsStatusText(limits: UsageLimitsBadgeState) {
-	if (limits.loading) return 'Checking credits...';
-	if (limits.billing) return limits.isExhausted ? 'Out of AI credits' : limits.usageText;
-	if (limits.needsConfiguration) return 'Configure AI Gateway';
+	if (limits.loading) return t('Checking credits...');
+	if (limits.billing) return limits.isExhausted ? t('Out of AI credits') : limits.usageText;
+	if (limits.needsConfiguration) return t('Configure AI Gateway');
 	if (limits.showCredits) return limits.creditsText;
 	if (limits.isExhausted && !limits.hasUserToken)
-		return 'Free limit exhausted';
+		return t('Free limit exhausted');
 	if (limits.showUsage && !limits.isExhausted) return limits.usageText;
-	return 'Connect Cloudflare';
+	return t('Connect Cloudflare');
 }
 
 function getLimitsDetailText(limits: UsageLimitsBadgeState) {
-	if (limits.loading) return 'Loading your usage status';
-	if (limits.billing) return "This month's AI credits";
-	if (limits.needsConfiguration) return 'Select an account and AI Gateway';
+	if (limits.loading) return t('Loading your usage status');
+	if (limits.billing) return t("This month's AI credits");
+	if (limits.needsConfiguration) return t('Select an account and AI Gateway');
 	if (limits.showCredits && limits.showUsage && !limits.isExhausted)
 		return limits.usageText;
-	if (limits.showCredits) return 'Connected to AI Gateway';
+	if (limits.showCredits) return t('Connected to AI Gateway');
 	if (limits.isExhausted && !limits.hasUserToken)
-		return 'Connect Cloudflare to continue building';
-	if (limits.showUsage && !limits.isExhausted) return 'Free tier usage';
-	return 'Use your Cloudflare AI Gateway credits';
+		return t('Connect Cloudflare to continue building');
+	if (limits.showUsage && !limits.isExhausted) return t('Free tier usage');
+	return t('Use your Cloudflare AI Gateway credits');
 }
 
 export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
@@ -93,7 +94,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 							</Avatar>
 							<span className="min-w-0 flex-1 flex-col group-data-[state=collapsed]/sidebar:hidden">
 								<span className="block truncate text-sm font-medium text-kumo-default">
-									{user.displayName || 'User'}
+									{user.displayName || t('User')}
 								</span>
 								{showLimitsState && (
 									<span
@@ -112,7 +113,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 							variant="ghost"
 							size="base"
 							shape="circle"
-							aria-label="Account menu"
+							aria-label={t('Account menu')}
 							className={cn(
 								'relative rounded-full transition-all hover:ring-2 hover:ring-kumo-brand/20',
 								className,
@@ -174,7 +175,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 								onClick={() => navigate('/settings')}
 								icon={LucideGlobeLock}
 							>
-								Configure AI Gateway
+								{t('Configure AI Gateway')}
 							</DropdownMenu.Item>
 						)}
 					{showLimitsState &&
@@ -184,20 +185,20 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 								onClick={() => navigate('/settings')}
 								icon={LucideGlobeLock}
 							>
-								Manage AI Gateway
+								{t('Manage AI Gateway')}
 							</DropdownMenu.Item>
 						)}
 					<DropdownMenu.Item
 						onClick={() => navigate('/profile')}
 						icon={UserIcon}
 					>
-						Profile
+						{t('Profile')}
 					</DropdownMenu.Item>
 					<DropdownMenu.Item
 						onClick={() => navigate('/settings')}
 						icon={GearIcon}
 					>
-						Settings
+						{t('Settings')}
 					</DropdownMenu.Item>
 				</DropdownMenu.Group>
 
@@ -206,7 +207,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 					icon={SignOutIcon}
 					variant="danger"
 				>
-					Sign Out
+					{t('Sign Out')}
 				</DropdownMenu.Item>
 			</DropdownMenu.Content>
 		</DropdownMenu>

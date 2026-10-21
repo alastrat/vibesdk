@@ -3,6 +3,8 @@ import { X } from 'lucide-react';
 import { type UsageSummary, type LimitConfig } from '@/hooks/use-limits';
 import { CloudflareLogo } from './icons/logos';
 import { CREDITS_BANNER_THRESHOLD } from '../../shared/constants/limits';
+import { formatDollars, formatNumber } from '../../shared/i18n/format';
+import { getLocale, t, useI18n } from '@/lib/i18n';
 
 interface CreditsBannerProps {
 	limitsData?: UsageSummary | null;
@@ -40,11 +42,12 @@ function getResetDate(window: LimitWindow, periodSeconds?: number): Date | null 
 }
 
 /**
- * Plain money string ('$61.57' for USD, '€12.00' for EUR, otherwise '12.00 XYZ').
- * Avoids Intl's locale prefixes like 'US$' that appear in non-US locales.
+ * Money as a string: US dollars the way the language writes them ('$61.57', 'USD 61,57', 'US$ 61,57'), '€12.00' for
+ * EUR, otherwise '12.00 XYZ'.
  */
 function formatMoney(amount: number, currency: string): string {
-	const symbols: Record<string, string> = { USD: '$', EUR: '€', GBP: '£' };
+	if (currency === 'USD') return formatDollars(amount, getLocale(), 'always');
+	const symbols: Record<string, string> = { EUR: '€', GBP: '£' };
 	const symbol = symbols[currency];
 	const value = amount.toFixed(2);
 	return symbol ? `${symbol}${value}` : `${value} ${currency}`;
@@ -52,13 +55,13 @@ function formatMoney(amount: number, currency: string): string {
 
 function formatResetIn(target: Date): string {
 	const diffMs = target.getTime() - Date.now();
-	if (diffMs <= 0) return 'soon';
+	if (diffMs <= 0) return t('soon');
 	const minutes = Math.floor(diffMs / 60000);
 	const hours = Math.floor(minutes / 60);
 	const days = Math.floor(hours / 24);
-	if (days >= 1) return `${days}d`;
-	if (hours >= 1) return `${hours}h`;
-	return `${Math.max(1, minutes)}m`;
+	if (days >= 1) return t('{count}d', { count: days });
+	if (hours >= 1) return t('{count}h', { count: hours });
+	return t('{count}m', { count: Math.max(1, minutes) });
 }
 
 type LimitWindow = 'daily' | 'weekly' | 'monthly' | 'lifetime' | 'rolling';
@@ -85,7 +88,7 @@ function buildConnectedBalanceContent(
 	resetDate: Date | null,
 	fallback: string,
 ): ReactNode {
-	const resetSuffix = resetDate ? ` · free credits reset in ${formatResetIn(resetDate)}` : '';
+	const resetSuffix = resetDate ? ` · ${t('free credits reset in {time}', { time: formatResetIn(resetDate) })}` : '';
 	if (!credits) {
 		return `${fallback}${resetSuffix}`;
 	}
@@ -99,6 +102,7 @@ function buildConnectedBalanceContent(
 
 function useBannerInfo(limitsData?: UsageSummary | null): { bannerInfo: BannerInfo | null; dismiss: () => void } {
 	const [isDismissed, setIsDismissed] = useState(false);
+	const { t, tn, locale } = useI18n();
 
 	const bannerInfo = useMemo<BannerInfo | null>(() => {
 		// With billing on, the plan's credits and their warnings live on the billing page, not in a Cloudflare prompt.
@@ -112,7 +116,7 @@ function useBannerInfo(limitsData?: UsageSummary | null): { bannerInfo: BannerIn
 			if (cloudflareCredits && cloudflareCredits.credits >= CREDITS_BANNER_THRESHOLD) return null;
 			const resetDate = config.limit ? resolveResetDate(config.limit) : null;
 			return {
-				content: buildConnectedBalanceContent(cloudflareCredits, resetDate, 'Connected to AI Gateway'),
+				content: buildConnectedBalanceContent(cloudflareCredits, resetDate, t('Connected to AI Gateway')),
 				isConnected: true,
 			};
 		}
@@ -131,43 +135,38 @@ function useBannerInfo(limitsData?: UsageSummary | null): { bannerInfo: BannerIn
 		if (remaining <= 0 && isConnected) {
 			if (cloudflareCredits && cloudflareCredits.credits >= CREDITS_BANNER_THRESHOLD) return null;
 			return {
-				content: buildConnectedBalanceContent(cloudflareCredits, resetDate, 'Free credits exhausted · using your AI Gateway'),
+				content: buildConnectedBalanceContent(cloudflareCredits, resetDate, t('Free credits exhausted · using your AI Gateway')),
 				isConnected: true,
 			};
 		}
 
-		const formatNumber = (value: number) => {
-			const rounded = Math.round(value * 10) / 10;
-			return Number.isInteger(rounded) ? rounded.toString() : rounded.toFixed(1);
-		};
-		const formatValue = (value: number) => {
+		const amount = (() => {
 			switch (limit.type) {
-				case 'prompts': return formatNumber(value);
-				case 'credits': return formatNumber(value);
-				case 'tokens': return `${(value / 1000).toFixed(0)}K`;
-				case 'cost': return `$${value.toFixed(2)}`;
-				default: return formatNumber(value);
-			}
-		};
-
-		const unit = (() => {
-			switch (limit.type) {
-				case 'prompts': return remaining === 1 ? 'free prompt' : 'free prompts';
-				case 'credits': return remaining === 1 ? 'free credit' : 'free credits';
-				case 'tokens': return 'free tokens';
-				case 'cost': return 'of free credit';
-				default: return 'free';
+				case 'tokens': return `${(remaining / 1000).toFixed(0)}K`;
+				case 'cost': return formatDollars(remaining, locale, 'always');
+				default: return formatNumber(Math.round(remaining * 10) / 10, locale);
 			}
 		})();
 
-		const resetVerb = limit.window === 'rolling' && !limit.resetAt ? 'resets within' : 'resets in';
-		const resetText = resetDate ? ` · ${resetVerb} ${formatResetIn(resetDate)}` : '';
+		const remainingText = (() => {
+			switch (limit.type) {
+				case 'prompts': return tn('{amount} free prompt remaining', '{amount} free prompts remaining', remaining, { amount });
+				case 'credits': return tn('{amount} free credit remaining', '{amount} free credits remaining', remaining, { amount });
+				case 'tokens': return t('{amount} free tokens remaining', { amount });
+				case 'cost': return t('{amount} of free credit remaining', { amount });
+				default: return t('{amount} free remaining', { amount });
+			}
+		})();
+
+		const resetText = resetDate
+			? ` · ${limit.window === 'rolling' && !limit.resetAt ? t('resets within {time}', { time: formatResetIn(resetDate) }) : t('resets in {time}', { time: formatResetIn(resetDate) })}`
+			: '';
 
 		return {
-			content: `${formatValue(remaining)} ${unit} remaining${resetText}`.trim(),
+			content: `${remainingText}${resetText}`,
 			isConnected,
 		};
-	}, [limitsData, isDismissed]);
+	}, [limitsData, isDismissed, t, tn, locale]);
 
 	return { bannerInfo, dismiss: () => setIsDismissed(true) };
 }
@@ -232,7 +231,7 @@ function BannerContent({
 						className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-sm text-white bg-brand/25 hover:bg-brand transition-colors duration-200"
 					>
 						<CloudflareLogo className="w-3.5 h-3.5" color1="#fff" color2="#fff" />
-						Connect
+						{t('Connect')}
 					</button>
 				)}
 				<button

@@ -4,6 +4,7 @@ import { buttonVariants } from '@cloudflare/kumo';
 import { InfoIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { useBilling } from '@/hooks/use-billing';
 import { cn } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 import { bannerKeyFor, billingBannerFor, type BillingBanner as Notice } from '@/routes/settings/billing-view';
 import { PlanButton } from './PlanButton';
 
@@ -62,7 +63,7 @@ export function BillingBanner() {
 				<NoticeAction action={notice.action} />
 				<button
 					type="button"
-					aria-label="Close"
+					aria-label={t('Close')}
 					onClick={() => {
 						rememberDismissed(key);
 						setClosed(key);

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useHeaderContent } from './header-context';
+import { t } from '@/lib/i18n';
 
 export function GlobalHeader() {
 	const { isMobile } = useSidebar();
@@ -37,7 +38,7 @@ export function GlobalHeader() {
 				<div className="relative flex h-12 items-center gap-2 border-b border-kumo-line pl-2 pr-3 md:gap-3 md:px-4">
 					{isMobile ? (
 						<SidebarTrigger
-							aria-label="Toggle sidebar"
+							aria-label={t('Toggle sidebar')}
 							className="shrink-0"
 						/>
 					) : null}
@@ -54,7 +55,7 @@ export function GlobalHeader() {
 									}
 									disabled={!hasChangeLogs}
 									className={`flex max-w-full items-center gap-2 rounded-full border border-brand/40 bg-bg-4/80 px-3 py-1.5 text-xs text-text-primary shadow-sm backdrop-blur hover:bg-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 dark:border-brand/30 dark:bg-kumo-elevated/80 md:text-sm${!hasChangeLogs ? ' opacity-50 cursor-not-allowed pointer-events-none' : ''}`}
-									aria-label="Platform updates"
+									aria-label={t('Platform updates')}
 								>
 									<AlertCircle className="h-4 w-4 text-kumo-brand" />
 									<span className="truncate max-w-[46ch] md:max-w-[60ch]">
@@ -75,7 +76,7 @@ export function GlobalHeader() {
 				{hasChangeLogs && (
 					<DialogContent className="max-w-xl">
 						<DialogHeader>
-							<DialogTitle>Platform updates</DialogTitle>
+							<DialogTitle>{t('Platform updates')}</DialogTitle>
 							{status.globalUserMessage && (
 								<DialogDescription className="text-sm text-muted-foreground">
 									{status.globalUserMessage}

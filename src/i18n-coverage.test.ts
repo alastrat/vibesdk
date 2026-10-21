@@ -13,7 +13,30 @@ import { findUntranslatedText } from '../shared/i18n/extract';
  * Text that is never translated, such as a brand name or a string of code, is marked with an `i18n-ignore` comment (see
  * `extract.ts`).
  */
-const COVERED: string[] = ['src/lib/i18n/', 'src/components/settings/', 'src/components/auth/LanguagePicker.tsx'];
+const COVERED: string[] = [
+	'src/lib/i18n/',
+	'src/components/settings/',
+	'src/components/auth/LanguagePicker.tsx',
+	'src/components/auth/auth-button.tsx',
+	'src/components/layout/app-layout.tsx',
+	'src/components/layout/app-sidebar.tsx',
+	'src/components/layout/global-header.tsx',
+	'src/components/layout/EstoriTopBar.tsx',
+	'src/components/layout/header-context.tsx',
+	'src/routes/app/',
+	'src/routes/home.tsx',
+	'src/components/ErrorBoundary.tsx',
+	'src/components/credits-banner.tsx',
+	'src/components/billing/BillingBanner.tsx',
+	'src/components/usage-limits-badge.tsx',
+	'src/utils/usage-limit-checker.tsx',
+	'src/components/ModelUnavailableNotice.tsx',
+	'src/utils/credit-change.ts',
+	'src/lib/legal-link-label.ts',
+	'src/lib/visibility-label.ts',
+	'src/components/ui/dialog.tsx',
+	'src/components/ui/model-selector.tsx',
+];
 
 /** Every source file that can be covered, loaded only when it is. Tests and declaration files are never covered. */
 const loaders = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '/shared/**/*.{ts,tsx}', '/worker/**/*.{ts,tsx}', '!/**/*.{test,spec,d}.{ts,tsx}'], {

@@ -78,6 +78,19 @@ These set the voice. Translate new copy to match them.
 | Discover (the page of shared sites) | Descubrir | Descobrir |
 | change (an edit to the store) | cambio | alteração |
 
+### Apps and the sidebar
+
+| English | Español | Português |
+| --- | --- | --- |
+| app (a project built in the chat) | app (feminine: "la app", "esta app") | app (masculine: "o app", "este app") |
+| bookmark (keep an app in your list) | favorito: "Agregar a favoritos", "En favoritos" | favorito: "Adicionar aos favoritos", "Nos favoritos" |
+| star (give an app a star) | destacar: "Destacar", "Destacado" | estrela: "Dar estrela", "Com estrela" |
+| prompt (the idea that started an app) | prompt | prompt |
+| deploy (put a preview online to look at) | desplegar | fazer deploy |
+| live preview (a preview that is running) | vista previa interactiva | pré-visualização interativa |
+| board | tablero | quadro |
+| your own key (a model key the seller brings) | clave propia | chave própria |
+
 ### Publishing
 
 | English | Español | Português |
