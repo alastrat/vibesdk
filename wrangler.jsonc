@@ -151,6 +151,10 @@
             {
                 "class_name": "CatalogOrderRunner",
                 "name": "CATALOG_ORDER_RUNNER"
+            },
+            {
+                "class_name": "TaskRunner",
+                "name": "TASK_RUNNER"
             }
 		]
 	},
@@ -211,6 +215,12 @@
                 "CatalogOrderRunner"
             ],
             "tag": "v7"
+        },
+        {
+            "new_sqlite_classes": [
+                "TaskRunner"
+            ],
+            "tag": "v8"
         }
 	],
     "triggers": {

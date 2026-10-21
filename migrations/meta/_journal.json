@@ -225,6 +225,13 @@
       "when": 1792555137294,
       "tag": "0031_oauth_state_locale",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792558045348,
+      "tag": "0032_seller_tasks",
+      "breakpoints": true
     }
   ]
 }

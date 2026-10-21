@@ -32,6 +32,7 @@ import { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_STATUSES } from '../../shared/types/
 import { LIVE_STORE_STATUSES, STORE_DOMAIN_PROVIDERS, STORE_DOMAIN_STATUSES } from '../../shared/types/live-stores';
 import { BILLING_EVENT_RESULTS, BILLING_NOTICE_KINDS, CREDIT_USE_SOURCES, SUBSCRIPTION_STATUSES } from '../../shared/types/billing';
 import { PAID_PLAN_IDS, PLAN_IDS } from '../../shared/types/plans';
+import { TASK_KINDS, TASK_PAUSE_REASONS, TASK_STATUSES } from '../../shared/types/tasks';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -1397,3 +1398,42 @@ export const creditPurchases = sqliteTable('credit_purchases', {
     expiryIdx: index('credit_purchases_expiry_idx').on(table.expiredAt, table.expiresAt),
 }));
 export type CreditPurchaseRecord = typeof creditPurchases.$inferSelect;
+
+// ========================================
+// SELLER TASKS
+// ========================================
+
+/**
+ * The seller task queue: background work run one step at a time by the seller's runner. Times are epoch milliseconds.
+ * A dedupe key is unique among the seller's unfinished tasks, so the same work is never queued twice.
+ */
+export const tasks = sqliteTable('tasks', {
+    id: text('id').primaryKey(),
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    appId: text('app_id').references(() => apps.id, { onDelete: 'cascade' }),
+    kind: text('kind', { enum: TASK_KINDS }).notNull(),
+    status: text('status', { enum: TASK_STATUSES }).notNull().default('queued'),
+    /** JSON, read by the kind. */
+    payload: text('payload').notNull().default('{}'),
+    /** JSON `TaskProgress`. */
+    progress: text('progress').notNull().default('{"done":0,"total":0,"skipped":0}'),
+    creditsUsed: integer('credits_used').notNull().default(0),
+    /** Failures in a row; a saved step clears it. */
+    attempts: integer('attempts').notNull().default(0),
+    /** Steps saved so far, which is also the next step's number: its credit uses are keyed by it. */
+    steps: integer('steps').notNull().default(0),
+    lastError: text('last_error'),
+    pauseReason: text('pause_reason', { enum: TASK_PAUSE_REASONS }),
+    runAt: integer('run_at').notNull(),
+    leaseUntil: integer('lease_until'),
+    dedupeKey: text('dedupe_key').notNull(),
+    createdAt: integer('created_at').notNull(),
+    startedAt: integer('started_at'),
+    finishedAt: integer('finished_at'),
+}, (table) => ({
+    unfinishedDedupeUnique: uniqueIndex('tasks_unfinished_dedupe_unique_idx').on(table.userId, table.dedupeKey).where(sql`${table.status} IN ('queued', 'running', 'paused')`),
+    userDueIdx: index('tasks_user_status_run_idx').on(table.userId, table.status, table.runAt),
+    dueIdx: index('tasks_status_run_idx').on(table.status, table.runAt),
+    userCreatedIdx: index('tasks_user_created_idx').on(table.userId, table.createdAt),
+    appIdx: index('tasks_app_idx').on(table.appId),
+}));

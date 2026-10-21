@@ -34,3 +34,4 @@ export { ModelTestService } from './services/ModelTestService';
 export { BillingService } from './services/BillingService';
 export { PlanAdminService } from './services/PlanAdminService';
 export { CreditLedgerService } from './services/CreditLedgerService';
+export { TaskService } from './services/TaskService';
