@@ -116,6 +116,24 @@ describe('store texts', () => {
 		expect(await service().missingTexts('app_other', 'es', 10)).toEqual([]);
 	});
 
+	it('missingTexts and countMissing leave out the texts a task gave up on, however many', async () => {
+		await service().replaceTexts('app_1', [text('a'), text('b'), text('c'), text('d')], NOW);
+		await service().upsertMachine('app_1', 'es', [machine('b')], NOW);
+		const gaveUp = ['hash-a', 'hash-never-read'];
+
+		expect((await service().missingTexts('app_1', 'es', 10, gaveUp)).map((row) => row.hash)).toEqual(['hash-c', 'hash-d']);
+		expect((await service().missingTexts('app_1', 'es', 1, gaveUp)).map((row) => row.hash)).toEqual(['hash-c']);
+		expect(await service().countMissing('app_1', 'es')).toBe(3);
+		expect(await service().countMissing('app_1', 'es', gaveUp)).toBe(2);
+		expect(await service().countMissing('app_1', 'pt-BR')).toBe(4);
+		expect(await service().countMissing('app_other', 'es')).toBe(0);
+
+		// One bound value however long the list, so D1's limit of 100 parameters doesn't apply.
+		const many = Array.from({ length: 600 }, (_, index) => `hash-skipped-${index}`);
+		expect(await service().countMissing('app_1', 'es', many)).toBe(3);
+		expect((await service().missingTexts('app_1', 'es', 10, [...many, 'hash-c'])).map((row) => row.hash)).toEqual(['hash-a', 'hash-d']);
+	});
+
 	it('counts per locale', async () => {
 		await service().replaceTexts('app_1', [text('a'), text('b'), text('c')], NOW);
 		await service().upsertMachine('app_1', 'es', [machine('a'), machine('b')], NOW);

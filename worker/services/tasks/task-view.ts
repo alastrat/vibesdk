@@ -17,7 +17,7 @@ export function taskView(task: TaskRecord): TaskView | null {
 		id: task.id,
 		appId: task.appId,
 		status: task.status,
-		progress: task.progress,
+		progress: { done: task.progress.done, total: task.progress.total, skipped: task.progress.skipped },
 		creditsUsed: task.creditsUsed,
 		pauseReason: task.pauseReason,
 		lastError: task.lastError,

@@ -145,27 +145,25 @@ export class StoreTranslationService extends BaseService {
 		);
 	}
 
-	/** Texts with no translation into `locale`, in the order they were read, so batches are stable. */
-	async missingTexts(appId: string, locale: Locale, limit: number): Promise<StoreText[]> {
+	/**
+	 * Texts with no translation into `locale`, in the order they were read, so batches are stable. A text with any
+	 * translation, the seller's included, is never missing. `exclude` leaves out hashes a task gave up on.
+	 */
+	async missingTexts(appId: string, locale: Locale, limit: number, exclude: readonly string[] = []): Promise<StoreText[]> {
 		const texts = schema.storeTexts;
-		const translations = schema.storeTranslations;
 		return this.database
 			.select({ hash: texts.sourceHash, text: texts.sourceText, kind: texts.kind })
 			.from(texts)
-			.where(
-				and(
-					eq(texts.appId, appId),
-					notExists(
-						this.database
-							.select({ one: sql`1` })
-							.from(translations)
-							.where(and(eq(translations.appId, texts.appId), eq(translations.locale, locale), eq(translations.sourceHash, texts.sourceHash))),
-					),
-				),
-			)
+			.where(this.missing(appId, locale, exclude))
 			.orderBy(asc(texts.seenAt), asc(rowidOf(texts)))
 			.limit(limit)
 			.all();
+	}
+
+	/** How many texts `missingTexts` would list without a limit. */
+	async countMissing(appId: string, locale: Locale, exclude: readonly string[] = []): Promise<number> {
+		const row = await this.database.select({ missing: count() }).from(schema.storeTexts).where(this.missing(appId, locale, exclude)).get();
+		return row?.missing ?? 0;
 	}
 
 	/** How far each language is against the store's current texts. */
@@ -288,6 +286,22 @@ export class StoreTranslationService extends BaseService {
 			.where(and(eq(translations.appId, appId), eq(translations.locale, locale)))
 			.all();
 		return new Map(rows.map((row) => [row.hash, row.text]));
+	}
+
+	/** The store's texts with no translation into `locale`. The excluded hashes go in as one JSON value, since D1 binds at most 100 parameters. */
+	private missing(appId: string, locale: Locale, exclude: readonly string[]): SQL | undefined {
+		const texts = schema.storeTexts;
+		const translations = schema.storeTranslations;
+		return and(
+			eq(texts.appId, appId),
+			notExists(
+				this.database
+					.select({ one: sql`1` })
+					.from(translations)
+					.where(and(eq(translations.appId, texts.appId), eq(translations.locale, locale), eq(translations.sourceHash, texts.sourceHash))),
+			),
+			exclude.length === 0 ? undefined : sql`${texts.sourceHash} NOT IN (SELECT value FROM json_each(${JSON.stringify(exclude)}))`,
+		);
 	}
 
 	/** The language the store is written in until the seller says otherwise: its owner's own, when Estori speaks it. */

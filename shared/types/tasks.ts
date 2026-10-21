@@ -23,6 +23,8 @@ export interface TaskProgress {
 	done: number;
 	total: number;
 	skipped: number;
+	/** What a kind gave up on, so its next step doesn't take it again. Kept with the task, and never shown to sellers. */
+	skippedHashes?: string[];
 }
 
 /** A seller can have at most this many queued, running or paused tasks. */

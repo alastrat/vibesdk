@@ -78,8 +78,10 @@ const countOf = (value: unknown): number => (typeof value === 'number' && Number
 function progressOf(json: string): TaskProgress {
 	const value = parsed(json);
 	if (typeof value !== 'object' || value === null) return { ...EMPTY_PROGRESS };
-	const { done, total, skipped } = value as Record<string, unknown>;
-	return { done: countOf(done), total: countOf(total), skipped: countOf(skipped) };
+	const { done, total, skipped, skippedHashes } = value as Record<string, unknown>;
+	const progress: TaskProgress = { done: countOf(done), total: countOf(total), skipped: countOf(skipped) };
+	if (Array.isArray(skippedHashes)) progress.skippedHashes = skippedHashes.filter((hash): hash is string => typeof hash === 'string');
+	return progress;
 }
 
 function recordOf(row: TaskRow): TaskRecord {

@@ -44,6 +44,11 @@ describe('taskView', () => {
 		});
 	});
 
+	it('never shows the work a kind gave up on', () => {
+		const view = taskView({ ...record, progress: { done: 40, total: 120, skipped: 2, skippedHashes: ['hash-a', 'hash-b'] } });
+		expect(view?.progress).toEqual({ done: 40, total: 120, skipped: 2 });
+	});
+
 	it('shows nothing for a task whose payload its kind cannot read', () => {
 		expect(taskView({ ...record, payload: { appId: 'app_1', locale: 'fr' } })).toBeNull();
 		expect(taskView({ ...record, payload: null })).toBeNull();

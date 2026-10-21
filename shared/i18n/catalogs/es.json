@@ -58,6 +58,8 @@
 	"Copyright": "Derechos de autor",
 	"Couldn't confirm your email. Try again.": "No se pudo confirmar tu correo electrónico. Inténtalo de nuevo.",
 	"Couldn't load that language. Reload the page and try again.": "No se pudo cargar ese idioma. Recarga la página e inténtalo de nuevo.",
+	"Couldn't reach the translation service.": "No se pudo conectar con el servicio de traducción.",
+	"Couldn't read your store right now.": "No se pudo leer tu tienda en este momento.",
 	"Couldn't record your agreement": "No se pudo registrar tu aceptación. Inténtalo de nuevo.",
 	"Couldn't save your language. Try again.": "No se pudo guardar tu idioma. Inténtalo de nuevo.",
 	"Couldn't send the reset link. Try again.": "No se pudo enviar el enlace de restablecimiento. Inténtalo de nuevo.",

@@ -3,6 +3,7 @@
 import type { TaskKind, TaskProgress } from '../../../shared/types/tasks';
 import type { TaskRecord } from '../../database/services/TaskService';
 import type { StepUsage } from '../billing/step-credits';
+import { storeTranslateKind } from '../store-translations/translate-kind';
 
 /** One model call a step made, for its credits. */
 export interface ModelCall {
@@ -35,9 +36,10 @@ export interface TaskKindHandler<P> {
 	onFinished?(ctx: TaskStepContext, payload: P): Promise<void>;
 	/**
 	 * What the seller sees for an error `step` or `onFinished` threw: English marked with `msg()`, naming no AI provider or
-	 * supplier. Left out, the queue's generic message is shown. The raw error is only logged.
+	 * supplier. Left out, or null for an error the kind doesn't know, the queue's generic message is shown. The raw error
+	 * is only logged.
 	 */
-	describeError?(error: unknown): string;
+	describeError?(error: unknown): string | null;
 }
 
 const handlers = new Map<TaskKind, TaskKindHandler<unknown>>();
@@ -49,3 +51,5 @@ export function registerTaskKind<P>(handler: TaskKindHandler<P>): void {
 export function taskKind(kind: TaskKind): TaskKindHandler<unknown> | null {
 	return handlers.get(kind) ?? null;
 }
+
+registerTaskKind(storeTranslateKind);

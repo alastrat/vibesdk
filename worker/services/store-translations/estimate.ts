@@ -4,7 +4,7 @@ import { resolveThinkModel } from '../../agents/think/model-config';
 import { TASK_MODEL_ID, TRANSLATION_BATCH_MAX_TEXTS } from '../../../shared/types/store-translations';
 import { stepCredits } from '../billing/step-credits';
 
-const CHARS_PER_TOKEN = 4;
+export const CHARS_PER_TOKEN = 4;
 /** The translation is about this much longer than its source. */
 const TARGET_LANGUAGE_GROWTH = 1.3;
 /** The instructions every batch's request starts with. */
