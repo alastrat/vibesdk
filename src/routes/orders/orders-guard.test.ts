@@ -16,8 +16,8 @@ function source(path: string): string {
 describe('the seller Orders pages', () => {
 	it('are routed for signed-in users', () => {
 		const routes = source('/src/routes.tsx');
-		expect(routes).toMatch(/path: 'orders',\s*element: \(\s*<ProtectedRoute>\s*<SellerOrdersPage \/>/);
-		expect(routes).toMatch(/path: 'orders\/:id',\s*element: \(\s*<ProtectedRoute>\s*<SellerOrderPage \/>/);
+		expect(routes).toMatch(/path: 'orders',\s*Component: protectedPage\(SellerOrdersPage\)/);
+		expect(routes).toMatch(/path: 'orders\/:id',\s*Component: protectedPage\(SellerOrderPage\)/);
 	});
 
 	it('open from an Orders item in the sidebar, folded and open', () => {

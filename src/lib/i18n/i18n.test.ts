@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadCatalog } from './catalog-loader';
-import { I18nProvider, STORAGE_KEY, T, applyAccountLocale, bindAccountSaver, getLocale, initialLocale, setLocale, subscribe, t, tn, useI18n } from './index';
+import { I18nProvider, LocaleLoadError, LocaleSaveError, STORAGE_KEY, T, applyAccountLocale, bindAccountSaver, getLocale, initialLocale, setLocale, subscribe, t, tn, useI18n } from './index';
 
 vi.mock('./catalog-loader', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./catalog-loader')>();
@@ -128,7 +128,9 @@ describe('the active language', () => {
 		stubBrowser();
 		await setLocale('es');
 		vi.mocked(loadCatalog).mockRejectedValueOnce(new Error('offline'));
-		await expect(setLocale('pt-BR')).rejects.toThrow('offline');
+		const failure = await setLocale('pt-BR').catch((error: unknown) => error);
+		expect(failure).toBeInstanceOf(LocaleLoadError);
+		expect((failure as Error).cause).toEqual(new Error('offline'));
 		expect(getLocale()).toBe('es');
 		expect(t('Choose your language')).toBe('Elige tu idioma');
 	});
@@ -169,7 +171,9 @@ describe('the signed-in account', () => {
 		bindAccountSaver(async () => {
 			throw new Error('offline');
 		});
-		await expect(setLocale('es')).rejects.toThrow('offline');
+		const failure = await setLocale('es').catch((error: unknown) => error);
+		expect(failure).toBeInstanceOf(LocaleSaveError);
+		expect((failure as Error).cause).toEqual(new Error('offline'));
 		expect(getLocale()).toBe('es');
 	});
 

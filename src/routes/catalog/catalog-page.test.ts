@@ -13,7 +13,7 @@ describe('the Catalog page', () => {
 	it('is a signed-in page linked from the sidebar', () => {
 		const routes = source('/src/routes.tsx');
 		expect(routes).toContain("path: 'catalog'");
-		expect(routes.slice(routes.indexOf("path: 'catalog'"), routes.indexOf("path: 'catalog'") + 200)).toContain('<ProtectedRoute>');
+		expect(routes.slice(routes.indexOf("path: 'catalog'"), routes.indexOf("path: 'catalog'") + 200)).toContain('protectedPage(CatalogPage)');
 		expect(source('/src/components/layout/app-sidebar.tsx')).toContain("navigate('/catalog')");
 	});
 

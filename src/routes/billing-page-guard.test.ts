@@ -33,7 +33,7 @@ describe('the billing page', () => {
 		const routes = source('/src/routes.tsx');
 		const appRoutes = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
 		expect(appRoutes).toContain('path: childPath(BILLING_PATH)');
-		expect(appRoutes.slice(appRoutes.indexOf('path: childPath(BILLING_PATH)'), appRoutes.indexOf('path: childPath(BILLING_PATH)') + 200)).toContain('<ProtectedRoute>');
+		expect(appRoutes.slice(appRoutes.indexOf('path: childPath(BILLING_PATH)'), appRoutes.indexOf('path: childPath(BILLING_PATH)') + 200)).toContain('protectedPage(');
 		const settings = source('/src/routes/settings/index.tsx');
 		expect(settings).toContain('billing.data?.enabled &&');
 		expect(settings).toContain('to={BILLING_PATH}');
@@ -163,7 +163,7 @@ describe('the billing page', () => {
 		for (const path of ['BILLING_CARD_PATH', 'BILLING_CARD_RETURN_PATH']) {
 			const at = appRoutes.indexOf(`path: childPath(${path})`);
 			expect(at, path).toBeGreaterThan(-1);
-			expect(appRoutes.slice(at, at + 200), path).toContain('<ProtectedRoute>');
+			expect(appRoutes.slice(at, at + 200), path).toContain('protectedPage(');
 		}
 		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeGreaterThan(-1);
 		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeLessThan(appRoutes.indexOf('path: childPath(BILLING_CARD_PATH)'));

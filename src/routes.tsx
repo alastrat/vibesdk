@@ -25,7 +25,7 @@ import AdminFlagsPage from './routes/admin/flags';
 import SellerOrdersPage from './routes/orders/orders';
 import SellerOrderPage from './routes/orders/order';
 import ShopperEmailsPage from './routes/emails/emails';
-import { ProtectedRoute } from './routes/protected-route';
+import { protectedPage } from './routes/protected-page';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
 import PricingPage from './routes/pricing';
@@ -73,99 +73,51 @@ const routes = [
 					},
 					{
 						path: 'profile',
-						element: (
-							<ProtectedRoute>
-								<Profile />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(Profile),
 					},
 					{
 						path: 'settings',
-						element: (
-							<ProtectedRoute>
-								<Settings />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(Settings),
 					},
 					{
 						path: childPath(BILLING_PATH),
-						element: (
-							<ProtectedRoute>
-								<BillingPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(BillingPage),
 					},
 					{
 						path: childPath(BILLING_CHECKOUT_PATH),
-						element: (
-							<ProtectedRoute>
-								<BillingCheckoutPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(BillingCheckoutPage),
 					},
 					{
 						path: childPath(BILLING_CHECKOUT_RETURN_PATH),
-						element: (
-							<ProtectedRoute>
-								<BillingCheckoutReturnPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(BillingCheckoutReturnPage),
 					},
 					{
 						path: childPath(BILLING_CARD_PATH),
-						element: (
-							<ProtectedRoute>
-								<BillingCardPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(BillingCardPage),
 					},
 					{
 						path: childPath(BILLING_CARD_RETURN_PATH),
-						element: (
-							<ProtectedRoute>
-								<BillingCardReturnPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(BillingCardReturnPage),
 					},
 					{
 						path: 'apps',
-						element: (
-							<ProtectedRoute>
-								<AppsPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AppsPage),
 					},
 					{
 						path: 'catalog',
-						element: (
-							<ProtectedRoute>
-								<CatalogPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(CatalogPage),
 					},
 					{
 						path: 'orders',
-						element: (
-							<ProtectedRoute>
-								<SellerOrdersPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(SellerOrdersPage),
 					},
 					{
 						path: 'orders/:id',
-						element: (
-							<ProtectedRoute>
-								<SellerOrderPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(SellerOrderPage),
 					},
 					{
 						path: 'emails',
-						element: (
-							<ProtectedRoute>
-								<ShopperEmailsPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(ShopperEmailsPage),
 					},
 					{
 						path: 'app/:id',
@@ -193,51 +145,27 @@ const routes = [
 					},
 					{
 						path: 'admin/reviews',
-						element: (
-							<ProtectedRoute>
-								<AdminReviewsPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AdminReviewsPage),
 					},
 					{
 						path: 'admin/early-access',
-						element: (
-							<ProtectedRoute>
-								<AdminEarlyAccessPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AdminEarlyAccessPage),
 					},
 					{
 						path: 'admin/contact-requests',
-						element: (
-							<ProtectedRoute>
-								<AdminContactRequestsPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AdminContactRequestsPage),
 					},
 					{
 						path: 'admin/catalog-orders',
-						element: (
-							<ProtectedRoute>
-								<AdminCatalogOrdersPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AdminCatalogOrdersPage),
 					},
 					{
 						path: 'admin/catalog-orders/:id',
-						element: (
-							<ProtectedRoute>
-								<AdminCatalogOrderPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AdminCatalogOrderPage),
 					},
 					{
 						path: 'admin/flags',
-						element: (
-							<ProtectedRoute>
-								<AdminFlagsPage />
-							</ProtectedRoute>
-						),
+						Component: protectedPage(AdminFlagsPage),
 					},
 				],
 			},

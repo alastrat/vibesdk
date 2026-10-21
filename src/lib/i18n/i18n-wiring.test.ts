@@ -5,6 +5,8 @@ import { STORAGE_KEY } from './index';
 const sources = import.meta.glob<string>(
 	[
 		'/src/main.tsx',
+		'/src/routes.tsx',
+		'/src/routes/protected-page.ts',
 		'/src/lib/i18n/index.ts',
 		'/src/lib/api-client.ts',
 		'/src/api-types.ts',
@@ -47,6 +49,11 @@ describe('the sign-in and sign-up screens', () => {
 		expect(source('/src/components/auth/login-modal.tsx')).toContain('<LanguagePicker />');
 	});
 
+	it('switch the language through chooseLocale, which says when that did not work', () => {
+		expect(source('/src/components/auth/LanguagePicker.tsx')).toContain('chooseLocale(value)');
+		expect(source('/src/components/settings/LanguageCard.tsx')).toContain('await chooseLocale(value)');
+	});
+
 	it('offer each language by its own name, never translated', () => {
 		const picker = source('/src/components/auth/LanguagePicker.tsx');
 		expect(picker).toContain('LOCALE_NAMES[code]');
@@ -66,11 +73,31 @@ describe('the app', () => {
 		expect(source('/src/main.tsx')).toContain('createBrowserRouter(localizeRoutes(routes)');
 	});
 
+	it('keeps no route as an element with elements inside it, which React would skip on a language change', () => {
+		const table = source('/src/routes.tsx');
+		// An `element` may only be a bare <Navigate>; a page behind sign-in is `Component: protectedPage(Page)`.
+		expect(table.match(/\belement:\s*\(?\s*<(?!Navigate\b)/g)).toBeNull();
+		expect(table).not.toContain('<ProtectedRoute');
+		expect(table).toContain('Component: protectedPage(Settings)');
+		expect(source('/src/routes/protected-page.ts')).toContain('createElement(ProtectedRoute, null, createElement(Page))');
+	});
+
+	it('uses none of the route fields localizeRoutes cannot render again', () => {
+		expect(source('/src/routes.tsx')).not.toMatch(/\b(lazy|ErrorBoundary|errorElement|HydrateFallback|hydrateFallbackElement)\s*:/);
+	});
+
 	it('follows the saved language of the signed-in account, and tells the account about a new choice', () => {
 		const auth = source('/src/contexts/auth-context.tsx');
 		expect(auth).toContain('applyAccountLocale(accountLocale)');
 		expect(auth).toContain('bindAccountSaver(');
 		expect(auth).toContain('apiClient.setLocale(locale)');
+	});
+
+	it('stops a profile request that is still in flight before it saves the new language in the cached session', () => {
+		const auth = source('/src/contexts/auth-context.tsx');
+		const saver = auth.slice(auth.indexOf('bindAccountSaver('), auth.indexOf('[signedIn, queryClient]'));
+		expect(saver).toContain('cancelQueries({ queryKey: queryKeys.auth.session() })');
+		expect(saver.indexOf('cancelQueries')).toBeLessThan(saver.indexOf('setQueryData<CachedAuthSession | null>'));
 	});
 
 	it('sends the visitor language with the sign-up request', () => {
@@ -92,15 +119,10 @@ describe('the page before the app loads', () => {
 		expect(page).toContain('document.documentElement.lang');
 	});
 
-	it('only takes a saved value that looks like one of our language codes', () => {
-		const page = indexHtml;
-		const accepts = /\.test\(stored\)/.test(page);
-		expect(accepts).toBe(true);
-		const pattern = /var pattern = (\/[^;]+\/);/.exec(page)?.[1];
-		expect(pattern).toBeDefined();
-		const shape = new RegExp((pattern ?? '').slice(1, -1));
-		for (const locale of LOCALES) expect(shape.test(locale), locale).toBe(true);
-		expect(shape.test('<script>')).toBe(false);
-		expect(shape.test('')).toBe(false);
+	it('only takes a saved value that is exactly one of our language codes, and all of them', () => {
+		const listed = /\[((?:'[^']+',?\s*)+)\]\.indexOf\(stored\)/.exec(indexHtml)?.[1];
+		expect(listed).toBeDefined();
+		const codes = (listed ?? '').split(',').map((code) => code.trim().replace(/^'|'$/g, '')).filter((code) => code !== '');
+		expect(codes).toEqual([...LOCALES]);
 	});
 });

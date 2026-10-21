@@ -2,8 +2,11 @@
  * The app's language. English text is the key: `t('Save card')` answers its translation in the active language, or the
  * English when it has none. `t`, `tn` and `getLocale` read a module singleton, so they work anywhere, in a component or
  * not. Every route renders again on a language change (see `localize-routes.ts`), and with it everything below that isn't
- * memoised. Text a component keeps in `useMemo` or `useState` must list the `locale` from `useI18n()`, and `t` must not
- * be called at module level, where it would freeze the English.
+ * memoised. What does not update, because React skips it:
+ *  - `t` called at module level, which freezes the English;
+ *  - text kept in `useMemo`, `useState` or a `React.memo` component, which must depend on `locale` from `useI18n()`;
+ *  - JSX built outside the component that renders it: a module-level `const page = <Page />`, an element kept in state,
+ *    or a route's `element: <Guard><Page /></Guard>`, which is why routes behind sign-in are `protectedPage(Page)`.
  */
 
 import { createElement, Fragment, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
@@ -14,6 +17,12 @@ import { loadCatalog } from './catalog-loader';
 
 /** Where this browser remembers the language; `index.html` reads it before the app loads. */
 export const STORAGE_KEY = 'estori:locale';
+
+/** A language's catalog could not be loaded, so the app stays in the language it was in. */
+export class LocaleLoadError extends Error {}
+
+/** The language was switched, but could not be saved on the account. */
+export class LocaleSaveError extends Error {}
 
 let active: { locale: Locale; catalog: Catalog | null } = { locale: DEFAULT_LOCALE, catalog: null };
 /** Counts requests for a language, so one that arrives while an earlier one is loading wins. */
@@ -62,17 +71,32 @@ export function initialLocale(): Locale {
 	return storedLocale() ?? negotiateLocale(typeof navigator === 'undefined' ? [] : (navigator.languages ?? []));
 }
 
+/** Tells the browser which language the page is in. */
+function declareLanguage(locale: Locale): void {
+	if (typeof document !== 'undefined') document.documentElement.lang = locale;
+}
+
+async function catalogOf(locale: Locale): Promise<Catalog | null> {
+	if (locale === active.locale) return active.catalog;
+	try {
+		return await loadCatalog(locale);
+	} catch (cause) {
+		// i18n-ignore: a developer message, the seller sees the toast
+		throw new LocaleLoadError(`The ${locale} catalog could not be loaded`, { cause });
+	}
+}
+
 /**
  * Makes `locale` the active language. Answers false when a later request replaced this one before its catalog arrived,
- * and rejects, leaving the language as it was, when the catalog can't be loaded.
+ * and rejects with a `LocaleLoadError`, leaving the language as it was, when the catalog can't be loaded.
  */
 async function activate(locale: Locale, remembered: boolean): Promise<boolean> {
 	const request = ++latestRequest;
-	const catalog = locale === active.locale ? active.catalog : await loadCatalog(locale);
+	const catalog = await catalogOf(locale);
 	if (request !== latestRequest) return false;
 	const changed = locale !== active.locale;
 	if (changed) active = { locale, catalog };
-	if (typeof document !== 'undefined') document.documentElement.lang = locale;
+	declareLanguage(locale);
 	if (remembered) remember(locale);
 	if (changed) for (const listener of [...listeners]) listener();
 	return true;
@@ -92,11 +116,16 @@ export function bindAccountSaver(saver: AccountSaver | null): () => void {
 /**
  * Switches the app to `locale`: loads its catalog, re-renders, sets `<html lang>`, remembers it in this browser and, when
  * someone is signed in, saves it on their account. The language changes even when the account can't be saved, and the
- * returned promise then rejects. A choice replaced by a later one is never saved.
+ * returned promise then rejects with a `LocaleSaveError`. A choice replaced by a later one is never saved.
  */
 export async function setLocale(locale: Locale): Promise<void> {
 	if (!(await activate(locale, true))) return;
-	await accountSaver?.(locale);
+	try {
+		await accountSaver?.(locale);
+	} catch (cause) {
+		// i18n-ignore: a developer message, the seller sees the toast
+		throw new LocaleSaveError(`The ${locale} language could not be saved`, { cause });
+	}
 }
 
 /** Switches to the language the signed-in account saved, which the account already knows. */
@@ -161,12 +190,19 @@ export function T({ text, values, components = NO_COMPONENTS }: TProps): ReactNo
 	return createElement(Fragment, null, renderParts(parseRichText(translate(active.catalog, text)), values, components));
 }
 
-/** Starts the app in its initial language, with no flash of English: a language that isn't English waits for its catalog. */
+/**
+ * Starts the app in its initial language, with no flash of English: a language that isn't English waits for its catalog.
+ * Once the app is showing, `<html lang>` says the language the text is in, which differs from the one `index.html`
+ * guessed from storage when that language could not be loaded.
+ */
 export function I18nProvider({ children }: { children: ReactNode }): ReactNode {
 	const [start] = useState(initialLocale);
 	const [ready, setReady] = useState(() => start === active.locale);
 	useEffect(() => {
-		if (ready) return;
+		if (ready) {
+			declareLanguage(getLocale());
+			return;
+		}
 		let mounted = true;
 		// A language that won't load leaves the app in English.
 		activate(start, false)

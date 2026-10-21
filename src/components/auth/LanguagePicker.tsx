@@ -1,15 +1,14 @@
 import { Languages } from 'lucide-react';
-import { toast } from 'sonner';
 import { LOCALES, LOCALE_NAMES, isLocale } from '@/api-types';
 import { useI18n } from '@/lib/i18n';
+import { chooseLocale } from '@/lib/i18n/choose-locale';
 
 /** A compact language menu for the sign-in and sign-up screens, where no account is there yet to remember a language. */
 export function LanguagePicker() {
-	const { locale, setLocale, t } = useI18n();
+	const { locale, t } = useI18n();
 
 	const choose = (value: string) => {
-		if (!isLocale(value)) return;
-		setLocale(value).catch(() => toast.error(t("Couldn't save your language. Try again.")));
+		if (isLocale(value)) void chooseLocale(value);
 	};
 
 	return (

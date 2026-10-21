@@ -31,8 +31,7 @@
 			(function () {
 				try {
 					var stored = localStorage.getItem('estori:locale');
-					var pattern = /^[a-z]{2}(-[A-Z]{2})?$/;
-					if (stored && pattern.test(stored)) document.documentElement.lang = stored;
+					if (['en', 'es', 'pt-BR'].indexOf(stored) !== -1) document.documentElement.lang = stored;
 				} catch (_) {}
 			})();
 		</script>

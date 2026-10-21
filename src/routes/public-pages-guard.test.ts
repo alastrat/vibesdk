@@ -27,7 +27,7 @@ describe('public pages', () => {
 		for (const path of ["path: 'terms'", "path: 'privacy'", "path: 'refunds'", "path: 'copyright'"]) {
 			expect(publicBlock).toContain(path);
 		}
-		expect(publicBlock.slice(0, publicBlock.indexOf('],'))).not.toContain('ProtectedRoute');
+		expect(publicBlock.slice(0, publicBlock.indexOf('],'))).not.toContain('protectedPage');
 	});
 
 	it('keeps the app sidebar only for app routes', () => {

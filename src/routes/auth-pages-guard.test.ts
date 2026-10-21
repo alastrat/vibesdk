@@ -68,7 +68,7 @@ describe('account email pages', () => {
 		expect(publicBlock).toContain("path: 'verify-email'");
 		expect(publicBlock).toContain('ResetPasswordPage');
 		expect(publicBlock).toContain('VerifyEmailPage');
-		expect(publicBlock).not.toContain('ProtectedRoute');
+		expect(publicBlock).not.toContain('protectedPage');
 		const appBlock = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
 		expect(appBlock).not.toContain('reset-password');
 		expect(appBlock).not.toContain('verify-email');

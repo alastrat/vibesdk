@@ -1,7 +1,9 @@
 {
 	"Choose your language": "Elige tu idioma",
+	"Couldn't load that language. Reload the page and try again.": "No se pudo cargar ese idioma. Recarga la página e inténtalo de nuevo.",
 	"Couldn't save your language. Try again.": "No se pudo guardar tu idioma. Inténtalo de nuevo.",
 	"Language": "Idioma",
 	"That language isn't available.": "Ese idioma no está disponible.",
+	"Try again": "Intentar de nuevo",
 	"{brand} uses this language in its menus and messages, and in the emails we send you.": "{brand} usa este idioma en sus menús y mensajes, y en los correos electrónicos que te enviamos."
 }

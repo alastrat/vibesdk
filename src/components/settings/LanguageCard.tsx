@@ -1,24 +1,22 @@
 import { useState } from 'react';
 import { LayerCard } from '@cloudflare/kumo';
 import { Languages } from 'lucide-react';
-import { toast } from 'sonner';
 import { LOCALES, LOCALE_NAMES, isLocale } from '@/api-types';
 import { BRAND } from '@/brand';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useI18n } from '@/lib/i18n';
+import { chooseLocale } from '@/lib/i18n/choose-locale';
 
 /** The language of the app and of the emails Estori sends. Each language is named in itself, so it can be found from any other. */
 export function LanguageCard() {
-	const { locale, setLocale, t } = useI18n();
+	const { locale, t } = useI18n();
 	const [saving, setSaving] = useState(false);
 
 	const choose = async (value: string) => {
 		if (!isLocale(value) || saving) return;
 		setSaving(true);
 		try {
-			await setLocale(value);
-		} catch {
-			toast.error(t("Couldn't save your language. Try again."));
+			await chooseLocale(value);
 		} finally {
 			setSaving(false);
 		}

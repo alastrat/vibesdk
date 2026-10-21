@@ -71,7 +71,7 @@ describe("estori's own checkout page", () => {
 		for (const path of ['BILLING_CHECKOUT_PATH', 'BILLING_CHECKOUT_RETURN_PATH']) {
 			const at = appRoutes.indexOf(`path: childPath(${path})`);
 			expect(at, path).toBeGreaterThan(-1);
-			expect(appRoutes.slice(at, at + 200), path).toContain('<ProtectedRoute>');
+			expect(appRoutes.slice(at, at + 200), path).toContain('protectedPage(');
 		}
 		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeGreaterThan(-1);
 		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeLessThan(appRoutes.indexOf('path: childPath(BILLING_CHECKOUT_PATH)'));

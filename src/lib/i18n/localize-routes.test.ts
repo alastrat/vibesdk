@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactElement } from 'react';
+import { Navigate } from 'react-router';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { RouteObject } from 'react-router';
 import { applyAccountLocale, t } from './index';
@@ -77,5 +78,23 @@ describe('localizeRoutes', () => {
 		vi.stubGlobal('document', { documentElement: { lang: 'en' } });
 		await applyAccountLocale('es');
 		expect(page()).toBe('<h1>Elige tu idioma</h1>');
+	});
+
+	it('accepts an element with no elements inside it, such as a redirect', () => {
+		const redirect = createElement(Navigate, { to: '/new', replace: true });
+		const [root] = localizeRoutes([{ path: 'old', element: redirect }]);
+		expect(root.element).toBeDefined();
+		expect(root.element).not.toBe(redirect);
+	});
+
+	it('refuses an element with elements inside it, which would keep the old language', () => {
+		const guarded = createElement('main', null, createElement(Heading));
+		expect(() => localizeRoutes([{ path: 'settings', element: guarded }])).toThrow('Route "settings" has an element with elements inside it');
+		expect(() => localizeRoutes([{ path: '/', children: [{ id: 'orders', element: guarded }] }])).toThrow('Route "orders"');
+	});
+
+	it.each(['lazy', 'ErrorBoundary', 'errorElement', 'HydrateFallback', 'hydrateFallbackElement'] as const)('refuses a route that sets %s, which it cannot render again', (field) => {
+		const value = field === 'lazy' ? async () => ({}) : field.endsWith('Element') ? createElement('p') : Heading;
+		expect(() => localizeRoutes([{ path: 'x', [field]: value } as RouteObject])).toThrow(`Route "x" sets ${field}`);
 	});
 });

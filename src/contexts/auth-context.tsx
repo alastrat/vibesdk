@@ -273,6 +273,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		if (!signedIn) return;
 		return bindAccountSaver(async (locale) => {
 			await unwrap(apiClient.setLocale(locale), 'Language not saved');
+			// A profile request sent before the save could land after it with the old language, and flip the app back.
+			await queryClient.cancelQueries({ queryKey: queryKeys.auth.session() });
 			queryClient.setQueryData<CachedAuthSession | null>(
 				queryKeys.auth.session(),
 				(cached) => cached && { ...cached, user: { ...cached.user, locale } },

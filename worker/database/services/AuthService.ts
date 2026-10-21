@@ -21,7 +21,7 @@ import {
     SecurityErrorType 
 } from 'shared/types/errors';
 import { SignupsPausedError } from '../../../shared/types/pauses';
-import type { Locale } from '../../../shared/i18n/locales';
+import { localeFromAcceptLanguage, type Locale } from '../../../shared/i18n/locales';
 import { isFlagOn } from '../../services/posthog/flags';
 import { AuthResult, AuthUserSession, OAuthUserInfo } from '../../types/auth-types';
 import { generateId } from '../../utils/idGenerator';
@@ -904,8 +904,13 @@ export class AuthService extends BaseService {
             // user row or session is created so a rejected email never gets admitted.
             enforceAllowedEmail(this.env, oauthUserInfo.email, 'oauth');
 
-            // Find or create user
-            const { user, created } = await this.findOrCreateOAuthUser(provider, oauthUserInfo);
+            // Find or create user. A new account starts in the language the browser asked for, so its emails do;
+            // an existing one keeps its own.
+            const { user, created } = await this.findOrCreateOAuthUser(
+                provider,
+                oauthUserInfo,
+                localeFromAcceptLanguage(request.headers.get('Accept-Language'))
+            );
             
             // Create session
             const { accessToken: sessionAccessToken, session } = await this.sessionService.createSession(
@@ -956,7 +961,8 @@ export class AuthService extends BaseService {
      */
     private async findOrCreateOAuthUser(
         provider: OAuthProvider,
-        oauthUserInfo: OAuthUserInfo
+        oauthUserInfo: OAuthUserInfo,
+        newAccountLocale: Locale
     ): Promise<{ user: schema.User; created: boolean }> {
         // Fail closed unless the provider asserts the email is verified.
         if (oauthUserInfo.emailVerified !== true) {
@@ -1062,7 +1068,7 @@ export class AuthService extends BaseService {
         if (await isFlagOn(this.env, 'signups-paused', null)) throw new SignupsPausedError();
 
         // 3. Brand-new identity: create the user and its first identity row.
-        return { user: await this.createOAuthUser(provider, oauthUserInfo), created: true };
+        return { user: await this.createOAuthUser(provider, oauthUserInfo, newAccountLocale), created: true };
     }
 
     /**
@@ -1140,7 +1146,8 @@ export class AuthService extends BaseService {
      */
     private async createOAuthUser(
         provider: OAuthProvider,
-        oauthUserInfo: OAuthUserInfo
+        oauthUserInfo: OAuthUserInfo,
+        locale: Locale
     ): Promise<schema.User> {
         const userId = generateId();
         const now = new Date();
@@ -1154,6 +1161,7 @@ export class AuthService extends BaseService {
             emailVerified: true,
             provider,
             providerId: oauthUserInfo.id,
+            preferences: { locale },
             createdAt: now,
             updatedAt: now
         });

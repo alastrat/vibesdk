@@ -15,7 +15,7 @@ function source(path: string): string {
 
 describe('the Emails page', () => {
 	it('is routed for signed-in users and opens from an Emails item in the sidebar, folded and open', () => {
-		expect(source('/src/routes.tsx')).toMatch(/path: 'emails',\s*element: \(\s*<ProtectedRoute>\s*<ShopperEmailsPage \/>/);
+		expect(source('/src/routes.tsx')).toMatch(/path: 'emails',\s*Component: protectedPage\(ShopperEmailsPage\)/);
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
 		expect(sidebar.match(/navigate\(SHOPPER_EMAILS_PATH\)/g) ?? []).toHaveLength(2);
 		expect(sidebar).toContain('id="emails-link"');
