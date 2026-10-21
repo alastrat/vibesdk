@@ -15,7 +15,7 @@ import { TASK_FAILED_MESSAGE, type TaskProgress } from '../../../shared/types/ta
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
 import { createLogger } from '../../logger';
 import type { ModelCall, TaskKindHandler, TaskStepContext, TaskStepResult } from '../tasks/kinds';
-import { createTaskModel, type TaskModel } from '../tasks/task-model';
+import { createTaskModel, isAnswerProblem, type TaskModel } from '../tasks/task-model';
 import { CHARS_PER_TOKEN } from './estimate';
 import { normalizeText } from './extract';
 import { buildTranslationPrompt, checkTranslation, translationSchema, type TranslationAnswer, type TranslationItem } from './prompt';
@@ -125,8 +125,9 @@ function judge(pending: readonly Pending[], answers: ReadonlyMap<string, string>
 
 /**
  * Translates one batch and saves what is good after each attempt, so a failing retry loses nothing. Returns how many
- * texts were saved and the ones still bad after the retry. A model failure throws, unless the batch is down to one text
- * after failed steps, when that text is given up on.
+ * texts were saved and the ones still bad after the retry. A model failure throws, so the task backs off; the one
+ * exception is a batch down to one text after failed steps, when the model's failure to answer for that text (not one to
+ * reach the model) sets it aside.
  */
 async function translateBatch(
 	model: TaskModel,
@@ -134,7 +135,7 @@ async function translateBatch(
 	payload: TranslatePayload,
 	source: Locale,
 	batch: readonly StoreText[],
-	options: { giveUpOnModelFailure: boolean; now: number },
+	options: { setAsideUnanswerable: boolean; now: number },
 ): Promise<{ saved: number; failed: StoreText[]; calls: ModelCall[] }> {
 	const calls: ModelCall[] = [];
 	let pending: Pending[] = batch.map((text, index) => ({ text, item: { id: String(index + 1), text: text.text } }));
@@ -144,8 +145,9 @@ async function translateBatch(
 		try {
 			answers = await ask(model, source, payload.locale, pending.map((entry) => entry.item), calls);
 		} catch (error) {
-			if (!options.giveUpOnModelFailure || !(error instanceof TranslationModelError)) throw error;
-			logger.warn('The model failed on a single text; skipping it', { appId: payload.appId, locale: payload.locale, hash: pending[0]?.text.hash, error: error.cause });
+			// Only a problem with the answer to this text sets it aside; reaching the model failing waits for the backoff.
+			if (!options.setAsideUnanswerable || !(error instanceof TranslationModelError) || !isAnswerProblem(error.cause)) throw error;
+			logger.warn('The model could not answer for a single text; skipping it', { appId: payload.appId, locale: payload.locale, hash: pending[0]?.text.hash, error: error.cause });
 			break;
 		}
 		const { good, bad } = judge(pending, answers);
@@ -195,7 +197,7 @@ async function translateStep(deps: TranslateKindDeps, ctx: TaskStepContext, payl
 	const failures = ctx.task.attempts;
 	const batchSize = BATCH_SIZES[Math.min(failures, BATCH_SIZES.length - 1)];
 	const batch = withinBatchChars(await store.missingTexts(payload.appId, payload.locale, batchSize, gaveUp));
-	const { saved, failed, calls } = await translateBatch(deps.model(ctx.env), store, payload, sourceLocale, batch, { giveUpOnModelFailure: batchSize === 1, now: ctx.now });
+	const { saved, failed, calls } = await translateBatch(deps.model(ctx.env), store, payload, sourceLocale, batch, { setAsideUnanswerable: batchSize === 1, now: ctx.now });
 
 	const skippedHashes = [...gaveUp, ...failed.map((text) => text.hash)].slice(0, MAX_SKIPPED_HASHES);
 	const remaining = await store.countMissing(payload.appId, payload.locale, skippedHashes);

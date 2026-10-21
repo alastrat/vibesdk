@@ -3,6 +3,7 @@
  * batches, retries and skips, seller edits, finishing, and the stores that have nothing to translate.
  */
 
+import { APICallError, NoObjectGeneratedError, type LanguageModelUsage } from 'ai';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import type { Locale } from '../../../shared/i18n/locales';
 import { TASK_MODEL_ID, TRANSLATION_BATCH_MAX_CHARS, TRANSLATION_BATCH_MAX_TEXTS, type StoreText } from '../../../shared/types/store-translations';
@@ -52,6 +53,27 @@ interface Request {
 }
 
 const translateAll: Answer = (items) => items.map(({ id, text }) => ({ id, text: `ES ${text}` }));
+
+const NO_USAGE: LanguageModelUsage = {
+	inputTokens: undefined,
+	inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
+	outputTokens: undefined,
+	outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
+	totalTokens: undefined,
+};
+
+/** What the SDK throws when the model's answer doesn't fit the schema: the texts, not the gateway, are the problem. */
+const unusableAnswer = () =>
+	new NoObjectGeneratedError({
+		message: 'No object generated: response did not match schema.',
+		text: '{"items":"none"}',
+		response: { id: 'response_1', timestamp: new Date(NOW), modelId: TASK_MODEL_ID },
+		usage: NO_USAGE,
+		finishReason: 'stop',
+	});
+
+/** What the SDK throws when the gateway answers 503: nothing is wrong with the texts. */
+const outage = () => new APICallError({ message: 'Service Unavailable', url: 'https://gateway.example/v1/chat/completions', requestBodyValues: {}, statusCode: 503, isRetryable: true });
 
 function fakeModel(answer: Answer = translateAll) {
 	const requests: Request[] = [];
@@ -431,7 +453,7 @@ describe('the store.translate kind', () => {
 	it('a text that makes the model fail every time is skipped on its own, and the rest of the batch is translated', async () => {
 		// One poisoned text among 40: any request that holds it fails.
 		const poison = 'Text 25';
-		const model = fakeModel((items) => (items.some((item) => item.text === poison) ? new Error('The model refused this request') : translateAll(items, 1)));
+		const model = fakeModel((items) => (items.some((item) => item.text === poison) ? unusableAnswer() : translateAll(items, 1)));
 		const run = queue({ model: model.model, refresh: reading(numbered(40)).refresh });
 		await run.start();
 
@@ -451,7 +473,7 @@ describe('the store.translate kind', () => {
 	});
 
 	it('takes 40 texts, then 10 after a failed step, then 1, and gives up on a lone text only after that', async () => {
-		const model = fakeModel((items) => (items.some((item) => item.text === 'Text 1') ? new Error('The model refused this request') : translateAll(items, 1)));
+		const model = fakeModel((items) => (items.some((item) => item.text === 'Text 1') ? unusableAnswer() : translateAll(items, 1)));
 		const run = queue({ model: model.model, refresh: reading(numbered(45)).refresh });
 		await run.start();
 		await run.tick();
@@ -475,9 +497,57 @@ describe('the store.translate kind', () => {
 		expect(model.requests[3].items[0].text).toBe('Text 2');
 	});
 
+	it('a 503 at batch size 1 throws and skips nothing, so the task backs off through an outage', async () => {
+		const model = fakeModel(() => outage());
+		const run = queue({ model: model.model, refresh: reading(named('Only', 'Other')).refresh });
+		await run.start();
+		await run.tick();
+
+		const attempts: number[] = [];
+		for (let step = 0; step < 4; step += 1) attempts.push((await run.tick()).attempts);
+
+		// Failures keep counting through size 1: 2 texts, 2 texts, then a lone text twice.
+		expect(attempts).toEqual([1, 2, 3, 4]);
+		expect(model.requests.map((request) => request.items.length)).toEqual([2, 2, 1, 1]);
+		const task = await run.read();
+		expect(task).toMatchObject({ status: 'queued', lastError: "Couldn't reach the translation service.", progress: { done: 0, total: 2, skipped: 0 } });
+		expect(task.progress.skippedHashes ?? []).toEqual([]);
+
+		// An outage that outlasts every retry fails the task, still without having skipped anything.
+		const failed = await run.finish();
+		expect(failed).toMatchObject({ status: 'failed', lastError: "Couldn't reach the translation service.", progress: { done: 0, total: 2, skipped: 0 } });
+		expect(failed.progress.skippedHashes ?? []).toEqual([]);
+		expect(await translated()).toEqual(new Map());
+	});
+
+	it('waits out an outage that ends at batch size 1, and every text is translated', async () => {
+		const model = fakeModel((items, request) => (request <= 3 ? outage() : translateAll(items, request)));
+		const run = queue({ model: model.model, refresh: reading(named('Only', 'Other')).refresh });
+		await run.start();
+
+		const task = await run.finish();
+
+		expect(task).toMatchObject({ status: 'done', progress: { done: 2, total: 2, skipped: 0 } });
+		expect(await translated()).toEqual(new Map([['Only', 'ES Only'], ['Other', 'ES Other']]));
+	});
+
+	it('a schema mismatch at batch size 1 skips the text, and the rest is translated', async () => {
+		// Two outages bring the batch down to one text; the model then cannot answer for that text.
+		const model = fakeModel((items, request) => (request <= 2 ? outage() : request === 3 ? unusableAnswer() : translateAll(items, request)));
+		const run = queue({ model: model.model, refresh: reading(named('Only', 'Other')).refresh });
+		await run.start();
+
+		const task = await run.finish();
+
+		expect(model.requests.map((request) => request.items.length)).toEqual([2, 2, 1, 1]);
+		expect(task).toMatchObject({ status: 'done', progress: { done: 1, total: 2, skipped: 1 } });
+		expect(task.progress.skippedHashes).toEqual(['h1']);
+		expect(await translated()).toEqual(new Map([['Other', 'ES Other']]));
+	});
+
 	it('a model failure for a batch that was not shrunk by failures still throws, even for one text', async () => {
 		let failing = true;
-		const model = fakeModel(() => (failing ? new Error('The model is unreachable') : [{ id: '1', text: 'ES Only' }]));
+		const model = fakeModel(() => (failing ? outage() : [{ id: '1', text: 'ES Only' }]));
 		const run = queue({ model: model.model, refresh: reading(named('Only')).refresh });
 		await run.start();
 		await run.tick();
@@ -496,8 +566,8 @@ describe('the store.translate kind', () => {
 		let request = 0;
 		const model = fakeModel((items) => {
 			request += 1;
-			if (request <= 2) return new Error('The model is unreachable');
-			return request === 3 ? [{ id: items[0].id, text: 'Hola' }] : new Error('The model is unreachable');
+			if (request <= 2) return outage();
+			return request === 3 ? [{ id: items[0].id, text: 'Hola' }] : unusableAnswer();
 		});
 		const run = queue({ model: model.model, refresh: reading(named('Hello {name}')).refresh });
 		await run.start();

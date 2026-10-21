@@ -6,7 +6,7 @@ import { THINK_MODELS } from '../../agents/think/model-config';
 import { TASK_MODEL_ID } from '../../../shared/types/store-translations';
 import { stepCredits } from '../billing/step-credits';
 import { TASK_LEASE_MS } from '../../../shared/types/tasks';
-import { createTaskModel, MODEL_CALL_TIMEOUT_MS } from './task-model';
+import { createTaskModel, isAnswerProblem, MODEL_CALL_TIMEOUT_MS } from './task-model';
 
 const schema = z.object({ items: z.array(z.object({ id: z.string(), text: z.string() })) });
 const ANSWER = { items: [{ id: '0', text: 'Hola' }] };
@@ -27,13 +27,13 @@ function gateway(reply: (n: number) => Response = () => completion(JSON.stringif
 	return { seen, fetchImpl };
 }
 
-function completion(content: string, usage: Record<string, number> | null = { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 }): Response {
+function completion(content: string, usage: Record<string, number> | null = { prompt_tokens: 1_000, completion_tokens: 500, total_tokens: 1_500 }, finishReason = 'stop'): Response {
 	return Response.json({
 		id: 'chatcmpl-1',
 		object: 'chat.completion',
 		created: 1,
 		model: TASK_MODEL_ID,
-		choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+		choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: finishReason }],
 		...(usage === null ? {} : { usage }),
 	});
 }
@@ -108,5 +108,48 @@ describe('the task model', () => {
 	it('fails the step when the answer does not fit the schema', async () => {
 		const { fetchImpl } = gateway(() => completion(JSON.stringify({ items: 'none' })));
 		await expect(createTaskModel(storedKeys, { fetch: fetchImpl }).generate(input)).rejects.toThrow();
+	});
+});
+
+describe('isAnswerProblem', () => {
+	/** The error the real model throws when the gateway behaves as `reply` says. */
+	async function thrownBy(reply: () => Response | Promise<Response>): Promise<unknown> {
+		const fetchImpl: typeof fetch = async () => reply();
+		return createTaskModel(storedKeys, { fetch: fetchImpl }).generate(input).then(
+			() => {
+				throw new Error('The call was expected to fail');
+			},
+			(error: unknown) => error,
+		);
+	}
+
+	it("is true for what is wrong with the model's answer: not JSON, off the schema, cut off by the token limit, or filtered", async () => {
+		const answers = {
+			'not JSON': completion('Sorry, here you go: Hola'),
+			'off the schema': completion(JSON.stringify({ items: 'none' })),
+			'cut off by the token limit': completion('{"items":[{"id":"0","text":"Ho', undefined, 'length'),
+			'a content filter': completion('', undefined, 'content_filter'),
+			'a refusal': completion('', undefined, 'stop'),
+		};
+		for (const [name, response] of Object.entries(answers)) {
+			expect(isAnswerProblem(await thrownBy(() => response.clone())), name).toBe(true);
+		}
+	});
+
+	it('is false for what is wrong with reaching the model: a 503 or 429, a 400, a network failure, a timeout, or anything unknown', async () => {
+		const failures = {
+			'a 503': await thrownBy(() => Response.json({ error: { message: 'unavailable' } }, { status: 503 })),
+			'a 502': await thrownBy(() => new Response('Bad gateway', { status: 502 })),
+			'a 429': await thrownBy(() => Response.json({ error: { message: 'rate limited' } }, { status: 429 })),
+			'a 400': await thrownBy(() => Response.json({ error: { message: 'bad request' } }, { status: 400 })),
+			'a network failure': await thrownBy(() => Promise.reject(new TypeError('fetch failed'))),
+			'a timeout': await thrownBy(() => Promise.reject(new DOMException('The operation timed out', 'TimeoutError'))),
+			'an empty reply': await thrownBy(() => new Response('', { status: 200 })),
+			'an unknown way for the model to stop': await thrownBy(() => completion('', undefined, 'recitation')),
+			'an unknown error': new Error('something else'),
+			'a string': 'boom',
+			'nothing': undefined,
+		};
+		for (const [name, error] of Object.entries(failures)) expect(isAnswerProblem(error), name).toBe(false);
 	});
 });
