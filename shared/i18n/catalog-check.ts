@@ -60,7 +60,8 @@ export function describeMessage(message: UsedMessage): string {
 /** A call whose message can't be read, for a person: where it is, what it was given, and what to write instead. */
 export function describeSkipped(skipped: SkippedMessage): string {
 	const call = skipped.call === 'T' ? '<T text>' : `${skipped.call}()`;
-	return `${skipped.file}:${skipped.line}  ${call} is given ${skipped.reason}; write the English as one literal, with {placeholders} for the values`;
+	const advice = skipped.call === 'tn' ? 'both the singular and the plural must be literals, with {count} for the number' : 'write the English as one literal, with {placeholders} for the values';
+	return `${skipped.file}:${skipped.line}  ${call} is given ${skipped.reason}; ${advice}`;
 }
 
 function listed(items: readonly string[]): string {

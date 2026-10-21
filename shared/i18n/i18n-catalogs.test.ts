@@ -50,7 +50,7 @@ describe('describeSkipped', () => {
 		expect(skipped.map(describeSkipped)).toEqual([
 			'src/a.tsx:1  t() is given a template literal with expressions; write the English as one literal, with {placeholders} for the values',
 			'src/a.tsx:2  msg() is given a concatenation; write the English as one literal, with {placeholders} for the values',
-			'src/a.tsx:3  tn() is given forms that are not both literals; write the English as one literal, with {placeholders} for the values',
+			'src/a.tsx:3  tn() is given forms that are not both literals; both the singular and the plural must be literals, with {count} for the number',
 			'src/a.tsx:4  <T text> is given a template literal with expressions; write the English as one literal, with {placeholders} for the values',
 		]);
 	});

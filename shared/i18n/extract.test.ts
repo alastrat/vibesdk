@@ -123,6 +123,18 @@ describe('extractMessages', () => {
 		expect(skipped(source)).toEqual(['1 tn: forms that are not both literals', '2 tn: forms that are not both literals', '3 tn: forms that are not both literals']);
 	});
 
+	it('reads a plural whose count is computed, however it is written', () => {
+		const source = [
+			"tn('{count} file', '{count} files', a + b);",
+			"tn('{count} file', '{count} files', `${a}`);",
+			"tn('{count} file', '{count} files', cond ? 1 : 2);",
+			"tn('{count} file', '{count} files', items.length, { name });",
+			"tn(locale, '{count} file', '{count} files', a + b);",
+		].join('\n');
+		expect(keys(source, 'a.ts')).toEqual(Array(5).fill('{count} file|{count} files'));
+		expect(skipped(source, 'a.ts')).toEqual([]);
+	});
+
 	it('finds a call with type arguments', () => {
 		expect(keys(`const a = t<string>('Typed'); const b = tn<string>('{count} one', '{count} many', n);`, 'a.ts')).toEqual(['Typed', '{count} one|{count} many']);
 	});
@@ -322,7 +334,7 @@ describe('findUntranslatedText', () => {
 	});
 
 	it('does not flag code that is not text: a single word, lowercase text, a comparison to a word', () => {
-		const source = `const a = 'hello world'; const b = { label: 'Save', title: 'Home' }; throw new Error('nope'); console.log('Debug');
+		const source = `const a = 'hello world'; const b = { kind: 'Save', variant: 'Home' }; throw new Error('nope'); console.log('Debug');
 			const c = cond ? 'yes' : 'no'; function f() { return <p>{c}</p>; }`;
 		expect(untranslated(source)).toEqual([]);
 	});
@@ -444,10 +456,12 @@ describe('findUntranslatedText', () => {
 				expect(untranslated(source, 'a.ts')).toEqual([]);
 			});
 
-			it('a JSX attribute that is not text, however it is written', () => {
+			it('a JSX attribute that holds code, however it is written', () => {
 				const source = `<>
-					<Button variant="Primary action" size={big ? 'Very big' : 'Small one'} className={cond ? 'Foo bar' : 'Baz qux'} />
-					<input value="Some value here" aria-labelledby="Heading text" />
+					<svg d="M0 0 L10 10" points="Some points here" transform="Rotate 90" viewBox="Zero zero ten ten" fontFamily="Some Font">
+						<path d={\`M\${x} 0 L10 10\`} className={cond ? 'Foo bar' : 'Baz qux'} style={{ content: 'Some text', fontFamily: 'Another Font' }} />
+					</svg>
+					<div className="Foo bar" data-label="Some label" data-testid={cond ? 'Left side' : 'Right side'} href="Some link" id="Main content" type="Primary button" key="Some key" />
 					<T text="Read the terms of use" />
 					<T text={busy ? 'Saving the store.' : 'Save the store.'} />
 				</>`;
@@ -479,9 +493,74 @@ describe('findUntranslatedText', () => {
 				expect(untranslated(source, 'a.ts')).toEqual([]);
 			});
 
-			it('a template that is a tagged template, which is code', () => {
-				expect(untranslated('const q = sql`SELECT id FROM users WHERE name = ${name}`; const s = css`Some thing`;', 'a.ts')).toEqual([]);
+			it('a template tagged sql or css, which is code', () => {
+				const source = 'const q = sql`SELECT id FROM users WHERE name = ${name}`; const s = css`Some thing`; const m = this.sql`Some query here`; const n = db.sql`Another query`;';
+				expect(untranslated(source, 'a.ts')).toEqual([]);
 			});
+
+			it('the source of a type-position import, a module declaration or an import attribute', () => {
+				const source = `type A = import('Some module name').B; declare module 'Another module name' {} import data from './data.json' with { type: 'Some thing here' };`;
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+		});
+
+		describe('a single-word label in data', () => {
+			it('is flagged by a key that names text, however the word is written', () => {
+				const source = [
+					"const a = [{ label: 'Orders' }, { title: 'About' }, { description: 'Overview' }, { placeholder: 'Search' }];",
+					"const b = [{ tooltip: 'Copy' }, { message: 'Saved' }, { heading: 'Welcome' }, { text: 'Hello' }, { 'label': 'Quoted' }];",
+					'const c = { label: `Templated` };',
+				].join('\n');
+				expect(untranslated(source, 'a.ts')).toEqual(['Orders', 'About', 'Overview', 'Search', 'Copy', 'Saved', 'Welcome', 'Hello', 'Quoted', 'Templated']);
+			});
+
+			it('is flagged in both branches of a condition, and in a fallback', () => {
+				expect(untranslated(`const a = { label: c ? 'Orders' : 'Drafts', title: name || 'Untitled' };`, 'a.ts')).toEqual(['Orders', 'Drafts', 'Untitled']);
+			});
+
+			it('is skipped by an i18n-ignore comment', () => {
+				const source = `const ITEMS = [\n\t// i18n-ignore\n\t{ label: 'Orders' },\n\t{ label: 'Drafts' },\n\t{ label: 'Emails' }, // i18n-ignore\n];`;
+				expect(untranslated(source, 'a.ts')).toEqual(['Drafts']);
+			});
+
+			it('is not flagged for lowercase, a key that is not text, a name, an acronym or a translated value', () => {
+				const source = [
+					"const a = [{ label: 'orders' }, { name: 'Orders' }, { value: 'About' }, { id: 'Overview' }, { label: t('Orders') }, { label: 'API' }];",
+					"const b = [{ label: 'A' }, { label: '1 item' }, { label: '' }, { [label]: 'Orders' }, { ['title']: 'About' }, { label: cond ? 'orders' : 'USD' }];",
+					"const c = [{ label: kind === 'About' ? 'orders' : 'api' }, { label: getLabel('Orders') }, { label: `${count}` }, { label: `${a} Orders` }];",
+				].join('\n');
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+		});
+
+		describe('a text prop on any element', () => {
+			it('is flagged when it reads as a message, whatever the prop is called', () => {
+				const source = `<>
+					<Hero eyebrow="Built for sellers" lead="More shoppers ask the AI." chip="New this week" fallback="A daily allowance" />
+					<DeleteButton deleteButtonText="Delete account" resourceType="API key" url="Live preview" />
+					<Card heading={busy ? 'Saving now' : 'Saved.'} />
+				</>`;
+				expect(untranslated(source)).toEqual(['Built for sellers', 'More shoppers ask the AI.', 'New this week', 'A daily allowance', 'Delete account', 'API key', 'Live preview', 'Saving now', 'Saved.']);
+			});
+
+			it('is not flagged for a single word, lowercase, or a code-like value', () => {
+				const source = `<Hero eyebrow="Sellers" kind="primary action" mode="Fast" aria-live="polite" rel="noopener noreferrer" to="/settings" />`;
+				expect(untranslated(source)).toEqual([]);
+			});
+
+			it('counts text as a text attribute on any element but <T>, where it is the message', () => {
+				const source = `<>\n\t<Typewriter text="Hello" />\n\t<Banner text={busy ? 'Working' : 'Done'} />\n\t<T text="Hello there" />\n</>`;
+				expect(findUntranslatedText(source, 'a.tsx').map(({ line, text }) => `${line}:${text}`)).toEqual(['2:Hello', '3:Working', '3:Done']);
+			});
+
+			it('is reported once, and skipped by an i18n-ignore comment', () => {
+				const source = `<>\n\t<Hero\n\t\t// i18n-ignore\n\t\teyebrow="Built for sellers"\n\t\tlead="Always shown here"\n\t/>\n</>`;
+				expect(untranslated(source)).toEqual(['Always shown here']);
+			});
+		});
+
+		it('flags a template with another tag, as it is shown', () => {
+			expect(untranslated('const a = html`Hello world`; const b = md`Some text.`;', 'a.ts')).toEqual(['Hello world', 'Some text.']);
 		});
 
 		it('still flags a call on something that only looks like a logger', () => {

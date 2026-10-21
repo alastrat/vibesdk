@@ -15,7 +15,7 @@
  */
 
 import { parse } from '@babel/parser';
-import type { File, JSXOpeningElement, Node, TemplateLiteral } from '@babel/types';
+import type { File, JSXAttribute, JSXOpeningElement, Node, TemplateLiteral } from '@babel/types';
 import { pluralKey } from './translate';
 
 export interface ExtractedMessage {
@@ -68,6 +68,12 @@ const TEXT_ATTRIBUTES: ReadonlySet<string> = new Set([
 	'pageTitle',
 ]);
 
+/** JSX attributes that hold code: path data, class names, styles, `data-*`, and the plain attributes of HTML. */
+const CODE_ATTRIBUTES: ReadonlySet<string> = new Set(['d', 'points', 'transform', 'viewBox', 'fontFamily', 'className', 'style', 'href', 'id', 'key', 'type']);
+
+/** Object keys whose value is text the user reads, so even a single capitalized word under one is flagged. */
+const DATA_TEXT_KEYS: ReadonlySet<string> = new Set(['label', 'title', 'description', 'placeholder', 'tooltip', 'message', 'heading', 'text']);
+
 /** The `toast` calls whose message the user reads: sonner's, and Kumo's `add`. */
 const TOAST_METHODS: ReadonlySet<string> = new Set(['success', 'error', 'warning', 'info', 'message', 'loading', 'add']);
 
@@ -79,6 +85,8 @@ const HTML_ENTITY = /&#?\w+;/g;
 const IGNORE_MARKER = /^\s*i18n-ignore\b/;
 const MESSAGE_START = /^\p{Lu}/u;
 const SENTENCE_END = /[.?!…:]$/;
+const CAPITALIZED_WORD = /^\p{Lu}\p{Ll}/u;
+const FUNCTION_NODES: ReadonlySet<string> = new Set(['ArrowFunctionExpression', 'FunctionExpression', 'FunctionDeclaration', 'ObjectMethod', 'ClassMethod']);
 
 /** The names that write log lines: `console`, `log`, `logger`, and the getters that hand one out; or `currentLogger`. */
 const LOGGER_NAME = /^(?:console|log|logger|getLog|getLogger)$/i;
@@ -204,9 +212,13 @@ interface CallReading {
 	problems: SkipReason[];
 }
 
-/** A plural is read only when both its forms are plain literals; a form that is only a variable is left alone. */
+/**
+ * A plural is read only when both its forms are plain literals; a form that is only a variable is left alone. A
+ * message as the third argument means the server form, with a locale first; in the client form it is a count, which
+ * may be any expression.
+ */
 function readPlural(args: readonly Node[]): CallReading {
-	const offset = isShaped(args[2]) ? 1 : 0;
+	const offset = keyParts(args[2]).keys.length > 0 ? 1 : 0;
 	const singular = literalText(args[offset]);
 	const plural = literalText(args[offset + 1]);
 	if (singular !== null && plural !== null) return { messages: [{ key: pluralKey(singular, plural), plural: { singular, plural } }], problems: [] };
@@ -381,16 +393,56 @@ function passesValue(parent: Node, child: Node): boolean {
 	}
 }
 
-/**
- * Whether a literal is code or data rather than text the user reads: a module source, a key, a type, an argument of
- * `t`, `tn`, `msg` or a log call, the value of a JSX attribute that is not text, or a tagged template. It looks through
- * a condition's branches, a fallback or a concatenation to where the value goes.
- */
-function isNotShown(node: Node, ancestors: readonly Node[]): boolean {
+/** How an attribute's value is read: shown as text, the key of a `<T text>`, code, or shown when it reads as a message. */
+type AttributeKind = 'text' | 'message' | 'code' | 'other';
+
+function attributeKind(attribute: JSXAttribute, element: Node | undefined): AttributeKind {
+	if (attribute.name.type !== 'JSXIdentifier') return 'code';
+	const name = attribute.name.name;
+	if (name === 'text') return element?.type === 'JSXOpeningElement' && element.name.type === 'JSXIdentifier' && element.name.name === 'T' ? 'message' : 'text';
+	if (TEXT_ATTRIBUTES.has(name)) return 'text';
+	return CODE_ATTRIBUTES.has(name) || name.startsWith('data-') ? 'code' : 'other';
+}
+
+/** Whether a node sits in the value of an attribute that holds code or a message key, outside any function in it. */
+function insideCodeAttribute(ancestors: readonly Node[]): boolean {
+	for (let index = ancestors.length - 1; index >= 0; index--) {
+		const ancestor = ancestors[index];
+		if (FUNCTION_NODES.has(ancestor.type)) return false;
+		if (ancestor.type === 'JSXAttribute') {
+			const kind = attributeKind(ancestor, ancestors[index - 1]);
+			return kind === 'code' || kind === 'message';
+		}
+	}
+	return false;
+}
+
+/** Tags whose template is code: `sql`, `css`, and a `sql` method. */
+function isCodeTag(tag: Node): boolean {
+	if (tag.type === 'Identifier') return tag.name === 'sql' || tag.name === 'css';
+	return tag.type === 'MemberExpression' && !tag.computed && tag.property.type === 'Identifier' && tag.property.name === 'sql';
+}
+
+/** Where a literal's value goes: the first node above it that does more than hand the value on, and the child it came through. */
+interface Owner {
+	parent: Node | undefined;
+	child: Node;
+}
+
+/** Looks through a condition's branches, a fallback, a concatenation and a type assertion to where the value goes. */
+function ownerOf(node: Node, ancestors: readonly Node[]): Owner {
 	let child = node;
 	let index = ancestors.length - 1;
 	while (index >= 0 && passesValue(ancestors[index], child)) child = ancestors[index--];
-	const parent = ancestors[index];
+	return { parent: ancestors[index], child };
+}
+
+/**
+ * Whether a literal is code or data rather than text the user reads: a module source, a key, a type, an argument of
+ * `t`, `tn`, `msg` or a log call, the value of a JSX attribute that holds code, or a `sql` or `css` template.
+ */
+function isNotShown({ parent, child }: Owner, ancestors: readonly Node[]): boolean {
+	if (insideCodeAttribute(ancestors)) return true;
 	if (!parent) return false;
 	switch (parent.type) {
 		case 'ImportDeclaration':
@@ -403,7 +455,7 @@ function isNotShown(node: Node, ancestors: readonly Node[]): boolean {
 		case 'TSLiteralType':
 			return true;
 		case 'TaggedTemplateExpression':
-			return parent.quasi === child;
+			return parent.quasi === child && isCodeTag(parent.tag);
 		case 'ObjectProperty':
 		case 'ObjectMethod':
 		case 'ClassProperty':
@@ -422,11 +474,14 @@ function isNotShown(node: Node, ancestors: readonly Node[]): boolean {
 			const name = calleeName(parent.callee);
 			return parent.callee.type === 'Import' || name === 'require' || (name !== null && MESSAGE_FUNCTIONS.has(name)) || isLogCall(parent.callee);
 		}
-		case 'JSXAttribute':
-			return !(parent.name.type === 'JSXIdentifier' && TEXT_ATTRIBUTES.has(parent.name.name));
 		default:
 			return false;
 	}
+}
+
+/** Whether the value is a property, under a name that is text, of an object: `{ label: 'Orders' }`. */
+function isDataText({ parent, child }: Owner): boolean {
+	return parent?.type === 'ObjectProperty' && !parent.computed && parent.value === child && DATA_TEXT_KEYS.has(propertyName(parent.key) ?? '');
 }
 
 /** Text that reads as a message: it starts with a capital, and has a space in it or ends like a sentence. */
@@ -461,8 +516,10 @@ function firstLetterLine(node: Node, source: string): number {
  *  - JSX text, the string values of the text attributes, and the message of a `toast`, each with letters in it;
  *  - any other string, or the fixed text of a template literal, that reads as a message: a capital first, then a space
  *    inside or a closing mark (`. ? ! … :`) at the end. That is an object's `label`, a fallback passed to a helper,
- *    an error's message, a `confirm()`, a message constant. It is not a module source, a key, a type, an argument of
- *    `t`, `tn`, `msg` or a log call, the value of a JSX attribute that is not text, or a tagged template.
+ *    an error's message, a `confirm()`, a message constant, the value of a custom prop such as `eyebrow`. A single
+ *    capitalized word counts too as the value of `label`, `title`, `description`, `placeholder`, `tooltip`, `message`,
+ *    `heading` or `text` in an object. It is not a module source, a key, a type, an argument of `t`, `tn`, `msg` or a log
+ *    call, the value of an attribute that holds code (`className`, `style`, `d`, `data-*`, ...), or a `sql` or `css` template.
  * A line is skipped when an `i18n-ignore` comment stands alone on the line above it, or trails it, for names and code
  * that are never translated.
  */
@@ -497,7 +554,7 @@ export function findUntranslatedText(source: string, file: string): Untranslated
 				}
 				break;
 			case 'JSXAttribute':
-				if (node.name.type === 'JSXIdentifier' && TEXT_ATTRIBUTES.has(node.name.name)) {
+				if (attributeKind(node, ancestors[ancestors.length - 1]) === 'text') {
 					reportLeaves(node.value?.type === 'JSXExpressionContainer' ? node.value.expression : node.value);
 				}
 				break;
@@ -518,9 +575,11 @@ export function findUntranslatedText(source: string, file: string): Untranslated
 			}
 			case 'StringLiteral':
 			case 'TemplateLiteral': {
-				if (seen.has(startOf(node)) || isNotShown(node, ancestors)) break;
+				if (seen.has(startOf(node))) break;
+				const owner = ownerOf(node, ancestors);
+				if (isNotShown(owner, ancestors)) break;
 				const text = node.type === 'StringLiteral' ? node.value : fixedText(node);
-				if (readsAsMessage(text)) report(startOf(node), lineOf(node), tidy(node.type === 'StringLiteral' ? node.value : templateSource(node, source)));
+				if (readsAsMessage(text) || (CAPITALIZED_WORD.test(text) && isDataText(owner))) report(startOf(node), lineOf(node), tidy(node.type === 'StringLiteral' ? node.value : templateSource(node, source)));
 				break;
 			}
 			default:
