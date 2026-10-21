@@ -120,6 +120,12 @@ describe('formatTemplatePrice', () => {
 		expect(formatTemplatePrice(950)).toBe('$9.50');
 	});
 
+	it('groups thousands, as formatUsd does', () => {
+		expect(formatTemplatePrice(100_000)).toBe('$1,000');
+		expect(formatTemplatePrice(123_450)).toBe('$1,234.50');
+		expect(formatTemplatePrice(123_450, 'pt-BR')).toBe('US$\u00a01.234,50');
+	});
+
 	it('keeps every price option a creator can choose as it was', () => {
 		expect(TEMPLATE_PRICE_OPTIONS_CENTS.map((cents) => formatTemplatePrice(cents))).toEqual(['Free', '$9', '$19', '$29', '$49']);
 		expect(formatTemplatePrice(-100)).toBe('Free');

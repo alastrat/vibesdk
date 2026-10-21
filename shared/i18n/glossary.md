@@ -84,7 +84,8 @@ These set the voice. Translate new copy to match them.
 | --- | --- | --- |
 | Go live | Publicar | Publicar |
 | publish | publicar | publicar |
-| Live (badge on the published draft) | Publicada | No ar |
+| Live (badge on a draft, qualifying "borrador"/"rascunho") | Publicado | No ar |
+| live (status of a store, qualifying "tienda"/"loja") | publicada | no ar |
 | unpublished changes | cambios sin publicar | alterações não publicadas |
 | take offline | despublicar | tirar do ar |
 | make private | hacer privado | tornar privado |
@@ -138,12 +139,30 @@ These set the voice. Translate new copy to match them.
 | dispute | disputa | disputa |
 | payout | transferencia | repasse |
 | payments (the setup page) | pagos | pagamentos |
-| checkout | pago | checkout |
+| checkout (the step where a shopper pays) | Finalizar compra | Finalizar compra |
 | cart | carrito | carrinho |
 | shipping | envío | envio |
 | tracking number | número de seguimiento | código de rastreamento |
 | carrier | transportista | transportadora |
 | your share | tu parte | sua parte |
+
+### Statuses
+
+Listed in the masculine singular, because the things they label most often (pedido/pedido, pago/pagamento, reembolso/reembolso, borrador/rascunho) are masculine. Make them agree with the noun they qualify: "tienda publicada", "factura pagada", "domínio ativo", "alterações aprovadas".
+
+| English | Español | Português |
+| --- | --- | --- |
+| pending | pendiente | pendente |
+| paid | pagado | pago |
+| failed | fallido | falhou |
+| shipped | enviado | enviado |
+| delivered | entregado | entregue |
+| refunded | reembolsado | reembolsado |
+| approved | aprobado | aprovado |
+| rejected (a review or listing) | rechazado | rejeitado |
+| declined (a card payment) | rechazado | recusado |
+| active | activo | ativo |
+| canceled | cancelado | cancelado |
 
 ### Account and navigation
 
@@ -177,10 +196,15 @@ These set the voice. Translate new copy to match them.
 | next | siguiente | próximo |
 | search | buscar | pesquisar |
 | confirm | confirmar | confirmar |
+| send (a message or an email) | enviar | enviar |
+| submit (a form, or something for review) | enviar | enviar |
+| yes | sí | sim |
+| no | no | não |
+| done (the button that closes a dialog) | listo | concluir |
 | share | compartir | compartilhar |
 | connect | conectar | conectar |
 | set up | configurar | configurar |
-| upload | subir | enviar |
+| upload | subir | fazer upload |
 | download | descargar | baixar |
 | try again | intentar de nuevo | tentar novamente |
 | loading | cargando | carregando |
@@ -193,6 +217,8 @@ These set the voice. Translate new copy to match them.
 - **Invoice.** Portuguese "fatura" is the invoice Estori sends. Never "nota fiscal", which is a tax document Estori doesn't issue.
 - **Refund.** Both use "reembolso". Portuguese "estorno" means reversing a charge and isn't used.
 - **Payout.** Spanish "transferencia" and Portuguese "repasse" are the money Estori pays out to the seller. "Pago" and "pagamento" are what a shopper pays.
-- **Live.** Spanish says "publicada" and "despublicar". Portuguese says "no ar" and "tirar do ar". Both use "publicar" for the action itself.
-- **Checkout.** Spanish says "pago" ("página de pago", "Finalizar compra" on the button). Portuguese keeps "checkout", the word Brazilian shoppers know.
+- **Live.** Spanish says "publicado" or "publicada", agreeing with what it qualifies ("borrador" is masculine, "tienda" is feminine), and "despublicar". Portuguese says "no ar" and "tirar do ar", which never change. Both use "publicar" for the action itself.
+- **Checkout.** Both say "Finalizar compra" for the step where a shopper pays. It is never "pago" or "pagamento", which are the money itself (and "Pagos"/"Pagamentos" is the seller's payments setup page). In running text, write around it: "al finalizar la compra", "ao finalizar a compra".
+- **Upload and send.** Portuguese upload is "fazer upload", so "enviar" means send and submit only. "carregar" isn't used for upload because it is already "carregando" (loading). Spanish keeps "subir" for upload and "enviar" for send and submit. "Shipped" is "enviado" in both languages, matching "envío" and "envio".
+- **Rejected and declined.** Portuguese tells them apart: "rejeitado" for a review, "recusado" for a card. Spanish uses "rechazado" for both.
 - **Shopper.** Always "comprador", never "cliente": Estori's own customers are the sellers, and "cliente" would blur the two.

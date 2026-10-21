@@ -11,8 +11,6 @@ export type MessageValues = Readonly<Record<string, string | number>>;
 
 const PLACEHOLDER = /\{([A-Za-z_]\w*)\}/g;
 
-const ENGLISH_PLURALS = new Intl.PluralRules('en-US');
-
 const pluralRules = perLocale((intl) => new Intl.PluralRules(intl));
 
 /** Fills `{name}` placeholders in one pass; a placeholder with no value stays as written. */
@@ -43,7 +41,7 @@ export function pluralKey(singular: string, plural: string): string {
 export function translatePlural(catalog: Catalog | null, locale: Locale, singular: string, plural: string, count: number, values?: MessageValues): string {
 	const entry = entryOf(catalog, pluralKey(singular, plural));
 	const form = typeof entry === 'object' && entry !== null ? entry[pluralRules(locale).select(count) === 'one' ? 'one' : 'other'] : '';
-	const text = typeof form === 'string' && form !== '' ? form : ENGLISH_PLURALS.select(count) === 'one' ? singular : plural;
+	const text = typeof form === 'string' && form !== '' ? form : pluralRules('en').select(count) === 'one' ? singular : plural;
 	return interpolate(text, { ...values, count: formatNumber(count, locale) });
 }
 

@@ -47,8 +47,9 @@ export const DISCOVER_PRICING_FILTERS = ['all', 'free', 'paid'] as const;
 export type DiscoverPricing = (typeof DISCOVER_PRICING_FILTERS)[number];
 
 /**
- * A template's price: "$29", "USD 29" or "US$ 29,50". Shared code can't reach the browser's translations, so the word
- * for a free template is the caller's `free`, which a translating caller sets to `t('Free')`.
+ * A template's price, grouped like `formatUsd`: "$29", "$1,234.50", "USD 29" or "US$ 29,50". Shared code can't reach
+ * the browser's translations, so the word for a free template is the caller's `free`, which a translating caller sets
+ * to `t('Free')`.
  */
 export function formatTemplatePrice(priceCents: number, locale: Locale = DEFAULT_LOCALE, free = 'Free'): string {
 	return priceCents <= 0 ? free : formatUsd(priceCents, locale);
