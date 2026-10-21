@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { PAY_PAGE_SCRIPT, payPageHeaders, renderPayPage, STRIPE_JS_URL } from './pay-page';
+import { PAY_PAGE_SCRIPT, payPageHeaders, renderPayPage } from './pay-page';
 import type { StoreInfo } from '../../../shared/types/store-payments';
+import { STRIPE_JS_URL } from '../../../shared/types/stripe';
 
 const INFO: StoreInfo = {
 	mode: 'test',

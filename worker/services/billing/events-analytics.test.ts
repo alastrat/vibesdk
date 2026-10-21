@@ -33,6 +33,8 @@ const CHECKOUT: StripeEvent = {
 
 const notRead = (): Promise<never> => Promise.reject(new Error('not read by a checkout'));
 
+const CONSENT = { userId: 'u1', plan: 'pro' as const, termsVersion: '2026-10-20', consentText: 'I agree.', createdAt: new Date('2026-10-05T10:00:00Z') };
+
 /** A live Premium subscription the account started a minute after the Pro one. */
 const LATER_PREMIUM: SubscriptionRecord = {
 	userId: 'u1',
@@ -55,12 +57,20 @@ function world(options: { recordFails?: boolean; stored?: SubscriptionRecord } =
 	let row: SubscriptionRecord | null = options.stored ?? null;
 	const tracked: Array<[string, readonly BillingAnalyticsEvent[]]> = [];
 	const deps: BillingEventDeps = {
-		stripe: { retrieveSubscription: async () => PRO, retrieveCheckoutSession: notRead },
+		stripe: {
+			retrieveSubscription: async () => PRO,
+			retrieveCheckoutSession: notRead,
+			setDefaultPaymentMethod: notRead,
+			updateSubscriptionMetadata: async () => undefined,
+			retrieveInvoice: notRead,
+			retrievePaymentIntent: notRead,
+		},
 		store: {
 			eventSeen: async (eventId) => recorded.has(eventId),
 			userOfCustomer: async (customerId) => (customerId === 'cus_1' ? 'u1' : null),
 			subscriptionOf: async () => row,
 			sentNoticeKeys: async () => new Set<string>(),
+			consentFor: async () => CONSENT,
 			recordEvent: async (input) => {
 				if (options.recordFails) throw new Error('D1_ERROR: network connection lost');
 				recorded.add(input.event.id);

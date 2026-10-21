@@ -75,7 +75,7 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 	if (paid && paid.amount_paid > 0) {
 		notices.push({
 			key: `receipt:${paid.id}`,
-			email: { kind: 'receipt', plan: next.plan, amountCents: paid.amount_paid, currency: paid.currency, periodStart, periodEnd, invoiceNumber: paid.number, invoiceUrl: paid.hosted_invoice_url },
+			email: { kind: 'receipt', plan: next.plan, amountCents: paid.amount_paid, currency: paid.currency, periodStart, periodEnd, invoiceNumber: paid.number },
 		});
 	}
 	if (paid && paid.billing_reason === 'subscription_cycle') {
@@ -92,8 +92,13 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 		notices.push({ key: `downgrade_scheduled:${next.stripeScheduleId}`, email: { kind: 'downgrade_scheduled', plan: next.pendingPlan, at: next.pendingPlanAt.getTime() } });
 	}
 	const graceEnd = graceEndsAt(next);
-	if (eventType === 'invoice.payment_failed' && invoice && graceEnd !== null) {
-		notices.push({ key: `payment_failed:${invoice.id}`, email: { kind: 'payment_failed', plan: next.plan, graceEndsAt: graceEnd } });
+	// Stripe sends payment_failed and payment_action_required for one failed invoice and they share this key. The event words
+	// the email here; the webhook rewords a payment_failed one from the invoice's payment before it goes out.
+	if ((eventType === 'invoice.payment_failed' || eventType === 'invoice.payment_action_required') && invoice && graceEnd !== null) {
+		notices.push({
+			key: `payment_failed:${invoice.id}`,
+			email: { kind: 'payment_failed', plan: next.plan, graceEndsAt: graceEnd, needsConfirmation: eventType === 'invoice.payment_action_required' },
+		});
 	}
 	if (next.cancelAtPeriodEnd && !same?.cancelAtPeriodEnd && isLive(next.status)) {
 		notices.push({ key: `plan_ending:${subscriptionId}:${seconds(next.currentPeriodEnd)}`, email: { kind: 'plan_ending', plan: next.plan, endsAt: periodEnd } });

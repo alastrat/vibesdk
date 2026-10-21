@@ -61,7 +61,7 @@ describe('checkCreditsBeforeTurn', () => {
 				plan: 'pro',
 				upgradeTo: null,
 				paymentFailed: true,
-				message: "Your last payment didn't go through, so this month's AI credits haven't started. Update your card in Manage billing to keep building.",
+				message: "Your last payment didn't go through, so this month's AI credits haven't started. Pay it on the billing page to keep building.",
 			},
 		});
 		await insertPurchase(db, { id: 'cp_grace', userId: 'u_grace', credits: 5_000, purchasedAt: new Date(NOW - 2 * DAY), expiresAt: new Date(NOW + 300 * DAY) });

@@ -1,4 +1,4 @@
-/** The billing tables on real SQL: customers kept once, events written all-or-nothing, notices claimed once, Basic's store places reserved atomically. */
+/** The billing tables on real SQL: customers kept once, events written all-or-nothing, notices claimed once, consents kept per Checkout session, Basic's store places reserved atomically. */
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { envWith, insertApp, insertSubscription, insertUser, migratedD1 } from '../test-support/real-d1';
@@ -13,7 +13,7 @@ const at = (iso: string) => new Date(iso);
 
 beforeAll(async () => {
 	db = await migratedD1();
-	for (const id of ['u_pay', 'u_two', 'u_admin', 'u_due', 'u_fresh', 'u_ending', 'u_stores', 'u_nocap', 'u_old']) await insertUser(db, id);
+	for (const id of ['u_pay', 'u_two', 'u_admin', 'u_due', 'u_fresh', 'u_ending', 'u_stores', 'u_nocap', 'u_old', 'u_consent']) await insertUser(db, id);
 });
 
 function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
@@ -104,6 +104,29 @@ describe('billing customers and events', () => {
 		await insertSubscription(db, { userId: 'u_ending', stripeSubscriptionId: 'sub_ending', status: 'active', cancelAtPeriodEnd: true, currentPeriodStart: at('2026-09-11T00:00:00Z'), currentPeriodEnd: at('2026-10-11T00:00:00Z') });
 		const due = await new BillingService(envWith(db)).subscriptionsToRepair(Date.parse('2026-10-11T18:00:00Z'));
 		expect(due.map((entry) => entry.stripeSubscriptionId).sort()).toEqual(['sub_due', 'sub_ending']);
+	});
+});
+
+describe('subscription consents', () => {
+	const consent = { sessionId: 'cs_sub_1', userId: 'u_consent', plan: 'pro' as const, termsVersion: '2026-10-20', consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.', now: at('2026-10-20T10:00:00Z') };
+
+	it('stores a consent and reads it back by session', async () => {
+		const billing = new BillingService(envWith(db));
+		await billing.recordConsent(consent);
+		expect(await billing.consentFor('cs_sub_1')).toEqual({ userId: 'u_consent', plan: 'pro', termsVersion: '2026-10-20', consentText: consent.consentText, createdAt: at('2026-10-20T10:00:00Z') });
+	});
+
+	it('a second consent for the same session replaces the wording', async () => {
+		const billing = new BillingService(envWith(db));
+		const withCode = { ...consent, sessionId: 'cs_sub_2', consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month until I cancel.' };
+		await billing.recordConsent({ ...withCode, consentText: consent.consentText });
+		await billing.recordConsent({ ...withCode, termsVersion: '2026-10-21', now: at('2026-10-20T10:05:00Z') });
+		expect(await billing.consentFor('cs_sub_2')).toEqual({ userId: 'u_consent', plan: 'pro', termsVersion: '2026-10-21', consentText: withCode.consentText, createdAt: at('2026-10-20T10:05:00Z') });
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM billing_consents WHERE stripe_checkout_session_id = 'cs_sub_2'").first('n')).toBe(1);
+	});
+
+	it('a consent for an unknown session reads null', async () => {
+		expect(await new BillingService(envWith(db)).consentFor('cs_unknown')).toBeNull();
 	});
 });
 

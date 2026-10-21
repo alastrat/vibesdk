@@ -1,15 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { PLAN_LIMITS, type BillingView, type PlanId } from '@/api-types';
+import { PLAN_LIMITS, type BillingView, type CardOnFile, type PlanId } from '@/api-types';
 import {
+	CARD_SAVED_MESSAGE,
+	PAYMENT_WENT_THROUGH_MESSAGE,
 	bannerKeyFor,
 	billingBannerFor,
 	canCancel,
+	cardLabelFor,
 	checkoutBaselineOf,
 	checkoutReturnOf,
 	clampExtraCredits,
 	confirmationFor,
 	creditsSummaryFor,
+	describePaymentResult,
 	isConfirmed,
+	isRenewalPaid,
+	pastDueActionsFor,
 	paymentNoteFor,
 	planChoicesFor,
 	planStatusFor,
@@ -41,6 +47,7 @@ function view(plan: PlanId, overrides: Partial<BillingView> = {}): BillingView {
 		limits: PLAN_LIMITS[plan],
 		canManageBilling: plan !== 'basic',
 		canBuyCredits: plan === 'premium',
+		card: null,
 		...overrides,
 	};
 }
@@ -49,8 +56,12 @@ const actions = (choices: ReturnType<typeof planChoicesFor>) => choices.map((cho
 
 describe('the billing page', () => {
 	it('reads where the seller came back from, and the plan a link asked for', () => {
-		expect(checkoutReturnOf('?checkout=success')).toBe('plan');
-		expect(checkoutReturnOf('?credits=success')).toBe('credits');
+		expect(checkoutReturnOf('?confirm=plan')).toBe('plan');
+		expect(checkoutReturnOf('?confirm=credits')).toBe('credits');
+		expect(checkoutReturnOf('?confirm=renewal')).toBe('renewal');
+		expect(checkoutReturnOf('?confirm=other')).toBeNull();
+		expect(checkoutReturnOf('?checkout=success')).toBeNull();
+		expect(checkoutReturnOf('?credits=success')).toBeNull();
 		expect(checkoutReturnOf('?checkout=cancelled')).toBe('cancelled');
 		expect(checkoutReturnOf('')).toBeNull();
 		expect(requestedPlanOf('?plan=premium')).toBe('premium');
@@ -102,7 +113,7 @@ describe('the billing page', () => {
 	});
 
 	it('puts a failed payment, then a credit warning, in the banner, with the next step for the plan', () => {
-		expect(billingBannerFor(view('pro', { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5 }))).toEqual({ tone: 'warning', message: "Your last payment didn't go through. Update your card by November 5 to keep Pro.", action: { kind: 'portal', label: 'Update card' } });
+		expect(billingBannerFor(view('pro', { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5 }))).toEqual({ tone: 'warning', message: "Your last payment didn't go through. Update your card by November 5 to keep Pro.", action: { kind: 'link', to: '/settings/billing', label: 'Open billing' } });
 		const low = { ...view('basic').credits!, used: 4_000, left: 1_000 };
 		expect(billingBannerFor(view('basic', { alert: 'credits_20', credits: low }))).toEqual({ tone: 'info', message: 'You have 1,000 AI credits left until November 5.', action: { kind: 'checkout', plan: 'pro', label: 'Get Pro' } });
 		expect(billingBannerFor(view('premium', { alert: 'credits_5' }))?.action).toEqual({ kind: 'link', to: '/settings/billing#extra-credits', label: 'Buy credits' });
@@ -117,7 +128,7 @@ describe('the billing page, beyond the plan cards', () => {
 		expect(paymentNoteFor(grace)).toBe("Your last payment didn't go through. Pro's features keep working until November 5, and this month's AI credits start once the payment goes through.");
 		const ended = view('basic', { source: 'free', status: 'past_due', paymentFailing: true });
 		expect(paymentNoteFor(ended)).toBe("Your last payment didn't go through, so your account is on Basic until it's paid.");
-		expect(billingBannerFor(ended)).toEqual({ tone: 'warning', message: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.", action: { kind: 'portal', label: 'Update card' } });
+		expect(billingBannerFor(ended)).toEqual({ tone: 'warning', message: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.", action: { kind: 'link', to: '/settings/billing', label: 'Open billing' } });
 		expect(actions(planChoicesFor(ended))).toEqual(['pro:none', 'premium:none']);
 		expect(paymentNoteFor(view('pro'))).toBeNull();
 	});
@@ -194,5 +205,55 @@ describe('the billing page, beyond the plan cards', () => {
 		expect(readCheckoutBaseline('not json')).toBeNull();
 		expect(readCheckoutBaseline(JSON.stringify({ credits: null, purchases: [{ purchasedAt: 'soon' }] }))).toBeNull();
 		expect(readCheckoutBaseline(null)).toBeNull();
+	});
+});
+
+const VISA: CardOnFile = { brand: 'visa', last4: '4242', expMonth: 8, expYear: 2028 };
+const FAILING = { status: 'past_due', paymentFailing: true, graceEndsAt: NOV_5, card: VISA } as const;
+
+describe('the card on file', () => {
+	it('formats the card on file', () => {
+		expect(cardLabelFor(VISA)).toBe('Visa ending 4242, expires 08/28');
+		expect(cardLabelFor({ brand: 'mastercard', last4: '4444', expMonth: 12, expYear: 2031 })).toBe('Mastercard ending 4444, expires 12/31');
+		expect(cardLabelFor({ brand: 'amex', last4: '0005', expMonth: 1, expYear: 2029 })).toBe('American Express ending 0005, expires 01/29');
+	});
+
+	it('calls a card of a brand it does not know a card', () => {
+		expect(cardLabelFor({ brand: 'unknown', last4: '1111', expMonth: 3, expYear: 2027 })).toBe('Card ending 1111, expires 03/27');
+		expect(cardLabelFor({ brand: 'someday_brand', last4: '1111', expMonth: 3, expYear: 2027 })).toBe('Card ending 1111, expires 03/27');
+	});
+});
+
+describe('a failed payment on the billing page', () => {
+	it('offers to pay with the card on file, and to update the card and pay', () => {
+		expect(pastDueActionsFor(view('pro', FAILING))).toEqual({
+			payNow: 'Pay now with Visa ending 4242',
+			updateCard: { label: 'Update card and pay', to: '/settings/billing/card?mode=pay' },
+		});
+	});
+
+	it('offers only a new card when there is none on file', () => {
+		expect(pastDueActionsFor(view('pro', { ...FAILING, card: null }))?.payNow).toBeNull();
+		expect(pastDueActionsFor(view('pro', { ...FAILING, card: { ...VISA, brand: 'unknown' } }))?.payNow).toBe('Pay now with card ending 4242');
+	});
+
+	it('offers nothing while payments are fine, outside the billing flag, or while Estori sets the plan', () => {
+		expect(pastDueActionsFor(view('pro', { card: VISA }))).toBeNull();
+		expect(pastDueActionsFor(view('pro', { ...FAILING, enabled: false }))).toBeNull();
+		expect(pastDueActionsFor(view('enterprise', { ...FAILING, source: 'override' }))).toBeNull();
+	});
+
+	it('describes each payment result', () => {
+		expect(describePaymentResult({ state: 'paid' })).toEqual({ tone: 'success', message: 'Your payment went through.' });
+		expect(describePaymentResult({ state: 'nothing_due' })).toEqual({ tone: 'success', message: PAYMENT_WENT_THROUGH_MESSAGE });
+		expect(describePaymentResult({ state: 'saved' })).toEqual({ tone: 'success', message: 'Your card is saved.' });
+		expect(CARD_SAVED_MESSAGE).toBe('Your card is saved.');
+		expect(describePaymentResult({ state: 'declined', message: 'Your card has insufficient funds.' })).toEqual({ tone: 'error', message: 'Your card has insufficient funds.' });
+		expect(describePaymentResult({ state: 'declined', message: '' }).message).toBe("The payment didn't go through. Try another card.");
+	});
+
+	it('knows when the webhook has recorded a paid renewal, so the page stops asking', () => {
+		expect(isRenewalPaid(view('pro', FAILING))).toBe(false);
+		expect(isRenewalPaid(view('pro', { card: VISA }))).toBe(true);
 	});
 });

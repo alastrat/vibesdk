@@ -7,25 +7,29 @@
 import type { BillingService, BillingEventInput } from '../../database/services/BillingService';
 import type { CreditLedgerService } from '../../database/services/CreditLedgerService';
 import type { SubscriptionRecord } from '../../database/schema';
-import { CHECKOUT_KIND_CREDITS, LIVE_SUBSCRIPTION_STATUSES, type BillingEventResult } from '../../../shared/types/billing';
+import { CHECKOUT_KIND_CARD, CHECKOUT_KIND_CREDITS, LIVE_SUBSCRIPTION_STATUSES, type BillingEventResult } from '../../../shared/types/billing';
 import { EXTRA_CREDITS, extraCreditsPriceCents, isExtraCreditsAmount } from '../../../shared/types/plans';
+import { createLogger } from '../../logger';
 import { generateId } from '../../utils/idGenerator';
 import type { PlatformAlert } from '../alerts/platform-alerts';
 import { isCheckoutSession } from '../payments/fulfill';
-import type { StripeCharge, StripeClient, StripeInvoice, StripeSubscriptionSchedule } from '../payments/stripe-client';
+import { idempotencyBucket, type StripeCharge, type StripeClient, type StripeInvoice, type StripeSubscriptionSchedule } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
 import { subscriptionEventsFor, type BillingAnalyticsEvent } from '../posthog/billing-events';
-import { heldPeriodKey, type BillingAccount } from './account';
+import { heldPeriodKey, payableSubscription, type BillingAccount } from './account';
+import { invoiceSubscriptionId, setDefaultCard } from './invoices';
 import type { PlannedNotice } from './notices';
 import { addMonths } from './periods';
 import type { StripePriceIds } from './prices';
 import { noticesFor, subscriptionRowFrom } from './subscription-row';
 
+const logger = createLogger('BillingEvents');
+
 export type BillingEventOutcome = 'applied' | 'duplicate' | 'ignored' | 'refused';
 
 export interface BillingEventDeps {
-	stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession'>;
-	store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent'>;
+	stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession' | 'setDefaultPaymentMethod' | 'updateSubscriptionMetadata' | 'retrieveInvoice' | 'retrievePaymentIntent'>;
+	store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent' | 'consentFor'>;
 	ledger: Pick<CreditLedgerService, 'purchaseBySession' | 'purchaseByPaymentIntent' | 'settle'>;
 	priceIds: StripePriceIds | null;
 	/** The account's plan and credit period at `nowMs`, from its stored subscription row. */
@@ -71,11 +75,6 @@ function isStripeSchedule(value: unknown): value is Pick<StripeSubscriptionSched
 
 function isStripeCharge(value: unknown): value is StripeCharge {
 	return hasStringId(value) && (typeof value.payment_intent === 'string' || value.payment_intent === null) && typeof value.amount_refunded === 'number';
-}
-
-function invoiceSubscriptionId(invoice: StripeInvoice): string | null {
-	const subscription = invoice.parent?.subscription_details?.subscription;
-	return typeof subscription === 'string' ? subscription : null;
 }
 
 /** The account named by Stripe's metadata, when the stored customer and the checkout agree; otherwise null. */
@@ -135,6 +134,47 @@ function poolMayChange(previous: SubscriptionRecord | null, next: SubscriptionRe
 	return previous?.stripeSubscriptionId === next.stripeSubscriptionId && previous.status === 'past_due' && (next.status === 'active' || next.status === 'trialing');
 }
 
+/**
+ * Whether the bank asked the seller to confirm a failed invoice's payment, read from its PaymentIntent; null, with a
+ * warning, when Stripe can't say.
+ */
+async function bankWantsConfirmation(deps: BillingEventDeps, invoiceId: string): Promise<boolean | null> {
+	try {
+		const payments = (await deps.stripe.retrieveInvoice(invoiceId)).payments?.data ?? [];
+		const payment = payments.find((entry) => entry.status === 'open' && entry.payment.payment_intent) ?? payments.find((entry) => entry.payment.payment_intent);
+		const intentId = payment?.payment.payment_intent;
+		if (intentId) {
+			const intent = await deps.stripe.retrievePaymentIntent(intentId);
+			return intent.status === 'requires_action' || intent.last_payment_error?.code === 'authentication_required';
+		}
+		logger.warn('A failed invoice has no payment to read how it failed', { invoiceId });
+	} catch (error) {
+		logger.warn('Could not read how an invoice payment failed', { invoiceId, error });
+	}
+	return null;
+}
+
+/**
+ * Stripe sends payment_failed before payment_action_required, and both claim one notice, so a payment_failed notice is
+ * worded from the invoice's payment rather than the event; it is read only when the notice is about to go out. A
+ * payment_action_required is the bank's request itself, and a failed read keeps the event's wording.
+ */
+async function wordedByPayment(deps: BillingEventDeps, notices: readonly PlannedNotice[], input: SubscriptionTarget): Promise<PlannedNotice[]> {
+	const { invoice } = input;
+	if (input.eventType !== 'invoice.payment_failed' || invoice === null) return [...notices];
+	const worded: PlannedNotice[] = [];
+	for (const notice of notices) {
+		const { email } = notice;
+		if (email.kind !== 'payment_failed') {
+			worded.push(notice);
+			continue;
+		}
+		const needsConfirmation = await bankWantsConfirmation(deps, invoice.id);
+		worded.push(needsConfirmation === null ? notice : { ...notice, email: { ...email, needsConfirmation } });
+	}
+	return worded;
+}
+
 /** The pool the account's open period takes once `next` is written, as the next charged step would store it. */
 async function poolWith(deps: BillingEventDeps, userId: string, next: SubscriptionRecord, nowMs: number): Promise<BillingEventInput['pool']> {
 	const account = await deps.accountWith(userId, next, nowMs);
@@ -183,7 +223,11 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	}
 	const planned = replacing ? [] : noticesFor(previous, next, { eventType: input.eventType, invoice: input.invoice });
 	const alreadySent = await deps.store.sentNoticeKeys(userId, planned.map((notice) => notice.key));
-	const notices = planned.filter((notice) => !alreadySent.has(notice.key));
+	const notices = await wordedByPayment(
+		deps,
+		planned.filter((notice) => !alreadySent.has(notice.key)),
+		input,
+	);
 	const pool = poolMayChange(previous, next, input.eventType) ? await poolWith(deps, userId, next, now.getTime()) : null;
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
 	if (recorded === 'duplicate') return 'duplicate';
@@ -194,6 +238,62 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	}
 	await notifyOrAlert(deps, userId, notices);
 	return 'applied';
+}
+
+/**
+ * A finished card setup makes its card the default for the customer's invoices and a payable subscription. The seller's
+ * return runs the same step, and each call is keyed on the card, so either can come first. Stripe is changed before the
+ * event is recorded, so a call that fails is retried rather than recorded as done. It never pays an invoice: only the
+ * page's pay mode, with the seller there for the bank's confirmation, does.
+ */
+export async function applyCardSetup(deps: BillingEventDeps, input: { eventId: string; eventType: string; sessionId: string }): Promise<BillingEventOutcome> {
+	if (await deps.store.eventSeen(input.eventId)) return 'duplicate';
+	const session = await deps.stripe.retrieveCheckoutSession(input.sessionId, ['setup_intent']);
+	const now = new Date(deps.nowMs());
+	const event = (userId: string | null, result: BillingEventResult) => ({ id: input.eventId, type: input.eventType, objectId: session.id, userId, result });
+	if (session.status !== 'complete') {
+		await deps.store.recordEvent({ event: event(null, 'ignored'), now });
+		return 'ignored';
+	}
+	// A card setup has no client reference of its own: billing's tags name the seller, and the customer must be theirs.
+	const customerId = session.customer ?? null;
+	const userId = await accountOf(deps, session.metadata?.estori_user_id ?? null, customerId, session.client_reference_id ?? null);
+	if (!userId || !customerId) {
+		await deps.alert({ kind: 'billing-mismatch', subject: session.id, message: "A card change's account doesn't match its Stripe customer, so the card wasn't changed." });
+		await deps.store.recordEvent({ event: event(null, 'refused'), now });
+		return 'refused';
+	}
+	const intent = session.setup_intent;
+	const cardId = typeof intent === 'object' && intent !== null ? intent.payment_method : null;
+	if (!cardId) {
+		logger.warn('A finished card setup does not say which card it saved', { sessionId: session.id });
+		await deps.store.recordEvent({ event: event(userId, 'ignored'), now });
+		return 'ignored';
+	}
+	const subscription = payableSubscription(await deps.store.subscriptionOf(userId));
+	await setDefaultCard(deps.stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId, now.getTime());
+	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), now });
+	return recorded === 'duplicate' ? 'duplicate' : 'applied';
+}
+
+/**
+ * Copies the seller's stored agreement to the renewal terms onto the subscription, unless it already carries one. A
+ * subscription that started with no stored agreement is recorded all the same, since it has been paid. The key rotates
+ * with the bucket: Stripe replays a failed request under the same key, so a retry in a later bucket is a new request.
+ */
+async function stampConsent(deps: BillingEventDeps, sessionId: string, subscriptionId: string): Promise<void> {
+	const consent = await deps.store.consentFor(sessionId);
+	if (!consent) {
+		logger.warn('A subscription started without a stored consent', { sessionId });
+		return;
+	}
+	const subscription = await deps.stripe.retrieveSubscription(subscriptionId);
+	if (subscription.metadata?.terms_version) return;
+	await deps.stripe.updateSubscriptionMetadata(
+		subscriptionId,
+		{ terms_version: consent.termsVersion, renewal_consent_at: consent.createdAt.toISOString() },
+		`billing-consent-${subscriptionId}-${idempotencyBucket(deps.nowMs())}`,
+	);
 }
 
 export async function applyCreditPurchase(deps: BillingEventDeps, input: { eventId: string; eventType: string; sessionId: string }): Promise<BillingEventOutcome> {
@@ -273,6 +373,29 @@ export async function applyCreditRefund(deps: BillingEventDeps, input: { eventId
 	return 'applied';
 }
 
+/** Records a checkout as the seller returns from paying it, ahead of the webhook that carries the same payment. */
+export interface CheckoutReturnRecorder {
+	subscription(sessionId: string, subscriptionId: string, userId: string): Promise<void>;
+	credits(sessionId: string): Promise<void>;
+}
+
+/**
+ * Each return records under `return:{session}`, an id of its own, so the webhook's event isn't mistaken for it. The same
+ * payment then reaches applySubscription or applyCreditPurchase twice, and what each already did makes the second a
+ * no-op: a stored subscription row yields no new notices or events, and a purchase is unique by its session.
+ */
+export function checkoutReturnRecorders(deps: BillingEventDeps): CheckoutReturnRecorder {
+	const eventType = 'checkout.return';
+	return {
+		subscription: async (sessionId, subscriptionId, userId) => {
+			await applySubscription(deps, { eventId: `return:${sessionId}`, eventType, subscriptionId, expectedUserId: userId, invoice: null });
+		},
+		credits: async (sessionId) => {
+			await applyCreditPurchase(deps, { eventId: `return:${sessionId}`, eventType, sessionId });
+		},
+	};
+}
+
 /** Billing's answer to a platform event; null when the event isn't billing's, so the webhook's other handlers take it. */
 export async function handleBillingEvent(deps: BillingEventDeps, event: StripeEvent): Promise<BillingEventOutcome | null> {
 	const object = event.data.object;
@@ -281,8 +404,12 @@ export async function handleBillingEvent(deps: BillingEventDeps, event: StripeEv
 		case 'checkout.session.completed': {
 			if (!isCheckoutSession(object)) return null;
 			if (object.metadata?.kind === CHECKOUT_KIND_CREDITS) return applyCreditPurchase(deps, { ...base, sessionId: object.id });
+			if (object.mode === 'setup' && object.metadata?.kind === CHECKOUT_KIND_CARD) return applyCardSetup(deps, { ...base, sessionId: object.id });
 			if (object.mode === 'subscription' && typeof object.subscription === 'string') {
-				return applySubscription(deps, { ...base, subscriptionId: object.subscription, expectedUserId: object.client_reference_id ?? null, invoice: null });
+				const outcome = await applySubscription(deps, { ...base, subscriptionId: object.subscription, expectedUserId: object.client_reference_id ?? null, invoice: null });
+				// A redelivery stamps too, so a stamp Stripe refused after the checkout was recorded is made on the retry.
+				if (outcome === 'applied' || outcome === 'duplicate') await stampConsent(deps, object.id, object.subscription);
+				return outcome;
 			}
 			return null;
 		}
@@ -291,7 +418,8 @@ export async function handleBillingEvent(deps: BillingEventDeps, event: StripeEv
 		case 'customer.subscription.deleted':
 			return hasStringId(object) ? applySubscription(deps, { ...base, subscriptionId: object.id, expectedUserId: null, invoice: null }) : null;
 		case 'invoice.paid':
-		case 'invoice.payment_failed': {
+		case 'invoice.payment_failed':
+		case 'invoice.payment_action_required': {
 			if (!isStripeInvoice(object)) return null;
 			const subscriptionId = invoiceSubscriptionId(object);
 			return subscriptionId ? applySubscription(deps, { ...base, subscriptionId, expectedUserId: null, invoice: object }) : null;

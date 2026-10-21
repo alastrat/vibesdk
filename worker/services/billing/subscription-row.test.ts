@@ -45,7 +45,7 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 }
 
 function invoice(reason: string, amountPaid = 4_900): StripeInvoice {
-	return { id: 'in_1', customer: 'cus_1', amount_paid: amountPaid, currency: 'usd', hosted_invoice_url: 'https://invoice.stripe.com/i/in_1', number: 'EST-0001', billing_reason: reason, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } } };
+	return { id: 'in_1', customer: 'cus_1', status: 'paid', created: 1, amount_due: amountPaid, amount_paid: amountPaid, total: amountPaid, currency: 'usd', hosted_invoice_url: 'https://invoice.stripe.com/i/in_1', invoice_pdf: null, number: 'EST-0001', description: null, billing_reason: reason, parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_1' } } };
 }
 
 const UPDATED = { eventType: 'customer.subscription.updated', invoice: null };
@@ -111,11 +111,22 @@ describe('noticesFor', () => {
 
 	it('warns once per failed invoice, naming the end of the grace period', () => {
 		expect(noticesFor(row(), row({ status: 'past_due' }), { eventType: 'invoice.payment_failed', invoice: invoice('subscription_cycle', 0) })).toEqual([
-			{ key: 'payment_failed:in_1', email: { kind: 'payment_failed', plan: 'pro', graceEndsAt: START * 1000 + 7 * DAY } },
+			{ key: 'payment_failed:in_1', email: { kind: 'payment_failed', plan: 'pro', graceEndsAt: START * 1000 + 7 * DAY, needsConfirmation: false } },
 		]);
+	});
+
+	it('asks the seller to confirm when the bank wants it, under the same key a plain failure uses', () => {
+		const asked = noticesFor(row(), row({ status: 'past_due' }), { eventType: 'invoice.payment_action_required', invoice: invoice('subscription_cycle', 0) });
+		expect(asked).toEqual([{ key: 'payment_failed:in_1', email: { kind: 'payment_failed', plan: 'pro', graceEndsAt: START * 1000 + 7 * DAY, needsConfirmation: true } }]);
+	});
+
+	it('sends a receipt that carries no address of the invoice', () => {
+		const [receipt] = noticesFor(row(), row(), { eventType: 'invoice.paid', invoice: invoice('subscription_create') });
+		expect(receipt.email).toEqual({ kind: 'receipt', plan: 'pro', amountCents: 4_900, currency: 'usd', periodStart: START * 1000, periodEnd: END * 1000, invoiceNumber: 'EST-0001' });
 	});
 
 	it('warns of nothing when a failed invoice leaves the subscription paid up, such as a declined move to Premium', () => {
 		expect(noticesFor(row(), row(), { eventType: 'invoice.payment_failed', invoice: invoice('subscription_update', 0) })).toEqual([]);
+		expect(noticesFor(row(), row(), { eventType: 'invoice.payment_action_required', invoice: invoice('subscription_update', 0) })).toEqual([]);
 	});
 });

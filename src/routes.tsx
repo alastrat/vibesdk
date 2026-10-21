@@ -1,4 +1,5 @@
 import { Navigate, type RouteObject } from 'react-router';
+import { BILLING_CARD_PATH, BILLING_CARD_RETURN_PATH, BILLING_CHECKOUT_PATH, BILLING_CHECKOUT_RETURN_PATH, BILLING_PATH } from './api-types';
 
 import App from './App';
 import RootIndex, { AppShell } from './routes/root-index';
@@ -6,6 +7,10 @@ import Chat from './routes/chat/chat';
 import Profile from './routes/profile';
 import Settings from './routes/settings/index';
 import BillingPage from './routes/settings/billing';
+import BillingCheckoutPage from './routes/settings/billing-checkout';
+import BillingCheckoutReturnPage from './routes/settings/billing-checkout-return';
+import BillingCardPage from './routes/settings/billing-card';
+import BillingCardReturnPage from './routes/settings/billing-card-return';
 import AppsPage from './routes/apps';
 import CatalogPage from './routes/catalog';
 import AppView from './routes/app';
@@ -50,6 +55,9 @@ import VerifyEmailPage from './routes/auth/VerifyEmailPage';
 
 const PublicShell = () => <PublicLayout />;
 
+/** A child route's path from an app path: the router's child paths carry no leading slash. */
+const childPath = (path: string): string => path.replace(/^\//, '');
+
 const routes = [
 	{
 		path: '/',
@@ -80,10 +88,42 @@ const routes = [
 						),
 					},
 					{
-						path: 'settings/billing',
+						path: childPath(BILLING_PATH),
 						element: (
 							<ProtectedRoute>
 								<BillingPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: childPath(BILLING_CHECKOUT_PATH),
+						element: (
+							<ProtectedRoute>
+								<BillingCheckoutPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: childPath(BILLING_CHECKOUT_RETURN_PATH),
+						element: (
+							<ProtectedRoute>
+								<BillingCheckoutReturnPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: childPath(BILLING_CARD_PATH),
+						element: (
+							<ProtectedRoute>
+								<BillingCardPage />
+							</ProtectedRoute>
+						),
+					},
+					{
+						path: childPath(BILLING_CARD_RETURN_PATH),
+						element: (
+							<ProtectedRoute>
+								<BillingCardReturnPage />
 							</ProtectedRoute>
 						),
 					},

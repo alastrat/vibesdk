@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../../../src/routes/copy-rules';
+import { BILLING_NOTICE_KINDS } from '../../../shared/types/billing';
 import { billingEmail, type BillingEmail } from '../billing/notices';
 
 const TO = 'ana@example.test';
@@ -13,16 +14,16 @@ describe('billing emails', () => {
 		const started = text({ kind: 'plan_started', plan: 'pro', renewsAt: NOV_5 });
 		expect(started.subject).toBe('Welcome to Estori Pro');
 		expect(started.text).toContain('Your account now has 20,000 AI credits a month, up to 3 live stores, your own domains and the supplier catalog. Pro renews on November 5 at $49 a month until you cancel.');
-		expect(started.text).toContain('Manage billing: https://estori.app/settings/billing');
+		expect(started.text).toContain('Open billing: https://estori.app/settings/billing');
 		expect(started.text).not.toContain('buy extra credits');
 		expect(text({ kind: 'plan_started', plan: 'premium', renewsAt: NOV_5 }).text).toContain('Premium renews on November 5 at $199 a month until you cancel. When you need more, you can buy extra credits.');
 	});
 
 	it('sends receipts with the amount, the period, the invoice and the seller of record', () => {
-		const receipt = text({ kind: 'receipt', plan: 'premium', amountCents: 15_000, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: 'EST-0002', invoiceUrl: 'https://invoice.stripe.com/i/in_1' });
+		const receipt = text({ kind: 'receipt', plan: 'premium', amountCents: 15_000, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: 'EST-0002' });
 		expect(receipt.subject).toBe('Your Estori receipt: $150.00');
 		expect(receipt.text).toContain('We received $150.00 for Estori Premium, October 5 to November 5.');
-		expect(receipt.text).toContain('View invoice: https://invoice.stripe.com/i/in_1');
+		expect(receipt.text).toContain('View invoice: https://estori.app/settings/billing#history');
 		expect(receipt.text).toContain('Invoice number: EST-0002');
 		expect(receipt.text).toContain('Sold by Globalink Commerce Technologies LLC');
 		const credits = text({ kind: 'credits_receipt', credits: 12_000, amountCents: 1_800, expiresAt: Date.UTC(2027, 9, 19), receiptNumber: 'pi_1' });
@@ -31,11 +32,13 @@ describe('billing emails', () => {
 		expect(credits.text).toContain('Receipt number: pi_1');
 	});
 
-	it('drops the invoice link and number a receipt does not have', () => {
-		const receipt = text({ kind: 'receipt', plan: 'pro', amountCents: 4_900, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: null, invoiceUrl: null });
-		expect(receipt.text).not.toContain('View invoice');
+	it('drops the invoice number a receipt does not have, and the invoice link when the deployment has no address', () => {
+		const email: BillingEmail = { kind: 'receipt', plan: 'pro', amountCents: 4_900, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: null };
+		const receipt = text(email);
 		expect(receipt.text).not.toContain('Invoice number');
+		expect(receipt.text).toContain('View invoice: https://estori.app/settings/billing#history');
 		expect(receipt.text).toContain('Amount: $49.00');
+		expect(billingEmail(TO, email, null).text).not.toContain('View invoice');
 	});
 
 	it('explains each plan change in plain words', () => {
@@ -50,14 +53,24 @@ describe('billing emails', () => {
 	});
 
 	it("says a failed payment keeps the plan's features but holds the new month's credits until it goes through", () => {
-		const failed = text({ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5 });
+		const failed = text({ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5, needsConfirmation: false });
 		expect(failed.subject).toBe("Your Pro payment didn't go through");
 		expect(failed.text).toContain("We couldn't charge your card for Estori Pro.");
 		expect(failed.text).toContain('Your stores and the features of Pro keep working until November 5 while we retry.');
 		expect(failed.text).toContain("Your new month's AI credits start as soon as the payment goes through. Credits you bought still work.");
-		expect(failed.text).toContain('Update your card to keep Pro.');
-		expect(failed.text).toContain('Update your card: https://estori.app/settings/billing');
+		expect(failed.text).toContain('Your card was declined. Open billing to pay with this card again or a new one.');
+		expect(failed.text).toContain('Open billing: https://estori.app/settings/billing');
+		expect(failed.text).not.toContain('Update your card');
+		expect(failed.text).not.toContain('confirm');
 		expect(failed.text).not.toContain('Pro continues');
+	});
+
+	it('asks the seller to confirm with their bank when the payment needs it, and points at Pay now', () => {
+		const confirm = text({ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5, needsConfirmation: true });
+		expect(confirm.subject).toBe("Your Pro payment didn't go through");
+		expect(confirm.text).toContain('Your bank asked you to confirm this payment. Open billing and choose Pay now.');
+		expect(confirm.text).not.toContain('declined');
+		expect(confirm.text).toContain('Open billing: https://estori.app/settings/billing');
 	});
 
 	it('tells every plan its credits renewed, and warns at 20% and 5% left with the next step for the plan', () => {
@@ -83,7 +96,7 @@ describe('billing emails', () => {
 	});
 
 	it('leaves the links out when the deployment has no address', () => {
-		expect(billingEmail(TO, { kind: 'plan_started', plan: 'pro', renewsAt: NOV_5 }, null).text).not.toContain('Manage billing');
+		expect(billingEmail(TO, { kind: 'plan_started', plan: 'pro', renewsAt: NOV_5 }, null).text).not.toContain('Open billing:');
 		expect(billingEmail(TO, { kind: 'enforcement_notice', startsOn: NOV_5, overLimits: false }, null).text).not.toContain('See plans');
 	});
 
@@ -92,11 +105,43 @@ describe('billing emails', () => {
 			{ kind: 'plan_started', plan: 'premium', renewsAt: NOV_5 },
 			{ kind: 'credits_5', plan: 'pro', left: 10, renewsAt: NOV_5 },
 			{ kind: 'enforcement_notice', startsOn: NOV_5, overLimits: true },
-			{ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5 },
+			{ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5, needsConfirmation: true },
 			{ kind: 'credits_renewed', credits: 5_000, renewsAt: NOV_5 },
 		];
 		for (const email of all.map(text)) {
 			for (const name of [...SUPPLIER_NAMES, ...AI_ASSISTANT_NAMES]) expect(`${email.subject} ${email.text}`.toLowerCase(), name).not.toContain(name);
+		}
+	});
+
+	it('no billing email contains a stripe.com link', () => {
+		const fixtures: { [K in BillingEmail['kind']]: Extract<BillingEmail, { kind: K }>[] } = {
+			plan_started: [{ kind: 'plan_started', plan: 'pro', renewsAt: NOV_5 }, { kind: 'plan_started', plan: 'premium', renewsAt: NOV_5 }],
+			receipt: [
+				{ kind: 'receipt', plan: 'premium', amountCents: 15_000, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: 'EST-0002' },
+				{ kind: 'receipt', plan: 'pro', amountCents: 4_900, currency: 'usd', periodStart: Date.UTC(2026, 9, 5), periodEnd: NOV_5, invoiceNumber: null },
+			],
+			plan_upgraded: [{ kind: 'plan_upgraded', plan: 'premium' }],
+			downgrade_scheduled: [{ kind: 'downgrade_scheduled', plan: 'pro', at: NOV_5 }],
+			payment_failed: [
+				{ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5, needsConfirmation: false },
+				{ kind: 'payment_failed', plan: 'pro', graceEndsAt: NOV_5, needsConfirmation: true },
+			],
+			plan_ending: [{ kind: 'plan_ending', plan: 'premium', endsAt: NOV_5 }],
+			plan_ended: [
+				{ kind: 'plan_ended', plan: 'premium', reason: 'cancelled' },
+				{ kind: 'plan_ended', plan: 'premium', reason: 'payment-failed' },
+			],
+			credits_renewed: [{ kind: 'credits_renewed', credits: 5_000, renewsAt: NOV_5 }],
+			credits_20: [{ kind: 'credits_20', plan: 'basic', left: 1_000, renewsAt: NOV_5 }],
+			credits_5: [{ kind: 'credits_5', plan: 'premium', left: 1_000, renewsAt: NOV_5 }],
+			credits_receipt: [{ kind: 'credits_receipt', credits: 12_000, amountCents: 1_800, expiresAt: Date.UTC(2027, 9, 19), receiptNumber: 'pi_1' }],
+			credits_refunded: [{ kind: 'credits_refunded', credits: 3_000, amountCents: 750 }],
+			enforcement_notice: [{ kind: 'enforcement_notice', startsOn: NOV_5, overLimits: true }, { kind: 'enforcement_notice', startsOn: NOV_5, overLimits: false }],
+		};
+		expect(Object.keys(fixtures).sort()).toEqual([...BILLING_NOTICE_KINDS].sort());
+		for (const email of Object.values(fixtures).flat()) {
+			const sent = text(email);
+			expect(/stripe\.com/.test(sent.html + sent.text), email.kind).toBe(false);
 		}
 	});
 });

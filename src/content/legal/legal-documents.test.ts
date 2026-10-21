@@ -138,7 +138,9 @@ describe('legal documents', () => {
 		const terms = LEGAL_DOCUMENTS.terms.body;
 		expect(EXTRA_CREDITS_DISCLOSURE.startsWith('Extra credits are used after your monthly credits and expire 12 months after purchase')).toBe(true);
 		expect(terms).toContain(EXTRA_CREDITS_DISCLOSURE.replace(/\.$/, ''));
-		expect(renewalDisclosure('pro')).toContain('until you cancel');
+		for (const promotion of [null, { duration: 'once', durationInMonths: null, discountedCents: 2_450 }, { duration: 'forever', durationInMonths: null, discountedCents: 2_450 }] as const) {
+			expect(renewalDisclosure('pro', promotion)).toContain('until you cancel');
+		}
 	});
 
 	it('names PostHog and Cloudflare Web Analytics, says no email or name goes to PostHog, and how to turn analytics off', () => {

@@ -51,6 +51,14 @@ export function liveSubscription(subscription: SubscriptionRecord | null): Subsc
 	return subscription !== null && LIVE_SUBSCRIPTION_STATUSES.includes(subscription.status) ? subscription : null;
 }
 
+/** A live plan's statuses, and `unpaid`: Stripe stopped retrying, and paying the open invoice reactivates it. */
+const PAYABLE_SUBSCRIPTION_STATUSES: readonly SubscriptionStatus[] = [...LIVE_SUBSCRIPTION_STATUSES, 'unpaid'];
+
+/** The subscription while the seller can still pay its open invoice and change the card it charges, else null. */
+export function payableSubscription(subscription: SubscriptionRecord | null): SubscriptionRecord | null {
+	return subscription !== null && PAYABLE_SUBSCRIPTION_STATUSES.includes(subscription.status) ? subscription : null;
+}
+
 function paysForItsPlan(subscription: SubscriptionRecord | null, nowMs: number): subscription is SubscriptionRecord {
 	if (!subscription || !isPaidPlanId(subscription.plan)) return false;
 	if (subscription.status === 'active' || subscription.status === 'trialing') return true;

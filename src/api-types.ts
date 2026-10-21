@@ -261,23 +261,47 @@ export {
 	isExtraCreditsAmount,
 	isPaidPlanId,
 	isPlanLimitRefusal,
+	limitFeatures,
 	limitsFor,
 	planLimitOverridesFrom,
 	planName,
+	storeAllowance,
 } from '../shared/types/plans.js';
 export type {
 	BillingChangeRequested,
 	BillingCreditsView,
-	BillingRedirect,
 	BillingSource,
 	BillingView,
-	CheckoutStarted,
+	CardOnFile,
+	CardSetupMode,
+	CardSetupStart,
+	CheckoutClientStart,
+	CheckoutConsentRequest,
+	CheckoutOrder,
+	CheckoutSessionState,
+	CheckoutStatusView,
+	CheckoutTermsView,
 	CreditsRequest,
+	InvoicePaymentResult,
+	InvoiceView,
 	PlanRequest,
+	PromotionTerms,
 	PurchaseView,
 	SubscriptionStatus,
 } from '../shared/types/billing.js';
-export { BILLING_NOT_OPEN_MESSAGE, BILLING_PATH, EXTRA_CREDITS_DISCLOSURE, PLAN_LIMIT_ERROR_CODE } from '../shared/types/billing.js';
+export {
+	BILLING_CARD_PATH,
+	BILLING_CARD_RETURN_PATH,
+	BILLING_CHECKOUT_PATH,
+	BILLING_CHECKOUT_RETURN_PATH,
+	BILLING_HISTORY_LIMIT,
+	BILLING_NOT_OPEN_MESSAGE,
+	BILLING_PATH,
+	CHECKOUT_EXPIRED_MESSAGE,
+	EXTRA_CREDITS_DISCLOSURE,
+	PAYMENTS_NOT_SET_UP_MESSAGE,
+	PLAN_LIMIT_ERROR_CODE,
+} from '../shared/types/billing.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';

@@ -16,6 +16,8 @@ export const queryKeys = {
 	drafts: (appId: string) => ['drafts', appId] as const,
 	/** The signed-in account's plan and credits: under `account`, so it is never persisted and signing out drops it. */
 	billing: () => [...queryKeys.account.all, 'billing'] as const,
+	/** The account's invoices, under the plan's key so a refresh of the plan refreshes them. */
+	billingHistory: () => [...queryKeys.billing(), 'history'] as const,
 	auth: {
 		all: ['auth'] as const,
 		session: () => [...queryKeys.auth.all, 'session'] as const,

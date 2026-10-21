@@ -24,7 +24,7 @@ export function upgradeTitleFor(refusal: PlanLimitRefusal): string {
 
 /** Basic buys a plan at checkout; Pro moves up on the billing page, where the charge is explained first. */
 export function upgradeActionFor(refusal: PlanLimitRefusal): UpgradeAction {
-	if (refusal.paymentFailed) return { kind: 'link', to: BILLING_PATH, label: 'Manage billing' };
+	if (refusal.paymentFailed) return { kind: 'link', to: BILLING_PATH, label: 'Open billing' };
 	switch (refusal.upgradeTo) {
 		case 'pro':
 			return { kind: 'checkout', plan: 'pro', label: 'Get Pro' };

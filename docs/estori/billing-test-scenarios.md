@@ -34,15 +34,16 @@ bun scripts/stripe-billing-scenarios.ts
 | 3 | Pro to Premium mid-period | Moves the clock to the middle of the period, then updates the item to Premium with `proration_behavior=always_invoice` and `payment_behavior=error_if_incomplete` | `plan: premium`, 100,000 credits |
 | 4 | Premium to Pro at renewal | Creates the schedule as the app does; then moves the clock past the period end | `pendingPlan: pro` with Premium kept; then `plan: pro`, `pendingPlan: null` |
 | 5 | Failed renewal, grace, new card | Sets the card that attaches and then declines (4000 0000 0000 0341) as default, moves past the renewal, then 8 more days; sets the Visa and pays the open invoice | `status: past_due` with the plan kept, no monthly credits, and `graceEndsAt` the period start plus 7 days; then `status: active` with the plan and its credits back |
-| 6 | 3-D Secure at checkout | Prints a reminder | By eye: subscribe with 4000 0025 0000 3155 and complete the challenge |
+| 6 | 3-D Secure at checkout | Prints a reminder with Estori's checkout address for Pro | By eye: pay on that page with 4000 0025 0000 3155 and complete the challenge |
 | 7 | Cancel at the period end | Cancels as the billing page does: releases any schedule still on the subscription, then `cancel_at_period_end=true` | `cancelAtPeriodEnd: true`, the plan kept |
 | 8 | Resume before the end | `cancel_at_period_end=false` | `cancelAtPeriodEnd: false` |
-| 9 | An expired checkout | Creates an extra-credits Checkout Session with the account's metadata, then expires it | No new purchase |
-| 10 | Extra credits bought, then refunded | Moves the account to Premium, asks you to buy 5,000 credits on the billing page with 4242 4242 4242 4242, waits for the purchase, then refunds its payment in full | `purchasedLeft` up by 5,000; then back to what it was |
+| 9 | An expired checkout | Creates an extra-credits Checkout Session (an Elements session, as the app does) with the account's metadata, then expires it | No new purchase |
+| 10 | Extra credits bought, then refunded | Moves the account to Premium, prints Estori's checkout address for 5,000 credits (`/settings/billing/checkout?credits=5000`) and asks you to pay there with 4242 4242 4242 4242, waits for the purchase, then refunds its payment in full | `purchasedLeft` up by 5,000; then back to what it was |
 | 11 | Cancel after a scheduled move to Pro | Scenario 4 (Premium, then Pro scheduled and the clock past the renewal), then cancels as in scenario 7. The schedule stays on the subscription for the month after the move, and Stripe refuses to cancel a subscription a schedule manages, so the cancel must release it first | `plan: pro`, `cancelAtPeriodEnd: true`, `status: active` |
 
 Notes:
 - Test clocks move Stripe's time, not Estori's. Scenario 5 therefore checks the grace Estori works out from the failed renewal, and does not wait for the fall to Basic on day 8. That fall, and the plan returning when the invoice is paid, are covered on real SQL by `worker/services/billing/account.test.ts` and `worker/api/controllers/payments/webhook-billing.sql.test.ts`.
+- Stripe confirms an Elements Checkout Session only through Stripe.js in a browser; its API has no server-side call that pays one. So the two steps that pay on Estori's checkout page, 3-D Secure (6) and extra credits (10), need a person, and the script prints the page's address for them. The other scenarios move the subscription through Stripe's API directly.
 - Scenario 10 needs a person at a browser signed in as the test account. The script waits up to 5 minutes for the purchase.
 - If a run stops half way, first cancel the subscription in Stripe's test dashboard (the webhook then updates Estori, and `GET /api/admin/users/:userId/billing` shows the account off its plan), and only then delete the test clock (Developers, Test clocks). Estori refuses to link a new customer to an account that still has a live subscription, and has no admin page for cancelling one.
 
@@ -55,7 +56,9 @@ Buying and changing a plan:
 - [ ] From a limit dialog that offers Premium (for example credits used up on Pro), choose Premium and pay. The plan changes and the limit lifts.
 - [ ] On the billing page, move Pro to Premium (charged now, credits grow), then Premium to Pro (scheduled for the renewal, Premium kept until then), then choose Premium again to drop the scheduled move.
 - [ ] Cancel the plan: the page says it runs until the date and offers to keep it. Keep it.
-- [ ] Manage billing opens Stripe's portal: card update, invoice history and cancel at the period end are there, and switching plan is not.
+- [ ] A declined card (4000 0000 0000 0002) on the checkout page shows the error and allows a retry; a promotion code, if you made one in Stripe, changes the consent wording and the button to match the price.
+- [ ] On the billing page, Change card opens Estori's own form and no Stripe page or address appears. The new card shows on the page, and the next renewal uses it.
+- [ ] Billing history lists the invoices, newest first, and each PDF downloads.
 - [ ] Buy extra credits on Premium. The page shows them, and they are used after the month's credits.
 
 Limits (each opens the Upgrade dialog with its own wording, and live stores keep serving):
@@ -68,7 +71,7 @@ Limits (each opens the Upgrade dialog with its own wording, and live stores keep
 
 Banners:
 - [ ] At 20% of credits left, then 5%: the banner shows, can be closed for the session, and returns at the next level. Use a small admin override such as `aiCredits: 200` to reach them quickly.
-- [ ] A failed payment: the banner links to Manage billing and names the day the plan ends.
+- [ ] A failed payment: the banner names the day the plan ends and leads to the billing page, which offers Pay now and Update card and pay.
 
 Emails, each with its "[Staging]" prefix and links that open the billing or pricing page:
 - [ ] Plan started and the receipt for each payment.

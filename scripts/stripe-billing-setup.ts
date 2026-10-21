@@ -42,36 +42,11 @@ interface ExistingPrice {
 	active: boolean;
 }
 
-interface PortalConfiguration {
-	features?: {
-		subscription_update?: { enabled?: boolean };
-		subscription_cancel?: { enabled?: boolean; mode?: string };
-		payment_method_update?: { enabled?: boolean };
-		invoice_history?: { enabled?: boolean };
-	};
-}
-
-/** What the customer portal's default configuration still needs, in the order to fix it. */
-function portalProblems(configuration: PortalConfiguration | undefined): string[] {
-	if (!configuration) return ["Create the customer portal's default configuration in the Stripe Dashboard."];
-	const features = configuration.features ?? {};
-	const problems: string[] = [];
-	if (features.subscription_update?.enabled) problems.push('Turn off plan switching in the customer portal.');
-	if (features.subscription_cancel?.enabled) {
-		if (features.subscription_cancel.mode !== 'at_period_end') problems.push('Set cancellations to happen at the end of the billing period.');
-	} else {
-		problems.push('Turn on cancelling in the customer portal.');
-	}
-	if (!features.payment_method_update?.enabled) problems.push('Turn on card updates in the customer portal.');
-	if (!features.invoice_history?.enabled) problems.push('Turn on invoice history in the customer portal.');
-	return problems;
-}
-
 export async function setUpBilling(input: {
 	secretKey: string;
 	mode: StripeMode;
 	fetchImpl: typeof fetch;
-}): Promise<{ mode: StripeMode; priceIds: StripePriceIds; portalProblems: string[] }> {
+}): Promise<{ mode: StripeMode; priceIds: StripePriceIds }> {
 	const keyMode = modeOfKey(input.secretKey);
 	if (keyMode !== input.mode) throw new Error(`The key is a ${keyMode} key, but --mode ${input.mode} was asked for.`);
 	const call = stripeCaller(input.secretKey, input.fetchImpl);
@@ -109,9 +84,8 @@ export async function setUpBilling(input: {
 		priceIds[spec.plan] = created.id;
 	}
 
-	const portal = await call<{ data: PortalConfiguration[] }>('GET', '/billing_portal/configurations', { is_default: true });
 	// Every spec above set its plan's id.
-	return { mode: input.mode, priceIds: priceIds as StripePriceIds, portalProblems: portalProblems(portal.data[0]) };
+	return { mode: input.mode, priceIds: priceIds as StripePriceIds };
 }
 
 function modeFromArgs(args: readonly string[]): StripeMode {
@@ -127,8 +101,6 @@ async function main(): Promise<void> {
 	const result = await setUpBilling({ secretKey, mode: modeFromArgs(process.argv.slice(2)), fetchImpl: (url, init) => fetch(url, init) });
 	console.log(`Stripe mode: ${result.mode}`);
 	console.log(`STRIPE_PRICE_IDS=${JSON.stringify(result.priceIds)}`);
-	for (const problem of result.portalProblems) console.log(`Portal: ${problem}`);
-	console.log('Also set a Terms of Service URL under Settings, Public details: Checkout requires it for the terms agreement.');
 }
 
 if (import.meta.main) {
