@@ -6,7 +6,7 @@ export const SITEMAP_PATH = '/sitemap.xml';
 export const ROBOTS_PATH = '/robots.txt';
 
 /** The API and the pages behind sign-in, which have nothing for search. */
-const PRIVATE_PATHS = ['/api/', '/admin/', '/chat/', '/apps', '/settings', '/profile'] as const;
+const PRIVATE_PATHS = ['/api/', '/admin/', '/chat/', '/apps', '/settings', '/profile', '/ingest/'] as const;
 
 function renderEntry(page: PublicPage, origin: string): string {
 	const lastModified = page.lastModified ? `<lastmod>${escapeHtml(page.lastModified)}</lastmod>` : '';

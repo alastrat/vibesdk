@@ -14,7 +14,7 @@ const ICONS: Readonly<Record<UsageCategory, Icon>> = {
 	personalization: SparkleIcon,
 };
 
-/** "about 90 to 480 credits per store" across the models, or the steps while the models load. */
+/** "about 480 to 13,350 credits per store" across the models, or the steps while the models load. */
 function costLabel(action: CreditAction, rates: readonly number[]): string {
 	if (action.steps !== undefined && rates.length === 0) return `${action.steps} AI steps per ${action.unit}`;
 	const { min, max } = actionCreditsRange(action, rates);
@@ -80,7 +80,7 @@ export function CreditsExplainer() {
 				</div>
 			</div>
 			<p className="mx-auto mt-10 max-w-[1248px] text-xs text-public-muted">
-				Estimates. Each AI step uses credits at the rate of the model you pick, and bigger stores and longer requests take more steps.
+				Estimates. Each AI step is charged from the work it does, at the price of the model you pick; bigger stores and longer requests take more steps.
 			</p>
 		</section>
 	);

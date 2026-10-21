@@ -11,7 +11,8 @@ import { stripeFromEnv, stripeModeOf } from '../../services/payments/config';
 import { accountFlags, sellerReadiness, type StripeClient } from '../../services/payments/stripe-client';
 import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/seller-setup';
 import { lockCatalogPricesFor } from '../../services/store-payments/catalog-locks';
-import { checkoutModeOf, refusal, startStoreCheckout, storeInfoOf } from '../../services/store-payments/checkout';
+import { isFlagOn } from '../../services/posthog/flags';
+import { checkoutModeOf, refusal, startStoreCheckout, storeInfoOf, type StartCheckoutInput } from '../../services/store-payments/checkout';
 import { safeReturnPath } from '../../services/store-payments/request';
 import { recordStoreOrder } from '../../services/store-payments/fulfill';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
@@ -153,11 +154,16 @@ async function sellerAccount(env: Env, userId: string, stripe: StripeClient | nu
 /** The mode this viewer's checkout would take, or null when this store can't take payments for them. */
 async function checkoutModeFor(env: Env, target: StorePlatformTarget): Promise<{ access: 'owner' | 'public' | 'live'; mode: StoreMode | null }> {
 	const access = await storeAccess(env, target);
-	return { access, mode: checkoutModeOf({ access, stripeMode: stripeModeOf(env), livePayments: livePaymentsOn(env) }) };
+	return { access, mode: checkoutModeOf({ access, stripeMode: stripeModeOf(env), livePayments: await livePaymentsOn(env, access, sellerIdOf(target)) }) };
 }
 
-function livePaymentsOn(env: Env): boolean {
-	return env.LIVE_STORE_PAYMENTS === 'on';
+/**
+ * Real payments need a live store's shopper, Stripe in live mode, Estori's switch on and live store payments not paused.
+ * The pause flag is read only for a request that could take real money, so previews and test mode never ask PostHog.
+ */
+async function livePaymentsOn(env: Env, access: StartCheckoutInput['access'], sellerUserId: string): Promise<boolean> {
+	if (access !== 'live' || stripeModeOf(env) !== 'live' || env.LIVE_STORE_PAYMENTS !== 'on') return false;
+	return !(await isFlagOn(env, 'live-store-payments-paused', sellerUserId));
 }
 
 async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Response> {
@@ -211,6 +217,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 		if ((await new LiveStoreService(env).getByApp(target.appId))?.status !== 'live') return json(refusal('store_paused'), 409);
 	}
 
+	const access = await storeAccess(env, target);
 	const stripe = stripeFromEnv(env);
 	const checkouts = new StoreCheckoutService(env);
 	const weekAgo = () => new Date(Date.now() - WEEK_MS);
@@ -218,7 +225,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 		{
 			loadManifest: () => loadManifest(env, target),
 			sellerAccount: () => sellerAccount(env, sellerIdOf(target), stripe),
-			lockCatalogPrices: (ids, country) => lockCatalogPricesFor(env, ids, country),
+			lockCatalogPrices: (ids, country) => lockCatalogPricesFor(env, ids, country, sellerIdOf(target)),
 			saveCheckout: (checkout) => checkouts.create(checkout),
 			createSession: async (input) => {
 				if (!stripe) throw new Error('Stripe is not configured');
@@ -273,9 +280,9 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			nowMs: () => Date.now(),
 		},
 		{
-			access: await storeAccess(env, target),
+			access,
 			stripeMode: stripeModeOf(env),
-			livePayments: livePaymentsOn(env),
+			livePayments: await livePaymentsOn(env, access, sellerIdOf(target)),
 			appId: target.appId,
 			sellerUserId: sellerIdOf(target),
 			body,

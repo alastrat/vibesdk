@@ -300,6 +300,8 @@ export function checkCanSendPrompt(
 	if (loading || !limitsData) {
 		return { canProceed: true };
 	}
+	// With billing on, the server's refusal opens the Upgrade dialog, so its copy lives in one place.
+	if (limitsData.billing) return { canProceed: true };
 
 	const { limitCheck, hasUserToken, hasCloudflareConfigured, cloudflareCredits } = limitsData;
 
@@ -361,6 +363,7 @@ export function getBackendLimitDialog(
 	if (!limitsData) {
 		return { canProceed: true };
 	}
+	if (limitsData.billing) return { canProceed: true };
 
 	const { hasUserToken, hasCloudflareConfigured, cloudflareCredits } = limitsData;
 

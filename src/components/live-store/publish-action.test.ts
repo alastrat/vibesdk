@@ -17,4 +17,11 @@ describe('the publish button', () => {
 	it('moves a live store to a new address', () => {
 		expect(publishAction(LIVE, 'northwind')).toEqual({ label: 'Publish', disabled: false });
 	});
+
+	it("names the draft Publish sends once the store has drafts", () => {
+		const draft = { id: 'k3x9q2mf', name: 'Typo fix' };
+		expect(publishAction({ status: 'unpublished', slug: null, hasChanges: true, draft }, 'northwind-tea')).toEqual({ label: "Publish 'Typo fix'", disabled: false });
+		expect(publishAction({ ...LIVE, hasChanges: true, draft }, 'northwind-tea')).toEqual({ label: "Publish 'Typo fix'", disabled: false });
+		expect(publishAction({ ...LIVE, draft }, 'northwind-tea')).toEqual({ label: 'Up to date', disabled: true });
+	});
 });

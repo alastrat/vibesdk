@@ -4,6 +4,7 @@ import { Button, Empty, LayerCard, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
 import type { CatalogProductView, CatalogVariantView } from '@/api-types';
 import { useCatalogProducts } from '@/hooks/use-catalog';
+import { useFlag } from '@/hooks/use-flag';
 
 function money(cents: number | null): string {
 	return cents === null ? 'Unavailable' : `$${(cents / 100).toFixed(2)}`;
@@ -84,6 +85,7 @@ function ProductCard({ product }: { product: CatalogProductView }) {
 export default function CatalogPage() {
 	const [query, setQuery] = useState('');
 	const products = useCatalogProducts(query);
+	const catalogPaused = useFlag('catalog-paused');
 	return (
 		<div className="size-full">
 			<title>{pageTitle('Catalog')}</title>
@@ -95,30 +97,39 @@ export default function CatalogPage() {
 						take your cost from the sale.
 					</p>
 				</div>
-				<input
-					type="search"
-					value={query}
-					onChange={(event) => setQuery(event.target.value)}
-					placeholder="Search the catalog"
-					aria-label="Search the catalog"
-					className="w-full rounded-lg border border-kumo-line bg-kumo-base px-3 py-2 text-sm"
-				/>
-				{products.data ? (
-					products.data.products.length === 0 ? (
-						<Empty title="Nothing matches" description="Try another word." />
-					) : (
-						<div className="grid gap-4">
-							{products.data.products.map((product) => (
-								<ProductCard key={product.productId} product={product} />
-							))}
-						</div>
-					)
-				) : products.isLoading ? (
-					<div className="flex justify-center py-16">
-						<Loader />
-					</div>
+				{catalogPaused ? (
+					<Empty
+						title="The catalog is paused"
+						description="Catalog products can't be added to stores or bought right now. Orders already paid for still ship."
+					/>
 				) : (
-					<Empty title="Couldn't load the catalog" description={products.error?.message} />
+					<>
+						<input
+							type="search"
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							placeholder="Search the catalog"
+							aria-label="Search the catalog"
+							className="w-full rounded-lg border border-kumo-line bg-kumo-base px-3 py-2 text-sm"
+						/>
+						{products.data ? (
+							products.data.products.length === 0 ? (
+								<Empty title="Nothing matches" description="Try another word." />
+							) : (
+								<div className="grid gap-4">
+									{products.data.products.map((product) => (
+										<ProductCard key={product.productId} product={product} />
+									))}
+								</div>
+							)
+						) : products.isLoading ? (
+							<div className="flex justify-center py-16">
+								<Loader />
+							</div>
+						) : (
+							<Empty title="Couldn't load the catalog" description={products.error?.message} />
+						)}
+					</>
 				)}
 			</div>
 		</div>

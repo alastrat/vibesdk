@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSearchParams } from 'react-router';
 import { toast } from 'sonner';
+import { SIGNUPS_PAUSED_ERROR_CODE, SIGNUPS_PAUSED_MESSAGE } from '@/api-types';
 
 /**
  * Surface auth failures redirected to `/` from the OAuth callback (e.g. an email
@@ -17,6 +18,7 @@ export function useOAuthErrorToast(): void {
 			oauth_failed:
 				'The sign-in provider reported an error. Please try again.',
 			auth_failed: 'Sign-in failed. Please try again.',
+			[SIGNUPS_PAUSED_ERROR_CODE]: SIGNUPS_PAUSED_MESSAGE,
 		};
 		toast.error(messages[authError] ?? messages.auth_failed);
 		searchParams.delete('error');

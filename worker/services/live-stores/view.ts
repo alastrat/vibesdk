@@ -36,8 +36,12 @@ export function liveStoreView(input: {
 	devPort: string | null;
 	domainsAvailable: boolean;
 	record: LiveStoreRow | null;
-	/** The commit the preview serves now; null when it was never deployed. */
+	/** The latest version of the draft being edited; null before it has one. */
 	previewCommit: string | null;
+	/** The draft being edited, which Publish sends live. */
+	draft: { id: string; name: string } | null;
+	/** The draft the live store was published from. */
+	publishedDraft: { id: string; name: string } | null;
 	/** The published version's store file. */
 	publishedManifest: string | null;
 	domain: StoreDomainRow | null;
@@ -56,5 +60,7 @@ export function liveStoreView(input: {
 		checkoutConnected: Boolean(parsed?.ok && parsed.manifest.products.length > 0),
 		domain: input.domain ? domainView(input.domain, input.devPort) : null,
 		domainsAvailable: input.domainsAvailable,
+		draft: input.draft,
+		publishedDraft: input.publishedDraft,
 	};
 }

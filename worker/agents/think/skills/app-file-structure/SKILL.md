@@ -7,9 +7,9 @@ This skill teaches how to build apps that deploy cleanly through the space deplo
 
 ## How the pipeline works
 
-When `deploy_space(branch)` is called, the space DO:
+When `deploy_space` is called with no argument (it deploys the draft you are editing), the space DO:
 
-1. Reads every file from the branch's working tree (skipping `.git/`).
+1. Reads every file from the draft's working tree (skipping `.git/`).
 2. Parses `wrangler.json` / `wrangler.jsonc` / `wrangler.toml` for `main`, `compatibility_date`, `compatibility_flags`, and `[assets]`.
 3. If `[assets].directory` is set, files under that directory become static assets served host-side by `handleAssetRequest`. Everything else is built into a Worker via `createApp` (with `server: <main>`).
 4. If no assets directory is configured, only `createWorker({ entryPoint: <main> })` is run. The output is loaded as a Dynamic Worker; all requests go to the Worker.
@@ -482,7 +482,7 @@ document.getElementById("root").textContent += `  ·  visits: ${v.count}`;
 
 Note `./api/time` (relative) in JS, `/style.css` (root-relative) in HTML. The HTML href is rewritten by the preview; the JS fetch resolves against the document's base URL.
 
-Commit this, call `deploy_space("main")`, and the preview at `/space/<name>/preview/main/` will render the timestamp and an incrementing visit counter persisted in the App DO's SQLite.
+Commit this, call `deploy_space` with no argument, and the preview of the draft you are editing will render the timestamp and an incrementing visit counter persisted in the App DO's SQLite.
 
 ## Reserved for the platform
 

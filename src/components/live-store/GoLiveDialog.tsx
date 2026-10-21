@@ -13,7 +13,8 @@ import {
 	useRemoveStoreDomain,
 	useTakeLiveStoreOffline,
 } from '@/hooks/use-live-store';
-import { SLUG_MAX_LENGTH, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
+import { useFlag } from '@/hooks/use-flag';
+import { CUSTOM_DOMAINS_PAUSED_MESSAGE, MAIN_DRAFT_ID, SLUG_MAX_LENGTH, STORE_PUBLISHING_PAUSED_MESSAGE, recordHost, slugProblem, type LiveStoreView, type StoreDomainRecord, type StoreDomainView } from '@/api-types';
 import { publishAction } from './publish-action';
 import { connectedDomainNote, domainNeedsRecords } from './domain-note';
 
@@ -67,6 +68,7 @@ function StatusBadge({ view }: { view: LiveStoreView }) {
 function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 	const publish = usePublishLiveStore(appId);
 	const offline = useTakeLiveStoreOffline(appId);
+	const publishingPaused = useFlag('store-publishing-paused');
 	const [slug, setSlug] = useState(view.slug ?? view.suggestedSlug);
 	useEffect(() => setSlug(view.slug ?? view.suggestedSlug), [view.slug, view.suggestedSlug]);
 
@@ -76,7 +78,7 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 	const problem = slugProblem(slug);
 	const action = publishAction(view, slug);
 	const onPublish = () =>
-		publish.mutate(slug, {
+		publish.mutate({ slug, draftId: view.draft?.id }, {
 			onSuccess: (next) => toast.success(next.url ? `Your store is live at ${next.url}` : 'Your store is live'),
 			onError: (error) => toast.error(error.message),
 		});
@@ -104,12 +106,16 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 				<p id="live-store-slug-help" className={problem ? 'text-sm text-kumo-danger' : 'text-sm text-kumo-subtle'}>
 					{problem ?? 'Lowercase letters, numbers and hyphens. Changing it moves your store to the new address.'}
 				</p>
-				{view.status === 'live' && view.hasChanges && <p className="text-sm text-kumo-subtle">Your preview has changes that aren't live yet.</p>}
+				{view.status === 'live' && view.hasChanges && <p className="text-sm text-kumo-subtle">Your preview of '{view.draft?.name ?? 'Main'}' has changes that aren't live yet.</p>}
+				{view.draft && view.draft.id !== MAIN_DRAFT_ID && action.disabled === false && (
+					<p className="text-sm text-kumo-subtle">Main will be behind the live store until you bring these changes in.</p>
+				)}
 				{view.status !== 'unpublished' && !view.checkoutConnected && (
 					<p className="text-sm text-kumo-danger">This store's checkout isn't connected to payments: its store file has no products.</p>
 				)}
+				{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}
 				<div className="flex flex-wrap gap-2">
-					<Button variant="primary" size="sm" onClick={onPublish} disabled={problem !== null || action.disabled || publish.isPending} loading={publish.isPending}>
+					<Button variant="primary" size="sm" onClick={onPublish} disabled={publishingPaused || problem !== null || action.disabled || publish.isPending} loading={publish.isPending}>
 						{action.label}
 					</Button>
 					{view.status === 'live' && view.url && (
@@ -136,12 +142,14 @@ function GoLiveBody({ appId, view }: { appId: string; view: LiveStoreView }) {
 
 function DomainSection({ appId, view }: { appId: string; view: LiveStoreView }) {
 	const add = useAddStoreDomain(appId);
+	const domainsPaused = useFlag('custom-domains-paused');
 	const [hostname, setHostname] = useState('');
 	return (
 		<section className="grid gap-3 border-t border-kumo-line pt-5">
 			<h3 className="text-sm font-medium">Your own domain</h3>
 			{!view.domainsAvailable && !view.domain && <p className="text-sm text-kumo-subtle">Custom domains aren't set up yet.</p>}
-			{view.domainsAvailable && !view.domain && (
+			{view.domainsAvailable && !view.domain && domainsPaused && <p className="text-sm text-kumo-subtle">{CUSTOM_DOMAINS_PAUSED_MESSAGE}</p>}
+			{view.domainsAvailable && !view.domain && !domainsPaused && (
 				<form
 					className="grid gap-2"
 					onSubmit={(event) => {

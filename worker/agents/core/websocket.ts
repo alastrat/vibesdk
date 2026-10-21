@@ -5,6 +5,10 @@ import { WebSocketMessage, WebSocketMessageData, WebSocketMessageType } from '..
 import { MAX_IMAGES_PER_MESSAGE, MAX_IMAGE_SIZE_BYTES, type ImageAttachment } from '../../types/image-attachment';
 import { type CredentialsPayload } from '../inferutils/config.types';
 import { checkUsageAndBalance } from '../../services/rate-limit';
+import { checkCreditsBeforeTurn } from '../../services/billing/metering';
+import { PLAN_LIMIT_ERROR_CODE } from '../../../shared/types/billing';
+import { AI_BUILDS_PAUSED_CODE, AI_BUILDS_PAUSED_MESSAGE } from '../../../shared/types/pauses';
+import { isFlagOn } from '../../services/posthog/flags';
 import type { CodeGeneratorAgent } from './codingAgent';
 import type { DeploymentTarget } from './types';
 import { isThinkModelId } from '../think/model-config';
@@ -34,6 +38,7 @@ export async function handleWebSocketMessage(
     connection: Connection, 
     message: string,
     usageCheck: typeof checkUsageAndBalance = checkUsageAndBalance,
+    creditCheck: typeof checkCreditsBeforeTurn = checkCreditsBeforeTurn,
 ): Promise<void> {
     try {
         logger.info(`Received WebSocket message from ${connection.id}: ${message}`);
@@ -47,6 +52,7 @@ export async function handleWebSocketMessage(
                 break;
             }
             case WebSocketMessageRequests.GENERATE_ALL:
+                if (await refuseBuildStartWhilePaused(agent, connection)) return;
                 // Set shouldBeGenerating flag to indicate persistent intent
                 agent.setState({ 
                     ...agent.state, 
@@ -147,7 +153,7 @@ export async function handleWebSocketMessage(
                     return;
                 }
                 if (parsedMessage.resume === true) {
-                    if (!(await ensureCanPrompt(agent, connection, usageCheck))) {
+                    if (!(await ensureCanPrompt(agent, connection, usageCheck, creditCheck))) {
                         return;
                     }
                     agent.handleUserInput(RESUME_BUILD_MESSAGE).catch((error: unknown) => {
@@ -192,6 +198,7 @@ export async function handleWebSocketMessage(
                 break;
             }
             case WebSocketMessageRequests.RESUME_GENERATION:
+                if (await refuseBuildStartWhilePaused(agent, connection)) return;
                 // Set shouldBeGenerating and restart generation
                 logger.info('Resuming code generation');
                 agent.setState({ 
@@ -250,7 +257,7 @@ export async function handleWebSocketMessage(
                     }
                 }
                 
-                if (!(await ensureCanPrompt(agent, connection, usageCheck))) {
+                if (!(await ensureCanPrompt(agent, connection, usageCheck, creditCheck))) {
                     return;
                 }
                 
@@ -331,18 +338,52 @@ export async function handleWebSocketMessage(
     }
 }
 
+/** While AI builds are paused, tells the user and answers true. A turn already running finishes. */
+async function refuseWhileBuildsPaused(agent: CodeGeneratorAgent, connection: Connection): Promise<boolean> {
+    if (!(await isFlagOn(agent.env, 'ai-builds-paused', agent.state.metadata.userId ?? null))) return false;
+    sendToConnection(connection, WebSocketMessageResponses.ERROR, { error: AI_BUILDS_PAUSED_MESSAGE, code: AI_BUILDS_PAUSED_CODE, showAsPopup: true });
+    return true;
+}
+
 /**
- * Runs the usage check for a new prompt. Sends the limit popup or error and
- * returns false when the user may not prompt.
+ * Refuses starting a build while builds are paused. A build that is already running isn't refused: a reload re-joins
+ * it by sending `generate_all`, and a refusal would show the pause notice over work that carries on.
+ */
+async function refuseBuildStartWhilePaused(agent: CodeGeneratorAgent, connection: Connection): Promise<boolean> {
+    if (agent.getBehavior().isCodeGenerating()) return false;
+    return refuseWhileBuildsPaused(agent, connection);
+}
+
+/**
+ * Runs the checks for a new prompt. Sends the limit popup or error and
+ * returns false when the user may not prompt. With billing on, the account's
+ * credits come first; a Think app then needs nothing more, since it always
+ * runs on Estori's gateway, while older builders that use the seller's own
+ * Cloudflare account keep the usage check.
  */
 async function ensureCanPrompt(
     agent: CodeGeneratorAgent,
     connection: Connection,
     usageCheck: typeof checkUsageAndBalance,
+    creditCheck: typeof checkCreditsBeforeTurn,
 ): Promise<boolean> {
+    if (await refuseWhileBuildsPaused(agent, connection)) return false;
     try {
         const env = agent.env;
         const userId = agent.state.metadata.userId;
+
+        const credits = await creditCheck(env, userId);
+        if (credits.billing && credits.refusal) {
+            logger.warn('Prompt refused by the credit check', { userId, plan: credits.refusal.plan });
+            sendToConnection(connection, WebSocketMessageResponses.ERROR, {
+                error: credits.refusal.message,
+                code: PLAN_LIMIT_ERROR_CODE,
+                planLimit: credits.refusal,
+                showAsPopup: true,
+            });
+            return false;
+        }
+        if (credits.billing && agent.state.behaviorType === 'think') return true;
 
         // The encrypted blob was captured from the HttpOnly cookie at WS
         // upgrade time (see codingAgent.onConnect) and stored in DO state.

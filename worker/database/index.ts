@@ -8,6 +8,7 @@ export { DatabaseService, createDatabaseService } from './database';
 
 // Domain-specific services
 export { AnalyticsService } from './services/AnalyticsService';
+export { AnalyticsPersonService } from './services/AnalyticsPersonService';
 export { BaseService } from './services/BaseService';
 export { UserService } from './services/UserService';
 export { AppService } from './services/AppService';
@@ -30,3 +31,6 @@ export { EarlyAccessService } from './services/EarlyAccessService';
 export { ContactService } from './services/ContactService';
 export { ModelConfigService } from './services/ModelConfigService';
 export { ModelTestService } from './services/ModelTestService';
+export { BillingService } from './services/BillingService';
+export { PlanAdminService } from './services/PlanAdminService';
+export { CreditLedgerService } from './services/CreditLedgerService';

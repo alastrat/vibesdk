@@ -20,8 +20,8 @@ function perDay(config: DailyCountable): number | null {
 	return mainPerDay === null ? config.dailyLimit : Math.min(mainPerDay, config.dailyLimit);
 }
 
-/** The limits shown on the pricing page, read from the configuration in force. */
-export function publicPlanFromSettings(rateLimit: RateLimitSettings): PublicPlanLimits {
+/** The limits shown on the pricing page, read from the configuration in force; the controller adds whether billing is on. */
+export function publicPlanFromSettings(rateLimit: RateLimitSettings): Omit<PublicPlanLimits, 'billing'> {
 	return {
 		newSitesPerDay: perDay(rateLimit.appCreation),
 		aiCreditsPerDay: perDay(rateLimit.llmCalls),

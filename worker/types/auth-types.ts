@@ -3,6 +3,7 @@
  */
 
 import type { ApiKey, AuthAttempt as SchemaAuthAttempt, AuditLog, OAuthState } from '../database/schema';
+import type { SessionTelemetry } from '../../shared/types/telemetry';
 
 /**
  * OAuth provider types
@@ -71,6 +72,8 @@ export interface SessionResponse {
 	user: AuthUser;
 	sessionId: string;
 	expiresAt: Date | null;
+	/** Client flags and the analytics setting; sent with sign-in and sign-up answers. */
+	telemetry?: SessionTelemetry;
 }
 
 /**

@@ -14,6 +14,7 @@ const STORE_FILE = {
 function toolWith(deployed: string[], storeFile?: string) {
 	const stub = {
 		gitCommit: async () => ({}),
+		getActiveDraft: async () => ({ id: 'main', name: 'Main', branch: 'main', tip: 'c1' }),
 		deploy: async (branch: string) => (deployed.push(branch), { preview_url: `/space/s/preview/${branch}/` }),
 		readFile: async (path: string) => {
 			if (path !== 'estori-store.json' || storeFile === undefined) throw new Error(`ENOENT: ${path}`);
@@ -49,5 +50,49 @@ describe('deploy_space', () => {
 		expect(JSON.parse(await toolWith([], JSON.stringify(STORE_FILE))({})).storeFile).toEqual({ ok: true });
 		expect(JSON.parse(await toolWith([])({}))).not.toHaveProperty('storeFile');
 	});
-});
 
+	it("deploys the draft being edited, and refuses any other version, including 'published'", async () => {
+		const deployed: string[] = [];
+		const stub = {
+			gitCommit: async () => ({}),
+			getActiveDraft: async () => ({ id: 'k3x9q2mf', name: 'Typo fix', branch: 'draft-k3x9q2mf', tip: 'c1' }),
+			deploy: async (branch: string) => (deployed.push(branch), { preview_url: `/space/s/preview/${branch}/` }),
+			readFile: async () => { throw new Error('ENOENT'); },
+		} as unknown as SpaceWorkspaceStub;
+		const tool = createDeploySpaceTool({ getStub: () => stub });
+		const run = (args: { branch?: string }) => (tool.execute as unknown as Execute)(args, { toolCallId: 'call_1', messages: [] });
+		await run({});
+		expect(deployed).toEqual(['draft-k3x9q2mf']);
+		for (const branch of ['main', 'published']) {
+			expect(JSON.parse(await run({ branch })).error).toContain('Switch to it with switch_draft first');
+		}
+		expect(deployed).toEqual(['draft-k3x9q2mf']);
+	});
+
+	it('does not deploy while conflict markers remain, since that would build the old version and report success', async () => {
+		const deployed: string[] = [];
+		const stub = {
+			gitCommit: async () => { throw new Error('Remove the conflict markers from about.html first.'); },
+			getActiveDraft: async () => ({ id: 'main', name: 'Main', branch: 'main', tip: 'c1' }),
+			deploy: async (branch: string) => (deployed.push(branch), { preview_url: `/space/s/preview/${branch}/` }),
+			readFile: async () => { throw new Error('ENOENT'); },
+		} as unknown as SpaceWorkspaceStub;
+		const tool = createDeploySpaceTool({ getStub: () => stub });
+		const result = JSON.parse(await (tool.execute as unknown as Execute)({}, { toolCallId: 'call_1', messages: [] }));
+		expect(result).toEqual({ branch: 'main', error: 'Remove the conflict markers from about.html first.' });
+		expect(deployed).toEqual([]);
+	});
+
+	it('still deploys when the commit fails for another reason, such as a clean tree', async () => {
+		const deployed: string[] = [];
+		const stub = {
+			gitCommit: async () => { throw new Error('nothing to commit'); },
+			getActiveDraft: async () => ({ id: 'main', name: 'Main', branch: 'main', tip: 'c1' }),
+			deploy: async (branch: string) => (deployed.push(branch), { preview_url: `/space/s/preview/${branch}/` }),
+			readFile: async () => { throw new Error('ENOENT'); },
+		} as unknown as SpaceWorkspaceStub;
+		const tool = createDeploySpaceTool({ getStub: () => stub });
+		await (tool.execute as unknown as Execute)({}, { toolCallId: 'call_1', messages: [] });
+		expect(deployed).toEqual(['main']);
+	});
+});

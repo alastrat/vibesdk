@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api-client';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
-import type { LiveStoreView } from '@/api-types';
+import type { LiveStoreView, PublishLiveStoreRequest } from '@/api-types';
 
 export function useLiveStore(appId: string, enabled: boolean) {
 	return useQuery({
@@ -13,17 +13,26 @@ export function useLiveStore(appId: string, enabled: boolean) {
 	});
 }
 
-/** Every call answers the store's whole view, so the panel takes it as it is. */
+/**
+ * Every call answers the store's whole view, so the panel takes it as it is.
+ * The drafts' badges and delete rule follow what is live, and Publish or going offline don't reload the preview, so they refetch.
+ */
 function useLiveStoreMutation<TInput>(appId: string, call: (input: TInput) => Promise<LiveStoreView>) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: call,
-		onSuccess: (view) => queryClient.setQueryData(queryKeys.liveStore(appId), view),
+		onSuccess: (view) => {
+			queryClient.setQueryData(queryKeys.liveStore(appId), view);
+			void queryClient.invalidateQueries({ queryKey: queryKeys.drafts(appId) });
+		},
 	});
 }
 
+/** Names the draft to publish, so a switch while the panel is open can't change what goes live. */
 export function usePublishLiveStore(appId: string) {
-	return useLiveStoreMutation(appId, (slug: string) => unwrap(apiClient.publishLiveStore(appId, { slug }), "Couldn't publish your store"));
+	return useLiveStoreMutation(appId, ({ slug, draftId }: PublishLiveStoreRequest) =>
+		unwrap(apiClient.publishLiveStore(appId, { slug, draftId }), "Couldn't publish your store"),
+	);
 }
 
 export function useTakeLiveStoreOffline(appId: string) {

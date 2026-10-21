@@ -71,7 +71,8 @@ describe('starting an app from a published site', () => {
 	});
 
 	it('stamps the app row on every deploy so Discover knows the site is deployed', () => {
-		expect(think.split('this.recordDeployedCommit(').length - 1).toBe(2);
+		// The host's deploy, the AI's deploy_space, and a draft switch taking the draft's own deployment.
+		expect(think.split('this.recordDeployedCommit(').length - 1).toBe(3);
 		expect(think).toContain('lastDeployedAt: new Date()');
 		expect(think).not.toContain('this.setState({ ...this.state, lastDeployedCommit: commitHash })');
 	});

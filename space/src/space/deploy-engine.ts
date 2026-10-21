@@ -2,7 +2,7 @@ import type { Git } from "@cloudflare/shell/git"
 import type { FileSystem } from "@cloudflare/shell"
 import { createApp, createWorker, type AssetConfig, type Modules } from "@cloudflare/worker-bundler"
 import { parseWranglerConfig, WranglerConfigError } from "./wrangler-config"
-import { globInfos } from "./fileinfo"
+import { readCommitFiles } from "./git-objects"
 import { storeManifestOf } from "./store-manifest"
 
 // ─── Deploy Engine ──────────────────────────────────────────────────────────
@@ -25,13 +25,31 @@ export const DEPLOYMENTS_TABLE_SQL = `
     assets TEXT NOT NULL DEFAULT '{}',
     asset_config TEXT NOT NULL DEFAULT '{}',
     store_manifest TEXT,
+    source_branch TEXT,
     deployed_at INTEGER NOT NULL
   )
 `
 
+/** Columns added to the deployments table after stores were created with it, oldest first. */
+export const DEPLOYMENTS_COLUMN_MIGRATIONS: readonly string[] = [
+  `ALTER TABLE deployments ADD COLUMN assets TEXT NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE deployments ADD COLUMN asset_config TEXT NOT NULL DEFAULT '{}'`,
+  `ALTER TABLE deployments ADD COLUMN store_manifest TEXT`,
+  `ALTER TABLE deployments ADD COLUMN source_branch TEXT`,
+]
+
+/** Adds the columns an existing deployments table lacks. A column that exists already throws, which is fine. */
+export function migrateDeploymentsTable(sql: SqlStorage): void {
+  for (const statement of DEPLOYMENTS_COLUMN_MIGRATIONS) {
+    try {
+      sql.exec(statement)
+    } catch {}
+  }
+}
+
 /** The deployment a live store serves. Only publishing writes it, so no deploy may use the name. */
 export const LIVE_BRANCH = "live"
-/** The branch whose deployment the seller previews, and publishing copies. */
+/** Main's branch, which stores published before drafts were published from. */
 export const PREVIEW_BRANCH = "main"
 
 /** Live store requests from the platform worker arrive under this path. Mirrors SPACE_LIVE_PATH in shared/types/live-stores.ts. */
@@ -51,25 +69,45 @@ export function isReservedBranch(branch: string): boolean {
   return branch.toLowerCase() === LIVE_BRANCH
 }
 
+/** What the live store serves, and the draft branch it was published from. */
+export interface PublishedVersion {
+  commit: string
+  sourceBranch: string
+}
+
 /**
- * Copies the previewed deployment into `live` unchanged, so shoppers get exactly the build the seller previewed. It
- * neither rebuilds nor checks anything out, so the working tree never moves. Null when the preview was never deployed.
+ * Copies a draft's deployment into `live` unchanged, so shoppers get exactly the build the seller previewed. It
+ * neither rebuilds nor checks anything out, so the working tree never moves. Null when the draft was never deployed.
  */
-export function publishLiveDeployment(sql: SqlStorage, nowMs: number): { commitHash: string; storeManifest: string | null } | null {
+export function publishLiveDeployment(
+  sql: SqlStorage,
+  nowMs: number,
+  branch: string,
+): { commitHash: string; storeManifest: string | null } | null {
+  if (isReservedBranch(branch)) return null
   const preview = sql
-    .exec("SELECT commit_hash, store_manifest FROM deployments WHERE branch = ?", PREVIEW_BRANCH)
+    .exec("SELECT commit_hash, store_manifest FROM deployments WHERE branch = ?", branch)
     .toArray()[0]
   if (!preview) return null
   sql.exec(
     `INSERT OR REPLACE INTO deployments
-     (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at)
-     SELECT ?, commit_hash, main_module, modules, assets, asset_config, store_manifest, ?
+     (branch, commit_hash, main_module, modules, assets, asset_config, store_manifest, deployed_at, source_branch)
+     SELECT ?, commit_hash, main_module, modules, assets, asset_config, store_manifest, ?, ?
      FROM deployments WHERE branch = ?`,
     LIVE_BRANCH,
     nowMs,
-    PREVIEW_BRANCH,
+    branch,
+    branch,
   )
   return { commitHash: String(preview.commit_hash), storeManifest: preview.store_manifest === null ? null : String(preview.store_manifest) }
+}
+
+/** The live store's commit and its draft branch. A store published before drafts came from Main. */
+export function publishedVersion(sql: SqlStorage): PublishedVersion | null {
+  const row = sql.exec("SELECT commit_hash, source_branch FROM deployments WHERE branch = ?", LIVE_BRANCH).toArray()[0]
+  if (!row) return null
+  const source = row.source_branch
+  return { commit: String(row.commit_hash), sourceBranch: typeof source === "string" && source.length > 0 ? source : PREVIEW_BRANCH }
 }
 
 export interface DeployContext {
@@ -113,41 +151,28 @@ export async function handleDeployCommand(
   }
 }
 
-// ─── Read files from a git branch using shell's git ─────────────────────────
+// ─── Read files from a git branch ───────────────────────────────────────────
 
-async function readBranchFiles(
-  ctx: DeployContext,
+/**
+ * The files of `branch`'s last commit, read from git objects. Nothing is checked out: publishing deploys whichever
+ * draft the seller picks, so the working tree stays on the draft being edited, unsaved work and all.
+ */
+export async function readBranchFiles(
+  ctx: Pick<DeployContext, "git" | "fs">,
   branch: string
 ): Promise<{ commitHash: string; files: Record<string, string> }> {
-  // Get commit log for the branch to find the commit hash
   const log = await ctx.git.log({ ref: branch, depth: 1 })
   if (log.length === 0) {
     throw new Error(`No commits found on branch "${branch}"`)
   }
   const commitHash = log[0].oid
 
-  // Checkout the branch to populate working tree
-  await ctx.git.checkout({ ref: branch, force: true })
-
-  // Read all files recursively (readDir is non-recursive, glob is)
-  const allFiles = await globInfos(ctx.fs, "**/*")
+  const decoder = new TextDecoder()
   const files: Record<string, string> = {}
-
-  for (const fileInfo of allFiles) {
-    if (fileInfo.type !== "file") continue
-    // Skip git's object store and the ArtifactsFileSystem bookkeeping dir —
-    // neither is part of the app and must never ship in a deploy bundle.
-    if (fileInfo.path.startsWith("/.git/") || fileInfo.path === "/.git") continue
-    if (fileInfo.path.startsWith("/.afs/") || fileInfo.path === "/.afs") continue
-
-    let content: string
-    try {
-      content = await ctx.fs.readFile(fileInfo.path)
-    } catch {
-      continue
-    }
-    const path = fileInfo.path.startsWith("/") ? fileInfo.path.slice(1) : fileInfo.path
-    files[path] = content
+  for (const file of await readCommitFiles(ctx.fs, commitHash)) {
+    // Git's object store and the ArtifactsFileSystem bookkeeping dir are never part of the app or a deploy bundle.
+    if (file.path === "/.git" || file.path.startsWith("/.git/") || file.path === "/.afs" || file.path.startsWith("/.afs/")) continue
+    files[file.path.slice(1)] = decoder.decode(file.bytes)
   }
 
   return { commitHash, files }

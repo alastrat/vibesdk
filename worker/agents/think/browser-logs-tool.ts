@@ -11,7 +11,8 @@
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
 import { getBrowserCaptureClient } from '../../services/browser-capture/factory';
-import { createLogger } from '../../logger';
+import type { BrowserCaptureClient } from '../../services/browser-capture/types';
+import { createLogger, type StructuredLogger } from '../../logger';
 
 const DESCRIPTION = [
 	'Open the current preview app in a real headless browser and return its console output, uncaught page errors, and failed network requests captured during page load.',
@@ -23,8 +24,13 @@ const DESCRIPTION = [
 	"OUTPUT is JSON: { url, captured_at, logs:[{level,text,location}], page_errors:[{message,stack}], request_failures:[{url,failure,status}], truncated, totals, warning? }. If 'warning' is set in dev, the browser sidecar wasn't reachable — instruct the user to run 'npm run dev:browser' and retry. Each category is independently capped at max_lines (default 100, -1 = no limit).",
 ].join('\n');
 
-export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: string }): Tool {
-	const { env, defaultUrl } = opts;
+export function createBrowserConsoleLogsTool(opts: {
+	env: Env;
+	/** Read when the tool runs, so a preview that changed earlier in the turn is followed. */
+	getDefaultUrl: () => string | undefined;
+	createClient?: (env: Env, logger: StructuredLogger) => Pick<BrowserCaptureClient, 'captureConsoleLogs'>;
+}): Tool {
+	const { env, getDefaultUrl, createClient = getBrowserCaptureClient } = opts;
 	const logger = createLogger('ThinkBrowserLogs');
 	return tool({
 		description: DESCRIPTION,
@@ -54,7 +60,7 @@ export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: stri
 			max_lines?: number;
 			interact_script?: string;
 		}) => {
-			const targetUrl = args.url ?? defaultUrl;
+			const targetUrl = args.url ?? getDefaultUrl();
 			if (!targetUrl) {
 				return JSON.stringify({
 					error:
@@ -62,7 +68,7 @@ export function createBrowserConsoleLogsTool(opts: { env: Env; defaultUrl?: stri
 				});
 			}
 
-			const client = getBrowserCaptureClient(env, logger);
+			const client = createClient(env, logger);
 			let result;
 			try {
 				result = await client.captureConsoleLogs({

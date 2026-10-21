@@ -5,6 +5,7 @@ import { getCORSConfig, getSecureHeadersConfig } from './config/security';
 import { RateLimitService } from './services/rate-limit/rateLimits';
 import { AppEnv } from './types/appenv';
 import { setupRoutes } from './api/routes';
+import { unhandledApiError } from './api/unhandled-error';
 import { CsrfService } from './services/csrf/CsrfService';
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
 import { getGlobalConfigurableSettings } from './config';
@@ -100,6 +101,7 @@ export function createApp(env: Env): Hono<AppEnv> {
 
     // Now setup all the routes
     setupRoutes(app);
+    app.onError(unhandledApiError);
 
     // Add not found route to redirect to ASSETS
     // Wrap the ASSETS response in a new Response with mutable headers so

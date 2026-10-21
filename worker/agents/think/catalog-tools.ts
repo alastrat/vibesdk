@@ -2,16 +2,31 @@
 
 import { tool, type Tool } from 'ai';
 import { z } from 'zod';
-import type { CatalogProductView } from '../../../shared/types/catalog';
+import { CATALOG_PAUSED_MESSAGE, type CatalogProductView } from '../../../shared/types/catalog';
 import { CatalogProductService } from '../../database';
 import { getProtocolForHost } from '../../utils/urls';
 import { catalogImagePath } from '../../services/catalog/images';
 import { agentProductView, catalogProductView } from '../../services/catalog/catalog-view';
+import { loadAccount } from '../../services/billing/account';
+import { isFlagOn } from '../../services/posthog/flags';
+import { assertWithinLimit, type PlanLimitRefusal } from '../../../shared/types/plans';
 
 export interface CatalogToolDeps {
 	search(query: string | null, limit: number): Promise<CatalogProductView[]>;
 	get(productId: string): Promise<CatalogProductView | null>;
+	/** Why the seller's plan can't add catalog products, or null when it can. */
+	catalogRefusal(): Promise<PlanLimitRefusal | null>;
+	/** Whether Estori's catalog is paused for this seller. */
+	paused(): Promise<boolean>;
 }
+
+/** The plan's refusal in the seller's words, for the AI to pass on; the products still come back so it can describe them. */
+function noticeOf(refusal: PlanLimitRefusal | null): { notice?: string } {
+	return refusal ? { notice: `${refusal.message} Tell the seller this before adding a catalog product to their store.` } : {};
+}
+
+/** While the catalog is paused the tools read nothing and answer this, so the AI builds with the seller's own products. */
+const PAUSED_ANSWER = JSON.stringify({ paused: true, message: `${CATALOG_PAUSED_MESSAGE} Build the store with the seller's own products.` });
 
 const HOW_TO_ADD = [
 	'To sell a catalog product, add it to estori-store.json like any product, and on each variant set catalogVariantId to the',
@@ -30,24 +45,26 @@ export function createCatalogTools(deps: CatalogToolDeps): { search_catalog: Too
 				limit: z.number().int().min(1).max(20).optional().describe('How many products to return, 10 by default.'),
 			}),
 			execute: async (input: { query?: string; limit?: number }) => {
-				const products = await deps.search(input.query ?? null, input.limit ?? 10);
-				return JSON.stringify({ products: products.map(agentProductView) });
+				if (await deps.paused()) return PAUSED_ANSWER;
+				const [products, refusal] = await Promise.all([deps.search(input.query ?? null, input.limit ?? 10), deps.catalogRefusal()]);
+				return JSON.stringify({ products: products.map(agentProductView), ...noticeOf(refusal) });
 			},
 		}),
 		get_catalog_product: tool({
 			description: `Read one catalog product with all its variants. ${HOW_TO_ADD}`,
 			inputSchema: z.object({ productId: z.string().min(1).max(64).describe('The productId from search_catalog.') }),
 			execute: async (input: { productId: string }) => {
-				const product = await deps.get(input.productId);
+				if (await deps.paused()) return PAUSED_ANSWER;
+				const [product, refusal] = await Promise.all([deps.get(input.productId), deps.catalogRefusal()]);
 				if (!product) return JSON.stringify({ error: `No catalog product ${input.productId}. Use search_catalog to find one.` });
-				return JSON.stringify({ product: agentProductView(product) });
+				return JSON.stringify({ product: agentProductView(product), ...noticeOf(refusal) });
 			},
 		}),
 	};
 }
 
-/** Catalog views with image URLs on Estori's own address, which stores load directly. */
-export function catalogToolDepsFromEnv(env: Env): CatalogToolDeps {
+/** Catalog views with image URLs on Estori's own address, which stores load directly, the seller's plan and the catalog pause. */
+export function catalogToolDepsFromEnv(env: Env, userId: string | null): CatalogToolDeps {
 	const origin = `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}`;
 	const imageUrl = (key: string) => `${origin}${catalogImagePath(key)}`;
 	const views = async (input: { query: string | null; productId: string | null; limit: number }) => {
@@ -58,5 +75,7 @@ export function catalogToolDepsFromEnv(env: Env): CatalogToolDeps {
 	return {
 		search: (query, limit) => views({ query, productId: null, limit }),
 		get: async (productId) => (await views({ query: null, productId, limit: 1 }))[0] ?? null,
+		catalogRefusal: async () => (userId ? assertWithinLimit(await loadAccount(env, userId), 'supplierCatalog') : null),
+		paused: () => isFlagOn(env, 'catalog-paused', userId),
 	};
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LEGAL_CONTACT, LEGAL_ENTITY, TERMS_VERSION, legalAddressLine } from '../../../shared/types/legal';
+import { EXTRA_CREDITS_DISCLOSURE, renewalDisclosure } from '../../../shared/types/billing';
 import { PLATFORM_FEE_LABEL } from '../../../shared/types/templates';
 import { LEGAL_DOCUMENTS, LEGAL_LINKS, LEGAL_SLUGS } from './legal-documents';
 import { SELLER_TERMS_VERSION } from '../../../shared/types/seller-setup';
@@ -50,11 +51,11 @@ describe('legal documents', () => {
 
 	it('adds selling in your own store as section 10, in the version sellers agree to', () => {
 		const terms = LEGAL_DOCUMENTS.terms;
-		expect(terms.version).toBe('2026-10-16');
+		expect(terms.version).toBe('2026-10-19');
 		// The selling terms change only when section 10 changes, never newer than the Terms that hold them.
 		expect(SELLER_TERMS_VERSION <= terms.version).toBe(true);
 		expect(terms.body).toContain('## 10. Selling in your own store');
-		expect(terms.body).toContain('## 21. Contact');
+		expect(terms.body).toContain('## 22. Contact');
 		for (const promise of [
 			'You are the merchant of record for your store',
 			'you pay the whole refund',
@@ -88,9 +89,9 @@ describe('legal documents', () => {
 
 	it('keeps section 10 and Our property among the sections that survive termination', () => {
 		const body = LEGAL_DOCUMENTS.terms.body;
-		expect(body.match(/## (\d+)\. Our property/)?.[1]).toBe('12');
+		expect(body.match(/## (\d+)\. Our property/)?.[1]).toBe('13');
 		expect(body.split('\n').find((line) => line.includes('survive termination'))).toBe(
-			'Sections 4 (the license for copies already made), 5, 6, 8, 9, 10, 12 and 15 to 19 survive termination.',
+			'Sections 4 (the license for copies already made), 5, 6, 8, 9, 10, 13 and 16 to 20 survive termination.',
 		);
 	});
 
@@ -103,5 +104,78 @@ describe('legal documents', () => {
 		expect(privacy).toContain('We receive the name, email, phone number (when given) and shipping address');
 		expect(privacy).toContain("A paid site's seller sees that a sale happened; its buyers' details aren't shown to them.");
 		expect(privacy).not.toContain("buyers' details aren't shown to sellers");
+	});
+
+	it('adds plans, credits and extra credits as section 11, with renewal, cancelling and refunds', () => {
+		const terms = LEGAL_DOCUMENTS.terms.body;
+		expect(terms).toContain('## 11. Plans, AI credits and extra credits');
+		for (const promise of [
+			'renew automatically every month until you cancel',
+			'Cancelling takes effect at the end of the period you paid for',
+			'no refunds for part of a period',
+			'Credits have no cash value',
+			"charged from the AI's real usage",
+			"Monthly credits don't carry over",
+			'Extra credits are used after your monthly credits and expire 12 months after purchase',
+			'non-refundable, except when you were charged twice or your account could not use them',
+			"at least 30 days' notice",
+			"If a renewal payment fails, your plan's features continue for 7 days while we retry the payment",
+			"that period's AI credits start once the payment goes through",
+			"your account moves to Basic if it still isn't paid",
+		]) {
+			expect(terms).toContain(promise);
+		}
+		expect(terms).toContain('Plans set how many sites you can create and how many AI credits you get. See section 11');
+		expect(terms).not.toContain('daily limits');
+		expect(terms).not.toContain('Purchases are one-time payments');
+		expect(terms).toContain('A paid site is a one-time payment in US dollars');
+		const refunds = LEGAL_DOCUMENTS.refunds.body;
+		expect(refunds).toContain('Pro, Premium and extra credits');
+		expect(refunds).toContain('within 14 days');
+	});
+
+	it('says at checkout what the Terms say', () => {
+		const terms = LEGAL_DOCUMENTS.terms.body;
+		expect(EXTRA_CREDITS_DISCLOSURE.startsWith('Extra credits are used after your monthly credits and expire 12 months after purchase')).toBe(true);
+		expect(terms).toContain(EXTRA_CREDITS_DISCLOSURE.replace(/\.$/, ''));
+		for (const promotion of [null, { duration: 'once', durationInMonths: null, discountedCents: 2_450 }, { duration: 'forever', durationInMonths: null, discountedCents: 2_450 }] as const) {
+			expect(renewalDisclosure('pro', promotion)).toContain('until you cancel');
+		}
+	});
+
+	it('names PostHog and Cloudflare Web Analytics, says no email or name goes to PostHog, and how to turn analytics off', () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain('**Usage information.**');
+		expect(privacy).toContain("We record layouts and clicks, not what's written on the page or what you type.");
+		expect(privacy).toContain('without the part of the address after a question mark');
+		expect(privacy).toContain('**Page view counts.**');
+		expect(privacy).toContain('Cloudflare Web Analytics counts page views');
+		expect(privacy).toContain('previews and stores served on estori.app addresses');
+		expect(privacy).toContain('**PostHog** (hosted in the United States): product analytics, session recordings and error reports');
+		expect(privacy).toContain("We don't send it your email address or name.");
+		expect(privacy).toContain('page view counts through Cloudflare Web Analytics, which uses no cookies');
+		expect(privacy).toContain("We use PostHog's analytics cookie and browser storage on estori.app");
+		expect(privacy).toContain("We don't use advertising cookies.");
+		expect(privacy).not.toContain("We don't use advertising or analytics cookies.");
+		expect(privacy).toContain("Stores built with Estori don't load PostHog.");
+		expect(privacy).toContain('You can turn analytics off at any time with the Analytics setting in Settings.');
+		expect(privacy).toContain('we still count the AI credits your builds use, without anything that identifies you');
+		expect(privacy).toContain('Global Privacy Control');
+		expect(LEGAL_DOCUMENTS.privacy.version).toBe(TERMS_VERSION);
+	});
+
+	it('says PostHog receives the IP address, business events and flag checks, and what recordings leave out', () => {
+		const privacy = LEGAL_DOCUMENTS.privacy.body;
+		expect(privacy).toContain(
+			'your IP address and the approximate location worked out from it (such as country, region and city)',
+		);
+		expect(privacy).not.toContain('country and region, from your IP address');
+		expect(privacy).toContain(
+			'We also note what you do in Estori, such as building and publishing sites, your plan and subscription, credit purchases, and sales in your stores.',
+		);
+		expect(privacy).toContain("PostHog receives the usage information in section 1, including your IP address, linked to your account's id.");
+		expect(privacy).toContain('We also still ask PostHog which switches apply to your account, using its id and your plan.');
+		expect(privacy).toContain('Recordings show no images.');
+		expect(privacy).toContain('never show the preview of your store.');
 	});
 });

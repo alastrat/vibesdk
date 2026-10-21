@@ -76,6 +76,12 @@ interface MainContentPanelProps {
 	// Repo tab (think-behavior only) — read-only Artifacts repository viewer
 	repoAvailable: boolean;
 
+	// Drafts (think-behavior owners only)
+	/** The drafts switcher, shown before the preview's title. */
+	draftSwitcher?: ReactNode;
+	/** A notice above the preview, such as Main's live-fix banner. */
+	previewNotice?: ReactNode;
+
 	// Refs
 	previewRef: RefObject<HTMLIFrameElement | null>;
 	editorRef: RefObject<HTMLDivElement | null>;
@@ -115,6 +121,8 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		agentId,
 		databaseAvailable,
 		repoAvailable,
+		draftSwitcher,
+		previewNotice,
 	} = props;
 
 	// Think apps surface Clone/GitHub inside the Repo tab, so hide them from the
@@ -281,8 +289,9 @@ export function MainContentPanel(props: MainContentPanelProps) {
 
 		return renderViewWithHeader(
 			<div className="flex min-w-0 items-center gap-2">
+				{draftSwitcher}
 				<span
-					className="truncate text-sm font-mono text-text-50/70"
+					className="min-w-0 truncate text-sm font-mono text-text-50/70"
 					title={previewTitle}
 				>
 					{previewTitle}
@@ -301,6 +310,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				)}
 			</div>,
 			<div className="flex flex-1 min-h-0 flex-col">
+				{previewNotice}
 				<PreviewCompatBanner previewUrl={previewUrl} />
 				<div className="relative flex flex-1 min-h-0 flex-col">{previewContent}</div>
 			</div>,

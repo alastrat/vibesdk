@@ -4,6 +4,7 @@
  */
 import { SessionResponse } from 'worker/types/auth-types';
 import { AuthUser } from './api-types';
+import type { SessionTelemetry } from '../shared/types/telemetry.js';
 
 export type { SecretTemplate } from 'worker/types/secretsTemplates';
 
@@ -225,6 +226,82 @@ export type {
   QueryAppTableResponse,
   WipeAppDatabaseResponse,
 } from 'worker/api/controllers/appDatabase/types';
+export type {
+  CreateDraftRequest,
+  RenameDraftRequest,
+  DraftStart,
+  DraftSummary,
+  DraftsSnapshot,
+} from 'worker/api/controllers/drafts/types';
+export { MAIN_DRAFT_ID, DRAFT_NAME_MAX_LENGTH, DRAFT_LIMIT, STORE_DRAFTS_PAUSED_MESSAGE } from '../shared/types/drafts.js';
+export type {
+	PaidPlanId,
+	PlanAccount,
+	PlanAccountInput,
+	PlanId,
+	PlanLimitKey,
+	PlanLimitOverrides,
+	PlanLimitRefusal,
+	PlanLimits,
+} from '../shared/types/plans.js';
+export {
+	EXTRA_CREDITS,
+	GRACE_PERIOD_DAYS,
+	LEGACY_CREDIT_FACTOR,
+	PAID_PLAN_IDS,
+	PLAN_IDS,
+	PLAN_LIMIT_CODE,
+	PLAN_LIMITS,
+	PLAN_PRICES_CENTS,
+	assertWithinLimit,
+	extraCreditsPriceCents,
+	formatBillingDate,
+	formatCredits,
+	formatUsd,
+	isExtraCreditsAmount,
+	isPaidPlanId,
+	isPlanLimitRefusal,
+	limitFeatures,
+	limitsFor,
+	planLimitOverridesFrom,
+	planName,
+	storeAllowance,
+} from '../shared/types/plans.js';
+export type {
+	BillingChangeRequested,
+	BillingCreditsView,
+	BillingSource,
+	BillingView,
+	CardOnFile,
+	CardSetupMode,
+	CardSetupStart,
+	CheckoutClientStart,
+	CheckoutConsentRequest,
+	CheckoutOrder,
+	CheckoutSessionState,
+	CheckoutStatusView,
+	CheckoutTermsView,
+	CreditsRequest,
+	InvoicePaymentResult,
+	InvoiceView,
+	PlanRequest,
+	PromotionTerms,
+	PurchaseView,
+	SubscriptionStatus,
+} from '../shared/types/billing.js';
+export {
+	BILLING_CARD_PATH,
+	BILLING_CARD_RETURN_PATH,
+	BILLING_CHECKOUT_PATH,
+	BILLING_CHECKOUT_RETURN_PATH,
+	BILLING_HISTORY_LIMIT,
+	BILLING_NOT_OPEN_MESSAGE,
+	BILLING_PATH,
+	CHECKOUT_EXPIRED_MESSAGE,
+	EXTRA_CREDITS_DISCLOSURE,
+	PAYMENTS_NOT_SET_UP_MESSAGE,
+	PLAN_LIMIT_ERROR_CODE,
+} from '../shared/types/billing.js';
 export type { ListAppBranchesResponse } from 'worker/api/controllers/artifacts/types';
 export type { RateLimitErrorResponse } from 'worker/api/responses';
 export { RateLimitExceededError, SecurityError, SecurityErrorType } from '../shared/types/errors.js';
@@ -268,7 +345,7 @@ export type {
 	CatalogOrderStatus,
 	ShippingAddress,
 } from '../shared/types/catalog';
-export { ADMIN_CATALOG_ORDERS_PATH } from '../shared/types/catalog';
+export { ADMIN_CATALOG_ORDERS_PATH, CATALOG_PAUSED_MESSAGE } from '../shared/types/catalog';
 
 export type {
 	AdminSalesData,
@@ -401,6 +478,7 @@ export type RegisterResponseData = SessionResponse & {
 export type ProfileResponseData = {
   user: AuthUser;
   sessionId: string;
+  telemetry: SessionTelemetry;
 };
 
 export interface AuthProvidersResponseData {
@@ -492,6 +570,20 @@ export {
 	contactTopicLabel,
 	isCompanySize,
 	isContactTopic,
+	isPremiumCredits,
 } from '../shared/types/contact.js';
 export type { CompanySize, ContactRequestBody, ContactTopic } from '../shared/types/contact.js';
 export type { PublicPlanLimits } from '../shared/types/plan.js';
+export type { AmountBand, PersonProperties, ServerEventName, ServerEventProperties } from '../shared/types/analytics-events.js';
+export type { ClientFlagKey, ClientFlagValues, FlagKey, FlagKind, FlagValues } from '../shared/types/feature-flags.js';
+export { FEATURE_FLAGS, FLAG_KEYS } from '../shared/types/feature-flags.js';
+export * from '../shared/types/pauses';
+export type {
+	AdminFlagRow,
+	AdminFlagsData,
+	AnalyticsOptOutSource,
+	AnalyticsPreferenceData,
+	SessionTelemetry,
+	TelemetryConfigData,
+} from '../shared/types/telemetry.js';
+export { GPC_ANALYTICS_MESSAGE } from '../shared/types/telemetry.js';

@@ -26,6 +26,13 @@ describe('the Go live panel', () => {
 		expect(dialog).toContain('view.checkoutConnected');
 	});
 
+	it('publishes the draft the panel names, not whichever draft is open when the request lands', () => {
+		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
+		expect(dialog).toContain('draftId: view.draft?.id');
+		const hooks = source('/src/hooks/use-live-store.ts');
+		expect(hooks).toContain('apiClient.publishLiveStore(appId, { slug, draftId })');
+	});
+
 	it("connects the seller's own domain, shows each DNS record to copy, checks it and removes it", () => {
 		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
 		for (const part of ['useAddStoreDomain(', 'useCheckStoreDomain(', 'useRemoveStoreDomain(', 'domain.records.map', 'navigator.clipboard.writeText', 'Check now', 'view.domainsAvailable']) {
@@ -56,6 +63,17 @@ describe('the Go live panel', () => {
 		expect(dialog).toContain("import { ConfirmButton } from '@/components/confirm-button';");
 		for (const copy of ['Take your store offline?', 'Remove this domain?']) expect(dialog, copy).toContain(copy);
 		expect(dialog).toContain('connectedDomainNote(storeStatus)');
+	});
+
+	it('holds publishing and new domains while they are paused, and keeps the rest of the panel', () => {
+		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
+		expect(dialog).toContain("const publishingPaused = useFlag('store-publishing-paused');");
+		expect(dialog).toMatch(/disabled=\{publishingPaused \|\| problem !== null/);
+		expect(dialog).toContain('{publishingPaused && <p className="text-sm text-kumo-subtle">{STORE_PUBLISHING_PAUSED_MESSAGE}</p>}');
+		expect(dialog).toContain("const domainsPaused = useFlag('custom-domains-paused');");
+		expect(dialog).toContain('{view.domainsAvailable && !view.domain && !domainsPaused && (');
+		expect(dialog).toContain('{CUSTOM_DOMAINS_PAUSED_MESSAGE}');
+		expect(dialog).toContain('Take offline');
 	});
 });
 

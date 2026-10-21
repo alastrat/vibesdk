@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { liveStoreView, storeUrl } from './view';
 
 const MANIFEST = JSON.stringify({ version: 1, currency: 'usd', shipping: { countries: ['US'], flatRateCents: 0 }, products: [{ id: 'tea', name: 'Tea', variants: [{ id: 'tea-50', name: '50 g', priceCents: 1200 }] }] });
-const BASE = { appId: 'e0dcb2a3-0ea1', title: 'Northwind Tea Co.', storesDomain: 'estori.shop', devPort: null, domainsAvailable: true, record: null, previewCommit: 'c2', publishedManifest: null, domain: null };
+const BASE = { appId: 'e0dcb2a3-0ea1', title: 'Northwind Tea Co.', storesDomain: 'estori.shop', devPort: null, domainsAvailable: true, record: null, previewCommit: 'c2', publishedManifest: null, domain: null, draft: { id: 'main', name: 'Main' }, publishedDraft: null };
 
 describe('the Go live view', () => {
 	it('builds https addresses in production, and http ones with the port on a local .localhost domain', () => {
@@ -24,6 +24,8 @@ describe('the Go live view', () => {
 			checkoutConnected: false,
 			domain: null,
 			domainsAvailable: true,
+			draft: { id: 'main', name: 'Main' },
+			publishedDraft: null,
 		});
 	});
 
@@ -39,6 +41,12 @@ describe('the Go live view', () => {
 		expect(liveStoreView({ ...BASE, domain }).domain).toEqual({ hostname: 'shop.northwindtea.com', rootDomain: 'northwindtea.com', url: 'https://shop.northwindtea.com', status: 'pending', records: [], lastError: null, checkedAt: null, verifiedAt: null });
 		// Record names are shown relative to the domain the seller manages, found with the public suffix list.
 		expect(liveStoreView({ ...BASE, domain: { ...domain, hostname: 'store.shop.example.co.uk' } }).domain?.rootDomain).toBe('example.co.uk');
+	});
+
+	it('names the draft that would be published and the one the live store came from', () => {
+		const view = liveStoreView({ ...BASE, draft: { id: 'k3x9q2mf', name: 'Typo fix' }, publishedDraft: { id: 'main', name: 'Main' } });
+		expect(view.draft).toEqual({ id: 'k3x9q2mf', name: 'Typo fix' });
+		expect(view.publishedDraft).toEqual({ id: 'main', name: 'Main' });
 	});
 
 	it('is unavailable without a stores domain', () => {

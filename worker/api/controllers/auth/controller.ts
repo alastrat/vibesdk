@@ -17,6 +17,7 @@ import {
     verifyEmailSchema
 } from './authSchemas';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
+import { SIGNUPS_PAUSED_ERROR_CODE, SignupsPausedError } from '../../../../shared/types/pauses';
 import {
     formatAuthResponse,
     mapUserResponse,
@@ -46,6 +47,9 @@ import { createEmailSender, isEmailSendingEnabled } from '../../../services/emai
 import { appBaseUrl } from '../../../services/email/links';
 import { CONFIRM_LINK_INVALID_MESSAGE, FORGOT_PASSWORD_MESSAGE } from '../../../services/auth/one-time-token';
 import { isEmailAuthEnabled } from '../../../utils/envs';
+import { honorAnalyticsChoice, sessionTelemetry } from '../../../services/posthog/session';
+import { serverAnalytics } from '../../../services/posthog/analytics';
+import { personUpdateOf } from '../../../services/posthog/person';
 /**
  * Authentication Controller
  */
@@ -80,9 +84,14 @@ export class AuthController extends BaseController {
                 appBaseUrl(env, request)
             );
             
-            const response = AuthController.createSuccessResponse(
-                formatAuthResponse(result.user, result.sessionId, result.expiresAt)
-            );
+            const telemetry = await sessionTelemetry(env, request, result.user.id);
+            if (!telemetry.analyticsOptOut) {
+                serverAnalytics(env).capture('account_created', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
+            }
+            const response = AuthController.createSuccessResponse({
+                ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
+                telemetry,
+            });
             
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
@@ -145,9 +154,14 @@ export class AuthController extends BaseController {
             const authService = new AuthService(env);
             const result = await authService.login(validatedData, request);
             
-            const response = AuthController.createSuccessResponse(
-                formatAuthResponse(result.user, result.sessionId, result.expiresAt)
-            );
+            const telemetry = await sessionTelemetry(env, request, result.user.id);
+            if (!telemetry.analyticsOptOut) {
+                serverAnalytics(env).capture('signed_in', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
+            }
+            const response = AuthController.createSuccessResponse({
+                ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
+                telemetry,
+            });
             
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
@@ -276,7 +290,9 @@ export class AuthController extends BaseController {
                 return AuthController.createErrorResponse(CONFIRM_LINK_INVALID_MESSAGE, 400);
             }
 
-            await new AuthService(env).verifyEmail(parsed.data.token);
+            const userId = await new AuthService(env).verifyEmail(parsed.data.token);
+            await honorAnalyticsChoice(env, request, userId);
+            serverAnalytics(env).capture('email_confirmed', userId, {});
 
             return AuthController.createSuccessResponse({ message: 'Your email is confirmed.' });
         } catch (error) {
@@ -364,14 +380,15 @@ export class AuthController extends BaseController {
      * Get current user profile
      * GET /api/auth/profile
      */
-    static async getProfile(_request: Request, _env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
+    static async getProfile(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
         try {
             if (!routeContext.user) {
                 return AuthController.createErrorResponse('Unauthorized', 401);
             }
             return AuthController.createSuccessResponse({
                 user: mapUserResponse(routeContext.user),
-                sessionId: routeContext.sessionId
+                sessionId: routeContext.sessionId,
+                telemetry: await sessionTelemetry(env, request, routeContext.user.id),
             });
         } catch (error) {
             return AuthController.handleError(error, 'get profile');
@@ -632,6 +649,11 @@ export class AuthController extends BaseController {
                 state,
                 request
             );
+
+            // A GPC signal on this navigation becomes the account's opt-out before anything is sent.
+            if (!(await honorAnalyticsChoice(env, request, result.user.id))) {
+                serverAnalytics(env).capture(result.isNewUser ? 'account_created' : 'signed_in', result.user.id, { method: validatedProvider }, await personUpdateOf(env, result.user.id));
+            }
             
             const baseUrl = new URL(request.url).origin;
             
@@ -677,11 +699,15 @@ export class AuthController extends BaseController {
             
             return response;
         } catch (error) {
-            this.logger.error('OAuth callback failed', error);
+            // A paused sign-up is expected while the pause is on, so it stays out of error reporting.
+            if (error instanceof SignupsPausedError) this.logger.warn('OAuth sign-up refused while sign-ups are paused');
+            else this.logger.error('OAuth callback failed', error);
             const baseUrl = new URL(request.url).origin;
-            const reason = error instanceof SecurityError && error.statusCode === 409
-                ? 'email_exists'
-                : 'auth_failed';
+            const reason = error instanceof SignupsPausedError
+                ? SIGNUPS_PAUSED_ERROR_CODE
+                : error instanceof SecurityError && error.statusCode === 409
+                    ? 'email_exists'
+                    : 'auth_failed';
             return Response.redirect(`${baseUrl}/?error=${reason}`, 302);
         }
     }

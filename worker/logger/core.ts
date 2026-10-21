@@ -3,6 +3,7 @@
  */
 import * as Sentry from '@sentry/cloudflare';
 import type { LoggerConfig, ObjectContext, LogEntry, LogLevel } from './types';
+import type { ServerErrorInput } from '../../shared/types/server-errors';
 
 export const DEFAULT_CONFIG: LoggerConfig = {
 	level: 'info',
@@ -23,6 +24,16 @@ const LOG_LEVELS: Record<LogLevel, number> = {
  */
 function scrubCredentials(data: unknown): unknown {
     return data;
+}
+
+let reportError: (input: ServerErrorInput) => void = () => undefined;
+
+/**
+ * Where every logged error is also reported. The Worker registers its reporter at startup (worker/index.ts), because
+ * the reporter is Worker-only code and the frontend's type check reaches this file.
+ */
+export function setErrorReporter(report: (input: ServerErrorInput) => void): void {
+	reportError = report;
 }
 
 export class StructuredLogger {
@@ -377,7 +388,10 @@ export class StructuredLogger {
 
 	error(message: string, ...args: unknown[]): void {
 		const { data, error } = this.processArgsWithError(args);
-        Sentry.captureException(error || new Error(message), { extra: data });
+		Sentry.captureException(error || new Error(message), { extra: data });
+		// Most calls pass the error inside their data, as `{ error }`.
+		const reported = error ?? (data.error instanceof Error ? data.error : undefined);
+		reportError({ component: this.component, message, error: reported });
 		this.log('error', message, data, error);
 	}
 

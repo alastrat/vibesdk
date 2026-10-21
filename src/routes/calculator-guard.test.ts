@@ -24,7 +24,7 @@ describe('credits calculator', () => {
 		const calculator = source(CALCULATOR);
 		expect(calculator).toContain('useModelRates()');
 		expect(calculator).toContain('usePublicPlan()');
-		expect(calculator).toContain('aiCreditsPerDay * DAYS_PER_MONTH');
+		expect(calculator).toContain('aiCreditsPerDay * DAYS_PER_MONTH * LEGACY_CREDIT_FACTOR');
 	});
 
 	it('starts from typical amounts for the number of stores, and can start over', () => {
@@ -42,9 +42,17 @@ describe('credits calculator', () => {
 	it('sends each recommendation to its next step: build, Premium with the pool, or sales', () => {
 		const calculator = source(CALCULATOR);
 		expect(calculator).toContain('<StartBuildingButton variant="blue" />');
-		expect(calculator).toContain("contactPath('premium', recommendation.tier.credits)");
+		expect(calculator).toContain("contactPath('premium', needed)");
+		expect(calculator).toContain('<PlanButton plan={recommendation.plan}');
+		expect(calculator).toContain('recommendPlan(needed, freeMonthly ?? undefined)');
 		expect(calculator).toContain("contactPath('enterprise')");
 		expect(calculator).toContain('to="/pricing#compare"');
+	});
+
+	it('prices Premium with the extra credits a bigger month needs, from the extra-credits table', () => {
+		const calculator = source(CALCULATOR);
+		expect(calculator).toContain('PLAN_PRICES_CENTS.premium + extraCreditsPriceCents(recommendation.extraCredits)');
+		expect(calculator).toContain('extra credits (');
 	});
 
 	it('keeps the recommendation in sight on phones, pinned under the inputs until the panel comes into view', () => {

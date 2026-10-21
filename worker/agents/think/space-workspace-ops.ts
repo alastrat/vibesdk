@@ -1,5 +1,13 @@
 import type { FileInfo } from '@cloudflare/shell';
 import type {
+	ActivateDraftResult,
+	ActiveDraft,
+	BringInOutcome,
+	CreateDraftResult,
+	DraftsSnapshot,
+	DraftStart,
+} from '@space-do/space';
+import type {
 	DeleteOperations,
 	EditOperations,
 	FindOperations,
@@ -26,6 +34,13 @@ export interface SpaceWorkspaceStub extends DurableObjectStub {
 	gitStatus(): Promise<unknown>;
 	deploy(branch: string): Promise<unknown>;
 	rollbackToCommit(branch: string, commitHash: string): Promise<unknown>;
+	// Draft RPC methods (used by the draft tools and the deploy tool).
+	getActiveDraft(): Promise<ActiveDraft & { tip: string | null }>;
+	listDrafts(): Promise<DraftsSnapshot>;
+	createDraft(name: string, from: DraftStart): Promise<CreateDraftResult>;
+	activateDraft(id: string): Promise<ActivateDraftResult>;
+	bringInLiveChanges(id: string): Promise<BringInOutcome>;
+	cancelBringingInLiveChanges(): Promise<{ cancelled: boolean }>;
 }
 
 export type SpaceWorkspaceOps = ReadOperations &

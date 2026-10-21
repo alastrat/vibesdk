@@ -1,13 +1,16 @@
-import { useId, useState, type ReactNode } from 'react';
-import { BuildingsIcon, CheckIcon, CoinsIcon, CrownIcon, StorefrontIcon, type Icon } from '@phosphor-icons/react';
+import type { ReactNode } from 'react';
+import { BuildingsIcon, CheckIcon, CoinsIcon, CrownIcon, RocketLaunchIcon, StorefrontIcon, type Icon } from '@phosphor-icons/react';
+import { PLAN_LIMITS, PLAN_PRICES_CENTS, type PaidPlanId } from '@/api-types';
+import { PlanButton } from '@/components/billing/PlanButton';
 import { ComingSoon } from '@/components/marketing/ComingSoon';
 import { PlanLimits } from '@/components/marketing/PlanLimits';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { PillLink } from '@/components/public-site/primitives';
-import type { CapabilityId } from '@/lib/capabilities';
-import { PREMIUM_TIERS, formatCredits, formatUsd, planById, type PlanId } from '@/lib/plans';
-import { contactPath } from '@/lib/contact';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
+import { useBillingOn } from '@/hooks/use-billing';
+import type { CapabilityId } from '@/lib/capabilities';
+import { contactPath } from '@/lib/contact';
+import { formatCredits, formatUsd, limitFeatures, planById, type PlanId } from '@/lib/plans';
 
 function Feature({ children, capability }: { children: ReactNode; capability?: CapabilityId }) {
 	return (
@@ -46,85 +49,109 @@ function Price({ cents }: { cents: number }) {
 	);
 }
 
-function BasicPlan() {
+/** The plan's credits, in the shaded line under the price. */
+function Allowance({ children }: { children: ReactNode }) {
 	return (
-		<article className="flex flex-col p-8 sm:p-10">
+		<div className="mt-6 flex min-h-12 items-center gap-3 rounded-xl bg-[#f5f6f8] px-4 py-3 text-sm text-public-ink">
+			<CoinsIcon className="size-5 shrink-0 text-public-blue" aria-hidden />
+			{children}
+		</div>
+	);
+}
+
+const CARD = 'flex flex-col p-8 sm:p-10 md:p-7 lg:p-10';
+
+function BasicPlan({ billing }: { billing: boolean }) {
+	const { liveStores, storesLifetime } = PLAN_LIMITS.basic;
+	return (
+		<article className={CARD}>
 			<PlanHeading id="basic" icon={StorefrontIcon} />
 			<Price cents={0} />
 			<p className="mt-1 text-sm text-public-muted">Free forever. No credit card.</p>
-			<div className="mt-6 flex min-h-12 items-center gap-3 rounded-xl bg-[#f5f6f8] px-4 py-3 text-sm text-public-ink">
-				<CoinsIcon className="size-5 shrink-0 text-public-blue" aria-hidden />
+			<Allowance>
 				<PlanLimits className="text-sm" fallback="A daily allowance of AI credits" />
-			</div>
+			</Allowance>
 			<StartBuildingButton variant="blue" className="mt-6" />
 			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8">
 				<Feature>Build and change stores just by asking</Feature>
 				<Feature>Live preview on desktop and phone</Feature>
 				<Feature>Start from any template in Discover</Feature>
 				<Feature>Publish your stores and sell them as templates</Feature>
+				{billing && liveStores !== null && storesLifetime !== null && (
+					<Feature>
+						{liveStores} live {liveStores === 1 ? 'store' : 'stores'}, {storesLifetime} stores in all
+					</Feature>
+				)}
 			</ul>
 		</article>
 	);
 }
 
-/** Premium with its credit pool: choosing a bigger pool updates the price. */
-function PremiumPlan() {
-	const [credits, setCredits] = useState(PREMIUM_TIERS[0].credits);
-	const selectId = useId();
-	const tier = PREMIUM_TIERS.find((entry) => entry.credits === credits) ?? PREMIUM_TIERS[0];
+/** What each paid plan adds to the one before it, from the shared limits. */
+function PaidFeatures({ plan }: { plan: PaidPlanId }) {
+	if (plan === 'pro') {
+		return (
+			<>
+				<Feature>Everything in Basic</Feature>
+				{limitFeatures('pro').map((line) => (
+					<Feature key={line}>{line}</Feature>
+				))}
+			</>
+		);
+	}
 	return (
-		<article className="flex flex-col p-8 sm:p-10">
-			<PlanHeading id="premium" icon={CrownIcon}>
-				<ComingSoon />
+		<>
+			<Feature>Everything in Pro</Feature>
+			{limitFeatures('premium', 'pro').map((line) => (
+				<Feature key={line}>{line}</Feature>
+			))}
+			<Feature capability="agentic-commerce">Get recommended by AI assistants</Feature>
+			<Feature capability="operations-agents">Store assistants</Feature>
+			<Feature capability="personalized-shopping">Personalized shopping</Feature>
+			<Feature>Priority email support</Feature>
+		</>
+	);
+}
+
+const PAID_ICONS: Record<PaidPlanId, Icon> = { pro: RocketLaunchIcon, premium: CrownIcon };
+
+/** Pro or Premium: sold here once billing is on, and until then marked coming soon, leading to sales. */
+function PaidPlan({ plan, billing }: { plan: PaidPlanId; billing: boolean }) {
+	return (
+		<article className={CARD}>
+			<PlanHeading id={plan} icon={PAID_ICONS[plan]}>
+				{!billing && <ComingSoon />}
 			</PlanHeading>
-			<Price cents={tier.priceCents} />
-			<p className="mt-1 text-sm text-public-muted">Billed monthly. Change your credits any time.</p>
-			<label htmlFor={selectId} className="sr-only">
-				Monthly AI credits
-			</label>
-			<div className="relative mt-6">
-				<CoinsIcon className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-public-blue" aria-hidden />
-				<select
-					id={selectId}
-					value={credits}
-					onChange={(event) => setCredits(Number(event.target.value))}
-					className="min-h-12 w-full cursor-pointer appearance-none rounded-xl bg-[#f5f6f8] py-3 pr-10 pl-12 text-sm text-public-ink ring-1 ring-transparent transition-shadow outline-none hover:ring-public-line focus-visible:ring-2 focus-visible:ring-public-blue"
-				>
-					{PREMIUM_TIERS.map((entry) => (
-						<option key={entry.credits} value={entry.credits}>
-							{formatCredits(entry.credits)} AI credits a month
-						</option>
-					))}
-				</select>
-				<span aria-hidden className="pointer-events-none absolute top-1/2 right-4 -translate-y-1/2 text-public-muted">
-					▾
-				</span>
-			</div>
-			<PillLink to={contactPath('premium', tier.credits)} variant="charcoal" className="mt-6">
-				Get Premium
-			</PillLink>
-			<p className="mt-3 text-center text-xs text-public-muted">Paid plans are coming soon. Tell us what you need and we'll set you up as they open.</p>
+			<Price cents={PLAN_PRICES_CENTS[plan]} />
+			<p className="mt-1 text-sm text-public-muted">Billed monthly. Cancel any time.</p>
+			<Allowance>{formatCredits(PLAN_LIMITS[plan].aiCredits)} AI credits a month</Allowance>
+			{billing ? <PlanButton plan={plan} className="mt-6" /> : (
+				<>
+					<PillLink to={contactPath(plan)} variant="charcoal" className="mt-6">
+						Get {planById(plan).name}
+					</PillLink>
+					<p className="mt-3 text-center text-xs text-public-muted">Paid plans are coming soon. Tell us what you need and we'll set you up as they open.</p>
+				</>
+			)}
 			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8">
-				<Feature>Everything in Basic, plus a monthly pool of AI credits</Feature>
-				<Feature capability="agentic-commerce">Get recommended by AI assistants</Feature>
-				<Feature capability="operations-agents">Store assistants</Feature>
-				<Feature capability="personalized-shopping">Personalized shopping</Feature>
-				<Feature>Priority email support</Feature>
+				<PaidFeatures plan={plan} />
 			</ul>
 		</article>
 	);
 }
 
-/** 1Password's business pricing: two plans side by side in one frame, Enterprise on its own band below. */
+/** 1Password's business pricing: Basic, Pro and Premium side by side in one frame, Enterprise on its own band below. */
 export function PlanCards() {
+	const billing = useBillingOn();
 	return (
 		<section aria-labelledby="plans-title" className="bg-white px-4 pt-16 pb-6 sm:px-6 sm:pt-20">
 			<h2 id="plans-title" className="sr-only">
 				Plans
 			</h2>
-			<div className="mx-auto grid max-w-[1248px] overflow-hidden rounded-[25px] ring-1 ring-[#c9dbff] md:grid-cols-2 md:divide-x md:divide-[#c9dbff] max-md:divide-y max-md:divide-[#c9dbff]">
-				<BasicPlan />
-				<PremiumPlan />
+			<div className="mx-auto grid max-w-[1248px] overflow-hidden rounded-[25px] ring-1 ring-[#c9dbff] md:grid-cols-3 md:divide-x md:divide-[#c9dbff] max-md:divide-y max-md:divide-[#c9dbff]">
+				<BasicPlan billing={billing} />
+				<PaidPlan plan="pro" billing={billing} />
+				<PaidPlan plan="premium" billing={billing} />
 			</div>
 			<EnterpriseBand />
 			<p className="mx-auto mt-6 max-w-[1248px] text-center text-xs text-public-muted">Prices are in US dollars and exclude any applicable taxes.</p>

@@ -54,6 +54,93 @@ export interface BranchDeploymentBundle {
 	compatibilityDate: string;
 }
 
+// ── Draft types (mirror src/space/drafts-store.ts and src/space/draft-git.ts) ──
+export type DraftStart = 'main' | 'live';
+
+/** One draft as the seller sees it. */
+export interface DraftSummary {
+	id: string;
+	name: string;
+	startedFrom: DraftStart;
+	updatedAt: number;
+	/** Checked out: the chat edits it and the preview shows it. */
+	active: boolean;
+	/** Its latest version is what the live store serves. */
+	live: boolean;
+	/** The live store was last published from it. */
+	publishedFromHere: boolean;
+	/** It has changes the live store doesn't. */
+	unpublishedChanges: boolean;
+	/** The live store has changes it doesn't. */
+	behindLive: boolean;
+	/** The AI is bringing the live store's changes into it. */
+	bringingInLiveChanges: boolean;
+}
+
+export interface DraftsSnapshot {
+	drafts: DraftSummary[];
+	activeDraftId: string;
+	/** The store has been published at least once. */
+	published: boolean;
+	limit: number;
+}
+
+export interface ActiveDraft {
+	id: string;
+	name: string;
+	branch: string;
+}
+
+export type ActivateDraftResult = { draft: ActiveDraft; previewStale: boolean } | { error: string };
+export type CreateDraftResult = { id: string; name: string } | { error: string };
+export type PublishDraftResult =
+	| { commitHash: string; storeManifest: string | null; draftId: string; draftName: string }
+	| { error: string };
+
+export interface PublishDraftOptions {
+	/** The account's plan lacks the catalog: refuse a version selling catalog products the live store doesn't. */
+	refuseNewCatalogProducts?: boolean;
+}
+
+/** What the Go live panel needs: the draft being edited, and the draft the live store came from. */
+export interface PublishContext {
+	active: { id: string; name: string; tip: string | null };
+	publishedDraft: { id: string; name: string } | null;
+}
+
+/**
+ * What bringing in the live store's changes did, as SpaceDO reports it. A binary file changed on both sides merges
+ * nothing: git can't combine two versions of one, so the seller has to pick.
+ */
+export type BringInOutcome =
+	| { result: 'up-to-date' }
+	| { result: 'fast-forward' | 'merged'; commit: string; deploy: unknown }
+	| { result: 'conflicts'; files: string[]; deletedByDraft: string[]; deletedByLive: string[]; liveChanges: string[] }
+	| { result: 'binary-changed-on-both-sides'; files: string[] }
+	| { error: string };
+
+/** A merge of the published commit into a draft that hasn't built yet. */
+export interface MergeState {
+	draftId: string;
+	branch: string;
+	/** The draft's tip before the merge: cancelling returns to it. */
+	ours: string;
+	/** The published commit being brought in. */
+	theirs: string;
+	/** Files with conflict markers. */
+	files: string[];
+	/** Files the draft deleted that the live store changed. */
+	deletedByDraft: string[];
+	/** Files the live store deleted that the draft changed. */
+	deletedByLive: string[];
+	/** The merge (or fast-forward) commit once there is one. */
+	merged: string | null;
+}
+
+// ── Store manifest (mirrors src/space/store-manifest.ts) ────────────────────
+/** The catalog variants a manifest sells; a manifest that doesn't parse sells none. */
+export function catalogVariantIdsOf(manifest: string | null): Set<string>;
+
 // ── Env shape (minimum). The host worker's Env satisfies this. ─────────────
 export interface Env {
 	SPACE_DO: DurableObjectNamespace;

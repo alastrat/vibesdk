@@ -15,15 +15,10 @@ export default defineConfig({
 		force: true,
 	},
 
-	// build: {
-	//     rollupOptions: {
-	//       output: {
-	//             advancedChunks: {
-	//                 groups: [{name: 'vendor', test: /node_modules/}]
-	//             }
-	//         }
-	//     }
-	// },
+	environments: {
+		// Hidden maps for PostHog error tracking; uploaded and deleted after the build (scripts/posthog-sourcemaps.ts).
+		client: { build: { sourcemap: 'hidden' } },
+	},
 	plugins: [
 		react(),
 		svgr(),

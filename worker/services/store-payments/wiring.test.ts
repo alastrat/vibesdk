@@ -1,9 +1,20 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { recordingD1 } from '../../database/test-support/recording-d1';
-import { returnPageRecordDeps, runStorePaymentsSchedule, storeRefundDeps } from './wiring';
 import { CATALOG_REFRESH_CRON, CATALOG_SWEEP_CRON } from '../catalog/scheduler';
 import type { StripeClient } from '../payments/stripe-client';
-import type { StoreOrderView } from './store';
+import type { NewStoreOrder, StoreOrderView } from './store';
+
+const captured = vi.hoisted((): Array<[string, string, Record<string, unknown>]> => []);
+vi.mock('../posthog/analytics', () => ({
+	serverAnalytics: () => ({ capture: (name: string, userId: string, properties: Record<string, unknown>) => void captured.push([name, userId, properties]) }),
+}));
+
+const { recordStoreOrderDeps, returnPageRecordDeps, runStorePaymentsSchedule, storeRefundDeps } = await import('./wiring');
+
+afterEach(() => {
+	captured.length = 0;
+	vi.restoreAllMocks();
+});
 
 const ORDER = { id: 'ord_1', sellerUserId: 'u1', sellerStripeAccountId: 'acct_1', stripeCheckoutSessionId: 'cs_1', items: [] } as unknown as StoreOrderView;
 
@@ -58,3 +69,21 @@ describe('runStorePaymentsSchedule', () => {
 	});
 });
 
+describe('recordStoreOrderDeps analytics', () => {
+	const NEW_ORDER = { id: 'ord_1', mode: 'live', appId: 'app_1', checkoutId: 'chk_1', sellerUserId: 'u1', totalCents: 4099, applicationFeeCents: 205, items: [] } as unknown as NewStoreOrder;
+
+	it('still records the sale, and warns, when the seller\'s order count cannot be read', async () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const { d1 } = recordingD1((sql) => {
+			if (sql.toLowerCase().includes('count(*)')) throw new Error('D1 is unavailable');
+			return [];
+		});
+		expect(await recordStoreOrderDeps({ DB: d1 } as unknown as Env).recordOrder(NEW_ORDER)).toBe('recorded');
+		expect(captured).toEqual([['sale_completed', 'u1', expect.objectContaining({ app_id: 'app_1', first_sale: false })]]);
+		const logged = warn.mock.calls.map(([line]) => String(line));
+		expect(logged).toHaveLength(1);
+		expect(logged[0]).toContain("Could not count the seller's orders");
+		expect(logged[0]).toContain('"sellerUserId":"u1"');
+		expect(logged[0]).toContain('D1 is unavailable');
+	});
+});

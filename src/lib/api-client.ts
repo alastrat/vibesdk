@@ -57,6 +57,9 @@ import type{
 	PlatformStatusData,
 	RateLimitError,
 	CapabilitiesData,
+	AdminFlagsData,
+	AnalyticsPreferenceData,
+	TelemetryConfigData,
 	VaultConfigResponse,
 	VaultStatusResponse,
 	ListAppTablesResponse,
@@ -113,6 +116,9 @@ import type{
 	LiveStoreView,
 	PublishLiveStoreRequest,
 	AddStoreDomainRequest,
+	CreateDraftRequest,
+	DraftsSnapshot,
+	RenameDraftRequest,
 	PayoutInterval,
 	CatalogProductsData,
 	AdminCatalogOrdersData,
@@ -121,13 +127,36 @@ import type{
 	StripeLinkData,
 	TemplateCategory,
 	AuthUser,
+	BillingChangeRequested,
+	BillingView,
+	CardSetupMode,
+	CardSetupStart,
+	CheckoutClientStart,
+	CheckoutConsentRequest,
+	CheckoutStatusView,
+	CheckoutTermsView,
+	CreditsRequest,
+	InvoicePaymentResult,
+	InvoiceView,
+	PaidPlanId,
+	PlanLimitRefusal,
+	PlanRequest,
 } from '@/api-types';
 import {
+	isPlanLimitRefusal,
 	RateLimitExceededError,
 	SecurityError,
 	SecurityErrorType,
 } from '@/api-types';
+import { filenameOfDisposition } from './download';
+import { announcePlanLimit } from './plan-limit-events';
 import { toast } from 'sonner';
+
+/** An invoice's PDF, ready to save. */
+export interface InvoicePdfFile {
+	blob: Blob;
+	filename: string;
+}
 
 /**
  * Global auth modal trigger for 401 interception
@@ -142,6 +171,9 @@ export function setGlobalAuthModalTrigger(trigger: (context?: string) => void) {
  * API Client Error class with proper error context
  */
 export class ApiError extends Error {
+	/** The plan limit behind a 402, for the shared Upgrade dialog. */
+	public planLimit: PlanLimitRefusal | null = null;
+
 	constructor(
 		public status: number,
 		public statusText: string,
@@ -471,12 +503,18 @@ class ApiClient {
                         }
                     }
 
-                    throw new ApiError(
+                    const apiError = new ApiError(
                         response.status,
                         response.statusText,
                         data.error?.message || data.message || 'Request failed',
                         endpoint,
                     );
+                    // A plan limit opens the shared Upgrade dialog; callers can still read it from the error.
+                    if (response.status === 402 && isPlanLimitRefusal(data?.error?.planLimit)) {
+                        apiError.planLimit = data.error.planLimit;
+                        announcePlanLimit(data.error.planLimit);
+                    }
+                    throw apiError;
 			}
 
 		    return { response, data };
@@ -511,6 +549,25 @@ class ApiClient {
 	 */
 	async getCapabilities(noToast: boolean = true): Promise<ApiResponse<CapabilitiesData>> {
 		return this.request<CapabilitiesData>('/api/capabilities', undefined, noToast);
+	}
+
+	/** Visitors' replay pause, and the local opt-in token; quiet, since the app works without it. */
+	async getTelemetryConfig(): Promise<ApiResponse<TelemetryConfigData>> {
+		return this.request<TelemetryConfigData>('/api/telemetry/config', undefined, true);
+	}
+
+	async getAnalyticsPreference(): Promise<ApiResponse<AnalyticsPreferenceData>> {
+		return this.request<AnalyticsPreferenceData>('/api/user/analytics');
+	}
+
+	/** Quiet: the settings card shows its own error. */
+	async setAnalyticsPreference(optedOut: boolean): Promise<ApiResponse<AnalyticsPreferenceData>> {
+		return this.request<AnalyticsPreferenceData>('/api/user/analytics', { method: 'PUT', body: { optedOut } }, true);
+	}
+
+	/** Every flag's value for the signed-in admin; quiet because non-admins get 403. */
+	async getAdminFlags(): Promise<ApiResponse<AdminFlagsData>> {
+		return this.request<AdminFlagsData>('/api/admin/flags', {}, true);
 	}
 
 	// ===============================
@@ -669,6 +726,82 @@ class ApiClient {
 		return this.request<StripeConnectStatusData>('/api/stripe/connect/payouts', { method: 'PUT', body: choice });
 	}
 
+	/** The signed-in account's plan, subscription, credits and what it may do. */
+	async getBilling(): Promise<ApiResponse<BillingView>> {
+		return this.request<BillingView>('/api/billing');
+	}
+
+	/** Opens an embedded checkout for Pro or Premium; the answer carries what Stripe.js starts the form with. */
+	async startPlanCheckout(plan: PaidPlanId): Promise<ApiResponse<CheckoutClientStart>> {
+		const body: PlanRequest = { plan };
+		return this.request<CheckoutClientStart>('/api/billing/checkout', { method: 'POST', body });
+	}
+
+	/** Opens an embedded checkout for extra credits, Premium only. */
+	async buyCredits(credits: number): Promise<ApiResponse<CheckoutClientStart>> {
+		const body: CreditsRequest = { credits };
+		return this.request<CheckoutClientStart>('/api/billing/credits', { method: 'POST', body });
+	}
+
+	/** The consent sentence, button and first payment of the seller's open subscription checkout, as Stripe has it now. */
+	async getCheckoutTerms(sessionId: string): Promise<ApiResponse<CheckoutTermsView>> {
+		return this.request<CheckoutTermsView>(`/api/billing/checkout/terms?${new URLSearchParams({ session_id: sessionId })}`);
+	}
+
+	/** Keeps the seller's agreement to the terms shown, before the payment is confirmed. */
+	async recordCheckoutConsent(body: CheckoutConsentRequest): Promise<ApiResponse<{ recorded: true }>> {
+		return this.request<{ recorded: true }>('/api/billing/checkout/consent', { method: 'POST', body });
+	}
+
+	/** Where the seller's checkout stands; once it is paid the server has recorded it. */
+	async getCheckoutStatus(sessionId: string): Promise<ApiResponse<CheckoutStatusView>> {
+		return this.request<CheckoutStatusView>(`/api/billing/checkout/status?${new URLSearchParams({ session_id: sessionId })}`);
+	}
+
+	/** Premium now, Pro at the renewal, or the current plan again to drop a pending move. */
+	async changePlan(plan: PaidPlanId): Promise<ApiResponse<BillingChangeRequested>> {
+		const body: PlanRequest = { plan };
+		return this.request<BillingChangeRequested>('/api/billing/change-plan', { method: 'POST', body });
+	}
+
+	async cancelPlan(): Promise<ApiResponse<BillingChangeRequested>> {
+		return this.request<BillingChangeRequested>('/api/billing/cancel', { method: 'POST' });
+	}
+
+	async resumePlan(): Promise<ApiResponse<BillingChangeRequested>> {
+		return this.request<BillingChangeRequested>('/api/billing/resume', { method: 'POST' });
+	}
+
+	/** Opens the form for a new card; `pay` also pays the failed invoice with it once it is saved. */
+	async startCardSetup(mode: CardSetupMode): Promise<ApiResponse<CardSetupStart>> {
+		return this.request<CardSetupStart>('/api/billing/card', { method: 'POST', body: { mode } });
+	}
+
+	/** Makes the card the seller just saved their default, and in `pay` mode pays the failed invoice with it. */
+	async completeCardSetup(sessionId: string): Promise<ApiResponse<InvoicePaymentResult>> {
+		return this.request<InvoicePaymentResult>('/api/billing/card/complete', { method: 'POST', body: { sessionId } });
+	}
+
+	/** Pays the failed invoice with the card on file. */
+	async payOpenInvoice(): Promise<ApiResponse<InvoicePaymentResult>> {
+		return this.request<InvoicePaymentResult>('/api/billing/invoices/pay', { method: 'POST' });
+	}
+
+	/** The seller's last 24 invoices, newest first. */
+	async getBillingHistory(): Promise<ApiResponse<InvoiceView[]>> {
+		return this.request<InvoiceView[]>('/api/billing/history');
+	}
+
+	/**
+	 * An invoice's PDF to save, named as the server names it. The server streams it, so Stripe's address never reaches the
+	 * page. A refusal throws with the server's own message; quiet, since the page shows it. A failure with no message of
+	 * its own, such as a gateway page, has status 0.
+	 */
+	async downloadInvoicePdf(invoiceId: string): Promise<InvoicePdfFile> {
+		const { response } = await this.requestRaw<unknown>(`/api/billing/invoices/${encodeURIComponent(invoiceId)}/pdf`, { skipJsonParsing: true }, false, true);
+		return { blob: await response.blob(), filename: filenameOfDisposition(response.headers.get('Content-Disposition'), `${invoiceId}.pdf`) };
+	}
+
 	/** The seller's level, store limits and this week's use. */
 	async getSellerLimits(): Promise<ApiResponse<SellerLimitsData>> {
 		return this.request<SellerLimitsData>('/api/stores/limits');
@@ -766,6 +899,27 @@ class ApiClient {
 
 	async removeStoreDomain(appId: string): Promise<ApiResponse<LiveStoreView>> {
 		return this.request<LiveStoreView>(`/api/stores/${encodeURIComponent(appId)}/live/domain`, { method: 'DELETE' });
+	}
+
+	/** The store's drafts and which one is being edited. */
+	async getDrafts(appId: string): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts`);
+	}
+
+	async createDraft(appId: string, request: CreateDraftRequest): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts`, { method: 'POST', body: request });
+	}
+
+	async activateDraft(appId: string, draftId: string): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts/${encodeURIComponent(draftId)}/activate`, { method: 'POST' });
+	}
+
+	async renameDraft(appId: string, draftId: string, request: RenameDraftRequest): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts/${encodeURIComponent(draftId)}`, { method: 'PATCH', body: request });
+	}
+
+	async deleteDraft(appId: string, draftId: string): Promise<ApiResponse<DraftsSnapshot>> {
+		return this.request<DraftsSnapshot>(`/api/stores/${encodeURIComponent(appId)}/drafts/${encodeURIComponent(draftId)}`, { method: 'DELETE' });
 	}
 
 	async getCatalogProducts(query?: string): Promise<ApiResponse<CatalogProductsData>> {
@@ -995,7 +1149,8 @@ class ApiClient {
 		} catch (error) {
 			// Handle any network or parsing errors
 			const errorMessage = error instanceof Error ? error.message : 'Failed to create agent session';
-			toast.error(errorMessage);
+			// A plan limit already opened the Upgrade dialog with this message.
+			if (!(error instanceof ApiError && error.planLimit)) toast.error(errorMessage);
 
             throw new Error(errorMessage);
 		}

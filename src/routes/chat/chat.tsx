@@ -72,6 +72,8 @@ import { useDragDrop } from '@/hooks/use-drag-drop';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { PublishDialog } from '@/components/publishing/PublishDialog';
 import { GoLiveDialog } from '@/components/live-store/GoLiveDialog';
+import { DraftSwitcher } from '@/components/drafts/DraftSwitcher';
+import { LiveFixBanner } from '@/components/drafts/LiveFixBanner';
 import { ModelUnavailableNotice } from '@/components/ModelUnavailableNotice';
 import { BuildProgressBar } from '@/components/BuildProgressBar';
 import { sendWebSocketMessage } from './utils/websocket-helpers';
@@ -1060,6 +1062,14 @@ function ChatSession() {
 		],
 	);
 
+	const sendChatRequest = useCallback(
+		(message: string) => {
+			if (sendWebSocketMessage(websocket, 'user_suggestion', { message })) sendUserMessage(message);
+		},
+		[websocket, sendUserMessage],
+	);
+	const showDrafts = !!app && isOwner && behaviorType === 'think';
+
 	const [progress, total] = useMemo((): [number, number] => {
 		// Calculate phase progress instead of file progress
 		const completedPhases = phaseTimeline.filter(
@@ -1498,6 +1508,8 @@ function ChatSession() {
 										!!chatId &&
 										(capabilities?.artifacts ?? false)
 									}
+									draftSwitcher={showDrafts && app ? <DraftSwitcher appId={app.id} refreshKey={previewUrl} isGenerating={isGenerating} onSendMessage={sendChatRequest} /> : undefined}
+									previewNotice={showDrafts && app ? <LiveFixBanner appId={app.id} refreshKey={previewUrl} onSendMessage={sendChatRequest} /> : undefined}
 								/>
 							</motion.div>
 						)}

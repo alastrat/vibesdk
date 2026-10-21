@@ -48,18 +48,16 @@ describe('pricing page', () => {
 	});
 
 	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
-		const order = ['<PlanCards />', '<ComparePlans />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={PRICING_FAQ} />'];
+		const order = ['<PlanCards />', '<ComparePlans billing={billing} />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={pricingFaq(billing, rates)} />'];
 		const positions = order.map((tag) => page.indexOf(tag));
 		expect(positions.every((position) => position > -1)).toBe(true);
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
 	});
 
-	it('shows Basic and Premium side by side in one frame, with Enterprise on its own band', () => {
+	it('shows Basic, Pro and Premium side by side in one frame, with Enterprise on its own band', () => {
 		const cards = source(CARDS);
-		expect(cards).toContain('md:grid-cols-2');
-		expect(cards).toContain('<BasicPlan />');
-		expect(cards).toContain('<PremiumPlan />');
-		expect(cards).toContain('<EnterpriseBand />');
+		expect(cards).toContain('md:grid-cols-3');
+		for (const card of ['<BasicPlan billing={billing} />', '<PaidPlan plan="pro" billing={billing} />', '<PaidPlan plan="premium" billing={billing} />', '<EnterpriseBand />']) expect(cards).toContain(card);
 	});
 
 	it('states the free allowance from the live limits, never typed in', () => {
@@ -69,16 +67,29 @@ describe('pricing page', () => {
 		expect(source('/src/components/marketing/PlanLimits.tsx')).toContain('fallback');
 	});
 
-	it('lets visitors pick a Premium credit pool, with the price following it', () => {
-		const cards = source(CARDS);
-		expect(cards).toContain('PREMIUM_TIERS.map');
-		expect(cards).toContain('<Price cents={tier.priceCents} />');
-		expect(cards).not.toMatch(/\$(99|199|349|599)\b/);
+	it("states today's daily allowance, while billing is off, in the credits steps are priced in, as the calculator does", () => {
+		const limits = source('/src/components/marketing/PlanLimits.tsx');
+		expect(limits).toContain('${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} AI credits a day');
+		expect(limits).not.toContain('${plan.data.aiCreditsPerDay} AI credits a day');
+		const compare = source(COMPARE);
+		expect(compare).toContain('${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} a day');
+		expect(compare).not.toContain('formatCredits(plan.data.aiCreditsPerDay)');
 	});
 
-	it("doesn't sell Premium before subscriptions exist: it leads to sales with the chosen pool, marked coming soon", () => {
+	it('prices Pro and Premium from the plan table, never typed in', () => {
 		const cards = source(CARDS);
-		expect(cards).toContain("contactPath('premium', tier.credits)");
+		expect(cards).toContain('<Price cents={PLAN_PRICES_CENTS[plan]} />');
+		expect(cards).not.toMatch(/\$(49|199)\b/);
+		// Credits and store counts come from the limits table too.
+		expect(cards).not.toMatch(/\b(5|20|100),000\b|Up to \d/);
+	});
+
+	it("sells Pro and Premium once billing is on, and until then marks them coming soon and leads to sales", () => {
+		const cards = source(CARDS);
+		expect(cards).toContain('billing ? <PlanButton plan={plan}');
+		// Each card asks sales about its own plan.
+		expect(cards).toContain('contactPath(plan)');
+		expect(cards).not.toContain("contactPath('premium')");
 		expect(cards).toContain('<ComingSoon />');
 		expect(cards).toContain('Paid plans are coming soon');
 		expect(cards).not.toMatch(/Buy now|Subscribe|checkout/i);
@@ -92,10 +103,25 @@ describe('pricing page', () => {
 		expect(band).not.toMatch(/\$\d/);
 	});
 
+	it("adds the Pro column, the limit rows and the plan buttons only once billing is on, and keeps today's table until then", () => {
+		const compare = source(COMPARE);
+		expect(compare).toContain('comparisonFor(billing)');
+		const paid = compare.slice(compare.indexOf("case 'pro':"), compare.indexOf("case 'enterprise':"));
+		expect(paid).toContain("case 'premium':");
+		expect(paid).toContain('action: billing ? (');
+		expect(paid).toContain('<PlanButton plan={id}');
+		expect(paid).toContain('contactPath(id)');
+		expect(paid).not.toContain("contactPath('premium')");
+		// Until billing is on, the paid columns keep the coming-soon tag beside the plan's name.
+		expect(paid).toContain('comingSoon: !billing');
+		expect(compare).toContain('{header.comingSoon && <ComingSoon />}');
+		expect(compare).not.toContain('PREMIUM_TIERS');
+	});
+
 	it('shows phones one plan beside the labels, picked from the corner of the header', () => {
 		const compare = source(COMPARE);
 		expect(compare).toContain('const isPhone = useIsMobile();');
-		expect(compare).toContain('const shown = isPhone ? PLANS.filter((entry) => entry.id === phonePlan) : PLANS;');
+		expect(compare).toContain('const shown = isPhone ? plans.filter((entry) => entry.id === phonePlan) : plans;');
 		expect(compare).toContain('colSpan={shown.length + 1}');
 		expect(compare).toMatch(/<select[^>]*aria-label="Plan to compare"/);
 	});
@@ -111,7 +137,7 @@ describe('pricing page', () => {
 
 	it('compares plans with pinned headers, and groups that fold', () => {
 		const compare = source(COMPARE);
-		expect(compare).toContain('PLAN_COMPARISON.map');
+		expect(compare).toContain('sections.map');
 		expect(compare).toContain('sticky top-[var(--public-header-h)] z-10');
 		// No scrolling box around the table at any width: it would stop the headers from pinning to the page.
 		expect(compare).not.toContain('overflow-x-auto');
@@ -141,7 +167,8 @@ describe('pricing page', () => {
 
 	it('answers the credit questions', () => {
 		const copy = source('/src/content/positioning.ts');
-		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I change my Premium credits?', 'Is Premium available now?']) {
+		expect(copy).toContain('export function pricingFaq(billing: boolean');
+		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I buy more credits?', 'Can I change or cancel my plan?', 'Are Pro and Premium available now?']) {
 			expect(copy, question).toContain(question);
 		}
 	});

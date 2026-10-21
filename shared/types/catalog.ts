@@ -5,6 +5,9 @@ import type { StoreMode } from './store-payments';
 export const CATALOG_SUPPLIERS = ['cjdropshipping'] as const;
 export type CatalogSupplier = (typeof CATALOG_SUPPLIERS)[number];
 
+/** The refusal while the catalog-paused flag is on. */
+export const CATALOG_PAUSED_MESSAGE = "Estori's catalog is paused right now, so catalog products can't be added to stores.";
+
 /** A catalog order waits for placement, is done (each item placed or rejected), or needs the owner. */
 export const CATALOG_ORDER_STATUSES = ['awaiting-placement', 'placement-done', 'needs-attention', 'risk-hold'] as const;
 export type CatalogOrderStatus = (typeof CATALOG_ORDER_STATUSES)[number];

@@ -142,17 +142,23 @@ export interface LiveStoreView {
 	suggestedSlug: string;
 	url: string | null;
 	publishedAt: string | null;
-	/** The preview has a version the live store doesn't serve yet. */
+	/** The draft being edited has a version the live store doesn't serve yet. */
 	hasChanges: boolean;
 	/** The published store file has products, so its checkout takes payments. */
 	checkoutConnected: boolean;
 	domain: StoreDomainView | null;
 	/** False until Estori sets up a way to connect sellers' domains. */
 	domainsAvailable: boolean;
+	/** The draft being edited, which Publish sends live. */
+	draft: { id: string; name: string } | null;
+	/** The draft the live store was published from. */
+	publishedDraft: { id: string; name: string } | null;
 }
 
 export interface PublishLiveStoreRequest {
 	slug: string;
+	/** Defaults to the draft being edited. */
+	draftId?: string;
 }
 
 export interface AddStoreDomainRequest {

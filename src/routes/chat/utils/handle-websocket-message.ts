@@ -1,5 +1,7 @@
 import type { WebSocket } from 'partysocket';
 import type { WebSocketMessage, BlueprintType, ConversationMessage, AgentState, PhasicState, BehaviorType, ProjectType, TemplateDetails, CloudflareDeploymentErrorCode, ModelUnavailableNotice } from '@/api-types';
+import { AI_BUILDS_PAUSED_CODE, PLAN_LIMIT_ERROR_CODE, isPlanLimitRefusal } from '@/api-types';
+import { announcePlanLimit } from '@/lib/plan-limit-events';
 import { deduplicateMessages, isAssistantMessageDuplicate } from './deduplicate-messages';
 import { logger } from '@/utils/logger';
 import { getFileType } from '@/utils/string';
@@ -1195,6 +1197,21 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
             case 'error': {
                 const errorData = message;
+
+                // Out of credits or another plan limit: the shared Upgrade dialog shows it.
+                if (errorData.code === PLAN_LIMIT_ERROR_CODE && isPlanLimitRefusal(errorData.planLimit)) {
+                    announcePlanLimit(errorData.planLimit);
+                    break;
+                }
+
+                // The pause also refuses build starts, such as the auto-resume on reload, which the editor already shows
+                // as running; without this it would stay "generating" until the seller pressed stop.
+                if (errorData.code === AI_BUILDS_PAUSED_CODE) {
+                    setIsGenerating(false);
+                    if (projectStages.find((stage) => stage.id === 'code')?.status === 'active') {
+                        updateStage('code', { status: 'pending' });
+                    }
+                }
                 
                 logger.info('🚨 Error message received:', {
                     showAsPopup: errorData.showAsPopup,

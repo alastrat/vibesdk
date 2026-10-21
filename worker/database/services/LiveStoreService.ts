@@ -1,8 +1,9 @@
 /** D1 reads and writes for live stores: each store's address, its published version, and the seller's own domain. */
 
-import { and, asc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
+import { and, asc, count, desc, eq, isNotNull, isNull, lt, or } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
+import { isUniqueViolation } from './unique-violation';
 import type { LiveStoreStatus, StoreDomainProvider, StoreDomainRecord, StoreDomainStatus } from '../../../shared/types/live-stores';
 
 export interface LiveStoreRow {
@@ -34,14 +35,6 @@ export interface StoreDomainRow {
     verifiedAt: Date | null;
 }
 
-/** Drizzle wraps D1's error, so the constraint is named in a cause. */
-function isUniqueViolation(error: unknown): boolean {
-    for (let current: unknown = error, depth = 0; current instanceof Error && depth < 4; current = current.cause, depth++) {
-        if (current.message.includes('UNIQUE constraint failed')) return true;
-    }
-    return false;
-}
-
 function isRecord(value: unknown): value is StoreDomainRecord {
     if (typeof value !== 'object' || value === null) return false;
     const record = value as Record<string, unknown>;
@@ -55,6 +48,11 @@ function recordsOf(text: string): StoreDomainRecord[] {
     } catch {
         return [];
     }
+}
+
+/** Narrows a join of stores and their apps to the account's stores that are live now. */
+function liveStoresOf(userId: string) {
+    return and(eq(schema.apps.userId, userId), eq(schema.liveStores.status, 'live'));
 }
 
 export class LiveStoreService extends BaseService {
@@ -86,6 +84,41 @@ export class LiveStoreService extends BaseService {
             throw error;
         }
         return 'published';
+    }
+
+    /** The account's stores that are live now; an offline store doesn't count. */
+    async liveCountOf(userId: string): Promise<number> {
+        const row = await this.database
+            .select({ live: count() })
+            .from(schema.liveStores)
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
+            .where(liveStoresOf(userId))
+            .get();
+        return row?.live ?? 0;
+    }
+
+    /** The ids of the account's apps whose stores are live now. */
+    async liveAppsOf(userId: string): Promise<string[]> {
+        const rows = await this.database
+            .select({ appId: schema.liveStores.appId })
+            .from(schema.liveStores)
+            .innerJoin(schema.apps, eq(schema.apps.id, schema.liveStores.appId))
+            .where(liveStoresOf(userId))
+            .orderBy(asc(schema.liveStores.appId))
+            .all();
+        return rows.map((row) => row.appId);
+    }
+
+    /** The live store published most recently, for the heartbeat's store check; null when none is live. */
+    async newestLiveSlug(): Promise<string | null> {
+        const row = await this.database
+            .select({ slug: schema.liveStores.slug })
+            .from(schema.liveStores)
+            .where(eq(schema.liveStores.status, 'live'))
+            .orderBy(desc(schema.liveStores.publishedAt))
+            .limit(1)
+            .get();
+        return row?.slug ?? null;
     }
 
     async setOffline(appId: string, now: Date): Promise<void> {

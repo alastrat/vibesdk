@@ -63,7 +63,7 @@ export function ModelUnavailableNotice({ notice, options, onSwitch, onRetry, onD
 			</div>
 			{alternative && failed && (
 				<p className="mt-2 text-xs text-kumo-subtle">
-					{alternative.label} uses {describeCreditChange(failed.creditCost, alternative.creditCost)}.
+					{alternative.label} uses {describeCreditChange(failed.creditsPerStep, alternative.creditsPerStep)}.
 				</p>
 			)}
 		</div>
