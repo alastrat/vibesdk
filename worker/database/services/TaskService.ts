@@ -86,6 +86,11 @@ function recordOf(row: TaskRow): TaskRecord {
 	return { ...row, payload: parsed(row.payload), progress: progressOf(row.progress) };
 }
 
+/** A task that never ran a step shows no start time, though a claim set one. */
+function startedIfStepped(): SQL {
+	return sql`CASE WHEN ${schema.tasks.steps} = 0 THEN NULL ELSE ${schema.tasks.startedAt} END`;
+}
+
 /** No task of this seller holds a live lease: the seller's runner does one step at a time. */
 function noLiveLease(userId: SQL | string, now: number): SQL {
 	return sql`NOT EXISTS (SELECT 1 FROM tasks l WHERE l.user_id = ${userId} AND l.status = 'running' AND l.lease_until > ${now})`;
@@ -137,19 +142,29 @@ export class TaskService extends BaseService {
 
 	/**
 	 * Saves a step's progress and credits, and releases the lease; the task is due again at once, behind the seller's other
-	 * due work. Saves each step once, and never changes the status, so a seller's cancel during the step stands.
+	 * due work. Saves each step once, and never changes the status, so a seller's cancel during the step stands. A step
+	 * that isn't the last clears the failure count; the last one leaves it to `finish`, so a finish that keeps failing
+	 * still counts. Answers the task's status, or null when this step was saved already.
 	 */
-	async saveStep(id: string, step: { progress: TaskProgress; credits: number; steps: number }, now: number): Promise<void> {
+	async saveStep(id: string, step: { progress: TaskProgress; credits: number; steps: number; finished: boolean }, now: number): Promise<TaskStatus | null> {
 		const tasks = schema.tasks;
-		await this.database
+		const [row] = await this.database
 			.update(tasks)
-			.set({ progress: JSON.stringify(step.progress), creditsUsed: sql`${tasks.creditsUsed} + ${step.credits}`, steps: step.steps, attempts: 0, lastError: null, leaseUntil: null, runAt: now })
+			.set({
+				progress: JSON.stringify(step.progress),
+				creditsUsed: sql`${tasks.creditsUsed} + ${step.credits}`,
+				steps: step.steps,
+				leaseUntil: null,
+				runAt: now,
+				...(step.finished ? {} : { attempts: 0, lastError: null }),
+			})
 			.where(and(eq(tasks.id, id), eq(tasks.steps, step.steps - 1)))
-			.run();
+			.returning({ status: tasks.status });
+		return row?.status ?? null;
 	}
 
 	async finish(id: string, now: number): Promise<void> {
-		await this.updateRunning(id, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null });
+		await this.updateRunning(id, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null, attempts: 0, lastError: null });
 	}
 
 	/** Fails a task for good, without retries, such as one whose payload can't be read. */
@@ -158,10 +173,10 @@ export class TaskService extends BaseService {
 	}
 
 	/**
-	 * A step failed: the task waits out its backoff, or fails at the last failure in a row, keeping the error. 'failed'
-	 * also when the task was no longer running, since it won't run again.
+	 * A step failed: the task waits out its backoff showing `messages.retry`, or fails at the last failure in a row showing
+	 * `messages.failed`. 'failed' also when the task was no longer running, since it won't run again.
 	 */
-	async recordFailure(id: string, message: string, now: number): Promise<'retry' | 'failed'> {
+	async recordFailure(id: string, messages: { retry: string; failed: string }, now: number): Promise<'retry' | 'failed'> {
 		const tasks = schema.tasks;
 		const current = await this.database.select({ attempts: tasks.attempts }).from(tasks).where(and(eq(tasks.id, id), eq(tasks.status, 'running'))).get();
 		if (!current) return 'failed';
@@ -169,8 +184,8 @@ export class TaskService extends BaseService {
 		const retryAt = taskRetryAt(failures, now);
 		const update =
 			retryAt === null
-				? { status: 'failed' as const, attempts: failures, lastError: message, finishedAt: now, leaseUntil: null }
-				: { status: 'queued' as const, attempts: failures, lastError: message, runAt: retryAt, leaseUntil: null };
+				? { status: 'failed' as const, attempts: failures, lastError: messages.failed, finishedAt: now, leaseUntil: null }
+				: { status: 'queued' as const, attempts: failures, lastError: messages.retry, runAt: retryAt, leaseUntil: null };
 		await this.database
 			.update(tasks)
 			.set(update)
@@ -184,7 +199,7 @@ export class TaskService extends BaseService {
 		const tasks = schema.tasks;
 		await this.database
 			.update(tasks)
-			.set({ status: 'paused', pauseReason: reason, leaseUntil: null })
+			.set({ status: 'paused', pauseReason: reason, leaseUntil: null, startedAt: startedIfStepped() })
 			.where(and(eq(tasks.id, id), inArray(tasks.status, CLAIMABLE_STATUSES)))
 			.run();
 	}
@@ -194,14 +209,14 @@ export class TaskService extends BaseService {
 		const tasks = schema.tasks;
 		await this.database
 			.update(tasks)
-			.set({ status: 'queued', runAt, pauseReason: reason, leaseUntil: null })
+			.set({ status: 'queued', runAt, pauseReason: reason, leaseUntil: null, startedAt: startedIfStepped() })
 			.where(and(eq(tasks.id, id), inArray(tasks.status, CLAIMABLE_STATUSES)))
 			.run();
 	}
 
 	/**
 	 * The seller's Resume or Retry: a paused or failed task of theirs is queued again where it stopped. Null when there's
-	 * no such task, or the same work was queued again since.
+	 * no such task, the same work was queued again since, or a failed task would take the seller past their limit.
 	 */
 	async resume(id: string, userId: string, now: number = Date.now()): Promise<TaskRecord | null> {
 		const tasks = schema.tasks;
@@ -214,6 +229,8 @@ export class TaskService extends BaseService {
 					eq(tasks.userId, userId),
 					inArray(tasks.status, RESUMABLE_STATUSES),
 					sql`NOT EXISTS (SELECT 1 FROM tasks o WHERE o.user_id = tasks.user_id AND o.dedupe_key = tasks.dedupe_key AND o.status IN (${UNFINISHED_SQL}) AND o.id <> tasks.id)`,
+					// A paused task already counts toward the limit; a failed one would add to it.
+					sql`(tasks.status IN (${UNFINISHED_SQL}) OR (SELECT count(*) FROM tasks u WHERE u.user_id = tasks.user_id AND u.status IN (${UNFINISHED_SQL})) < ${MAX_UNFINISHED_TASKS})`,
 				),
 			)
 			.returning();
@@ -276,12 +293,13 @@ export class TaskService extends BaseService {
 	}
 
 	/** Sellers with a task paused for this reason, such as credits running out. */
-	async pausedUserIds(reason: TaskPauseReason): Promise<string[]> {
+	async pausedUserIds(reason: TaskPauseReason, limit: number): Promise<string[]> {
 		const tasks = schema.tasks;
 		const rows = await this.database
 			.selectDistinct({ userId: tasks.userId })
 			.from(tasks)
 			.where(and(eq(tasks.status, 'paused'), eq(tasks.pauseReason, reason)))
+			.limit(limit)
 			.all();
 		return rows.map((row) => row.userId);
 	}

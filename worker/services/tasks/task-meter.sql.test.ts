@@ -77,7 +77,7 @@ describe('resumeCreditPausedTasks', () => {
 		await tasks().resume(queued.id, 'seller_progress', NOW);
 		const claimed = await tasks().claimNext('seller_progress', NOW, 120_000);
 		if (!claimed) throw new Error('Not claimed');
-		await tasks().saveStep(claimed.id, { progress: { done: 40, total: 120, skipped: 0 }, credits: 7, steps: 1 }, NOW);
+		await tasks().saveStep(claimed.id, { progress: { done: 40, total: 120, skipped: 0 }, credits: 7, steps: 1, finished: false }, NOW);
 		await tasks().pause(claimed.id, 'credits');
 		const { runners } = fakeRunners();
 

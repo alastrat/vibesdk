@@ -86,9 +86,12 @@ describe('the task runner wiring', () => {
 		const { runners, woken } = fakeRunners();
 		const env = envWith(db, { TASK_RUNNER: runners });
 
+		const infoLog = vi.spyOn(console, 'log').mockImplementation(() => {});
 		await runTaskSchedule('5 * * * *', env);
 		expect(woken).toEqual([]);
 		await runTaskSchedule(TASK_SWEEP_CRON, env);
 		expect(woken).toEqual([{ name: 'seller_due', userId: 'seller_due' }]);
+		expect(infoLog.mock.calls.map((call) => String(call[0])).join('\n')).toContain('Woke task runners with due work');
+		infoLog.mockRestore();
 	});
 });

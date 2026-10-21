@@ -4,6 +4,7 @@
  */
 
 import type { Locale } from '../i18n/locales';
+import { msg } from '../i18n/translate';
 
 export const TASK_STATUSES = ['queued', 'running', 'paused', 'done', 'failed', 'canceled'] as const;
 export type TaskStatus = (typeof TASK_STATUSES)[number];
@@ -28,10 +29,14 @@ export interface TaskProgress {
 export const MAX_UNFINISHED_TASKS = 50;
 /** The wait after each failure in a row, first to last. */
 export const TASK_RETRY_DELAYS_MS: readonly number[] = [30_000, 120_000, 600_000, 1_800_000, 7_200_000];
-/** At this many failures in a row the task is failed. */
-export const TASK_MAX_FAILURES = 5;
+/** At this many failures in a row the task is failed: after one try and a retry after each delay. */
+export const TASK_MAX_FAILURES = TASK_RETRY_DELAYS_MS.length + 1;
 /** How long a step holds its task before another run may take it. */
 export const TASK_LEASE_MS = 120_000;
+
+/** What a task shows the seller after a failure its kind didn't describe; a raw error is never shown. */
+export const TASK_RETRY_MESSAGE = msg('Something went wrong. Estori will try again.');
+export const TASK_FAILED_MESSAGE = msg("Something went wrong and Estori stopped trying. Retry when you're ready.");
 
 /** When a task that just failed `failures` (at least 1) times in a row runs again; null once it has failed for good. */
 export function taskRetryAt(failures: number, now: number): number | null {

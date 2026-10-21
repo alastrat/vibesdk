@@ -33,6 +33,11 @@ export interface TaskKindHandler<P> {
 	step(ctx: TaskStepContext, payload: P): Promise<TaskStepResult>;
 	/** Runs once the last step says finished, before the task is marked done; a throw retries the task. */
 	onFinished?(ctx: TaskStepContext, payload: P): Promise<void>;
+	/**
+	 * What the seller sees for an error `step` or `onFinished` threw: English marked with `msg()`, naming no AI provider or
+	 * supplier. Left out, the queue's generic message is shown. The raw error is only logged.
+	 */
+	describeError?(error: unknown): string;
 }
 
 const handlers = new Map<TaskKind, TaskKindHandler<unknown>>();

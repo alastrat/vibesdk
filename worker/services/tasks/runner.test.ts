@@ -1,5 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { TASK_LEASE_MS, TASK_MAX_FAILURES, TASK_RETRY_DELAYS_MS, taskRetryAt, type TaskPauseReason } from '../../../shared/types/tasks';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
+import {
+	TASK_FAILED_MESSAGE,
+	TASK_LEASE_MS,
+	TASK_MAX_FAILURES,
+	TASK_RETRY_DELAYS_MS,
+	TASK_RETRY_MESSAGE,
+	taskRetryAt,
+	type TaskPauseReason,
+} from '../../../shared/types/tasks';
 import type { TaskRecord } from '../../database/services/TaskService';
 import type { ModelCall, TaskKindHandler, TaskStepContext, TaskStepResult } from './kinds';
 import type { MeterGate, TaskMeter } from './meter';
@@ -8,6 +16,14 @@ import { runTaskTick, type TaskStore } from './runner';
 const NOW = 1_800_000_000_000;
 const ENV = {} as Env;
 const CALL: ModelCall = { model: 'google-ai-studio/gemini-3.6-flash', usage: { inputTokens: 1200, outputTokens: 900 } };
+
+let errorLog: MockInstance<typeof console.error>;
+beforeEach(() => {
+	errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+afterEach(() => {
+	errorLog.mockRestore();
+});
 
 function task(id: string, overrides: Partial<TaskRecord> = {}): TaskRecord {
 	return {
@@ -43,7 +59,12 @@ function memoryStore(initial: TaskRecord[]) {
 	};
 	const leased = (userId: string, now: number) => [...tasks.values()].some((record) => record.userId === userId && record.status === 'running' && (record.leaseUntil ?? 0) > now);
 	const claimable = (record: TaskRecord) => record.status === 'queued' || record.status === 'running';
-	let failSaves = 0;
+	const failing = { saveStep: 0, recordFailure: 0 };
+	const unavailable = (method: keyof typeof failing) => {
+		if (failing[method] === 0) return;
+		failing[method] -= 1;
+		throw new Error('D1 is unavailable');
+	};
 
 	const store: TaskStore = {
 		async claimNext(userId, now, leaseMs) {
@@ -56,41 +77,41 @@ function memoryStore(initial: TaskRecord[]) {
 			return { ...next };
 		},
 		async saveStep(id, step, now) {
-			if (failSaves > 0) {
-				failSaves -= 1;
-				throw new Error('D1 is unavailable');
-			}
+			unavailable('saveStep');
 			const record = get(id);
-			if (record.steps !== step.steps - 1) return;
-			Object.assign(record, { progress: step.progress, creditsUsed: record.creditsUsed + step.credits, steps: step.steps, attempts: 0, lastError: null, leaseUntil: null, runAt: now });
+			if (record.steps !== step.steps - 1) return null;
+			Object.assign(record, { progress: step.progress, creditsUsed: record.creditsUsed + step.credits, steps: step.steps, leaseUntil: null, runAt: now });
+			if (!step.finished) Object.assign(record, { attempts: 0, lastError: null });
+			return record.status;
 		},
 		async finish(id, now) {
 			const record = get(id);
-			if (record.status === 'running') Object.assign(record, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null });
+			if (record.status === 'running') Object.assign(record, { status: 'done', finishedAt: now, leaseUntil: null, pauseReason: null, attempts: 0, lastError: null });
 		},
 		async fail(id, message, now) {
 			const record = get(id);
 			if (record.status === 'running') Object.assign(record, { status: 'failed', lastError: message, finishedAt: now, leaseUntil: null });
 		},
-		async recordFailure(id, message, now) {
+		async recordFailure(id, messages, now) {
+			unavailable('recordFailure');
 			const record = get(id);
 			if (record.status !== 'running') return 'failed';
 			const failures = record.attempts + 1;
 			const retryAt = taskRetryAt(failures, now);
 			if (retryAt === null) {
-				Object.assign(record, { status: 'failed', attempts: failures, lastError: message, finishedAt: now, leaseUntil: null });
+				Object.assign(record, { status: 'failed', attempts: failures, lastError: messages.failed, finishedAt: now, leaseUntil: null });
 				return 'failed';
 			}
-			Object.assign(record, { status: 'queued', attempts: failures, lastError: message, runAt: retryAt, leaseUntil: null });
+			Object.assign(record, { status: 'queued', attempts: failures, lastError: messages.retry, runAt: retryAt, leaseUntil: null });
 			return 'retry';
 		},
 		async pause(id, reason) {
 			const record = get(id);
-			if (claimable(record)) Object.assign(record, { status: 'paused', pauseReason: reason, leaseUntil: null });
+			if (claimable(record)) Object.assign(record, { status: 'paused', pauseReason: reason, leaseUntil: null, startedAt: record.steps === 0 ? null : record.startedAt });
 		},
 		async defer(id, runAt, reason) {
 			const record = get(id);
-			if (claimable(record)) Object.assign(record, { status: 'queued', runAt, pauseReason: reason, leaseUntil: null });
+			if (claimable(record)) Object.assign(record, { status: 'queued', runAt, pauseReason: reason, leaseUntil: null, startedAt: record.steps === 0 ? null : record.startedAt });
 		},
 		async nextRunAt(userId) {
 			const live = [...tasks.values()].filter((record) => record.userId === userId && claimable(record));
@@ -106,16 +127,20 @@ function memoryStore(initial: TaskRecord[]) {
 		resume(id: string, now: number) {
 			Object.assign(get(id), { status: 'queued', pauseReason: null, attempts: 0, lastError: null, finishedAt: null, leaseUntil: null, runAt: now });
 		},
-		failNextSaves(count: number) {
-			failSaves = count;
+		/** What the seller's Cancel does. */
+		cancel(id: string, now: number) {
+			Object.assign(get(id), { status: 'canceled', finishedAt: now, leaseUntil: null });
+		},
+		failNext(method: keyof typeof failing, count: number) {
+			failing[method] = count;
 		},
 	};
 }
 
 type Payload = { appId: string; locale: string };
-type Scripted = TaskStepResult | Error;
+type Scripted = TaskStepResult | Error | ((ctx: TaskStepContext) => TaskStepResult);
 
-function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepContext) => void } = {}) {
+function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepContext) => void; describeError?: (error: unknown) => string } = {}) {
 	const stepped: Array<{ taskId: string; now: number; payload: Payload }> = [];
 	const finished: string[] = [];
 	const handler: TaskKindHandler<Payload> = {
@@ -127,28 +152,31 @@ function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepCont
 		},
 		async step(ctx, payload) {
 			stepped.push({ taskId: ctx.task.id, now: ctx.now, payload });
-			const next = script.shift();
+			const next = script.length > 1 ? script.shift() : script[0];
 			if (!next) throw new Error('No scripted step');
 			if (next instanceof Error) throw next;
-			return next;
+			return typeof next === 'function' ? next(ctx) : next;
 		},
 		async onFinished(ctx) {
 			finished.push(ctx.task.id);
 			options.onFinished?.(ctx);
 		},
+		describeError: options.describeError,
 	};
 	return { handler, stepped, finished };
 }
 
-function fakeMeter(gates: MeterGate[] = []) {
+function fakeMeter(gates: MeterGate[] = [], options: { chargeFails?: boolean; gateFails?: boolean } = {}) {
 	const charges: Array<{ userId: string; taskId: string; step: number; calls: ModelCall[] }> = [];
 	let gated = 0;
 	const meter: TaskMeter = {
 		async gate() {
 			gated += 1;
+			if (options.gateFails) throw new Error('The ledger is unavailable');
 			return gates.shift() ?? { ok: true };
 		},
 		async charge(input) {
+			if (options.chargeFails) throw new Error('The ledger is unavailable');
 			charges.push(input);
 			return input.calls.length * 7;
 		},
@@ -156,12 +184,23 @@ function fakeMeter(gates: MeterGate[] = []) {
 	return { meter, charges, gated: () => gated };
 }
 
-function setup(tasks: TaskRecord[], script: Scripted[], gates: MeterGate[] = []) {
+function setup(tasks: TaskRecord[], script: Scripted[], gates: MeterGate[] = [], options: Parameters<typeof fakeKind>[1] & Parameters<typeof fakeMeter>[1] = {}) {
 	const memory = memoryStore(tasks);
-	const kind = fakeKind(script);
-	const metering = fakeMeter(gates);
+	const kind = fakeKind(script, options);
+	const metering = fakeMeter(gates, options);
 	const deps = { store: memory.store, meter: metering.meter, kinds: (name: string) => (name === kind.handler.kind ? kind.handler : null), env: ENV };
 	return { ...memory, ...kind, ...metering, tick: (now: number) => runTaskTick(deps, 'seller_1', now) };
+}
+
+/** Ticks at each alarm the runner asks for until it asks for none, or `limit` ticks. */
+async function runUntilIdle(queue: ReturnType<typeof setup>, from: number, limit = 20): Promise<{ ticks: number; now: number }> {
+	let now = from;
+	for (let ticks = 1; ticks <= limit; ticks += 1) {
+		const { nextAlarmAt } = await queue.tick(now);
+		if (nextAlarmAt === null) return { ticks, now };
+		now = nextAlarmAt;
+	}
+	return { ticks: limit, now };
 }
 
 const progress = (done: number, total: number, skipped = 0) => ({ done, total, skipped });
@@ -206,24 +245,47 @@ describe('runTaskTick', () => {
 		expect(queue.task('a')).toMatchObject({ status: 'done', steps: 4, creditsUsed: 30 + 14 });
 	});
 
-	it('retries a throwing step with the first backoff, and fails it after 5 failures with the error kept', async () => {
-		const queue = setup([task('a')], Array.from({ length: TASK_MAX_FAILURES }, () => new Error('The batch could not be read')));
+	it('retries a throwing step after each of the five backoffs, and fails it at the 6th failure in a row', async () => {
+		expect(TASK_MAX_FAILURES).toBe(6);
+		const queue = setup([task('a')], [new Error('The batch could not be read')]);
 
 		let now = NOW;
 		const waits: number[] = [];
 		for (let failure = 1; failure < TASK_MAX_FAILURES; failure += 1) {
 			const { nextAlarmAt } = await queue.tick(now);
-			expect(queue.task('a')).toMatchObject({ status: 'queued', attempts: failure, lastError: 'The batch could not be read' });
+			expect(queue.task('a')).toMatchObject({ status: 'queued', attempts: failure, lastError: TASK_RETRY_MESSAGE });
 			expect(nextAlarmAt).toBe(queue.task('a').runAt);
 			waits.push((nextAlarmAt ?? 0) - now);
 			now = nextAlarmAt ?? now;
 		}
-		expect(waits[0]).toBe(30_000);
-		expect(waits).toEqual(TASK_RETRY_DELAYS_MS.slice(0, TASK_MAX_FAILURES - 1));
+		expect(waits).toEqual([30_000, 120_000, 600_000, 1_800_000, 7_200_000]);
+		expect(waits).toEqual(TASK_RETRY_DELAYS_MS);
 
 		expect(await queue.tick(now)).toEqual({ nextAlarmAt: null });
-		expect(queue.task('a')).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES, lastError: 'The batch could not be read', finishedAt: now });
+		expect(queue.task('a')).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES, lastError: TASK_FAILED_MESSAGE, finishedAt: now });
+		expect(queue.stepped).toHaveLength(TASK_MAX_FAILURES);
 		expect(queue.charges).toEqual([]);
+	});
+
+	it("never stores a step's raw error, which may name a provider: the kind's description or a generic message, and the raw error is logged", async () => {
+		const leaky = new Error('google-ai-studio returned 429: quota exceeded for gemini-3.6-flash');
+
+		const plain = setup([task('a')], [leaky]);
+		await plain.tick(NOW);
+		expect(plain.task('a').lastError).toBe(TASK_RETRY_MESSAGE);
+		const logged = errorLog.mock.calls.map((call) => call.map(String).join(' ')).join('\n');
+		expect(logged).toContain('quota exceeded for gemini-3.6-flash');
+		expect(logged).toContain('"taskId":"a"');
+
+		const described = setup([task('b')], [leaky], [], { describeError: () => 'The translation service is busy. Estori will try again.' });
+		await described.tick(NOW);
+		expect(described.task('b').lastError).toBe('The translation service is busy. Estori will try again.');
+
+		await runUntilIdle(plain, NOW + 1);
+		await runUntilIdle(described, NOW + 1);
+		expect(plain.task('a')).toMatchObject({ status: 'failed', lastError: TASK_FAILED_MESSAGE });
+		expect(described.task('b')).toMatchObject({ status: 'failed', lastError: 'The translation service is busy. Estori will try again.' });
+		expect(JSON.stringify([plain.task('a'), described.task('b')])).not.toMatch(/google|gemini|429/);
 	});
 
 	it('pauses with reason credits when the meter gate refuses without resumeAt', async () => {
@@ -231,7 +293,7 @@ describe('runTaskTick', () => {
 
 		expect(await queue.tick(NOW)).toEqual({ nextAlarmAt: null });
 
-		expect(queue.task('a')).toMatchObject({ status: 'paused', pauseReason: 'credits' satisfies TaskPauseReason, progress: progress(120, 400), steps: 3, creditsUsed: 90, leaseUntil: null });
+		expect(queue.task('a')).toMatchObject({ status: 'paused', pauseReason: 'credits' satisfies TaskPauseReason, progress: progress(120, 400), steps: 3, creditsUsed: 90, leaseUntil: null, startedAt: NOW - 60_000 });
 		expect(queue.stepped).toEqual([]);
 		expect(queue.charges).toEqual([]);
 	});
@@ -256,7 +318,8 @@ describe('runTaskTick', () => {
 		const queue = setup([task('a')], [stepOf(40, 40, true)], [{ ok: false, reason: 'daily-limit', resumeAt: tomorrow }]);
 
 		expect(await queue.tick(NOW)).toEqual({ nextAlarmAt: tomorrow });
-		expect(queue.task('a')).toMatchObject({ status: 'queued', pauseReason: 'daily-limit', runAt: tomorrow, leaseUntil: null });
+		// It never ran a step, so it shows no start time.
+		expect(queue.task('a')).toMatchObject({ status: 'queued', pauseReason: 'daily-limit', runAt: tomorrow, leaseUntil: null, startedAt: null });
 		expect(queue.stepped).toEqual([]);
 
 		// Nothing runs before then.
@@ -264,7 +327,7 @@ describe('runTaskTick', () => {
 		expect(queue.gated()).toBe(1);
 
 		await queue.tick(tomorrow);
-		expect(queue.task('a')).toMatchObject({ status: 'done', pauseReason: null });
+		expect(queue.task('a')).toMatchObject({ status: 'done', pauseReason: null, startedAt: tomorrow });
 	});
 
 	it('skips canceled tasks and arms the next alarm at the earliest run_at', async () => {
@@ -296,20 +359,35 @@ describe('runTaskTick', () => {
 		const unknown = setup([task('a')], [stepOf(1, 1, true)]);
 		const result = await runTaskTick({ store: unknown.store, meter: unknown.meter, kinds: () => null, env: ENV }, 'seller_1', NOW);
 		expect(result).toEqual({ nextAlarmAt: null });
-		expect(unknown.task('a')).toMatchObject({ status: 'failed', finishedAt: NOW, attempts: 0 });
-		expect(unknown.task('a').lastError).toEqual(expect.any(String));
+		expect(unknown.task('a')).toMatchObject({ status: 'failed', finishedAt: NOW, attempts: 0, lastError: TASK_FAILED_MESSAGE });
 		expect(unknown.stepped).toEqual([]);
 
 		const unreadable = setup([task('b', { payload: { appId: 'app_1' } })], [stepOf(1, 1, true)]);
 		expect(await unreadable.tick(NOW)).toEqual({ nextAlarmAt: null });
-		expect(unreadable.task('b')).toMatchObject({ status: 'failed', attempts: 0 });
+		expect(unreadable.task('b')).toMatchObject({ status: 'failed', attempts: 0, lastError: TASK_FAILED_MESSAGE });
 		expect(unreadable.stepped).toEqual([]);
 		expect(unreadable.gated()).toBe(0);
 	});
 
-	it('runs a step whose save was lost again under the same step number, after the lease, so it is charged once', async () => {
+	it('a step whose save failed counts as a failure and runs again under the same step number, so it is charged once', async () => {
 		const queue = setup([task('a')], [stepOf(40, 80), stepOf(40, 80)]);
-		queue.failNextSaves(1);
+		queue.failNext('saveStep', 1);
+
+		expect(await queue.tick(NOW)).toEqual({ nextAlarmAt: NOW + TASK_RETRY_DELAYS_MS[0] });
+		expect(queue.task('a')).toMatchObject({ status: 'queued', attempts: 1, steps: 0, lastError: TASK_RETRY_MESSAGE });
+
+		await queue.tick(NOW + TASK_RETRY_DELAYS_MS[0]);
+		expect(queue.charges.map((charge) => [charge.taskId, charge.step])).toEqual([
+			['a', 0],
+			['a', 0],
+		]);
+		expect(queue.task('a')).toMatchObject({ steps: 1, creditsUsed: 7, progress: progress(40, 80), attempts: 0, lastError: null });
+	});
+
+	it('when even the failure cannot be recorded, the tick throws and the lease holds the task until it runs out', async () => {
+		const queue = setup([task('a')], [stepOf(40, 80)]);
+		queue.failNext('saveStep', 1);
+		queue.failNext('recordFailure', 1);
 
 		await expect(queue.tick(NOW)).rejects.toThrow('D1 is unavailable');
 		// The runner's alarm retries a minute later; the lease still holds the task.
@@ -317,17 +395,32 @@ describe('runTaskTick', () => {
 		expect(queue.stepped).toHaveLength(1);
 
 		await queue.tick(NOW + TASK_LEASE_MS);
-		expect(queue.charges.map((charge) => [charge.taskId, charge.step])).toEqual([
-			['a', 0],
-			['a', 0],
-		]);
-		expect(queue.task('a')).toMatchObject({ steps: 1, creditsUsed: 7, progress: progress(40, 80) });
+		expect(queue.charges.map((charge) => charge.step)).toEqual([0, 0]);
+		expect(queue.task('a')).toMatchObject({ steps: 1, creditsUsed: 7 });
+	});
+
+	it('a meter whose charge always throws ends the task failed instead of paying for model calls forever', async () => {
+		const queue = setup([task('a')], [stepOf(40, 80)], [], { chargeFails: true });
+
+		const { ticks } = await runUntilIdle(queue, NOW);
+
+		expect(ticks).toBe(TASK_MAX_FAILURES);
+		expect(queue.stepped).toHaveLength(TASK_MAX_FAILURES);
+		expect(queue.task('a')).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES, steps: 0, lastError: TASK_FAILED_MESSAGE });
+	});
+
+	it('a meter gate that throws counts as a failure too', async () => {
+		const queue = setup([task('a')], [stepOf(40, 80)], [], { gateFails: true });
+
+		await runUntilIdle(queue, NOW);
+
+		expect(queue.task('a')).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES });
+		expect(queue.stepped).toEqual([]);
 	});
 
 	it('an onFinished that throws is retried by running the step again', async () => {
 		let failOnce = true;
-		const memory = memoryStore([task('a')]);
-		const kind = fakeKind([stepOf(10, 10, true), stepOf(10, 10, true, [])], {
+		const queue = setup([task('a')], [stepOf(10, 10, true), stepOf(10, 10, true, [])], [], {
 			onFinished: () => {
 				if (failOnce) {
 					failOnce = false;
@@ -335,13 +428,39 @@ describe('runTaskTick', () => {
 				}
 			},
 		});
-		const metering = fakeMeter();
-		const deps = { store: memory.store, meter: metering.meter, kinds: () => kind.handler, env: ENV };
 
-		const first = await runTaskTick(deps, 'seller_1', NOW);
-		expect(memory.task('a')).toMatchObject({ status: 'queued', attempts: 1, lastError: 'Could not mark the language ready' });
-		await runTaskTick(deps, 'seller_1', first.nextAlarmAt ?? NOW);
-		expect(memory.task('a')).toMatchObject({ status: 'done', steps: 2 });
-		expect(kind.finished).toEqual(['a', 'a']);
+		const first = await queue.tick(NOW);
+		expect(queue.task('a')).toMatchObject({ status: 'queued', attempts: 1, lastError: TASK_RETRY_MESSAGE });
+		await queue.tick(first.nextAlarmAt ?? NOW);
+		expect(queue.task('a')).toMatchObject({ status: 'done', steps: 2, attempts: 0, lastError: null });
+		expect(queue.finished).toEqual(['a', 'a']);
+	});
+
+	it('an onFinished that keeps throwing fails the task after TASK_MAX_FAILURES', async () => {
+		const queue = setup([task('a')], [stepOf(10, 10, true, [])], [], {
+			onFinished: () => {
+				throw new Error('Could not mark the language ready');
+			},
+		});
+
+		const { ticks } = await runUntilIdle(queue, NOW);
+
+		expect(ticks).toBe(TASK_MAX_FAILURES);
+		expect(queue.finished).toHaveLength(TASK_MAX_FAILURES);
+		expect(queue.task('a')).toMatchObject({ status: 'failed', attempts: TASK_MAX_FAILURES, lastError: TASK_FAILED_MESSAGE });
+	});
+
+	it('a step that cancels its own task never calls onFinished', async () => {
+		const queue = setup([task('a')], [
+			(ctx) => {
+				queue.cancel(ctx.task.id, NOW);
+				return stepOf(10, 10, true);
+			},
+		]);
+
+		expect(await queue.tick(NOW)).toEqual({ nextAlarmAt: null });
+
+		expect(queue.finished).toEqual([]);
+		expect(queue.task('a')).toMatchObject({ status: 'canceled', finishedAt: NOW, progress: progress(10, 10), steps: 1, creditsUsed: 7 });
 	});
 });

@@ -16,6 +16,8 @@ import type { TaskMeter } from './meter';
 import { wakeTaskRunner } from './scheduler';
 
 const logger = createLogger('TaskMeter');
+/** Sellers with credit-paused tasks checked per daily run; the rest are checked the next day. */
+const CREDIT_PAUSED_SELLERS_PER_RUN = 1_000;
 
 export interface TaskMeterDeps {
 	billingOn(userId: string): Promise<boolean>;
@@ -104,7 +106,7 @@ export async function resumeCreditPausedTasks(env: Env): Promise<number> {
 	try {
 		const tasks = new TaskService(env);
 		const meter = taskMeterFromEnv(env);
-		for (const userId of await tasks.pausedUserIds('credits')) {
+		for (const userId of await tasks.pausedUserIds('credits', CREDIT_PAUSED_SELLERS_PER_RUN)) {
 			try {
 				if (!(await meter.gate(userId)).ok) continue;
 				let sellerResumed = 0;
