@@ -83,13 +83,13 @@ These set the voice. Translate new copy to match them.
 | English | Español | Português |
 | --- | --- | --- |
 | app (a project built in the chat) | app (feminine: "la app", "esta app") | app (masculine: "o app", "este app") |
-| bookmark (keep an app in your list) | favorito: "Agregar a favoritos", "En favoritos" | favorito: "Adicionar aos favoritos", "Nos favoritos" |
-| star (give an app a star) | destacar: "Destacar", "Destacado" | estrela: "Dar estrela", "Com estrela" |
+| bookmark (keep an app in your list) | favorito: "Favorito" (the button), "Favoritos" (the list and the state); messages say "favoritos" | favorito: "Favoritar" (the button), "Favoritos" (the list and the state); messages say "favoritos" |
+| star (give an app a star) | destacar: "Destacar", "Destacado" | estrela: "Estrela", "Com estrela" |
 | prompt (the idea that started an app) | prompt | prompt |
 | deploy (put a preview online to look at) | desplegar | fazer deploy |
 | live preview (a preview that is running) | vista previa interactiva | pré-visualização interativa |
 | board | tablero | quadro |
-| your own key (a model key the seller brings) | clave propia | chave própria |
+| your own key (the badge on a model the seller has a key for) | "Tu clave", and "Sin clave" for a model that needs one | "Sua chave", and "Sem chave" for a model that needs one |
 
 ### Publishing
 

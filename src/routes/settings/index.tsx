@@ -21,7 +21,6 @@ import {
 import { BILLING_PATH, LEGAL_CONTACT, planName, type ActiveSessionsData, type ApiKeysData } from '@/api-types';
 import {
 	Button,
-	DeleteResource,
 	Dialog,
 	DialogClose,
 	DialogDescription,
@@ -46,6 +45,8 @@ import { CloudflareAccountSelector } from '@/components/cloudflare-account-selec
 import { ConnectedAccounts } from '@/components/connected-accounts';
 import { AnalyticsPreferenceCard } from '@/components/analytics/AnalyticsPreferenceCard';
 import { LanguageCard } from '@/components/settings/LanguageCard';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
+import { t } from '@/lib/i18n';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
 
@@ -708,7 +709,7 @@ export default function SettingsPage() {
 										</LayerCard>
 
 									{keyToRevoke && (
-										<DeleteResource
+										<ConfirmDeleteDialog
 											open={!!keyToRevoke}
 											onOpenChange={(open) => {
 												if (!open) {
@@ -716,12 +717,12 @@ export default function SettingsPage() {
 													setRevokeError(undefined);
 												}
 											}}
-											resourceType="API key"
+											resourceType={t('API key')}
 											resourceName={keyToRevoke.name}
 											onDelete={handleRevokeApiKey}
 											isDeleting={revokingKey}
 											errorMessage={revokeError}
-											deleteButtonText="Revoke API key"
+											deleteButtonText={t('Revoke API key')}
 											className="sm:w-[32rem]"
 										/>
 									)}

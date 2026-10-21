@@ -40,6 +40,12 @@ const COVERED: string[] = [
 	'src/lib/visibility-label.ts',
 	'src/components/ui/dialog.tsx',
 	'src/components/ui/model-selector.tsx',
+	'src/components/theme-toggle.tsx',
+	'src/components/build-box.tsx',
+	'src/components/shared/AppActionsDropdown.tsx',
+	'src/components/shared/AppLoadingSkeleton.tsx',
+	'src/components/shared/ConfirmDeleteDialog.tsx',
+	'src/lib/limit-amount.ts',
 ];
 
 /** Every source file that can be covered, loaded only when it is. Tests and declaration files are never covered. */

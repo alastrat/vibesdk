@@ -4,7 +4,9 @@ import { type UsageSummary, type LimitConfig } from '@/hooks/use-limits';
 import { CloudflareLogo } from './icons/logos';
 import { CREDITS_BANNER_THRESHOLD } from '../../shared/constants/limits';
 import { formatDollars, formatNumber } from '../../shared/i18n/format';
+import { INTL_LOCALE } from '../../shared/i18n/locales';
 import { getLocale, t, useI18n } from '@/lib/i18n';
+import { formatLimitAmount } from '@/lib/limit-amount';
 
 interface CreditsBannerProps {
 	limitsData?: UsageSummary | null;
@@ -41,21 +43,22 @@ function getResetDate(window: LimitWindow, periodSeconds?: number): Date | null 
 	}
 }
 
-/**
- * Money as a string: US dollars the way the language writes them ('$61.57', 'USD 61,57', 'US$ 61,57'), '€12.00' for
- * EUR, otherwise '12.00 XYZ'.
- */
+/** Money the way the language writes it: US dollars as '$61.57', 'USD 61.57' or 'US$ 61,57', other currencies by their own symbol. */
 function formatMoney(amount: number, currency: string): string {
-	if (currency === 'USD') return formatDollars(amount, getLocale(), 'always');
-	const symbols: Record<string, string> = { EUR: '€', GBP: '£' };
-	const symbol = symbols[currency];
-	const value = amount.toFixed(2);
-	return symbol ? `${symbol}${value}` : `${value} ${currency}`;
+	const locale = getLocale();
+	if (currency === 'USD') return formatDollars(amount, locale, 'always');
+	try {
+		return new Intl.NumberFormat(INTL_LOCALE[locale], { style: 'currency', currency }).format(amount);
+	} catch {
+		// A currency code Intl does not know.
+		return `${formatNumber(amount, locale)} ${currency}`;
+	}
 }
 
-function formatResetIn(target: Date): string {
+/** How long until `target` in a few characters ("3d", "5 h", "45 min"), or null once it has passed. */
+function formatResetIn(target: Date): string | null {
 	const diffMs = target.getTime() - Date.now();
-	if (diffMs <= 0) return t('soon');
+	if (diffMs <= 0) return null;
 	const minutes = Math.floor(diffMs / 60000);
 	const hours = Math.floor(minutes / 60);
 	const days = Math.floor(hours / 24);
@@ -88,7 +91,8 @@ function buildConnectedBalanceContent(
 	resetDate: Date | null,
 	fallback: string,
 ): ReactNode {
-	const resetSuffix = resetDate ? ` · ${t('free credits reset in {time}', { time: formatResetIn(resetDate) })}` : '';
+	const resetIn = resetDate ? formatResetIn(resetDate) : null;
+	const resetSuffix = resetDate ? ` · ${resetIn === null ? t('free credits reset soon') : t('free credits reset in {time}', { time: resetIn })}` : '';
 	if (!credits) {
 		return `${fallback}${resetSuffix}`;
 	}
@@ -140,13 +144,7 @@ function useBannerInfo(limitsData?: UsageSummary | null): { bannerInfo: BannerIn
 			};
 		}
 
-		const amount = (() => {
-			switch (limit.type) {
-				case 'tokens': return `${(remaining / 1000).toFixed(0)}K`;
-				case 'cost': return formatDollars(remaining, locale, 'always');
-				default: return formatNumber(Math.round(remaining * 10) / 10, locale);
-			}
-		})();
+		const amount = formatLimitAmount(limit.type, remaining, locale);
 
 		const remainingText = (() => {
 			switch (limit.type) {
@@ -158,9 +156,11 @@ function useBannerInfo(limitsData?: UsageSummary | null): { bannerInfo: BannerIn
 			}
 		})();
 
-		const resetText = resetDate
-			? ` · ${limit.window === 'rolling' && !limit.resetAt ? t('resets within {time}', { time: formatResetIn(resetDate) }) : t('resets in {time}', { time: formatResetIn(resetDate) })}`
-			: '';
+		const resetIn = resetDate ? formatResetIn(resetDate) : null;
+		const rolling = limit.window === 'rolling' && !limit.resetAt;
+		const resetMessage =
+			resetIn === null ? t('resets soon') : rolling ? t('resets within {time}', { time: resetIn }) : t('resets in {time}', { time: resetIn });
+		const resetText = resetDate ? ` · ${resetMessage}` : '';
 
 		return {
 			content: `${remainingText}${resetText}`,

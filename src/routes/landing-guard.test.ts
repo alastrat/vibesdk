@@ -49,7 +49,7 @@ describe('landing page', () => {
 
 	it('keeps the images note on an opaque surface, readable on the dark hero', () => {
 		const box = source('/src/components/build-box.tsx');
-		const note = box.slice(box.lastIndexOf('<div', box.indexOf('Images Beta:')), box.indexOf('Images Beta:'));
+		const note = box.slice(box.lastIndexOf('<div', box.indexOf("t('Images Beta:')")), box.indexOf("t('Images Beta:')"));
 		expect(note).toContain('bg-kumo-elevated');
 		expect(note).not.toMatch(/\bbg-[\w-]+\/\d+/);
 	});
