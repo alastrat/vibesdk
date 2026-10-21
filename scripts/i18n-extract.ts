@@ -4,13 +4,14 @@
  * are never changed, and keys no source uses are listed but kept, unless `--prune` is given.
  *   bun run i18n:extract            update the catalogs, then list what still needs a translation
  *   bun run i18n:extract --prune    also delete the keys no source uses
+ * A message that can't be read (a template literal with expressions, a concatenation) is listed and fails the run.
  */
 
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describeMessage, checkCatalog, serializeCatalog, syncCatalog, usedMessages, type CatalogReport, type CatalogSync } from '../shared/i18n/catalog-check';
-import { messagesOfFiles } from '../shared/i18n/extract';
+import { checkCatalog, describeMessage, describeSkipped, serializeCatalog, syncCatalog, usedMessages, type CatalogReport, type CatalogSync } from '../shared/i18n/catalog-check';
+import { messagesOfFiles, type SkippedMessage } from '../shared/i18n/extract';
 import { DEFAULT_LOCALE, LOCALES } from '../shared/i18n/locales';
 
 /** The folders scanned. `shared/i18n/i18n-catalogs.test.ts` scans the same files, so the two agree on what is used. */
@@ -69,11 +70,17 @@ export function summaryLines(name: string, sync: CatalogSync, report: CatalogRep
 	];
 }
 
+/** The calls whose message could not be read, which no catalog can translate; empty when there are none. */
+export function skippedLines(skipped: readonly SkippedMessage[]): string[] {
+	return skipped.length > 0 ? ['not read:', ...listed(skipped.map(describeSkipped))] : [];
+}
+
 function main(): void {
 	const options = parseOptions(process.argv.slice(2));
 	const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 	const files = sourceFiles(root);
-	const messages = usedMessages(messagesOfFiles(Object.fromEntries(files.map((file) => [file, readFileSync(path.join(root, file), 'utf8')]))));
+	const { messages: extracted, skipped } = messagesOfFiles(Object.fromEntries(files.map((file) => [file, readFileSync(path.join(root, file), 'utf8')])));
+	const messages = usedMessages(extracted);
 	console.log(`Scanned ${files.length} files: ${messages.length} messages, ${messages.filter((message) => message.plural).length} of them plurals`);
 
 	for (const locale of LOCALES.filter((candidate) => candidate !== DEFAULT_LOCALE)) {
@@ -83,6 +90,8 @@ function main(): void {
 		if (text !== readFileSync(file, 'utf8')) writeFileSync(file, text);
 		for (const line of summaryLines(`${locale}.json`, sync, checkCatalog(messages, sync.catalog), options)) console.log(line);
 	}
+	for (const line of skippedLines(skipped)) console.error(line);
+	if (skipped.length > 0) process.exitCode = 1;
 }
 
 // process.argv can be undefined in the Workers test pool, so guard each access.

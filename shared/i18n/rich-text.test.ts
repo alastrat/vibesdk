@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseRichText } from './rich-text';
+import { parseRichText, tagsOf } from './rich-text';
 
 describe('parseRichText', () => {
 	it('splits text around a tag', () => {
@@ -60,5 +60,17 @@ describe('parseRichText', () => {
 
 	it('reads placeholders that were filled in before parsing as text', () => {
 		expect(parseRichText('Renews on <b>May 1</b>, {unfilled}')).toEqual(['Renews on ', { tag: 'b', children: ['May 1'] }, ', {unfilled}']);
+	});
+});
+
+describe('tagsOf', () => {
+	it('lists the bare tags, openers and closers, each once, in order of first use', () => {
+		expect(tagsOf('<b>Bold</b> and <i>italic</i> and <b>bold</b>')).toEqual(['<b>', '</b>', '<i>', '</i>']);
+	});
+
+	it('reads the same tags parseRichText does, and nothing else', () => {
+		expect(tagsOf('1 < 2 and 3 > 2, <3, <a href="x">, <br/>, <>')).toEqual([]);
+		expect(tagsOf('<my-tag>x</my-tag>')).toEqual(['<my-tag>', '</my-tag>']);
+		expect(tagsOf('plain text')).toEqual([]);
 	});
 });

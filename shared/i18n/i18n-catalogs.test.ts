@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import es from './catalogs/es.json';
 import ptBR from './catalogs/pt-BR.json';
-import { checkCatalog, describeMessage, serializeCatalog, syncCatalog, usedMessages, type UsedMessage } from './catalog-check';
+import { checkCatalog, describeMessage, describeSkipped, serializeCatalog, syncCatalog, usedMessages, type UsedMessage } from './catalog-check';
 import { messagesOfFiles } from './extract';
 
 /** Every source file the app is built from, except tests. `scripts/i18n-extract.ts` scans the same files. */
@@ -13,7 +13,7 @@ const sources = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '/shared/**/*.{t
 
 /** The messages the fixture source marks for translation. */
 function used(source: string): UsedMessage[] {
-	return usedMessages(messagesOfFiles({ 'src/fixture.tsx': source }));
+	return usedMessages(messagesOfFiles({ 'src/fixture.tsx': source }).messages);
 }
 
 const FIXTURE = `
@@ -32,7 +32,7 @@ const COMPLETE = {
 
 describe('usedMessages', () => {
 	it('lists each key once, with every place that uses it, sorted by key', () => {
-		const messages = usedMessages(messagesOfFiles({ '/src/b.ts': `t('Zed');\nt('Alpha');`, '/src/a.ts': `t('Alpha');` }));
+		const messages = usedMessages(messagesOfFiles({ '/src/b.ts': `t('Zed');\nt('Alpha');`, '/src/a.ts': `t('Alpha');` }).messages);
 		expect(messages.map(({ key, sites }) => ({ key, sites }))).toEqual([
 			{ key: 'Alpha', sites: ['src/b.ts:2', 'src/a.ts:1'] },
 			{ key: 'Zed', sites: ['src/b.ts:1'] },
@@ -41,6 +41,18 @@ describe('usedMessages', () => {
 
 	it('keeps the singular and plural of a plural message', () => {
 		expect(used(`tn('{count} credit', '{count} credits', n);`)[0].plural).toEqual({ singular: '{count} credit', plural: '{count} credits' });
+	});
+});
+
+describe('describeSkipped', () => {
+	it('says where the call is, what it was given, and how to write it', () => {
+		const { skipped } = messagesOfFiles({ '/src/a.tsx': "t(`Hello ${name}`);\nmsg('Hi, ' + name);\ntn(one, 'many', n);\n<T text={`Hi ${name}`} />" });
+		expect(skipped.map(describeSkipped)).toEqual([
+			'src/a.tsx:1  t() is given a template literal with expressions; write the English as one literal, with {placeholders} for the values',
+			'src/a.tsx:2  msg() is given a concatenation; write the English as one literal, with {placeholders} for the values',
+			'src/a.tsx:3  tn() is given forms that are not both literals; write the English as one literal, with {placeholders} for the values',
+			'src/a.tsx:4  <T text> is given a template literal with expressions; write the English as one literal, with {placeholders} for the values',
+		]);
 	});
 });
 
@@ -230,7 +242,7 @@ describe('syncCatalog', () => {
 		expect(second).toBe(first);
 	});
 
-	it('serializes with tabs, one entry per line, and a final newline', () => {
+	it('serializes with tabs, a key and its text on one line, a plural\'s forms on their own, and a final newline', () => {
 		expect(serializeCatalog({})).toBe('{}\n');
 		expect(serializeCatalog({ A: 'ñ ¿', P: { one: 'x', other: 'y' } })).toBe('{\n\t"A": "ñ ¿",\n\t"P": {\n\t\t"one": "x",\n\t\t"other": "y"\n\t}\n}\n');
 	});
@@ -245,7 +257,12 @@ describe('the catalogs against the source', () => {
 		expect(paths.filter((path) => /\.(test|spec)\.tsx?$/.test(path))).toEqual([]);
 	});
 
-	const messages = usedMessages(messagesOfFiles(sources));
+	const { messages: extracted, skipped } = messagesOfFiles(sources);
+	const messages = usedMessages(extracted);
+
+	it('reads every message in the source: none is a template with expressions, a concatenation or half a plural', () => {
+		expect(skipped.map(describeSkipped)).toEqual([]);
+	});
 
 	describe.each([
 		['es.json', es],

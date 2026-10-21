@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { interpolate, msg, pluralKey, translate, translatePlural, type Catalog } from './translate';
+import { interpolate, msg, placeholdersOf, pluralKey, translate, translatePlural, type Catalog } from './translate';
 
 const ES: Catalog = {
 	'Renews on {date}': 'Se renueva el {date}',
@@ -117,5 +117,17 @@ describe('translatePlural', () => {
 	it('fills other values too, and keeps {count} as the formatted count', () => {
 		const catalog: Catalog = { '{count} left on {plan}|{count} left on {plan}': { one: 'Queda {count} en {plan}', other: 'Quedan {count} en {plan}' } };
 		expect(translatePlural(catalog, 'es', '{count} left on {plan}', '{count} left on {plan}', 1_200, { plan: 'Pro', count: 'ignored' })).toBe('Quedan 1,200 en Pro');
+	});
+});
+
+describe('placeholdersOf', () => {
+	it('lists the names of the placeholders, each once, in order of first use', () => {
+		expect(placeholdersOf('{count} of {total}, then {count} again')).toEqual(['count', 'total']);
+	});
+
+	it('reads the same placeholders interpolate fills', () => {
+		expect(placeholdersOf('{a_b} {C1} {_x}')).toEqual(['a_b', 'C1', '_x']);
+		expect(placeholdersOf('{} { x } {1} {a-b} none')).toEqual([]);
+		expect(placeholdersOf('plain text')).toEqual([]);
 	});
 });

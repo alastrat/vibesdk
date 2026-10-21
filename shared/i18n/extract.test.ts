@@ -3,7 +3,12 @@ import { extractMessages, findUntranslatedText, messagesOfFiles, parseSource, vi
 
 /** The keys found in a fixture, in source order. */
 function keys(source: string, file = 'a.tsx'): string[] {
-	return extractMessages(source, file).map((message) => message.key);
+	return extractMessages(source, file).messages.map((message) => message.key);
+}
+
+/** The calls in a fixture that the extractor could not read, as `line call: reason`. */
+function skipped(source: string, file = 'a.tsx'): string[] {
+	return extractMessages(source, file).skipped.map((call) => `${call.line} ${call.call}: ${call.reason}`);
 }
 
 /** The texts reported for a fixture, in source order. */
@@ -17,7 +22,7 @@ describe('extractMessages', () => {
 	});
 
 	it('records the file and the line of each call', () => {
-		const found = extractMessages(`const a = 1;\n\nconst b = t('Second');\n`, 'src/x.ts');
+		const { messages: found } = extractMessages(`const a = 1;\n\nconst b = t('Second');\n`, 'src/x.ts');
 		expect(found).toEqual([{ key: 'Second', file: 'src/x.ts', line: 3 }]);
 	});
 
@@ -27,7 +32,7 @@ describe('extractMessages', () => {
 	});
 
 	it('finds tn() as a plural keyed by singular and plural', () => {
-		const [found] = extractMessages(`tn('{count} credit', '{count} credits', count);`, 'a.ts');
+		const [found] = extractMessages(`tn('{count} credit', '{count} credits', count);`, 'a.ts').messages;
 		expect(found.key).toBe('{count} credit|{count} credits');
 		expect(found.plural).toEqual({ singular: '{count} credit', plural: '{count} credits' });
 	});
@@ -55,20 +60,71 @@ describe('extractMessages', () => {
 		expect(keys('t(`Save card`); msg(`Gone`);', 'a.ts')).toEqual(['Save card', 'Gone']);
 	});
 
-	it('leaves out a non-literal argument', () => {
+	it('leaves out a variable, a member or a call, without complaint: t(identifier) is legal', () => {
 		const source = [
 			'const label = t(name);',
-			'const a = t(`Hello ${name}`);',
-			"const b = t('a' + 'b');",
-			'const c = tn(one, other, n);',
-			"const d = tn('only one', other, n);",
+			'const a = t(LABELS[status]);',
+			'const b = t(getLabel());',
+			'const c = t(item.label, { item });',
+			'const d = tn(one, other, n);',
 			'const e = msg(text);',
-			"const f = t(locale, name, { name });",
+			'const f = t(locale, name, { name });',
 			"const g = t('');",
 			'const h = <T text={label} />;',
 			'const i = <T />;',
 		].join('\n');
+		expect(extractMessages(source, 'a.tsx')).toEqual({ messages: [], skipped: [] });
+	});
+
+	it('takes both branches of a condition, and both sides of a fallback', () => {
+		expect(keys(`t(busy ? 'Saving…' : 'Save');`, 'a.ts')).toEqual(['Saving…', 'Save']);
+		expect(keys(`t(a ? 'One' : b ? 'Two' : 'Three');`, 'a.ts')).toEqual(['One', 'Two', 'Three']);
+		expect(keys(`t(name || 'Untitled'); t(note ?? 'No note'); msg(ok && 'Fine');`, 'a.ts')).toEqual(['Untitled', 'No note', 'Fine']);
+		expect(keys(`t(locale, busy ? 'Saving…' : 'Save', { n });`, 'a.ts')).toEqual(['Saving…', 'Save']);
+		expect(keys(`t(busy ? 'Hi {name}' : 'Bye {name}', { name });`, 'a.ts')).toEqual(['Hi {name}', 'Bye {name}']);
+		expect(keys(`msg(ok ? 'Yes' : 'No');`, 'a.ts')).toEqual(['Yes', 'No']);
+		expect(keys(`<T text={busy ? 'Saving <b>now</b>' : 'Save'} />`)).toEqual(['Saving <b>now</b>', 'Save']);
+	});
+
+	it('reads the condition of a branch only for its branches, not its test', () => {
+		expect(keys(`t(mode === 'Fast mode' ? 'Quick' : 'Slow');`, 'a.ts')).toEqual(['Quick', 'Slow']);
+	});
+
+	it('reports a template literal with expressions, which can never match a catalog key', () => {
+		const source = [
+			'const a = t(`Hello ${name}`);',
+			'const b = t(locale, `Hello ${name}`, { name });',
+			'const c = msg(`Hello ${name}`);',
+			'const d = <T text={`Hello ${name}`} />;',
+			'const e = tn(`${n} credit`, `${n} credits`, n);',
+		].join('\n');
+		expect(skipped(source)).toEqual([
+			'1 t: a template literal with expressions',
+			'2 t: a template literal with expressions',
+			'3 msg: a template literal with expressions',
+			'4 T: a template literal with expressions',
+			'5 tn: forms that are not both literals',
+		]);
 		expect(keys(source)).toEqual([]);
+	});
+
+	it('reports a concatenation, with strings or not', () => {
+		const source = ["t('Hello ' + name);", 'msg(a + b);', "<T text={'Hello ' + name} />;", "tn('{count} ' + noun, '{count} nouns', n);"].join('\n');
+		expect(skipped(source)).toEqual(['1 t: a concatenation', '2 msg: a concatenation', '3 T: a concatenation', '4 tn: forms that are not both literals']);
+	});
+
+	it('reads the literal branch of a condition that has a template in the other', () => {
+		expect(keys('t(a ? `Hi ${name}` : \'Hi\');', 'a.ts')).toEqual(['Hi']);
+		expect(skipped('t(a ? `Hi ${name}` : \'Hi\');', 'a.ts')).toEqual(['1 t: a template literal with expressions']);
+	});
+
+	it('reports a plural whose two forms are not both literals, but not one that is all variables', () => {
+		const source = ["tn('{count} credit', PLURAL, n);", "tn(SINGULAR, '{count} credits', n);", "tn(a ? '{count} x' : '{count} y', '{count} z', n);", 'tn(SINGULAR, PLURAL, n);'].join('\n');
+		expect(skipped(source)).toEqual(['1 tn: forms that are not both literals', '2 tn: forms that are not both literals', '3 tn: forms that are not both literals']);
+	});
+
+	it('finds a call with type arguments', () => {
+		expect(keys(`const a = t<string>('Typed'); const b = tn<string>('{count} one', '{count} many', n);`, 'a.ts')).toEqual(['Typed', '{count} one|{count} many']);
 	});
 
 	it('reads literals wrapped in TypeScript assertions', () => {
@@ -112,7 +168,7 @@ describe('extractMessages', () => {
 	});
 
 	it('does not parse a file that cannot hold a call', () => {
-		expect(extractMessages('this is {{ not valid <<< code', 'a.ts')).toEqual([]);
+		expect(extractMessages('this is {{ not valid <<< code', 'a.ts')).toEqual({ messages: [], skipped: [] });
 	});
 
 	it('names the file when a candidate does not parse', () => {
@@ -122,8 +178,10 @@ describe('extractMessages', () => {
 
 describe('messagesOfFiles', () => {
 	it('extracts from every file and drops the leading slash of a glob path', () => {
-		const files = { '/src/a.ts': `t('A');`, '/src/b.ts': 'const nothing = 1;', 'worker/c.ts': `msg('C');` };
-		expect(messagesOfFiles(files).map(({ key, file }) => `${file}: ${key}`)).toEqual(['src/a.ts: A', 'worker/c.ts: C']);
+		const files = { '/src/a.ts': `t('A');`, '/src/b.ts': 'const nothing = 1;', 'worker/c.ts': `msg('C'); t(\`Hi ${'$'}{name}\`);` };
+		const { messages, skipped } = messagesOfFiles(files);
+		expect(messages.map(({ key, file }) => `${file}: ${key}`)).toEqual(['src/a.ts: A', 'worker/c.ts: C']);
+		expect(skipped.map(({ file, line, call }) => `${file}:${line} ${call}`)).toEqual(['worker/c.ts:1 t']);
 	});
 });
 
@@ -263,8 +321,8 @@ describe('findUntranslatedText', () => {
 		expect(untranslated(source)).toEqual([]);
 	});
 
-	it('does not flag strings outside text positions', () => {
-		const source = `const a = 'Hello world'; const b = { label: 'Save', title: 'Home' }; throw new Error('Nope'); console.log('Debug');
+	it('does not flag code that is not text: a single word, lowercase text, a comparison to a word', () => {
+		const source = `const a = 'hello world'; const b = { label: 'Save', title: 'Home' }; throw new Error('nope'); console.log('Debug');
 			const c = cond ? 'yes' : 'no'; function f() { return <p>{c}</p>; }`;
 		expect(untranslated(source)).toEqual([]);
 	});
@@ -316,6 +374,121 @@ describe('findUntranslatedText', () => {
 		});
 	});
 
+	describe('English in code', () => {
+		it('flags an object value, whatever its key', () => {
+			const source = `export const ITEMS = [{ label: 'Add a product', description: 'Sells it in your store.', title: 'New product', error: "Couldn't load it" }];`;
+			expect(untranslated(source, 'a.ts')).toEqual(['Add a product', 'Sells it in your store.', 'New product', "Couldn't load it"]);
+		});
+
+		it('flags the fallback passed to a helper', () => {
+			expect(untranslated(`const data = unwrap(response, "Couldn't save your store.");`, 'a.ts')).toEqual(["Couldn't save your store."]);
+		});
+
+		it('flags the message of an error', () => {
+			expect(untranslated(`throw new Error('Something went wrong.'); const e = Error('Try again later');`, 'a.ts')).toEqual(['Something went wrong.', 'Try again later']);
+		});
+
+		it('flags a native dialog', () => {
+			expect(untranslated(`if (window.confirm('Delete this draft?')) {} alert('Saved!');`, 'a.ts')).toEqual(['Delete this draft?', 'Saved!']);
+		});
+
+		it('flags an exported message constant, and a message in state', () => {
+			const source = `export const CHECKOUT_FAILED = 'Checkout failed. Try again.';\nconst [error, setError] = useState('Not connected yet');\nsetError('Could not connect: try again');`;
+			expect(untranslated(source)).toEqual(['Checkout failed. Try again.', 'Not connected yet', 'Could not connect: try again']);
+		});
+
+		it('flags the fixed text of a template literal, where it starts like a sentence', () => {
+			const source = 'const a = `Could not save ${name}.`;\nconst b = `Saved ${count} items`;\nconst c = `${name} is ready.`;\nconst d = `${a}${b}`;';
+			expect(untranslated(source, 'a.ts')).toEqual(['Could not save ${name}.', 'Saved ${count} items']);
+		});
+
+		it('flags a literal in a condition, a fallback or a concatenation that is shown', () => {
+			const source = `const a = ok ? 'All good here' : 'Not so good'; const b = name || 'Nobody is here'; const c = 'Hello there, ' + name;`;
+			expect(untranslated(source, 'a.ts')).toEqual(['All good here', 'Not so good', 'Nobody is here', 'Hello there,']);
+		});
+
+		it('flags a message in a function a non-text attribute holds', () => {
+			expect(untranslated(`<button onClick={() => setError('Could not save.')}>{t('Save')}</button>`)).toEqual(['Could not save.']);
+		});
+
+		it('flags a value passed to t() in its values', () => {
+			expect(untranslated(`t('Hi {name}', { name: 'Some Customer' });`, 'a.ts')).toEqual(['Some Customer']);
+		});
+
+		it('flags a sentence by its capital and a space, or by its capital and a closing mark', () => {
+			const source = [
+				"const a = ['Two words', 'Done.', 'Why?', 'Wow!', 'Loading…', 'Error:', 'Done. ', 'Ok.\\n'];",
+				"const b = ['Save', 'Authorization', 'Content-Type', 'two words', 'save.', '1 item', ' items', '$49', 'USD', ''];",
+			].join('\n');
+			expect(untranslated(source, 'a.ts')).toEqual(['Two words', 'Done.', 'Why?', 'Wow!', 'Loading…', 'Error:', 'Done.', 'Ok.']);
+		});
+
+		it('reports each literal once, wherever more than one rule sees it', () => {
+			const source = `<>
+				<input placeholder="Search for stores" title={busy ? 'Working on it' : 'Ready to go'} />
+				<p>{'Welcome back to Estori'}</p>
+			</>;
+			toast.error('Could not save.', { description: 'Try again in a moment.' });
+			toast.add({ title: 'Saved your store.' });`;
+			expect(untranslated(source)).toEqual(['Search for stores', 'Working on it', 'Ready to go', 'Welcome back to Estori', 'Could not save.', 'Try again in a moment.', 'Saved your store.']);
+		});
+
+		it('skips a line with an i18n-ignore comment', () => {
+			const source = `const ITEMS = [\n\t// i18n-ignore\n\t{ label: 'Shown as is' },\n\t{ label: 'Not skipped' },\n];\nconst a = 'Also skipped'; // i18n-ignore`;
+			expect(untranslated(source, 'a.ts')).toEqual(['Not skipped']);
+		});
+
+		describe('but not', () => {
+			it('the source of an import or an export', () => {
+				const source = `import a from 'Some module.js'; import type { B } from 'Another one'; export { c } from 'Third one'; export * from 'Fourth one'; const d = await import('Fifth one'); const e = require('Sixth one'); import f = require('Seventh one');`;
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+
+			it('a JSX attribute that is not text, however it is written', () => {
+				const source = `<>
+					<Button variant="Primary action" size={big ? 'Very big' : 'Small one'} className={cond ? 'Foo bar' : 'Baz qux'} />
+					<input value="Some value here" aria-labelledby="Heading text" />
+					<T text="Read the terms of use" />
+					<T text={busy ? 'Saving the store.' : 'Save the store.'} />
+				</>`;
+				expect(untranslated(source)).toEqual([]);
+			});
+
+			it('an object key, however it is written', () => {
+				const source = `const a = { 'Some key': 1, ['Computed key']: 2, 'Method name'() {} }; class B { 'Field name' = 1; 'Method key'() {} } interface C { 'Prop name': string; 'Method sig'(): void } enum D { 'Member name' = 1 } const e = a['Some key']; const f = a?.['Some key'];`;
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+
+			it('a TypeScript literal type', () => {
+				const source = `type Mode = 'Some text.' | 'Other text'; function f(mode: 'Third one'): 'Fourth one' { return mode; } const x = y as 'Fifth one';`;
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+
+			it('the argument of t, tn and msg, whatever the branch', () => {
+				const source = `t('Some text.'); tn('One thing.', 'Many things.', n); msg('Another text.'); t(locale, 'Server text.'); i18n.t('Member text.'); t(busy ? 'Busy text.' : 'Idle text.'); msg(name || 'Fallback text.');`;
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+
+			it('the argument of a console or logger call', () => {
+				const source = [
+					"console.log('Some text.'); console.error('Failed to load', error); console.warn('Careful now.');",
+					"logger.info('Starting up the server.'); this.logger.warn('Slow request.'); this.logger().debug('Request received.');",
+					"currentLogger.error('Could not parse: ' + body); GitHubService.logger.error(`Failed to fetch ${id}.`); deps.logger.info('Ready now.');",
+					"log('Plain log line.'); logError('Another failure.'); this.getLog().info('From a getter.');",
+				].join('\n');
+				expect(untranslated(source, 'a.ts')).toEqual([]);
+			});
+
+			it('a template that is a tagged template, which is code', () => {
+				expect(untranslated('const q = sql`SELECT id FROM users WHERE name = ${name}`; const s = css`Some thing`;', 'a.ts')).toEqual([]);
+			});
+		});
+
+		it('still flags a call on something that only looks like a logger', () => {
+			expect(untranslated(`catalog.error('Not a logger.'); login('Sign in please.'); notlog('Also not one.');`, 'a.ts')).toEqual(['Not a logger.', 'Sign in please.', 'Also not one.']);
+		});
+	});
+
 	it('names the file when the source does not parse', () => {
 		expect(() => findUntranslatedText('const = ;', 'src/broken.tsx')).toThrow(/src\/broken\.tsx/);
 	});
@@ -326,6 +499,14 @@ describe('parseSource and visitNodes', () => {
 		const types: string[] = [];
 		visitNodes(parseSource(`// note\nconst a = f('x');`, 'a.ts').program, (node) => types.push(node.type));
 		expect(types).toEqual(['Program', 'VariableDeclaration', 'VariableDeclarator', 'Identifier', 'CallExpression', 'Identifier', 'StringLiteral']);
+	});
+
+	it('tells the visitor the node\'s ancestors, nearest last', () => {
+		const seen: string[] = [];
+		visitNodes(parseSource(`f('x');`, 'a.ts').program, (node, ancestors) => {
+			if (node.type === 'StringLiteral') seen.push(ancestors.map((ancestor) => ancestor.type).join(' > '));
+		});
+		expect(seen).toEqual(['Program > ExpressionStatement > CallExpression']);
 	});
 
 	it('parses JSX only in .tsx files', () => {

@@ -3,7 +3,9 @@
  * wrong, and the catalog `scripts/i18n-extract.ts` writes. Shared by that script and the completeness test.
  */
 
-import type { ExtractedMessage } from './extract';
+import type { ExtractedMessage, SkippedMessage } from './extract';
+import { tagsOf } from './rich-text';
+import { placeholdersOf } from './translate';
 
 /** A message the source marks for translation, with every place that uses it. */
 export interface UsedMessage {
@@ -28,12 +30,6 @@ export interface CatalogReport {
 	/** The keys are not in the order `syncCatalog` writes. */
 	unsorted: boolean;
 }
-
-/** The same grammar as `interpolate` in `translate.ts`. */
-const PLACEHOLDER = /\{([A-Za-z_]\w*)\}/g;
-
-/** The same bare tags as `parseRichText` in `rich-text.ts`. */
-const TAG = /<\/?[A-Za-z][\w-]*>/g;
 
 /** Plain code-unit order, so the catalogs sort the same way everywhere. */
 function byCode(a: string, b: string): number {
@@ -61,8 +57,10 @@ export function describeMessage(message: UsedMessage): string {
 	return `${JSON.stringify(message.key)} (${message.sites[0]})`;
 }
 
-function uniqueSorted(matches: IterableIterator<RegExpMatchArray>): string[] {
-	return [...new Set([...matches].map((match) => match[0]))].sort(byCode);
+/** A call whose message can't be read, for a person: where it is, what it was given, and what to write instead. */
+export function describeSkipped(skipped: SkippedMessage): string {
+	const call = skipped.call === 'T' ? '<T text>' : `${skipped.call}()`;
+	return `${skipped.file}:${skipped.line}  ${call} is given ${skipped.reason}; write the English as one literal, with {placeholders} for the values`;
 }
 
 function listed(items: readonly string[]): string {
@@ -72,12 +70,12 @@ function listed(items: readonly string[]): string {
 /** How a translation differs from its English in the placeholders and tags it holds; empty when it doesn't. */
 function differences(english: string, translation: string): string[] {
 	const found: string[] = [];
-	for (const [what, pattern] of [
-		['placeholders', PLACEHOLDER],
-		['tags', TAG],
+	for (const [what, read] of [
+		['placeholders', (text: string) => placeholdersOf(text).map((name) => `{${name}}`)],
+		['tags', tagsOf],
 	] as const) {
-		const expected = uniqueSorted(english.matchAll(pattern));
-		const actual = uniqueSorted(translation.matchAll(pattern));
+		const expected = [...read(english)].sort(byCode);
+		const actual = [...read(translation)].sort(byCode);
 		if (expected.join(' ') !== actual.join(' ')) found.push(`${what} differ (English: ${listed(expected)}; translation: ${listed(actual)})`);
 	}
 	return found;
@@ -173,7 +171,7 @@ export function syncCatalog(used: readonly UsedMessage[], catalog: Readonly<Reco
 	return { catalog: Object.fromEntries([...entries].sort(([a], [b]) => byCode(a, b))), added, unused };
 }
 
-/** The catalog file's text: tab-indented, one entry per line, and a final newline. */
+/** The catalog file's text: tab-indented, a key and its text on one line, a plural's two forms on lines of their own, and a final newline. */
 export function serializeCatalog(catalog: Readonly<Record<string, unknown>>): string {
 	return `${JSON.stringify(catalog, null, '\t')}\n`;
 }

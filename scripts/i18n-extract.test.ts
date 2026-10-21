@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { checkCatalog, syncCatalog, usedMessages } from '../shared/i18n/catalog-check';
 import { messagesOfFiles } from '../shared/i18n/extract';
-import { parseOptions, summaryLines } from './i18n-extract';
+import { parseOptions, skippedLines, summaryLines } from './i18n-extract';
 
 const KEEP = { prune: false };
 
 /** The summary for a catalog synced against a source fixture. */
 function summary(source: string, catalog: Record<string, unknown>, options = KEEP): string[] {
-	const messages = usedMessages(messagesOfFiles({ 'src/fixture.ts': source }));
+	const messages = usedMessages(messagesOfFiles({ 'src/fixture.ts': source }).messages);
 	const sync = syncCatalog(messages, catalog, options);
 	return summaryLines('es.json', sync, checkCatalog(messages, sync.catalog), options);
 }
@@ -57,5 +57,19 @@ describe('summaryLines', () => {
 		expect(lines).toHaveLength(1 + 1 + 25 + 1);
 		expect(lines[0]).toBe('es.json: 30 added, 30 to translate');
 		expect(lines.at(-1)).toBe('    ... and 5 more');
+	});
+});
+
+describe('skippedLines', () => {
+	it('says nothing when every message could be read', () => {
+		expect(skippedLines(messagesOfFiles({ 'src/fixture.ts': `t('Save card');` }).skipped)).toEqual([]);
+	});
+
+	it('lists each message that could not be read, so the run can fail', () => {
+		const { skipped } = messagesOfFiles({ 'src/fixture.ts': 't(`Hello ${name}`);' });
+		expect(skippedLines(skipped)).toEqual([
+			'not read:',
+			'    src/fixture.ts:1  t() is given a template literal with expressions; write the English as one literal, with {placeholders} for the values',
+		]);
 	});
 });

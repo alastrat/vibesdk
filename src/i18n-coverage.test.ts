@@ -2,14 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { findUntranslatedText } from '../shared/i18n/extract';
 
 /**
- * The folders and files whose English text is all translated: no JSX text, text attribute or toast message outside
- * `t()`, `tn()` or `<T>`. Each task that translates part of the app adds what it translated, and this test then holds
- * it to that. Entries are paths from the repo root:
+ * The folders and files whose English text is all translated: no JSX text, text attribute, toast message or other
+ * English string (a capital, then a space or a closing mark) outside `t()`, `tn()`, `msg()` or `<T>`. Each task that
+ * translates part of the app adds what it translated, and this test then holds it to that. Entries are paths from the
+ * repo root:
  *  - a folder ends with `/` and covers every .ts and .tsx file below it: `'src/components/layout/'`;
  *  - a file is its path: `'src/routes/home.tsx'`;
  *  - a glob may use `*`, `**`, `?` and `{a,b}`: `'src/hooks/use-billing*.ts'`;
- *  - a leading `!` leaves out what the entry matches, from the entries above it: `'!src/routes/chat/debug-panel.tsx'`.
- * Text that is never translated, such as a brand name, is marked with an `i18n-ignore` comment (see `extract.ts`).
+ *  - a leading `!` leaves out what the entry matches, wherever it stands in the list: `'!src/routes/chat/debug-panel.tsx'`.
+ * Text that is never translated, such as a brand name or a string of code, is marked with an `i18n-ignore` comment (see
+ * `extract.ts`).
  */
 const COVERED: string[] = ['src/lib/i18n/', 'src/components/settings/', 'src/components/auth/LanguagePicker.tsx'];
 
@@ -63,11 +65,8 @@ function coveredPaths(entries: readonly string[], paths: readonly string[]): { f
 
 /** One `file:line  text` line for each English text found in the files. */
 async function untranslatedLines(paths: readonly string[], read: (path: string) => Promise<string>): Promise<string[]> {
-	const lines: string[] = [];
-	for (const path of paths) {
-		for (const hit of findUntranslatedText(await read(path), path)) lines.push(`${hit.file}:${hit.line}  ${hit.text}`);
-	}
-	return lines;
+	const sources = await Promise.all(paths.map(read));
+	return paths.flatMap((path, index) => findUntranslatedText(sources[index], path).map((hit) => `${hit.file}:${hit.line}  ${hit.text}`));
 }
 
 describe('the covered folders', () => {
@@ -85,13 +84,14 @@ describe('the covered folders', () => {
 		if (unmatched.length > 0) throw new Error(`COVERED entries that match no file (a folder ends with /):\n${unmatched.join('\n')}`);
 	});
 
-	it('have no English text outside t(), tn() and <T>', async () => {
+	// Every covered file is loaded and parsed here, so the default 5 s is too little once most of the app is covered.
+	it('have no English text outside t(), tn(), msg() and <T>', async () => {
 		const { files } = coveredPaths(COVERED, paths);
 		const lines = await untranslatedLines(files, (path) => loaders[`/${path}`]());
 		if (lines.length > 0) {
-			throw new Error(`${lines.length} English text(s) in covered files; wrap each in t(), tn() or <T>, or mark it with i18n-ignore:\n${lines.join('\n')}`);
+			throw new Error(`${lines.length} English text(s) in covered files; wrap each in t(), tn(), msg() or <T>, or mark it with i18n-ignore:\n${lines.join('\n')}`);
 		}
-	});
+	}, 30_000);
 });
 
 describe('covering a folder', () => {

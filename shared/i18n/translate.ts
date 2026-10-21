@@ -13,6 +13,11 @@ const PLACEHOLDER = /\{([A-Za-z_]\w*)\}/g;
 
 const pluralRules = perLocale((intl) => new Intl.PluralRules(intl));
 
+/** The names of the `{placeholders}` in a text, each once, in order of first use. */
+export function placeholdersOf(text: string): string[] {
+	return [...new Set(Array.from(text.matchAll(PLACEHOLDER), (match) => match[1]))];
+}
+
 /** Fills `{name}` placeholders in one pass; a placeholder with no value stays as written. */
 export function interpolate(text: string, values?: MessageValues): string {
 	if (!values) return text;

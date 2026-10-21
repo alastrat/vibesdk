@@ -9,6 +9,11 @@ interface OpenTag {
 /** Only bare tags count; `<a href>`, `<br/>`, `<3` and `1 < 2` stay text, so translated copy can't smuggle in markup. */
 const TAG = /<(\/?)([A-Za-z][\w-]*)>/g;
 
+/** The bare tags in a text, such as `<link>` and `</link>`, each once, in order of first use. */
+export function tagsOf(text: string): string[] {
+	return [...new Set(Array.from(text.matchAll(TAG), (match) => match[0]))];
+}
+
 function append(parts: RichPart[], part: RichPart): void {
 	if (typeof part === 'string') {
 		if (part === '') return;
