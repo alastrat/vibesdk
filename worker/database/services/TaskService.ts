@@ -286,6 +286,17 @@ export class TaskService extends BaseService {
 		return rows.map((row) => row.userId);
 	}
 
+	/** The ids of the seller's tasks paused for this reason. */
+	async pausedTaskIds(userId: string, reason: TaskPauseReason): Promise<string[]> {
+		const tasks = schema.tasks;
+		const rows = await this.database
+			.select({ id: tasks.id })
+			.from(tasks)
+			.where(and(eq(tasks.userId, userId), eq(tasks.status, 'paused'), eq(tasks.pauseReason, reason)))
+			.all();
+		return rows.map((row) => row.id);
+	}
+
 	private async find(where: SQL | undefined): Promise<TaskRecord | null> {
 		const row = await this.database.select().from(schema.tasks).where(where).get();
 		return row ? recordOf(row) : null;

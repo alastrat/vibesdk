@@ -7,8 +7,8 @@ import { DurableObject } from 'cloudflare:workers';
 import { createLogger } from '../../logger';
 import { TaskService } from '../../database';
 import { taskKind } from './kinds';
-import { unmeteredTaskMeter } from './meter';
 import { runTaskTick } from './runner';
+import { taskMeterFromEnv } from './task-meter';
 
 const logger = createLogger('TaskRunner');
 const USER_KEY = 'userId';
@@ -26,7 +26,7 @@ export class TaskRunner extends DurableObject<Env> {
 		const userId = await this.ctx.storage.get<string>(USER_KEY);
 		if (!userId) return;
 		try {
-			const { nextAlarmAt } = await runTaskTick({ store: new TaskService(this.env), meter: unmeteredTaskMeter, kinds: taskKind, env: this.env }, userId, Date.now());
+			const { nextAlarmAt } = await runTaskTick({ store: new TaskService(this.env), meter: taskMeterFromEnv(this.env), kinds: taskKind, env: this.env }, userId, Date.now());
 			if (nextAlarmAt !== null) await this.ctx.storage.setAlarm(nextAlarmAt);
 		} catch (error) {
 			logger.error('Task runner alarm failed; trying again later', { userId, error });

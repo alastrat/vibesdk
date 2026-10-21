@@ -4,6 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { BillingService } from '../../database/services/BillingService';
 import { CreditLedgerService } from '../../database/services/CreditLedgerService';
+import { TaskService } from '../../database/services/TaskService';
 import { handleBillingEvent } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
 import { billingEventDepsFromEnv } from './wiring';
@@ -134,6 +135,21 @@ describe('the daily billing run', () => {
 		expect(await db.prepare("SELECT settled, forgiven, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_day'").first()).toEqual({ settled: 1_000, forgiven: 0, closed: 1 });
 		expect(await db.prepare("SELECT used, expired_at IS NOT NULL AS expired FROM credit_purchases WHERE id = 'cp_day'").first()).toEqual({ used: 1_000, expired: 1 });
 		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_uses WHERE user_id = 'u_day'").first()).toEqual({ n: 0 });
+	});
+
+	it("resumes a seller's tasks that paused for credits once they have credits again, and wakes their runner", async () => {
+		await insertUser(db, 'u_task');
+		const tasks = new TaskService(env());
+		const queued = await tasks.enqueue({ userId: 'u_task', appId: null, kind: 'store.translate', payload: {}, dedupeKey: 'store.translate:app_t:es' });
+		if (!('task' in queued)) throw new Error('Refused');
+		await tasks.pause(queued.task.id, 'credits');
+		const woken: string[] = [];
+		const runners = { idFromName: (name: string) => name, get: () => ({ wake: async (userId: string) => void woken.push(userId) }) };
+
+		await runDailyBilling(env({ TASK_RUNNER: runners }), Date.parse('2026-10-19T06:35:00Z'));
+
+		expect((await tasks.listForUser('u_task', { limit: 10 }))[0]).toMatchObject({ status: 'queued', pauseReason: null });
+		expect(woken).toEqual(['u_task']);
 	});
 });
 

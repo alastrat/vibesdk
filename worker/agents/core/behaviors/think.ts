@@ -29,7 +29,7 @@ import type { ThinkAgentConfig } from '../../think/ThinkAgent';
 import { withDurableObjectResetRetry } from '../../think/space-workspace-ops';
 import { modelUnavailableNotice, resolveThinkModel } from '../../think/model-config';
 import type { ProviderFailure } from '../../think/model-transport';
-import { resolveGatewayAuth } from '../../think/gateway-auth';
+import { resolveThinkGateway } from '../../think/gateway-auth';
 import { BuildProgressTracker } from '../../think/build-progress';
 import { buildFinishedProperties, buildStartedProperties, type BuildTurnUsage } from '../../think/build-events';
 import { screenshotTarget } from '../../think/screenshot-policy';
@@ -307,31 +307,17 @@ export class ThinkCodingBehavior
 
 		// Provider key or gateway stored keys (BYOK); in stored-keys mode
 		// `ThinkAgent.getModel()` drops the provider `Authorization` header.
-		const gatewayToken = this.getGatewayToken();
-		const auth = resolveGatewayAuth(conf, gatewayToken);
-
-		// Target the gateway by account + gateway ID (the `CLOUDFLARE_AI_GATEWAY`
-		// binding), forwarding `CLOUDFLARE_GATEWAY_ID: env.CLOUDFLARE_AI_GATEWAY`.
-		// This deliberately ignores `CLOUDFLARE_AI_GATEWAY_URL` (which may point at a different
-		// gateway/account the platform token isn't authorized for).
-		const env = this.env as unknown as {
-			CLOUDFLARE_ACCOUNT_ID?: string;
-			CLOUDFLARE_AI_GATEWAY?: string;
-		};
-		let baseURL = conf.baseURL;
-		if (env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AI_GATEWAY) {
-			baseURL = `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.CLOUDFLARE_AI_GATEWAY}/compat`;
-		}
+		const gateway = resolveThinkGateway(conf, this.env);
 
 		const config: ThinkAgentConfig = {
 			userId,
 			model: {
-				baseURL,
-				apiKey: auth.apiKey,
+				baseURL: gateway.baseURL,
+				apiKey: gateway.apiKey,
 				modelName,
 				contextSize: aiModelConfig.contextSize,
-				headers: auth.headers,
-				useStoredKeys: auth.useStoredKeys,
+				headers: gateway.headers,
+				useStoredKeys: gateway.useStoredKeys,
 			},
 			systemPrompt: this.buildSystemPrompt(modelName),
 			previewUrl: await this.getBrowserPreviewURL(0).catch(() => undefined),
@@ -358,14 +344,6 @@ export class ThinkCodingBehavior
 			this.setState({ ...this.state, thinkModelId: previous });
 			throw new Error('the agent could not be reconfigured');
 		}
-	}
-
-	private getGatewayToken(): string | undefined {
-		const tokenEnv = this.env as unknown as {
-			CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
-			CLOUDFLARE_API_TOKEN?: string;
-		};
-		return tokenEnv.CLOUDFLARE_AI_GATEWAY_TOKEN || tokenEnv.CLOUDFLARE_API_TOKEN;
 	}
 
 	/**

@@ -33,8 +33,8 @@ export type BillingNoticeKind = (typeof BILLING_NOTICE_KINDS)[number];
 /** Where an account's plan comes from: nothing paid, a Stripe subscription, or an admin's override. */
 export type BillingSource = 'free' | 'subscription' | 'override';
 
-/** What spent a credit use: the Think agent's steps, or an inference call outside it. */
-export const CREDIT_USE_SOURCES = ['think', 'infer'] as const;
+/** What spent a credit use: the Think agent's steps, an inference call outside it, or a seller task's model call. */
+export const CREDIT_USE_SOURCES = ['think', 'infer', 'task'] as const;
 export type CreditUseSource = (typeof CREDIT_USE_SOURCES)[number];
 
 export const BILLING_PATH = '/settings/billing';

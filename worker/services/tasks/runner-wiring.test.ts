@@ -64,6 +64,7 @@ describe('the task runner wiring', () => {
 		expect(runner).toContain('const ALARM_RETRY_MS = 60 * 1000;');
 		const alarm = runner.slice(runner.indexOf('async alarm()'));
 		expect(alarm).toContain('runTaskTick(');
+		expect(alarm).toContain('meter: taskMeterFromEnv(this.env)');
 		expect(alarm.indexOf('setAlarm(Date.now() + ALARM_RETRY_MS)')).toBeGreaterThan(alarm.indexOf('catch (error)'));
 	});
 

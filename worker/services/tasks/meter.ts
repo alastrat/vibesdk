@@ -10,9 +10,3 @@ export interface TaskMeter {
 	/** Charges a step's calls and answers its credits; a step charged before is not charged again. */
 	charge(input: { userId: string; taskId: string; step: number; calls: ModelCall[] }): Promise<number>;
 }
-
-/** Lets every step run and charges nothing. */
-export const unmeteredTaskMeter: TaskMeter = {
-	gate: async () => ({ ok: true }),
-	charge: async () => 0,
-};

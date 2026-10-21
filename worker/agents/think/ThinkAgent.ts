@@ -26,10 +26,7 @@ import { catalogToolDepsFromEnv, createCatalogTools } from './catalog-tools';
 import { createPaymentsSetupTool, paymentsSetupDepsFromEnv } from './payments-setup-tool';
 import { serializeTools } from './serial-tools';
 import { selectThinkContextMessages } from './context-selector';
-import { getUserConfigurableSettings } from '../../config';
-import { RateLimitService } from '../../services/rate-limit/rateLimits';
-import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
-import type { RateLimitSettings } from '../../services/rate-limit/config';
+import { countDailyCall, loadDailyAllowance, type DailyAllowance } from '../../services/rate-limit/daily-allowance';
 import { isFlagOn } from '../../services/posthog/flags';
 import { chargeStep, loadTurnAccount, meteringDepsFromEnv, type TurnAccount } from '../../services/billing/metering';
 import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
@@ -60,7 +57,7 @@ interface TurnPricing {
  */
 type TurnUsage =
 	| (TurnPricing & { mode: 'credits'; userId: string; account: TurnAccount | null })
-	| (TurnPricing & { mode: 'daily'; config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number })
+	| (TurnPricing & DailyAllowance & { mode: 'daily'; creditCost: number })
 	| (TurnPricing & { mode: 'unmetered' });
 
 /**
@@ -315,14 +312,8 @@ export class ThinkAgent extends Think<Env> {
 			this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, account: await loadTurnAccount(this.env, config.userId) };
 		} else if (config) {
 			try {
-				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
-				this.turnUsage = {
-					...pricing,
-					mode: 'daily',
-					config: userConfig.security.rateLimit,
-					hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
-					creditCost: model.config.creditCost,
-				};
+				const allowance = await loadDailyAllowance(this.env, config.userId, { ownAccountPays: true });
+				this.turnUsage = { ...pricing, mode: 'daily', ...allowance, creditCost: model.config.creditCost };
 			} catch (error) {
 				console.warn('Failed to resolve Think credit metering configuration', error);
 			}
@@ -397,16 +388,7 @@ export class ThinkAgent extends Think<Env> {
 		if (this.turnSteps !== null) this.turnSteps += 1;
 		const config = this.getConfig<ThinkAgentConfig>();
 		if (this.turnUsage?.mode === 'daily' && config) {
-			await RateLimitService.enforceLLMCallsRateLimit(
-				this.env,
-				this.turnUsage.config,
-				config.userId,
-				'Think',
-				'',
-				false,
-				this.turnUsage.hasCloudflareConfigured,
-				{ creditCost: this.turnUsage.creditCost, throwOnExceeded: false },
-			);
+			await countDailyCall(this.env, this.turnUsage, config.userId, this.turnUsage.creditCost);
 		}
 		if (ctx.stepNumber >= this.maxSteps - 1) {
 			return {
