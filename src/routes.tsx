@@ -25,6 +25,7 @@ import AdminFlagsPage from './routes/admin/flags';
 import SellerOrdersPage from './routes/orders/orders';
 import SellerOrderPage from './routes/orders/order';
 import ShopperEmailsPage from './routes/emails/emails';
+import TranslationsPage from './routes/translations/translations';
 import { protectedPage } from './routes/protected-page';
 import { PublicLayout } from './components/layout/PublicLayout';
 import { TermsPage, PrivacyPage, RefundsPage, CopyrightPage } from './routes/legal';
@@ -118,6 +119,10 @@ const routes = [
 					{
 						path: 'emails',
 						Component: protectedPage(ShopperEmailsPage),
+					},
+					{
+						path: 'translations',
+						Component: protectedPage(TranslationsPage),
 					},
 					{
 						path: 'app/:id',

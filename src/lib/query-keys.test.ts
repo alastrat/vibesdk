@@ -49,6 +49,23 @@ describe('payments query keys', () => {
 	});
 });
 
+describe('store translation and task query keys', () => {
+	it.each([
+		['stores', queryKeys.account.storeTranslations.stores(), queryKeys.account.storeTranslations.all()],
+		['store', queryKeys.account.storeTranslations.store('app1'), queryKeys.account.storeTranslations.all()],
+		["store's tasks", queryKeys.account.tasks.store('app1'), queryKeys.account.tasks.all()],
+	])('keeps the %s cache out of storage and under the account prefix', (_name, key, prefix) => {
+		expect(key.slice(0, prefix.length)).toEqual(prefix);
+		expect(key[0]).toBe(queryKeys.account.all[0]);
+		expect(persisted(key)).toBe(false);
+	});
+
+	it('keeps each store apart', () => {
+		expect(queryKeys.account.storeTranslations.store('app1')).not.toEqual(queryKeys.account.storeTranslations.store('app2'));
+		expect(queryKeys.account.tasks.store('app1')).not.toEqual(queryKeys.account.tasks.store('app2'));
+	});
+});
+
 describe('billing query key', () => {
 	it('keeps the account plan out of storage and under the account prefix, so signing out drops it', () => {
 		expect(queryKeys.billing()[0]).toBe(queryKeys.account.all[0]);

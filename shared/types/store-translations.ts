@@ -102,6 +102,9 @@ export interface StoreTranslationTextRequest {
 /** A page of the translations editor lists this many texts. */
 export const STORE_TRANSLATION_PAGE_SIZE = 50;
 
+/** The Translations page in the main menu. */
+export const STORE_TRANSLATIONS_PATH = '/translations';
+
 /** A language the store can be translated into, and how far it is; `left` is the texts with no translation yet. */
 export interface StoreLanguageStatus {
 	locale: Locale;

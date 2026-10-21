@@ -24,6 +24,9 @@ describe('the seller Orders pages', () => {
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
 		expect(sidebar.match(/navigate\(SELLER_ORDERS_PATH\)/g) ?? []).toHaveLength(2);
 		expect(sidebar).toContain('id="orders-link"');
+		// Orders comes before Emails and Translations, folded and open.
+		const items = [...sidebar.matchAll(/id="(orders|emails|translations)-link"/g)].map((match) => match[1]);
+		expect(items).toEqual(['orders', 'emails', 'translations', 'orders', 'emails', 'translations']);
 	});
 
 	it('list orders to ship by default, with test orders hidden behind a switch, a store filter and Load more', () => {

@@ -20,6 +20,11 @@ describe('the Emails page', () => {
 		expect(sidebar.match(/navigate\(SHOPPER_EMAILS_PATH\)/g) ?? []).toHaveLength(2);
 		expect(sidebar).toContain('id="emails-link"');
 		expect(sidebar.indexOf('id="orders-link"')).toBeLessThan(sidebar.indexOf('id="emails-link"'));
+		// Each form lists Orders, Emails, then Translations.
+		expect(sidebar.match(/id="emails-link"/g) ?? []).toHaveLength(2);
+		expect(sidebar.indexOf('id="emails-link"')).toBeLessThan(sidebar.indexOf('id="translations-link"'));
+		expect(sidebar.lastIndexOf('id="emails-link"')).toBeLessThan(sidebar.lastIndexOf('id="translations-link"'));
+		expect(sidebar.indexOf('id="translations-link"')).toBeLessThan(sidebar.lastIndexOf('id="emails-link"'));
 	});
 
 	it('shows each email with its switch, Edit and where it came from, a store picker, and where replies go', () => {

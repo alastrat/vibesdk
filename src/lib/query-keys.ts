@@ -157,6 +157,17 @@ export const queryKeys = {
 			store: (appId: string) => [...queryKeys.account.shopperEmails.all(), 'store', appId] as const,
 			preview: (appId: string, kind: string, subject: string, heading: string, body: string) => [...queryKeys.account.shopperEmails.all(), 'preview', appId, kind, subject, heading, body] as const,
 		},
+		/** Each store's languages and translations: never persisted, like the rest of `account`. */
+		storeTranslations: {
+			all: () => [...queryKeys.account.all, 'store-translations'] as const,
+			stores: () => [...queryKeys.account.storeTranslations.all(), 'stores'] as const,
+			store: (appId: string) => [...queryKeys.account.storeTranslations.all(), 'store', appId] as const,
+		},
+		/** The seller's background tasks: never persisted, like the rest of `account`. */
+		tasks: {
+			all: () => [...queryKeys.account.all, 'tasks'] as const,
+			store: (appId: string) => [...queryKeys.account.tasks.all(), 'store', appId] as const,
+		},
 		/** Admins' catalog orders: never persisted, like the rest of `account`. */
 		catalogOrders: {
 			all: () => [...queryKeys.account.all, 'catalog-orders'] as const,

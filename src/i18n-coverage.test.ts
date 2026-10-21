@@ -40,6 +40,8 @@ const COVERED: string[] = [
 	'src/lib/visibility-label.ts',
 	'src/components/ui/dialog.tsx',
 	'src/components/ui/model-selector.tsx',
+	'src/routes/translations/',
+	'src/hooks/use-store-translations.ts',
 ];
 
 /** Every source file that can be covered, loaded only when it is. Tests and declaration files are never covered. */
