@@ -98,7 +98,11 @@ describe('SpaceDO.getDeploymentTexts', () => {
 	});
 });
 
-const sources = import.meta.glob<string>(['/space/src/space/durable-object.ts'], { query: '?raw', import: 'default', eager: true });
+const sources = import.meta.glob<string>(['/space/src/space/durable-object.ts', '/space/src/index.ts', '/space/types/index.d.ts'], {
+	query: '?raw',
+	import: 'default',
+	eager: true,
+});
 
 describe('SpaceDO.getDeploymentTexts wiring', () => {
 	it('waits for init and reads the stored row without touching git or the working tree', () => {
@@ -109,5 +113,17 @@ describe('SpaceDO.getDeploymentTexts wiring', () => {
 		expect(body).toContain('await this.ensureInit()');
 		expect(body).toContain('readDeploymentTexts(this.ctx.storage.sql, branch)');
 		expect(body).not.toMatch(/this\.(git|fs|overlay)\b/);
+	});
+
+	it('exports DeploymentTexts to the worker, in the package\'s hand-kept types too', () => {
+		const entry = sources['/space/src/index.ts'];
+		const types = sources['/space/types/index.d.ts'];
+		expect(entry).toMatch(/export type \{[^}]*\bDeploymentTexts\b[^}]*\} from "\.\/space\/deploy-engine"/);
+		expect(types).toContain('export interface DeploymentTexts {');
+		const declared = types.slice(types.indexOf('export interface DeploymentTexts {'));
+		const shape = declared.slice(0, declared.indexOf('\n}\n'));
+		for (const field of ['branch: string;', 'commitHash: string;', "files: { path: string; kind: 'html' | 'script'; text: string }[];", 'manifest: string | null;']) {
+			expect(shape).toContain(field);
+		}
 	});
 });

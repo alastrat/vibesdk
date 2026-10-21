@@ -4,6 +4,7 @@
  */
 
 import { Parser } from 'htmlparser2';
+import { decodeHTML, decodeHTMLAttribute } from 'entities';
 import { tokenizer, tokTypes, type Token } from 'acorn';
 import type { DeploymentTexts } from '@space-do/space';
 import { MAX_STORE_TEXTS, MAX_TEXT_CHARS, type StoreText, type StoreTextKind } from '../../../shared/types/store-translations';
@@ -13,11 +14,23 @@ export interface StoreTexts {
 	texts: StoreText[];
 	/** The store has more texts than MAX_STORE_TEXTS, so the extraction stopped at the limit. */
 	truncated: boolean;
+	/** A deployment's `estori-store.json` did not parse, so its products were not read. */
+	manifestInvalid: boolean;
 }
 
 /** Collapses every run of whitespace, no-break spaces included, to one space and trims. Entities are not decoded. */
 export function normalizeText(raw: string): string {
 	return raw.replace(/\s+/g, ' ').trim();
+}
+
+/** The key of a text node's raw source: entities decoded as a browser decodes text, then normalized. */
+export function htmlTextKey(raw: string): string {
+	return normalizeText(decodeHTML(raw));
+}
+
+/** The key of an attribute value's raw source: entities decoded as a browser decodes attributes, then normalized. */
+export function htmlAttributeKey(raw: string): string {
+	return normalizeText(decodeHTMLAttribute(raw));
 }
 
 /** The lowercase hex SHA-256 of a normalized text. */
@@ -28,16 +41,19 @@ export async function textHash(normalized: string): Promise<string> {
 
 const LETTER = /\p{L}/u;
 
+/** Stands for a `${...}` span in a template literal. Text that holds it is never a rendered text node. */
+const SUBSTITUTION = '\u0000';
+
 /** Distinct texts in first-seen order, up to MAX_STORE_TEXTS. */
 class TextCollector {
 	private readonly found = new Map<string, StoreTextKind>();
 	truncated = false;
 
-	/** Takes a text unless it has no letters, is too long, or was seen before. The first text past the limit stops the store. */
+	/** Takes a text unless it has no letters, holds a substitution, is too long, or was seen before. The first text past the limit stops the store. */
 	add(raw: string, kind: StoreTextKind): void {
 		if (this.truncated) return;
 		const text = normalizeText(raw);
-		if (text.length > MAX_TEXT_CHARS || !LETTER.test(text) || this.found.has(text)) return;
+		if (text.length > MAX_TEXT_CHARS || !LETTER.test(text) || text.includes(SUBSTITUTION) || this.found.has(text)) return;
 		if (this.found.size >= MAX_STORE_TEXTS) {
 			this.truncated = true;
 			return;
@@ -52,7 +68,8 @@ class TextCollector {
 
 // ─── HTML ───────────────────────────────────────────────────────────────────
 
-const SKIPPED_ELEMENTS = new Set(['script', 'style', 'noscript', 'code', 'pre', 'template']);
+/** Containers of code, templates and form values: neither their text nor any attribute inside them or on them is read. */
+const CODE_CONTAINERS = new Set(['script', 'style', 'noscript', 'code', 'pre', 'template', 'textarea']);
 const TEXT_ATTRIBUTES = new Set(['alt', 'title', 'placeholder', 'aria-label']);
 const BUTTON_INPUT_TYPES = new Set(['submit', 'button', 'reset']);
 
@@ -63,7 +80,7 @@ function isDescriptiveMeta(attributes: Record<string, string>): boolean {
 	return name === 'description' || property === 'og:title' || property === 'og:description';
 }
 
-/** The attribute values of one element that shoppers read, in source order. */
+/** The raw attribute values of one element that shoppers read, in source order. */
 function textAttributes(tag: string, attributes: Record<string, string>): string[] {
 	const found: string[] = [];
 	for (const [name, value] of Object.entries(attributes)) {
@@ -75,26 +92,28 @@ function textAttributes(tag: string, attributes: Record<string, string>): string
 }
 
 /**
- * Text nodes and the attributes shoppers read. A text node ends at any tag or comment, so `Hello <b>world</b>` has two,
- * as the serve-time rewriter sees it. Nothing inside script, style, noscript, code, pre or template counts.
+ * Text nodes and the attributes shoppers read, keyed from the raw source with htmlTextKey and htmlAttributeKey, which
+ * the serve-time rewriter uses on what it is handed. A text node ends at any tag or comment, so `Hello <b>world</b>`
+ * has two, as the rewriter sees it.
  */
 function extractHtml(html: string, kind: StoreTextKind, collector: TextCollector): void {
-	let skipped = 0;
+	let inCode = 0;
 	let node = '';
 	const endNode = () => {
-		if (skipped === 0) collector.add(node, kind);
+		if (inCode === 0) collector.add(htmlTextKey(node), kind);
 		node = '';
 	};
 	const parser = new Parser(
 		{
 			onopentag(name, attributes) {
 				endNode();
-				for (const value of textAttributes(name, attributes)) collector.add(value, kind);
-				if (SKIPPED_ELEMENTS.has(name)) skipped++;
+				if (CODE_CONTAINERS.has(name)) inCode++;
+				if (inCode > 0) return;
+				for (const value of textAttributes(name, attributes)) collector.add(htmlAttributeKey(value), kind);
 			},
 			onclosetag(name) {
 				endNode();
-				if (SKIPPED_ELEMENTS.has(name)) skipped--;
+				if (CODE_CONTAINERS.has(name)) inCode--;
 			},
 			ontext(data) {
 				node += data;
@@ -102,7 +121,7 @@ function extractHtml(html: string, kind: StoreTextKind, collector: TextCollector
 			oncomment: endNode,
 			onend: endNode,
 		},
-		{ decodeEntities: true },
+		{ decodeEntities: false },
 	);
 	parser.write(html);
 	parser.end();
@@ -110,18 +129,30 @@ function extractHtml(html: string, kind: StoreTextKind, collector: TextCollector
 
 // ─── Scripts ────────────────────────────────────────────────────────────────
 
-const CAPITALIZED_WORD = /^\p{Lu}\p{Ll}+/u;
+/** A capitalized word, after any emoji, symbol, digit or bracket in front of it. */
+const CAPITALIZED_WORD = /^[^\p{L}]*\p{Lu}\p{Ll}+/u;
+const STARTS_WITH_CAPITAL = /^[^\p{L}]*\p{Lu}/u;
 const MIME_TYPE = /^(?:application|audio|font|image|message|model|multipart|text|video|\*)\/[\w.+*-]+(?:\s*;.*)?$/i;
 const IDENTIFIER_ALPHABET = /^[\p{L}\p{N}_$-]+$/u;
 const JOINED_OR_CASED = /[_-]|[\p{Ll}\p{N}]\p{Lu}/u;
-const CSS_DECLARATION = /^[a-z-]+\s*:\s*\S/;
 const SELECTOR_COMPOUND = /^([a-z][a-z0-9]*|\*)?((?:[.#][\w-]+|\[\]|::?[a-z-]+(?:\(\))?)*),?$/i;
 const SELECTOR_COMBINATORS = new Set(['>', '+', '~']);
 const HTML_TAGS = new Set(
-	'a article aside body button div footer form h1 h2 h3 h4 h5 h6 header img input label li main nav ol option p section select span table td textarea th tr ul'.split(
+	'a article aside body button dd div dl dt footer form h1 h2 h3 h4 h5 h6 header img input label li main nav ol option p section select span table tbody td textarea th thead tr ul'.split(
 		' ',
 	),
 );
+const CLASS_TOKEN = /^[a-z0-9:_/.-]+$/;
+const TIME_ZONE = /^(?:Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc|US)\/[A-Za-z_+-]+(?:\/[A-Za-z_+-]+)*$/;
+const EMAIL = /^\S+@\S+\.\S+$/;
+const BARE_ADDRESS = /^(?:(?:mailto|tel|sms):|www\.|[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:[/?#]|$))\S*$/i;
+const KEY_NAMES = new Set([
+	'Escape', 'Enter', 'Tab', 'Shift', 'Control', 'Alt', 'Meta', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Delete', 'Bearer',
+]);
+/** Statements in capital letters are SQL; `Select a size` and `Create account` are copy, so other cases need a statement's shape. */
+const SQL_UPPERCASE = /^(?:SELECT|INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|PRAGMA|WITH|REPLACE)\s/;
+const SQL_SHAPE =
+	/^(?:select\s.*[*,(]|insert\s+(?:or\s+\w+\s+)?into\s|update\s+\S+\s+set\s|delete\s+from\s+\S+\s+where\s|create\s+(?:\w+\s+)*?(?:table|index|view|trigger)\s|drop\s+(?:table|index|view|trigger)\s|alter\s+table\s|pragma\s+\w|with\s+(?:recursive\s+)?\S+\s+as\s*\(|replace\s+into\s)/i;
 
 /** A space with a letter somewhere on each side of it: two words, whatever punctuation hangs on them. */
 function hasSpaceBetweenLetters(text: string): boolean {
@@ -135,10 +166,14 @@ function readsAsWords(text: string): boolean {
 	return hasSpaceBetweenLetters(text) || CAPITALIZED_WORD.test(text);
 }
 
-/** A selector needs a class, id, attribute, pseudo or combinator, and only known tags: `Tom + Jerry` is prose. */
+/**
+ * A selector needs a class, id, attribute, pseudo or combinator, or several tag names in a row (`form input`); every
+ * tag in it must be a known HTML tag, so `Tom + Jerry` and `Visit example.com today` are prose.
+ */
 function isCssSelector(text: string): boolean {
 	const tokens = text.replace(/\[[^\]]*\]/g, '[]').replace(/\([^)]*\)/g, '()').split(' ');
 	let qualified = false;
+	let allTagged = true;
 	for (const token of tokens) {
 		if (SELECTOR_COMBINATORS.has(token)) {
 			qualified = true;
@@ -149,16 +184,26 @@ function isCssSelector(text: string): boolean {
 		const [, tag, qualifiers] = match;
 		if (!tag && !qualifiers) return false;
 		if (tag && tag !== '*' && !HTML_TAGS.has(tag.toLowerCase())) return false;
+		if (!tag || tag === '*') allTagged = false;
 		if (qualifiers) qualified = true;
 	}
-	return qualified;
+	return qualified || (tokens.length > 1 && allTagged);
 }
 
-/** `name: value;` pairs. Without a semicolon `note: be careful` is prose. */
-function isCssDeclarations(text: string): boolean {
-	if (!text.includes(';')) return false;
-	const declarations = text.split(';').map((part) => part.trim()).filter((part) => part !== '');
-	return declarations.length > 0 && declarations.every((declaration) => CSS_DECLARATION.test(declaration));
+/** Utility classes: lowercase tokens, at least one like `btn-primary`, `md:flex` or `p4`. */
+function isClassList(text: string): boolean {
+	const tokens = text.split(' ');
+	return tokens.every((token) => CLASS_TOKEN.test(token)) && tokens.some((token) => /[a-z]/.test(token) && /[-:\d]/.test(token));
+}
+
+/** Lowercase text with a length unit, a color or a percentage in a function. A sentence starts with a capital: `Save 20% today`. */
+function isCssValue(text: string): boolean {
+	if (STARTS_WITH_CAPITAL.test(text)) return false;
+	return /\d(?:px|r?em|vh|vw)\b/.test(text) || /\d%[,)]/.test(text) || /(?:^|[\s(,])#[0-9a-f]{3,8}\b/i.test(text);
+}
+
+function isSqlStatement(text: string): boolean {
+	return SQL_UPPERCASE.test(text) || SQL_SHAPE.test(text);
 }
 
 /** One camelCase, snake_case, kebab-case or SCREAMING_CASE token. */
@@ -166,14 +211,27 @@ function isIdentifier(text: string): boolean {
 	return IDENTIFIER_ALPHABET.test(text) && JOINED_OR_CASED.test(text);
 }
 
-/** Strings that name something for code, not for a person: addresses, paths, selectors, declarations, types, identifiers. */
+/** A string that is only an email, a URL or a domain. */
+function isOnlyAddress(text: string): boolean {
+	return !text.includes(' ') && (EMAIL.test(text) || BARE_ADDRESS.test(text));
+}
+
+/** Strings that name something for code, not for a person: addresses, paths, selectors, values, statements, identifiers. */
 function isCodeLike(text: string): boolean {
 	return (
-		/^(?:\/|\.|#|http)/.test(text) ||
+		/^(?:\/|\.|#|http|[{[])/.test(text) ||
 		text.includes('://') ||
+		text.includes(';') ||
+		/\S=\S/.test(text) ||
+		text === 'use strict' ||
+		KEY_NAMES.has(text) ||
 		MIME_TYPE.test(text) ||
+		TIME_ZONE.test(text) ||
+		isOnlyAddress(text) ||
 		isIdentifier(text) ||
-		isCssDeclarations(text) ||
+		isSqlStatement(text) ||
+		isCssValue(text) ||
+		isClassList(text) ||
 		isCssSelector(text)
 	);
 }
@@ -183,12 +241,31 @@ type ScriptToken = Token & { value?: unknown };
 
 /** The string follows `import`, `from`, `require(` or `import(`, so it names a module. */
 function isModuleSpecifier(before: ScriptToken[]): boolean {
-	const tokens = before.at(-1)?.type === tokTypes.backQuote ? before.slice(0, -1) : before;
-	const last = tokens.at(-1);
+	const last = before.at(-1);
 	if (!last) return false;
 	if (last.type === tokTypes._import || (last.type === tokTypes.name && last.value === 'from')) return true;
-	const callee = tokens.at(-2);
+	const callee = before.at(-2);
 	return last.type === tokTypes.parenL && callee !== undefined && (callee.type === tokTypes._import || (callee.type === tokTypes.name && callee.value === 'require'));
+}
+
+const MODULE_BANNER = /^\s*(?:[a-z][\w-]*:(?!\/\/))?([\w@.$~+/-]+)\s*$/i;
+
+/**
+ * Whether a line comment is a bundler's module banner (`// virtual:node_modules/hono/dist/index.js`) for a library:
+ * true, false for the store's own module, null for any other comment.
+ */
+function bannerIsLibrary(comment: string): boolean | null {
+	const path = MODULE_BANNER.exec(comment)?.[1];
+	if (path === undefined || !/[/.]/.test(path)) return null;
+	return /(?:^|\/)node_modules\//.test(path);
+}
+
+/** A template literal being read: its quasis, with a SUBSTITUTION where each `${...}` was. */
+interface TemplateFrame {
+	parts: string[];
+	/** The quasi just read, so the next token is `${` or the closing backquote. */
+	afterQuasi: boolean;
+	skip: boolean;
 }
 
 interface ScriptRead {
@@ -199,19 +276,49 @@ interface ScriptRead {
 	end: number;
 }
 
-/** The values of a script's string and template tokens, module specifiers left out. A syntax error ends the read there. */
+/**
+ * The string literals of a script and each template literal as one string, a template read when it closes. Module
+ * specifiers and everything after a node_modules banner are left out. A syntax error ends the read there.
+ */
 function readScriptStrings(source: string, sourceType: 'module' | 'script'): ScriptRead {
 	const strings: string[] = [];
+	const templates: TemplateFrame[] = [];
 	const recent: ScriptToken[] = [];
+	let inLibrary = false;
 	let end = 0;
 	try {
-		const tokens: Iterable<ScriptToken> = tokenizer(source, { ecmaVersion: 'latest', sourceType });
+		const tokens: Iterable<ScriptToken> = tokenizer(source, {
+			ecmaVersion: 'latest',
+			sourceType,
+			onComment: (isBlock, comment) => {
+				if (!isBlock) inLibrary = bannerIsLibrary(comment) ?? inLibrary;
+			},
+		});
 		for (const token of tokens) {
 			end = token.end;
-			const isText = token.type === tokTypes.string || token.type === tokTypes.template;
-			if (isText && typeof token.value === 'string' && !isModuleSpecifier(recent)) strings.push(token.value);
+			const template = templates.at(-1);
+			if (token.type === tokTypes.backQuote) {
+				if (template?.afterQuasi) {
+					templates.pop();
+					if (!template.skip) strings.push(template.parts.join(''));
+				} else {
+					templates.push({ parts: [], afterQuasi: false, skip: inLibrary || isModuleSpecifier(recent) });
+				}
+			} else if (token.type === tokTypes.template || token.type === tokTypes.invalidTemplate) {
+				if (template) {
+					template.parts.push(typeof token.value === 'string' ? token.value : SUBSTITUTION);
+					template.afterQuasi = true;
+				}
+			} else if (token.type === tokTypes.dollarBraceL) {
+				if (template) {
+					template.parts.push(SUBSTITUTION);
+					template.afterQuasi = false;
+				}
+			} else if (token.type === tokTypes.string && typeof token.value === 'string' && !inLibrary && !isModuleSpecifier(recent)) {
+				strings.push(token.value);
+			}
 			recent.push(token);
-			if (recent.length > 3) recent.shift();
+			if (recent.length > 2) recent.shift();
 		}
 		return { strings, complete: true, end };
 	} catch {
@@ -228,7 +335,10 @@ function scriptStrings(source: string): string[] {
 	return asScript.end >= asModule.end ? asScript.strings : asModule.strings;
 }
 
-/** String literals and template text that read as words. A string with markup goes through the HTML reader. */
+/**
+ * String literals and template text that read as words. A string with markup goes through the HTML reader, which
+ * takes what a rendered page would have as text nodes; one without is decoded as `innerHTML` would decode it.
+ */
 function extractScript(source: string, collector: TextCollector): void {
 	for (const value of scriptStrings(source)) {
 		if (collector.truncated) return;
@@ -236,38 +346,52 @@ function extractScript(source: string, collector: TextCollector): void {
 			extractHtml(value, 'script', collector);
 			continue;
 		}
-		const text = normalizeText(value);
-		if (text.length <= MAX_TEXT_CHARS && readsAsWords(text) && !isCodeLike(text)) collector.add(text, 'script');
+		const text = htmlTextKey(value);
+		if (text.length <= MAX_TEXT_CHARS && !text.includes(SUBSTITUTION) && readsAsWords(text) && !isCodeLike(text)) collector.add(text, 'script');
 	}
 }
 
+/** Vendored or minified scripts are libraries, not the store's own copy. */
+const LIBRARY_ASSET = /\.min\.m?js$|(?:^|\/)vendor\//i;
+
 // ─── Manifest ───────────────────────────────────────────────────────────────
 
-/** Product names, descriptions and variant names. The brand name is the seller's, and stays as it is. */
-function extractManifest(raw: string, collector: TextCollector): void {
+/** Product names, descriptions and variant names. The brand name is the seller's, and stays as it is. Returns false when the manifest does not parse. */
+function extractManifest(raw: string, collector: TextCollector): boolean {
 	const parsed = parseStoreManifest(raw);
-	if (!parsed.ok) return;
+	if (!parsed.ok) return false;
 	for (const product of parsed.manifest.products) {
 		collector.add(product.name, 'product');
 		if (product.description !== undefined) collector.add(product.description, 'product');
 		for (const variant of product.variants) collector.add(variant.name, 'product');
 	}
+	return true;
 }
 
 // ─── Store ──────────────────────────────────────────────────────────────────
 
-/** The distinct texts of every source, in first-seen order: sources as given, and in each its files, then its manifest. */
+/** HTML pages first, then script assets, then server modules, whose names have no leading slash. Stable within each. */
+function readingOrder(files: DeploymentTexts['files']): DeploymentTexts['files'] {
+	const rank = (file: DeploymentTexts['files'][number]) => (file.kind === 'html' ? 0 : file.path.startsWith('/') ? 1 : 2);
+	return [...files].sort((a, b) => rank(a) - rank(b));
+}
+
+/**
+ * The distinct texts of every source, in first-seen order: sources as given, and in each its manifest, then its HTML
+ * pages, script assets and server modules. A store with too many texts keeps its products and pages and loses scripts.
+ */
 export async function extractStoreTexts(sources: DeploymentTexts[]): Promise<StoreTexts> {
 	const collector = new TextCollector();
+	let manifestInvalid = false;
 	for (const source of sources) {
-		for (const file of source.files) {
+		if (source.manifest !== null && !extractManifest(source.manifest, collector)) manifestInvalid = true;
+		for (const file of readingOrder(source.files)) {
 			if (collector.truncated) break;
 			if (file.kind === 'html') extractHtml(file.text, 'page', collector);
-			else extractScript(file.text, collector);
+			else if (!LIBRARY_ASSET.test(file.path)) extractScript(file.text, collector);
 		}
-		if (source.manifest !== null) extractManifest(source.manifest, collector);
 		if (collector.truncated) break;
 	}
 	const texts = await Promise.all(collector.entries().map(async ([text, kind]) => ({ hash: await textHash(text), text, kind })));
-	return { texts, truncated: collector.truncated };
+	return { texts, truncated: collector.truncated, manifestInvalid };
 }
