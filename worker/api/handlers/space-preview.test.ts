@@ -17,6 +17,7 @@ vi.mock('../../database/services/AppService', () => ({
 }));
 
 const { handleSpacePreview } = await import('./space-preview');
+const { recordingD1 } = await import('../../database/test-support/recording-d1');
 const {
 	buildPreviewCookie,
 	PUBLIC_PREVIEW_SUBJECT,
@@ -57,6 +58,8 @@ function makeEnv(
 		CUSTOM_DOMAIN: 'example.com',
 		CUSTOM_PREVIEW_DOMAIN: '',
 		SPACE_DO: namespace,
+		// The store has no language settings, so its pages are served as written.
+		DB: recordingD1().d1,
 		...overrides,
 	} as unknown as HandlerEnv;
 }

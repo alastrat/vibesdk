@@ -29,6 +29,13 @@ const MAX_QUERY_CHARS = 200;
 
 const DEFAULT_SETTINGS = { matchBrowser: true, showSwitcher: true, autoTranslate: true, version: 1 } as const;
 
+/** A translation as serving reads it: the source text's hash, the normalized source text, and the translation. */
+export interface StoreTranslationEntry {
+	hash: string;
+	source: string;
+	text: string;
+}
+
 type SettingsRow = typeof schema.storeTranslationSettings.$inferSelect;
 type Targets = StoreTranslationSettings['targets'];
 
@@ -279,13 +286,17 @@ export class StoreTranslationService extends BaseService {
 
 	/** Every translation into `locale` by source hash, including those of texts the store no longer shows: what serving reads. */
 	async dictionary(appId: string, locale: Locale): Promise<Map<string, string>> {
+		return new Map((await this.translationsOf(appId, locale)).map((row) => [row.hash, row.text]));
+	}
+
+	/** The same translations with their source texts, which the overlay script looks up without hashing. */
+	async translationsOf(appId: string, locale: Locale): Promise<StoreTranslationEntry[]> {
 		const translations = schema.storeTranslations;
-		const rows = await this.database
-			.select({ hash: translations.sourceHash, text: translations.text })
+		return this.database
+			.select({ hash: translations.sourceHash, source: translations.sourceText, text: translations.text })
 			.from(translations)
 			.where(and(eq(translations.appId, appId), eq(translations.locale, locale)))
 			.all();
-		return new Map(rows.map((row) => [row.hash, row.text]));
 	}
 
 	/** The store's texts with no translation into `locale`. The excluded hashes go in as one JSON value, since D1 binds at most 100 parameters. */

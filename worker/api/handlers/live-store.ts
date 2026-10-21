@@ -8,6 +8,7 @@ import type { StoreHost } from '../../services/live-stores/hosts';
 import { createLogger } from '../../logger';
 import { handleStorePlatform, matchLivePlatformPath } from './store-platform';
 import { plainPage } from './plain-page';
+import { serveStorePage } from '../../services/store-translations/serve-context';
 
 const logger = createLogger('LiveStore');
 
@@ -29,8 +30,9 @@ export async function handleLiveStore(request: Request, env: Env, ctx: Execution
 	const namespace = (env as unknown as { SPACE_DO?: DurableObjectNamespace }).SPACE_DO;
 	if (!namespace) return plainPage(503, 'This store is temporarily unavailable', 'Try again in a moment.');
 	const forwarded = new URL(`${SPACE_LIVE_PATH}${url.pathname}${url.search}`, url.origin);
+	const space = namespace.get(namespace.idFromName(store.appId));
 	try {
-		return await namespace.get(namespace.idFromName(store.appId)).fetch(new Request(forwarded.toString(), request));
+		return await serveStorePage(request, env, { appId: store.appId, basePath: '', pageUrl: url }, (page) => space.fetch(new Request(forwarded.toString(), page)));
 	} catch (error) {
 		logger.error('Live store could not be served', { appId: store.appId, error });
 		return plainPage(503, 'This store is temporarily unavailable', 'Try again in a moment.');

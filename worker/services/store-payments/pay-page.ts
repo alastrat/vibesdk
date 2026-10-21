@@ -6,6 +6,7 @@
 
 import { STORE_CHECKOUT_MESSAGES, type StoreBrand, type StoreInfo } from '../../../shared/types/store-payments';
 import { STRIPE_JS_URL } from '../../../shared/types/stripe';
+import { jsonForScript } from '../../utils/html';
 
 const NEUTRAL_BRAND: StoreBrand = {
 	name: '',
@@ -32,11 +33,6 @@ export interface PayPageInput {
 
 function escapeHtml(text: string): string {
 	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-/** JSON that can sit inside a script element: nothing in it can close the element or start markup. */
-function jsonForScript(value: unknown): string {
-	return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
 function isDark(hex: string): boolean {

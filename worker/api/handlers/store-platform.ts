@@ -3,7 +3,8 @@
  * Stripe and receipts. They are answered here, before SpaceDO, so generated code never handles payments.
  */
 
-import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal, type StoreMode } from '../../../shared/types/store-payments';
+import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal, type StoreManifest, type StoreMode } from '../../../shared/types/store-payments';
+import { isLocale } from '../../../shared/i18n/locales';
 import { createLogger } from '../../logger';
 import { SellerTermsService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
 import { AppService } from '../../database/services/AppService';
@@ -32,6 +33,10 @@ import { releaseOldestHolds } from '../../services/store-payments/holds';
 import { replaceCheckout } from '../../services/store-payments/replace';
 import { LiveStoreService } from '../../database/services/LiveStoreService';
 import { plainPage } from './plain-page';
+import { loadStoreLanguageContext } from '../../services/store-translations/serve-context';
+import { resolveShopperLanguage, STORE_LANGUAGE_PARAM } from '../../services/store-translations/language';
+import { STORE_OVERLAY_PATH, translateManifest } from '../../services/store-translations/rewrite';
+import { overlayScript } from '../../services/store-translations/overlay-script';
 
 const logger = createLogger('StorePlatform');
 
@@ -166,13 +171,45 @@ async function livePaymentsOn(env: Env, access: StartCheckoutInput['access'], se
 	return !(await isFlagOn(env, 'live-store-payments-paused', sellerUserId));
 }
 
-async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Response> {
+async function serveStoreInfo(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const file = await loadManifest(env, target);
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	if (!parsed?.ok) return json({ error: 'This store has no valid estori-store.json' }, 404);
 	const { mode } = await checkoutModeFor(env, target);
 	const seller = mode ? await sellerAccount(env, sellerIdOf(target), null) : null;
-	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test'));
+	const { manifest, varies } = await manifestForShopper(request, env, target.appId, parsed.manifest);
+	const response = json(storeInfoOf(manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test'));
+	if (varies) response.headers.set('Vary', 'Cookie, Accept-Language');
+	return response;
+}
+
+/**
+ * The store's products in the shopper's language when the store has ready languages; `varies` says the answer depends
+ * on the shopper. Prices and everything else are untouched, and a failure answers in the store's own words.
+ */
+async function manifestForShopper(request: Request, env: Env, appId: string, manifest: StoreManifest): Promise<{ manifest: StoreManifest; varies: boolean }> {
+	try {
+		const ctx = await loadStoreLanguageContext(env, appId);
+		if (ctx.ready.length === 0) return { manifest, varies: false };
+		const { locale } = resolveShopperLanguage(request, ctx);
+		if (locale === ctx.settings.sourceLocale) return { manifest, varies: true };
+		return { manifest: await translateManifest(manifest, await ctx.dictionary(locale)), varies: true };
+	} catch (error) {
+		logger.warn('Store products could not be translated; they are served as written', { appId, error });
+		return { manifest, varies: false };
+	}
+}
+
+/** `/__estori/i18n.js?lang=xx&v=n`: the overlay for a ready language, kept by browsers while `v` is the current version. */
+async function serveOverlayScript(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
+	const query = new URL(request.url).searchParams;
+	const ctx = await loadStoreLanguageContext(env, target.appId);
+	const locale = query.get(STORE_LANGUAGE_PARAM);
+	const headers = { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' };
+	if (!isLocale(locale) || !ctx.ready.includes(locale)) return new Response('', { status: 404, headers });
+	const current = query.get('v') === String(ctx.settings.version);
+	const script = overlayScript(locale, await ctx.entries(locale));
+	return new Response(script, { headers: { ...headers, 'Cache-Control': current ? 'public, max-age=31536000, immutable' : 'no-store' } });
 }
 
 /** Estori's checkout page: the store's brand and products from its file, and a fresh nonce for the page's own script. */
@@ -365,7 +402,8 @@ export async function handleStorePlatform(request: Request, env: Env, target: St
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store.js`) {
 			return new Response(STORE_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
 		}
-		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(env, target);
+		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(request, env, target);
+		if (request.method === 'GET' && path === STORE_OVERLAY_PATH) return await serveOverlayScript(request, env, target);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/pay`) return await servePayPage(request, env, target);
 		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target, ctx);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/return`) return await serveReturn(request, env, target);

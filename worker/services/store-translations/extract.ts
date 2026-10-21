@@ -69,11 +69,11 @@ class TextCollector {
 // ─── HTML ───────────────────────────────────────────────────────────────────
 
 /** Containers of code and templates: neither their text nor any attribute inside them or on them is read. */
-const CODE_CONTAINERS = new Set(['script', 'style', 'noscript', 'code', 'pre', 'template']);
+export const CODE_CONTAINERS: ReadonlySet<string> = new Set(['script', 'style', 'noscript', 'code', 'pre', 'template']);
 /** A textarea's text is a form value, but its own placeholder, title and aria-label are copy. */
-const VALUE_CONTAINERS = new Set(['textarea']);
-const TEXT_ATTRIBUTES = new Set(['alt', 'title', 'placeholder', 'aria-label']);
-const BUTTON_INPUT_TYPES = new Set(['submit', 'button', 'reset']);
+export const VALUE_CONTAINERS: ReadonlySet<string> = new Set(['textarea']);
+export const TEXT_ATTRIBUTES: ReadonlySet<string> = new Set(['alt', 'title', 'placeholder', 'aria-label']);
+export const BUTTON_INPUT_TYPES: ReadonlySet<string> = new Set(['submit', 'button', 'reset']);
 
 /** The `content` of a meta tag that shoppers or search results read. */
 function isDescriptiveMeta(attributes: Record<string, string>): boolean {
@@ -82,15 +82,19 @@ function isDescriptiveMeta(attributes: Record<string, string>): boolean {
 	return name === 'description' || property === 'og:title' || property === 'og:description';
 }
 
+/** The names of one element's attributes that shoppers read, in source order. Names are lower-case, values raw. */
+export function textAttributeNames(tag: string, attributes: Record<string, string>): string[] {
+	return Object.keys(attributes).filter(
+		(name) =>
+			TEXT_ATTRIBUTES.has(name) ||
+			(name === 'value' && tag === 'input' && BUTTON_INPUT_TYPES.has((attributes.type ?? '').trim().toLowerCase())) ||
+			(name === 'content' && tag === 'meta' && isDescriptiveMeta(attributes)),
+	);
+}
+
 /** The raw attribute values of one element that shoppers read, in source order. */
 function textAttributes(tag: string, attributes: Record<string, string>): string[] {
-	const found: string[] = [];
-	for (const [name, value] of Object.entries(attributes)) {
-		if (TEXT_ATTRIBUTES.has(name)) found.push(value);
-		else if (name === 'value' && tag === 'input' && BUTTON_INPUT_TYPES.has((attributes.type ?? '').trim().toLowerCase())) found.push(value);
-		else if (name === 'content' && tag === 'meta' && isDescriptiveMeta(attributes)) found.push(value);
-	}
-	return found;
+	return textAttributeNames(tag, attributes).map((name) => attributes[name]);
 }
 
 /**
