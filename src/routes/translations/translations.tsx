@@ -2,14 +2,15 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button, Empty, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
-import { LOCALES, LOCALE_NAMES, STORE_TRANSLATIONS_PAUSED_MESSAGE, isLocale, type StoreTranslationOverview, type StoreTranslationSettings, type StoreTranslationSettingsPatch, type StoreTranslationStoreSummary } from '@/api-types';
+import { STORE_TRANSLATIONS_PAUSED_MESSAGE, type StoreTranslationOverview, type StoreTranslationSettings, type StoreTranslationSettingsPatch, type StoreTranslationStoreSummary } from '@/api-types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useFlag } from '@/hooks/use-flag';
 import { useSaveTranslationSettings, useStoreTranslations, useTranslationStores } from '@/hooks/use-store-translations';
 import { useI18n } from '@/lib/i18n';
 import { LanguageCard } from './language-card';
-import { TaskActivity } from './task-activity';
+import { StoreLanguageSelect } from './store-language-select';
+import { Notice, TaskActivity } from './task-activity';
 
 /** Where this browser remembers the store the seller last chose. */
 const CHOSEN_STORE_KEY = 'estori:translations-store';
@@ -64,7 +65,15 @@ export default function TranslationsPage() {
 						</>
 					)
 				) : stores.isError ? (
-					<Empty title={t("Couldn't load your stores")} description={stores.error.message} />
+					<Empty
+						title={t("Couldn't load your stores")}
+						description={stores.error.message}
+						contents={
+							<Button size="sm" variant="secondary" disabled={stores.isFetching} loading={stores.isFetching} onClick={() => void stores.refetch()}>
+								{t('Retry')}
+							</Button>
+						}
+					/>
 				) : (
 					<Spinner />
 				)}
@@ -142,7 +151,7 @@ function StoreTranslations({ appId }: { appId: string }) {
 					<h2 className="text-lg font-semibold text-kumo-strong">{t('Languages')}</h2>
 					<ul className="grid gap-3 sm:grid-cols-2">
 						{data.languages.map((language) => (
-							<LanguageCard key={language.locale} appId={appId} language={language} creditsLeft={data.creditsLeft} storeUrl={data.liveUrl ?? data.previewUrl} />
+							<LanguageCard key={language.locale} appId={appId} language={language} settings={data.settings} creditsLeft={data.creditsLeft} storeUrl={data.liveUrl ?? data.previewUrl} />
 						))}
 					</ul>
 				</section>
@@ -164,17 +173,17 @@ function StoreNotes({ data, retrying, onRetry }: { data: StoreTranslationOvervie
 	return (
 		<div className="grid gap-2">
 			{data.textsUnavailable && (
-				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
-					<span className="text-sm text-kumo-default">{t("We couldn't read your store right now. Try again in a moment.")}</span>
-					<Button size="sm" variant="secondary" disabled={retrying} loading={retrying} onClick={onRetry}>
-						{t('Retry')}
-					</Button>
-				</div>
+				<Notice
+					text={t("We couldn't read your store right now. Try again in a moment.")}
+					actions={
+						<Button size="sm" variant="secondary" disabled={retrying} loading={retrying} onClick={onRetry}>
+							{t('Retry')}
+						</Button>
+					}
+				/>
 			)}
 			{notes.map((note) => (
-				<p key={note} className="rounded-lg px-3 py-2 text-sm text-kumo-default ring ring-kumo-hairline">
-					{note}
-				</p>
+				<Notice key={note} text={note} />
 			))}
 		</div>
 	);
@@ -197,24 +206,14 @@ function SettingsCard({ appId, settings }: { appId: string; settings: StoreTrans
 			<h2 className="text-lg font-semibold text-kumo-strong">{t('Settings')}</h2>
 			<div className="grid gap-1.5 sm:max-w-xs">
 				<span className="font-medium text-kumo-default">{t('Store language')}</span>
-				<Select
+				<StoreLanguageSelect
 					value={settings.sourceLocale}
+					label={t('Store language')}
 					disabled={save.isPending}
-					onValueChange={(value) => {
-						if (isLocale(value) && value !== settings.sourceLocale) change({ sourceLocale: value });
+					onChange={(value) => {
+						if (value !== settings.sourceLocale) change({ sourceLocale: value });
 					}}
-				>
-					<SelectTrigger aria-label={t('Store language')} className="w-full">
-						<SelectValue />
-					</SelectTrigger>
-					<SelectContent>
-						{LOCALES.map((code) => (
-							<SelectItem key={code} value={code}>
-								<span lang={code}>{LOCALE_NAMES[code]}</span>
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
+				/>
 				<span className="text-kumo-subtle">{t('The language your store is written in.')}</span>
 			</div>
 			<ul className="grid gap-3">

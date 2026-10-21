@@ -136,7 +136,7 @@ export interface StoreTranslationOverview {
 	textsUnavailable: boolean;
 	/** AI credits the seller has left; null while billing is off. */
 	creditsLeft: number | null;
-	/** The store's preview, which any language can be tried in; null before it has one. */
+	/** The store's preview, in its own language or, with `?lang=`, a language that is on and ready; null before it has one. */
 	previewUrl: string | null;
 	/** The live store's address; null while it isn't live. */
 	liveUrl: string | null;

@@ -1,5 +1,5 @@
 import { formatDistanceStrict } from 'date-fns';
-import { LOCALE_NAMES, formatCredits, type Locale, type StoreLanguageStatus, type TaskStatus, type TaskView } from '@/api-types';
+import { LOCALE_NAMES, formatCredits, isUnfinishedStatus, type Locale, type StoreLanguageStatus, type TaskStatus, type TaskView } from '@/api-types';
 import { msg, t, tn } from '@/lib/i18n';
 import { dateFnsLocale } from '@/lib/i18n/date-locale';
 
@@ -9,14 +9,17 @@ export type LanguageState = (typeof LANGUAGE_STATES)[number];
 
 export type StatusVariant = 'secondary' | 'outline' | 'info' | 'success' | 'warning' | 'error';
 
-/** English, marked for the catalogs; `t()` translates a label where it is shown. */
+/**
+ * English, marked for the catalogs; `t()` translates a label where it is shown. Ready and failed name the translation,
+ * so Spanish and Portuguese can agree with "traducción" and "tradução" rather than take the generic status words.
+ */
 export const LANGUAGE_STATE_LABELS: Readonly<Record<LanguageState, string>> = {
 	off: msg('Off'),
 	'not-translated': msg('Not translated'),
 	translating: msg('Translating'),
-	ready: msg('Ready'),
+	ready: msg('Translation ready'),
 	paused: msg('Paused'),
-	failed: msg('Failed'),
+	failed: msg('Translation failed'),
 };
 
 export const LANGUAGE_STATE_VARIANTS: Readonly<Record<LanguageState, StatusVariant>> = {
@@ -28,13 +31,14 @@ export const LANGUAGE_STATE_VARIANTS: Readonly<Record<LanguageState, StatusVaria
 	failed: 'error',
 };
 
+/** How a task ended names the task, so the words can agree with "tarea" and "tarefa". */
 const TASK_STATUS_LABELS: Readonly<Record<TaskStatus, string>> = {
 	queued: msg('Queued'),
 	running: msg('Running'),
 	paused: msg('Paused'),
-	done: msg('Done'),
-	failed: msg('Failed'),
-	canceled: msg('Canceled'),
+	done: msg('Task done'),
+	failed: msg('Task failed'),
+	canceled: msg('Task canceled'),
 };
 
 const TASK_STATUS_VARIANTS: Readonly<Record<TaskStatus, StatusVariant>> = {
@@ -51,20 +55,46 @@ export function taskWaitsForAllowance(task: TaskView): boolean {
 	return task.status === 'queued' && task.pauseReason === 'daily-limit';
 }
 
-/** The task takes a step soon, so the page reads it again: it runs, or waits its turn but not until tomorrow. */
-export function taskIsMoving(task: TaskView): boolean {
-	return task.status === 'running' || (task.status === 'queued' && !taskWaitsForAllowance(task));
+/** How often the page reads the store's tasks while one of them moves. */
+export const TASK_POLL_MS = 3_000;
+
+/** The longest wait a browser timer can hold. */
+const LONGEST_TIMER_MS = 2_147_483_647;
+
+/** The task takes a step now or soon: it runs, or it is queued to run now rather than at a later time. */
+export function taskIsMoving(task: TaskView, now: number = Date.now()): boolean {
+	return task.status === 'running' || (task.status === 'queued' && Date.parse(task.runAt) <= now);
+}
+
+/** When to read a store's tasks again: every few seconds while one moves, once when the next waiting one is due, else never. */
+export function taskRefetchDelay(tasks: readonly TaskView[], now: number = Date.now()): number | false {
+	if (tasks.some((task) => taskIsMoving(task, now))) return TASK_POLL_MS;
+	const waits = tasks.filter((task) => task.status === 'queued').map((task) => Date.parse(task.runAt) - now);
+	if (waits.length === 0) return false;
+	return Math.min(Math.max(Math.min(...waits), TASK_POLL_MS), LONGEST_TIMER_MS);
 }
 
 /** Not finished: the seller can cancel it, and a new one for the same work would only find it again. */
 export function taskIsUnfinished(task: TaskView): boolean {
-	return task.status === 'queued' || task.status === 'running' || task.status === 'paused';
+	return isUnfinishedStatus(task.status);
+}
+
+/**
+ * Whether the store's languages and its task list disagree about a language's latest task, which one of the two reads
+ * being older than the other explains. The list is newest first.
+ */
+export function languagesDisagreeWithTasks(languages: readonly StoreLanguageStatus[], tasks: readonly TaskView[]): boolean {
+	return languages.some((language) => {
+		const latest = tasks.find((task) => task.kind === 'store.translate' && task.payload.locale === language.locale);
+		if (!latest) return false;
+		return latest.id !== language.task?.id || latest.status !== language.task.status || latest.pauseReason !== language.task.pauseReason;
+	});
 }
 
 /** A task's own work comes first, since it says what is happening now; then whether the seller turned the language off. */
 export function languageState(language: StoreLanguageStatus): LanguageState {
 	const { task } = language;
-	if (task && taskIsMoving(task)) return 'translating';
+	if (task && (task.status === 'running' || (task.status === 'queued' && !taskWaitsForAllowance(task)))) return 'translating';
 	if (task && (task.status === 'paused' || taskWaitsForAllowance(task))) return 'paused';
 	if (!language.enabled) return 'off';
 	if (task?.status === 'failed') return 'failed';

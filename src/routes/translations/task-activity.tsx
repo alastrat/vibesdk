@@ -27,7 +27,14 @@ export function TaskActivity({ appId }: { appId: string }) {
 					<Empty title={t('No translations yet')} description={t('Translations you start show up here, with their progress and the credits they used.')} />
 				)
 			) : tasks.isError ? (
-				<p className="text-sm text-kumo-subtle">{tasks.error.message}</p>
+				<Notice
+					text={tasks.error.message}
+					actions={
+						<Button size="sm" variant="secondary" disabled={tasks.isFetching} loading={tasks.isFetching} onClick={() => void tasks.refetch()}>
+							{t('Retry')}
+						</Button>
+					}
+				/>
 			) : (
 				<div className="flex justify-center py-8">
 					<Loader />
@@ -41,12 +48,13 @@ function TaskRow({ appId, task }: { appId: string; task: TaskView }) {
 	const { locale, t } = useI18n();
 	const cancel = useCancelTask(appId);
 	const badge = taskBadge(task);
+	const label = taskLabel(task);
 	const { done, total } = task.progress;
 
 	return (
 		<li className="grid gap-2 rounded-lg border border-kumo-line p-3 text-sm">
 			<div className="flex flex-wrap items-center justify-between gap-2">
-				<span className="font-medium text-kumo-default">{taskLabel(task)}</span>
+				<span className="font-medium text-kumo-default">{label}</span>
 				<Badge variant={badge.variant}>{t(badge.label)}</Badge>
 			</div>
 			{total > 0 && <Meter label={t('{done} of {total} texts', { done: formatNumber(done, locale), total: formatNumber(total, locale) })} value={translatedPercent({ total, translated: done })} />}
@@ -59,6 +67,7 @@ function TaskRow({ appId, task }: { appId: string; task: TaskView }) {
 					size="sm"
 					variant="secondary"
 					className="w-fit"
+					aria-label={t('Cancel {task}', { task: label })}
 					disabled={cancel.isPending}
 					loading={cancel.isPending}
 					onClick={() => cancel.mutate(task.id, { onSuccess: () => toast.success(t('Canceled. What was translated stays.')), onError: (error) => toast.error(error.message) })}
@@ -74,9 +83,10 @@ function TaskRow({ appId, task }: { appId: string; task: TaskView }) {
 export function TaskNotice({ appId, task }: { appId: string; task: TaskView }) {
 	const { t, tn } = useI18n();
 	const resume = useResumeTask(appId);
-	const start = (label: string) => (
-		<Button size="sm" variant="secondary" disabled={resume.isPending} loading={resume.isPending} onClick={() => resume.mutate(task.id, { onError: (error) => toast.error(error.message) })}>
-			{label}
+	const label = taskLabel(task);
+	const start = (text: string, name: string) => (
+		<Button size="sm" variant="secondary" aria-label={name} disabled={resume.isPending} loading={resume.isPending} onClick={() => resume.mutate(task.id, { onError: (error) => toast.error(error.message) })}>
+			{text}
 		</Button>
 	);
 
@@ -89,15 +99,15 @@ export function TaskNotice({ appId, task }: { appId: string; task: TaskView }) {
 						<Link to={BILLING_PATH} className="text-sm font-medium text-kumo-default underline underline-offset-2">
 							{t('Add credits')}
 						</Link>
-						{start(t('Resume'))}
+						{start(t('Resume'), t('Resume {task}', { task: label }))}
 					</>
 				}
 			/>
 		);
 	}
-	if (task.status === 'paused') return <Notice text={t('Paused')} actions={start(t('Resume'))} />;
+	if (task.status === 'paused') return <Notice text={t('Paused')} actions={start(t('Resume'), t('Resume {task}', { task: label }))} />;
 	if (taskWaitsForAllowance(task)) return <Notice text={t("Waiting for tomorrow's allowance")} />;
-	if (task.status === 'failed') return <Notice text={t(task.lastError ?? TASK_FAILED_MESSAGE)} actions={start(t('Retry'))} />;
+	if (task.status === 'failed') return <Notice text={t(task.lastError ?? TASK_FAILED_MESSAGE)} actions={start(t('Retry'), t('Retry {task}', { task: label }))} />;
 	if (task.lastError && taskIsUnfinished(task)) return <Notice text={t(task.lastError)} />;
 	if (task.status === 'done' && task.progress.skipped > 0) {
 		return <Notice text={tn("{count} text couldn't be translated", "{count} texts couldn't be translated", task.progress.skipped)} />;
@@ -105,7 +115,8 @@ export function TaskNotice({ appId, task }: { appId: string; task: TaskView }) {
 	return null;
 }
 
-function Notice({ text, actions }: { text: string; actions?: ReactNode }) {
+/** A line about the store or a task, with what the seller can do about it. */
+export function Notice({ text, actions }: { text: string; actions?: ReactNode }) {
 	return (
 		<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
 			<span className="text-sm text-kumo-default">{text}</span>

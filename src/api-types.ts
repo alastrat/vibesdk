@@ -335,7 +335,7 @@ export type {
 } from '../shared/types/shopper-emails';
 export { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_LABELS, SHOPPER_EMAIL_LIMITS, SHOPPER_EMAIL_STATUSES, SHOPPER_EMAILS_PATH } from '../shared/types/shopper-emails';
 export type { TaskKind, TaskPauseReason, TaskProgressView, TaskStatus, TaskView, TaskViewPayloads } from '../shared/types/tasks';
-export { TASK_FAILED_MESSAGE, TASK_KINDS, TASK_STATUSES, UNFINISHED_TASK_STATUSES } from '../shared/types/tasks';
+export { TASK_FAILED_MESSAGE, TASK_KINDS, TASK_STATUSES, UNFINISHED_TASK_STATUSES, isUnfinishedStatus } from '../shared/types/tasks';
 export type {
 	StoreLanguageStatus,
 	StoreText,
@@ -349,7 +349,7 @@ export type {
 	StoreTranslationStoreSummary,
 	StoreTranslationTextRequest,
 } from '../shared/types/store-translations';
-export { MAX_TEXT_CHARS, STORE_TRANSLATION_ORIGINS, STORE_TRANSLATION_PAGE_SIZE, STORE_TRANSLATIONS_PATH } from '../shared/types/store-translations';
+export { MAX_TEXT_CHARS, STORE_TRANSLATION_ORIGINS, STORE_TRANSLATION_PAGE_SIZE, STORE_TRANSLATIONS_PATH, UNTOUCHED_SETTINGS_VERSION } from '../shared/types/store-translations';
 export type { CatalogProductsData, CatalogProductView, CatalogVariantView } from '../shared/types/catalog';
 export type {
 	AdminCatalogOrderDetail,

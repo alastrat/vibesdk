@@ -5,10 +5,7 @@ import { apiClient } from '@/lib/api-client';
 import { t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
-import { taskIsMoving } from '@/routes/translations/translations-format';
-
-/** How often the page reads a store again while one of its tasks moves. */
-export const TASK_POLL_MS = 3_000;
+import { languagesDisagreeWithTasks, taskRefetchDelay } from '@/routes/translations/translations-format';
 
 /** The seller's stores that have been deployed, for the picker. Nothing is read while `enabled` is false. */
 export function useTranslationStores(enabled: boolean) {
@@ -38,8 +35,9 @@ function statusesOf(tasks: readonly TaskView[]): string {
 }
 
 /**
- * The store's tasks, newest first, read again every few seconds while one of them moves. When a task's status changes,
- * such as from running to done, the store's languages are read again once.
+ * The store's tasks, newest first: read again every few seconds while one moves, and once when a waiting one is due. The
+ * store's languages are read again once when a task's status changes, such as from running to done, and once when the
+ * first read of each disagrees about a language's task.
  */
 export function useStoreTasks(appId: string) {
 	const queryClient = useQueryClient();
@@ -47,15 +45,20 @@ export function useStoreTasks(appId: string) {
 		queryKey: queryKeys.account.tasks.store(appId),
 		queryFn: () => unwrap(apiClient.getTasks(appId), t("Couldn't load this store's activity")),
 		retry: false,
-		refetchInterval: (query) => (query.state.data?.some(taskIsMoving) ? TASK_POLL_MS : false),
+		refetchInterval: (query) => (query.state.data ? taskRefetchDelay(query.state.data) : false),
 	});
 	const statuses = tasks.data ? statusesOf(tasks.data) : null;
 	const seen = useRef<string | null>(null);
+	const reconciled = useRef(false);
 	useEffect(() => {
-		if (statuses === null) return;
-		if (seen.current !== null && seen.current !== statuses) void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.store(appId) });
+		if (statuses === null || !tasks.data) return;
+		const changed = seen.current !== null && seen.current !== statuses;
 		seen.current = statuses;
-	}, [appId, queryClient, statuses]);
+		const overview = queryClient.getQueryData<StoreTranslationOverview>(queryKeys.account.storeTranslations.store(appId));
+		const stale = !reconciled.current && overview !== undefined && languagesDisagreeWithTasks(overview.languages, tasks.data);
+		if (overview !== undefined) reconciled.current = true;
+		if (changed || stale) void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.store(appId) });
+	}, [appId, queryClient, statuses, tasks.data]);
 	return tasks;
 }
 
@@ -69,13 +72,15 @@ export function useSaveTranslationSettings(appId: string) {
 	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (patch: StoreTranslationSettingsPatch) => unwrap(apiClient.saveStoreTranslationSettings(appId, patch), t("Couldn't save your settings")),
-		onSuccess: (settings, patch) => {
-			queryClient.setQueryData<StoreTranslationOverview>(queryKeys.account.storeTranslations.store(appId), (data) =>
+		onSuccess: (settings) => {
+			const key = queryKeys.account.storeTranslations.store(appId);
+			const before = queryClient.getQueryData<StoreTranslationOverview>(key)?.settings.sourceLocale;
+			queryClient.setQueryData<StoreTranslationOverview>(key, (data) =>
 				data ? { ...data, settings, languages: data.languages.map((language) => ({ ...language, enabled: settings.targets[language.locale]?.enabled ?? false })) } : data,
 			);
 			// The picker lists each store's languages; a new store language changes which languages the store has.
 			void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.stores() });
-			if (patch.sourceLocale !== undefined) void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeTranslations.store(appId) });
+			if (before !== settings.sourceLocale) void queryClient.invalidateQueries({ queryKey: key });
 		},
 	});
 }

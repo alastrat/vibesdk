@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, LinkButton, Meter } from '@cloudflare/kumo';
-import { LOCALE_NAMES, type StoreLanguageStatus } from '@/api-types';
+import { LOCALE_NAMES, UNTOUCHED_SETTINGS_VERSION, type Locale, type StoreLanguageStatus, type StoreTranslationSettings } from '@/api-types';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { useRunStoreTranslation, useSaveTranslationSettings } from '@/hooks/use-store-translations';
 import { useI18n } from '@/lib/i18n';
+import { StoreLanguageSelect } from './store-language-select';
 import { TaskNotice } from './task-activity';
 import { LANGUAGE_STATE_LABELS, LANGUAGE_STATE_VARIANTS, creditsLeftText, estimateText, languageState, previewHref, taskIsUnfinished, translatedPercent } from './translations-format';
 
 interface LanguageCardProps {
 	appId: string;
 	language: StoreLanguageStatus;
+	settings: StoreTranslationSettings;
 	/** AI credits the seller has left; null while billing is off. */
 	creditsLeft: number | null;
 	/** The live store, else its preview; null when there is neither. */
@@ -19,7 +21,7 @@ interface LanguageCardProps {
 }
 
 /** One language the store can be shown in: how far it is, what translating the rest costs, and whether shoppers get it. */
-export function LanguageCard({ appId, language, creditsLeft, storeUrl }: LanguageCardProps) {
+export function LanguageCard({ appId, language, settings, creditsLeft, storeUrl }: LanguageCardProps) {
 	const { locale, t, tn } = useI18n();
 	const [confirming, setConfirming] = useState(false);
 	const save = useSaveTranslationSettings(appId);
@@ -58,72 +60,105 @@ export function LanguageCard({ appId, language, creditsLeft, storeUrl }: Languag
 			</div>
 			{language.task && <TaskNotice appId={appId} task={language.task} />}
 			<div className="flex flex-wrap gap-2">
-				<Button size="sm" variant="primary" disabled={busy || upToDate || language.total === 0} onClick={() => setConfirming(true)}>
+				<Button size="sm" variant="primary" aria-label={t('Translate to {language}', { language: name })} disabled={busy || upToDate || language.total === 0} onClick={() => setConfirming(true)}>
 					{t('Translate')}
 				</Button>
 				{/* The store serves only languages that are on and ready; any other would show its own language. */}
 				{storeUrl && language.enabled && language.ready && (
-					<LinkButton size="sm" variant="secondary" href={previewHref(storeUrl, language.locale)} external>
+					<LinkButton size="sm" variant="secondary" href={previewHref(storeUrl, language.locale)} external aria-label={t('Preview in {language}', { language: name })}>
 						{t('Preview in {language}', { language: name })}
 					</LinkButton>
 				)}
 			</div>
-			<TranslateDialog appId={appId} language={language} creditsLeft={creditsLeft} open={confirming} onOpenChange={setConfirming} />
+			<Dialog open={confirming} onOpenChange={setConfirming}>
+				<DialogContent>
+					<DialogHeader>
+						<DialogTitle>{t('Translate your store into {language}?', { language: name })}</DialogTitle>
+						<DialogDescription>
+							{tn(
+								'Estori automatically translates {count} text that has no translation yet. Your edits are never changed.',
+								'Estori automatically translates {count} texts that have no translation yet. Your edits are never changed.',
+								language.left,
+							)}
+						</DialogDescription>
+					</DialogHeader>
+					<TranslateForm appId={appId} language={language} settings={settings} creditsLeft={creditsLeft} onDone={() => setConfirming(false)} />
+				</DialogContent>
+			</Dialog>
 		</li>
 	);
 }
 
-interface TranslateDialogProps {
+interface TranslateFormProps {
 	appId: string;
 	language: StoreLanguageStatus;
+	settings: StoreTranslationSettings;
 	creditsLeft: number | null;
-	open: boolean;
-	onOpenChange: (open: boolean) => void;
+	onDone: () => void;
 }
 
-/** Asks before spending credits: what translating costs, and what the seller has. Starting is allowed past what's left. */
-function TranslateDialog({ appId, language, creditsLeft, open, onOpenChange }: TranslateDialogProps) {
-	const { locale, t, tn } = useI18n();
+/**
+ * Asks before spending credits: the store's language, which checkout and Estori's own pages follow once it is saved, then
+ * what translating costs and what the seller has. Mounted with the dialog, so each opening starts from the saved settings.
+ * Starting is allowed past what's left.
+ */
+function TranslateForm({ appId, language, settings, creditsLeft, onDone }: TranslateFormProps) {
+	const { locale, t } = useI18n();
+	const [source, setSource] = useState<Locale>(settings.sourceLocale);
+	const save = useSaveTranslationSettings(appId);
 	const run = useRunStoreTranslation(appId);
+	const pending = save.isPending || run.isPending;
 	const name = LOCALE_NAMES[language.locale];
+	const alreadyIn = source === language.locale;
+	// Until the seller saves settings, the store's language is a guess, so the first translation saves the one shown.
+	const saveSource = settings.version <= UNTOUCHED_SETTINGS_VERSION || source !== settings.sourceLocale;
 	const short = creditsLeft !== null && language.estimateCredits > creditsLeft;
 
-	const start = () =>
-		run.mutate(language.locale, {
-			onSuccess: (result) => {
-				onOpenChange(false);
-				toast.success(result.created ? t('Translating your store into {language}', { language: name }) : t('Your store is already being translated into {language}', { language: name }));
-			},
-			onError: (error) => toast.error(error.message),
-		});
+	const confirm = async () => {
+		try {
+			if (saveSource) await save.mutateAsync({ sourceLocale: source });
+			if (alreadyIn) {
+				onDone();
+				toast.success(t('Saved'));
+				return;
+			}
+			const result = await run.mutateAsync(language.locale);
+			onDone();
+			toast.success(result.created ? t('Translating your store into {language}', { language: name }) : t('Your store is already being translated into {language}', { language: name }));
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : t("Couldn't start the translation"));
+		}
+	};
 
 	return (
-		<Dialog open={open} onOpenChange={onOpenChange}>
-			<DialogContent>
-				<DialogHeader>
-					<DialogTitle>{t('Translate your store into {language}?', { language: name })}</DialogTitle>
-					<DialogDescription>
-						{tn(
-							'Estori automatically translates the {count} text that has no translation yet. Your edits are never changed.',
-							'Estori automatically translates the {count} texts that have no translation yet. Your edits are never changed.',
-							language.left,
-						)}
-					</DialogDescription>
-				</DialogHeader>
+		<div className="grid gap-4">
+			<div className="grid gap-1.5 text-sm">
+				<span className="font-medium text-kumo-default">{t('Your store is written in')}</span>
+				<StoreLanguageSelect value={source} onChange={setSource} label={t('Your store is written in')} disabled={pending} />
+			</div>
+			{alreadyIn ? (
+				<p className="text-sm text-kumo-default">{t("Your store is already in {language}, so there's nothing to translate it into.", { language: name })}</p>
+			) : (
 				<div className="grid gap-1 text-sm">
 					<span className="font-medium text-kumo-default">{estimateText(language.estimateCredits, locale)}</span>
 					{creditsLeft !== null && <span className="text-kumo-subtle">{creditsLeftText(creditsLeft, locale)}</span>}
 					{short && <span className="text-kumo-default">{t("That's more than you have left. The translation pauses when your credits run out, and you can add credits to finish it.")}</span>}
 				</div>
-				<div className="flex flex-wrap justify-end gap-2">
-					<Button size="sm" variant="secondary" onClick={() => onOpenChange(false)}>
-						{t('Cancel')}
+			)}
+			<div className="flex flex-wrap justify-end gap-2">
+				<Button size="sm" variant="secondary" onClick={onDone}>
+					{t('Cancel')}
+				</Button>
+				{alreadyIn ? (
+					<Button size="sm" variant="primary" disabled={pending} loading={pending} onClick={() => void confirm()}>
+						{t('Save')}
 					</Button>
-					<Button size="sm" variant="primary" disabled={run.isPending} loading={run.isPending} onClick={start}>
+				) : (
+					<Button size="sm" variant="primary" aria-label={t('Translate to {language}', { language: name })} disabled={pending} loading={pending} onClick={() => void confirm()}>
 						{t('Translate')}
 					</Button>
-				</div>
-			</DialogContent>
-		</Dialog>
+				)}
+			</div>
+		</div>
 	);
 }

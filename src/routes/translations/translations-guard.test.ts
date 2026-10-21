@@ -47,10 +47,18 @@ describe('the Translations page', () => {
 
 	it('polls the light task list every 3 seconds while a task moves, never the store overview', () => {
 		const hooks = source('/src/hooks/use-store-translations.ts');
-		expect(hooks).toContain('TASK_POLL_MS = 3_000');
+		expect(source('/src/routes/translations/translations-format.ts')).toContain('TASK_POLL_MS = 3_000');
 		expect(hooks.match(/refetchInterval:/g)).toHaveLength(1);
-		expect(hooks).toContain('refetchInterval: (query) => (query.state.data?.some(taskIsMoving) ? TASK_POLL_MS : false)');
+		expect(hooks).toContain('refetchInterval: (query) => (query.state.data ? taskRefetchDelay(query.state.data) : false)');
 		expect(hooks).toContain('apiClient.getTasks(appId)');
+	});
+
+	it('names the language or task on every button that acts on one', () => {
+		const card = source('/src/routes/translations/language-card.tsx');
+		expect(card.match(/aria-label=\{t\('Translate to \{language\}', \{ language: name \}\)\}/g)).toHaveLength(2);
+		expect(card).toContain("aria-label={t('Preview in {language}', { language: name })}");
+		const activity = source('/src/routes/translations/task-activity.tsx');
+		for (const label of ["t('Cancel {task}'", "t('Resume {task}'", "t('Retry {task}'"]) expect(activity, label).toContain(label);
 	});
 
 	it('shows the estimate before translating, and what credits are left', () => {

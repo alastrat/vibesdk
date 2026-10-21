@@ -1,16 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Locale, StoreLanguageStatus, TaskView } from '@/api-types';
-import { applyAccountLocale } from '@/lib/i18n';
+import { applyAccountLocale, t } from '@/lib/i18n';
 import {
 	LANGUAGE_STATE_LABELS,
 	LANGUAGE_STATE_VARIANTS,
+	TASK_POLL_MS,
 	creditsLeftText,
 	estimateText,
 	languageState,
+	languagesDisagreeWithTasks,
 	previewHref,
 	taskBadge,
 	taskIsMoving,
 	taskLabel,
+	taskRefetchDelay,
 	translatedPercent,
 	type LanguageState,
 } from './translations-format';
@@ -59,9 +62,20 @@ describe('the state of a language', () => {
 		expect(languageState(language(overrides))).toBe(expected);
 	});
 
+	it('is translating while its task waits out a retry delay', () => {
+		expect(languageState(language({ task: task({ status: 'queued', runAt: '2099-01-01T00:00:00.000Z', lastError: 'Something went wrong. Estori will try again.' }) }))).toBe('translating');
+	});
+
 	it('has a label and a badge variant for each state', () => {
-		expect(LANGUAGE_STATE_LABELS).toEqual({ off: 'Off', 'not-translated': 'Not translated', translating: 'Translating', ready: 'Ready', paused: 'Paused', failed: 'Failed' });
+		expect(LANGUAGE_STATE_LABELS).toEqual({ off: 'Off', 'not-translated': 'Not translated', translating: 'Translating', ready: 'Translation ready', paused: 'Paused', failed: 'Translation failed' });
 		expect(LANGUAGE_STATE_VARIANTS).toEqual({ off: 'secondary', 'not-translated': 'outline', translating: 'info', ready: 'success', paused: 'warning', failed: 'error' });
+	});
+
+	it('says ready and failed in words that agree with "translation", not the generic status words', async () => {
+		await applyAccountLocale('es');
+		expect([t(LANGUAGE_STATE_LABELS.ready), t(LANGUAGE_STATE_LABELS.failed)]).toEqual(['Traducción lista', 'Traducción fallida']);
+		await applyAccountLocale('pt-BR');
+		expect([t(LANGUAGE_STATE_LABELS.ready), t(LANGUAGE_STATE_LABELS.failed)]).toEqual(['Tradução pronta', 'Tradução com falha']);
 	});
 
 	it('is a whole percent translated, never 100 before the last text', () => {
@@ -73,12 +87,40 @@ describe('the state of a language', () => {
 });
 
 describe('a task', () => {
-	it('moves while it runs or waits its turn, but not while it is held until tomorrow or has ended', () => {
-		expect(taskIsMoving(task())).toBe(true);
-		expect(taskIsMoving(task({ status: 'queued' }))).toBe(true);
-		expect(taskIsMoving(task({ status: 'queued', lastError: 'Something went wrong. Estori will try again.' }))).toBe(true);
-		expect(taskIsMoving(task({ status: 'queued', pauseReason: 'daily-limit' }))).toBe(false);
-		for (const status of ['paused', 'done', 'failed', 'canceled'] as const) expect(taskIsMoving(task({ status })), status).toBe(false);
+	it('moves while it runs or is queued to run now, but not while it waits for a later time or has ended', () => {
+		const now = Date.parse('2026-10-21T10:00:00.000Z');
+		expect(taskIsMoving(task(), now)).toBe(true);
+		expect(taskIsMoving(task({ status: 'queued', runAt: '2026-10-21T10:00:00.000Z' }), now)).toBe(true);
+		expect(taskIsMoving(task({ status: 'queued', runAt: '2026-10-21T09:59:00.000Z' }), now)).toBe(true);
+		expect(taskIsMoving(task({ status: 'queued', runAt: '2026-10-21T10:02:00.000Z', lastError: 'Something went wrong. Estori will try again.' }), now)).toBe(false);
+		expect(taskIsMoving(task({ status: 'queued', runAt: '2026-10-22T00:00:00.000Z', pauseReason: 'daily-limit' }), now)).toBe(false);
+		for (const status of ['paused', 'done', 'failed', 'canceled'] as const) expect(taskIsMoving(task({ status }), now), status).toBe(false);
+	});
+
+	it('is read again every 3 seconds while one moves, once when the next waiting one is due, and never with none unfinished', () => {
+		const now = Date.parse('2026-10-21T10:00:00.000Z');
+		const waiting = (runAt: string) => task({ status: 'queued', runAt });
+		expect(TASK_POLL_MS).toBe(3_000);
+		expect(taskRefetchDelay([task(), waiting('2026-10-21T11:00:00.000Z')], now)).toBe(3_000);
+		expect(taskRefetchDelay([waiting('2026-10-21T10:02:00.000Z'), waiting('2026-10-21T10:30:00.000Z')], now)).toBe(120_000);
+		expect(taskRefetchDelay([waiting('2026-10-21T10:00:01.000Z')], now)).toBe(3_000);
+		expect(taskRefetchDelay([task({ status: 'queued', runAt: '2026-10-22T00:00:00.000Z', pauseReason: 'daily-limit' })], now)).toBe(14 * 3_600_000);
+		expect(taskRefetchDelay([waiting('2099-01-01T00:00:00.000Z')], now)).toBe(2_147_483_647);
+		expect(taskRefetchDelay([task({ status: 'done' }), task({ status: 'paused', pauseReason: 'credits' })], now)).toBe(false);
+		expect(taskRefetchDelay([], now)).toBe(false);
+	});
+
+	it("is told apart from the store's languages when either read is older than the other", () => {
+		const running = task({ id: 't1' });
+		expect(languagesDisagreeWithTasks([language({ task: running })], [running])).toBe(false);
+		expect(languagesDisagreeWithTasks([language({ task: running })], [task({ id: 't1', status: 'done' })])).toBe(true);
+		expect(languagesDisagreeWithTasks([language({ task: running })], [task({ id: 't1', status: 'paused', pauseReason: 'credits' })])).toBe(true);
+		// A newer task for the language than the one the languages know.
+		expect(languagesDisagreeWithTasks([language({ task: task({ id: 't1', status: 'done' }) })], [task({ id: 't2', status: 'queued' }), task({ id: 't1', status: 'done' })])).toBe(true);
+		expect(languagesDisagreeWithTasks([language({ task: null })], [task({ id: 't3' })])).toBe(true);
+		// Another language's task, or none listed, says nothing about this one.
+		expect(languagesDisagreeWithTasks([language({ task: running })], [task({ id: 't4', payload: { locale: 'pt-BR' } })])).toBe(false);
+		expect(languagesDisagreeWithTasks([language({ task: null })], [])).toBe(false);
 	});
 
 	it("is labelled with what it does, naming the language in that language's own words", async () => {
@@ -93,9 +135,17 @@ describe('a task', () => {
 		expect(taskBadge(task({ status: 'queued' }))).toEqual({ label: 'Queued', variant: 'secondary' });
 		expect(taskBadge(task({ status: 'queued', pauseReason: 'daily-limit' }))).toEqual({ label: 'Paused', variant: 'warning' });
 		expect(taskBadge(task({ status: 'paused', pauseReason: 'credits' }))).toEqual({ label: 'Paused', variant: 'warning' });
-		expect(taskBadge(task({ status: 'done' }))).toEqual({ label: 'Done', variant: 'success' });
-		expect(taskBadge(task({ status: 'failed' }))).toEqual({ label: 'Failed', variant: 'error' });
-		expect(taskBadge(task({ status: 'canceled' }))).toEqual({ label: 'Canceled', variant: 'outline' });
+		expect(taskBadge(task({ status: 'done' }))).toEqual({ label: 'Task done', variant: 'success' });
+		expect(taskBadge(task({ status: 'failed' }))).toEqual({ label: 'Task failed', variant: 'error' });
+		expect(taskBadge(task({ status: 'canceled' }))).toEqual({ label: 'Task canceled', variant: 'outline' });
+	});
+
+	it('says how a task ended in words that agree with "task"', async () => {
+		const ended = () => (['done', 'failed', 'canceled'] as const).map((status) => t(taskBadge(task({ status })).label));
+		await applyAccountLocale('es');
+		expect(ended()).toEqual(['Tarea terminada', 'Tarea fallida', 'Tarea cancelada']);
+		await applyAccountLocale('pt-BR');
+		expect(ended()).toEqual(['Tarefa concluída', 'Tarefa com falha', 'Tarefa cancelada']);
 	});
 });
 

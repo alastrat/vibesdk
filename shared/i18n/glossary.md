@@ -130,8 +130,11 @@ These set the voice. Translate new copy to match them.
 | language switcher | selector de idioma | seletor de idioma |
 | task (background work, such as a translation) | tarea | tarefa |
 | activity (the list of a store's tasks) | actividad | atividade |
-| ready (a translation shoppers can see) | lista | pronta |
+| Translation ready (a language shoppers can see) | Traducción lista | Tradução pronta |
+| Task done (a task that finished) | Tarea terminada | Tarefa concluída |
 | daily limit (free AI use while billing is off) | límite diario | limite diário |
+
+The Translations page's statuses name what they qualify ("Translation failed", "Task canceled"), so they agree with "traducción"/"tradução" and "tarea"/"tarefa". The bare words ("Ready", "Done") keep the masculine defaults of the Statuses table below.
 
 ### Plans and billing
 
