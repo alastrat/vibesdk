@@ -1,3 +1,4 @@
+import type { Locale } from '../../../shared/i18n/locales';
 import { STRIPE_JS_URL } from '../../../shared/types/stripe';
 
 /** Appearance for Elements. Only the theme and the variables Estori sets are typed. */
@@ -96,7 +97,13 @@ export interface StripeJs {
 	handleNextAction(options: { clientSecret: string }): Promise<StripeNextActionResult>;
 }
 
-type StripeFactory = (publishableKey: string) => StripeJs;
+/** The languages of Stripe's own text (the card form, its errors) that match the app's. */
+export type StripeLocale = 'en' | 'es-419' | 'pt-BR';
+
+/** Latin American Spanish, as the app's Spanish is; Stripe's plain `es` is Spain's. */
+export const STRIPE_LOCALES: Record<Locale, StripeLocale> = { en: 'en', es: 'es-419', 'pt-BR': 'pt-BR' };
+
+type StripeFactory = (publishableKey: string, options?: { locale: StripeLocale }) => StripeJs;
 
 declare global {
 	interface Window {
@@ -131,10 +138,10 @@ function loadScript(): Promise<StripeFactory> {
 }
 
 /**
- * Adds Stripe.js to the page once, then returns a new Stripe instance for the key. Each Checkout
- * Session gets its own instance, because Stripe.js can't confirm a second session on the same one.
+ * Adds Stripe.js to the page once, then returns a new Stripe instance for the key, whose card form speaks the app's
+ * language. Each Checkout Session gets its own instance, because Stripe.js can't confirm a second session on the same one.
  */
-export async function loadStripe(publishableKey: string): Promise<StripeJs> {
+export async function loadStripe(publishableKey: string, locale: Locale): Promise<StripeJs> {
 	const factory = await loadScript();
-	return factory(publishableKey);
+	return factory(publishableKey, { locale: STRIPE_LOCALES[locale] });
 }

@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
-import TestRenderer from 'react-test-renderer';
+import type TestRenderer from 'react-test-renderer';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { Input } from '@cloudflare/kumo';
 import { CONFIRM_LINK_INVALID_MESSAGE, RESET_LINK_INVALID_MESSAGE } from '@/api-types';
@@ -12,17 +12,9 @@ import { PasswordField } from '@/components/auth/PasswordField';
 import { OrangeButton } from '@/components/shared/OrangeButton';
 import { apiClient } from '@/lib/api-client';
 import { applyAccountLocale, t } from '@/lib/i18n';
+import { mountElement, silenceTestRendererDeprecation, unmountAll } from '@/test-support/mounted';
 import ResetPasswordPage from './ResetPasswordPage';
 import VerifyEmailPage from './VerifyEmailPage';
-
-vi.hoisted(() => {
-	// React's `await act(...)` queues its work on a MessageChannel, which Workers don't have.
-	class Channel {
-		port1: { onmessage: ((event: unknown) => void) | null } = { onmessage: null };
-		port2 = { postMessage: () => void setTimeout(() => this.port1.onmessage?.({}), 0) };
-	}
-	Object.assign(globalThis, { MessageChannel: Channel, IS_REACT_ACT_ENVIRONMENT: true });
-});
 
 // Kumo's components read `window` when they mount, which the Workers test pool doesn't have; these keep what the pages
 // hand them (text, handlers) in plain elements.
@@ -38,15 +30,10 @@ vi.mock('@/lib/api-client', () => ({ apiClient: { verifyEmail: vi.fn(), resetPas
 vi.mock('@/contexts/auth-context', () => ({ useAuth: () => ({ isAuthenticated: false, refreshUser: async () => undefined }) }));
 vi.mock('@/components/auth/AuthModalProvider', () => ({ useAuthModal: () => ({ showAuthModal: () => undefined }) }));
 
-beforeAll(() => {
-	// The test renderer announces its own deprecation on every mount.
-	const error = console.error.bind(console);
-	vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-		if (!String(args[0]).includes('react-test-renderer is deprecated')) error(...args);
-	});
-});
+beforeAll(silenceTestRendererDeprecation);
 
 afterEach(async () => {
+	await unmountAll();
 	vi.mocked(apiClient.verifyEmail).mockReset();
 	vi.mocked(apiClient.resetPassword).mockReset();
 	await applyAccountLocale('en');
@@ -57,11 +44,8 @@ const failure = (message: string) => ({ success: false as const, error: { messag
 /** Mounts a page at `/?token=abc`; `screen()` is everything on screen as text. */
 async function mount(Page: () => React.ReactNode) {
 	const router = createMemoryRouter([{ path: '/', Component: Page }], { initialEntries: ['/?token=abc'] });
-	let renderer!: TestRenderer.ReactTestRenderer;
-	await act(async () => {
-		renderer = TestRenderer.create(createElement(RouterProvider, { router }));
-	});
-	return { renderer, screen: (): string => JSON.stringify(renderer.toJSON()), unmount: () => act(async () => renderer.unmount()) };
+	const renderer: TestRenderer.ReactTestRenderer = await mountElement(createElement(RouterProvider, { router }));
+	return { renderer, screen: (): string => JSON.stringify(renderer.toJSON()) };
 }
 
 describe('Confirm your email', () => {
@@ -70,7 +54,6 @@ describe('Confirm your email', () => {
 		const page = await mount(VerifyEmailPage);
 		expect(page.screen()).toContain('Confirma tu correo electrónico');
 		expect(page.screen()).toContain('Confirmar mi correo electrónico');
-		await page.unmount();
 	});
 
 	it.each(['en', 'es', 'pt-BR'] as const)('understands an expired link that the API answers in %s', async (locale) => {
@@ -84,7 +67,6 @@ describe('Confirm your email', () => {
 		expect(page.screen()).toContain('/settings');
 		expect(page.screen()).not.toContain('"Try again"');
 		expect(page.screen()).not.toContain('Tentar novamente');
-		await page.unmount();
 	});
 
 	it('shows any other answer as a failure that can be tried again', async () => {
@@ -95,7 +77,6 @@ describe('Confirm your email', () => {
 		expect(page.screen()).toContain('Algo salió mal en el servidor');
 		expect(page.screen()).toContain('Intentar de nuevo');
 		expect(page.screen()).not.toContain('/settings');
-		await page.unmount();
 	});
 });
 
@@ -114,7 +95,6 @@ describe('Reset your password', () => {
 		expect(page.screen()).toContain('Redefina sua senha');
 		expect(page.screen()).toContain('Escolha uma nova senha para sua conta.');
 		expect(page.screen()).toContain('Atualizar senha');
-		await page.unmount();
 	});
 
 	it.each(['en', 'es', 'pt-BR'] as const)('understands an expired link that the API answers in %s', async (locale) => {
@@ -126,7 +106,6 @@ describe('Reset your password', () => {
 		// The page for an expired link, with its button for a new one, not the form again with an error above it.
 		expect(page.renderer.root.findAllByType('form')).toHaveLength(0);
 		expect(page.screen()).toContain(answered);
-		await page.unmount();
 	});
 
 	it('keeps the form, with the answer above it, for any other failure', async () => {
@@ -136,6 +115,5 @@ describe('Reset your password', () => {
 		await submit(page);
 		expect(page.renderer.root.findAllByType('form')).toHaveLength(1);
 		expect(page.screen()).toContain('Algo salió mal en el servidor');
-		await page.unmount();
 	});
 });

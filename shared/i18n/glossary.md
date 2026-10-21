@@ -83,13 +83,32 @@ These set the voice. Translate new copy to match them.
 | English | Español | Português |
 | --- | --- | --- |
 | app (a project built in the chat) | app (feminine: "la app", "esta app") | app (masculine: "o app", "este app") |
-| bookmark (keep an app in your list) | favorito: "Agregar a favoritos", "En favoritos" | favorito: "Adicionar aos favoritos", "Nos favoritos" |
-| star (give an app a star) | destacar: "Destacar", "Destacado" | estrela: "Dar estrela", "Com estrela" |
+| bookmark (keep an app in your list) | favorito: "Favorito" (the button), "Favoritos" (the list and the state); messages say "favoritos" | favorito: "Favoritar" (the button), "Favoritos" (the list and the state); messages say "favoritos" |
+| star (give an app a star) | destacar: "Destacar", "Destacado" | estrela: "Estrela", "Com estrela" |
 | prompt (the idea that started an app) | prompt | prompt |
 | deploy (put a preview online to look at) | desplegar | fazer deploy |
 | live preview (a preview that is running) | vista previa interactiva | pré-visualização interativa |
 | board | tablero | quadro |
-| your own key (a model key the seller brings) | clave propia | chave própria |
+| your own key (the badge on a model the seller has a key for) | "Tu clave", and "Sin clave" for a model that needs one | "Sua chave", and "Sem chave" for a model that needs one |
+
+### The editor and the chat
+
+| English | Español | Português |
+| --- | --- | --- |
+| blueprint (the AI's written plan for an app) | blueprint | blueprint |
+| phase (a stage of a build) | fase | fase |
+| views (the screens a blueprint lists) | pantallas | telas |
+| debug / deep debug | depurar / depuración profunda | depurar / depuração profunda |
+| commit (a saved version in the history) | commit: "hacer commit", "historial de commits" | commit: "fazer commit", "histórico de commits" |
+| roll back (return to an earlier commit) | revertir | reverter |
+| branch | rama | branch |
+| repository | repositorio | repositório |
+| token (a temporary access code) | token | token |
+| skill (a set of instructions the assistant loads) | habilidad | habilidade |
+| online (an app that has been deployed) | en línea (never "en vivo") | online (never "ao vivo") |
+| your computer (where a repository is cloned) | tu computadora | seu computador |
+
+The tool rows in the chat speak about what the assistant did, in the third person: "Leyendo src/App.tsx…", "Leyó src/App.tsx", "No se pudo leer src/App.tsx" and "Lendo src/App.tsx…", "Leu src/App.tsx", "Não foi possível ler src/App.tsx". The file or text after the verb is never translated.
 
 ### Publishing
 
@@ -158,6 +177,13 @@ The Translations page's statuses name what they qualify ("Translation failed", "
 | upgrade (to a higher plan) | mejorar el plan | fazer upgrade |
 | downgrade (to a lower plan) | cambiar a un plan inferior | fazer downgrade |
 | cancel (a subscription) | cancelar | cancelar |
+| get (a plan: the button that starts a checkout) | obtener | assinar |
+| keep (a plan that was set to end) | mantener | manter |
+| move to (a plan, up or down) | cambiar a | mudar para |
+| due today (what a checkout charges now) | a pagar hoy | a pagar hoje |
+| promotion code | código promocional | código promocional |
+| void (an invoice) | anulada | anulada |
+| not collected (an invoice) | no cobrada | não cobrada |
 
 ### Selling and orders
 
@@ -205,8 +231,13 @@ Listed in the masculine singular, because the things they label most often (pedi
 | sign out | cerrar sesión | sair |
 | account | cuenta | conta |
 | profile | perfil | perfil |
-| settings | configuración | configurações |
+| settings (the page's name, as a title or menu item) | Configuración | Configurações |
+| settings (in a sentence or after a verb: "Abrir configuración") | configuración, "la configuración" | configurações, "as configurações" |
 | language | idioma | idioma |
+| analytics (usage data and the setting that shares it) | analíticas | análises |
+| gateway (an AI Gateway) | gateway | gateway |
+| revoke (an API key or a session) | revocar | revogar |
+| connected / not connected (a provider or an account) | conectado / no conectado | conectado / não conectado |
 | password | contraseña | senha |
 | email | correo electrónico | e-mail |
 | home | inicio | início |
@@ -268,6 +299,6 @@ Listed in the masculine singular, because the things they label most often (pedi
 - **Rejected and declined.** Portuguese tells them apart: "rejeitado" for a review, "recusado" for a card. Spanish uses "rechazado" for both.
 - **Done.** Spanish buttons take the infinitive ("Guardar", "Cancelar"), with one exception: the button that closes a dialog or finishes a step is "Listo", the word Spanish interfaces use, not "Terminar" or "Finalizar". Portuguese keeps the rule with "Concluir".
 - **Sign in.** Portuguese uses "entrar" for the action and "login" for the page and the provider ("Voltar para o login", "provedor de login"). It never says "fazer login" on a button, and never "provedor de acesso", which in Brazil means an internet provider. Spanish says "iniciar sesión" for the action and "inicio de sesión" for the page.
-- **Why sign-in is asked for.** Each reason is a whole sentence of its own ("Inicia sesión para destacar esta app", "Entre para dar uma estrela neste app"), never a fragment joined to "Sign in", because the word order differs.
+- **Why sign-in is asked for.** Each reason is a whole sentence of its own ("Inicia sesión para destacar esta app", "Entre para dar estrela neste app"), never a fragment joined to "Sign in", because the word order differs.
 - **The legal documents.** Their names are translated, and each link says the document is in English: "(en inglés)", "(em inglês)", shown only outside English.
 - **Shopper.** Always "comprador", never "cliente": Estori's own customers are the sellers, and "cliente" would blur the two.

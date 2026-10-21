@@ -16,7 +16,7 @@ describe("a connection attempt's failure", () => {
 	it("is what the chat's timeout, error and close handlers report through", () => {
 		const chat = sources['/src/routes/chat/hooks/use-chat.ts'] ?? '';
 		expect(chat).toContain('const reportFailure = failureReporterForAttempt(');
-		for (const reason of ["reportFailure('Connection timeout')", "reportFailure('WebSocket error')", 'reportFailure(`Connection closed (code: ${event.code})`)']) {
+		for (const reason of ["reportFailure(t('Connection timeout'))", "reportFailure(t('WebSocket error'))", "reportFailure(t('Connection closed (code: {code})', { code: event.code }))"]) {
 			expect(chat, reason).toContain(reason);
 		}
 	});

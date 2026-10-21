@@ -24,12 +24,11 @@ import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
-import { msg } from '@/lib/i18n';
-
-const DEFAULT_PLACEHOLDER_PHRASES = ['todo list app', 'F1 fantasy game', 'personal finance tracker'];
+import { msg, useI18n } from '@/lib/i18n';
+import { formatNumber } from '../../shared/i18n/format';
 
 interface BuildBoxProps {
-	/** Text before the animated phrases; the home page uses "Create a ". */
+	/** Text before the animated phrases; the home page uses "Create ", whose phrases carry their own article. */
 	placeholder?: string;
 	/** Keep the array stable (module constant or memoized) so the typewriter doesn't restart. */
 	placeholderPhrases?: string[];
@@ -38,11 +37,15 @@ interface BuildBoxProps {
 
 /** The prompt that starts a new build: signed-out visitors sign up first, then land in their build. */
 export function BuildBox({
-	placeholder = 'Create a ',
-	placeholderPhrases = DEFAULT_PLACEHOLDER_PHRASES,
+	placeholder: placeholderProp,
+	placeholderPhrases: phrasesProp,
 	className,
 }: BuildBoxProps) {
+	const { t, locale } = useI18n();
 	const navigate = useNavigate();
+	const defaultPhrases = useMemo(() => [t('a todo list app'), t('an F1 fantasy game'), t('a personal finance tracker')], [t]);
+	const placeholder = placeholderProp ?? t('Create ');
+	const placeholderPhrases = phrasesProp ?? defaultPhrases;
 	const { requireAuth } = useAuthGuard();
 	const [projectMode, setProjectMode] = useState<ProjectType>('app');
 	const behaviorMode: Extract<BehaviorType, 'think' | 'phasic'> = 'think';
@@ -69,13 +72,13 @@ export function BuildBox({
 			id: def.id,
 			label:
 				def.id === 'presentation'
-					? 'Slides'
+					? t('Slides')
 					: def.id === 'general'
-						? 'General'
-						: 'App',
+						? t('General')
+						: t('App'),
 			description: def.description,
 		}));
-	}, [capabilities, getEnabledFeatures, isLoadingCapabilities]);
+	}, [capabilities, getEnabledFeatures, isLoadingCapabilities, t]);
 
 	const showModeSelector = modeOptions.length > 1;
 
@@ -94,7 +97,6 @@ export function BuildBox({
 		useImageUpload({
 			onError: (error) => {
 				console.error('Image upload error:', error);
-				toast.error(error);
 			},
 		});
 
@@ -106,7 +108,7 @@ export function BuildBox({
 	const handleCreateApp = (query: string, mode: ProjectType) => {
 		if (query.length > MAX_AGENT_QUERY_LENGTH) {
 			toast.error(
-				`Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`,
+				t('Prompt too large ({length} characters). Maximum allowed is {max} characters.', { length: formatNumber(query.length, locale), max: formatNumber(MAX_AGENT_QUERY_LENGTH, locale) }),
 			);
 			return;
 		}
@@ -226,12 +228,9 @@ export function BuildBox({
 							/>
 							<p className="text-xs text-kumo-subtle leading-relaxed">
 								<span className="font-medium text-text-secondary">
-									Images Beta:
+									{t('Images Beta:')}
 								</span>{' '}
-								Images guide app layout and design but may
-								not be replicated exactly. The coding agent
-								cannot access images directly for app
-								assets.
+								{t('Images guide app layout and design but may not be replicated exactly. The coding agent cannot access images directly for app assets.')}
 							</p>
 						</div>
 					</motion.div>

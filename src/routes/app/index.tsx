@@ -2,6 +2,7 @@ import type { FileType } from '@/api-types';
 import { MonacoEditor } from '@/components/monaco-editor/lazy-monaco-editor';
 import { AppLoadingSkeleton } from '@/components/shared/AppLoadingSkeleton';
 import { FloatingBackgroundIcons } from '@/components/shared/FloatingBackgroundIcons';
+import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
 import { GitCloneModal } from '@/components/shared/GitCloneModal';
 import { PublishDialog } from '@/components/publishing/PublishDialog';
 import { SiteReuseBar } from '@/components/publishing/SiteReuseBar';
@@ -26,7 +27,6 @@ import { getFileType } from '@/utils/string';
 import {
 	Badge,
 	Button,
-	DeleteResource,
 	DropdownMenu,
 	LayerCard,
 	Tabs,
@@ -702,7 +702,7 @@ export default function AppView() {
 					]}
 				/>
 
-				<div className="shrink-0 flex items-center gap-2 max-w-full">
+				<div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
 					{isSignedIn && (
 						<>
 							<Button
@@ -1028,10 +1028,10 @@ export default function AppView() {
 			</div>
 
 			{app && (
-				<DeleteResource
+				<ConfirmDeleteDialog
 					open={isDeleteDialogOpen}
 					onOpenChange={setIsDeleteDialogOpen}
-					resourceType={t('App')}
+					resourceType={t('app')}
 					deleteButtonText={t('Delete App')}
 					resourceName={app.title}
 					onDelete={handleDeleteApp}

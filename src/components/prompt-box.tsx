@@ -7,6 +7,7 @@ import { CreditsBanner } from '@/components/credits-banner';
 import { OrangeButton } from '@/components/shared/OrangeButton';
 import { useTypewriterPlaceholder } from '@/hooks/use-typewriter-placeholder';
 import type { ImageAttachment } from '@/api-types';
+import { t } from '@/lib/i18n';
 import { type UsageSummary } from '@/hooks/use-limits';
 
 const MAX_WORDS = 4000;
@@ -146,7 +147,7 @@ export function PromptBox({
 
 	const dragOverlay = isDragging && (
 		<div className="absolute inset-0 flex items-center justify-center bg-brand/10 backdrop-blur-sm rounded-xl z-50 pointer-events-none">
-			<p className="text-kumo-brand font-medium">Drop images here</p>
+			<p className="text-kumo-brand font-medium">{t('Drop images here')}</p>
 		</div>
 	);
 
@@ -205,8 +206,8 @@ export function PromptBox({
 											disabled ||
 											submitDisabled
 										}
-										aria-label="Send message"
-										title="Send message"
+										aria-label={t('Send message')}
+										title={t('Send message')}
 										icon={
 											submitIcon ?? (
 												<ArrowRightIcon className="size-4" />
@@ -316,8 +317,8 @@ export function PromptBox({
 								disabled={
 									!value.trim() || disabled || submitDisabled
 								}
-								aria-label="Send message"
-								title="Send message"
+								aria-label={t('Send message')}
+								title={t('Send message')}
 								className="size-7!"
 								icon={
 									submitIcon ?? (

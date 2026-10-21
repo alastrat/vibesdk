@@ -8,6 +8,7 @@ import { BILLING_PATH } from '@/api-types';
 import { pageTitle } from '@/brand';
 import { BackToBilling } from '@/components/billing/BackToBilling';
 import { apiClient } from '@/lib/api-client';
+import { msg, t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { settlePayment } from '@/lib/stripe/next-action';
 import { unwrap } from '@/lib/unwrap-response';
@@ -18,7 +19,7 @@ type Working = 'saving' | 'confirming';
 
 type Halted = { message: string; tryAgain: boolean };
 
-const WORKING_TEXT: Record<Working, string> = { saving: 'Saving your card…', confirming: 'Confirming your payment…' };
+const WORKING_TEXT: Record<Working, string> = { saving: msg('Saving your card…'), confirming: msg('Confirming your payment…') };
 
 /**
  * Where Stripe sends the seller after the card is saved. It makes the card the default, pays the failed renewal with it
@@ -69,15 +70,15 @@ export default function BillingCardReturnPage() {
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('Card')}</title>
+			<title>{pageTitle(t('Card'))}</title>
 			<div className="container mx-auto grid max-w-xl gap-6 px-4 py-16">
 				{stopped ? (
 					<>
-						<Banner variant="alert" icon={<WarningCircleIcon />} description={stopped.message} />
+						<Banner variant="alert" icon={<WarningCircleIcon />} description={t(stopped.message)} />
 						<div className="flex flex-wrap items-center gap-2">
 							{stopped.tryAgain && (
 								<Link to={cardPathOf('pay')} className={buttonVariants({ variant: 'primary', size: 'sm' })}>
-									Try another card
+									{t('Try another card')}
 								</Link>
 							)}
 							<BackToBilling />
@@ -86,7 +87,7 @@ export default function BillingCardReturnPage() {
 				) : (
 					<div className="grid justify-items-center gap-3" role="status">
 						<Loader />
-						<p className="text-sm text-kumo-subtle">{WORKING_TEXT[working]}</p>
+						<p className="text-sm text-kumo-subtle">{t(WORKING_TEXT[working])}</p>
 					</div>
 				)}
 			</div>

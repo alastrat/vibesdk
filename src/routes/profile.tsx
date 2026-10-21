@@ -34,7 +34,9 @@ import {
 import { useNavigate, useSearchParams } from 'react-router';
 import { capitalizeFirstLetter, getInitials } from '@/lib/utils';
 import { formatNumber } from '@/utils/analytics';
-import { format } from 'date-fns';
+import { formatLongDate, formatShortDate, formatShortDateTime } from '@/lib/format-date';
+import { getLocale, msg, t, T } from '@/lib/i18n';
+import { visibilityLabel } from '@/lib/visibility-label';
 import { toast } from 'sonner';
 import { useUserStats, useUserActivity } from '@/hooks/use-stats';
 import { useUpdateProfile } from '@/hooks/use-profile';
@@ -44,37 +46,59 @@ import { pageTitle } from '@/brand';
 const STATS = [
 	{
 		key: 'appCount' as const,
-		label: 'Total apps',
+		label: msg('Total apps'),
 		icon: Code,
 		iconClass: 'text-kumo-brand',
 	},
 	{
 		key: 'publicAppCount' as const,
-		label: 'Public apps',
+		label: msg('Public apps'),
 		icon: Globe,
 		iconClass: 'text-teal-500',
 	},
 	{
 		key: 'totalViewsReceived' as const,
-		label: 'Total views',
+		label: msg('Total views'),
 		icon: Eye,
 		iconClass: 'text-purple-500',
 	},
 	{
 		key: 'totalLikesReceived' as const,
-		label: 'Total likes',
+		label: msg('Total likes'),
 		icon: Star,
 		iconClass: 'text-amber-500',
 	},
 ] as const;
 
+// Each label is translated where it is shown.
 const PROFILE_TABS = [
-	{ value: 'about', label: 'About' },
-	{ value: 'apps', label: 'Apps' },
-	{ value: 'paid', label: 'Paid listings' },
-	{ value: 'achievements', label: 'Achievements' },
-	{ value: 'activity', label: 'Activity' },
+	{ value: 'about', label: msg('About') },
+	{ value: 'apps', label: msg('Apps') },
+	{ value: 'paid', label: msg('Paid listings') },
+	{ value: 'achievements', label: msg('Achievements') },
+	{ value: 'activity', label: msg('Activity') },
 ] as const;
+
+const ACTIVITY_VERB_CLASS = 'font-medium';
+const ACTIVITY_TITLE_CLASS = 'text-kumo-subtle';
+
+/** What the seller did and to what, such as "Created Lucia Candles"; each sentence is whole so the verb can change with the language. */
+function ActivityLine({ type, title }: { type: string; title: string }) {
+	const components = {
+		verb: (children: React.ReactNode) => <span className={ACTIVITY_VERB_CLASS}>{children}</span>,
+		title: (children: React.ReactNode) => <span className={ACTIVITY_TITLE_CLASS}>{children}</span>,
+	};
+	switch (type) {
+		case 'created':
+			return <T text="<verb>Created</verb> <title>{title}</title>" values={{ title }} components={components} />;
+		case 'updated':
+			return <T text="<verb>Updated</verb> <title>{title}</title>" values={{ title }} components={components} />;
+		case 'favorited':
+			return <T text="<verb>Favorited</verb> <title>{title}</title>" values={{ title }} components={components} />;
+		default:
+			return <span className={ACTIVITY_TITLE_CLASS}>{title}</span>;
+	}
+}
 
 /** The tab named by `?tab=`, so Stripe's return URL opens Paid listings. */
 function tabFromSearch(value: string | null): string {
@@ -141,11 +165,11 @@ export default function Profile() {
 				bio: profileData.bio,
 				timezone: profileData.timezone,
 			});
-			toast.success('Profile updated successfully');
+			toast.success(t('Profile updated successfully'));
 			setIsEditing(false);
 		} catch (error) {
 			console.error('Profile update error:', error);
-			toast.error('Failed to update profile');
+			toast.error(t('Failed to update profile'));
 		}
 	};
 
@@ -172,7 +196,7 @@ export default function Profile() {
 		<div className="min-h-screen">
 			<title>
 				{pageTitle(
-					user?.displayName ? `${user.displayName} - Profile` : 'Profile',
+					user?.displayName ? t('{name} - Profile', { name: user.displayName }) : t('Profile'),
 				)}
 			</title>
 			<main className="container mx-auto max-w-4xl px-4 py-12 pb-24">
@@ -188,7 +212,7 @@ export default function Profile() {
 					<div className="min-w-0 flex-1 text-center sm:text-left">
 						<div className="mb-1.5 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap">
 							<h1 className="font-funky-mono text-2xl font-semibold text-kumo-strong">
-								{user?.displayName || 'Your profile'}
+								{user?.displayName || t('Your profile')}
 							</h1>
 							<div className="flex flex-wrap items-center justify-center gap-1.5">
 								<Badge variant="secondary" className="gap-1">
@@ -210,7 +234,7 @@ export default function Profile() {
 											className="size-3"
 											weight="fill"
 										/>
-										Verified
+										{t('Verified')}
 									</Badge>
 								)}
 							</div>
@@ -234,7 +258,7 @@ export default function Profile() {
 									onClick={handleSave}
 									loading={isSaving}
 								>
-									Save changes
+									{t('Save changes')}
 								</Button>
 								<Button
 									variant="outline"
@@ -242,7 +266,7 @@ export default function Profile() {
 									onClick={handleCancel}
 									icon={<X className="size-4" />}
 								>
-									Cancel
+									{t('Cancel')}
 								</Button>
 							</>
 						) : (
@@ -253,7 +277,7 @@ export default function Profile() {
 									onClick={handleEdit}
 									icon={<PencilSimple className="size-4" />}
 								>
-									Edit profile
+									{t('Edit profile')}
 								</Button>
 								<Button
 									variant="outline"
@@ -261,7 +285,7 @@ export default function Profile() {
 									onClick={() => navigate('/settings')}
 									icon={<Gear className="size-4" />}
 								>
-									Settings
+									{t('Settings')}
 								</Button>
 							</>
 						)}
@@ -286,10 +310,10 @@ export default function Profile() {
 								<p className="text-3xl font-semibold tabular-nums text-kumo-strong">
 									{statsLoading
 										? '–'
-										: formatNumber(stats?.[key] ?? 0)}
+										: formatNumber(stats?.[key] ?? 0, getLocale())}
 								</p>
 								<p className="text-sm text-kumo-subtle">
-									{label}
+									{t(label)}
 								</p>
 							</div>
 						</div>
@@ -302,13 +326,13 @@ export default function Profile() {
 						value={activeTab}
 						onValueChange={handleTabChange}
 						className="w-fit"
-						tabs={[...PROFILE_TABS]}
+						tabs={PROFILE_TABS.map((tab) => ({ value: tab.value, label: t(tab.label) }))}
 					/>
 
 					{activeTab === 'about' && (
 						<LayerCard>
 							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								Profile information
+								{t('Profile information')}
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
 								<div className="grid gap-6">
@@ -316,7 +340,7 @@ export default function Profile() {
 										{isEditing ? (
 											<Input
 												id="displayName"
-												label="Display name"
+												label={t('Display name')}
 												value={profileData.displayName}
 												onChange={(e) =>
 													setProfileData({
@@ -329,7 +353,7 @@ export default function Profile() {
 										) : (
 											<div className="grid gap-1">
 												<p className="text-sm text-kumo-subtle">
-													Display name
+													{t('Display name')}
 												</p>
 												<p className="text-sm text-kumo-default">
 													{user?.displayName || '—'}
@@ -340,7 +364,7 @@ export default function Profile() {
 										{isEditing ? (
 											<Input
 												id="username"
-												label="Username"
+												label={t('Username')}
 												value={profileData.username}
 												onChange={(e) =>
 													setProfileData({
@@ -349,23 +373,24 @@ export default function Profile() {
 															e.target.value,
 													})
 												}
+												// i18n-ignore: a username as typed
 												placeholder="@username"
 											/>
 										) : (
 											<div className="grid gap-1">
 												<p className="text-sm text-kumo-subtle">
-													Username
+													{t('Username')}
 												</p>
 												<p className="text-sm text-kumo-default">
 													{user?.username ||
-														'Not set'}
+														t('Not set')}
 												</p>
 											</div>
 										)}
 
 										<div className="grid gap-1">
 											<p className="text-sm text-kumo-subtle">
-												Email
+												{t('Email')}
 											</p>
 											<p className="flex items-center gap-2 text-sm text-kumo-default">
 												<span className="h-lh flex items-center text-kumo-subtle">
@@ -377,20 +402,15 @@ export default function Profile() {
 
 										<div className="grid gap-1">
 											<p className="text-sm text-kumo-subtle">
-												Member since
+												{t('Member since')}
 											</p>
 											<p className="flex items-center gap-2 text-sm text-kumo-default">
 												<span className="h-lh flex items-center text-kumo-subtle">
 													<CalendarBlank className="size-4" />
 												</span>
 												{user?.createdAt
-													? format(
-															new Date(
-																user.createdAt,
-															),
-															'MMMM d, yyyy',
-														)
-													: 'Unknown'}
+													? formatLongDate(new Date(user.createdAt), getLocale())
+													: t('Unknown')}
 											</p>
 										</div>
 									</div>
@@ -398,7 +418,7 @@ export default function Profile() {
 									{isEditing ? (
 										<InputArea
 											id="bio"
-											label="Bio"
+											label={t('Bio')}
 											value={profileData.bio}
 											onChange={(e) =>
 												setProfileData({
@@ -406,17 +426,17 @@ export default function Profile() {
 													bio: e.target.value,
 												})
 											}
-											placeholder="Tell us about yourself..."
+											placeholder={t('Tell us about yourself...')}
 											rows={4}
 										/>
 									) : (
 										<div className="grid gap-1">
 											<p className="text-sm text-kumo-subtle">
-												Bio
+												{t('Bio')}
 											</p>
 											<p className="text-sm text-kumo-default">
 												{user?.bio ||
-													'No bio yet — hit edit to add one!'}
+													t('No bio yet — hit edit to add one!')}
 											</p>
 										</div>
 									)}
@@ -428,7 +448,7 @@ export default function Profile() {
 					{activeTab === 'apps' && (
 						<LayerCard>
 							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								Recent apps
+								{t('Recent apps')}
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
 								{appsLoading ? (
@@ -467,13 +487,8 @@ export default function Profile() {
 															)}
 															<span className="text-xs text-kumo-subtle">
 																{app.createdAt
-																	? format(
-																			new Date(
-																				app.createdAt,
-																			),
-																			'MMM d, yyyy',
-																		)
-																	: 'Recently'}
+																	? formatShortDate(new Date(app.createdAt), getLocale())
+																	: t('Recently')}
 															</span>
 														</div>
 													</div>
@@ -486,7 +501,7 @@ export default function Profile() {
 															: 'secondary'
 													}
 												>
-													{app.visibility}
+													{visibilityLabel(app.visibility)}
 												</Badge>
 											</button>
 										))}
@@ -501,8 +516,8 @@ export default function Profile() {
 												weight="duotone"
 											/>
 										}
-										title="No apps yet"
-										description="Build something fun — your first app is one prompt away."
+										title={t('No apps yet')}
+										description={t('Build something fun — your first app is one prompt away.')}
 										contents={
 											<Button
 												variant="primary"
@@ -511,7 +526,7 @@ export default function Profile() {
 													navigate('/chat')
 												}
 											>
-												Create your first app
+												{t('Create your first app')}
 											</Button>
 										}
 									/>
@@ -523,7 +538,7 @@ export default function Profile() {
 					{activeTab === 'paid' && (
 						<LayerCard>
 							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								Paid listings
+								{t('Paid listings')}
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
 								<div className="grid gap-4">
@@ -537,7 +552,7 @@ export default function Profile() {
 					{activeTab === 'achievements' && (
 						<LayerCard>
 							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								Achievements
+								{t('Achievements')}
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
 								{statsLoading ? (
@@ -563,8 +578,7 @@ export default function Profile() {
 															{achievement}
 														</p>
 														<p className="text-sm text-kumo-subtle">
-															Unlocked — nice
-															work!
+															{t('Unlocked — nice work!')}
 														</p>
 													</div>
 												</div>
@@ -581,8 +595,8 @@ export default function Profile() {
 												weight="duotone"
 											/>
 										}
-										title="No achievements yet"
-										description="Create apps and share them to unlock badges."
+										title={t('No achievements yet')}
+										description={t('Create apps and share them to unlock badges.')}
 									/>
 								)}
 							</LayerCard.Primary>
@@ -592,7 +606,7 @@ export default function Profile() {
 					{activeTab === 'activity' && (
 						<LayerCard>
 							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								Activity
+								{t('Activity')}
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
 								{activityLoading ? (
@@ -622,30 +636,12 @@ export default function Profile() {
 												</span>
 												<div className="min-w-0 flex-1 grid gap-0.5">
 													<p className="text-sm text-kumo-default">
-														<span className="font-medium">
-															{activity.type ===
-																'created' &&
-																'Created'}
-															{activity.type ===
-																'updated' &&
-																'Updated'}
-															{activity.type ===
-																'favorited' &&
-																'Favorited'}
-														</span>{' '}
-														<span className="text-kumo-subtle">
-															{activity.title}
-														</span>
+														<ActivityLine type={activity.type} title={activity.title} />
 													</p>
 													<p className="text-xs text-kumo-subtle">
 														{activity.timestamp
-															? format(
-																	new Date(
-																		activity.timestamp,
-																	),
-																	'MMM d, yyyy h:mm a',
-																)
-															: 'Recently'}
+															? formatShortDateTime(new Date(activity.timestamp), getLocale())
+															: t('Recently')}
 													</p>
 												</div>
 											</div>
@@ -661,8 +657,8 @@ export default function Profile() {
 												weight="duotone"
 											/>
 										}
-										title="No recent activity"
-										description="Your creations and updates will show up here."
+										title={t('No recent activity')}
+										description={t('Your creations and updates will show up here.')}
 									/>
 								)}
 							</LayerCard.Primary>

@@ -32,6 +32,7 @@ import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { legalLinkLabel } from '@/lib/legal-link-label';
+import type { AppVisibility } from '@/lib/visibility-label';
 import { t, tn } from '@/lib/i18n';
 import { SELLER_ORDERS_PATH, SHOPPER_EMAILS_PATH, STORE_TRANSLATIONS_PATH } from '@/api-types';
 import { useFlag } from '@/hooks/use-flag';
@@ -42,7 +43,7 @@ interface App {
 	framework?: string | null;
 	updatedAt: Date | string | null;
 	updatedAtFormatted?: string;
-	visibility: 'private' | 'team' | 'board' | 'public';
+	visibility: AppVisibility;
 	userId?: string | null;
 	isFavorite?: boolean;
 }

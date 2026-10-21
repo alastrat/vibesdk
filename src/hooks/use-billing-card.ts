@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import type { CardSetupMode, CardSetupStart } from '@/api-types';
 import { apiClient } from '@/lib/api-client';
 import { loadWithin, singleFlight } from '@/lib/async';
+import { getLocale } from '@/lib/i18n';
 import { sessionStatusOf } from '@/lib/stripe/session';
 import { CARD_ONLY_PAYMENT_ELEMENT, loadStripe, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
 import { unwrap } from '@/lib/unwrap-response';
@@ -48,19 +49,21 @@ export function useBillingCard(mode: CardSetupMode) {
 			dispatch({ type: 'started', sessionId });
 
 			try {
-				const stripe = await loadWithin(loadStripe(start.publishableKey));
+				const stripe = await loadWithin(loadStripe(start.publishableKey, getLocale()));
 				if (!current) return;
 				const checkout = stripe.initCheckoutElementsSdk({ clientSecret: start.clientSecret, elementsOptions: { appearance: appearance() } });
 				sdk.current = checkout;
 				// Stripe.js refuses to confirm until the page has read the session's total, so every change reads it.
 				checkout.on('change', (session) => dispatch({ type: 'sessionStatus', sessionId, status: sessionStatusOf(session) }));
 				const target = container.current;
+				// i18n-ignore: a developer message, the seller sees the form's failure notice
 				if (!target) throw new Error('The card form has nowhere to open');
 				payment = checkout.createPaymentElement(CARD_ONLY_PAYMENT_ELEMENT);
 				payment.on('change', ({ complete }) => dispatch({ type: 'cardChanged', complete }));
 				payment.mount(target);
 				const loaded = await loadWithin(checkout.loadActions());
 				if (!current) return;
+				// i18n-ignore: a developer message, the seller sees the form's failure notice
 				if (loaded.type !== 'success') throw new Error('The card form could not open');
 				const status = sessionStatusOf(loaded.actions.getSession());
 				if (status === 'complete') {

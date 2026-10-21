@@ -19,6 +19,7 @@ import { useState, useEffect, useRef } from 'react';
 import { DebugSessionBubble } from './debug-session-bubble';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 import { BRAND } from '@/brand';
+import { t } from '@/lib/i18n';
 
 /**
  * Strip internal system tags that should not be displayed to users
@@ -35,9 +36,9 @@ export function UserMessage({ message }: { message: string }) {
 		<div className="flex flex-col gap-2 min-w-0">
 			<div className="flex items-center gap-2 mb-3">
 				<div className="size-5 flex items-center justify-center rounded-full bg-brand text-white shrink-0">
-					<span className="text-[10px]">U</span>
+					<span className="text-[10px]">{t('You').charAt(0)}</span>
 				</div>
-				<div className="font-medium text-text-50">You</div>
+				<div className="font-medium text-text-50">{t('You')}</div>
 			</div>
 			<Markdown className="text-text-primary/80">{sanitizedMessage}</Markdown>
 		</div>
@@ -151,18 +152,18 @@ function ToolEventHoverPreview({ event }: { event: ToolEvent }) {
 			<div className="font-medium text-text-secondary">{getToolSummary(event)}</div>
 			{inputPreview && (
 				<div className="flex flex-col gap-1">
-					<span className="text-kumo-brand font-medium">Input</span>
+					<span className="text-kumo-brand font-medium">{t('Input')}</span>
 					<span className="text-text-primary whitespace-pre-wrap break-words font-mono">{inputPreview}</span>
 				</div>
 			)}
 			{outputPreview && (
 				<div className="flex flex-col gap-1">
-					<span className="text-kumo-brand font-medium">Output</span>
+					<span className="text-kumo-brand font-medium">{t('Output')}</span>
 					<span className="text-text-primary whitespace-pre-wrap break-words font-mono">{outputPreview}</span>
 				</div>
 			)}
 			{(inputPreview || outputPreview) && (
-				<div className="text-text-tertiary italic">Click to expand</div>
+				<div className="text-text-tertiary italic">{t('Click to expand')}</div>
 			)}
 		</div>
 	);
@@ -182,13 +183,13 @@ function ToolEventExpandedPanel({ event }: { event: ToolEvent }) {
 		<div className="flex flex-col gap-3">
 			{showInput && (
 				<div className="flex flex-col gap-1">
-					<div className="text-[10px] uppercase tracking-wide text-text-tertiary">Input</div>
+					<div className="text-[10px] uppercase tracking-wide text-text-tertiary">{t('Input')}</div>
 					<JsonRenderer data={event.args} />
 				</div>
 			)}
 			{showOutput && (
 				<div className="flex flex-col gap-1">
-					<div className="text-[10px] uppercase tracking-wide text-text-tertiary">Output</div>
+					<div className="text-[10px] uppercase tracking-wide text-text-tertiary">{t('Output')}</div>
 					<ToolResultRenderer result={event.result!} toolName={event.name} event={event} />
 				</div>
 			)}
@@ -232,7 +233,7 @@ function DeepDebugTranscript({ transcript }: { transcript: ConversationMessage[]
 		<div className="flex flex-col gap-3 p-3 rounded-md bg-surface-tertiary/50 border-l-2 border-brand/30">
 			<div className="flex items-center gap-2 text-xs font-medium text-kumo-brand">
 				<MessageSquare className="size-3" />
-				<span>Deep Debugger Transcript</span>
+				<span>{t('Deep Debugger Transcript')}</span>
 			</div>
 			{transcript.map((msg, idx) => {
 				if (msg.role === 'tool') return null; // Tool results rendered with assistant messages
@@ -280,7 +281,7 @@ function ClarifyingQuestionsResult({ event }: { event: ToolEvent }) {
 					</div>
 					{q.options && q.options.length > 0 && (
 						<div className="text-xs text-text-secondary pl-5">
-							Options: {q.options.join(', ')}
+							{t('Options: {options}', { options: q.options.join(', ') })}
 						</div>
 					)}
 				</div>
@@ -485,7 +486,7 @@ function ReasoningBlock({ part, streaming }: { part: Extract<MessagePart, { type
 					? <LoaderCircle className="size-3.5 shrink-0 text-kumo-brand animate-spin" />
 					: <Brain className="size-3.5 shrink-0 text-text-tertiary" />}
 				<span className={cn('flex-1 text-xs font-medium text-text-secondary', active && 'animate-pulse')}>
-					{active ? 'Thinking' : 'Thoughts'}
+					{active ? t('Thinking') : t('Thoughts')}
 				</span>
 				<ChevronDown className={cn('size-3.5 shrink-0 text-text-tertiary transition-transform', open && 'rotate-180')} />
 			</button>
@@ -524,20 +525,20 @@ function RollbackButton({ commitHash }: { commitHash: string }) {
 	if (confirming) {
 		return (
 			<span className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-				<span className="text-[10px] text-text-tertiary">Roll back?</span>
+				<span className="text-[10px] text-text-tertiary">{t('Roll back?')}</span>
 				<button
 					type="button"
 					onClick={() => { onRollback(commitHash); setConfirming(false); }}
 					className="rounded px-1.5 py-0.5 text-[10px] font-medium text-red-500 hover:bg-red-500/10"
 				>
-					Confirm
+					{t('Confirm')}
 				</button>
 				<button
 					type="button"
 					onClick={() => setConfirming(false)}
 					className="rounded px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary hover:bg-surface-tertiary/40"
 				>
-					Cancel
+					{t('Cancel')}
 				</button>
 			</span>
 		);
@@ -547,11 +548,11 @@ function RollbackButton({ commitHash }: { commitHash: string }) {
 		<button
 			type="button"
 			onClick={e => { e.stopPropagation(); setConfirming(true); }}
-			title={`Roll back to ${commitHash.slice(0, 8)}`}
+			title={t('Roll back to {commit}', { commit: commitHash.slice(0, 8) })}
 			className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary hover:bg-surface-tertiary/40 hover:text-text-secondary"
 		>
 			<RotateCcw className="size-3 shrink-0" />
-			Rollback
+			{t('Rollback')}
 		</button>
 	);
 }
@@ -571,7 +572,7 @@ function ToolEventDetails({ event }: { event: ToolEvent }) {
 		<div className="mt-1.5 mb-1 ml-0.5 border-l border-kumo-line/60 pl-3 flex flex-col gap-2.5 text-[11px] font-mono max-h-72 overflow-auto text-kumo-subtle">
 			{hasInput && (
 				<div className="flex flex-col gap-0.5 min-w-0">
-					<div className="text-[10px] uppercase tracking-wider text-kumo-subtle/70">Input</div>
+					<div className="text-[10px] uppercase tracking-wider text-kumo-subtle/70">{t('Input')}</div>
 					<div className="text-kumo-subtle">
 						<JsonRenderer data={event.args} />
 					</div>
@@ -579,7 +580,7 @@ function ToolEventDetails({ event }: { event: ToolEvent }) {
 			)}
 			{hasOutput && (
 				<div className="flex flex-col gap-0.5 min-w-0">
-					<div className="text-[10px] uppercase tracking-wider text-kumo-subtle/70">Output</div>
+					<div className="text-[10px] uppercase tracking-wider text-kumo-subtle/70">{t('Output')}</div>
 					<div className="text-kumo-subtle">
 						<ToolResultRenderer result={event.result!} toolName={event.name} event={event} />
 					</div>

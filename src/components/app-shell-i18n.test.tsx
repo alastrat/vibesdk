@@ -2,33 +2,19 @@
  * Pieces of the app shell mounted for real in each language: they must change with the language and keep the values
  * (names, numbers, amounts) the seller's data supplies. `react-test-renderer` mounts them without a DOM.
  */
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
-import TestRenderer from 'react-test-renderer';
+import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { createElement } from 'react';
 import type { ThinkModelOption } from '@/api-types';
 import { applyAccountLocale } from '@/lib/i18n';
 import { legalLinkLabel } from '@/lib/legal-link-label';
 import { visibilityLabel } from '@/lib/visibility-label';
+import { mountElement, silenceTestRendererDeprecation, textOf, unmountAll } from '@/test-support/mounted';
 import { ModelUnavailableNotice } from './ModelUnavailableNotice';
 
-vi.hoisted(() => {
-	// React's `await act(...)` queues its work on a MessageChannel, which Workers don't have.
-	class Channel {
-		port1: { onmessage: ((event: unknown) => void) | null } = { onmessage: null };
-		port2 = { postMessage: () => void setTimeout(() => this.port1.onmessage?.({}), 0) };
-	}
-	Object.assign(globalThis, { MessageChannel: Channel, IS_REACT_ACT_ENVIRONMENT: true });
-});
-
-beforeAll(() => {
-	// The test renderer announces its own deprecation on every mount.
-	const error = console.error.bind(console);
-	vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-		if (!String(args[0]).includes('react-test-renderer is deprecated')) error(...args);
-	});
-});
+beforeAll(silenceTestRendererDeprecation);
 
 afterEach(async () => {
+	await unmountAll();
 	await applyAccountLocale('en');
 });
 
@@ -39,28 +25,16 @@ const options: ThinkModelOption[] = [
 
 /** Every piece of text the notice shows, in order. */
 async function noticeText(reason: 'overloaded' | 'timeout'): Promise<string> {
-	let renderer!: TestRenderer.ReactTestRenderer;
-	await act(async () => {
-		renderer = TestRenderer.create(
-			createElement(ModelUnavailableNotice, {
-				notice: { modelId: 'google/fast', reason, status: 503, alternativeModelId: 'anthropic/deep' },
-				options,
-				onSwitch: () => undefined,
-				onRetry: () => undefined,
-				onDismiss: () => undefined,
-			}),
-		);
-	});
-	const text: string[] = [];
-	const collect = (node: TestRenderer.ReactTestRendererJSON | string | null | Array<TestRenderer.ReactTestRendererJSON | string>): void => {
-		if (node === null) return;
-		if (typeof node === 'string') text.push(node);
-		else if (Array.isArray(node)) node.forEach(collect);
-		else node.children?.forEach(collect);
-	};
-	collect(renderer.toJSON());
-	await act(async () => renderer.unmount());
-	return text.join(' ');
+	const renderer = await mountElement(
+		createElement(ModelUnavailableNotice, {
+			notice: { modelId: 'google/fast', reason, status: 503, alternativeModelId: 'anthropic/deep' },
+			options,
+			onSwitch: () => undefined,
+			onRetry: () => undefined,
+			onDismiss: () => undefined,
+		}),
+	);
+	return textOf(renderer);
 }
 
 describe('ModelUnavailableNotice', () => {

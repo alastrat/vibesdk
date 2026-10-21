@@ -34,6 +34,8 @@ import { useLimitsContext } from '@/contexts/limits-context';
 import { RESUME_BUILD_MESSAGE } from '../../../../shared/think';
 import type { BuildStatus } from '../utils/build-status';
 import { failureReporterForAttempt } from '../utils/connection-failure';
+import { getLocale, t, tn } from '@/lib/i18n';
+import { formatNumber } from '../../../../shared/i18n/format';
 
 export type Edit = Omit<CodeFixEdits, 'type'>;
 
@@ -118,7 +120,7 @@ export function useChat({
 	const [messages, setMessages] = useState<ChatMessage[]>(
 		getInitialBehaviorType() === 'think'
 			? []
-			: [createAIMessage('main', 'Thinking...', true)],
+			: [createAIMessage('main', t('Thinking...'), true)],
 	);
 
 	const [bootstrapFiles, setBootstrapFiles] = useState<FileType[]>([]);
@@ -271,14 +273,14 @@ export function useChat({
 				const parts = [...a.selected];
 				if (a.custom.trim()) parts.push(a.custom.trim());
 				if (parts.length === 0) return null;
-				return `Q: ${a.question}\nA: ${parts.join(', ')}`;
+				return `${t('Q: {question}', { question: a.question })}\n${t('A: {answer}', { answer: parts.join(', ') })}`;
 			})
 			.filter((s): s is string => typeof s === 'string')
 			.join('\n\n');
 
 		if (!lines) return;
 
-		const message = `Here are my answers:\n\n${lines}`;
+		const message = `${t('Here are my answers:')}\n\n${lines}`;
 		sendWebSocketMessage(websocket, 'user_suggestion', { message });
 		sendUserMessage(message);
 		setClarifyingQuestions(null);
@@ -415,7 +417,7 @@ export function useChat({
 					if (ws.readyState === WebSocket.CONNECTING) {
 						logger.warn('⏰ WebSocket connection timeout');
 						ws.close();
-						reportFailure('Connection timeout');
+						reportFailure(t('Connection timeout'));
 					}
 				}, 30000);
 
@@ -443,7 +445,7 @@ export function useChat({
 					if (isRetry) {
 						// Clear old messages on reconnect to prevent duplicates
 						setMessages(() => [
-							createAIMessage('websocket_reconnected', 'Seems we lost connection for a while there. Fixed now!', true)
+							createAIMessage('websocket_reconnected', t('Seems we lost connection for a while there. Fixed now!'), true)
 						]);
 					}
 
@@ -473,12 +475,13 @@ export function useChat({
 					if (myAttemptId !== connectAttemptIdRef.current) return;
 					if (!shouldReconnectRef.current) return;
 					logger.error('❌ WebSocket error:', error);
-					reportFailure('WebSocket error');
+					reportFailure(t('WebSocket error'));
 				});
 
 				ws.addEventListener('close', (event) => {
 					clearTimeout(connectionTimeout);
 					logger.info(
+						// i18n-ignore: a log line for developers
 						`🔌 WebSocket connection closed with code ${event.code}: ${event.reason || 'No reason provided'}`,
 						event,
 					);
@@ -487,7 +490,7 @@ export function useChat({
 					setIsWebSocketOpen(false);
 					if (!shouldReconnectRef.current) return;
 					// Retry on any close while mounted (including 1000) to improve resilience
-					reportFailure(`Connection closed (code: ${event.code})`);
+					reportFailure(t('Connection closed (code: {code})', { code: event.code }));
 				});
 
 				return function disconnect() {
@@ -496,7 +499,7 @@ export function useChat({
 				};
 			} catch (error) {
 				logger.error('❌ Error establishing WebSocket connection:', error);
-				handleConnectionFailureRef.current?.(wsUrl, disableGenerate, 'Connection setup failed');
+				handleConnectionFailureRef.current?.(wsUrl, disableGenerate, t('Connection setup failed'));
 			}
 		},
 		[maxRetries, handleWebSocketMessage, urlChatId],
@@ -509,12 +512,19 @@ export function useChat({
 			
 			if (retryCount.current >= maxRetries) {
 				logger.error(`💥 WebSocket connection failed permanently after ${maxRetries + 1} attempts`);
-				sendMessage(createAIMessage('websocket_failed', `🚨 Connection failed permanently after ${maxRetries + 1} attempts.\n\n❌ Reason: ${reason}\n\n🔄 Please refresh the page to try again.`));
+				sendMessage(createAIMessage('websocket_failed', [
+					t('Connection failed permanently after {attempts} attempts.', { attempts: maxRetries + 1 }),
+					t('Reason: {reason}', { reason }),
+					t('Please refresh the page to try again.'),
+				].join('\n\n')));
 				
-				// Debug logging for permanent failure
+				// Debug logging for permanent failure; the debug panel is for developers and stays in English.
 				onDebugMessage?.('error',
+					// i18n-ignore
 					'WebSocket Connection Failed Permanently',
+					// i18n-ignore
 					`Failed after ${maxRetries + 1} attempts. Reason: ${reason}`,
+					// i18n-ignore
 					'WebSocket Resilience'
 				);
 				return;
@@ -529,7 +539,15 @@ export function useChat({
 
 			logger.warn(`🔄 Retrying WebSocket connection in ${actualDelay / 1000}s (attempt ${retryCount.current + 1}/${maxRetries + 1})`);
 			
-			sendMessage(createAIMessage('websocket_retrying', `🔄 Connection failed. Retrying in ${Math.ceil(actualDelay / 1000)} seconds... (attempt ${retryCount.current + 1}/${maxRetries + 1})\n\n❌ Reason: ${reason}`, true));
+			sendMessage(createAIMessage('websocket_retrying', [
+				tn(
+					'Connection failed. Retrying in {count} second... (attempt {attempt}/{max})',
+					'Connection failed. Retrying in {count} seconds... (attempt {attempt}/{max})',
+					Math.ceil(actualDelay / 1000),
+					{ attempt: retryCount.current + 1, max: maxRetries + 1 },
+				),
+				t('Reason: {reason}', { reason }),
+			].join('\n\n'), true));
 
 			const timeoutId = setTimeout(() => {
 				connectWithRetryRef.current?.(wsUrl, { disableGenerate, isRetry: true });
@@ -537,10 +555,13 @@ export function useChat({
 			
 			retryTimeouts.current.push(timeoutId);
 			
-			// Debug logging for retry attempt
+			// Debug logging for retry attempt; the debug panel is for developers and stays in English.
 			onDebugMessage?.('warning',
+				// i18n-ignore
 				'WebSocket Connection Retry',
+				// i18n-ignore
 				`Retry ${retryCount.current}/${maxRetries} in ${actualDelay / 1000}s. Reason: ${reason}`,
+				// i18n-ignore
 				'WebSocket Resilience'
 			);
 		},
@@ -563,7 +584,7 @@ export function useChat({
 			try {
 				if (urlChatId === 'new') {
 					if (!userQuery && !sourceAppId) {
-						const errorMsg = 'Please enter a description of what you want to build';
+						const errorMsg = t('Please enter a description of what you want to build');
 						logger.error('Query is required for new code generation');
 						toast.error(errorMsg);
 						return;
@@ -571,7 +592,10 @@ export function useChat({
 
 					const query = userQuery ?? '';
 					if (query.length > MAX_AGENT_QUERY_LENGTH) {
-						const errorMsg = `Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`;
+						const errorMsg = t('Prompt too large ({length} characters). Maximum allowed is {max} characters.', {
+							length: formatNumber(query.length, getLocale()),
+							max: formatNumber(MAX_AGENT_QUERY_LENGTH, getLocale()),
+						});
 						toast.error(errorMsg);
 						setMessages(() => [createAIMessage('main', errorMsg)]);
 						return;
@@ -623,7 +647,7 @@ export function useChat({
 					const initialBehaviorType = getBehaviorTypeForProject(projectType);
 					if (initialBehaviorType === 'phasic') {
 						sendMessage(
-							createAIMessage('main', "Sure, let's get started. Bootstrapping the project first...", true),
+							createAIMessage('main', t("Sure, let's get started. Bootstrapping the project first..."), true),
 						);
 					}
 
@@ -632,11 +656,11 @@ export function useChat({
 						if (obj.error) {
 							// The server streams agent initialization failures after the session ids.
 							const streamError: { message?: string } = obj.error;
-							throw new Error(streamError.message || 'Failed to start your app');
+							throw new Error(streamError.message || t('Failed to start your app'));
 						}
 						if (obj.chunk) {
 							if (!startedBlueprintStream) {
-								sendMessage(createAIMessage('main', 'Blueprint is being generated...', true));
+								sendMessage(createAIMessage('main', t('Blueprint is being generated...'), true));
 								logger.info('Blueprint stream has started');
 								setIsBootstrapping(false);
 								setIsGeneratingBlueprint(true);
@@ -682,12 +706,12 @@ export function useChat({
 					const finalBehaviorType = getBehaviorTypeForProject(projectType);
 					if (finalBehaviorType === 'phasic') {
 						sendMessage(
-							createAIMessage('main', 'Blueprint generation complete. Now starting the code generation...', true),
+							createAIMessage('main', t('Blueprint generation complete. Now starting the code generation...'), true),
 						);
 					}
 
 					if (!result.websocketUrl || !result.agentId) {
-						throw new Error('Failed to initialize agent session');
+						throw new Error(t('Failed to initialize agent session'));
 					}
 
 					// Connect to WebSocket
@@ -698,7 +722,7 @@ export function useChat({
 					
 					// Emit app-created event for sidebar updates
 					appEvents.emitAppCreated(result.agentId, {
-						title: query || 'New App',
+						title: query || t('New App'),
 						description: query,
 					});
 				} else if (connectionStatus.current === 'idle') {
@@ -712,7 +736,7 @@ export function useChat({
 					// thread directly — no placeholder is needed there.
 					if (getBehaviorTypeForProject(projectType) !== 'think') {
 						setMessages(() => [
-							createAIMessage('fetching-chat', 'Starting from where you left off...', true),
+							createAIMessage('fetching-chat', t('Starting from where you left off...'), true),
 						]);
 					}
 
@@ -720,7 +744,7 @@ export function useChat({
 					const response = await apiClient.connectToAgent(urlChatId);
 					if (!response.success || !response.data) {
 						logger.error('Failed to fetch existing chat:', { chatId: urlChatId, error: response.error });
-						throw new Error(response.error?.message || 'Failed to connect to agent');
+						throw new Error(response.error?.message || t('Failed to connect to agent'));
 					}
 
 					logger.debug('Existing agentId API result', response.data);
@@ -729,7 +753,7 @@ export function useChat({
 
 
 					if (!response.data.websocketUrl) {
-						throw new Error('Missing websocketUrl for existing agent');
+						throw new Error(t('Missing websocketUrl for existing agent'));
 					}
 
 					logger.debug('connecting from init for existing chatId');
@@ -745,9 +769,9 @@ export function useChat({
 					const rateLimitMessage = handleRateLimitError(error.details, onDebugMessage);
 					setMessages(prev => [...prev, rateLimitMessage]);
 				} else if (urlChatId === 'new') {
-					const message = error instanceof Error ? error.message : 'Failed to start your app';
+					const message = error instanceof Error ? error.message : t('Failed to start your app');
 					if (sessionStreamOpened) toast.error(message);
-					sendMessage(createAIMessage('main', `Couldn't start your app: ${message}`));
+					sendMessage(createAIMessage('main', t("Couldn't start your app: {message}", { message })));
 					setIsBootstrapping(false);
 					setIsGeneratingBlueprint(false);
 				}
@@ -858,12 +882,16 @@ export function useChat({
 						setIsRedeployReady(false);
 
 						// Show timeout message
-						sendMessage(createAIMessage('deployment_timeout', `Deployment timed out after 1 minute.\n\nPlease try deploying again. The server may be busy.`));
+						sendMessage(createAIMessage('deployment_timeout', `${t('Deployment timed out after 1 minute.')}\n\n${t('Please try deploying again. The server may be busy.')}`));
 
 						// Debug logging for timeout
+						// The debug panel is for developers and stays in English.
 						onDebugMessage?.('warning',
+							// i18n-ignore
 							'Deployment Timeout',
+							// i18n-ignore
 							`Deployment for ${instanceId} timed out after 60 seconds`,
+							// i18n-ignore
 							'Deployment Timeout Management'
 						);
 					}
@@ -871,7 +899,7 @@ export function useChat({
 				}, 60000); // 1 minute = 60,000ms
 
 			} else {
-				throw new Error('WebSocket connection not available');
+				throw new Error(t('WebSocket connection not available'));
 			}
 		} catch (error) {
 			logger.error('Error sending deployment WebSocket message:', error);
@@ -883,7 +911,7 @@ export function useChat({
 			setCloudflareDeploymentUrl('');
 			setIsRedeployReady(false);
 
-			sendMessage(createAIMessage('deployment_error', `Failed to initiate deployment: ${error instanceof Error ? error.message : 'Unknown error'}\n\nYou can try again.`));
+			sendMessage(createAIMessage('deployment_error', `${t('Failed to initiate deployment: {error}', { error: error instanceof Error ? error.message : t('Unknown error') })}\n\n${t('You can try again.')}`));
 		}
 	}, [websocket, sendMessage, isDeploying, onDebugMessage]);
 

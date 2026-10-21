@@ -2,6 +2,7 @@ import { Link } from 'react-router';
 import { LayerCard, buttonVariants } from '@cloudflare/kumo';
 import { CreditCardIcon } from '@phosphor-icons/react';
 import { BILLING_CARD_PATH, type CardOnFile } from '@/api-types';
+import { t } from '@/lib/i18n';
 import { cardLabelFor } from '@/routes/settings/billing-view';
 import { SectionTitle } from './SectionTitle';
 
@@ -9,12 +10,12 @@ import { SectionTitle } from './SectionTitle';
 export function PaymentMethodCard({ card }: { card: CardOnFile | null }) {
 	return (
 		<LayerCard id="payment-method" className="scroll-mt-4">
-			<SectionTitle icon={<CreditCardIcon className="size-4" aria-hidden />}>Payment method</SectionTitle>
+			<SectionTitle icon={<CreditCardIcon className="size-4" aria-hidden />}>{t('Payment method')}</SectionTitle>
 			<LayerCard.Primary>
 				<div className="flex flex-wrap items-center justify-between gap-4">
-					<p className="text-sm text-kumo-default">{card ? cardLabelFor(card) : 'No card on file.'}</p>
+					<p className="text-sm text-kumo-default">{card ? cardLabelFor(card) : t('No card on file.')}</p>
 					<Link to={BILLING_CARD_PATH} className={buttonVariants({ variant: 'secondary' })}>
-						{card ? 'Change card' : 'Add card'}
+						{card ? t('Change card') : t('Add card')}
 					</Link>
 				</div>
 			</LayerCard.Primary>

@@ -1,7 +1,7 @@
-import { DEFAULT_SELLER_LIMITS, EXTRA_CREDITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
+import { DEFAULT_SELLER_LIMITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
-export { formatCredits, formatUsd, limitFeatures, storeAllowance };
+export { extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance };
 export type { PlanId };
 
 export interface Plan {
@@ -23,8 +23,8 @@ export function planById(id: PlanId): Plan {
 	return plan;
 }
 
-/** "$1.50 per 1,000", the price of extra credits. */
-export const EXTRA_CREDITS_PRICE = `${formatUsd(EXTRA_CREDITS.unitPriceCents)} per ${formatCredits(EXTRA_CREDITS.creditsPerUnit)}`;
+/** "$1.50 per 1,000", the price of extra credits, in English for the public pages; the app words it with `extraCreditsPriceLabel`. */
+export const EXTRA_CREDITS_PRICE = extraCreditsPriceLabel();
 
 /** A check (true), a dash (false) or a short text. */
 export type PlanCell = boolean | string;

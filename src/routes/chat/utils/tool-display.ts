@@ -1,3 +1,4 @@
+import { msg, t, tn } from '@/lib/i18n';
 import type { ToolEvent } from './message-helpers';
 
 function asString(value: unknown): string | undefined {
@@ -52,7 +53,7 @@ function quote(value: string, max = 48): string {
 }
 
 function pathLabel(path: string | undefined): string {
-	return path ? shortenPath(path) : 'file';
+	return path ? shortenPath(path) : t('file');
 }
 
 export function pickToolPath(args?: Record<string, unknown>): string | undefined {
@@ -68,51 +69,60 @@ export function pickToolPaths(args?: Record<string, unknown>): string[] {
 
 type VerbSet = { start: string; success: string; error: string };
 
+/** The verbs a tool row shows, marked as messages and translated where they are shown (see `verbFor`). */
 const VERBS: Record<string, VerbSet> = {
-	read: { start: 'Reading', success: 'Read', error: 'Failed to read' },
-	write: { start: 'Writing', success: 'Wrote', error: 'Failed to write' },
-	edit: { start: 'Editing', success: 'Edited', error: 'Failed to edit' },
-	delete: { start: 'Deleting', success: 'Deleted', error: 'Failed to delete' },
-	list: { start: 'Listing', success: 'Listed', error: 'Failed to list' },
-	find: { start: 'Finding', success: 'Find', error: 'Failed to find' },
-	grep: { start: 'Searching', success: 'Searched', error: 'Failed to search' },
-	bash: { start: 'Running', success: 'Ran', error: 'Failed to run' },
-	commit: { start: 'Committing', success: 'Committed', error: 'Failed to commit' },
-	deploy_space: { start: 'Deploying', success: 'Deployed', error: 'Failed to deploy' },
-	deploy_preview: { start: 'Deploying preview', success: 'Deployed preview', error: 'Failed to deploy preview' },
-	set_title: { start: 'Setting title', success: 'Set title', error: 'Failed to set title' },
-	ask_questions: { start: 'Asking', success: 'Asked', error: 'Failed to ask' },
+	read: { start: msg('Reading'), success: msg('Read'), error: msg('Failed to read') },
+	write: { start: msg('Writing'), success: msg('Wrote'), error: msg('Failed to write') },
+	edit: { start: msg('Editing'), success: msg('Edited'), error: msg('Failed to edit') },
+	delete: { start: msg('Deleting'), success: msg('Deleted'), error: msg('Failed to delete') },
+	list: { start: msg('Listing'), success: msg('Listed'), error: msg('Failed to list') },
+	find: { start: msg('Finding'), success: msg('Found'), error: msg('Failed to find') },
+	grep: { start: msg('Searching'), success: msg('Searched'), error: msg('Failed to search') },
+	bash: { start: msg('Running'), success: msg('Ran'), error: msg('Failed to run') },
+	commit: { start: msg('Committing'), success: msg('Committed'), error: msg('Failed to commit') },
+	deploy_space: { start: msg('Deploying'), success: msg('Deployed'), error: msg('Failed to deploy') },
+	deploy_preview: { start: msg('Deploying preview'), success: msg('Deployed preview'), error: msg('Failed to deploy preview') },
+	set_title: { start: msg('Setting title'), success: msg('Set title'), error: msg('Failed to set title') },
+	ask_questions: { start: msg('Asking'), success: msg('Asked'), error: msg('Failed to ask') },
 	get_browser_console_logs: {
-		start: 'Checking browser console',
-		success: 'Checked browser console',
-		error: 'Failed to check browser console',
+		start: msg('Checking browser console'),
+		success: msg('Checked browser console'),
+		error: msg('Failed to check browser console'),
 	},
-	activate_skill: { start: 'Loading skill', success: 'Loaded skill', error: 'Failed to load skill' },
-	web_search: { start: 'Searching the web', success: 'Searched the web', error: 'Web search failed' },
-	git: { start: 'Running git', success: 'Ran git', error: 'Git failed' },
-	read_files: { start: 'Reading files', success: 'Read files', error: 'Failed to read files' },
-	regenerate_file: { start: 'Regenerating', success: 'Regenerated', error: 'Failed to regenerate' },
-	generate_files: { start: 'Generating files', success: 'Generated files', error: 'Failed to generate files' },
-	exec_commands: { start: 'Running commands', success: 'Ran commands', error: 'Commands failed' },
-	run_analysis: { start: 'Analyzing', success: 'Analyzed', error: 'Analysis failed' },
-	get_runtime_errors: { start: 'Checking runtime errors', success: 'Checked runtime errors', error: 'Failed to check runtime errors' },
-	get_logs: { start: 'Fetching logs', success: 'Fetched logs', error: 'Failed to fetch logs' },
-	deep_debug: { start: 'Debugging', success: 'Finished debugging', error: 'Debugging failed' },
-	queue_request: { start: 'Queuing request', success: 'Queued request', error: 'Failed to queue request' },
-	submit_feedback: { start: 'Submitting feedback', success: 'Submitted feedback', error: 'Failed to submit feedback' },
-	rename_project: { start: 'Renaming project', success: 'Renamed project', error: 'Failed to rename project' },
-	alter_blueprint: { start: 'Updating blueprint', success: 'Updated blueprint', error: 'Failed to update blueprint' },
-	wait_for_generation: { start: 'Waiting for generation', success: 'Generation ready', error: 'Wait failed' },
-	wait_for_debug: { start: 'Waiting for debug', success: 'Debug ready', error: 'Wait failed' },
-	wait: { start: 'Waiting', success: 'Waited', error: 'Wait failed' },
+	activate_skill: { start: msg('Loading skill'), success: msg('Loaded skill'), error: msg('Failed to load skill') },
+	web_search: { start: msg('Searching the web'), success: msg('Searched the web'), error: msg('Web search failed') },
+	git: { start: msg('Running git'), success: msg('Ran git'), error: msg('Git failed') },
+	read_files: { start: msg('Reading files'), success: msg('Read files'), error: msg('Failed to read files') },
+	regenerate_file: { start: msg('Regenerating'), success: msg('Regenerated'), error: msg('Failed to regenerate') },
+	generate_files: { start: msg('Generating files'), success: msg('Generated files'), error: msg('Failed to generate files') },
+	exec_commands: { start: msg('Running commands'), success: msg('Ran commands'), error: msg('Commands failed') },
+	run_analysis: { start: msg('Analyzing'), success: msg('Analyzed'), error: msg('Analysis failed') },
+	get_runtime_errors: { start: msg('Checking runtime errors'), success: msg('Checked runtime errors'), error: msg('Failed to check runtime errors') },
+	get_logs: { start: msg('Fetching logs'), success: msg('Fetched logs'), error: msg('Failed to fetch logs') },
+	deep_debug: { start: msg('Debugging'), success: msg('Finished debugging'), error: msg('Debugging failed') },
+	queue_request: { start: msg('Queuing request'), success: msg('Queued request'), error: msg('Failed to queue request') },
+	submit_feedback: { start: msg('Submitting feedback'), success: msg('Submitted feedback'), error: msg('Failed to submit feedback') },
+	rename_project: { start: msg('Renaming project'), success: msg('Renamed project'), error: msg('Failed to rename project') },
+	alter_blueprint: { start: msg('Updating blueprint'), success: msg('Updated blueprint'), error: msg('Failed to update blueprint') },
+	wait_for_generation: { start: msg('Waiting for generation'), success: msg('Generation ready'), error: msg('Wait failed') },
+	wait_for_debug: { start: msg('Waiting for debug'), success: msg('Debug ready'), error: msg('Wait failed') },
+	wait: { start: msg('Waiting'), success: msg('Waited'), error: msg('Wait failed') },
+	// Rows the chat adds itself, not tools the AI ran.
+	conversation_reset: { start: msg('Resetting conversation'), success: msg('Conversation reset'), error: msg('Failed to reset conversation') },
+	fetching_conversations: {
+		start: msg('Fetching your latest conversations'),
+		success: msg('Fetched your latest conversations'),
+		error: msg('Failed to fetch your latest conversations'),
+	},
 };
 
+/** The verb for a tool and its status. A tool with no entry shows its own name, which is code and stays as written. */
 function verbFor(name: string, status: ToolEvent['status']): string {
 	const set = VERBS[name];
-	if (set) return set[status === 'start' ? 'start' : status === 'error' ? 'error' : 'success'];
+	if (set) return t(set[status === 'start' ? 'start' : status === 'error' ? 'error' : 'success']);
 	const pretty = name.replace(/_/g, ' ');
-	if (status === 'start') return `Running ${pretty}`;
-	if (status === 'error') return `Failed ${pretty}`;
+	if (status === 'start') return t('Running {tool}', { tool: pretty });
+	if (status === 'error') return t('Failed {tool}', { tool: pretty });
 	return pretty.charAt(0).toUpperCase() + pretty.slice(1);
 }
 
@@ -130,7 +140,7 @@ function detailFor(name: string, args?: Record<string, unknown>): string | undef
 			return path ? pathLabel(path) : undefined;
 		case 'read_files':
 			if (paths.length === 1) return pathLabel(paths[0]);
-			if (paths.length > 1) return `${paths.length} files`;
+			if (paths.length > 1) return tn('{count} file', '{count} files', paths.length);
 			return undefined;
 		case 'find': {
 			const pattern = pickString(args, 'pattern', 'glob');
@@ -139,7 +149,7 @@ function detailFor(name: string, args?: Record<string, unknown>): string | undef
 		case 'grep': {
 			const query = pickString(args, 'query', 'pattern', 'search');
 			const include = pickString(args, 'include');
-			if (query && include) return `${quote(query)} in ${include}`;
+			if (query && include) return t('{query} in {include}', { query: quote(query), include });
 			if (query) return quote(query);
 			return undefined;
 		}
@@ -149,7 +159,7 @@ function detailFor(name: string, args?: Record<string, unknown>): string | undef
 			if (script) return quote(script, 40);
 			const commands = pickStringArray(args, 'commands');
 			if (commands.length === 1) return quote(commands[0], 40);
-			if (commands.length > 1) return `${commands.length} commands`;
+			if (commands.length > 1) return tn('{count} command', '{count} commands', commands.length);
 			return undefined;
 		}
 		case 'commit': {
@@ -181,7 +191,7 @@ function detailFor(name: string, args?: Record<string, unknown>): string | undef
 		case 'ask_questions': {
 			const questions = args?.questions;
 			if (Array.isArray(questions) && questions.length > 0) {
-				return questions.length === 1 ? '1 question' : `${questions.length} questions`;
+				return tn('{count} question', '{count} questions', questions.length);
 			}
 			return undefined;
 		}
@@ -231,25 +241,32 @@ export function getToolActivityLabel(name: string, args?: Record<string, unknown
 	return detail ? `${verb} ${detail}` : verb;
 }
 
-/** Noun used when collapsing multiple consecutive tools of the same name. */
+/** The counted noun used when collapsing multiple consecutive tools of the same name, e.g. "3 files". */
 function groupNoun(name: string, count: number): string {
-	const nouns: Record<string, [string, string]> = {
-		read: ['file', 'files'],
-		write: ['file', 'files'],
-		edit: ['file', 'files'],
-		delete: ['file', 'files'],
-		list: ['directory', 'directories'],
-		find: ['search', 'searches'],
-		grep: ['search', 'searches'],
-		bash: ['command', 'commands'],
-		exec_commands: ['command', 'commands'],
-		read_files: ['file batch', 'file batches'],
-		commit: ['commit', 'commits'],
-		web_search: ['search', 'searches'],
-		ask_questions: ['question set', 'question sets'],
-	};
-	const pair = nouns[name] ?? ['step', 'steps'];
-	return count === 1 ? pair[0] : pair[1];
+	switch (name) {
+		case 'read':
+		case 'write':
+		case 'edit':
+		case 'delete':
+			return tn('{count} file', '{count} files', count);
+		case 'list':
+			return tn('{count} directory', '{count} directories', count);
+		case 'find':
+		case 'grep':
+		case 'web_search':
+			return tn('{count} search', '{count} searches', count);
+		case 'bash':
+		case 'exec_commands':
+			return tn('{count} command', '{count} commands', count);
+		case 'read_files':
+			return tn('{count} file batch', '{count} file batches', count);
+		case 'commit':
+			return tn('{count} commit', '{count} commits', count);
+		case 'ask_questions':
+			return tn('{count} question set', '{count} question sets', count);
+		default:
+			return tn('{count} step', '{count} steps', count);
+	}
 }
 
 /**
@@ -267,7 +284,7 @@ export function getToolGroupSummary(events: ToolEvent[]): string {
 	const verb = verbFor(name, status);
 	const noun = groupNoun(name, events.length);
 	const ellipsis = status === 'start' ? '…' : '';
-	return `${verb} ${events.length} ${noun}${ellipsis}`;
+	return `${verb} ${noun}${ellipsis}`;
 }
 
 export function getGroupStatus(events: ToolEvent[]): ToolEvent['status'] {

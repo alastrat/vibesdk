@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
+import { t } from '@/lib/i18n';
 
 const COPY_FEEDBACK_DURATION = 2000;
 
@@ -30,7 +31,7 @@ export function useCopyToClipboard(
 	const {
 		duration = COPY_FEEDBACK_DURATION,
 		successMessage,
-		errorMessage = 'Failed to copy',
+		errorMessage = t('Failed to copy'),
 	} = options;
 
 	const [copied, setCopied] = useState(false);

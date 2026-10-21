@@ -22,7 +22,7 @@ afterEach(() => {
 const env = () => envWith(db, { JWT_SECRET: 'test-only-jwt-secret-of-at-least-32-characters', ENVIRONMENT: 'dev' });
 
 /** Starts a Google sign-in with `query`, and answers what the state row it made holds. */
-async function start(query: Record<string, string>): Promise<{ status: number; locale: string | null }> {
+async function start(query: Record<string, string>): Promise<{ status: number; locale: string | null; redirectUri: string | null }> {
 	const url = new URL('https://estori.app/api/auth/oauth/google');
 	for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
 	const response = await AuthController.initiateOAuth(new Request(url), env(), {} as ExecutionContext, {
@@ -30,13 +30,13 @@ async function start(query: Record<string, string>): Promise<{ status: number; l
 		queryParams: url.searchParams,
 	} as unknown as RouteContext);
 	const state = new URL(response.headers.get('Location') ?? 'https://invalid.test').searchParams.get('state');
-	const row = await db.prepare('SELECT locale FROM oauth_states WHERE state = ?').bind(state).first<{ locale: string | null }>();
-	return { status: response.status, locale: row === null ? null : row.locale };
+	const row = await db.prepare('SELECT locale, redirect_uri FROM oauth_states WHERE state = ?').bind(state).first<{ locale: string | null; redirect_uri: string | null }>();
+	return { status: response.status, locale: row === null ? null : row.locale, redirectUri: row === null ? null : row.redirect_uri };
 }
 
 describe('GET /api/auth/oauth/:provider', () => {
 	it.each(['en', 'es', 'pt-BR'])('stores the picked language: %s', async (locale) => {
-		expect(await start({ locale })).toEqual({ status: 302, locale });
+		expect(await start({ locale })).toMatchObject({ status: 302, locale });
 	});
 
 	it.each([
@@ -46,18 +46,15 @@ describe('GET /api/auth/oauth/:provider', () => {
 		['an empty value', ''],
 		['markup', '<script>'],
 	])('stores nothing for %s, and still sends the visitor to the provider', async (_label, locale) => {
-		expect(await start({ locale })).toEqual({ status: 302, locale: null });
+		expect(await start({ locale })).toMatchObject({ status: 302, locale: null });
 	});
 
 	it('stores nothing when no language was sent', async () => {
-		expect(await start({})).toEqual({ status: 302, locale: null });
+		expect(await start({})).toMatchObject({ status: 302, locale: null });
 	});
 
 	it('keeps the language next to the page to return to', async () => {
-		const result = await start({ locale: 'es', redirect_url: '/settings' });
-		expect(result).toEqual({ status: 302, locale: 'es' });
-		const row = await db.prepare(`SELECT redirect_uri FROM oauth_states WHERE locale = 'es' ORDER BY created_at DESC LIMIT 1`).first<{ redirect_uri: string }>();
-		expect(row?.redirect_uri).toBe('/settings');
+		expect(await start({ locale: 'es', redirect_url: '/settings' })).toEqual({ status: 302, locale: 'es', redirectUri: '/settings' });
 	});
 });
 

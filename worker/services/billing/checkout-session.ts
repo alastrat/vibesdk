@@ -11,6 +11,7 @@ import {
 	type PromotionTerms,
 } from '../../../shared/types/billing';
 import { PLAN_LIMITS, PLAN_PRICES_CENTS, extraCreditsPriceCents, formatCredits, isPaidPlanId, limitFeatures, type PaidPlanId } from '../../../shared/types/plans';
+import type { Translator } from '../../../shared/i18n/translate';
 import type { StripeCheckoutSession, StripeCoupon } from '../payments/stripe-client';
 
 /** A discount whose terms can't be stated exactly. The checkout refuses it: consent never shows a guessed price or month count. */
@@ -65,21 +66,23 @@ export function billingSessionOf(session: StripeCheckoutSession): { kind: 'plan'
 	return session.mode === 'subscription' && isPaidPlanId(plan) ? { kind: 'plan', plan } : null;
 }
 
-export function planOrder(plan: PaidPlanId): CheckoutOrder {
-	return { kind: 'plan', plan, priceCents: PLAN_PRICES_CENTS[plan], includes: [`${formatCredits(PLAN_LIMITS[plan].aiCredits)} AI credits a month`, ...limitFeatures(plan)] };
+/** What a plan sells, its lines worded in the seller's language. */
+export function planOrder(plan: PaidPlanId, i18n: Translator): CheckoutOrder {
+	const credits = i18n.t('{credits} AI credits a month', { credits: formatCredits(PLAN_LIMITS[plan].aiCredits, i18n.locale) });
+	return { kind: 'plan', plan, priceCents: PLAN_PRICES_CENTS[plan], includes: [credits, ...limitFeatures(plan, undefined, i18n)] };
 }
 
 export function creditsOrder(credits: number): CheckoutOrder {
 	return { kind: 'credits', credits, amountCents: extraCreditsPriceCents(credits) };
 }
 
-/** The consent sentence, button, small print and first payment for a plan session, following its promotion code. Throws as `promotionTermsOf` does. */
-export function termsViewOf(plan: PaidPlanId, session: StripeCheckoutSession): CheckoutTermsView {
+/** The consent sentence, button, small print and first payment for a plan session, following its promotion code, worded in the seller's language. Throws as `promotionTermsOf` does. */
+export function termsViewOf(plan: PaidPlanId, session: StripeCheckoutSession, i18n: Translator): CheckoutTermsView {
 	const promotion = promotionTermsOf(session);
 	return {
-		consentText: subscriptionConsentText(plan, promotion),
-		buttonText: subscribeButtonText(plan, promotion),
+		consentText: subscriptionConsentText(plan, promotion, i18n),
+		buttonText: subscribeButtonText(plan, promotion, i18n),
 		dueTodayCents: promotion ? promotion.discountedCents : (session.amount_total ?? PLAN_PRICES_CENTS[plan]),
-		disclosure: renewalDisclosure(plan, promotion),
+		disclosure: renewalDisclosure(plan, promotion, i18n),
 	};
 }

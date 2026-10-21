@@ -1,5 +1,6 @@
 import type { BlueprintType, PhasicBlueprint } from '@/api-types';
 import { cn } from '@cloudflare/kumo';
+import { t } from '@/lib/i18n';
 import { Markdown } from './messages';
 
 const isPhasicBlueprint = (blueprint: BlueprintType): blueprint is PhasicBlueprint =>
@@ -21,7 +22,7 @@ export function Blueprint({
 			<div className="bg-brand p-6 rounded-t-xl flex items-center">
 				<div className="flex flex-col gap-1">
 					<div className="uppercase text-xs tracking-wider text-white/90">
-						Blueprint
+						{t('Blueprint')}
 					</div>
 					<div className="text-2xl font-medium text-white">
 						{blueprint.title}
@@ -31,13 +32,13 @@ export function Blueprint({
 			<div className="flex flex-col px-6 py-4 bg-kumo-elevated rounded-b-xl space-y-8">
 				{/* Basic Info */}
 				<div className="grid grid-cols-[120px_1fr] gap-4 text-sm">
-					<div className="text-text-50/70 font-mono">Description</div>
+					<div className="text-text-50/70 font-mono">{t('Description')}</div>
 					<Markdown className="text-text-50">{blueprint.description}</Markdown>
 
 					{Array.isArray(blueprint.colorPalette) &&
 						blueprint.colorPalette.length > 0 && (
 							<>
-								<div className="text-text-50/70 font-mono">Color Palette</div>
+								<div className="text-text-50/70 font-mono">{t('Color Palette')}</div>
 								<div className="flex items-center gap-2">
 									{Array.isArray(blueprint.colorPalette) &&
 										blueprint.colorPalette?.map((color, index) => (
@@ -54,7 +55,7 @@ export function Blueprint({
 							</>
 						)}
 
-					<div className="text-text-50/70 font-mono">Dependencies</div>
+					<div className="text-text-50/70 font-mono">{t('Dependencies')}</div>
 					<div className="flex flex-wrap gap-2 items-center">
 						{Array.isArray(blueprint.frameworks) &&
 							blueprint.frameworks.map((framework, index) => {
@@ -92,7 +93,7 @@ export function Blueprint({
 				{phasicBlueprint && phasicBlueprint.views?.length > 0 && (
 					<div>
 						<h3 className="text-sm font-medium mb-3 text-text-50/70 uppercase tracking-wider">
-							Views
+							{t('Views')}
 						</h3>
 						<div className="space-y-3">
 							{phasicBlueprint.views?.map((view, index) => (
@@ -113,13 +114,13 @@ export function Blueprint({
 				{phasicBlueprint?.userFlow && (
 					<div>
 						<h3 className="text-sm font-medium mb-3 text-text-50/70 uppercase tracking-wider">
-							User Flow
+							{t('User Flow')}
 						</h3>
 						<div className="space-y-4">
 							{phasicBlueprint.userFlow.uiLayout && (
 								<div>
 									<h4 className="text-xs font-medium mb-2 text-text-50/70">
-										UI Layout
+										{t('UI Layout')}
 									</h4>
 									<Markdown className="text-sm text-text-50">
 									{phasicBlueprint.userFlow.uiLayout}
@@ -130,7 +131,7 @@ export function Blueprint({
 							{phasicBlueprint.userFlow.uiDesign && (
 								<div>
 									<h4 className="text-xs font-medium mb-2 text-text-50/70">
-										UI Design
+										{t('UI Design')}
 									</h4>
 									<Markdown className="text-sm text-text-50">
 									{phasicBlueprint.userFlow.uiDesign}
@@ -141,7 +142,7 @@ export function Blueprint({
 							{phasicBlueprint.userFlow.userJourney && (
 								<div>
 									<h4 className="text-xs font-medium mb-2 text-text-50/70">
-										User Journey
+										{t('User Journey')}
 									</h4>
 									<Markdown className="text-sm text-text-50">
 									{phasicBlueprint.userFlow.userJourney}
@@ -156,7 +157,7 @@ export function Blueprint({
 				{phasicBlueprint && (phasicBlueprint.dataFlow || phasicBlueprint.architecture?.dataFlow) && (
 					<div>
 						<h3 className="text-sm font-medium mb-2 text-text-50/70 uppercase tracking-wider">
-							Data Flow
+							{t('Data Flow')}
 						</h3>
 						<Markdown className="text-sm text-text-50">
 							{phasicBlueprint.dataFlow || phasicBlueprint.architecture?.dataFlow}
@@ -168,13 +169,13 @@ export function Blueprint({
 				{phasicBlueprint && phasicBlueprint.implementationRoadmap?.length > 0 && (
 					<div>
 						<h3 className="text-sm font-medium mb-2 text-text-50/70 uppercase tracking-wider">
-							Implementation Roadmap
+							{t('Implementation Roadmap')}
 						</h3>
 						<div className="space-y-3">
 							{phasicBlueprint.implementationRoadmap?.map((roadmapItem, index) => (
 								<div key={`roadmap-${index}`} className="space-y-1">
 									<h4 className="text-xs font-medium text-text-50/70">
-										Phase {index + 1}: {roadmapItem.phase}
+										{t('Phase {number}: {name}', { number: index + 1, name: roadmapItem.phase })}
 									</h4>
 									<Markdown className="text-sm text-text-50">
 										{roadmapItem.description}
@@ -189,7 +190,7 @@ export function Blueprint({
 				{phasicBlueprint?.initialPhase && (
 					<div>
 						<h3 className="text-sm font-medium mb-2 text-text-50/70 uppercase tracking-wider">
-							Initial Phase
+							{t('Initial Phase')}
 						</h3>
 						<div className="space-y-3">
 							<div>
@@ -202,7 +203,7 @@ export function Blueprint({
 								{Array.isArray(phasicBlueprint.initialPhase.files) && phasicBlueprint.initialPhase.files.length > 0 && (
 									<div>
 										<h5 className="text-xs font-medium mb-2 text-text-50/60">
-											Files to be created:
+											{t('Files to be created:')}
 										</h5>
 										<div className="space-y-2">
 										{phasicBlueprint.initialPhase.files.map((file, fileIndex) => (
@@ -223,7 +224,7 @@ export function Blueprint({
 				{phasicBlueprint && phasicBlueprint.pitfalls?.length > 0 && (
 					<div>
 						<h3 className="text-sm font-medium mb-2 text-text-50/70 uppercase tracking-wider">
-							Pitfalls
+							{t('Pitfalls')}
 						</h3>
 						<div className="prose prose-sm prose-invert">
 							<ul className="">

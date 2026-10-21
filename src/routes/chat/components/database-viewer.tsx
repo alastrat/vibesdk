@@ -20,6 +20,7 @@ import { cn } from '@cloudflare/kumo';
 import { useDatabaseViewer } from '../hooks/use-database-viewer';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { T, t, tn } from '@/lib/i18n';
 
 interface DatabaseViewerProps {
 	agentId: string;
@@ -75,13 +76,13 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 		<div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden bg-kumo-base text-text-primary">
 			<div className="flex shrink-0 items-center gap-2 px-3 py-2 border-b border-bg-2 bg-bg-4/40">
 				<DatabaseIcon className="size-4 text-text-50/70" />
-				<span className="text-xs font-mono text-text-50/70">App database</span>
-				<span className="text-xs text-text-50/40 ml-2">read-only</span>
+				<span className="text-xs font-mono text-text-50/70">{t('App database')}</span>
+				<span className="text-xs text-text-50/40 ml-2">{t('read-only')}</span>
 				<div className="ml-auto flex items-center gap-1">
 					<button
 						className="p-1 hover:bg-kumo-elevated rounded transition-colors text-text-50/70"
 						onClick={() => void refreshAll()}
-						title="Refresh"
+						title={t('Refresh')}
 					>
 						<RefreshCw
 							className={cn('size-4', (loadingTables || loadingQuery) && 'animate-spin')}
@@ -90,7 +91,7 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 					<button
 						className="p-1 hover:bg-kumo-elevated rounded transition-colors text-red-500/80 hover:text-red-500"
 						onClick={() => setConfirmingWipe(true)}
-						title="Reset database"
+						title={t('Reset database')}
 					>
 						<Trash2 className="size-4" />
 					</button>
@@ -99,36 +100,36 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 
 			{error && (
 				<div className="shrink-0 px-3 py-2 text-xs text-red-400 bg-red-500/10 border-b border-red-500/20">
-					{error}
+					{t(error)}
 				</div>
 			)}
 
 			<div className="flex-1 flex min-h-0 min-w-0 overflow-hidden">
 				<div className="w-56 shrink-0 border-r border-bg-2 overflow-y-auto bg-bg-4/20 flex flex-col min-h-0">
 					<div className="px-3 py-2 text-[10px] uppercase tracking-wider text-text-50/40 font-mono">
-						Tables
+						{t('Tables')}
 					</div>
 					{loadingTables && (
-						<div className="px-3 py-2 text-xs text-text-50/50">Loading…</div>
+						<div className="px-3 py-2 text-xs text-text-50/50">{t('Loading…')}</div>
 					)}
 					{!loadingTables && tables && tables.tables.length === 0 && (
 						<div className="px-3 py-4 text-xs text-text-50/50 leading-relaxed">
-							No tables yet.
+							{t('No tables yet.')}
 							<br />
-							Your app hasn't written anything to its database yet.
+							{t("Your app hasn't written anything to its database yet.")}
 						</div>
 					)}
-					{tables?.tables.map((t) => (
+					{tables?.tables.map((table) => (
 						<button
-							key={t.name}
-							onClick={() => selectTable(t.name)}
+							key={table.name}
+							onClick={() => selectTable(table.name)}
 							className={cn(
 								'flex items-center justify-between px-3 py-1.5 text-xs font-mono text-left hover:bg-kumo-elevated transition-colors min-w-0',
-								selectedTable === t.name && 'bg-kumo-elevated text-text-primary',
+								selectedTable === table.name && 'bg-kumo-elevated text-text-primary',
 							)}
 						>
-							<span className="truncate">{t.name}</span>
-							<span className="text-text-50/40 ml-2 shrink-0">{t.rowCount}</span>
+							<span className="truncate">{table.name}</span>
+							<span className="text-text-50/40 ml-2 shrink-0">{table.rowCount}</span>
 						</button>
 					))}
 				</div>
@@ -136,7 +137,7 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 				<div className="flex-1 flex flex-col min-h-0 min-w-0 overflow-hidden">
 					{!selectedTable && (
 						<div className="flex-1 flex items-center justify-center text-text-50/50 text-sm">
-							Select a table to view rows
+							{t('Select a table to view rows')}
 						</div>
 					)}
 					{selectedTable && (
@@ -144,10 +145,10 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 							<div className="relative flex-1 min-h-0 min-w-0">
 								<div className="absolute inset-0 overflow-auto">
 									{loadingQuery && !queryResult && (
-										<div className="p-4 text-xs text-text-50/50">Loading rows…</div>
+										<div className="p-4 text-xs text-text-50/50">{t('Loading rows…')}</div>
 									)}
 									{queryResult && queryResult.rows.length === 0 && (
-										<div className="p-4 text-xs text-text-50/50">No rows.</div>
+										<div className="p-4 text-xs text-text-50/50">{t('No rows.')}</div>
 									)}
 									{queryResult && queryResult.rows.length > 0 && (
 										<table className="w-max min-w-full text-xs font-mono border-collapse">
@@ -200,11 +201,11 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 							{queryResult && (
 								<div className="flex items-center gap-3 px-3 py-2 border-t border-bg-2 bg-bg-4/40 text-xs shrink-0 min-w-0">
 									<span className="text-text-50/60 shrink-0">
-										{queryResult.totalCount.toLocaleString()} rows
+										{tn('{count} row', '{count} rows', queryResult.totalCount)}
 									</span>
 									<span className="text-text-50/30">·</span>
 									<span className="text-text-50/60 shrink-0">
-										Page {page + 1} / {totalPages}
+										{t('Page {page} / {total}', { page: page + 1, total: totalPages })}
 									</span>
 									<button
 										className="p-1 rounded hover:bg-kumo-elevated text-text-50/60 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
@@ -221,7 +222,7 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 										<ChevronRight className="size-3.5" />
 									</button>
 									<div className="ml-auto flex items-center gap-1 shrink-0">
-										<span className="text-text-50/50">per page</span>
+										<span className="text-text-50/50">{t('per page')}</span>
 										<select
 											value={pageSize}
 											onChange={(e) => setPageSize(Number(e.target.value))}
@@ -257,16 +258,17 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 			<Dialog open={confirmingWipe} onOpenChange={setConfirmingWipe}>
 				<DialogContent className="max-w-md">
 					<DialogHeader>
-						<DialogTitle>Reset app database?</DialogTitle>
+						<DialogTitle>{t('Reset app database?')}</DialogTitle>
 					</DialogHeader>
 					<p className="text-sm text-text-50/80">
-						This drops every table in your app's Durable Object. The next request the app
-						handles will recreate whatever schema its <code>CREATE TABLE IF NOT EXISTS</code>{' '}
-						calls define. This cannot be undone.
+						<T
+							text="This drops every table in your app's Durable Object. The next request the app handles will recreate whatever schema its <code>CREATE TABLE IF NOT EXISTS</code> calls define. This cannot be undone."
+							components={{ code: (children) => <code>{children}</code> }}
+						/>
 					</p>
 					<div className="flex justify-end gap-2 mt-4">
 						<Button variant="outline" onClick={() => setConfirmingWipe(false)}>
-							Cancel
+							{t('Cancel')}
 						</Button>
 						<Button
 							variant="destructive"
@@ -275,7 +277,7 @@ export function DatabaseViewer({ agentId, enabled }: DatabaseViewerProps) {
 								setConfirmingWipe(false);
 							}}
 						>
-							Reset
+							{t('Reset')}
 						</Button>
 					</div>
 				</DialogContent>
@@ -294,6 +296,7 @@ function CellValue({
 	onExpand: (v: unknown) => void;
 }) {
 	if (value === null || value === undefined) {
+		// i18n-ignore: a SQL NULL, shown as the database writes it
 		return <span className="text-text-50/30 italic">null</span>;
 	}
 	if (typeof value === 'number' || typeof value === 'boolean') {
@@ -307,7 +310,7 @@ function CellValue({
 			<button
 				className="text-left text-text-primary/80 hover:text-text-primary underline-offset-2 hover:underline truncate max-w-64 inline-block align-bottom"
 				onClick={() => onExpand(value)}
-				title="Click to view full value"
+				title={t('Click to view full value')}
 			>
 				{value.slice(0, MAX_INLINE_CELL_LEN)}…
 			</button>
@@ -321,7 +324,7 @@ function CellValue({
 		<button
 			className="text-left text-text-primary/80 hover:text-text-primary underline-offset-2 hover:underline truncate max-w-64 inline-block align-bottom"
 			onClick={() => onExpand(value)}
-			title="Click to view full value"
+			title={t('Click to view full value')}
 		>
 			{repr.slice(0, MAX_INLINE_CELL_LEN)}…
 		</button>
@@ -330,6 +333,7 @@ function CellValue({
 
 function ExpandedCellView({ value }: { value: unknown }) {
 	if (value === null || value === undefined) {
+		// i18n-ignore: a SQL NULL, shown as the database writes it
 		return <pre className="text-xs">null</pre>;
 	}
 	if (typeof value === 'string') {

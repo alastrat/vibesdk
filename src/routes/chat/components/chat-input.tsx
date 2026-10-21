@@ -6,6 +6,7 @@ import type { ImageAttachment } from '@/api-types';
 import { type UsageSummary } from '@/hooks/use-limits';
 import { Button } from '@cloudflare/kumo';
 import { SquareIcon } from '@phosphor-icons/react';
+import { t } from '@/lib/i18n';
 
 interface ChatInputProps {
 	// Form state
@@ -79,8 +80,8 @@ export function ChatInput({
 	};
 
 	const placeholder = isDebugging
-		? 'Deep debugging in progress... Please abort to continue'
-		: 'Send a message';
+		? t('Deep debugging in progress... Please abort to continue')
+		: t('Send a message');
 
 	const stopButton =
 		isGenerating || isGeneratingBlueprint || isDebugging ? (
@@ -90,8 +91,8 @@ export function ChatInput({
 				shape="square"
 				size="sm"
 				onClick={handleStopGeneration}
-				aria-label="Stop generation"
-				title="Stop generation"
+				aria-label={t('Stop generation')}
+				title={t('Stop generation')}
 				icon={SquareIcon}
 			/>
 		) : undefined;

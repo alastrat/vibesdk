@@ -3,6 +3,8 @@ import { Zap } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@cloudflare/kumo';
+import { INTL_LOCALE } from '../../../../shared/i18n/locales';
+import { T, getLocale, t, tn } from '@/lib/i18n';
 
 export interface TerminalLog {
 	id: string;
@@ -134,10 +136,10 @@ export function Terminal({
 							)}>
 								<Zap className="size-8 mb-3 text-gray-300 dark:text-gray-600" />
 								<p className="text-sm font-medium mb-1">
-									Terminal Ready
+									{t('Terminal Ready')}
 								</p>
 								<p className="text-xs text-gray-400 dark:text-gray-500">
-									Start by running a command to see output here
+									{t('Start by running a command to see output here')}
 								</p>
 							</div>
 						) : (
@@ -152,7 +154,7 @@ export function Terminal({
 								>
 									<div className="flex-shrink-0 mt-0.5">
 										<span className="text-xs text-gray-400 dark:text-gray-500 font-mono">
-											{new Date(log.timestamp).toLocaleTimeString('en-US', {
+											{new Date(log.timestamp).toLocaleTimeString(INTL_LOCALE[getLocale()], {
 												hour12: false,
 												hour: '2-digit',
 												minute: '2-digit',
@@ -167,21 +169,6 @@ export function Terminal({
 										)}>
 											{log.type === 'command' && (
 												<span className="text-kumo-brand-primary font-semibold mr-1">$</span>
-											)}
-											{log.type === 'stderr' && (
-												<span className="text-red-500 dark:text-red-400 mr-1">❌</span>
-											)}
-											{log.type === 'error' && (
-												<span className="text-red-500 dark:text-red-400 mr-1">🚫</span>
-											)}
-											{log.type === 'warn' && (
-												<span className="text-amber-500 dark:text-yellow-400 mr-1">⚠️</span>
-											)}
-											{log.type === 'info' && (
-												<span className="text-blue-500 dark:text-blue-400 mr-1">ℹ️</span>
-											)}
-											{log.type === 'debug' && (
-												<span className="text-gray-500 dark:text-gray-400 mr-1">🐛</span>
 											)}
 											{log.content}
 										</div>
@@ -216,7 +203,7 @@ export function Terminal({
 						value={command}
 						onChange={(e) => setCommand(e.target.value)}
 						onKeyDown={handleKeyDown}
-						placeholder={isConnected ? "Type your command here..." : "Terminal not connected"}
+						placeholder={isConnected ? t('Type your command here...') : t('Terminal not connected')}
 						disabled={!isConnected}
 						className={cn(
 							"flex-1 bg-transparent border-none p-0 h-auto text-sm font-mono",
@@ -232,22 +219,25 @@ export function Terminal({
 						{isConnected ? (
 							<div className="flex items-center gap-4">
 								<span className="flex items-center gap-1">
-									Press
-									<kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">↑</kbd>
-									<kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">↓</kbd>
-									for history
+									<T
+										text="Press <up>↑</up> <down>↓</down> for history"
+										components={{
+											up: (children) => <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">{children}</kbd>,
+											down: (children) => <kbd className="px-1.5 py-0.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded text-xs font-mono">{children}</kbd>,
+										}}
+									/>
 								</span>
 							</div>
 						) : (
 							<div className="flex items-center gap-2">
 								<div className="size-1.5 rounded-full bg-red-500 animate-pulse" />
-								Waiting for connection...
+								{t('Waiting for connection...')}
 							</div>
 						)}
 					</div>
 					{commandHistory.length > 0 && (
 						<div className="text-xs text-gray-400 dark:text-gray-500">
-							{commandHistory.length} command{commandHistory.length !== 1 ? 's' : ''} in history
+							{tn('{count} command in history', '{count} commands in history', commandHistory.length)}
 						</div>
 					)}
 				</div>

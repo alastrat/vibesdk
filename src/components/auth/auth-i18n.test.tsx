@@ -4,28 +4,19 @@
  * back from a provider. `react-test-renderer` mounts them without a DOM, which the Workers test pool doesn't have.
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import TestRenderer from 'react-test-renderer';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { toast } from 'sonner';
 import { SIGNUPS_PAUSED_ERROR_CODE } from '@/api-types';
 import { useOAuthErrorToast } from '@/hooks/use-oauth-error-toast';
 import { emailError, newPasswordErrors, passwordError } from '@/lib/auth-validation';
 import { applyAccountLocale, msg } from '@/lib/i18n';
+import { mountElement, silenceTestRendererDeprecation, unmountAll } from '@/test-support/mounted';
 import { AuthForm, authCopy, type AuthMode } from './AuthForm';
 import { AuthPhoto } from './AuthPhoto';
 import { PasswordField } from './PasswordField';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
-
-vi.hoisted(() => {
-	// React's `await act(...)` queues its work on a MessageChannel, which Workers don't have.
-	class Channel {
-		port1: { onmessage: ((event: unknown) => void) | null } = { onmessage: null };
-		port2 = { postMessage: () => void setTimeout(() => this.port1.onmessage?.({}), 0) };
-	}
-	Object.assign(globalThis, { MessageChannel: Channel, IS_REACT_ACT_ENVIRONMENT: true });
-});
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn() } }));
 
@@ -43,15 +34,10 @@ vi.mock('@/contexts/auth-context', () => ({
 	}),
 }));
 
-beforeAll(() => {
-	// The test renderer announces its own deprecation on every mount.
-	const error = console.error.bind(console);
-	vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
-		if (!String(args[0]).includes('react-test-renderer is deprecated')) error(...args);
-	});
-});
+beforeAll(silenceTestRendererDeprecation);
 
 afterEach(async () => {
+	await unmountAll();
 	vi.mocked(toast.error).mockClear();
 	await applyAccountLocale('en');
 });
@@ -95,7 +81,7 @@ describe('the sign-up form', () => {
 		await applyAccountLocale('es');
 		const html = form('forgot');
 		expect(html).toContain('Enviar enlace de restablecimiento');
-		expect(html).toContain('Volver a iniciar sesión');
+		expect(html).toContain('Volver al inicio de sesión');
 		expect(html).not.toContain('Continuar con Google');
 	});
 });
@@ -103,14 +89,9 @@ describe('the sign-up form', () => {
 describe('the terms agreement', () => {
 	/** The text, the links with their address, and where they open. */
 	async function agreement() {
-		let renderer!: TestRenderer.ReactTestRenderer;
-		await act(async () => {
-			renderer = TestRenderer.create(createElement(TermsAgreementLabel));
-		});
+		const renderer = await mountElement(createElement(TermsAgreementLabel));
 		const links = renderer.root.findAllByType('a').map((link) => ({ href: link.props.href, target: link.props.target, rel: link.props.rel, text: [link.props.children].flat().join('') }));
-		const text = JSON.stringify(renderer.toJSON());
-		await act(async () => renderer.unmount());
-		return { links, text };
+		return { links, text: JSON.stringify(renderer.toJSON()) };
 	}
 
 	it('says nothing about a language in English', async () => {
@@ -227,11 +208,7 @@ describe('the error a provider sign-in comes back with', () => {
 
 	async function arriveWith(code: string): Promise<string | undefined> {
 		const router = createMemoryRouter([{ path: '/', Component: Probe }], { initialEntries: [`/?error=${code}`] });
-		let renderer!: TestRenderer.ReactTestRenderer;
-		await act(async () => {
-			renderer = TestRenderer.create(createElement(RouterProvider, { router }));
-		});
-		await act(async () => renderer.unmount());
+		await mountElement(createElement(RouterProvider, { router }));
 		const shown = vi.mocked(toast.error).mock.calls[0]?.[0];
 		return typeof shown === 'string' ? shown : undefined;
 	}

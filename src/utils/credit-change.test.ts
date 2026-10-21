@@ -19,14 +19,14 @@ describe('describeCreditChange', () => {
 
 	it('describes it in Spanish', async () => {
 		await applyAccountLocale('es');
-		expect(describeCreditChange(16, 136)).toBe('aproximadamente 136 créditos por paso en lugar de aproximadamente 16 (aproximadamente 8.5 veces más)');
-		expect(describeCreditChange(136, 16)).toBe('aproximadamente 16 créditos por paso en lugar de aproximadamente 136 (aproximadamente 88% más barato)');
-		expect(describeCreditChange(136, 136)).toBe('aproximadamente 136 créditos por paso');
+		expect(describeCreditChange(16, 136)).toBe('alrededor de 136 créditos por paso, en lugar de 16 (unas 8.5 veces el consumo actual)');
+		expect(describeCreditChange(136, 16)).toBe('alrededor de 16 créditos por paso, en lugar de 136 (aproximadamente 88% más barato)');
+		expect(describeCreditChange(136, 136)).toBe('alrededor de 136 créditos por paso');
 	});
 
 	it('describes it in Portuguese, with its plural rule', async () => {
 		await applyAccountLocale('pt-BR');
-		expect(describeCreditChange(16, 136)).toBe('cerca de 136 créditos por etapa em vez de cerca de 16 (cerca de 8,5 vezes mais)');
+		expect(describeCreditChange(16, 136)).toBe('cerca de 136 créditos por etapa, em vez de 16 (cerca de 8,5 vezes o consumo atual)');
 		expect(describeCreditChange(1, 1)).toBe('cerca de 1 crédito por etapa');
 	});
 });

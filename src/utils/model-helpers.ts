@@ -1,3 +1,5 @@
+import { t } from '@/lib/i18n';
+
 export interface ProviderInfo {
 	name: string;
 	color: string;
@@ -8,7 +10,7 @@ export interface ProviderInfo {
  * e.g., "openai/gpt-4" -> "gpt-4"
  */
 export function getModelDisplayName(modelValue?: string): string {
-	if (!modelValue) return 'Default';
+	if (!modelValue) return t('Default');
 	return modelValue.split('/').pop() || modelValue;
 }
 
@@ -16,7 +18,7 @@ export function getModelDisplayName(modelValue?: string): string {
  * Get provider badge info (name and color classes) from model value
  */
 export function getProviderInfo(modelValue?: string): ProviderInfo {
-	if (!modelValue) return { name: 'Default', color: 'bg-kumo-base text-kumo-subtle' };
+	if (!modelValue) return { name: t('Default'), color: 'bg-kumo-base text-kumo-subtle' };
 
 	// Check specific prefixes first to avoid incorrect matches
 	if (modelValue.includes('cerebras/')) {
@@ -35,7 +37,23 @@ export function getProviderInfo(modelValue?: string): ProviderInfo {
 		return { name: 'Google', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400' };
 	}
 
-	return { name: 'Custom', color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400' };
+	return { name: t('Custom'), color: 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400' };
+}
+
+/** How much a model thinks before it answers, as a label in the active language; an effort this app doesn't know is shown as sent. */
+export function reasoningEffortLabel(effort: string): string {
+	switch (effort) {
+		case 'minimal':
+			return t('Minimal');
+		case 'low':
+			return t('Low');
+		case 'medium':
+			return t('Medium');
+		case 'high':
+			return t('High');
+		default:
+			return effort.charAt(0).toUpperCase() + effort.slice(1);
+	}
 }
 
 /**

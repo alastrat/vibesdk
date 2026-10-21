@@ -4,7 +4,7 @@ import { buttonVariants } from '@cloudflare/kumo';
 import { InfoIcon, WarningCircleIcon, XIcon } from '@phosphor-icons/react';
 import { useBilling } from '@/hooks/use-billing';
 import { cn } from '@/lib/utils';
-import { t } from '@/lib/i18n';
+import { t, useI18n } from '@/lib/i18n';
 import { bannerKeyFor, billingBannerFor, type BillingBanner as Notice } from '@/routes/settings/billing-view';
 import { PlanButton } from './PlanButton';
 
@@ -30,9 +30,10 @@ function rememberDismissed(key: string): void {
 }
 
 function NoticeAction({ action }: { action: Notice['action'] }) {
+	const i18n = useI18n();
 	switch (action.kind) {
 		case 'checkout':
-			return <PlanButton plan={action.plan} variant="blue" className="px-3 py-1 text-xs" />;
+			return <PlanButton plan={action.plan} variant="blue" className="px-3 py-1 text-xs" i18n={i18n} />;
 		case 'link':
 			return (
 				<Link to={action.to} className={cn(buttonVariants({ variant: 'secondary', size: 'sm' }))}>

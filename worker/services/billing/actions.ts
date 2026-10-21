@@ -29,6 +29,7 @@ import {
 import { isCurrentTermsVersion, TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
 import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
+import type { Translator } from '../../../shared/i18n/translate';
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { stripeFromEnv } from '../payments/config';
@@ -107,6 +108,8 @@ export interface BillingActionDeps {
 	nowMs: number;
 	/** The billing-checkout pause for this seller: it refuses a plan checkout, a plan change and extra credits. */
 	checkoutPaused(userId: string): Promise<boolean>;
+	/** The language the checkout's wording, which the seller agrees to, is written in. */
+	i18n: Translator;
 }
 
 type Failure = Extract<BillingActionResult<never>, { message: string }>;
@@ -169,9 +172,9 @@ function checkoutReturnUrl(deps: BillingActionDeps): string {
 }
 
 /** The wording of a plan session, or the refusal for a promotion whose terms can't be stated exactly. */
-function termsOf(plan: PaidPlanId, session: StripeCheckoutSession): BillingActionResult<CheckoutTermsView> {
+function termsOf(deps: BillingActionDeps, plan: PaidPlanId, session: StripeCheckoutSession): BillingActionResult<CheckoutTermsView> {
 	try {
-		return ok(termsViewOf(plan, session));
+		return ok(termsViewOf(plan, session, deps.i18n));
 	} catch (error) {
 		if (!(error instanceof UnreadablePromotionError)) throw error;
 		logger.warn('A checkout was refused because its promotion can not be stated exactly', { sessionId: session.id, couponId: error.couponId, message: error.message });
@@ -240,8 +243,8 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 				replaces,
 			}),
 		);
-		const terms = termsOf(plan, session);
-		return terms.ok ? clientStart(session, publishableKey, planOrder(plan), terms.value) : terms;
+		const terms = termsOf(deps, plan, session);
+		return terms.ok ? clientStart(session, publishableKey, planOrder(plan, deps.i18n), terms.value) : terms;
 	});
 }
 
@@ -401,7 +404,7 @@ async function openPlanCheckout(deps: BillingActionDeps, userId: string, session
 /** The consent sentence, button and first payment of the seller's open subscription checkout, as Stripe has it now. */
 export async function checkoutTerms(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<CheckoutTermsView>> {
 	const open = await openPlanCheckout(deps, userId, sessionId);
-	return open.ok ? termsOf(open.value.plan, open.value.session) : open;
+	return open.ok ? termsOf(deps, open.value.plan, open.value.session) : open;
 }
 
 function consentRequestOf(body: unknown): CheckoutConsentRequest | null {
@@ -422,7 +425,7 @@ export async function recordCheckoutConsent(deps: BillingActionDeps, userId: str
 	const open = await openPlanCheckout(deps, userId, request.sessionId);
 	if (!open.ok) return open;
 	const { session, plan } = open.value;
-	const terms = termsOf(plan, session);
+	const terms = termsOf(deps, plan, session);
 	if (!terms.ok) return terms;
 	if (request.consentText !== terms.value.consentText) return fail(409, BILLING_MESSAGES.priceChanged);
 	await deps.consents.recordConsent({ sessionId: session.id, userId, plan, termsVersion: TERMS_VERSION, consentText: terms.value.consentText, now: new Date(deps.nowMs) });
@@ -648,7 +651,7 @@ export async function invoicePdf(deps: BillingActionDeps, userId: string, invoic
 	});
 }
 
-export function billingActionDepsFromEnv(env: Env, request: Request): BillingActionDeps {
+export function billingActionDepsFromEnv(env: Env, request: Request, i18n: Translator): BillingActionDeps {
 	const billing = new BillingService(env);
 	return {
 		stripe: stripeFromEnv(env),
@@ -661,5 +664,6 @@ export function billingActionDepsFromEnv(env: Env, request: Request): BillingAct
 		baseUrl: appBaseUrl(env, request),
 		nowMs: Date.now(),
 		checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId),
+		i18n,
 	};
 }

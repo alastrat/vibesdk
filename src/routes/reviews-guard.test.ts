@@ -28,7 +28,7 @@ describe('reviews and paid listings', () => {
 
 	it('lists the owner paid listings on the profile', () => {
 		expect(source('/src/routes/profile.tsx')).toContain('<PaidListingsList />');
-		expect(source('/src/routes/profile.tsx')).toContain("{ value: 'paid', label: 'Paid listings' }");
+		expect(source('/src/routes/profile.tsx')).toContain("{ value: 'paid', label: msg('Paid listings') }");
 		expect(source('/src/components/publishing/PaidListingsList.tsx')).toContain('paidListingStatusView(');
 	});
 });

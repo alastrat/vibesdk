@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ENGLISH } from '../../../shared/i18n/translate';
 import { LEGAL_CONTACT, LEGAL_ENTITY, TERMS_VERSION, legalAddressLine } from '../../../shared/types/legal';
 import { EXTRA_CREDITS_DISCLOSURE, renewalDisclosure } from '../../../shared/types/billing';
 import { PLATFORM_FEE_LABEL } from '../../../shared/types/templates';
@@ -139,7 +140,7 @@ describe('legal documents', () => {
 		expect(EXTRA_CREDITS_DISCLOSURE.startsWith('Extra credits are used after your monthly credits and expire 12 months after purchase')).toBe(true);
 		expect(terms).toContain(EXTRA_CREDITS_DISCLOSURE.replace(/\.$/, ''));
 		for (const promotion of [null, { duration: 'once', durationInMonths: null, discountedCents: 2_450 }, { duration: 'forever', durationInMonths: null, discountedCents: 2_450 }] as const) {
-			expect(renewalDisclosure('pro', promotion)).toContain('until you cancel');
+			expect(renewalDisclosure('pro', promotion, ENGLISH)).toContain('until you cancel');
 		}
 	});
 

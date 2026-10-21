@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { ConfigCard } from './config-card';
 import { ConfigModal } from './config-modal';
 import { categorizeAgent } from '@/utils/model-helpers';
+import { t, tn } from '@/lib/i18n';
 import { WORKFLOW_TABS } from '@/lib/constants/workflow-tabs';
 import type {
   ModelConfig,
@@ -84,7 +85,7 @@ export function ModelConfigTabs({
     );
     
     if (customizedConfigs.length === 0) {
-      toast.info('No customized configurations to test');
+      toast.info(t('No customized configurations to test'));
       return;
     }
 
@@ -100,14 +101,14 @@ export function ModelConfigTabs({
       }
     }
 
-    toast.success(`Tested ${customizedConfigs.length} configs: ${successCount} passed, ${errorCount} failed`);
+    toast.success(t('Tested {total} configs: {passed} passed, {failed} failed', { total: customizedConfigs.length, passed: successCount, failed: errorCount }));
   };
 
   if (loadingConfigs) {
     return (
       <div className="flex items-center gap-3 p-8">
         <Settings className="h-5 w-5 animate-spin text-text-tertiary" />
-        <span className="text-sm text-text-tertiary">Loading model configurations...</span>
+        <span className="text-sm text-text-tertiary">{t('Loading model configurations...')}</span>
       </div>
     );
   }
@@ -117,9 +118,9 @@ export function ModelConfigTabs({
       {/* Header with controls */}
       <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
         <div className="flex-1">
-          <h4 className="font-medium">Model Configuration Overrides</h4>
+          <h4 className="font-medium">{t('Model Configuration Overrides')}</h4>
           <p className="text-sm text-text-tertiary">
-            Customize AI model settings for different operations. Organized by workflow stage.
+            {t('Customize AI model settings for different operations. Organized by workflow stage.')}
           </p>
         </div>
         
@@ -128,7 +129,7 @@ export function ModelConfigTabs({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-text-tertiary" />
             <Input
-              placeholder="Search configurations..."
+              placeholder={t('Search configurations...')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9 w-full sm:w-64 dark:bg-bg-1 bg-bg-4"
@@ -144,7 +145,7 @@ export function ModelConfigTabs({
               className="gap-2"
             >
               <Play className="h-4 w-4" />
-              Test All
+              {t('Test All')}
             </Button>
             
             <Button
@@ -155,7 +156,7 @@ export function ModelConfigTabs({
               className="gap-2"
             >
               <RotateCcw className="h-4 w-4" />
-              {savingConfigs ? 'Resetting...' : 'Reset All'}
+              {savingConfigs ? t('Resetting...') : t('Reset All')}
             </Button>
           </div>
         </div>
@@ -175,7 +176,7 @@ export function ModelConfigTabs({
               label: (
                 <span className="inline-flex items-center gap-2">
                   <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
+                  <span className="hidden sm:inline">{t(tab.label)}</span>
                   {customizedCount > 0 && (
                     <Badge variant="secondary" className="text-xs h-5 w-5 rounded-full p-0 flex items-center justify-center">
                       {customizedCount}
@@ -197,10 +198,10 @@ export function ModelConfigTabs({
               <div className="space-y-4">
                 {/* Tab description */}
                 <div className="text-sm text-text-tertiary">
-                  {tab.description} • {agents.length} agent{agents.length !== 1 ? 's' : ''}
+                  {t(tab.description)} • {tn('{count} agent', '{count} agents', agents.length)}
                   {getCustomizedCountForTab(tab.id) > 0 && (
                     <span className="ml-2 text-text-primary font-medium">
-                      ({getCustomizedCountForTab(tab.id)} customized)
+                      {tn('({count} customized)', '({count} customized)', getCustomizedCountForTab(tab.id))}
                     </span>
                   )}
                 </div>
@@ -208,7 +209,7 @@ export function ModelConfigTabs({
                 {/* Agent config cards */}
                 {agents.length === 0 ? (
                   <div className="text-center py-8 text-text-tertiary">
-                    {searchTerm ? 'No configurations match your search.' : 'No configurations in this category.'}
+                    {searchTerm ? t('No configurations match your search.') : t('No configurations in this category.')}
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 gap-8 auto-rows-fr">

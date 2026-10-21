@@ -5,6 +5,7 @@
 
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertBillingCustomer, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { ENGLISH } from '../../../shared/i18n/translate';
 import type { StripeCheckoutSession, StripeSubscription } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
 
@@ -125,7 +126,7 @@ function completed(eventId: string, session: StripeCheckoutSession): StripeEvent
 const subscriptionRows = (userId: string) => db.prepare('SELECT stripe_subscription_id AS id, status, plan FROM subscriptions WHERE user_id = ?').bind(userId).all();
 const purchaseCount = (userId: string) => db.prepare('SELECT COUNT(*) AS n FROM credit_purchases WHERE user_id = ?').bind(userId).first('n');
 const eventIds = (objectId: string) => db.prepare('SELECT stripe_event_id AS id, result FROM billing_events WHERE object_id = ? ORDER BY stripe_event_id').bind(objectId).all();
-const status = (userId: string, sessionId: string) => checkoutStatus(billingActionDepsFromEnv(env(), STATUS), userId, sessionId);
+const status = (userId: string, sessionId: string) => checkoutStatus(billingActionDepsFromEnv(env(), STATUS, ENGLISH), userId, sessionId);
 
 describe('the status of a paid checkout', () => {
 	it('a paid plan session records the subscription once', async () => {

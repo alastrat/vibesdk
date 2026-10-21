@@ -1,13 +1,14 @@
 import { Badge, Button, Empty, LayerCard, Loader } from '@cloudflare/kumo';
 import { DownloadSimpleIcon, ReceiptIcon } from '@phosphor-icons/react';
 import { useBillingHistory, useInvoiceDownload } from '@/hooks/use-billing';
+import { t } from '@/lib/i18n';
 import { HISTORY_EMPTY_MESSAGE, historyRowsFor, type HistoryRow } from './history-rows';
 import { SectionTitle } from './SectionTitle';
 
 function DownloadButton({ id, busy, disabled, onDownload }: { id: string; busy: boolean; disabled: boolean; onDownload: (id: string) => void }) {
 	return (
 		<Button variant="secondary" size="sm" loading={busy} disabled={disabled && !busy} icon={<DownloadSimpleIcon />} onClick={() => onDownload(id)}>
-			Download
+			{t('Download')}
 		</Button>
 	);
 }
@@ -36,17 +37,17 @@ export function BillingHistory() {
 
 	return (
 		<LayerCard id="history" className="scroll-mt-4">
-			<SectionTitle icon={<ReceiptIcon className="size-4" aria-hidden />}>Billing history</SectionTitle>
+			<SectionTitle icon={<ReceiptIcon className="size-4" aria-hidden />}>{t('Billing history')}</SectionTitle>
 			<LayerCard.Primary>
 				{rows === null ? (
 					history.isError ? (
 						<Empty
 							size="sm"
-							title="Couldn't load your invoices"
-							description={history.error.message}
+							title={t("Couldn't load your invoices")}
+							description={t(history.error.message)}
 							contents={
 								<Button variant="secondary" size="sm" onClick={() => void history.refetch()}>
-									Try again
+									{t('Try again')}
 								</Button>
 							}
 						/>
@@ -56,7 +57,7 @@ export function BillingHistory() {
 						</div>
 					)
 				) : rows.length === 0 ? (
-					<p className="text-sm text-kumo-subtle">{HISTORY_EMPTY_MESSAGE}</p>
+					<p className="text-sm text-kumo-subtle">{t(HISTORY_EMPTY_MESSAGE)}</p>
 				) : (
 					<ul className="divide-y divide-kumo-line">
 						{rows.map((row) => (

@@ -7,7 +7,8 @@ import { useLimitsContext } from '@/contexts/limits-context';
 import type { LimitConfig, UsageSummary } from '@/hooks/use-limits';
 import { formatCredits } from '@/api-types';
 import { t, tn, useI18n } from '@/lib/i18n';
-import { formatDollars, formatNumber } from '../../shared/i18n/format';
+import { formatDollars } from '../../shared/i18n/format';
+import { formatLimitAmount } from '@/lib/limit-amount';
 import { Loader2, LucideGlobeLock } from 'lucide-react';
 
 interface UsageLimitsBadgeProps {
@@ -124,20 +125,8 @@ export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 			const remaining = Math.max(0, max - current);
 			isExhausted = !limitCheck.withinLimits;
 
-			// Format value
-			const formatValue = (value: number) => {
-				switch (limit.type) {
-					case 'tokens':
-						return `${(value / 1000).toFixed(0)}K`;
-					case 'cost':
-						return formatDollars(value, locale, 'always');
-					default:
-						return formatNumber(Math.round(value * 10) / 10, locale);
-				}
-			};
-
 			// A plan's credits aren't all free, so billing drops the word.
-			const amount = billing ? formatCredits(remaining, locale) : formatValue(remaining);
+			const amount = billing ? formatCredits(remaining, locale) : formatLimitAmount(limit.type, remaining, locale);
 			usageText = billing ? billingUsageText(limit.type, remaining, amount) : freeUsageText(limit.type, remaining, amount);
 			mobileUsageText = mobileUsageLabel(limit.type, remaining, amount);
 			showUsage = true;

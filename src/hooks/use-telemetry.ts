@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/auth-context';
 import { applyAnalyticsChoice } from '@/lib/analytics/posthog-browser';
 import { apiClient } from '@/lib/api-client';
+import { msg, t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 
@@ -10,7 +11,7 @@ import { unwrap } from '@/lib/unwrap-response';
 export function useTelemetryConfig() {
 	return useQuery({
 		queryKey: queryKeys.platform.telemetry(),
-		queryFn: () => unwrap(apiClient.getTelemetryConfig(), "Couldn't load the analytics config"),
+		queryFn: () => unwrap(apiClient.getTelemetryConfig(), msg("Couldn't load the analytics config")),
 		staleTime: 10 * 60_000,
 		retry: false,
 	});
@@ -20,7 +21,7 @@ export function useAnalyticsPreference() {
 	const { user, isAuthenticated } = useAuth();
 	return useQuery({
 		queryKey: queryKeys.account.analytics(user?.id),
-		queryFn: () => unwrap(apiClient.getAnalyticsPreference(), "Couldn't load your analytics setting"),
+		queryFn: () => unwrap(apiClient.getAnalyticsPreference(), msg("Couldn't load your analytics setting")),
 		enabled: isAuthenticated,
 		retry: false,
 	});
@@ -30,19 +31,20 @@ export function useSetAnalyticsPreference() {
 	const queryClient = useQueryClient();
 	const { user, refreshUser } = useAuth();
 	return useMutation({
-		mutationFn: (optedOut: boolean) => unwrap(apiClient.setAnalyticsPreference(optedOut), "Couldn't save your analytics setting"),
+		mutationFn: (optedOut: boolean) => unwrap(apiClient.setAnalyticsPreference(optedOut), msg("Couldn't save your analytics setting")),
 		onSuccess: async (data) => {
 			queryClient.setQueryData(queryKeys.account.analytics(user?.id), data);
 			applyAnalyticsChoice(data.optedOut);
 			await refreshUser();
 		},
-		onError: (error: Error) => toast.error(error.message),
+		onError: (error: Error) => toast.error(t(error.message)),
 	});
 }
 
 export function useAdminFlags() {
 	return useQuery({
 		queryKey: queryKeys.account.adminFlags(),
+		// i18n-ignore: the admin flags page is for staff and stays in English
 		queryFn: () => unwrap(apiClient.getAdminFlags(), "Couldn't load flags"),
 		retry: false,
 	});
