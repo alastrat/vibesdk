@@ -8,6 +8,7 @@ import { Button, Dialog } from '@cloudflare/kumo';
 import { XIcon } from '@phosphor-icons/react';
 import { AuthForm, authCopy, type OAuthProvider, type SignInView } from './AuthForm';
 import { AuthPhoto } from './AuthPhoto';
+import { LanguagePicker } from './LanguagePicker';
 
 interface LoginModalProps {
 	isOpen: boolean;
@@ -62,6 +63,10 @@ export function LoginModal({
 							)}
 						/>
 					)}
+
+					<div>
+						<LanguagePicker />
+					</div>
 
 					{/* Centred, so the shorter reset view sits in the middle of the window */}
 					<div className="my-auto">

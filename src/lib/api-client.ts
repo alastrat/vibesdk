@@ -59,6 +59,8 @@ import type{
 	CapabilitiesData,
 	AdminFlagsData,
 	AnalyticsPreferenceData,
+	Locale,
+	LocalePreferenceData,
 	TelemetryConfigData,
 	VaultConfigResponse,
 	VaultStatusResponse,
@@ -563,6 +565,11 @@ class ApiClient {
 	/** Quiet: the settings card shows its own error. */
 	async setAnalyticsPreference(optedOut: boolean): Promise<ApiResponse<AnalyticsPreferenceData>> {
 		return this.request<AnalyticsPreferenceData>('/api/user/analytics', { method: 'PUT', body: { optedOut } }, true);
+	}
+
+	/** Quiet: the language card and the picker report their own errors. */
+	async setLocale(locale: Locale): Promise<ApiResponse<LocalePreferenceData>> {
+		return this.request<LocalePreferenceData>('/api/user/locale', { method: 'PUT', body: { locale } }, true);
 	}
 
 	/** Every flag's value for the signed-in admin; quiet because non-admins get 403. */
@@ -1723,6 +1730,8 @@ class ApiClient {
 		password: string;
 		name?: string;
 		acceptedTermsVersion: string;
+		/** The language the visitor was using, saved on the new account. */
+		locale?: Locale;
 	}): Promise<ApiResponse<RegisterResponseData>> {
 		return this.request<RegisterResponseData>('/api/auth/register', {
 			method: 'POST',

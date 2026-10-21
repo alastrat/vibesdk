@@ -148,13 +148,13 @@ These set the voice. Translate new copy to match them.
 
 ### Statuses
 
-Listed in the masculine singular, because the things they label most often (pedido/pedido, pago/pagamento, reembolso/reembolso, borrador/rascunho) are masculine. Make them agree with the noun they qualify: "tienda publicada", "factura pagada", "domínio ativo", "alterações aprovadas".
+Listed in the masculine singular, because the things they label most often (pedido/pedido, pago/pagamento, reembolso/reembolso, borrador/rascunho) are masculine. Make them agree with the noun they qualify: "tienda publicada", "factura pagada", "domínio ativo", "alterações aprovadas". Portuguese "com falha" never changes ("pagamento com falha", "fatura com falha"): it is an adjective phrase, not a verb, so a status never reads as "falhou" ("it failed").
 
 | English | Español | Português |
 | --- | --- | --- |
 | pending | pendiente | pendente |
 | paid | pagado | pago |
-| failed | fallido | falhou |
+| failed | fallido | com falha |
 | shipped | enviado | enviado |
 | delivered | entregado | entregue |
 | refunded | reembolsado | reembolsado |
@@ -200,7 +200,7 @@ Listed in the masculine singular, because the things they label most often (pedi
 | submit (a form, or something for review) | enviar | enviar |
 | yes | sí | sim |
 | no | no | não |
-| done (the button that closes a dialog) | listo | concluir |
+| done (the button that closes a dialog) | listo (an exception, see below) | concluir |
 | share | compartir | compartilhar |
 | connect | conectar | conectar |
 | set up | configurar | configurar |
@@ -221,4 +221,5 @@ Listed in the masculine singular, because the things they label most often (pedi
 - **Checkout.** Both say "Finalizar compra" for the step where a shopper pays. It is never "pago" or "pagamento", which are the money itself (and "Pagos"/"Pagamentos" is the seller's payments setup page). In running text, write around it: "al finalizar la compra", "ao finalizar a compra".
 - **Upload and send.** Portuguese upload is "fazer upload", so "enviar" means send and submit only. "carregar" isn't used for upload because it is already "carregando" (loading). Spanish keeps "subir" for upload and "enviar" for send and submit. "Shipped" is "enviado" in both languages, matching "envío" and "envio".
 - **Rejected and declined.** Portuguese tells them apart: "rejeitado" for a review, "recusado" for a card. Spanish uses "rechazado" for both.
+- **Done.** Spanish buttons take the infinitive ("Guardar", "Cancelar"), with one exception: the button that closes a dialog or finishes a step is "Listo", the word Spanish interfaces use, not "Terminar" or "Finalizar". Portuguese keeps the rule with "Concluir".
 - **Shopper.** Always "comprador", never "cliente": Estori's own customers are the sellers, and "cliente" would blur the two.

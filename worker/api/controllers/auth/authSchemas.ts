@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { commonSchemas } from '../../../utils/inputValidator';
 import { RESET_LINK_INVALID_MESSAGE } from '../../../services/auth/one-time-token';
+import { LOCALES } from '../../../../shared/i18n/locales';
 
 /**
  * Login request schema
@@ -24,7 +25,9 @@ export const registerSchema = z.object({
   email: commonSchemas.email,
   password: commonSchemas.password,
   name: z.string().min(2, 'Name must be at least 2 characters').max(100).optional(),
-  acceptedTermsVersion: z.string().max(32).optional()
+  acceptedTermsVersion: z.string().max(32).optional(),
+  // The language the visitor was using. One we don't speak is dropped: it must never refuse a sign-up.
+  locale: z.enum(LOCALES).optional().catch(undefined)
 });
 
 export type RegisterRequest = z.infer<typeof registerSchema>;

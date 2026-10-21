@@ -45,6 +45,7 @@ import { useBilling } from '@/hooks/use-billing';
 import { CloudflareAccountSelector } from '@/components/cloudflare-account-selector';
 import { ConnectedAccounts } from '@/components/connected-accounts';
 import { AnalyticsPreferenceCard } from '@/components/analytics/AnalyticsPreferenceCard';
+import { LanguageCard } from '@/components/settings/LanguageCard';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
 
@@ -352,6 +353,8 @@ export default function SettingsPage() {
 					</LayerCard>
 
 					<AnalyticsPreferenceCard />
+
+					<LanguageCard />
 
 					{billing.data?.enabled && (
 						<LayerCard id="billing">

@@ -49,6 +49,7 @@ export type {
 export type {
   UserAppsData,
   ProfileUpdateData,
+  LocalePreferenceData,
 } from 'worker/api/controllers/user/types';
 
 // Stats API Types
@@ -587,3 +588,5 @@ export type {
 	TelemetryConfigData,
 } from '../shared/types/telemetry.js';
 export { GPC_ANALYTICS_MESSAGE } from '../shared/types/telemetry.js';
+export type { Locale } from '../shared/i18n/locales.js';
+export { DEFAULT_LOCALE, LOCALES, LOCALE_NAMES, isLocale, negotiateLocale } from '../shared/i18n/locales.js';

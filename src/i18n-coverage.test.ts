@@ -11,7 +11,7 @@ import { findUntranslatedText } from '../shared/i18n/extract';
  *  - a leading `!` leaves out what the entry matches, from the entries above it: `'!src/routes/chat/debug-panel.tsx'`.
  * Text that is never translated, such as a brand name, is marked with an `i18n-ignore` comment (see `extract.ts`).
  */
-const COVERED: string[] = [];
+const COVERED: string[] = ['src/lib/i18n/', 'src/components/settings/', 'src/components/auth/LanguagePicker.tsx'];
 
 /** Every source file that can be covered, loaded only when it is. Tests and declaration files are never covered. */
 const loaders = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '/shared/**/*.{ts,tsx}', '/worker/**/*.{ts,tsx}', '!/**/*.{test,spec,d}.{ts,tsx}'], {

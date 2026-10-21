@@ -1,1 +1,7 @@
-{}
+{
+	"Choose your language": "Escolha seu idioma",
+	"Couldn't save your language. Try again.": "Não foi possível salvar seu idioma. Tente novamente.",
+	"Language": "Idioma",
+	"That language isn't available.": "Esse idioma não está disponível.",
+	"{brand} uses this language in its menus and messages, and in the emails we send you.": "O {brand} usa este idioma em seus menus e mensagens, e nos e-mails que enviamos para você."
+}

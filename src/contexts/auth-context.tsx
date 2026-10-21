@@ -19,7 +19,9 @@ import {
 } from '@tanstack/react-query';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useSentryUser } from '@/hooks/useSentryUser';
+import { applyAccountLocale, bindAccountSaver, getLocale } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
+import { unwrap } from '@/lib/unwrap-response';
 import type {
 	AuthProvidersResponseData,
 	AuthSession,
@@ -255,6 +257,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	// Sync user context with Sentry for error tracking
 	useSentryUser(user);
 
+	// The app follows the language the account saved, once the profile loads and whenever it changes.
+	const accountLocale = user?.locale ?? null;
+	useEffect(() => {
+		if (accountLocale) {
+			applyAccountLocale(accountLocale).catch((localeError: unknown) => {
+				console.warn('Failed to load the saved language:', localeError);
+			});
+		}
+	}, [accountLocale]);
+
+	// While someone is signed in, a language they choose is saved on their account and in the cached session.
+	const signedIn = user !== null;
+	useEffect(() => {
+		if (!signedIn) return;
+		return bindAccountSaver(async (locale) => {
+			await unwrap(apiClient.setLocale(locale), 'Language not saved');
+			queryClient.setQueryData<CachedAuthSession | null>(
+				queryKeys.auth.session(),
+				(cached) => cached && { ...cached, user: { ...cached.user, locale } },
+			);
+		});
+	}, [signedIn, queryClient]);
+
 	const applyAuthenticatedSession = useCallback(
 		async (data: LoginResponseData) => {
 			// Cancel any in-flight validation so a late response cannot clobber
@@ -343,7 +368,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			name?: string;
 			acceptedTermsVersion: string;
 		}) => {
-			const response = await apiClient.register(data);
+			const response = await apiClient.register({ ...data, locale: getLocale() });
 			if (!response.success || !response.data) {
 				throw new Error(
 					response.error?.message || 'Registration failed',

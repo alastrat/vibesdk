@@ -27,6 +27,15 @@
 				} catch (_) {}
 			})();
 		</script>
+		<script>
+			(function () {
+				try {
+					var stored = localStorage.getItem('estori:locale');
+					var pattern = /^[a-z]{2}(-[A-Z]{2})?$/;
+					if (stored && pattern.test(stored)) document.documentElement.lang = stored;
+				} catch (_) {}
+			})();
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>

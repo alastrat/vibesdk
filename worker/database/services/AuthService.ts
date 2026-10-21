@@ -4,6 +4,7 @@
  */
 
 import * as schema from '../schema';
+import { SAVED_LOCALE } from '../preferences-sql';
 import { eq, and, sql, or, lt, gt, isNull } from 'drizzle-orm';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { generateSecureToken } from '../../utils/cryptoUtils';
@@ -20,6 +21,7 @@ import {
     SecurityErrorType 
 } from 'shared/types/errors';
 import { SignupsPausedError } from '../../../shared/types/pauses';
+import type { Locale } from '../../../shared/i18n/locales';
 import { isFlagOn } from '../../services/posthog/flags';
 import { AuthResult, AuthUserSession, OAuthUserInfo } from '../../types/auth-types';
 import { generateId } from '../../utils/idGenerator';
@@ -75,6 +77,8 @@ export interface RegistrationData {
     password: string;
     name?: string;
     acceptedTermsVersion?: string;
+    /** The language the visitor was using; saved on the account so its emails start in it. */
+    locale?: Locale;
 }
 
 /**
@@ -245,6 +249,7 @@ export class AuthService extends BaseService {
                 providerId: userId,
                 termsAcceptedAt: now,
                 termsVersion: TERMS_VERSION,
+                preferences: data.locale ? { locale: data.locale } : {},
                 createdAt: now,
                 updatedAt: now
             });
@@ -1369,6 +1374,7 @@ export class AuthService extends BaseService {
                     emailVerified: schema.users.emailVerified,
                     createdAt: schema.users.createdAt,
                     termsVersion: schema.users.termsVersion,
+                    locale: SAVED_LOCALE,
                 })
                 .from(schema.users)
                 .where(
