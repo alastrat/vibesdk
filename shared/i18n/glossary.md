@@ -139,6 +139,13 @@ These set the voice. Translate new copy to match them.
 | upgrade (to a higher plan) | mejorar el plan | fazer upgrade |
 | downgrade (to a lower plan) | cambiar a un plan inferior | fazer downgrade |
 | cancel (a subscription) | cancelar | cancelar |
+| get (a plan: the button that starts a checkout) | obtener | assinar |
+| keep (a plan that was set to end) | mantener | manter |
+| move to (a plan, up or down) | cambiar a | mudar para |
+| due today (what a checkout charges now) | a pagar hoy | a pagar hoje |
+| promotion code | código promocional | código promocional |
+| void (an invoice) | anulada | anulada |
+| not collected (an invoice) | no cobrada | não cobrada |
 
 ### Selling and orders
 
@@ -189,6 +196,10 @@ Listed in the masculine singular, because the things they label most often (pedi
 | settings (the page's name, as a title or menu item) | Configuración | Configurações |
 | settings (in a sentence or after a verb: "Abrir configuración") | configuración, "la configuración" | configurações, "as configurações" |
 | language | idioma | idioma |
+| analytics (usage data and the setting that shares it) | analíticas | análises |
+| gateway (an AI Gateway) | gateway | gateway |
+| revoke (an API key or a session) | revocar | revogar |
+| connected / not connected (a provider or an account) | conectado / no conectado | conectado / não conectado |
 | password | contraseña | senha |
 | email | correo electrónico | e-mail |
 | home | inicio | início |

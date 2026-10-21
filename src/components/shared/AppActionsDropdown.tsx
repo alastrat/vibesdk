@@ -98,7 +98,7 @@ export function AppActionsDropdown({
       <ConfirmDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        resourceType={t('App')}
+        resourceType={t('app')}
         deleteButtonText={t('Delete App')}
         resourceName={appTitle}
         onDelete={handleDeleteApp}

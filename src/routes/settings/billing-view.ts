@@ -18,8 +18,15 @@ import {
 	type PurchaseView,
 } from '@/api-types';
 import { upgradeActionFor, type UpgradeAction } from '@/components/billing/upgrade-action';
+import { getLocale, msg, t } from '@/lib/i18n';
 import type { SettledPayment } from '@/lib/stripe/next-action';
+import { perLocale } from '../../../shared/i18n/format';
 import { cardPathOf } from './card-state';
+
+/** The language's own writing of a date, an amount of credits and an amount in dollars. */
+const billingDate = (ms: number): string => formatBillingDate(ms, getLocale());
+const credits = (count: number): string => formatCredits(count, getLocale());
+const usd = (cents: number): string => formatUsd(cents, getLocale());
 
 /** After a checkout, the page asks for the view this often until the webhook has recorded the payment, for up to this long. */
 export const CONFIRM_POLL_MS = 2_000;
@@ -54,20 +61,24 @@ function choice(plan: PaidPlanId, action: PlanChoice['action'], label: string, n
 }
 
 function choiceFor(view: BillingView, plan: PaidPlanId): PlanChoice {
-	if (view.source === 'override' || view.plan === 'enterprise') return choice(plan, 'none', 'Set by Estori', 'Talk to us to change your plan.');
-	if (view.paymentFailing) return plan === view.plan ? choice(plan, 'current', 'Your plan') : choice(plan, 'none', 'Update your card first');
-	if (view.plan === 'basic') return choice(plan, 'checkout', `Get ${planName(plan)}`);
+	if (view.source === 'override' || view.plan === 'enterprise') return choice(plan, 'none', t('Set by Estori'), t('Talk to us to change your plan.'));
+	if (view.paymentFailing) return plan === view.plan ? choice(plan, 'current', t('Your plan')) : choice(plan, 'none', t('Update your card first'));
+	if (view.plan === 'basic') return choice(plan, 'checkout', t('Get {plan}', { plan: planName(plan) }));
 	const current = view.plan;
 	const name = planName(current);
 	if (view.cancelAtPeriodEnd) {
-		return plan === current ? choice(plan, 'resume', `Keep ${name}`, `Ends on ${formatBillingDate(view.periodEnd)}`) : choice(plan, 'none', `Keep ${name} first`);
+		return plan === current
+			? choice(plan, 'resume', t('Keep {plan}', { plan: name }), t('Ends on {date}', { date: billingDate(view.periodEnd) }))
+			: choice(plan, 'none', t('Keep {plan} first', { plan: name }));
 	}
 	if (view.pendingPlan !== null && view.pendingPlan !== current) {
-		const on = formatBillingDate(view.pendingPlanAt ?? view.periodEnd);
-		return plan === current ? choice(plan, 'cancel-change', `Keep ${name}`, `Moves to ${planName(view.pendingPlan)} on ${on}`) : choice(plan, 'none', `Starts ${on}`);
+		const date = billingDate(view.pendingPlanAt ?? view.periodEnd);
+		return plan === current
+			? choice(plan, 'cancel-change', t('Keep {plan}', { plan: name }), t('Moves to {plan} on {date}', { plan: planName(view.pendingPlan), date }))
+			: choice(plan, 'none', t('Starts {date}', { date }));
 	}
-	if (plan === current) return choice(plan, 'current', 'Your plan');
-	return plan === 'premium' ? choice(plan, 'upgrade', 'Move to Premium') : choice(plan, 'downgrade', 'Move to Pro at renewal');
+	if (plan === current) return choice(plan, 'current', t('Your plan'));
+	return plan === 'premium' ? choice(plan, 'upgrade', t('Move to {plan}', { plan: planName('premium') })) : choice(plan, 'downgrade', t('Move to {plan} at renewal', { plan: planName('pro') }));
 }
 
 /** Pro's and Premium's next step for the account, in that order. */
@@ -85,25 +96,38 @@ export interface Confirmation {
 
 /** What a change charges or ends, said before the seller confirms it. */
 export function confirmationFor(view: BillingView, action: ConfirmedAction): Confirmation {
-	const renewal = formatBillingDate(view.periodEnd);
+	const renewal = billingDate(view.periodEnd);
 	const pro = planName('pro');
 	const premium = planName('premium');
 	switch (action) {
 		case 'upgrade':
 			return {
-				title: `Move to ${premium} now?`,
-				body: `You'll have ${formatCredits(PLAN_LIMITS.premium.aiCredits)} AI credits a month right away, and the credits you've used this month count against them. We'll charge the difference for the rest of this month, then ${premium} renews at ${formatUsd(PLAN_PRICES_CENTS.premium)} a month.`,
-				confirm: `Move to ${premium}`,
+				title: t('Move to {plan} now?', { plan: premium }),
+				body: t(
+					"You'll have {credits} AI credits a month right away, and the credits you've used this month count against them. We'll charge the difference for the rest of this month, then {plan} renews at {price} a month.",
+					{ credits: credits(PLAN_LIMITS.premium.aiCredits), plan: premium, price: usd(PLAN_PRICES_CENTS.premium) },
+				),
+				confirm: t('Move to {plan}', { plan: premium }),
 			};
 		case 'downgrade':
 			return {
-				title: `Move to ${pro} at renewal?`,
-				body: `You keep ${premium} until ${renewal}. Then ${pro} renews at ${formatUsd(PLAN_PRICES_CENTS.pro)} a month, with ${formatCredits(PLAN_LIMITS.pro.aiCredits)} AI credits a month. There's no refund for the rest of this month.`,
-				confirm: `Move to ${pro}`,
+				title: t('Move to {plan} at renewal?', { plan: pro }),
+				body: t("You keep {premium} until {date}. Then {pro} renews at {price} a month, with {credits} AI credits a month. There's no refund for the rest of this month.", {
+					premium,
+					date: renewal,
+					pro,
+					price: usd(PLAN_PRICES_CENTS.pro),
+					credits: credits(PLAN_LIMITS.pro.aiCredits),
+				}),
+				confirm: t('Move to {plan}', { plan: pro }),
 			};
 		case 'cancel': {
 			const name = planName(view.plan);
-			return { title: `Cancel ${name}?`, body: `${name} stays on until ${renewal}, then your account moves to Basic. Your stores stay live.`, confirm: `Cancel ${name}` };
+			return {
+				title: t('Cancel {plan}?', { plan: name }),
+				body: t('{plan} stays on until {date}, then your account moves to Basic. Your stores stay live.', { plan: name, date: renewal }),
+				confirm: t('Cancel {plan}', { plan: name }),
+			};
 		}
 	}
 }
@@ -189,16 +213,19 @@ function paymentAtStake(view: BillingView): boolean {
 export function paymentNoteFor(view: BillingView): string | null {
 	if (!paymentAtStake(view)) return null;
 	if (view.graceEndsAt !== null) {
-		return `Your last payment didn't go through. ${planName(view.plan)}'s features keep working until ${formatBillingDate(view.graceEndsAt)}, and this month's AI credits start once the payment goes through.`;
+		return t("Your last payment didn't go through. {plan}'s features keep working until {date}, and this month's AI credits start once the payment goes through.", {
+			plan: planName(view.plan),
+			date: billingDate(view.graceEndsAt),
+		});
 	}
-	return "Your last payment didn't go through, so your account is on Basic until it's paid.";
+	return t("Your last payment didn't go through, so your account is on Basic until it's paid.");
 }
 
 export function planStatusFor(view: BillingView): string {
-	if (view.source === 'override') return 'Set by Estori';
-	if (view.paymentFailing) return 'Payment failing';
-	if (view.cancelAtPeriodEnd) return 'Ending';
-	return view.source === 'subscription' ? 'Active' : 'Free';
+	if (view.source === 'override') return t('Set by Estori');
+	if (view.paymentFailing) return t('Payment failing');
+	if (view.cancelAtPeriodEnd) return t('Ending');
+	return view.source === 'subscription' ? t('Active') : t('Free');
 }
 
 /** True once the webhook has recorded a paid renewal, so the page stops asking. */
@@ -209,10 +236,10 @@ export function isRenewalPaid(view: BillingView): boolean {
 /** When the plan renews, ends or changes; null while a failed payment's note says what happens instead. */
 export function renewalLineFor(view: BillingView): string | null {
 	if (paymentAtStake(view)) return null;
-	if (view.cancelAtPeriodEnd) return `Ends on ${formatBillingDate(view.periodEnd)}`;
-	if (view.pendingPlan !== null) return `Moves to ${planName(view.pendingPlan)} on ${formatBillingDate(view.pendingPlanAt ?? view.periodEnd)}`;
-	if (view.source === 'subscription') return `Renews on ${formatBillingDate(view.periodEnd)}`;
-	return `AI credits renew on ${formatBillingDate(view.credits?.renewsAt ?? view.periodEnd)}`;
+	if (view.cancelAtPeriodEnd) return t('Ends on {date}', { date: billingDate(view.periodEnd) });
+	if (view.pendingPlan !== null) return t('Moves to {plan} on {date}', { plan: planName(view.pendingPlan), date: billingDate(view.pendingPlanAt ?? view.periodEnd) });
+	if (view.source === 'subscription') return t('Renews on {date}', { date: billingDate(view.periodEnd) });
+	return t('AI credits renew on {date}', { date: billingDate(view.credits?.renewsAt ?? view.periodEnd) });
 }
 
 /** This month's credits on the billing page: the pool and grants apart from extra credits, so nothing reads as counted twice. */
@@ -227,34 +254,34 @@ export interface CreditsSummary {
 }
 
 export function creditsSummaryFor(view: BillingView): CreditsSummary | null {
-	const { credits } = view;
-	if (!credits) return null;
-	const monthly = credits.pool + credits.granted;
-	const usedOfMonthly = Math.min(credits.used, monthly);
-	const overrun = credits.used - usedOfMonthly;
+	const { credits: period } = view;
+	if (!period) return null;
+	const monthly = period.pool + period.granted;
+	const usedOfMonthly = Math.min(period.used, monthly);
+	const overrun = period.used - usedOfMonthly;
 	// The purchases' own balances, before this month's overrun is taken from them, bound what they covered.
 	const covered = Math.min(overrun, view.purchases.reduce((sum, purchase) => sum + purchase.left, 0));
 	let overrunNote: string | null = null;
 	if (overrun > 0) {
-		overrunNote =
-			covered === overrun
-				? `Your extra credits covered the other ${formatCredits(overrun)}.`
-				: `${formatCredits(overrun)} more were used to finish turns that were already running${covered > 0 ? `, ${formatCredits(covered)} of them from your extra credits` : ''}.`;
+		if (covered === overrun) overrunNote = t('Your extra credits covered the other {credits}.', { credits: credits(overrun) });
+		else if (covered > 0) {
+			overrunNote = t('{credits} more were used to finish turns that were already running, {covered} of them from your extra credits.', { credits: credits(overrun), covered: credits(covered) });
+		} else overrunNote = t('{credits} more were used to finish turns that were already running.', { credits: credits(overrun) });
 	}
 	return {
-		meterLabel: `${formatCredits(usedOfMonthly)} of ${formatCredits(monthly)} AI credits used this month`,
+		meterLabel: t('{used} of {total} AI credits used this month', { used: credits(usedOfMonthly), total: credits(monthly) }),
 		meterPercent: monthly > 0 ? (usedOfMonthly / monthly) * 100 : 0,
 		monthlyLeft: monthly - usedOfMonthly,
-		extraLeft: credits.purchasedLeft,
+		extraLeft: period.purchasedLeft,
 		overrunNote,
 	};
 }
 
-const EXPIRY_DATE = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const expiryDate = perLocale((intl) => new Intl.DateTimeFormat(intl, { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }));
 
 /** "5,000 left, expire October 19, 2027": purchases last a year, so the year is part of the date. */
 export function purchaseLineFor(purchase: PurchaseView): string {
-	return `${formatCredits(purchase.left)} left, expire ${EXPIRY_DATE.format(purchase.expiresAt)}`;
+	return t('{credits} left, expire {date}', { credits: credits(purchase.left), date: expiryDate(getLocale()).format(purchase.expiresAt) });
 }
 
 /** The nearest amount of extra credits Stripe sells: whole thousands from the minimum to the maximum. */
@@ -276,17 +303,17 @@ export function billingBannerFor(view: BillingView | undefined): BillingBanner |
 	if (paymentAtStake(view)) {
 		const message =
 			view.graceEndsAt !== null
-				? `Your last payment didn't go through. Update your card by ${formatBillingDate(view.graceEndsAt)} to keep ${planName(view.plan)}.`
-				: "Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.";
-		return { tone: 'warning', message, action: { kind: 'link', to: BILLING_PATH, label: 'Open billing' } };
+				? t("Your last payment didn't go through. Update your card by {date} to keep {plan}.", { date: billingDate(view.graceEndsAt), plan: planName(view.plan) })
+				: t("Your last payment didn't go through, so your account is on Basic until it's paid. Update your card.");
+		return { tone: 'warning', message, action: { kind: 'link', to: BILLING_PATH, label: t('Open billing') } };
 	}
 	if (view.alert === null || view.credits === null) return null;
-	const { credits, limits } = view;
+	const { credits: period, limits } = view;
 	// The refusal the account would get with no credits left names its next step, so the banner offers the same one.
-	const refusal = assertWithinLimit({ billing: true, plan: view.plan, limits, creditsResetAt: credits.renewsAt }, 'aiCredits', limits.aiCredits);
+	const refusal = assertWithinLimit({ billing: true, plan: view.plan, limits, creditsResetAt: period.renewsAt }, 'aiCredits', limits.aiCredits);
 	return {
 		tone: view.alert === 'credits_5' ? 'warning' : 'info',
-		message: `You have ${formatCredits(credits.left)} AI credits left until ${formatBillingDate(credits.renewsAt)}.`,
+		message: t('You have {credits} AI credits left until {date}.', { credits: credits(period.left), date: billingDate(period.renewsAt) }),
 		action: refusal ? upgradeActionFor(refusal) : { kind: 'none' },
 	};
 }
@@ -299,11 +326,14 @@ export function bannerKeyFor(view: BillingView): string {
 const CARD_BRANDS: Record<string, string> = {
 	visa: 'Visa',
 	mastercard: 'Mastercard',
+	// i18n-ignore: a brand name
 	amex: 'American Express',
 	discover: 'Discover',
+	// i18n-ignore: a brand name
 	diners: 'Diners Club',
 	jcb: 'JCB',
 	unionpay: 'UnionPay',
+	// i18n-ignore: a brand name
 	cartes_bancaires: 'Cartes Bancaires',
 	eftpos_au: 'EFTPOS',
 };
@@ -316,10 +346,10 @@ function brandNameOf(brand: string): string | null {
 export function cardLabelFor(card: CardOnFile): string {
 	const month = String(card.expMonth).padStart(2, '0');
 	const year = String(card.expYear % 100).padStart(2, '0');
-	return `${brandNameOf(card.brand) ?? 'Card'} ending ${card.last4}, expires ${month}/${year}`;
+	return t('{brand} ending {last4}, expires {month}/{year}', { brand: brandNameOf(card.brand) ?? t('Card'), last4: card.last4, month, year });
 }
 
-export const UPDATE_CARD_AND_PAY_LABEL = 'Update card and pay';
+export const UPDATE_CARD_AND_PAY_LABEL = msg('Update card and pay');
 
 export interface PastDueActions {
 	/** The "Pay now" button's words, or null when there is no card on file to pay with. */
@@ -332,14 +362,14 @@ export function pastDueActionsFor(view: BillingView): PastDueActions | null {
 	if (!paymentAtStake(view)) return null;
 	const { card } = view;
 	return {
-		payNow: card ? `Pay now with ${brandNameOf(card.brand) ?? 'card'} ending ${card.last4}` : null,
-		updateCard: { label: UPDATE_CARD_AND_PAY_LABEL, to: cardPathOf('pay') },
+		payNow: card ? t('Pay now with {brand} ending {last4}', { brand: brandNameOf(card.brand) ?? t('card'), last4: card.last4 }) : null,
+		updateCard: { label: t(UPDATE_CARD_AND_PAY_LABEL), to: cardPathOf('pay') },
 	};
 }
 
-export const PAYMENT_WENT_THROUGH_MESSAGE = 'Your payment went through.';
-export const CARD_SAVED_MESSAGE = 'Your card is saved.';
-const PAYMENT_DECLINED_MESSAGE = "The payment didn't go through. Try another card.";
+export const PAYMENT_WENT_THROUGH_MESSAGE = msg('Your payment went through.');
+export const CARD_SAVED_MESSAGE = msg('Your card is saved.');
+const PAYMENT_DECLINED_MESSAGE = msg("The payment didn't go through. Try another card.");
 
 export interface PaymentNotice {
 	tone: 'success' | 'error';
@@ -351,10 +381,10 @@ export function describePaymentResult(result: SettledPayment): PaymentNotice {
 	switch (result.state) {
 		case 'paid':
 		case 'nothing_due':
-			return { tone: 'success', message: PAYMENT_WENT_THROUGH_MESSAGE };
+			return { tone: 'success', message: t(PAYMENT_WENT_THROUGH_MESSAGE) };
 		case 'saved':
-			return { tone: 'success', message: CARD_SAVED_MESSAGE };
+			return { tone: 'success', message: t(CARD_SAVED_MESSAGE) };
 		case 'declined':
-			return { tone: 'error', message: result.message || PAYMENT_DECLINED_MESSAGE };
+			return { tone: 'error', message: t(result.message || PAYMENT_DECLINED_MESSAGE) };
 	}
 }

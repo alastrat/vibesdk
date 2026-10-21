@@ -92,8 +92,8 @@ describe('the billing page', () => {
 
 	it('says "Open billing", and never "Manage billing", anywhere in the app', () => {
 		for (const [path, text] of Object.entries(app)) expect(text, path).not.toContain('Manage billing');
-		expect(source('/src/components/billing/upgrade-action.ts')).toContain("label: 'Open billing'");
-		expect(source('/src/routes/settings/billing-view.ts')).toContain("action: { kind: 'link', to: BILLING_PATH, label: 'Open billing' }");
+		expect(source('/src/components/billing/upgrade-action.ts')).toContain("label: t('Open billing')");
+		expect(source('/src/routes/settings/billing-view.ts')).toContain("action: { kind: 'link', to: BILLING_PATH, label: t('Open billing') }");
 	});
 
 	it("shows the card on file and the invoices, for an account that has billing details", () => {
@@ -118,8 +118,8 @@ describe('the billing page', () => {
 		expect(page).toContain('paying={payNow.isPending}');
 		expect(page).toContain('onPayNow={() => payNow.mutate()}');
 		const view = source('/src/routes/settings/billing-view.ts');
-		expect(view).toContain('`Pay now with ${');
-		expect(view).toContain("UPDATE_CARD_AND_PAY_LABEL = 'Update card and pay'");
+		expect(view).toContain("t('Pay now with {brand} ending {last4}'");
+		expect(view).toContain("UPDATE_CARD_AND_PAY_LABEL = msg('Update card and pay')");
 		expect(view).toContain('cardPathOf(\'pay\')');
 	});
 
@@ -154,7 +154,7 @@ describe('the billing page', () => {
 		const download = hooks.slice(hooks.indexOf('export function useInvoiceDownload('));
 		expect(download).toContain('apiClient.downloadInvoicePdf(invoiceId)');
 		expect(download).toContain('saveBlob(file.blob, file.filename)');
-		expect(download).toContain('toast.error(downloadFailureMessage(failure, INVOICE_DOWNLOAD_FAILED_MESSAGE))');
+		expect(download).toContain('toast.error(t(downloadFailureMessage(failure, INVOICE_DOWNLOAD_FAILED_MESSAGE)))');
 	});
 
 	it('has the card page and its return route in the app, signed in, after the billing page', () => {

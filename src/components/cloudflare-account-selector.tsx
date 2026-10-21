@@ -10,6 +10,8 @@ import { Button, DropdownMenu, LayerCard } from '@cloudflare/kumo';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api-client';
+import { getLocale, t } from '@/lib/i18n';
+import { formatDollars } from '../../shared/i18n/format';
 import { CloudflareLogo } from '@cloudflare/kumo';
 import {
 	Loader2,
@@ -113,6 +115,7 @@ export function CloudflareAccountSelector() {
 			);
 
 			if (!response.ok) {
+				// i18n-ignore: a developer message, the seller sees the toast below
 				throw new Error('Failed to fetch accounts');
 			}
 
@@ -150,7 +153,7 @@ export function CloudflareAccountSelector() {
 			}
 		} catch (error) {
 			console.error('Error fetching accounts:', error);
-			toast.error('Failed to load Cloudflare accounts');
+			toast.error(t('Failed to load Cloudflare accounts'));
 		} finally {
 			setLoading(false);
 			setRefreshing(false);
@@ -159,7 +162,7 @@ export function CloudflareAccountSelector() {
 
 	const handleRefresh = async () => {
 		await fetchAccounts({ refresh: true });
-		toast.success('Refreshed Cloudflare accounts and gateways');
+		toast.success(t('Refreshed Cloudflare accounts and gateways'));
 	};
 
 	// Update available gateways when account changes
@@ -180,7 +183,7 @@ export function CloudflareAccountSelector() {
 	// Save selection
 	const handleSave = async () => {
 		if (!selectedAccountId || !selectedGatewayId) {
-			toast.error('Please select both an account and a gateway');
+			toast.error(t('Please select both an account and a gateway'));
 			return;
 		}
 
@@ -189,7 +192,7 @@ export function CloudflareAccountSelector() {
 			const response = await apiClient.setCloudflareSelection(selectedAccountId, selectedGatewayId);
 
 			if (response.success) {
-				toast.success('Cloudflare configuration saved successfully');
+				toast.success(t('Cloudflare configuration saved successfully'));
 				// Refresh the page to update the badge
 				window.location.reload();
 			}
@@ -205,7 +208,7 @@ export function CloudflareAccountSelector() {
 	const handleDisconnect = async () => {
 		try {
 			await apiClient.disconnectCloudflare();
-			toast.success('Disconnected from Cloudflare. You can reconnect anytime.');
+			toast.success(t('Disconnected from Cloudflare. You can reconnect anytime.'));
 			await refreshLimits?.();
 			setTimeout(() => window.location.reload(), 500);
 		} catch (error) {
@@ -222,7 +225,7 @@ export function CloudflareAccountSelector() {
 			<span className="h-lh flex items-center">
 				<CloudflareLogoThemed className="size-5" />
 			</span>
-			<span>Cloudflare AI Gateway</span>
+			<span>{t('Cloudflare AI Gateway')}</span>
 		</div>
 	);
 
@@ -246,12 +249,12 @@ export function CloudflareAccountSelector() {
 				<LayerCard.Primary>
 					<div className="grid gap-4">
 						<p className="text-sm text-kumo-subtle">
-							You haven't connected any Cloudflare accounts yet.
+							{t("You haven't connected any Cloudflare accounts yet.")}
 						</p>
 						<div>
 							<Button onClick={handleReconnect} variant="secondary" className="gap-2">
 								<CloudflareLogo variant="glyph" className="size-4" />
-								Connect Cloudflare
+								{t('Connect Cloudflare')}
 							</Button>
 						</div>
 					</div>
@@ -277,7 +280,7 @@ export function CloudflareAccountSelector() {
 							<span className="h-lh flex items-center">
 								<CheckCircle2 className="size-3.5" />
 							</span>
-							<span>Connected</span>
+							<span>{t('Connected')}</span>
 						</div>
 					)}
 					{!isConnected && (
@@ -285,7 +288,7 @@ export function CloudflareAccountSelector() {
 							<span className="h-lh flex items-center">
 								<AlertCircle className="size-3.5" />
 							</span>
-							<span>Not connected</span>
+							<span>{t('Not connected')}</span>
 						</div>
 					)}
 					{isConnected && (
@@ -296,7 +299,7 @@ export function CloudflareAccountSelector() {
 								shape="square"
 								onClick={handleRefresh}
 								disabled={refreshing}
-								aria-label="Refresh accounts and gateways"
+								aria-label={t('Refresh accounts and gateways')}
 							>
 								<RefreshCw className={`size-4 ${refreshing ? 'animate-spin' : ''}`} />
 							</Button>
@@ -307,7 +310,7 @@ export function CloudflareAccountSelector() {
 											variant="ghost"
 											size="sm"
 											shape="square"
-											aria-label="Account actions"
+											aria-label={t('Account actions')}
 										>
 											<MoreVertical className="size-4" />
 										</Button>
@@ -319,7 +322,7 @@ export function CloudflareAccountSelector() {
                       icon={ArrowSquareOutIcon}
 											onClick={() => window.open(gatewayDashUrl, '_blank', 'noopener,noreferrer')}
 										>
-											View gateway
+											{t('View gateway')}
 										</DropdownMenu.Item>
 									)}
 									<DropdownMenu.Item
@@ -327,7 +330,7 @@ export function CloudflareAccountSelector() {
 										onClick={handleDisconnect}
 										variant="danger"
 									>
-										Disconnect
+										{t('Disconnect')}
 									</DropdownMenu.Item>
 								</DropdownMenu.Content>
 							</DropdownMenu>
@@ -339,12 +342,12 @@ export function CloudflareAccountSelector() {
 				{!isConnected ? (
 					<div className="grid gap-4">
 						<p className="text-sm text-kumo-subtle">
-							Connect your Cloudflare account to use your own AI Gateway and credits.
+							{t('Connect your Cloudflare account to use your own AI Gateway and credits.')}
 						</p>
 						<div>
 							<Button onClick={handleReconnect} variant="secondary" className="gap-2">
 								<CloudflareLogo variant="glyph" className="size-4" />
-								Connect Cloudflare
+								{t('Connect Cloudflare')}
 							</Button>
 						</div>
 					</div>
@@ -353,12 +356,10 @@ export function CloudflareAccountSelector() {
 						<div className="flex items-start justify-between gap-4 rounded-lg ring ring-kumo-line px-4 py-3">
 							<div className="grid gap-1.5">
 								<Label htmlFor="ai-gateway-toggle" className="text-sm font-medium">
-									Use my AI Gateway
+									{t('Use my AI Gateway')}
 								</Label>
 								<p className="text-sm text-kumo-subtle">
-									When enabled, requests run through your Cloudflare AI Gateway and
-									use your own credits. When disabled, the platform's free tier and
-									limits apply.
+									{t("When enabled, requests run through your Cloudflare AI Gateway and use your own credits. When disabled, the platform's free tier and limits apply.")}
 								</p>
 							</div>
 							<Switch
@@ -370,10 +371,10 @@ export function CloudflareAccountSelector() {
 						</div>
 
 						<div className="grid gap-1.5">
-							<Label htmlFor="account-select">Cloudflare account</Label>
+							<Label htmlFor="account-select">{t('Cloudflare account')}</Label>
 							<Select value={selectedAccountId || undefined} onValueChange={handleAccountChange}>
 								<SelectTrigger id="account-select" className="w-full">
-									<SelectValue placeholder="Select an account" />
+									<SelectValue placeholder={t('Select an account')} />
 								</SelectTrigger>
 								<SelectContent>
 									{accounts.map((account) => (
@@ -391,14 +392,14 @@ export function CloudflareAccountSelector() {
 						</div>
 
 						<div className="grid gap-1.5">
-							<Label htmlFor="gateway-select">AI Gateway</Label>
+							<Label htmlFor="gateway-select">{t('AI Gateway')}</Label>
 							<Select
 								value={selectedGatewayId || undefined}
 								onValueChange={setSelectedGatewayId}
 								disabled={availableGateways.length === 0}
 							>
 								<SelectTrigger id="gateway-select" className="w-full">
-									<SelectValue placeholder="Select a gateway" />
+									<SelectValue placeholder={t('Select a gateway')} />
 								</SelectTrigger>
 								<SelectContent>
 									{availableGateways.map((gateway) => (
@@ -410,12 +411,12 @@ export function CloudflareAccountSelector() {
 							</Select>
 							{selectedGateway && selectedGateway.creditsRemaining !== null && (
 								<p className="text-sm text-kumo-subtle">
-									Current balance: ${selectedGateway.creditsRemaining.toFixed(2)}
+									{t('Current balance: {amount}', { amount: formatDollars(selectedGateway.creditsRemaining, getLocale(), 'always') })}
 								</p>
 							)}
 							{availableGateways.length === 0 && selectedAccountId && (
 								<p className="text-sm text-amber-600">
-									No gateways available for this account. Please create one in your Cloudflare dashboard.
+									{t('No gateways available for this account. Please create one in your Cloudflare dashboard.')}
 								</p>
 							)}
 						</div>
@@ -428,10 +429,10 @@ export function CloudflareAccountSelector() {
 								{saving ? (
 									<>
 										<Loader2 className="size-4 animate-spin" />
-										Saving...
+										{t('Saving...')}
 									</>
 								) : (
-									'Save configuration'
+									t('Save configuration')
 								)}
 							</Button>
 						</div>

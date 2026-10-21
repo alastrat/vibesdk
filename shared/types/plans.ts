@@ -1,5 +1,6 @@
 import { formatDollars, formatMonthDay, formatNumber } from '../i18n/format';
 import { DEFAULT_LOCALE, type Locale } from '../i18n/locales';
+import { ENGLISH, type Translator } from '../i18n/translate';
 import { DRAFT_LIMIT } from './drafts';
 
 export const PLAN_IDS = ['basic', 'pro', 'premium', 'enterprise'] as const;
@@ -134,25 +135,33 @@ export function formatBillingDate(ms: number, locale: Locale = DEFAULT_LOCALE): 
 	return formatMonthDay(ms, locale);
 }
 
-/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. */
-export function storeAllowance(plan: PaidPlanId): string {
+/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. English unless a translator is passed. */
+export function storeAllowance(plan: PaidPlanId, i18n: Translator = ENGLISH): string {
 	const { liveStores, newStoresPerDay } = PLAN_LIMITS[plan];
 	const parts: string[] = [];
-	if (liveStores !== null) parts.push(`Up to ${liveStores} live stores`);
-	if (newStoresPerDay !== null) parts.push(`${newStoresPerDay} new stores a day`);
+	if (liveStores !== null) parts.push(i18n.tn('Up to {count} live store', 'Up to {count} live stores', liveStores));
+	if (newStoresPerDay !== null) parts.push(i18n.tn('{count} new store a day', '{count} new stores a day', newStoresPerDay));
 	return parts.join(', ');
 }
 
-/** A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. */
-export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId): string[] {
+/**
+ * A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. English
+ * unless a translator is passed, so the public pricing page keeps its English.
+ */
+export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId, i18n: Translator = ENGLISH): string[] {
 	const limits = PLAN_LIMITS[plan];
-	const lines = [storeAllowance(plan)];
-	if (limits.ownDomainsPerLiveStore > 0) lines.push('Your own domain on each live store');
-	if (limits.supplierCatalog) lines.push('The supplier catalog');
-	if (limits.extraCredits) lines.push('Buy extra credits any time');
+	const lines = [storeAllowance(plan, i18n)];
+	if (limits.ownDomainsPerLiveStore > 0) lines.push(i18n.t('Your own domain on each live store'));
+	if (limits.supplierCatalog) lines.push(i18n.t('The supplier catalog'));
+	if (limits.extraCredits) lines.push(i18n.t('Buy extra credits any time'));
 	if (over === undefined) return lines;
-	const already = limitFeatures(over);
+	const already = limitFeatures(over, undefined, i18n);
 	return lines.filter((line) => !already.includes(line));
+}
+
+/** "$1.50 per 1,000", the price of extra credits. English unless a translator is passed. */
+export function extraCreditsPriceLabel(i18n: Translator = ENGLISH): string {
+	return i18n.t('{price} per {credits}', { price: formatUsd(EXTRA_CREDITS.unitPriceCents, i18n.locale), credits: formatCredits(EXTRA_CREDITS.creditsPerUnit, i18n.locale) });
 }
 
 export function extraCreditsPriceCents(credits: number): number {

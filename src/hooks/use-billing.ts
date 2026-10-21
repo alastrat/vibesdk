@@ -7,23 +7,25 @@ import { useAuth } from '@/contexts/auth-context';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { singleFlight } from '@/lib/async';
 import { downloadFailureMessage, saveBlob } from '@/lib/download';
+import { msg, t } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { settlePayment, type SettledPayment } from '@/lib/stripe/next-action';
 import { unwrap } from '@/lib/unwrap-response';
 import { usePublicPlan } from './use-public-plan';
 
-export const CHECKOUT_FAILED_MESSAGE = "Couldn't open the checkout. Try again in a moment.";
-export const CHANGE_FAILED_MESSAGE = "Couldn't change your plan. Try again in a moment.";
-export const PAY_FAILED_MESSAGE = "Couldn't take the payment. Try again in a moment.";
-export const HISTORY_FAILED_MESSAGE = "Couldn't load your invoices";
-export const INVOICE_DOWNLOAD_FAILED_MESSAGE = "Couldn't download the invoice. Try again in a moment.";
+// The messages below are translated where they are shown, so a language picked meanwhile still applies.
+export const CHECKOUT_FAILED_MESSAGE = msg("Couldn't open the checkout. Try again in a moment.");
+export const CHANGE_FAILED_MESSAGE = msg("Couldn't change your plan. Try again in a moment.");
+export const PAY_FAILED_MESSAGE = msg("Couldn't take the payment. Try again in a moment.");
+export const HISTORY_FAILED_MESSAGE = msg("Couldn't load your invoices");
+export const INVOICE_DOWNLOAD_FAILED_MESSAGE = msg("Couldn't download the invoice. Try again in a moment.");
 
 /** The signed-in account's plan, credits and what it may do; `refetchInterval` polls while a payment is being confirmed. */
 export function useBilling({ refetchInterval = false }: { refetchInterval?: number | false } = {}) {
 	const { isAuthenticated } = useAuth();
 	return useQuery({
 		queryKey: queryKeys.billing(),
-		queryFn: () => unwrap(apiClient.getBilling(), "Couldn't load your plan"),
+		queryFn: () => unwrap(apiClient.getBilling(), msg("Couldn't load your plan")),
 		enabled: isAuthenticated,
 		staleTime: 60_000,
 		refetchInterval,
@@ -43,7 +45,7 @@ export function useBillingOn(): boolean {
 /** Toasts a failed billing request, unless it was a plan limit, which the Upgrade dialog already shows. */
 export function showBillingError(failure: unknown, fallback: string): void {
 	if (failure instanceof ApiError && failure.planLimit) return;
-	toast.error(failure instanceof Error && failure.message ? failure.message : fallback);
+	toast.error(t(failure instanceof Error && failure.message ? failure.message : fallback));
 }
 
 /**
@@ -130,6 +132,6 @@ export function useInvoiceDownload() {
 			const file = await apiClient.downloadInvoicePdf(invoiceId);
 			saveBlob(file.blob, file.filename);
 		},
-		onError: (failure) => toast.error(downloadFailureMessage(failure, INVOICE_DOWNLOAD_FAILED_MESSAGE)),
+		onError: (failure) => toast.error(t(downloadFailureMessage(failure, INVOICE_DOWNLOAD_FAILED_MESSAGE))),
 	});
 }

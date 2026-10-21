@@ -20,6 +20,8 @@ import {
 import type { BillingConsentInput } from '../../database/services/BillingService';
 import type { CreditPurchaseRecord, SubscriptionRecord } from '../../database/schema';
 import type { BillingAccount } from './account';
+import { ENGLISH } from '../../../shared/i18n/translate';
+import { serverT } from '../i18n/server-t';
 import { PLAN_LIMITS } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 import { CHECKOUT_EXPIRED_MESSAGE, PAYMENTS_NOT_SET_UP_MESSAGE } from '../../../shared/types/billing';
@@ -270,6 +272,7 @@ function fake(
 		baseUrl: 'https://estori.app',
 		nowMs: Date.parse('2026-10-19T15:00:00Z'),
 		checkoutPaused: vi.fn(async () => state.paused === true),
+		i18n: ENGLISH,
 	};
 	return { deps, calls, keys, expands, returnUrls, consents, recorded, state };
 }
@@ -1290,5 +1293,82 @@ describe('card changes and invoices while billing checkout is paused', () => {
 		expect(await billingHistory(deps, 'u1')).toMatchObject({ ok: true });
 		expect(await invoicePdf(deps, 'u1', 'in_1')).toMatchObject({ ok: true });
 		expect(deps.checkoutPaused).not.toHaveBeenCalled();
+	});
+});
+
+/** Spanish and Portuguese write a no-break space between the currency and the amount; the tests read it as a space. */
+const plain = (text: string): string => text.replace(/\u00a0/g, ' ');
+/** The server's text for a sentence written here with plain spaces after "USD" and "US$". */
+const withNoBreakSpaces = (text: string): string => text.replace(/(USD|US\$) (?=\d)/g, '$1\u00a0');
+
+describe("the checkout's wording in the seller's language", () => {
+	const SPANISH_CONSENT = 'Acepto los Términos (en inglés) y que Estori Pro se renueva a USD 49 al mes hasta que yo cancele.';
+	const PORTUGUESE_CONSENT = 'Concordo com os Termos (em inglês) e com o fato de que o Estori Pro renova a US$ 49 por mês até eu cancelar.';
+
+	it('words the terms a plan checkout opens with, and what it includes, in Spanish and Portuguese', async () => {
+		const spanish = fake({ customer: 'cus_1', sessions: [PLAN_SESSION] });
+		spanish.deps.i18n = serverT('es');
+		const started = await startCheckout(spanish.deps, USER, 'pro');
+		if (!started.ok) throw new Error('the checkout starts');
+		expect(started.value.terms).toEqual({
+			consentText: withNoBreakSpaces(SPANISH_CONSENT),
+			buttonText: withNoBreakSpaces('Suscribirse: USD 49 al mes'),
+			dueTodayCents: 4_900,
+			disclosure: withNoBreakSpaces('Pro se renueva cada mes a USD 49 hasta que canceles. Cancela cuando quieras en Estori; termina al final del período.'),
+		});
+		expect(started.value.order).toMatchObject({ kind: 'plan', includes: ['20,000 créditos de IA al mes', 'Hasta 3 tiendas publicadas, 10 tiendas nuevas al día', 'Tu propio dominio en cada tienda publicada', 'El catálogo de proveedores'] });
+
+		const portuguese = fake({ customer: 'cus_1', sessions: [PLAN_SESSION] });
+		portuguese.deps.i18n = serverT('pt-BR');
+		const answered = await startCheckout(portuguese.deps, USER, 'pro');
+		if (!answered.ok) throw new Error('the checkout starts');
+		expect(plain(answered.value.terms?.consentText ?? '')).toBe(PORTUGUESE_CONSENT);
+		expect(plain(answered.value.terms?.buttonText ?? '')).toBe('Assinar: US$ 49 por mês');
+		expect(answered.value.order).toMatchObject({ includes: expect.arrayContaining(['20.000 créditos de IA por mês', 'Até 3 lojas no ar, 10 lojas novas por dia']) });
+	});
+
+	it('words a promotion code in each language, with its month count', async () => {
+		const repeating = fake({ sessions: [withCode({ duration: 'repeating', duration_in_months: 3 })] });
+		repeating.deps.i18n = serverT('es');
+		expect(await checkoutTerms(repeating.deps, 'u1', 'cs_plan')).toMatchObject({
+			ok: true,
+			value: {
+				consentText: withNoBreakSpaces('Acepto los Términos (en inglés) y que Estori Pro cuesta USD 24.50 al mes durante 3 meses, luego USD 49 al mes, hasta que yo cancele.'),
+				buttonText: withNoBreakSpaces('Suscribirse: USD 24.50 al mes durante 3 meses, luego USD 49 al mes'),
+			},
+		});
+		const once = fake({ sessions: [withCode({ duration: 'repeating', duration_in_months: 1 })] });
+		once.deps.i18n = serverT('pt-BR');
+		const answered = await checkoutTerms(once.deps, 'u1', 'cs_plan');
+		if (!answered.ok) throw new Error('the terms are answered');
+		expect(plain(answered.value.buttonText)).toBe('Assinar: US$ 24,50 por mês durante 1 mês, depois US$ 49 por mês');
+		expect(plain(answered.value.consentText)).toBe('Concordo com os Termos (em inglês) e com o fato de que o Estori Pro custa US$ 24,50 por mês durante 1 mês, depois US$ 49 por mês, até eu cancelar.');
+		expect(plain(answered.value.disclosure)).toBe(
+			'O plano Pro custa US$ 24,50 por mês durante 1 mês, depois renova todo mês a US$ 49 até você cancelar. Cancele quando quiser no Estori; termina no fim do período.',
+		);
+	});
+
+	it('stores the wording the seller was shown, in their language, and refuses the same sentence in another', async () => {
+		const spanish = fake({ sessions: [PLAN_SESSION] });
+		spanish.deps.i18n = serverT('es');
+		const agreed = { sessionId: 'cs_plan', termsVersion: TERMS_VERSION, consentText: withNoBreakSpaces(SPANISH_CONSENT) };
+		expect(await recordCheckoutConsent(spanish.deps, 'u1', agreed)).toEqual({ ok: true, value: { recorded: true } });
+		expect(spanish.consents.map((consent) => consent.consentText)).toEqual([withNoBreakSpaces(SPANISH_CONSENT)]);
+
+		// The English sentence is not what the server words for a Spanish seller, so it is the changed-price refusal and stores nothing.
+		const refused = fake({ sessions: [PLAN_SESSION] });
+		refused.deps.i18n = serverT('es');
+		expect(await recordCheckoutConsent(refused.deps, 'u1', { ...agreed, consentText: NO_CODE_CONSENT })).toEqual({ ok: false, status: 409, message: 'The price changed. Check it and agree again.' });
+		expect(refused.consents).toEqual([]);
+
+		const english = fake({ sessions: [PLAN_SESSION] });
+		expect(await recordCheckoutConsent(english.deps, 'u1', agreed)).toMatchObject({ ok: false, status: 409 });
+		expect(english.consents).toEqual([]);
+	});
+
+	it('keeps the English wording byte for byte when the seller speaks English', async () => {
+		const english = fake({ customer: 'cus_1', sessions: [PLAN_SESSION] });
+		english.deps.i18n = serverT('en');
+		expect(await startCheckout(english.deps, USER, 'pro')).toMatchObject({ ok: true, value: { terms: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', disclosure: NO_CODE_DISCLOSURE } } });
 	});
 });

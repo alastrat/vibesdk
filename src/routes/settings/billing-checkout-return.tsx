@@ -7,10 +7,11 @@ import { pageTitle } from '@/brand';
 import { CHECKOUT_FAILED_MESSAGE } from '@/hooks/use-billing';
 import { recallCheckoutRequest } from '@/hooks/use-billing-checkout';
 import { apiClient } from '@/lib/api-client';
+import { msg, t } from '@/lib/i18n';
 import { unwrap } from '@/lib/unwrap-response';
 import { returnTargetOf } from './checkout-state';
 
-const NOT_CHECKED_MESSAGE = "We couldn't check your payment. Look at your plan and credits on the billing page in a minute.";
+const NOT_CHECKED_MESSAGE = msg("We couldn't check your payment. Look at your plan and credits on the billing page in a minute.");
 
 /**
  * Where Stripe sends the seller after paying. It asks where the checkout stands and moves on: to billing, which
@@ -47,21 +48,21 @@ export default function BillingCheckoutReturnPage() {
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('Checkout')}</title>
+			<title>{pageTitle(t('Checkout'))}</title>
 			<div className="container mx-auto grid max-w-xl gap-6 px-4 py-16">
 				{notChecked ? (
 					<>
-						<Banner variant="alert" icon={<WarningCircleIcon />} description={NOT_CHECKED_MESSAGE} />
+						<Banner variant="alert" icon={<WarningCircleIcon />} description={t(NOT_CHECKED_MESSAGE)} />
 						<div>
 							<Link to={BILLING_PATH} className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-								Back to billing
+								{t('Back to billing')}
 							</Link>
 						</div>
 					</>
 				) : (
 					<div className="grid justify-items-center gap-3">
 						<Loader />
-						<p className="text-sm text-kumo-subtle">Confirming your payment…</p>
+						<p className="text-sm text-kumo-subtle">{t('Confirming your payment…')}</p>
 					</div>
 				)}
 			</div>

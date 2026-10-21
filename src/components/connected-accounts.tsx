@@ -21,6 +21,7 @@ import {
 	AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { apiClient } from '@/lib/api-client';
+import { t } from '@/lib/i18n';
 import { useAuth } from '@/contexts/auth-context';
 import type { LinkedIdentitiesData, OAuthProvider } from '@/api-types';
 import { CloudflareLogo } from '@cloudflare/kumo';
@@ -32,6 +33,7 @@ const PROVIDER_META: Record<
 	{ label: string; icon: React.ReactNode }
 > = {
 	github: {
+		// i18n-ignore: a brand name
 		label: 'GitHub',
 		icon: (
 			<svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -40,6 +42,7 @@ const PROVIDER_META: Record<
 		),
 	},
 	google: {
+		// i18n-ignore: a brand name
 		label: 'Google',
 		icon: (
 			<svg className="h-5 w-5" viewBox="0 0 24 24">
@@ -63,6 +66,7 @@ const PROVIDER_META: Record<
 		),
 	},
 	cloudflare: {
+		// i18n-ignore: a brand name
 		label: 'Cloudflare',
 		icon: <CloudflareLogo variant="glyph" className="h-5 w-5" />,
 	},
@@ -87,7 +91,7 @@ export function ConnectedAccounts() {
 			setIdentities(response.data?.identities ?? []);
 		} catch (error) {
 			console.error('Error loading linked identities:', error);
-			toast.error('Failed to load connected accounts');
+			toast.error(t('Failed to load connected accounts'));
 		} finally {
 			setLoading(false);
 		}
@@ -106,15 +110,14 @@ export function ConnectedAccounts() {
 		if (linked) {
 			const label =
 				PROVIDER_META[linked as OAuthProvider]?.label ?? linked;
-			toast.success(`${label} account linked successfully`);
+			toast.success(t('{provider} account linked successfully', { provider: label }));
 		} else if (error) {
 			const messages: Record<string, string> = {
-				link_conflict:
-					'That provider account is already linked to another user.',
-				link_unauthorized: 'Sign in again to link a new provider.',
-				link_failed: 'Failed to link provider. Please try again.',
+				link_conflict: t('That provider account is already linked to another user.'),
+				link_unauthorized: t('Sign in again to link a new provider.'),
+				link_failed: t('Failed to link provider. Please try again.'),
 			};
-			toast.error(messages[error] ?? 'Failed to link provider.');
+			toast.error(messages[error] ?? t('Failed to link provider.'));
 		}
 
 		if (linked || error) {
@@ -141,13 +144,13 @@ export function ConnectedAccounts() {
 			const response = await apiClient.unlinkProvider(providerToUnlink);
 			if (response.success) {
 				const label = PROVIDER_META[providerToUnlink].label;
-				toast.success(`${label} account unlinked`);
+				toast.success(t('{provider} account unlinked', { provider: label }));
 				await loadIdentities();
 				setProviderToUnlink(null);
 			}
 		} catch (error) {
 			console.error('Error unlinking provider:', error);
-			toast.error('Failed to unlink provider');
+			toast.error(t('Failed to unlink provider'));
 		} finally {
 			setUnlinking(false);
 		}
@@ -171,11 +174,10 @@ export function ConnectedAccounts() {
 		<div className="grid gap-4">
 			<div className="grid gap-1.5">
 				<h4 className="text-sm font-medium text-kumo-default">
-					Connected accounts
+					{t('Connected accounts')}
 				</h4>
 				<p className="text-sm text-kumo-subtle">
-					Link multiple sign-in providers to your account. You can use
-					any linked provider to sign in.
+					{t('Link multiple sign-in providers to your account. You can use any linked provider to sign in.')}
 				</p>
 			</div>
 
@@ -183,7 +185,7 @@ export function ConnectedAccounts() {
 				<div className="flex items-center gap-3 py-2">
 					<Loader2 className="h-5 w-5 animate-spin text-kumo-subtle" />
 					<span className="text-sm text-kumo-subtle">
-						Loading connected accounts...
+						{t('Loading connected accounts...')}
 					</span>
 				</div>
 			) : (
@@ -208,8 +210,8 @@ export function ConnectedAccounts() {
 										</p>
 										<p className="truncate text-sm text-kumo-subtle">
 											{isLinked
-												? identity?.email || 'Linked'
-												: 'Not connected'}
+												? identity?.email || t('Linked')
+												: t('Not connected')}
 										</p>
 									</div>
 								</div>
@@ -223,7 +225,7 @@ export function ConnectedAccounts() {
 													className="gap-1"
 												>
 													<ShieldCheck className="h-3 w-3" />
-													Verified
+													{t('Verified')}
 												</Badge>
 											)}
 											<Button
@@ -233,7 +235,7 @@ export function ConnectedAccounts() {
 												title={
 													canUnlink
 														? undefined
-														: 'You must keep at least one sign-in method'
+														: t('You must keep at least one sign-in method')
 												}
 												onClick={() =>
 													setProviderToUnlink(
@@ -243,7 +245,7 @@ export function ConnectedAccounts() {
 												className="gap-2 text-destructive hover:text-destructive"
 											>
 												<Unlink className="h-4 w-4" />
-												Unlink
+												{t('Unlink')}
 											</Button>
 										</>
 									) : (
@@ -261,7 +263,7 @@ export function ConnectedAccounts() {
 											) : (
 												<Link2 className="h-4 w-4" />
 											)}
-											Link
+											{t('Link')}
 										</Button>
 									)}
 								</div>
@@ -277,25 +279,21 @@ export function ConnectedAccounts() {
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Unlink provider?</AlertDialogTitle>
+						<AlertDialogTitle>{t('Unlink provider?')}</AlertDialogTitle>
 						<AlertDialogDescription>
-							You will no longer be able to sign in with your{' '}
-							{providerToUnlink
-								? PROVIDER_META[providerToUnlink].label
-								: ''}{' '}
-							account. You can re-link it at any time.
+							{t('You will no longer be able to sign in with your {provider} account. You can re-link it at any time.', { provider: providerToUnlink ? PROVIDER_META[providerToUnlink].label : '' })}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={unlinking}>
-							Cancel
+							{t('Cancel')}
 						</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={handleUnlink}
 							disabled={unlinking}
 							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
 						>
-							{unlinking ? 'Unlinking…' : 'Unlink'}
+							{unlinking ? t('Unlinking…') : t('Unlink')}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

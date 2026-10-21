@@ -32,13 +32,13 @@ afterEach(async () => {
 
 const onDelete = vi.fn(async () => undefined);
 
-async function mountDialog(overrides: { caseSensitive?: boolean; isDeleting?: boolean; errorMessage?: string } = {}) {
+async function mountDialog(overrides: { caseSensitive?: boolean; isDeleting?: boolean; errorMessage?: string; resourceType?: string } = {}) {
 	onDelete.mockClear();
 	return mountElement(
 		createElement(ConfirmDeleteDialog, {
 			open: true,
 			onOpenChange: () => undefined,
-			resourceType: 'App',
+			resourceType: 'app',
 			resourceName: 'Lucia Candles',
 			onDelete,
 			deleteButtonText: 'Delete App',
@@ -96,6 +96,16 @@ describe('ConfirmDeleteDialog', () => {
 		await applyAccountLocale('pt-BR');
 		const portuguese = textOf(await mountDialog());
 		for (const phrase of ['Excluir Lucia Candles', 'Esta ação não pode ser desfeita.', 'Digite', 'para confirmar:', 'Cancelar']) expect(portuguese).toContain(phrase);
+	});
+
+	it('shows the noun as the caller wrote it, capitals included', async () => {
+		expect(textOf(await mountDialog({ resourceType: 'API key' }))).toContain('API key.');
+		await unmountAll();
+		await applyAccountLocale('es');
+		expect(textOf(await mountDialog({ resourceType: 'clave de API' }))).toContain('(clave de API).');
+		await unmountAll();
+		await applyAccountLocale('pt-BR');
+		expect(textOf(await mountDialog({ resourceType: 'chave de API' }))).toContain('chave de API');
 	});
 
 	it('translates the labels a screen reader reads', async () => {

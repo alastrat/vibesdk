@@ -256,6 +256,7 @@ export {
 	PLAN_PRICES_CENTS,
 	assertWithinLimit,
 	extraCreditsPriceCents,
+	extraCreditsPriceLabel,
 	formatBillingDate,
 	formatCredits,
 	formatUsd,

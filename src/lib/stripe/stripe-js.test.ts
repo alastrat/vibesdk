@@ -68,6 +68,16 @@ describe('loadStripe', () => {
 		expect(page.stripePage.Stripe).toHaveBeenCalledTimes(2);
 	});
 
+	it("opens each stripe in the app's language, Latin American Spanish for Spanish", async () => {
+		const { loadStripe } = await freshLoader();
+		const factory = vi.fn(fakeStripe);
+		page.stripePage.Stripe = factory;
+		await loadStripe('pk_test_a');
+		await loadStripe('pk_test_a', 'es');
+		await loadStripe('pk_test_a', 'pt-BR');
+		expect(factory.mock.calls.map((call) => (call as unknown[])[1])).toEqual([{ locale: 'en' }, { locale: 'es-419' }, { locale: 'pt-BR' }]);
+	});
+
 	it('does not add a script when stripe is already on the page', async () => {
 		const { loadStripe } = await freshLoader();
 		page.stripePage.Stripe = fakeStripe;

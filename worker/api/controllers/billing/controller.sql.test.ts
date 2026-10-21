@@ -328,3 +328,46 @@ describe('the history, the checkout reads and the invoice PDF', () => {
 		expect(asked).toContain('/v1/invoices/in_1/pay');
 	});
 });
+
+describe("the checkout's wording follows the seller's language", () => {
+	const PLAN_SESSION = { id: 'cs_9', url: null, client_secret: 'cs_9_secret_x', status: 'open', amount_total: 4_900, client_reference_id: 'u_basic', metadata: { estori_user_id: 'u_basic', plan: 'pro' }, mode: 'subscription', discounts: [] };
+
+	/** The seller as authentication hands them over, with their saved language (or none). */
+	const seller = (locale: string | null): RouteContext =>
+		({ user: { id: 'u_basic', email: 'u_basic@example.test', locale }, sessionId: 's1', pathParams: {}, queryParams: new URLSearchParams('session_id=cs_9') }) as unknown as RouteContext;
+
+	const consentFor = async (locale: string | null, acceptLanguage?: string) => {
+		stripeServes({ '/v1/checkout/sessions/cs_9': PLAN_SESSION });
+		const request = new Request('https://estori.app/api/billing/checkout/terms?session_id=cs_9', { headers: acceptLanguage ? { 'Accept-Language': acceptLanguage } : {} });
+		const response = await BillingController.checkoutTerms(request, env(), ctx, seller(locale));
+		return ((await response.json()).data as { consentText: string }).consentText.replace(/ /g, ' ');
+	};
+
+	it("words the terms in the seller's saved language", async () => {
+		expect(await consentFor('es')).toBe('Acepto los Términos (en inglés) y que Estori Pro se renueva a USD 49 al mes hasta que yo cancele.');
+		expect(await consentFor('pt-BR')).toBe('Concordo com os Termos (em inglês) e com o fato de que o Estori Pro renova a US$ 49 por mês até eu cancelar.');
+		expect(await consentFor('en')).toBe('I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.');
+	});
+
+	it("falls back to the browser's language for a seller who has not chosen one, and to English without either", async () => {
+		expect(await consentFor(null, 'pt-BR,pt;q=0.9,en;q=0.8')).toContain('Concordo com os Termos');
+		expect(await consentFor(null, 'fr-FR,fr;q=0.9')).toContain('I agree to the Terms');
+		expect(await consentFor(null)).toContain('I agree to the Terms');
+	});
+
+	it("prefers the saved language to the browser's", async () => {
+		expect(await consentFor('es', 'pt-BR')).toContain('Acepto los Términos');
+	});
+
+	it('words the plan checkout it opens, its order and terms, in the same language', async () => {
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+			const path = new URL(String(input)).pathname;
+			if (path === '/v1/customers') return Response.json({ id: 'cus_basic', email: null, metadata: null });
+			return Response.json(PLAN_SESSION);
+		});
+		const response = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env(), ctx, seller('es'));
+		const data = (await response.json()).data as { order: { includes: string[] }; terms: { buttonText: string } };
+		expect(data.order.includes[0]).toBe('20,000 créditos de IA al mes');
+		expect(data.terms.buttonText.replace(/ /g, ' ')).toBe('Suscribirse: USD 49 al mes');
+	});
+});

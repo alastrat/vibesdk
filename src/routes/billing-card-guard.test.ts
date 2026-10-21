@@ -81,8 +81,8 @@ describe("estori's own card page", () => {
 	it('shows a refusal or a timeout in place of the form, each with a way back', () => {
 		const page = source(PAGE);
 		expect(page).toContain('CARD_EXPIRED_MESSAGE');
-		expect(page).toContain("label: 'Start again'");
-		expect(page).toContain("label: 'Try again'");
+		expect(page).toContain("label: t('Start again')");
+		expect(page).toContain("label: t('Try again')");
 		expect(page).toContain('<Stopped ');
 		expect(page).toContain('<BackToBilling />');
 	});

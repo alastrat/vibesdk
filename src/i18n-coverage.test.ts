@@ -46,6 +46,15 @@ const COVERED: string[] = [
 	'src/components/shared/AppLoadingSkeleton.tsx',
 	'src/components/shared/ConfirmDeleteDialog.tsx',
 	'src/lib/limit-amount.ts',
+	'src/routes/settings/',
+	'src/routes/profile.tsx',
+	'src/components/billing/',
+	'src/components/analytics/',
+	'src/hooks/use-telemetry.ts',
+	'src/hooks/use-billing*.ts',
+	'src/components/connected-accounts.tsx',
+	'src/components/cloudflare-account-selector.tsx',
+	'shared/types/billing.ts',
 ];
 
 /** Every source file that can be covered, loaded only when it is. Tests and declaration files are never covered. */

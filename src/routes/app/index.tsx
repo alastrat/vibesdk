@@ -1031,7 +1031,7 @@ export default function AppView() {
 				<ConfirmDeleteDialog
 					open={isDeleteDialogOpen}
 					onOpenChange={setIsDeleteDialogOpen}
-					resourceType={t('App')}
+					resourceType={t('app')}
 					deleteButtonText={t('Delete App')}
 					resourceName={app.title}
 					onDelete={handleDeleteApp}

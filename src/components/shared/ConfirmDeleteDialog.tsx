@@ -8,7 +8,7 @@ const COPIED_FEEDBACK_MS = 1500;
 interface ConfirmDeleteDialogProps {
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	/** What is being deleted, as a noun in the active language ("app", "API key"). */
+	/** What is being deleted, as the noun reads inside a sentence in the active language ("app", "API key", "clave de API"). */
 	resourceType: string;
 	/** The name the seller types to confirm, which is also shown as written. */
 	resourceName: string;
@@ -94,7 +94,7 @@ export function ConfirmDeleteDialog({
 						<DialogDescription className="max-w-prose text-base text-pretty text-kumo-subtle">
 							<T
 								text="This action cannot be undone. This will permanently delete the <name>{name}</name> {type}."
-								values={{ name: resourceName, type: resourceType.toLowerCase() }}
+								values={{ name: resourceName, type: resourceType }}
 								components={{ name: (children) => <span className="font-medium text-kumo-default">{children}</span> }}
 							/>
 						</DialogDescription>

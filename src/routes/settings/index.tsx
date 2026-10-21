@@ -46,13 +46,15 @@ import { ConnectedAccounts } from '@/components/connected-accounts';
 import { AnalyticsPreferenceCard } from '@/components/analytics/AnalyticsPreferenceCard';
 import { LanguageCard } from '@/components/settings/LanguageCard';
 import { ConfirmDeleteDialog } from '@/components/shared/ConfirmDeleteDialog';
-import { t } from '@/lib/i18n';
+import { formatNumericDate } from '@/lib/format-date';
+import { getLocale, t } from '@/lib/i18n';
 import { BRAND, pageTitle } from '@/brand';
 import { BiohazardIcon, TrashIcon } from '@phosphor-icons/react';
 
 const SUCCESS_BADGE_CLASS = 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-200';
 const WARNING_BADGE_CLASS = 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200';
 
+// i18n-ignore: the subject of an email to Estori's privacy inbox, which staff read in English
 const DELETION_REQUEST_HREF = `mailto:${LEGAL_CONTACT.privacy}?subject=${encodeURIComponent('Delete my Estori account')}`;
 
 type CreatedApiKey = {
@@ -70,7 +72,7 @@ function getFallbackActiveSessions(): ActiveSessionsData {
 					typeof navigator === 'undefined'
 						? null
 						: navigator.userAgent,
-				ipAddress: 'Current location',
+				ipAddress: t('Current location'),
 				lastActivity: new Date(),
 				createdAt: new Date(),
 				isCurrent: true,
@@ -92,7 +94,7 @@ async function fetchActiveSessions(): Promise<ActiveSessionsData> {
 async function fetchApiKeys(): Promise<ApiKeysData> {
 	const response = await apiClient.getApiKeys();
 	if (!response.success) {
-		throw new Error(response.error?.message || 'Failed to load API keys');
+		throw new Error(response.error?.message || t('Failed to load API keys'));
 	}
 	return { keys: response.data?.keys ?? [] };
 }
@@ -108,16 +110,16 @@ export default function SettingsPage() {
 		if (!status) return;
 
 		if (status === 'connected') {
-			toast.success('Cloudflare connected successfully');
+			toast.success(t('Cloudflare connected successfully'));
 		} else {
 			const reason = searchParams.get('reason');
 			const messages: Record<string, string> = {
-				connect_endpoint_changed: 'Please try connecting Cloudflare again.',
-				session_mismatch: 'Your session changed during connection. Please try again.',
-				missing_verifier: 'Cloudflare connection expired. Please try again.',
-				invalid_state: 'Cloudflare connection could not be verified. Please try again.',
+				connect_endpoint_changed: t('Please try connecting Cloudflare again.'),
+				session_mismatch: t('Your session changed during connection. Please try again.'),
+				missing_verifier: t('Cloudflare connection expired. Please try again.'),
+				invalid_state: t('Cloudflare connection could not be verified. Please try again.'),
 			};
-			toast.error(messages[reason ?? ''] ?? 'Failed to connect Cloudflare. Please try again.');
+			toast.error(messages[reason ?? ''] ?? t('Failed to connect Cloudflare. Please try again.'));
 		}
 
 		const next = new URLSearchParams(searchParams);
@@ -164,7 +166,7 @@ export default function SettingsPage() {
 			const response = await apiClient.resendVerification();
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || "Couldn't send the confirmation email",
+					response.error?.message || t("Couldn't send the confirmation email"),
 				);
 			}
 			return response.data.message;
@@ -176,7 +178,7 @@ export default function SettingsPage() {
 			toast.error(
 				error instanceof Error && error.message
 					? error.message
-					: "Couldn't send the confirmation email",
+					: t("Couldn't send the confirmation email"),
 			);
 		},
 	});
@@ -186,19 +188,19 @@ export default function SettingsPage() {
 			const response = await apiClient.revokeSession(sessionId);
 			if (!response.success) {
 				throw new Error(
-					response.error?.message || 'Failed to revoke session',
+					response.error?.message || t('Failed to revoke session'),
 				);
 			}
 		},
 		onSuccess: () => {
-			toast.success('Session revoked successfully');
+			toast.success(t('Session revoked successfully'));
 			void queryClient.invalidateQueries({
 				queryKey: queryKeys.account.settings.activeSessions(user?.id),
 			});
 		},
 		onError: (error) => {
 			console.error('Error revoking session:', error);
-			toast.error('Failed to revoke session');
+			toast.error(t('Failed to revoke session'));
 		},
 	});
 
@@ -207,7 +209,7 @@ export default function SettingsPage() {
 			const response = await apiClient.createApiKey({ name });
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || 'Failed to create API key',
+					response.error?.message || t('Failed to create API key'),
 				);
 			}
 			return response.data;
@@ -220,7 +222,7 @@ export default function SettingsPage() {
 			});
 			setShowCreatedKey(true);
 			resetCreatedKeyCopy();
-			toast.success('API key created');
+			toast.success(t('API key created'));
 			void queryClient.invalidateQueries({
 				queryKey: queryKeys.account.settings.apiKeys(user?.id),
 			});
@@ -228,7 +230,7 @@ export default function SettingsPage() {
 		},
 		onError: (error) => {
 			console.error('Error creating API key:', error);
-			toast.error('Failed to create API key');
+			toast.error(t('Failed to create API key'));
 		},
 	});
 
@@ -237,12 +239,12 @@ export default function SettingsPage() {
 			const response = await apiClient.revokeApiKey(keyId);
 			if (!response.success) {
 				throw new Error(
-					response.error?.message || 'Failed to revoke API key',
+					response.error?.message || t('Failed to revoke API key'),
 				);
 			}
 		},
 		onSuccess: () => {
-			toast.success('API key revoked');
+			toast.success(t('API key revoked'));
 			setKeyToRevoke(null);
 			setRevokeError(undefined);
 			void queryClient.invalidateQueries({
@@ -254,7 +256,7 @@ export default function SettingsPage() {
 			setRevokeError(
 				error instanceof Error
 					? error.message
-					: 'Failed to revoke API key',
+					: t('Failed to revoke API key'),
 			);
 		},
 	});
@@ -283,21 +285,21 @@ export default function SettingsPage() {
 	useEffect(() => {
 		if (!apiKeysError) return;
 		console.error('Error loading API keys:', apiKeysError);
-		toast.error('Failed to load API keys');
+		toast.error(t('Failed to load API keys'));
 	}, [apiKeysError]);
 
 	return (
 		<div className="relative">
-			<title>{pageTitle('Settings')}</title>
+			<title>{pageTitle(t('Settings'))}</title>
 			<main className="container mx-auto px-4 py-16 max-w-4xl pb-48">
 				<div className="grid gap-8">
 					{/* Page Header */}
 					<div className="grid gap-1.5 mb-4">
 						<h1 className="text-4xl font-semibold font-funky-mono text-kumo-default">
-							Settings
+							{t('Settings')}
 						</h1>
 						<p className="text-sm text-kumo-subtle font-funky-mono">
-							Manage your account settings and preferences
+							{t('Manage your account settings and preferences')}
 						</p>
 					</div>
 
@@ -307,14 +309,14 @@ export default function SettingsPage() {
 								<span className="flex items-center">
 									<Mail className="size-4" />
 								</span>
-								<span>Account</span>
+								<span>{t('Account')}</span>
 							</div>
 						</LayerCard.Secondary>
 						<LayerCard.Primary>
 							<div className="flex flex-wrap items-center justify-between gap-4">
 								<div className="grid min-w-0 gap-1.5">
 									<h4 className="text-sm font-medium text-kumo-default">
-										Email
+										{t('Email')}
 									</h4>
 									<div className="flex flex-wrap items-center gap-2">
 										<p className="truncate text-sm text-kumo-subtle">
@@ -326,14 +328,14 @@ export default function SettingsPage() {
 													variant="secondary"
 													className={SUCCESS_BADGE_CLASS}
 												>
-													Email confirmed
+													{t('Email confirmed')}
 												</Badge>
 											) : (
 												<Badge
 													variant="secondary"
 													className={WARNING_BADGE_CLASS}
 												>
-													Email not confirmed
+													{t('Email not confirmed')}
 												</Badge>
 											)
 										)}
@@ -346,7 +348,7 @@ export default function SettingsPage() {
 										loading={resendConfirmationMutation.isPending}
 										onClick={() => resendConfirmationMutation.mutate()}
 									>
-										Resend confirmation email
+										{t('Resend confirmation email')}
 									</Button>
 								)}
 							</div>
@@ -364,14 +366,14 @@ export default function SettingsPage() {
 									<span className="flex items-center">
 										<CreditCard className="size-4" />
 									</span>
-									<span>Plan and billing</span>
+									<span>{t('Plan and billing')}</span>
 								</div>
 							</LayerCard.Secondary>
 							<LayerCard.Primary>
 								<div className="flex flex-wrap items-center justify-between gap-4">
 									<div className="grid gap-1.5">
 										<h4 className="text-sm font-medium text-kumo-default">
-											Your plan
+											{t('Your plan')}
 										</h4>
 										<p className="text-sm text-kumo-subtle">
 											{planName(billing.data.plan)}
@@ -381,7 +383,7 @@ export default function SettingsPage() {
 										to={BILLING_PATH}
 										className={buttonVariants({ variant: 'secondary', size: 'sm' })}
 									>
-										Plan, credits and billing
+										{t('Plan, credits and billing')}
 									</Link>
 								</div>
 							</LayerCard.Primary>
@@ -397,7 +399,7 @@ export default function SettingsPage() {
 								<span className="flex items-center">
 									<Key className="size-4" />
 								</span>
-								<span>API keys</span>
+								<span>{t('API keys')}</span>
 							</div>
 						</LayerCard.Secondary>
 						<LayerCard.Primary>
@@ -405,12 +407,10 @@ export default function SettingsPage() {
 								<div className="flex items-start justify-between gap-4">
 									<div className="grid gap-1.5">
 										<h4 className="text-sm font-medium text-kumo-default">
-											{BRAND.name} API keys
+											{t('{brand} API keys', { brand: BRAND.name })}
 										</h4>
 										<p className="text-sm text-kumo-subtle">
-											Use these keys to authenticate
-											external SDK clients. The full key
-											is shown only once when created.
+											{t('Use these keys to authenticate external SDK clients. The full key is shown only once when created.')}
 										</p>
 									</div>
 
@@ -435,7 +435,7 @@ export default function SettingsPage() {
 													className="gap-2"
 												>
 													<Key className="size-4" />
-													Create API key
+													{t('Create API key')}
 												</Button>
 											)}
 										/>
@@ -443,13 +443,13 @@ export default function SettingsPage() {
 											<div className="mb-4 grid gap-1.5">
 												<DialogTitle className="text-xl font-semibold">
 													{createdKey
-														? 'Your new API key'
-														: 'Create API key'}
+														? t('Your new API key')
+														: t('Create API key')}
 												</DialogTitle>
 												<DialogDescription className="text-kumo-subtle">
 													{createdKey
-														? 'Copy this key now. You will not be able to see it again.'
-														: 'Give your key a memorable name. You can revoke it anytime.'}
+														? t('Copy this key now. You will not be able to see it again.')
+														: t('Give your key a memorable name. You can revoke it anytime.')}
 												</DialogDescription>
 											</div>
 
@@ -457,7 +457,7 @@ export default function SettingsPage() {
 												<div className="grid gap-4">
 													<div className="grid gap-1.5">
 														<p className="text-sm font-medium text-kumo-default">
-															Key name
+															{t('Key name')}
 														</p>
 														<Input
 															value={newKeyName}
@@ -467,7 +467,7 @@ export default function SettingsPage() {
 																		.value,
 																)
 															}
-															placeholder="e.g. My production SDK"
+															placeholder={t('e.g. My production SDK')}
 															autoFocus
 														/>
 													</div>
@@ -475,13 +475,9 @@ export default function SettingsPage() {
 													<div className="rounded-lg bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 p-3">
 														<p className="text-sm text-amber-800 dark:text-amber-200">
 															<strong>
-																Important:
+																{t('Important:')}
 															</strong>{' '}
-															Treat this like a
-															password. Anyone
-															with this key can
-															act as your {BRAND.name}
-															account.
+															{t('Treat this like a password. Anyone with this key can act as your {brand} account.', { brand: BRAND.name })}
 														</p>
 													</div>
 												</div>
@@ -489,7 +485,7 @@ export default function SettingsPage() {
 												<div className="grid gap-4">
 													<div className="grid gap-1.5">
 														<p className="text-sm font-medium text-kumo-default">
-															API key
+															{t('API key')}
 														</p>
 														<div className="relative">
 															<Input
@@ -511,8 +507,8 @@ export default function SettingsPage() {
 																	variant="ghost"
 																	aria-label={
 																		showCreatedKey
-																			? 'Hide API key'
-																			: 'Show API key'
+																			? t('Hide API key')
+																			: t('Show API key')
 																	}
 																	onClick={() =>
 																		setShowCreatedKey(
@@ -533,8 +529,8 @@ export default function SettingsPage() {
 																	variant="ghost"
 																	aria-label={
 																		copiedCreatedKey
-																			? 'Copied'
-																			: 'Copy API key'
+																			? t('Copied')
+																			: t('Copy API key')
 																	}
 																	onClick={() =>
 																		copyCreatedKey(
@@ -555,9 +551,10 @@ export default function SettingsPage() {
 
 													<div className="rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 p-3 grid gap-1.5">
 														<p className="text-xs font-medium text-slate-700 dark:text-slate-300">
-															SDK usage
+															{t('SDK usage')}
 														</p>
 														<code className="text-xs text-slate-600 dark:text-slate-400 block font-mono text-[0.9em]">
+															{/* i18n-ignore: the name of an environment variable */}
 															VIBESDK_API_KEY=
 															{
 																createdKey.keyPreview
@@ -581,7 +578,7 @@ export default function SettingsPage() {
 														loading={creatingKey}
 														className="gap-2"
 													>
-														Create
+														{t('Create')}
 													</Button>
 												) : (
 													<DialogClose
@@ -590,7 +587,7 @@ export default function SettingsPage() {
 																variant="secondary"
 																{...props}
 															>
-																Done
+																{t('Done')}
 															</Button>
 														)}
 													/>
@@ -604,7 +601,7 @@ export default function SettingsPage() {
 									<div className="flex items-center gap-3">
 										<Settings className="size-4 animate-spin text-kumo-subtle" />
 										<span className="text-sm text-kumo-subtle">
-											Loading API keys...
+											{t('Loading API keys...')}
 										</span>
 									</div>
 								) : apiKeys.length === 0 ? (
@@ -615,12 +612,10 @@ export default function SettingsPage() {
 											</span>
 											<div className="grid gap-1.5">
 												<p className="text-sm font-medium text-kumo-default">
-													No API keys yet
+													{t('No API keys yet')}
 												</p>
 												<p className="text-sm text-kumo-subtle">
-													Create an API key to use the{' '}
-													{BRAND.name} SDK from your own
-													apps.
+													{t('Create an API key to use the {brand} SDK from your own apps.', { brand: BRAND.name })}
 												</p>
 											</div>
 										</div>
@@ -628,19 +623,19 @@ export default function SettingsPage() {
 								) : (
 									<>
 										<p className="mb-2 text-sm text-kumo-subtle">
-											Active keys for SDK usage
+											{t('Active keys for SDK usage')}
 										</p>
 										<LayerCard className="overflow-x-auto p-0">
 											<Table>
 												<Table.Header>
 													<Table.Row>
-														<Table.Head>Name</Table.Head>
-														<Table.Head>Preview</Table.Head>
-														<Table.Head>Created</Table.Head>
-														<Table.Head>Last used</Table.Head>
-														<Table.Head>Status</Table.Head>
+														<Table.Head>{t('Name')}</Table.Head>
+														<Table.Head>{t('Preview')}</Table.Head>
+														<Table.Head>{t('Created')}</Table.Head>
+														<Table.Head>{t('Last used')}</Table.Head>
+														<Table.Head>{t('Status')}</Table.Head>
 														<Table.Head className="text-right">
-															Actions
+															{t('Actions')}
 														</Table.Head>
 													</Table.Row>
 												</Table.Header>
@@ -655,16 +650,12 @@ export default function SettingsPage() {
 															</Table.Cell>
 															<Table.Cell className="text-kumo-subtle">
 																{k.createdAt
-																	? new Date(
-																			k.createdAt,
-																		).toLocaleDateString()
+																	? formatNumericDate(new Date(k.createdAt), getLocale())
 																	: '—'}
 															</Table.Cell>
 															<Table.Cell className="text-kumo-subtle">
 																{k.lastUsed
-																	? new Date(
-																			k.lastUsed,
-																		).toLocaleDateString()
+																	? formatNumericDate(new Date(k.lastUsed), getLocale())
 																	: '—'}
 															</Table.Cell>
 															<Table.Cell>
@@ -673,11 +664,11 @@ export default function SettingsPage() {
 																		variant="secondary"
 																		className={SUCCESS_BADGE_CLASS}
 																	>
-																		Active
+																		{t('Active')}
 																	</Badge>
 																) : (
 																	<Badge variant="secondary">
-																		Revoked
+																		{t('Revoked')}
 																	</Badge>
 																)}
 															</Table.Cell>
@@ -699,7 +690,7 @@ export default function SettingsPage() {
 																	className="gap-2"
 																>
 																	<Trash2 className="size-4" />
-																	Revoke
+																	{t('Revoke')}
 																</Button>
 															</Table.Cell>
 														</Table.Row>
@@ -739,7 +730,7 @@ export default function SettingsPage() {
 								<span className="h-lh flex items-center">
 									<Lock className="size-4" />
 								</span>
-								<span>Security</span>
+								<span>{t('Security')}</span>
 							</div>
 						</LayerCard.Secondary>
 						<LayerCard.Primary>
@@ -750,13 +741,13 @@ export default function SettingsPage() {
 
 								<div className="grid gap-4">
 									<h4 className="text-sm font-medium text-kumo-default">
-										Active sessions
+										{t('Active sessions')}
 									</h4>
 									{activeSessionsLoading ? (
 										<div className="flex items-center gap-3">
 											<Settings className="size-4 animate-spin text-kumo-subtle" />
 											<span className="text-sm text-kumo-subtle">
-												Loading active sessions...
+												{t('Loading active sessions...')}
 											</span>
 										</div>
 									) : (
@@ -773,17 +764,15 @@ export default function SettingsPage() {
 														<div className="grid gap-1.5">
 															<p className="text-sm font-medium text-kumo-default">
 																{session.isCurrent
-																	? 'Current session'
-																	: 'Other session'}
+																	? t('Current session')
+																	: t('Other session')}
 															</p>
 															<p className="text-sm text-kumo-subtle">
 																{
 																	session.ipAddress
 																}{' '}
 																•{' '}
-																{new Date(
-																	session.lastActivity,
-																).toLocaleDateString()}
+																{formatNumericDate(new Date(session.lastActivity), getLocale())}
 															</p>
 														</div>
 													</div>
@@ -800,7 +789,7 @@ export default function SettingsPage() {
 																	)
 																}
 															>
-																Revoke
+																{t('Revoke')}
 															</Button>
 														)}
 													</div>
@@ -819,17 +808,17 @@ export default function SettingsPage() {
 								<span className="h-lh flex items-center">
 									<BiohazardIcon weight="duotone" className="size-4" />
 								</span>
-								Danger zone
+								{t('Danger zone')}
 							</div>
 						</LayerCard.Secondary>
 						<LayerCard.Primary>
 							<div className="flex items-center justify-between gap-4">
 								<div className="grid gap-1.5">
 									<p className="text-sm font-medium text-kumo-default">
-										Delete account
+										{t('Delete account')}
 									</p>
 									<p className="text-sm text-kumo-subtle">
-										Ask us to erase your account and all your data
+										{t('Ask us to erase your account and all your data')}
 									</p>
 								</div>
 
@@ -845,17 +834,17 @@ export default function SettingsPage() {
 													weight="duotone"
 													className="size-4"
 												/>
-												Delete account
+												{t('Delete account')}
 											</Button>
 										)}
 									/>
 									<Dialog className="p-8">
 										<div className="mb-4 grid gap-1.5">
 											<DialogTitle className="text-xl font-semibold">
-												Delete your account
+												{t('Delete your account')}
 											</DialogTitle>
 											<DialogDescription className="text-kumo-subtle">
-												To delete your account and all your data, email {LEGAL_CONTACT.privacy} from {user?.email}. We complete erasure within 45 days.
+												{t('To delete your account and all your data, email {address} from {email}. We complete erasure within 45 days.', { address: LEGAL_CONTACT.privacy, email: user?.email ?? '' })}
 											</DialogDescription>
 										</div>
 										<div className="mt-8 flex justify-end gap-2">
@@ -865,7 +854,7 @@ export default function SettingsPage() {
 														variant="secondary"
 														{...props}
 													>
-														Cancel
+														{t('Cancel')}
 													</Button>
 												)}
 											/>
@@ -873,7 +862,7 @@ export default function SettingsPage() {
 												variant="primary"
 												href={DELETION_REQUEST_HREF}
 											>
-												Email us
+												{t('Email us')}
 											</LinkButton>
 										</div>
 									</Dialog>

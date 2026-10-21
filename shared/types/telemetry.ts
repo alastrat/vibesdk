@@ -1,5 +1,6 @@
 /** What the API answers for analytics, the analytics setting and flags. */
 
+import { msg } from '../i18n/translate';
 import type { ClientFlagValues, FlagKey, FlagKind } from './feature-flags';
 
 /** `GET /api/telemetry/config`. The browser's project token comes from a committed hostname map, not from here. */
@@ -26,7 +27,7 @@ export interface AnalyticsPreferenceData {
 	gpc: boolean;
 }
 
-export const GPC_ANALYTICS_MESSAGE = "Your browser's Global Privacy Control setting is on, so analytics stays off.";
+export const GPC_ANALYTICS_MESSAGE = msg("Your browser's Global Privacy Control setting is on, so analytics stays off.");
 
 export interface AdminFlagRow {
 	key: FlagKey;

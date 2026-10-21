@@ -3,10 +3,8 @@ import { X } from 'lucide-react';
 import { type UsageSummary, type LimitConfig } from '@/hooks/use-limits';
 import { CloudflareLogo } from './icons/logos';
 import { CREDITS_BANNER_THRESHOLD } from '../../shared/constants/limits';
-import { formatDollars, formatNumber } from '../../shared/i18n/format';
-import { INTL_LOCALE } from '../../shared/i18n/locales';
 import { getLocale, t, useI18n } from '@/lib/i18n';
-import { formatLimitAmount } from '@/lib/limit-amount';
+import { formatLimitAmount, formatMoney } from '@/lib/limit-amount';
 
 interface CreditsBannerProps {
 	limitsData?: UsageSummary | null;
@@ -40,18 +38,6 @@ function getResetDate(window: LimitWindow, periodSeconds?: number): Date | null 
 		case 'lifetime':
 		default:
 			return null;
-	}
-}
-
-/** Money the way the language writes it: US dollars as '$61.57', 'USD 61.57' or 'US$ 61,57', other currencies by their own symbol. */
-function formatMoney(amount: number, currency: string): string {
-	const locale = getLocale();
-	if (currency === 'USD') return formatDollars(amount, locale, 'always');
-	try {
-		return new Intl.NumberFormat(INTL_LOCALE[locale], { style: 'currency', currency }).format(amount);
-	} catch {
-		// A currency code Intl does not know.
-		return `${formatNumber(amount, locale)} ${currency}`;
 	}
 }
 
@@ -99,7 +85,7 @@ function buildConnectedBalanceContent(
 	return (
 		<span className="inline-flex items-center gap-1">
 			<CloudflareLogo className="w-3.5 h-3.5" />
-			<span>{formatMoney(credits.credits, credits.currency)} {resetSuffix}</span>
+			<span>{formatMoney(credits.credits, credits.currency, getLocale())} {resetSuffix}</span>
 		</span>
 	);
 }

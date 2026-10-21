@@ -50,6 +50,28 @@ export function translatePlural(catalog: Catalog | null, locale: Locale, singula
 	return interpolate(text, { ...values, count: formatNumber(count, locale) });
 }
 
+/**
+ * Translates into one language. Code shared by the app and the server words its text through a `Translator`, so it
+ * works wherever it runs: the app hands over `useI18n()`, the server `serverT(locale)`.
+ */
+export interface Translator {
+	locale: Locale;
+	t(english: string, values?: MessageValues): string;
+	tn(singular: string, plural: string, count: number, values?: MessageValues): string;
+}
+
+/** A `Translator` for `locale` over its catalog, which is null for English. */
+export function translatorFor(catalog: Catalog | null, locale: Locale): Translator {
+	return {
+		locale,
+		t: (english, values) => translate(catalog, english, values),
+		tn: (singular, plural, count, values) => translatePlural(catalog, locale, singular, plural, count, values),
+	};
+}
+
+/** The source language, which needs no catalog; what English-only pages hand to shared wording. */
+export const ENGLISH: Translator = translatorFor(null, 'en');
+
 /** Marks a string for the extractor and answers it unchanged; the server translates it where it answers a request. */
 export function msg(english: string): string {
 	return english;
