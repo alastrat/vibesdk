@@ -10,7 +10,7 @@ import { languageUrl } from './language';
 /** Each language by its own name, as shoppers look for it. */
 export const STORE_LANGUAGE_NAMES: Readonly<Record<Locale, string>> = { en: 'English', es: 'Español', 'pt-BR': 'Português' };
 
-/** The switcher's name for screen readers, in the language the page is in. */
+/** What the switcher is, in the language the page is in; its accessible name adds the language it shows. */
 const SWITCHER_LABEL: Readonly<Record<Locale, string>> = { en: 'Language', es: 'Idioma', 'pt-BR': 'Idioma' };
 
 /** Marks the switcher, so the overlay script leaves its names as they are. */
@@ -30,15 +30,15 @@ const STYLES = {
 /** The switcher's markup: the page's language as its button, and a link to this page in each of the store's languages. */
 export function languageSwitcher(current: Locale, languages: readonly Locale[], pageUrl: URL): string {
 	const links = languages.map((locale) => {
-		const url = languageUrl(pageUrl, locale);
-		const href = escapeHtml(`${url.pathname}${url.search}`);
+		// Only the query: the page's own path, whatever it is, can't take the link off the store.
+		const href = escapeHtml(languageUrl(pageUrl, locale).search);
 		const marked = locale === current ? ' aria-current="true"' : '';
 		const style = locale === current ? `${STYLES.link};${STYLES.current}` : STYLES.link;
 		return `<li style="${STYLES.item}"><a href="${href}" hreflang="${locale}" lang="${locale}"${marked} style="${style}">${escapeHtml(STORE_LANGUAGE_NAMES[locale])}</a></li>`;
 	});
 	return (
 		`<details ${SWITCHER_ATTRIBUTE} translate="no" style="${STYLES.details}">` +
-		`<summary aria-label="${SWITCHER_LABEL[current]}" style="${STYLES.summary}">${escapeHtml(STORE_LANGUAGE_NAMES[current])}</summary>` +
+		`<summary aria-label="${escapeHtml(`${SWITCHER_LABEL[current]}: ${STORE_LANGUAGE_NAMES[current]}`)}" style="${STYLES.summary}">${escapeHtml(STORE_LANGUAGE_NAMES[current])}</summary>` +
 		`<ul style="${STYLES.list}">${links.join('')}</ul></details>`
 	);
 }

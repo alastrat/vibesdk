@@ -35,7 +35,7 @@ import { releaseOldestHolds } from '../../services/store-payments/holds';
 import { replaceCheckout } from '../../services/store-payments/replace';
 import { LiveStoreService } from '../../database/services/LiveStoreService';
 import { plainPage } from './plain-page';
-import { loadStoreLanguageContext, shopperLanguage, type ShopperLanguage } from '../../services/store-translations/serve-context';
+import { loadServingLanguages, shopperLanguage, type ShopperLanguage } from '../../services/store-translations/serve-context';
 import { STORE_LANGUAGE_PARAM, storeLanguages } from '../../services/store-translations/language';
 import { STORE_OVERLAY_PATH, translateManifest } from '../../services/store-translations/rewrite';
 import { overlayScript } from '../../services/store-translations/overlay-script';
@@ -211,16 +211,24 @@ async function refusedFor(request: Request, env: Env, target: StorePlatformTarge
 	return refusal(reason, await shopperLocale(request, env, target));
 }
 
-/** `/__estori/i18n.js?lang=xx&v=n`: the overlay for a ready language, kept by browsers while `v` is the current version. */
+/**
+ * `/__estori/i18n.js?lang=xx&v=n`: the overlay for a ready language, kept by browsers while `v` is the current version.
+ * It is always a script: a failure answers an empty one, since the page itself is already translated.
+ */
 async function serveOverlayScript(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const query = new URL(request.url).searchParams;
-	const ctx = await loadStoreLanguageContext(env, target.appId);
-	const locale = query.get(STORE_LANGUAGE_PARAM);
 	const headers = { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' };
-	if (!isLocale(locale) || !ctx.ready.includes(locale)) return new Response('', { status: 404, headers });
-	const current = query.get('v') === String(ctx.settings.version);
-	const script = overlayScript(locale, await ctx.entries(locale));
-	return new Response(script, { headers: { ...headers, 'Cache-Control': current ? 'public, max-age=31536000, immutable' : 'no-store' } });
+	try {
+		const ctx = await loadServingLanguages(env, target.appId);
+		const locale = query.get(STORE_LANGUAGE_PARAM);
+		if (!ctx || !isLocale(locale) || !ctx.ready.includes(locale)) return new Response('', { status: 404, headers });
+		const current = query.get('v') === String(ctx.settings.version);
+		const script = overlayScript(locale, await ctx.scriptEntries(locale));
+		return new Response(script, { headers: { ...headers, 'Cache-Control': current ? 'public, max-age=31536000, immutable' : 'no-store' } });
+	} catch (error) {
+		logger.warn('The store overlay script could not be built', { appId: target.appId, error });
+		return new Response('', { status: 503, headers });
+	}
 }
 
 /** `store.js`, worded for the shopper's language; it knows the store's languages to follow the page's own. */

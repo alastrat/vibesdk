@@ -48,9 +48,12 @@ function qualityOf(params: readonly string[]): number {
 	return 1;
 }
 
-/** The app language for an `Accept-Language` header: ranges ordered by q-value, then by position, then negotiated. */
-export function localeFromAcceptLanguage(header: string | null): Locale {
-	if (!header) return DEFAULT_LOCALE;
+/**
+ * The app languages an `Accept-Language` header accepts, best first: ranges ordered by q-value, then by position,
+ * each matched by its base language (`es-MX` is `es`, `pt` is `pt-BR`), each language once. Empty when none match.
+ */
+export function acceptedLocales(header: string | null): Locale[] {
+	if (!header) return [];
 	const ranked = header
 		.split(',')
 		.map((range, position) => {
@@ -59,5 +62,11 @@ export function localeFromAcceptLanguage(header: string | null): Locale {
 		})
 		.filter((range) => range.tag !== '' && range.quality > 0)
 		.sort((a, b) => b.quality - a.quality || a.position - b.position);
-	return negotiateLocale(ranked.map((range) => range.tag));
+	const locales = ranked.map((range) => localeOfTag(range.tag)).filter((locale): locale is Locale => locale !== null);
+	return [...new Set(locales)];
+}
+
+/** The app language for an `Accept-Language` header: its best accepted language, or the default. */
+export function localeFromAcceptLanguage(header: string | null): Locale {
+	return acceptedLocales(header)[0] ?? DEFAULT_LOCALE;
 }

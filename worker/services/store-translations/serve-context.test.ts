@@ -10,76 +10,102 @@ function settings(overrides: Partial<StoreTranslationSettings> = {}): StoreTrans
 	return { sourceLocale: 'en', targets: { es: { enabled: true, ready: true } }, matchBrowser: true, showSwitcher: true, autoTranslate: true, version: 3, ...overrides };
 }
 
-/** A source that counts its reads; `current` is what D1 would answer now. */
-function countingSource(current: { settings: StoreTranslationSettings; failNext?: boolean }) {
-	const reads = { settings: 0, translations: [] as string[] };
+/** A source that counts its reads; `stored` is the store's saved settings row, or null when it has none. */
+function countingSource(current: { stored: StoreTranslationSettings | null; failNext?: boolean }) {
+	const reads = { stored: 0, translations: [] as string[], scripts: 0 };
 	const source: StoreLanguageSource = {
-		async settingsOf() {
-			reads.settings++;
+		async storedSettings() {
+			reads.stored++;
 			if (current.failNext) {
 				current.failNext = false;
 				throw new Error('D1 is unavailable');
 			}
-			return current.settings;
+			return current.stored;
 		},
 		async translationsOf(_appId: string, locale: Locale) {
-			reads.translations.push(`${locale}@${current.settings.version}`);
-			return [{ hash: await textHash('Fresh tea'), source: 'Fresh tea', text: `Fresh tea in ${locale} v${current.settings.version}` }];
+			const version = current.stored?.version ?? 0;
+			reads.translations.push(`${locale}@${version}`);
+			return [{ hash: await textHash('Fresh tea'), source: 'Fresh tea', text: `Fresh tea in ${locale} v${version}` }];
+		},
+		async scriptTranslationsOf() {
+			reads.scripts++;
+			return [{ hash: await textHash('Add to cart'), source: 'Add to cart', text: 'Agregar al carrito' }];
 		},
 	};
 	return { source, reads };
 }
 
-describe('loadStoreLanguageContext', () => {
+describe('the store language loader', () => {
 	it("reuses a store's settings for 30 seconds", async () => {
 		let now = 1_000;
 		const load = createStoreLanguageLoader(() => now);
-		const current = { settings: settings() };
-		const { source, reads } = countingSource(current);
-		await load(source, 'app_1');
+		const { source, reads } = countingSource({ stored: settings() });
+		await load.serving(source, 'app_1');
 		now += 29_999;
-		await load(source, 'app_1');
-		expect(reads.settings).toBe(1);
-		await load(source, 'app_2');
-		expect(reads.settings).toBe(2);
+		await load.serving(source, 'app_1');
+		await load.context(source, 'app_1');
+		expect(reads.stored).toBe(1);
+		await load.serving(source, 'app_2');
+		expect(reads.stored).toBe(2);
 		now += 1;
-		await load(source, 'app_1');
-		expect(reads.settings).toBe(3);
+		await load.serving(source, 'app_1');
+		expect(reads.stored).toBe(3);
+	});
+
+	it('serves nothing for a store without settings, after one read, and keeps it in English for Estori\'s own pages', async () => {
+		let now = 0;
+		const load = createStoreLanguageLoader(() => now);
+		const { source, reads } = countingSource({ stored: null });
+		expect(await load.serving(source, 'app_1')).toBeNull();
+		expect(await load.serving(source, 'app_1')).toBeNull();
+		// Never the owner's own language: an English store stays English for sellers who use Estori in Spanish.
+		const ctx = await load.context(source, 'app_1');
+		expect(ctx.settings.sourceLocale).toBe('en');
+		expect(ctx.ready).toEqual([]);
+		expect(reads.stored).toBe(1);
+		now += 30_000;
+		await load.context(source, 'app_1');
+		expect(reads.stored).toBe(2);
 	});
 
 	it('only offers languages the seller turned on whose first translation finished, never the source', async () => {
 		const load = createStoreLanguageLoader(() => 0);
 		const targets: StoreTranslationSettings['targets'] = { en: { enabled: true, ready: true }, es: { enabled: true, ready: false }, 'pt-BR': { enabled: false, ready: true } };
-		const { source } = countingSource({ settings: settings({ sourceLocale: 'en', targets }) });
-		expect((await load(source, 'app_1')).ready).toEqual([]);
-		const { source: other } = countingSource({ settings: settings({ sourceLocale: 'es', targets: { en: { enabled: true, ready: true }, 'pt-BR': { enabled: true, ready: true } } }) });
-		expect((await load(other, 'app_2')).ready).toEqual(['en', 'pt-BR']);
+		const { source } = countingSource({ stored: settings({ sourceLocale: 'en', targets }) });
+		expect(await load.serving(source, 'app_1')).toBeNull();
+		expect((await load.context(source, 'app_1')).ready).toEqual([]);
+		const { source: other } = countingSource({ stored: settings({ sourceLocale: 'es', targets: { en: { enabled: true, ready: true }, 'pt-BR': { enabled: true, ready: true } } }) });
+		expect((await load.serving(other, 'app_2'))?.ready).toEqual(['en', 'pt-BR']);
 	});
 
-	it("loads each language's translations once per version, by hash and as pairs", async () => {
+	it("loads each language's translations once per version, by hash and by text", async () => {
 		let now = 0;
 		const load = createStoreLanguageLoader(() => now);
-		const current = { settings: settings() };
+		const current = { stored: settings() };
 		const { source, reads } = countingSource(current);
-		const ctx = await load(source, 'app_1');
+		const ctx = await load.context(source, 'app_1');
 		expect(await ctx.dictionary('es')).toEqual(new Map([[await textHash('Fresh tea'), 'Fresh tea in es v3']]));
-		expect(await ctx.entries('es')).toEqual([['Fresh tea', 'Fresh tea in es v3']]);
-		expect(await (await load(source, 'app_1')).dictionary('es')).toBeInstanceOf(Map);
+		expect(await ctx.texts('es')).toEqual(new Map([['Fresh tea', 'Fresh tea in es v3']]));
+		expect(await (await load.context(source, 'app_1')).texts('es')).toBeInstanceOf(Map);
 		expect(reads.translations).toEqual(['es@3']);
 
 		// The seller's next edit bumps the version; once the settings are read again, so are the translations.
-		current.settings = settings({ version: 4 });
+		current.stored = settings({ version: 4 });
 		now += 30_000;
-		expect(await (await load(source, 'app_1')).entries('es')).toEqual([['Fresh tea', 'Fresh tea in es v4']]);
+		expect(await (await load.context(source, 'app_1')).texts('es')).toEqual(new Map([['Fresh tea', 'Fresh tea in es v4']]));
 		expect(reads.translations).toEqual(['es@3', 'es@4']);
+
+		// The overlay's texts are read on their own, only when the overlay is asked for.
+		expect(reads.scripts).toBe(0);
+		expect(await ctx.scriptEntries('es')).toEqual([['Add to cart', 'Agregar al carrito']]);
+		expect(reads.scripts).toBe(1);
 	});
 
 	it('tries again after a failed read instead of keeping the failure', async () => {
 		const load = createStoreLanguageLoader(() => 0);
-		const current = { settings: settings(), failNext: true };
-		const { source, reads } = countingSource(current);
-		await expect(load(source, 'app_1')).rejects.toThrow('D1 is unavailable');
-		expect((await load(source, 'app_1')).ready).toEqual(['es']);
-		expect(reads.settings).toBe(2);
+		const { source, reads } = countingSource({ stored: settings(), failNext: true });
+		await expect(load.serving(source, 'app_1')).rejects.toThrow('D1 is unavailable');
+		expect((await load.serving(source, 'app_1'))?.ready).toEqual(['es']);
+		expect(reads.stored).toBe(2);
 	});
 });

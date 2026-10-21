@@ -82,12 +82,17 @@ function isDescriptiveMeta(attributes: Record<string, string>): boolean {
 	return name === 'description' || property === 'og:title' || property === 'og:description';
 }
 
+/** A button input's label. A named one is also a form value the store's server reads, so it stays as written. */
+function isButtonLabel(tag: string, attributes: Record<string, string>): boolean {
+	return tag === 'input' && attributes.name === undefined && BUTTON_INPUT_TYPES.has((attributes.type ?? '').trim().toLowerCase());
+}
+
 /** The names of one element's attributes that shoppers read, in source order. Names are lower-case, values raw. */
 export function textAttributeNames(tag: string, attributes: Record<string, string>): string[] {
 	return Object.keys(attributes).filter(
 		(name) =>
 			TEXT_ATTRIBUTES.has(name) ||
-			(name === 'value' && tag === 'input' && BUTTON_INPUT_TYPES.has((attributes.type ?? '').trim().toLowerCase())) ||
+			(name === 'value' && isButtonLabel(tag, attributes)) ||
 			(name === 'content' && tag === 'meta' && isDescriptiveMeta(attributes)),
 	);
 }

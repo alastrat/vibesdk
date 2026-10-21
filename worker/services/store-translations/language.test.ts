@@ -36,6 +36,13 @@ describe('resolveShopperLanguage', () => {
 		expect(resolveShopperLanguage(request(), spanishStore)).toEqual({ locale: 'es', setCookie: false });
 	});
 
+	it("takes the browser's best language the store offers, and the source when it offers none", () => {
+		const spanishStore = fakeLanguageContext({ source: 'es', ready: ['en'] });
+		expect(resolveShopperLanguage(request('', { 'Accept-Language': 'pt-BR,en;q=0.8' }), spanishStore)).toEqual({ locale: 'en', setCookie: false });
+		expect(resolveShopperLanguage(request('', { 'Accept-Language': 'fr' }), spanishStore)).toEqual({ locale: 'es', setCookie: false });
+		expect(resolveShopperLanguage(request('', { 'Accept-Language': 'fr, en;q=0' }), spanishStore)).toEqual({ locale: 'es', setCookie: false });
+	});
+
 	it('an unready or unknown language falls back to source', () => {
 		const partly = fakeLanguageContext({ source: 'es', ready: ['en'], targets: { 'pt-BR': { enabled: true, ready: false } } });
 		expect(resolveShopperLanguage(request('?lang=pt-BR', { Cookie: 'estori_lang=pt-BR', 'Accept-Language': 'pt-BR' }), partly)).toEqual({ locale: 'es', setCookie: false });
@@ -54,6 +61,15 @@ describe('store languages', () => {
 
 	it("links a language on the same page, keeping the page's other query parameters", () => {
 		expect(languageUrl(new URL(`${PAGE}?page=2&lang=es#reviews`), 'pt-BR').toString()).toBe(`${PAGE}?page=2&lang=pt-BR`);
+	});
+
+	it("never links off the store's origin, however the path starts", () => {
+		for (const path of ['//evil.example/login', '///evil.example', '/\\evil.example/x']) {
+			const url = languageUrl(new URL(`https://northwind-tea.estori.shop${path}?next=1`), 'es');
+			expect(url.origin, path).toBe('https://northwind-tea.estori.shop');
+			expect(url.pathname.startsWith('//'), path).toBe(false);
+		}
+		expect(languageUrl(new URL('https://northwind-tea.estori.shop//evil.example/login'), 'es').toString()).toBe('https://northwind-tea.estori.shop/evil.example/login?lang=es');
 	});
 
 	it('keeps the cookie for a year on the store, or on the preview it was set on', () => {

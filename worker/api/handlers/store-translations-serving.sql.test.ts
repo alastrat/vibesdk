@@ -6,6 +6,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Locale } from '../../../shared/i18n/locales';
 import type { StoreInfo, StoreManifest } from '../../../shared/types/store-payments';
+import type { StoreTextKind } from '../../../shared/types/store-translations';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../database/test-support/real-d1';
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
 import { normalizeText, textHash } from '../../services/store-translations/extract';
@@ -18,7 +19,9 @@ import { handleStorePlatform, type StorePlatformTarget } from './store-platform'
 
 const NOW = 1_800_000_000_000;
 const JWT_SECRET = 'store-translations-serving-test-secret-0123456789';
-const CTX = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
+/** Work handed to waitUntil, which each test lets finish so none of it reads the database after the test. */
+const background: Promise<unknown>[] = [];
+const CTX = { waitUntil: (work: Promise<unknown>) => void background.push(work), passThroughOnException: () => undefined } as unknown as ExecutionContext;
 const ORIGIN = 'https://northwind-tea.estori.shop';
 
 const MANIFEST: StoreManifest = {
@@ -46,6 +49,18 @@ const SPANISH: Record<string, string> = {
 	Red: 'Rojo',
 	'Fresh tea': 'Té fresco',
 	'Add to cart': 'Agregar al carrito',
+	// A text the store no longer shows.
+	'Gone for good': 'Ya no está',
+};
+
+/** Where each text the store shows now came from; the rest of SPANISH are translations of texts that went away. */
+const KINDS: Record<string, StoreTextKind> = {
+	'Trail mug': 'product',
+	'A sturdy mug for the trail.': 'product',
+	Blue: 'product',
+	Red: 'product',
+	'Fresh tea': 'page',
+	'Add to cart': 'script',
 };
 
 const PAGE = '<!doctype html><html lang="en"><head><title>Fresh tea</title></head><body><h1>Fresh tea</h1><button>Add to cart</button></body></html>';
@@ -57,7 +72,10 @@ beforeAll(async () => {
 	await insertUser(db, 'seller_1');
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(async () => {
+	await Promise.all(background.splice(0));
+	vi.restoreAllMocks();
+});
 
 let stores = 0;
 
@@ -67,6 +85,8 @@ async function storeWith(ready: Locale[], options: { showSwitcher?: boolean } = 
 	await insertApp(db, { id: appId, userId: 'seller_1' });
 	const service = new StoreTranslationService(envWith(db));
 	await service.saveSettings(appId, { sourceLocale: 'en', showSwitcher: options.showSwitcher ?? true }, NOW);
+	const texts = await Promise.all(Object.entries(KINDS).map(async ([text, kind]) => ({ hash: await textHash(normalizeText(text)), text, kind })));
+	await service.replaceTexts(appId, texts, NOW);
 	for (const locale of ready) {
 		const rows = await Promise.all(Object.entries(SPANISH).map(async ([source, text]) => ({ hash: await textHash(normalizeText(source)), source, text })));
 		await service.upsertMachine(appId, locale, rows, NOW);
@@ -75,7 +95,54 @@ async function storeWith(ready: Locale[], options: { showSwitcher?: boolean } = 
 	return appId;
 }
 
-/** A SpaceDO that serves the store's page and manifest, and records the requests it was sent. */
+/** A new store that never saved language settings. */
+async function storeWithoutSettings(): Promise<string> {
+	const appId = `app_${++stores}`;
+	await insertApp(db, { id: appId, userId: 'seller_1' });
+	return appId;
+}
+
+/**
+ * The test database behind a plain object, recording each statement prepared on it and holding every answer until
+ * `open` settles. Sentry wraps `prepare` in place, so the real binding is never handed out to be wrapped.
+ */
+function watchedD1(open: Promise<void> = Promise.resolve()) {
+	const prepared: string[] = [];
+	const held = (statement: D1PreparedStatement): D1PreparedStatement =>
+		({
+			bind: (...values: unknown[]) => held(statement.bind(...values)),
+			first: async (column?: string) => {
+				await open;
+				return column === undefined ? statement.first() : statement.first(column);
+			},
+			all: async () => {
+				await open;
+				return statement.all();
+			},
+			raw: async (options?: { columnNames?: boolean }) => {
+				await open;
+				return options?.columnNames ? statement.raw({ columnNames: true }) : statement.raw();
+			},
+			run: async () => {
+				await open;
+				return statement.run();
+			},
+		}) as unknown as D1PreparedStatement;
+	const d1 = {
+		prepare: (query: string) => {
+			prepared.push(query);
+			return held(db.prepare(query));
+		},
+		batch: async (statements: D1PreparedStatement[]) => {
+			await open;
+			return db.batch(statements);
+		},
+		exec: (query: string) => db.exec(query),
+	} as unknown as D1Database;
+	return { d1, prepared };
+}
+
+/** A SpaceDO that serves the store's page and manifest, answers revalidation of its page and script, and records what it was sent. */
 function spaceEnv(options: { db?: D1Database; page?: string } = {}) {
 	const seen: Request[] = [];
 	const namespace = {
@@ -83,7 +150,11 @@ function spaceEnv(options: { db?: D1Database; page?: string } = {}) {
 		get: () => ({
 			fetch: async (request: Request) => {
 				seen.push(request);
-				return new Response(options.page ?? PAGE, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=0, must-revalidate', ETag: '"page"' } });
+				const script = new URL(request.url).pathname.endsWith('.js');
+				const etag = script ? '"js"' : '"page"';
+				const headers = { 'Content-Type': script ? 'text/javascript' : 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=0, must-revalidate', ETag: etag };
+				if (request.headers.get('If-None-Match') === etag) return new Response(null, { status: 304, headers });
+				return new Response(script ? 'render("Add to cart")' : (options.page ?? PAGE), { headers });
 			},
 			getStoreManifest: async () => ({ commitHash: 'c0ffee', manifest: JSON.stringify(MANIFEST) }),
 		}),
@@ -130,22 +201,58 @@ describe('a translated store page', () => {
 	it("is the store's own page, byte for byte, when no language is ready", async () => {
 		const appId = await storeWith([]);
 		const { env, seen } = spaceEnv();
-		const response = await handleLiveStore(new Request(`${ORIGIN}/?lang=es`, { headers: { Accept: 'text/html', 'If-None-Match': '"page"' } }), env, CTX, liveHost(appId));
+		const response = await handleLiveStore(new Request(`${ORIGIN}/?lang=es`, { headers: { Accept: 'text/html' } }), env, CTX, liveHost(appId));
 		expect(await response.text()).toBe(PAGE);
 		expect(response.headers.get('ETag')).toBe('"page"');
 		expect(response.headers.get('Vary')).toBeNull();
 		// The store answers its own revalidation.
-		expect(seen[0].headers.get('If-None-Match')).toBe('"page"');
+		const revalidated = await handleLiveStore(new Request(`${ORIGIN}/`, { headers: { Accept: 'text/html', 'If-None-Match': '"page"' } }), env, CTX, liveHost(appId));
+		expect(revalidated.status).toBe(304);
+		expect(seen).toHaveLength(2);
 	});
 
-	it("asks the store for a whole page when it may be served in another language than the browser's copy", async () => {
+	it('a store with no settings makes exactly one D1 read on a cold page view, then none within 30 s', async () => {
+		const appId = await storeWithoutSettings();
+		const { d1, prepared } = watchedD1();
+		const { env } = spaceEnv({ db: d1 });
+		const view = async () => (await handleLiveStore(new Request(`${ORIGIN}/products`, { headers: { Accept: 'text/html', 'Accept-Language': 'es' } }), env, CTX, liveHost(appId))).text();
+		expect(await view()).toBe(PAGE);
+		expect(prepared).toHaveLength(1);
+		expect(prepared[0]).toContain('"store_translation_settings"');
+		expect(await view()).toBe(PAGE);
+		expect(prepared).toHaveLength(1);
+	});
+
+	it('a revalidating navigation is forwarded before the settings read resolves', async () => {
+		const appId = await storeWith(['es']);
+		let open = () => undefined as void;
+		const { d1 } = watchedD1(new Promise<void>((resolve) => (open = resolve)));
+		const { env, seen } = spaceEnv({ db: d1 });
+		const pending = handleLiveStore(new Request(`${ORIGIN}/`, { headers: { Accept: 'text/html', 'If-None-Match': '"page"', Cookie: 'estori_lang=es' } }), env, CTX, liveHost(appId));
+		try {
+			await vi.waitFor(() => expect(seen).toHaveLength(1));
+			expect(seen[0].headers.get('If-None-Match')).toBe('"page"');
+		} finally {
+			// Held reads must finish before the test ends, or its storage can't be reset.
+			open();
+		}
+		// The store said 304, but the browser's copy may be in another language, so the page is fetched whole.
+		const response = await pending;
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain('<h1>Té fresco</h1>');
+		expect(seen).toHaveLength(2);
+		expect(seen[1].headers.get('If-None-Match')).toBeNull();
+	});
+
+	it("keeps the store's own revalidation of scripts, styles and images, which are never rewritten", async () => {
 		const appId = await storeWith(['es']);
 		const { env, seen } = spaceEnv();
-		await handleLiveStore(new Request(`${ORIGIN}/`, { headers: { Accept: 'text/html,application/xhtml+xml', 'If-None-Match': '"page"' } }), env, CTX, liveHost(appId));
-		expect(seen[0].headers.get('If-None-Match')).toBeNull();
-		// Scripts, styles and images are never rewritten, so they keep their revalidation.
-		await handleLiveStore(new Request(`${ORIGIN}/app.js`, { headers: { Accept: '*/*', 'If-None-Match': '"js"' } }), env, CTX, liveHost(appId));
-		expect(seen[1].headers.get('If-None-Match')).toBe('"js"');
+		const response = await handleLiveStore(new Request(`${ORIGIN}/app.js`, { headers: { Accept: '*/*', 'If-None-Match': '"js"' } }), env, CTX, liveHost(appId));
+		expect(response.status).toBe(304);
+		expect(seen).toHaveLength(1);
+		// The store's languages were read meanwhile, for the next page.
+		expect(background).toHaveLength(1);
+		expect(await background[0]).not.toBeNull();
 	});
 
 	it('serves the original page when its languages cannot be read', async () => {
@@ -173,9 +280,38 @@ describe('a translated store page', () => {
 		const html = await response.text();
 		expect(html).toContain(`<script src="${base}/__estori/i18n.js?lang=es&amp;v=`);
 		expect(html).toContain(`<link rel="alternate" hreflang="es" href="https://build.estori.test${base}/about?lang=es">`);
-		expect(html).toContain(`href="${base}/about?lang=en"`);
+		expect(html).toContain('href="?lang=en"');
 		expect(html).not.toContain(token);
 		expect(response.headers.getSetCookie()).toContain(`estori_lang=es; Path=${base}/; Max-Age=31536000; SameSite=Lax; Secure`);
+	});
+});
+
+describe('the overlay script', () => {
+	it('the payload excludes page-kind and stale texts', async () => {
+		const appId = await storeWith(['es']);
+		const { version } = await new StoreTranslationService(envWith(db)).settingsOf(appId);
+		const response = await handleStorePlatform(new Request(`${ORIGIN}/__estori/i18n.js?lang=es&v=${version}`), spaceEnv().env, liveTarget(appId, '/__estori/i18n.js'), CTX);
+		const script = await response.text();
+		const payload = JSON.parse(/new Map\((\[.*?\])\);/.exec(script)?.[1] ?? 'null') as [string, string][];
+		// Pages are translated on the server and products come translated in the store's data.
+		expect(payload).toEqual([['Add to cart', 'Agregar al carrito']]);
+		expect(script).not.toContain('Ya no está');
+	});
+
+	it('answers a failure with an empty script, never JSON', async () => {
+		const appId = await storeWith(['es']);
+		const broken = {
+			prepare: () => {
+				throw new Error('D1 is unavailable');
+			},
+		} as unknown as D1Database;
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const response = await handleStorePlatform(new Request(`${ORIGIN}/__estori/i18n.js?lang=es&v=1`), spaceEnv({ db: broken }).env, liveTarget(appId, '/__estori/i18n.js'), CTX);
+		expect(response.status).toBe(503);
+		expect(response.headers.get('Content-Type')).toContain('text/javascript');
+		expect(response.headers.get('Cache-Control')).toBe('no-store');
+		expect(await response.text()).toBe('');
+		expect(warned).toHaveBeenCalledOnce();
 	});
 });
 
@@ -219,7 +355,7 @@ describe("a translated store's data", () => {
 		expect(current.headers.get('Content-Type')).toContain('text/javascript');
 		expect(current.headers.get('Cache-Control')).toBe('public, max-age=31536000, immutable');
 		const script = await current.text();
-		expect(script).toContain('["Fresh tea","Té fresco"]');
+		expect(script).toContain('["Add to cart","Agregar al carrito"]');
 		expect(script).toContain('MutationObserver');
 
 		const stale = await overlay(`?lang=es&v=${version - 1}`);

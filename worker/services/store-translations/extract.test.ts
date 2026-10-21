@@ -94,6 +94,7 @@ describe('extractStoreTexts', () => {
 <input type="submit" value="Join now">
 <input type="BUTTON" value="Click me">
 <input type="reset" value="Clear form">
+<input type="submit" name="plan" value="Named button">
 <input type="text" value="Typed value">
 <p>Hello <b>world</b></p>
 <p>1234</p>

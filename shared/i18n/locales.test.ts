@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LOCALE, INTL_LOCALE, LOCALES, LOCALE_AI_NAMES, LOCALE_NAMES, isLocale, localeFromAcceptLanguage, negotiateLocale } from './locales';
+import { DEFAULT_LOCALE, INTL_LOCALE, LOCALES, LOCALE_AI_NAMES, LOCALE_NAMES, acceptedLocales, isLocale, localeFromAcceptLanguage, negotiateLocale } from './locales';
 
 describe('the locale table', () => {
 	it('lists English first, then Latin American Spanish and Brazilian Portuguese', () => {
@@ -74,5 +74,27 @@ describe('localeFromAcceptLanguage', () => {
 
 	it('reads spacing and case loosely', () => {
 		expect(localeFromAcceptLanguage('  FR ; Q=0.9 ,PT-br ; q=0.8')).toBe('pt-BR');
+	});
+});
+
+describe('acceptedLocales', () => {
+	it("lists the app languages a header accepts, best first, each matched by its base language and named once", () => {
+		expect(acceptedLocales('pt-BR,en;q=0.8')).toEqual(['pt-BR', 'en']);
+		expect(acceptedLocales('es-MX,es;q=0.9,en-US;q=0.8,en;q=0.7')).toEqual(['es', 'en']);
+		expect(acceptedLocales('fr;q=0.9, en;q=0.1, pt;q=0.5')).toEqual(['pt-BR', 'en']);
+		expect(acceptedLocales('pt-PT;q=0.2, pt-BR')).toEqual(['pt-BR']);
+	});
+
+	it('is empty for a header that names no app language, refuses them all, or is missing', () => {
+		expect(acceptedLocales('fr, de;q=0.5, *')).toEqual([]);
+		expect(acceptedLocales('es;q=0, en;q=0')).toEqual([]);
+		expect(acceptedLocales('')).toEqual([]);
+		expect(acceptedLocales(null)).toEqual([]);
+	});
+
+	it('agrees with localeFromAcceptLanguage on the first choice', () => {
+		for (const header of ['fr;q=0.9, pt-BR;q=0.8', 'en;q=0.5, es;q=0.9', '  FR ; Q=0.9 ,PT-br ; q=0.8', 'es;q=abc, pt;q=0.4']) {
+			expect(acceptedLocales(header)[0], header).toBe(localeFromAcceptLanguage(header));
+		}
 	});
 });

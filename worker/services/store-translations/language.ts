@@ -3,7 +3,7 @@
  * store matches them, then the store's source. Only the source and the ready languages can be chosen.
  */
 
-import { LOCALES, localeFromAcceptLanguage, type Locale } from '../../../shared/i18n/locales';
+import { LOCALES, acceptedLocales, type Locale } from '../../../shared/i18n/locales';
 import type { StoreLanguageContext } from './serve-context';
 
 export const STORE_LANGUAGE_COOKIE = 'estori_lang';
@@ -30,19 +30,20 @@ export function resolveShopperLanguage(request: Request, ctx: StoreLanguageConte
 	const asked = new URL(request.url).searchParams.get(STORE_LANGUAGE_PARAM);
 	if (offered(asked)) return { locale: asked, setCookie: asked !== cookie };
 	if (offered(cookie)) return { locale: cookie, setCookie: false };
-	const browser = request.headers.get('Accept-Language');
-	// A request that names no language, as crawlers' often don't, gets the source rather than the default language.
-	if (ctx.settings.matchBrowser && browser?.trim()) {
-		const preferred = localeFromAcceptLanguage(browser);
-		if (offered(preferred)) return { locale: preferred, setCookie: false };
-	}
-	return { locale: ctx.settings.sourceLocale, setCookie: false };
+	// The browser's best language the store offers; a browser that names none of them, or no language at all as
+	// crawlers often do, gets the source.
+	const browser = ctx.settings.matchBrowser ? acceptedLocales(request.headers.get('Accept-Language')).find(offered) : undefined;
+	return { locale: browser ?? ctx.settings.sourceLocale, setCookie: false };
 }
 
-/** The same page in another language: its other query parameters kept, its fragment dropped. */
+/**
+ * The same page in another language, on the page's own origin: its other query parameters kept, its fragment
+ * dropped, and leading slashes collapsed, so a path like `//evil.example/login` can't name another site.
+ */
 export function languageUrl(pageUrl: URL, locale: Locale): URL {
-	const url = new URL(pageUrl);
-	url.hash = '';
+	const url = new URL(pageUrl.origin);
+	url.pathname = pageUrl.pathname.replace(/^\/+/, '/');
+	url.search = pageUrl.search;
 	url.searchParams.set(STORE_LANGUAGE_PARAM, locale);
 	return url;
 }

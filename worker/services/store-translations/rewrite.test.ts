@@ -28,6 +28,11 @@ const SPANISH: Record<string, string> = {
 	'Fresh tea for everyone, brewed every morning': 'Té fresco para todos, preparado cada mañana',
 };
 
+/** What a page in Spanish gets in its head, for the store's home page. */
+const SPANISH_HEAD =
+	'<link rel="alternate" hreflang="en" href="https://northwind-tea.estori.shop/?lang=en"><link rel="alternate" hreflang="es" href="https://northwind-tea.estori.shop/?lang=es">' +
+	'<link rel="alternate" hreflang="x-default" href="https://northwind-tea.estori.shop/?lang=en"><script src="/__estori/i18n.js?lang=es&amp;v=7" defer></script>';
+
 function context(options: Partial<FakeLanguageOptions> = {}) {
 	return fakeLanguageContext({ source: 'en', ready: ['es'], translations: { es: SPANISH }, showSwitcher: false, ...options });
 }
@@ -59,11 +64,15 @@ describe('translateStoreHtml', () => {
 		const html =
 			'<html lang="en"><p title="Fresh tea" data-note="Fresh tea">Fresh tea</p><img alt="A cup of tea" src="/cup.png">' +
 			'<input type="submit" value="Buy now"><input type="text" value="Buy now"><input type="BUTTON" value="Buy now">' +
+			'<input type="submit" name="action" value="Buy now">' +
 			'<meta name="description" content="Fresh tea"><meta property="og:title" content="Fresh tea"><meta name="keywords" content="Fresh tea">' +
 			'<input placeholder="Your email"><button aria-label="Close">Close</button></html>';
 		expect(await served(html)).toBe(
-			'<html lang="es"><p title="Té fresco" data-note="Fresh tea">Té fresco</p><img alt="Una taza de té" src="/cup.png">' +
+			`<html lang="es">${SPANISH_HEAD}<p title="Té fresco" data-note="Fresh tea">Té fresco</p>` +
+				'<img alt="Una taza de té" src="/cup.png">' +
 				'<input type="submit" value="Comprar ahora"><input type="text" value="Buy now"><input type="BUTTON" value="Comprar ahora">' +
+				// A named button's value is sent to the store's server, so it stays as the store wrote it.
+				'<input type="submit" name="action" value="Buy now">' +
 				'<meta name="description" content="Té fresco"><meta property="og:title" content="Té fresco"><meta name="keywords" content="Fresh tea">' +
 				'<input placeholder="Tu correo"><button aria-label="Cerrar">Cerrar</button></html>',
 		);
@@ -160,6 +169,39 @@ describe('translateStoreHtml', () => {
 		expect(await served(html, 'en', {}, basePath, pageUrl)).not.toContain('i18n.js');
 	});
 
+	it('places the links, the overlay and the switcher on pages without a literal head or closing body', async () => {
+		const links = SPANISH_HEAD;
+		const switcher = languageSwitcher('es', ['en', 'es'], PAGE);
+		const options = { showSwitcher: true };
+		// No head: before the first element of the body, where the parser still opens one.
+		expect(await served('<!doctype html><html lang="en"><body><p>Hello</p></body></html>', 'es', options)).toBe(
+			`<!doctype html><html lang="es">${links}<body><p>Hola</p>${switcher}</body></html>`,
+		);
+		// A head that never closes ends where the body starts.
+		expect(await served('<html><head><title>Fresh tea</title><body><p>Hello</p></body></html>', 'es', options)).toBe(
+			`<html lang="es"><head><title>Té fresco</title>${links}<body><p>Hola</p>${switcher}</body></html>`,
+		);
+		// No closing body: the switcher goes at the end of the document.
+		expect(await served('<html><head><title>Fresh tea</title></head><body><p>Hello</p>', 'es', options)).toBe(
+			`<html lang="es"><head><title>Té fresco</title>${links}</head><body><p>Hola</p>${switcher}`,
+		);
+		// A doctype and no html, head or body at all.
+		expect(await served('<!doctype html><title>Fresh tea</title><p>Hello', 'es', options)).toBe(`<!doctype html><title>Té fresco</title>${links}<p>Hola${switcher}`);
+		// A fragment a store's script fetches is translated, but gets no second set of links or switcher.
+		expect(await served('<div class="cart"><p>Hello</p></div>', 'es', options)).toBe('<div class="cart"><p>Hola</p></div>');
+	});
+
+	it("never links off the store's origin, whatever the page's path", async () => {
+		const pageUrl = new URL('https://northwind-tea.estori.shop//evil.example/login?next=%2Fcart');
+		const html = await served('<html><head></head><body><p>Hello</p></body></html>', 'es', { showSwitcher: true }, '', pageUrl);
+		const targets = [...html.matchAll(/(?:href|src)="([^"]*)"/g)].map((match) => match[1].replace(/&amp;/g, '&'));
+		expect(targets.length).toBeGreaterThan(5);
+		for (const target of targets) expect(new URL(target, pageUrl).origin, target).toBe('https://northwind-tea.estori.shop');
+		expect(html).toContain('<link rel="alternate" hreflang="es" href="https://northwind-tea.estori.shop/evil.example/login?next=%2Fcart&amp;lang=es">');
+		expect(html).toContain('<a href="?next=%2Fcart&amp;lang=en"');
+		expect(html).not.toMatch(/href="\/\//);
+	});
+
 	it('leaves anything but a page alone', async () => {
 		const ctx = context();
 		const css = new Response('p::after { content: "Fresh tea" }', { headers: { 'Content-Type': 'text/css' } });
@@ -174,11 +216,12 @@ describe('the language switcher', () => {
 		const html = languageSwitcher('pt-BR', ['en', 'es', 'pt-BR'], new URL('https://northwind-tea.estori.shop/cart?coupon=TEA&lang=es'));
 		expect(html.startsWith('<details')).toBe(true);
 		expect(html).toContain('position:fixed');
-		expect(html).toMatch(/<summary aria-label="Idioma"[^>]*>Português<\/summary>/);
-		expect(html).toMatch(/<a href="\/cart\?coupon=TEA&amp;lang=en" hreflang="en" lang="en"[^>]*>English<\/a>/);
-		expect(html).toMatch(/<a href="\/cart\?coupon=TEA&amp;lang=es" hreflang="es" lang="es"[^>]*>Español<\/a>/);
-		expect(html).toMatch(/<a href="\/cart\?coupon=TEA&amp;lang=pt-BR" hreflang="pt-BR" lang="pt-BR" aria-current="true"[^>]*>Português<\/a>/);
-		expect(languageSwitcher('en', ['en', 'es'], PAGE)).toMatch(/<summary aria-label="Language"/);
+		// The button's accessible name holds its visible text.
+		expect(html).toMatch(/<summary aria-label="Idioma: Português"[^>]*>Português<\/summary>/);
+		expect(html).toMatch(/<a href="\?coupon=TEA&amp;lang=en" hreflang="en" lang="en"[^>]*>English<\/a>/);
+		expect(html).toMatch(/<a href="\?coupon=TEA&amp;lang=es" hreflang="es" lang="es"[^>]*>Español<\/a>/);
+		expect(html).toMatch(/<a href="\?coupon=TEA&amp;lang=pt-BR" hreflang="pt-BR" lang="pt-BR" aria-current="true"[^>]*>Português<\/a>/);
+		expect(languageSwitcher('en', ['en', 'es'], PAGE)).toMatch(/<summary aria-label="Language: English"/);
 	});
 });
 

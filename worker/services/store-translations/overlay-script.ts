@@ -1,6 +1,7 @@
 /**
  * `/__estori/i18n.js`: translates the text and attributes a store's scripts add or change after the page loads, with
- * one language's translations inside it. The server already translated the page; this covers what scripts render.
+ * the translations of the texts the store's scripts show inside it. The server already translated the page and the
+ * store's products; this covers what scripts render. Text that is already a translation is left as it is.
  *
  * It keys text as the extractor does: whitespace runs collapsed and trimmed with the same expression as
  * `normalizeText`, on text the browser has already decoded. Its containers and attributes are the extractor's.
@@ -13,7 +14,7 @@ import { SWITCHER_ATTRIBUTE } from './switcher';
 
 const upperCased = (names: ReadonlySet<string>): string[] => [...names].map((name) => name.toUpperCase());
 
-/** The overlay for one language: `entries` are `[normalized source text, translation]` pairs. */
+/** The overlay for one language: `entries` are `[normalized source text, translation]` pairs of the store's script texts. */
 export function overlayScript(locale: Locale, entries: readonly (readonly [string, string])[]): string {
 	return `/* Estori store translations: ${locale} */
 (function () {
@@ -27,6 +28,17 @@ export function overlayScript(locale: Locale, entries: readonly (readonly [strin
 
   function normalize(text) {
     return text.replace(/\\s+/g, ' ').trim();
+  }
+
+  // A text that reads as a translation is never translated again, though it may be a source text too.
+  var translated = new Set();
+  translations.forEach(function (translation) {
+    translated.add(normalize(translation));
+  });
+
+  function translationOf(text) {
+    var key = normalize(text);
+    return translated.has(key) ? undefined : translations.get(key);
   }
 
   function nameOf(element) {
@@ -52,7 +64,8 @@ export function overlayScript(locale: Locale, entries: readonly (readonly [strin
   function readsAttribute(element, name) {
     if (TEXT_ATTRIBUTES.indexOf(name) >= 0) return true;
     var tag = nameOf(element);
-    if (name === 'value') return tag === 'INPUT' && BUTTON_TYPES.indexOf((element.getAttribute('type') || '').trim().toLowerCase()) >= 0;
+    // A named button's value is also a form value the store's server reads.
+    if (name === 'value') return tag === 'INPUT' && !element.hasAttribute('name') && BUTTON_TYPES.indexOf((element.getAttribute('type') || '').trim().toLowerCase()) >= 0;
     if (name !== 'content' || tag !== 'META') return false;
     var meta = (element.getAttribute('name') || '').toLowerCase();
     var property = (element.getAttribute('property') || '').toLowerCase();
@@ -61,7 +74,7 @@ export function overlayScript(locale: Locale, entries: readonly (readonly [strin
 
   function translateText(node) {
     var text = node.data;
-    var translation = translations.get(normalize(text));
+    var translation = translationOf(text);
     if (translation === undefined) return;
     var leading = text.slice(0, text.length - text.trimStart().length);
     node.data = leading + translation + text.slice(text.trimEnd().length);
@@ -70,7 +83,7 @@ export function overlayScript(locale: Locale, entries: readonly (readonly [strin
   function translateAttribute(element, name) {
     var value = element.getAttribute(name);
     if (value === null || !readsAttribute(element, name)) return;
-    var translation = translations.get(normalize(value));
+    var translation = translationOf(value);
     if (translation !== undefined) element.setAttribute(name, translation);
   }
 

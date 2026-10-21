@@ -36,7 +36,7 @@ export async function handleLiveStore(request: Request, env: Env, ctx: Execution
 	const forwarded = new URL(`${SPACE_LIVE_PATH}${url.pathname}${url.search}`, url.origin);
 	const space = namespace.get(namespace.idFromName(store.appId));
 	try {
-		return await serveStorePage(request, env, { appId: store.appId, basePath: '', pageUrl: url }, (page) => space.fetch(new Request(forwarded.toString(), page)));
+		return await serveStorePage(request, env, ctx, { appId: store.appId, basePath: '', pageUrl: url }, (page) => space.fetch(new Request(forwarded.toString(), page)));
 	} catch (error) {
 		logger.error('Live store could not be served', { appId: store.appId, error });
 		return plainPage((await shopperLanguage(request, env, store.appId)).locale, 503, UNAVAILABLE_TITLE, UNAVAILABLE_MESSAGE);

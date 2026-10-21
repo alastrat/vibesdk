@@ -38,6 +38,11 @@ export interface StoreTranslationEntry {
 	text: string;
 }
 
+/** The settings of a store that saved none: this source language, and no other language. */
+export function unsavedSettings(sourceLocale: Locale): StoreTranslationSettings {
+	return { sourceLocale, targets: {}, ...DEFAULT_SETTINGS };
+}
+
 type SettingsRow = typeof schema.storeTranslationSettings.$inferSelect;
 type Targets = StoreTranslationSettings['targets'];
 
@@ -82,9 +87,13 @@ export function isRowsCursor(cursor: string): boolean {
 export class StoreTranslationService extends BaseService {
 	/** The store's settings; the defaults, with the owner's language as the source, when it has none yet. */
 	async settingsOf(appId: string): Promise<StoreTranslationSettings> {
+		return (await this.storedSettings(appId)) ?? unsavedSettings(await this.defaultSourceLocale(appId));
+	}
+
+	/** The settings the store saved, in one read; null when it never saved any, so it has no other language to serve. */
+	async storedSettings(appId: string): Promise<StoreTranslationSettings | null> {
 		const row = await this.database.select().from(schema.storeTranslationSettings).where(eq(schema.storeTranslationSettings.appId, appId)).get();
-		if (row) return settingsFromRow(row);
-		return { sourceLocale: await this.defaultSourceLocale(appId), targets: {}, ...DEFAULT_SETTINGS };
+		return row ? settingsFromRow(row) : null;
 	}
 
 	/** When the store's texts were last read from its deployments, null before the first time, and what that read noticed. */
@@ -364,13 +373,25 @@ export class StoreTranslationService extends BaseService {
 		return new Map((await this.translationsOf(appId, locale)).map((row) => [row.hash, row.text]));
 	}
 
-	/** The same translations with their source texts, which the overlay script looks up without hashing. */
+	/** The same translations with their normalized source texts, which serving looks up without hashing. */
 	async translationsOf(appId: string, locale: Locale): Promise<StoreTranslationEntry[]> {
 		const translations = schema.storeTranslations;
 		return this.database
 			.select({ hash: translations.sourceHash, source: translations.sourceText, text: translations.text })
 			.from(translations)
 			.where(and(eq(translations.appId, appId), eq(translations.locale, locale)))
+			.all();
+	}
+
+	/** Translations of the texts the store's scripts show now: what the overlay needs, since pages are translated on the server. */
+	async scriptTranslationsOf(appId: string, locale: Locale): Promise<StoreTranslationEntry[]> {
+		const texts = schema.storeTexts;
+		const translations = schema.storeTranslations;
+		return this.database
+			.select({ hash: texts.sourceHash, source: texts.sourceText, text: translations.text })
+			.from(texts)
+			.innerJoin(translations, and(eq(translations.appId, texts.appId), eq(translations.sourceHash, texts.sourceHash)))
+			.where(and(eq(texts.appId, appId), eq(texts.kind, 'script'), eq(translations.locale, locale)))
 			.all();
 	}
 

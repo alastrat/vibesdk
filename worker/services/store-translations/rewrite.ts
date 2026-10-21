@@ -16,6 +16,9 @@ import { languageSwitcher } from './switcher';
 
 export const STORE_OVERLAY_PATH = `${STORE_PLATFORM_PREFIX}/i18n.js`;
 
+/** Elements a document's head may hold, so the page's own head is still open while they come. */
+const HEAD_ELEMENTS = new Set(['html', 'head', 'title', 'base', 'meta', 'link', 'style', 'script', 'noscript', 'template']);
+
 export interface TranslateHtmlInput {
 	locale: Locale;
 	ctx: StoreLanguageContext;
@@ -29,15 +32,9 @@ export function isStorePage(response: Response): boolean {
 	return response.status === 200 && (response.headers.get('Content-Type') ?? '').toLowerCase().includes('text/html');
 }
 
-/** The translation of a normalized text; the extractor skipped empty and over-long texts, so they have none. */
-async function lookup(key: string, dictionary: ReadonlyMap<string, string>): Promise<string | undefined> {
-	if (key === '' || key.length > MAX_TEXT_CHARS) return undefined;
-	return dictionary.get(await textHash(key));
-}
-
 /** A text node's raw source in the language, as HTML, with its leading and trailing whitespace; null without a translation. */
-async function translatedText(raw: string, dictionary: ReadonlyMap<string, string>): Promise<string | null> {
-	const translation = await lookup(htmlTextKey(raw), dictionary);
+function translatedText(raw: string, texts: ReadonlyMap<string, string>): string | null {
+	const translation = texts.get(htmlTextKey(raw));
 	if (translation === undefined) return null;
 	// trimStart and trimEnd remove what `\s` matches, in linear time on any run of whitespace.
 	const decoded = decodeHTML(raw);
@@ -46,61 +43,62 @@ async function translatedText(raw: string, dictionary: ReadonlyMap<string, strin
 	return escapeText(leading) + escapeText(translation) + escapeText(trailing);
 }
 
-async function translateAttributes(element: Element, dictionary: ReadonlyMap<string, string>): Promise<void> {
+function translateAttributes(element: Element, texts: ReadonlyMap<string, string>): void {
 	const attributes: Record<string, string> = {};
 	for (const [name, value] of element.attributes) attributes[name] = value;
 	for (const name of textAttributeNames(element.tagName.toLowerCase(), attributes)) {
-		const translation = await lookup(htmlAttributeKey(attributes[name]), dictionary);
+		const translation = texts.get(htmlAttributeKey(attributes[name]));
 		// The rewriter escapes only quotes in what it is given, so the value goes in already escaped.
 		if (translation !== undefined) element.setAttribute(name, escapeAttribute(translation));
 	}
 }
 
 /**
- * Counts an element as open until its end tag; false when it has none. A self-closing SVG or MathML element, such as
- * `<svg><style/>`, has no end tag and no content, and asking for its end tag throws, which would break the page.
+ * Registers `handler` for the element's end tag; false when it has none. A self-closing SVG or MathML element, such as
+ * `<svg><style/>`, has no end tag, and asking for its end tag throws, which would break the page mid-stream.
  */
-function whileOpen(element: Element, open: () => void, close: () => void): boolean {
+function onEnd(element: Element, handler: (end: EndTag) => void): boolean {
 	try {
-		element.onEndTag(close);
+		element.onEndTag(handler);
+		return true;
 	} catch {
 		return false;
 	}
-	open();
-	return true;
 }
 
 /**
- * Text nodes and attributes through the dictionary. A text node's chunks are held until its last, so the whole node is
- * looked up once. Code containers keep their text and attributes, their own included; a textarea keeps only its text.
+ * Text nodes and attributes through the page's translations, looked up by their normalized text. A text node's chunks
+ * are held until its last, so the whole node is looked up once. Code containers keep their text and attributes, their
+ * own included; a textarea keeps only its text.
  */
-function translatingRewriter(rewriter: HTMLRewriter, dictionary: ReadonlyMap<string, string>): HTMLRewriter {
+function translateContent(rewriter: HTMLRewriter, texts: ReadonlyMap<string, string>): void {
 	let inCode = 0;
 	let inValue = 0;
 	/** The element being visited is a self-closing code container, which keeps its own attributes though nothing is open. */
 	let emptyCode = false;
 	let node = '';
 	// Handlers run in the order they are added, so an element's container handler runs before its attributes are read.
-	return rewriter
+	rewriter
 		.on([...CODE_CONTAINERS].join(', '), {
 			element(element) {
-				emptyCode = !whileOpen(element, () => inCode++, () => inCode--);
+				emptyCode = !onEnd(element, () => inCode--);
+				if (!emptyCode) inCode++;
 			},
 		})
 		.on([...VALUE_CONTAINERS].join(', '), {
 			element(element) {
-				whileOpen(element, () => inValue++, () => inValue--);
+				if (onEnd(element, () => inValue--)) inValue++;
 			},
 		})
 		.on('*', {
-			async element(element) {
+			element(element) {
 				const keepsAttributes = inCode > 0 || emptyCode;
 				emptyCode = false;
-				if (!keepsAttributes) await translateAttributes(element, dictionary);
+				if (!keepsAttributes) translateAttributes(element, texts);
 			},
 		})
 		.onDocument({
-			async text(chunk) {
+			text(chunk) {
 				if (inCode + inValue > 0) return;
 				node += chunk.text;
 				if (!chunk.lastInTextNode) {
@@ -109,8 +107,59 @@ function translatingRewriter(rewriter: HTMLRewriter, dictionary: ReadonlyMap<str
 				}
 				const raw = node;
 				node = '';
-				const translated = await translatedText(raw, dictionary);
+				const translated = translatedText(raw, texts);
 				if (translated !== null || raw !== chunk.text) chunk.replace(translated ?? raw, { html: true });
+			},
+		});
+}
+
+/**
+ * Sets the page's language and adds Estori's markup where the page has room for it, whatever tags it leaves out:
+ * `head` at the end of the page's head, or before the first element of its body when it never opens or closes one;
+ * `body` before the body's end tag, or at the end of the document without one. A fragment a store's script fetches,
+ * with no doctype, html, head or body, gets neither, or each fetch would add another switcher to the page.
+ */
+function placeMarkup(rewriter: HTMLRewriter, locale: Locale, markup: { head: string; body: string }): void {
+	let isDocument = false;
+	/** The head markup was placed, or the first element of a fragment showed it has no place. */
+	let headDone = false;
+	let bodyDone = markup.body === '';
+	rewriter
+		.on('*', {
+			element(element) {
+				const tag = element.tagName.toLowerCase();
+				if (tag === 'html' || tag === 'head' || tag === 'body') isDocument = true;
+				if (tag === 'html') element.setAttribute('lang', locale);
+				if (headDone) return;
+				if (tag === 'head') {
+					onEnd(element, (end) => {
+						if (headDone) return;
+						end.before(markup.head, { html: true });
+						headDone = true;
+					});
+				} else if (!HEAD_ELEMENTS.has(tag)) {
+					if (isDocument) element.before(markup.head, { html: true });
+					headDone = true;
+				}
+			},
+		})
+		.on('body', {
+			element(element) {
+				onEnd(element, (end) => {
+					if (bodyDone) return;
+					end.before(markup.body, { html: true });
+					bodyDone = true;
+				});
+			},
+		})
+		.onDocument({
+			doctype() {
+				isDocument = true;
+			},
+			end(end) {
+				if (!isDocument) return;
+				const rest = (headDone ? '' : markup.head) + (bodyDone ? '' : markup.body);
+				if (rest) end.append(rest, { html: true });
 			},
 		});
 }
@@ -128,37 +177,23 @@ function overlayTag(input: TranslateHtmlInput): string {
 
 /**
  * A store page in `locale`. A page of a store with a ready language, in any language, is marked with it and gets the
- * alternate links and the switcher; a page in a translated language also gets its text and the overlay script.
- * Anything but a 200 HTML page, or a store with no ready language, is returned as it is.
+ * alternate links and the switcher; a page in a translated language also gets its text and the overlay script. The
+ * language's translations are loaded once, before the page streams. Anything but a 200 HTML page, or a store with no
+ * ready language, is returned as it is.
  */
 export async function translateStoreHtml(response: Response, input: TranslateHtmlInput): Promise<Response> {
 	const { locale, ctx, pageUrl } = input;
 	if (!isStorePage(response) || ctx.ready.length === 0) return response;
 	const translating = locale !== ctx.settings.sourceLocale;
-	const dictionary = translating ? await ctx.dictionary(locale) : null;
+	const texts = translating ? await ctx.texts(locale) : null;
 	const languages = storeLanguages(ctx);
-	const head = alternateLinks(languages, ctx.settings.sourceLocale, pageUrl) + (translating ? overlayTag(input) : '');
 
-	let rewriter = new HTMLRewriter()
-		.on('html', {
-			element(element) {
-				element.setAttribute('lang', locale);
-			},
-		})
-		.on('head', {
-			element(element) {
-				element.append(head, { html: true });
-			},
-		});
-	if (ctx.settings.showSwitcher) {
-		const switcher = languageSwitcher(locale, languages, pageUrl);
-		rewriter = rewriter.on('body', {
-			element(element) {
-				element.append(switcher, { html: true });
-			},
-		});
-	}
-	if (dictionary) rewriter = translatingRewriter(rewriter, dictionary);
+	const rewriter = new HTMLRewriter();
+	placeMarkup(rewriter, locale, {
+		head: alternateLinks(languages, ctx.settings.sourceLocale, pageUrl) + (translating ? overlayTag(input) : ''),
+		body: ctx.settings.showSwitcher ? languageSwitcher(locale, languages, pageUrl) : '',
+	});
+	if (texts) translateContent(rewriter, texts);
 
 	const rewritten = rewriter.transform(response);
 	const headers = new Headers(rewritten.headers);
@@ -173,7 +208,12 @@ export async function translateStoreHtml(response: Response, input: TranslateHtm
 
 /** Product names, descriptions and variant names in the dictionary's language; prices, ids and the rest as they are. */
 export async function translateManifest(manifest: StoreManifest, dictionary: ReadonlyMap<string, string>): Promise<StoreManifest> {
-	const translate = async (text: string) => (await lookup(normalizeText(text), dictionary)) ?? text;
+	const translate = async (text: string) => {
+		const key = normalizeText(text);
+		// The extractor skips empty and over-long texts, so they have no translation.
+		if (key === '' || key.length > MAX_TEXT_CHARS) return text;
+		return dictionary.get(await textHash(key)) ?? text;
+	};
 	const products = await Promise.all(
 		manifest.products.map(async (product) => {
 			const translated = {

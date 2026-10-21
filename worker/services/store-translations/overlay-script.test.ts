@@ -186,13 +186,17 @@ describe('the overlay script', () => {
 		button.setAttribute('aria-label', 'Fresh tea');
 		const submit = document.element('input', { type: 'Submit', value: 'Add to cart' });
 		const field = document.element('input', { type: 'text', value: 'Add to cart' });
+		// A named button's value is sent to the store's server.
+		const named = document.element('input', { type: 'submit', name: 'action', value: 'Add to cart' });
 		main.appendChild(submit);
 		main.appendChild(field);
+		main.appendChild(named);
 		document.flush();
 		expect(label.data).toBe('Agotado');
 		expect(button.getAttribute('aria-label')).toBe('Té fresco');
 		expect(submit.getAttribute('value')).toBe('Agregar al carrito');
 		expect(field.getAttribute('value')).toBe('Add to cart');
+		expect(named.getAttribute('value')).toBe('Add to cart');
 
 		// Its own writes come back as records it drops, so nothing is written twice.
 		expect(document.observer?.pending).toEqual([]);
@@ -223,6 +227,21 @@ describe('the overlay script', () => {
 		expect(area.textContent).toBe('Fresh tea');
 		expect(area.getAttribute('placeholder')).toBe('Té fresco');
 		expect(switcher.textContent).toBe('Fresh tea');
+	});
+
+	it('never translates a translation again', () => {
+		// "Agregar" is the translation of "Add", and also a source text of its own.
+		const entries: [string, string][] = [
+			['Add', 'Agregar'],
+			['Agregar', 'Sumar'],
+		];
+		const { document, main } = pageWithOverlay(entries, 'Agregar');
+		const later = document.element('button', { title: ' Agregar ' }, 'Agregar');
+		main.appendChild(later);
+		document.flush();
+		expect(main.textContent).toBe('AgregarAgregar');
+		expect(later.getAttribute('title')).toBe(' Agregar ');
+		expect(document.writes).toEqual([]);
 	});
 
 	it('translates what earlier scripts wrote before it ran', () => {

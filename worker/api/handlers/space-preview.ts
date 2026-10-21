@@ -145,7 +145,7 @@ async function serveAuthorizedPreview(
 	if (basePath === undefined) return forwardToSpacePreview(request, env, spaceName);
 	const pageUrl = new URL(url);
 	pageUrl.searchParams.delete(PREVIEW_TOKEN_PARAM);
-	return serveStorePage(request, env, { appId: spaceName, basePath, pageUrl }, (page) => forwardToSpacePreview(page, env, spaceName));
+	return serveStorePage(request, env, ctx, { appId: spaceName, basePath, pageUrl }, (page) => forwardToSpacePreview(page, env, spaceName));
 }
 
 /**
