@@ -1,28 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { msg, t } from '@/lib/i18n';
 
+/** Marked as messages here and translated where they are shown. */
 const THINKING_PHRASES = [
-  'Thinking',
-  'Ideating',
-  'Planning',
-  'Designing',
-  'Crafting',
-  'Architecting',
-  'Conceptualizing',
-  'Envisioning',
-  'Strategizing',
-  'Formulating',
-  'Contemplating',
-  'Analyzing',
-  'Brainstorming',
-  'Sketching',
-  'Exploring',
-  'Imagining',
-  'Structuring',
-  'Orchestrating',
-  'Composing',
-  'Refining',
+  msg('Thinking'),
+  msg('Ideating'),
+  msg('Planning'),
+  msg('Designing'),
+  msg('Crafting'),
+  msg('Architecting'),
+  msg('Conceptualizing'),
+  msg('Envisioning'),
+  msg('Strategizing'),
+  msg('Formulating'),
+  msg('Contemplating'),
+  msg('Analyzing'),
+  msg('Brainstorming'),
+  msg('Sketching'),
+  msg('Exploring'),
+  msg('Imagining'),
+  msg('Structuring'),
+  msg('Orchestrating'),
+  msg('Composing'),
+  msg('Refining'),
 ];
 
 interface ThinkingIndicatorProps {
@@ -84,7 +86,7 @@ export function ThinkingIndicator({ visible }: ThinkingIndicatorProps) {
               }}
               className="text-sm text-text-50/60 font-medium flex items-center gap-1"
             >
-              {THINKING_PHRASES[phraseIndex]}...
+              {t(THINKING_PHRASES[phraseIndex])}...
               <motion.span
                 animate={{ opacity: [1, 0.3, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}

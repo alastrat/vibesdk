@@ -91,6 +91,25 @@ These set the voice. Translate new copy to match them.
 | board | tablero | quadro |
 | your own key (the badge on a model the seller has a key for) | "Tu clave", and "Sin clave" for a model that needs one | "Sua chave", and "Sem chave" for a model that needs one |
 
+### The editor and the chat
+
+| English | Español | Português |
+| --- | --- | --- |
+| blueprint (the AI's written plan for an app) | blueprint | blueprint |
+| phase (a stage of a build) | fase | fase |
+| views (the screens a blueprint lists) | pantallas | telas |
+| debug / deep debug | depurar / depuración profunda | depurar / depuração profunda |
+| commit (a saved version in the history) | commit: "hacer commit", "historial de commits" | commit: "fazer commit", "histórico de commits" |
+| roll back (return to an earlier commit) | revertir | reverter |
+| branch | rama | branch |
+| repository | repositorio | repositório |
+| token (a temporary access code) | token | token |
+| skill (a set of instructions the assistant loads) | habilidad | habilidade |
+| online (an app that has been deployed) | en línea (never "en vivo") | online (never "ao vivo") |
+| your computer (where a repository is cloned) | tu computadora | seu computador |
+
+The tool rows in the chat speak about what the assistant did, in the third person: "Leyendo src/App.tsx…", "Leyó src/App.tsx", "No se pudo leer src/App.tsx" and "Lendo src/App.tsx…", "Leu src/App.tsx", "Não foi possível ler src/App.tsx". The file or text after the verb is never translated.
+
 ### Publishing
 
 | English | Español | Português |

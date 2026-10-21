@@ -8,6 +8,7 @@
 import { forwardRef } from 'react';
 import { PreviewIframe } from '@/routes/chat/components/preview-iframe';
 import type { PreviewComponentProps } from '../../core/types';
+import { t } from '@/lib/i18n';
 
 export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 	(
@@ -26,7 +27,7 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 				<div className={`${className ?? ''} flex items-center justify-center bg-kumo-base border border-text/10 rounded-lg`}>
 					<div className="text-center p-8">
 						<p className="text-text-primary/70 text-sm">
-							No preview URL available yet. The preview will appear once your app is deployed.
+							{t('No preview URL available yet. The preview will appear once your app is deployed.')}
 						</p>
 					</div>
 				</div>
@@ -38,7 +39,7 @@ export const AppPreview = forwardRef<HTMLIFrameElement, PreviewComponentProps>(
 				ref={ref ?? previewRef}
 				src={previewUrl}
 				className={className}
-				title="App Preview"
+				title={t('App Preview')}
 				shouldRefreshPreview={shouldRefreshPreview}
 				manualRefreshTrigger={manualRefreshTrigger}
 				webSocket={websocket}

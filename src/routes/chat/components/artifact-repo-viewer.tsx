@@ -30,10 +30,15 @@ import { FileExplorer } from './file-explorer';
 import { getFileType } from '@/utils/string';
 import { apiClient } from '@/lib/api-client';
 import type { FileType } from '@/api-types';
+import { formatShortDate } from '@/lib/format-date';
+import { getLocale, msg, t, tn } from '@/lib/i18n';
 
 // Module scope: the viewer's hooks treat the client as a dependency, so a new
 // instance per render would refetch forever.
 const client = createArtifactsClient({ apiPath: '/api/artifacts' });
+
+/** Kept in state as English and translated where it is shown, so it follows a language change. */
+const LOAD_FAILED_MESSAGE = msg('Failed to load repository');
 
 const COMMIT_LOG_LIMIT = 30;
 /** Guard against pathological repos: stop walking after this many entries. */
@@ -78,13 +83,13 @@ function shortHash(hash: string): string {
 function relativeTime(epochSeconds: number): string {
 	const deltaMs = Date.now() - epochSeconds * 1000;
 	const mins = Math.round(deltaMs / 60000);
-	if (mins < 1) return 'just now';
-	if (mins < 60) return `${mins}m ago`;
+	if (mins < 1) return t('just now');
+	if (mins < 60) return t('{count}m ago', { count: mins });
 	const hours = Math.round(mins / 60);
-	if (hours < 24) return `${hours}h ago`;
+	if (hours < 24) return t('{count}h ago', { count: hours });
 	const days = Math.round(hours / 24);
-	if (days < 30) return `${days}d ago`;
-	return new Date(epochSeconds * 1000).toLocaleDateString();
+	if (days < 30) return t('{count}d ago', { count: days });
+	return formatShortDate(new Date(epochSeconds * 1000), getLocale());
 }
 
 /** Recursively enumerate every file (blob-like entry) under a tree hash. */
@@ -264,7 +269,7 @@ export function ArtifactRepoViewerPanel({
 			try {
 				const head = await client.getLog({ repoName, ref: selectedRef, limit: 1, signal });
 				if (!head.ok) {
-					if (!signal.aborted) setTreeError('Failed to load repository');
+					if (!signal.aborted) setTreeError(LOAD_FAILED_MESSAGE);
 					return;
 				}
 				const commit = head.value[0];
@@ -314,7 +319,7 @@ export function ArtifactRepoViewerPanel({
 				parentHashesRef.current = changedOld;
 				setFiles(toFileList(changed.map((f) => f.path)));
 			} catch {
-				if (!signal.aborted) setTreeError('Failed to load repository');
+				if (!signal.aborted) setTreeError(LOAD_FAILED_MESSAGE);
 			} finally {
 				if (!signal.aborted) setTreeLoading(false);
 			}
@@ -383,7 +388,7 @@ export function ArtifactRepoViewerPanel({
 					>
 						{pinnedCommit && (
 							<option value="" disabled>
-								detached: {shortHash(pinnedCommit)}
+								{t('detached: {hash}', { hash: shortHash(pinnedCommit) })}
 							</option>
 						)}
 						{branches.length === 0 && activeBranch && (
@@ -406,20 +411,20 @@ export function ArtifactRepoViewerPanel({
 							? 'bg-bg-4 text-text-primary'
 							: 'text-text-50/70 hover:text-text-primary hover:bg-bg-4/60',
 					)}
-					title="Commit history"
+					title={t('Commit history')}
 				>
 					<GitCommit className="size-4" />
-					Commits
+					{t('Commits')}
 				</button>
 
 				{pinnedCommit && (
 					<button
 						onClick={resetToBranch}
 						className="flex items-center gap-1 text-xs text-text-50/70 hover:text-text-primary rounded-md px-2 py-1 hover:bg-bg-4/60 transition-colors"
-						title="Back to branch"
+						title={t('Back to branch')}
 					>
 						<X className="size-3.5" />
-						diff {shortHash(pinnedCommit)} · {files.length} changed
+						{tn('diff {hash} · {count} changed', 'diff {hash} · {count} changed', files.length, { hash: shortHash(pinnedCommit) })}
 					</button>
 				)}
 
@@ -431,23 +436,24 @@ export function ArtifactRepoViewerPanel({
 						<button
 							onClick={onGitCloneClick}
 							className="flex items-center gap-1.5 text-xs rounded-md px-2 py-1 text-text-50/70 hover:text-text-primary hover:bg-bg-4/60 transition-colors"
-							title="Clone to local machine"
+							title={t('Clone to local machine')}
 						>
 							<Download className="size-4" />
-							Clone
+							{t('Clone')}
 						</button>
 					)}
 					{onGitHubExportClick && isGitHubExportReady && (
 						<button
 							onClick={onGitHubExportClick}
 							className="flex items-center gap-1.5 text-xs rounded-md px-2 py-1 text-text-50/70 hover:text-text-primary hover:bg-bg-4/60 transition-colors"
-							title="Export to GitHub"
+							title={t('Export to GitHub')}
 						>
 							<Github className="size-4" />
+							{/* i18n-ignore: a brand name */}
 							GitHub
 						</button>
 					)}
-					<span className="text-xs font-mono text-text-50/40">read-only</span>
+					<span className="text-xs font-mono text-text-50/40">{t('read-only')}</span>
 				</div>
 
 				{/* Commit dropdown */}
@@ -455,11 +461,11 @@ export function ArtifactRepoViewerPanel({
 					<div className="absolute left-3 top-full z-20 mt-1 w-[28rem] max-w-[calc(100%-1.5rem)] max-h-96 overflow-auto rounded-md border border-bg-2 bg-kumo-elevated shadow-lg">
 						{log.status === 'error' && (
 							<div className="px-3 py-3 text-xs text-red-500/80">
-								Failed to load commits
+								{t('Failed to load commits')}
 							</div>
 						)}
 						{log.status === 'success' && commits.length === 0 && (
-							<div className="px-3 py-3 text-xs text-text-50/50">No commits yet</div>
+							<div className="px-3 py-3 text-xs text-text-50/50">{t('No commits yet')}</div>
 						)}
 						{commits.map((commit) => {
 							const isActive = pinnedCommit === commit.hash;
@@ -503,7 +509,7 @@ export function ArtifactRepoViewerPanel({
 					<div className="flex-1 min-w-0">
 						{treeError ? (
 							<div className="flex h-full items-center justify-center text-sm text-red-500/80">
-								{treeError}
+								{t(treeError)}
 							</div>
 						) : activeFile ? (
 							diffMode ? (
@@ -533,10 +539,10 @@ export function ArtifactRepoViewerPanel({
 						) : (
 							<div className="flex h-full items-center justify-center text-sm text-text-50/50">
 								{treeLoading
-									? 'Loading repository…'
+									? t('Loading repository…')
 									: diffMode
-										? 'Select a changed file to view its diff'
-										: 'Select a file to view'}
+										? t('Select a changed file to view its diff')
+										: t('Select a file to view')}
 							</div>
 						)}
 					</div>

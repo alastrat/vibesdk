@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor';
 import { useTheme } from '../../contexts/theme-context';
+import { t } from '@/lib/i18n';
 
 import 'monaco-editor/editor/editor.api';
 import editorWorker from 'monaco-editor/editor/editor.worker?worker';
@@ -472,8 +473,8 @@ export const MonacoEditor = memo<MonacoEditorProps>(function MonacoEditor({
 					inlineClassName: 'diffDelete',
 					hoverMessage: {
 						value: replace
-							? `Will be replaced with: ${replace}`
-							: 'Will be deleted',
+							? t('Will be replaced with: {replacement}', { replacement: replace })
+							: t('Will be deleted'),
 					},
 				},
 			});

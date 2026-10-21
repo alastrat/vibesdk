@@ -5,6 +5,7 @@ import { cn } from '@cloudflare/kumo';
 import type { ChatMessage } from '../utils/message-helpers';
 import { formatElapsedTime } from '../hooks/use-debug-session';
 import { MessageContentRenderer, ToolStatusIndicator } from './messages';
+import { t } from '@/lib/i18n';
 
 interface DebugSessionBubbleProps {
 message: ChatMessage;
@@ -97,9 +98,9 @@ isExpanded && "border-b"
 hasError && !isActive && "text-red-500",
 !isActive && !hasError && "text-green-500"
 )}>
-{isActive ? 'Deep Debugging' :
- hasError ? 'Debugging Failed' :
- 'Debugging Complete'}
+{isActive ? t('Deep Debugging') :
+ hasError ? t('Debugging Failed') :
+ t('Debugging Complete')}
 </span>
 
 {/* Timer and tool count */}
@@ -147,7 +148,7 @@ className="max-h-[600px] overflow-y-auto px-4 py-3"
 <div className="space-y-3">
 {/* Render message content */}
 <MessageContentRenderer
-content={message.content || 'Initializing debug session...'}
+content={message.content || t('Initializing debug session...')}
 toolEvents={message.ui?.toolEvents?.filter(ev => ev.contentLength !== undefined) || []}
 />
 
@@ -181,7 +182,7 @@ className={cn(
 "flex items-center justify-center",
 "transition-colors"
 )}
-title="Scroll to bottom"
+title={t('Scroll to bottom')}
 >
 <ArrowDown className="size-4 text-text-secondary" />
 </motion.button>

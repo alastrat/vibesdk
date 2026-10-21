@@ -20,6 +20,8 @@ import type { FileType, BlueprintType, BehaviorType, ModelConfigsInfo, TemplateD
 import type { ContentDetectionResult } from '../utils/content-detector';
 import type { GitHubExportHook } from '@/hooks/use-github-export';
 import type { Edit } from '../hooks/use-chat';
+import { t } from '@/lib/i18n';
+import { featureName } from '../utils/feature-name';
 
 interface MainContentPanelProps {
 	// View state
@@ -174,7 +176,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		if (markdownFiles.length === 0) return null;
 
 		return renderViewWithHeader(
-			<span className="text-sm font-mono text-text-50/70">Documentation</span>,
+			<span className="text-sm font-mono text-text-50/70">{t('Documentation')}</span>,
 			<MarkdownDocsPreview
 				files={markdownFiles}
 				isGenerating={isGenerating || isGeneratingBlueprint}
@@ -190,7 +192,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		// Get feature capabilities to determine preview behavior
 		const featureCapabilities = featureRegistry.getCapabilities(projectType);
 		const featureDefinition = featureRegistry.getDefinition(projectType);
-		const previewTitle = blueprint?.title ?? featureDefinition?.name ?? 'Preview';
+		const previewTitle = blueprint?.title ?? (featureDefinition ? featureName(featureDefinition.name) : t('Preview'));
 
 		// Check if we should show the refresh button (presentations handle refresh differently)
 		const showManualRefresh = featureCapabilities?.hasLiveReload ?? true;
@@ -234,7 +236,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 				src={previewUrl}
 				ref={previewRef}
 				className="flex-1 w-full h-full border-0"
-				title="Preview"
+				title={t('Preview')}
 				shouldRefreshPreview={shouldRefreshPreview}
 				manualRefreshTrigger={manualRefreshTrigger}
 				webSocket={websocket}
@@ -303,7 +305,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 					<button
 						className="shrink-0 p-1 hover:bg-kumo-elevated rounded transition-colors"
 						onClick={onManualRefresh}
-						title="Refresh preview"
+						title={t('Refresh preview')}
 					>
 						<RefreshCw className="size-4 text-text-primary/50" />
 					</button>
@@ -321,6 +323,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 	const renderBlueprintView = () =>
 		renderViewWithHeader(
 			<div className="flex items-center gap-2">
+				{/* i18n-ignore: a file name */}
 				<span className="text-sm text-text-50/70 font-mono">Blueprint.md</span>
 				{previewUrl && <Copy text={previewUrl} />}
 			</div>,
@@ -339,7 +342,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		if (!activeFile) {
 			return renderViewWithHeader(
 				<div className="flex items-center gap-2">
-					<span className="text-sm font-mono text-text-50/70">Select a file</span>
+					<span className="text-sm font-mono text-text-50/70">{t('Select a file')}</span>
 				</div>,
 				<div className="flex-1 relative">
 					<div className="absolute inset-0 flex" ref={editorRef}>
@@ -349,7 +352,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 							onFileClick={onFileClick}
 						/>
 						<div className="flex-1 flex items-center justify-center bg-kumo-base">
-							<span className="text-text-50/50 text-sm">No file selected</span>
+							<span className="text-text-50/50 text-sm">{t('No file selected')}</span>
 						</div>
 					</div>
 				</div>,
@@ -416,7 +419,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		if (!databaseAvailable || !agentId) return null;
 		return renderViewWithHeader(
 			<div className="flex items-center gap-2">
-				<span className="text-sm font-mono text-text-50/70">Database</span>
+				<span className="text-sm font-mono text-text-50/70">{t('Database')}</span>
 			</div>,
 			<DatabaseViewer agentId={agentId} enabled={view === 'database'} />,
 		);
@@ -426,7 +429,7 @@ export function MainContentPanel(props: MainContentPanelProps) {
 		if (!repoAvailable || !agentId) return null;
 		return renderViewWithHeader(
 			<div className="flex items-center gap-2">
-				<span className="text-sm font-mono text-text-50/70">Repository</span>
+				<span className="text-sm font-mono text-text-50/70">{t('Repository')}</span>
 			</div>,
 			<ArtifactRepoViewerPanel
 				repoName={agentId}

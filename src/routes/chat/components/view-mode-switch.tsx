@@ -3,6 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Eye, Code, FileText, Presentation, Database, GitBranch } from 'lucide-react';
 import { featureRegistry } from '@/features';
 import type { ProjectType } from '@/api-types';
+import { t } from '@/lib/i18n';
+import { featureName } from '../utils/feature-name';
 
 // Map icon names to components
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -57,7 +59,7 @@ export function ViewModeSwitch({
 						exit={{ opacity: 0, scale: 0 }}
 						className="absolute z-50 top-10 left-0 bg-kumo-elevated text-text-primary text-xs px-2 py-1 rounded whitespace-nowrap animate-fade-in"
 					>
-						You can view code anytime from here
+						{t('You can view code anytime from here')}
 					</motion.div>
 				)}
 			</AnimatePresence>
@@ -72,7 +74,7 @@ export function ViewModeSwitch({
 							? 'bg-bg-4 text-text-primary'
 							: 'text-text-50/70 hover:text-text-primary hover:bg-brand',
 					)}
-					title={featureDefinition?.name ?? 'Preview'}
+					title={featureDefinition ? featureName(featureDefinition.name) : t('Preview')}
 				>
 					<PreviewIcon className="size-4" />
 				</button>
@@ -86,7 +88,7 @@ export function ViewModeSwitch({
 						? 'bg-bg-4 text-text-primary'
 						: 'text-text-50/70 hover:text-text-primary hover:bg-brand',
 				)}
-				title="Code"
+				title={t('Code')}
 			>
 				<Code className="size-4" />
 			</button>
@@ -101,7 +103,7 @@ export function ViewModeSwitch({
 							? 'bg-bg-4 text-text-primary'
 							: 'text-text-50/70 hover:text-text-primary hover:bg-brand',
 					)}
-					title="Docs"
+					title={t('Docs')}
 				>
 					<FileText className="size-4" />
 				</button>
@@ -117,7 +119,7 @@ export function ViewModeSwitch({
 							? 'bg-bg-4 text-text-primary'
 							: 'text-text-50/70 hover:text-text-primary hover:bg-brand',
 					)}
-					title="Database (read-only)"
+					title={t('Database (read-only)')}
 				>
 					<Database className="size-4" />
 				</button>
@@ -133,7 +135,7 @@ export function ViewModeSwitch({
 							? 'bg-bg-4 text-text-primary'
 							: 'text-text-50/70 hover:text-text-primary hover:bg-brand',
 					)}
-					title="Repository (read-only)"
+					title={t('Repository (read-only)')}
 				>
 					<GitBranch className="size-4" />
 				</button>

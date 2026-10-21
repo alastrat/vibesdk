@@ -2,6 +2,7 @@ import { useRef, type ChangeEvent } from 'react';
 import { SUPPORTED_IMAGE_MIME_TYPES } from '@/api-types';
 import { ImageIcon } from '@phosphor-icons/react';
 import { Button } from '@cloudflare/kumo';
+import { t } from '@/lib/i18n';
 
 export interface ImageUploadButtonProps {
 	onFilesSelected: (files: File[]) => void;
@@ -56,8 +57,8 @@ export function ImageUploadButton({
 				onClick={handleClick}
 				disabled={disabled}
 				className={className}
-				aria-label="Upload image"
-				title="Upload image (PNG, JPEG, WEBP, HEIC, HEIF)"
+				aria-label={t('Upload image')}
+				title={t('Upload image (PNG, JPEG, WEBP, HEIC, HEIF)')}
 			>
 				<ImageIcon
 					weight="duotone"

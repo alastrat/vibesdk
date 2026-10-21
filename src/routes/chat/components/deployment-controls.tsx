@@ -6,6 +6,7 @@ import { apiClient } from '../../../lib/api-client';
 import { toast } from 'sonner';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { BRAND } from '@/brand';
+import { t } from '@/lib/i18n';
 
 interface DeploymentControlsProps {
 	// Deployment state
@@ -104,9 +105,7 @@ export function DeploymentControls({
 	};
 
 	const currentState = getCurrentDeploymentState();
-	const destination = deploymentTarget === 'user'
-		? 'your Cloudflare account'
-		: `${BRAND.name} hosting`;
+	const toOwnAccount = deploymentTarget === 'user';
 
 	const handleDeploy = () => {
 		setIsDeployButtonClicked(true);
@@ -149,7 +148,7 @@ export function DeploymentControls({
 
 	const handleToggleVisibility = async () => {
 		if (!appId) {
-			toast.error('App ID not found');
+			toast.error(t('App ID not found'));
 			return;
 		}
 		if (localVisibility === 'private') {
@@ -163,13 +162,13 @@ export function DeploymentControls({
 			if (response.success && response.data) {
 				setLocalVisibility('private');
 				onVisibilityUpdate?.('private');
-				toast.success('App is now private');
+				toast.success(t('App is now private'));
 			} else {
-				throw new Error(response.error?.message || 'Failed to update visibility');
+				throw new Error(response.error?.message || t('Failed to update visibility'));
 			}
 		} catch (error) {
 			console.error('Error updating app visibility:', error);
-			toast.error('Failed to update visibility');
+			toast.error(t('Failed to update visibility'));
 		} finally {
 			setIsUpdatingVisibility(false);
 		}
@@ -185,10 +184,10 @@ export function DeploymentControls({
 					icon: null,
 					titleColor: "text-text-tertiary dark:text-text-tertiary",
 					subtitleColor: "text-text-tertiary/80 dark:text-text-tertiary/70",
-					title: deploymentTarget === 'user' ? 'Deploy to your Cloudflare account' : 'Deploy',
-					subtitle: deploymentTarget === 'user'
-						? "Deploy will be enabled after the app has files"
-						: "Deploy will be enabled after Phase 1 is implemented",
+					title: toOwnAccount ? t('Deploy to your Cloudflare account') : t('Deploy'),
+					subtitle: toOwnAccount
+						? t('Deploy will be enabled after the app has files')
+						: t('Deploy will be enabled after Phase 1 is implemented'),
 					buttonDisabled: true,
 					buttonVariant: "secondary" as const,
 					buttonClass: "bg-kumo-base dark:bg-kumo-base text-text-tertiary dark:text-text-tertiary border-muted dark:border-muted cursor-not-allowed"
@@ -201,8 +200,10 @@ export function DeploymentControls({
 					icon: <Zap className="w-2.5 h-2.5 text-white" />,
 					titleColor: "text-text-primary dark:text-text-primary",
 					subtitleColor: "text-text-tertiary dark:text-text-tertiary",
-					title: "Ready to Deploy",
-					subtitle: `Publishes a standalone Worker to ${destination}`,
+					title: t('Ready to Deploy'),
+					subtitle: toOwnAccount
+						? t('Publishes a standalone Worker to your Cloudflare account')
+						: t('Publishes a standalone Worker to {brand} hosting', { brand: BRAND.name }),
 					buttonDisabled: false,
 					buttonVariant: "primary" as const,
 					buttonClass: "bg-brand text-white border-brand hover:scale-105"
@@ -215,8 +216,10 @@ export function DeploymentControls({
 					icon: <Loader className="w-2.5 h-2.5 text-white animate-spin" />,
 					titleColor: "text-blue-900 dark:text-blue-100",
 					subtitleColor: "text-blue-600 dark:text-blue-300",
-					title: deploymentTarget === 'user' ? 'Deploying to your Cloudflare account' : 'Deploying',
-					subtitle: `Publishing your application to ${destination}...`,
+					title: toOwnAccount ? t('Deploying to your Cloudflare account') : t('Deploying'),
+					subtitle: toOwnAccount
+						? t('Publishing your application to your Cloudflare account...')
+						: t('Publishing your application to {brand} hosting...', { brand: BRAND.name }),
 					buttonDisabled: true,
 					buttonVariant: "primary" as const,
 					buttonClass: "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-500 dark:border-blue-600 scale-105 shadow-lg dark:shadow-blue-900/50"
@@ -229,8 +232,10 @@ export function DeploymentControls({
 					icon: <Loader className="w-2.5 h-2.5 text-white animate-spin" />,
 					titleColor: "text-blue-900 dark:text-blue-100",
 					subtitleColor: "text-blue-600 dark:text-blue-300",
-					title: deploymentTarget === 'user' ? 'Redeploying to your Cloudflare account' : 'Redeploying',
-					subtitle: `Updating your application in ${destination}...`,
+					title: toOwnAccount ? t('Redeploying to your Cloudflare account') : t('Redeploying'),
+					subtitle: toOwnAccount
+						? t('Updating your application in your Cloudflare account...')
+						: t('Updating your application in {brand} hosting...', { brand: BRAND.name }),
 					buttonDisabled: true,
 					buttonVariant: "primary" as const,
 					buttonClass: "bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white border-blue-500 dark:border-blue-600 scale-105 shadow-lg dark:shadow-blue-900/50"
@@ -243,8 +248,8 @@ export function DeploymentControls({
 					icon: <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>,
 					titleColor: "text-red-900 dark:text-red-100",
 					subtitleColor: "text-red-600 dark:text-red-300",
-					title: "❌ Deployment Failed",
-					subtitle: "Error in deployment, please try again",
+					title: t('Deployment Failed'),
+					subtitle: t('Error in deployment, please try again'),
 					buttonDisabled: !isPhase1Complete,
 					buttonVariant: "primary" as const,
 					buttonClass: isPhase1Complete
@@ -308,12 +313,12 @@ export function DeploymentControls({
 							{isCurrentlyDeploying ? (
 								<>
 									<Loader className="w-4 h-4 mr-2 animate-spin" />
-									{currentState === DeploymentState.REDEPLOYING ? 'Redeploying...' : 'Deploying...'}
+									{currentState === DeploymentState.REDEPLOYING ? t('Redeploying...') : t('Deploying...')}
 								</>
 							) : (
 								<>
 									<Zap className="w-4 h-4 mr-2" />
-									{deploymentTarget === 'user' ? 'Deploy to your Cloudflare account' : 'Deploy'}
+									{toOwnAccount ? t('Deploy to your Cloudflare account') : t('Deploy')}
 								</>
 							)}
 						</Button>
@@ -336,17 +341,19 @@ export function DeploymentControls({
 						{/* Success Header */}
 						<div className="flex-1">
 							<div className="text-sm font-semibold text-green-900 dark:text-green-100">
-								🎉 Successfully Deployed!
+								{t('Successfully Deployed!')}
 							</div>
 							<div className="text-xs text-green-700 dark:text-green-300 mt-0.5">
-								Your application is now live in {destination}
+								{toOwnAccount
+									? t('Your application is now live in your Cloudflare account')
+									: t('Your application is now live in {brand} hosting', { brand: BRAND.name })}
 							</div>
 						</div>
 					</div>
 
 					{/* Elegant URL Display */}
 					<div className="bg-kumo-base/60 dark:bg-bg-4/60 border border-green-200/40 dark:border-green-800/20 rounded-md p-3 mb-3">
-						<div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">Live URL:</div>
+						<div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">{t('Live URL:')}</div>
 						<div className="flex items-center gap-2">
 							<code className="flex-1 text-sm font-mono text-green-800 dark:text-green-200 bg-green-50/50 dark:bg-green-950/30 px-2 py-1 rounded text-ellipsis overflow-hidden">
 								{deploymentUrl}
@@ -356,7 +363,7 @@ export function DeploymentControls({
 								variant="secondary"
 								className="h-7 px-2 text-xs bg-kumo-base dark:bg-bg-4 border border-green-300 dark:border-green-300/50 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950 hover:border-green-400 transition-all flex-shrink-0"
 							>
-								{urlCopied ? 'Copied!' : 'Copy'}
+								{urlCopied ? t('Copied!') : t('Copy')}
 							</Button>
 						</div>
 					</div>
@@ -366,10 +373,11 @@ export function DeploymentControls({
 						<div className="bg-brand/5 border border-brand/20 rounded-md p-3 mb-3">
 							<div className="text-xs text-kumo-brand font-medium mb-1 flex items-center gap-1">
 								<Share2 className="w-3 h-3" />
-								Shareable Link:
+								{t('Shareable Link:')}
 							</div>
 							<div className="flex items-center gap-2">
 								<code className="flex-1 text-sm font-mono text-kumo-brand bg-brand/5 px-2 py-1 rounded text-ellipsis overflow-hidden">
+									{/* i18n-ignore: a URL path */}
 									{window.location.origin}/app/{appId}
 								</code>
 								<Button
@@ -377,7 +385,7 @@ export function DeploymentControls({
 									variant="secondary"
 									className="h-7 px-2 text-xs bg-brand/10 border border-brand/30 text-kumo-brand hover:bg-brand/20 transition-all flex-shrink-0"
 								>
-									{linkCopied ? 'Copied!' : 'Copy Link'}
+									{linkCopied ? t('Copied!') : t('Copy Link')}
 								</Button>
 							</div>
 						</div>
@@ -395,7 +403,7 @@ export function DeploymentControls({
 							className="h-10 text-sm bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800 text-white border-green-600 dark:border-green-700 font-medium shadow-sm hover:shadow-md dark:hover:shadow-green-900/50 transition-all duration-200 hover:scale-[1.02]"
 						>
 							<ExternalLink className="w-4 h-4 mr-2" />
-							View Live
+							{t('View Live')}
 						</Button>
 
 						{/* Make Public/Private Button - Always visible after deployment */}
@@ -414,17 +422,17 @@ export function DeploymentControls({
 								{isUpdatingVisibility ? (
 									<>
 										<Loader className="w-4 h-4 mr-2 animate-spin" />
-										Updating...
+										{t('Updating...')}
 									</>
 								) : localVisibility === 'private' ? (
 									<>
 										<Globe className="w-4 h-4 mr-2" />
-										Make Public
+										{t('Make Public')}
 									</>
 								) : (
 									<>
 										<Lock className="w-4 h-4 mr-2" />
-										Make Private
+										{t('Make Private')}
 									</>
 								)}
 							</Button>
@@ -446,12 +454,12 @@ export function DeploymentControls({
 								{isDeploying ? (
 									<>
 										<Loader className="w-4 h-4 mr-2 animate-spin" />
-										Redeploying...
+										{t('Redeploying...')}
 									</>
 								) : (
 									<>
 										<Zap className="w-4 h-4 mr-2" />
-										Redeploy
+										{t('Redeploy')}
 									</>
 								)}
 							</Button>

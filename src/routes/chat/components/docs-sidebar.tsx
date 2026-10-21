@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@cloudflare/kumo';
 import type { FileType } from '@/api-types';
+import { t, tn } from '@/lib/i18n';
 
 interface DocsSidebarProps {
 	files: FileType[];
@@ -52,10 +53,10 @@ export function DocsSidebar({
 			{/* Header */}
 			<div className="px-4 py-3 border-b">
 				<h3 className="text-sm font-medium text-text-primary">
-					Documentation
+					{t('Documentation')}
 				</h3>
 				<p className="text-xs text-kumo-subtle mt-0.5">
-					{files.length} {files.length === 1 ? 'file' : 'files'}
+					{tn('{count} file', '{count} files', files.length)}
 				</p>
 			</div>
 

@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { msg, t } from '@/lib/i18n';
 import { generateId } from '@/utils/id-generator';
 import type { RateLimitError, ConversationMessage, ReferenceCard } from '@/api-types';
 
@@ -208,15 +209,19 @@ export function handleRateLimitError(
     let displayMessage = rateLimitError.message;
     
     if (rateLimitError.suggestions && rateLimitError.suggestions.length > 0) {
-        displayMessage += `\n\n💡 Suggestions:\n${rateLimitError.suggestions.map(s => `• ${s}`).join('\n')}`;
+        displayMessage += `\n\n${t('Suggestions:')}\n${rateLimitError.suggestions.map(s => `• ${s}`).join('\n')}`;
     }
     
     toast.error(displayMessage);
     
+    // The debug panel is for developers and stays in English.
     onDebugMessage?.(
         'error',
+        // i18n-ignore
         `Rate Limit: ${rateLimitError.limitType.replace('_', ' ')} limit exceeded`,
+        // i18n-ignore
         `Limit: ${rateLimitError.limit} per ${Math.floor((rateLimitError.period || 0) / 3600)}h\nRetry after: ${(rateLimitError.period || 0) / 3600}h\n\nSuggestions:\n${rateLimitError.suggestions?.join('\n') || 'None'}`,
+        // i18n-ignore
         'Rate Limiting',
         rateLimitError.limitType,
         rateLimitError
@@ -224,7 +229,7 @@ export function handleRateLimitError(
     
     return createAIMessage(
         `rate_limit_${Date.now()}`,
-        `⏱️ ${displayMessage}`
+        displayMessage
     );
 }
 
@@ -407,5 +412,5 @@ export function skippedReferenceCard(url: string): ReferenceCard {
     } catch {
         // keep the raw text as the host
     }
-    return { url, host, ok: false, reason: 'only the first 3 links are captured; this one stays as text' };
+    return { url, host, ok: false, reason: msg('only the first 3 links are captured; this one stays as text') };
 }

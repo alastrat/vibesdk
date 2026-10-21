@@ -1,3 +1,5 @@
+import { msg } from '@/lib/i18n';
+
 export interface ProjectStage {
     id: 'bootstrap' | 'blueprint' | 'code';
     title: string;
@@ -5,18 +7,19 @@ export interface ProjectStage {
     metadata?: string;
 }
 
+/** The stage titles are marked as messages here and translated where they are shown. */
 export const initialStages: ProjectStage[] = [
     {
         id: 'bootstrap',
-        title: 'Bootstrapping project',
+        title: msg('Bootstrapping project'),
         status: 'active',
     },
     {
         id: 'blueprint',
-        title: 'Generating Blueprint',
+        title: msg('Generating Blueprint'),
         status: 'pending',
     },
-    { id: 'code', title: 'Generating code', status: 'pending' },
+    { id: 'code', title: msg('Generating code'), status: 'pending' },
 ];
 
 /**

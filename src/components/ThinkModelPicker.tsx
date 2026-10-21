@@ -1,6 +1,7 @@
 import { cn } from '@cloudflare/kumo';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ThinkModelOption } from '@/api-types';
+import { t } from '@/lib/i18n';
 
 interface ThinkModelPickerProps {
 	options: ThinkModelOption[];
@@ -18,11 +19,11 @@ export function ThinkModelPicker({ options, value, onChange, disabled = false, c
 	return (
 		<Select value={value} onValueChange={onChange} disabled={disabled}>
 			<SelectTrigger
-				aria-label="Model"
+				aria-label={t('Model')}
 				size="sm"
 				className={cn('w-auto gap-1.5 border-none bg-transparent px-2 text-sm shadow-none', className)}
 			>
-				<SelectValue placeholder="Select model" />
+				<SelectValue placeholder={t('Select model')} />
 			</SelectTrigger>
 			<SelectContent>
 				{options.map((option) => (

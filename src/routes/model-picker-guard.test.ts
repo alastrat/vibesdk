@@ -28,7 +28,7 @@ describe('model picker: component', () => {
 	});
 
 	it('shows the placeholder when no model is selected', () => {
-		expect(source('/src/components/ThinkModelPicker.tsx')).toContain('placeholder="Select model"');
+		expect(source('/src/components/ThinkModelPicker.tsx')).toContain("placeholder={t('Select model')}");
 	});
 });
 
@@ -66,7 +66,7 @@ describe('model picker: chat', () => {
 		const actions = compact.slice(compact.indexOf('{leftActions}'));
 		expect(compact).toContain('{leftActions}');
 		expect(actions).toContain('{rightActions}');
-		expect(actions).toContain('aria-label="Send message"');
+		expect(actions).toContain("aria-label={t('Send message')}");
 	});
 
 	it('creates the session with the chosen model', () => {

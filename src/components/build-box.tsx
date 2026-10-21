@@ -97,7 +97,6 @@ export function BuildBox({
 		useImageUpload({
 			onError: (error) => {
 				console.error('Image upload error:', error);
-				toast.error(error);
 			},
 		});
 

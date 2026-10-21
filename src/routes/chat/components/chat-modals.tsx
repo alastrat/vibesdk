@@ -13,6 +13,7 @@ import { GitHubExportModal } from '@/components/github-export-modal';
 import { GitCloneModal } from '@/components/shared/GitCloneModal';
 import type { AuthUser, AppDetailsData } from '@/api-types';
 import type { GitHubExportHook } from '@/hooks/use-github-export';
+import { t } from '@/lib/i18n';
 
 interface ChatModalsProps {
 	// Debug panel
@@ -62,15 +63,15 @@ export function ChatModals({
 			<AlertDialog open={isResetDialogOpen} onOpenChange={onResetDialogChange}>
 				<AlertDialogContent className="sm:max-w-[425px]">
 					<AlertDialogHeader>
-						<AlertDialogTitle>Reset conversation?</AlertDialogTitle>
+						<AlertDialogTitle>{t('Reset conversation?')}</AlertDialogTitle>
 						<AlertDialogDescription>
-							This will clear the chat history for this app. Generated files and preview are not affected.
+							{t('This will clear the chat history for this app. Generated files and preview are not affected.')}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t('Cancel')}</AlertDialogCancel>
 						<AlertDialogAction onClick={onResetConversation} className="bg-kumo-elevated hover:bg-kumo-elevated/80 text-text-primary">
-							Reset
+							{t('Reset')}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
