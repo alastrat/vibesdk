@@ -4,7 +4,7 @@
  */
 
 import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal, type StoreCheckoutResponse, type StoreManifest, type StoreMode } from '../../../shared/types/store-payments';
-import { isLocale, type Locale } from '../../../shared/i18n/locales';
+import { isLocale } from '../../../shared/i18n/locales';
 import { msg } from '../../../shared/i18n/translate';
 import { createLogger } from '../../logger';
 import { SellerTermsService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
@@ -15,7 +15,7 @@ import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/sel
 import { lockCatalogPricesFor } from '../../services/store-payments/catalog-locks';
 import { isFlagOn } from '../../services/posthog/flags';
 import { checkoutModeOf, refusal, startStoreCheckout, storeInfoOf, type StartCheckoutInput } from '../../services/store-payments/checkout';
-import { safeReturnPath } from '../../services/store-payments/request';
+import { returnPathInLanguage, safeReturnPath } from '../../services/store-payments/request';
 import { recordStoreOrder } from '../../services/store-payments/fulfill';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
 import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader, receiptOf, signReceipt, verifyReceipt } from '../../services/store-payments/receipts';
@@ -35,8 +35,8 @@ import { releaseOldestHolds } from '../../services/store-payments/holds';
 import { replaceCheckout } from '../../services/store-payments/replace';
 import { LiveStoreService } from '../../database/services/LiveStoreService';
 import { plainPage } from './plain-page';
-import { loadServingLanguages, shopperLanguage, type ShopperLanguage } from '../../services/store-translations/serve-context';
-import { STORE_LANGUAGE_PARAM, storeLanguages } from '../../services/store-translations/language';
+import { loadServingLanguages, shopperLanguage, shopperLocale, type ShopperLanguage } from '../../services/store-translations/serve-context';
+import { STORE_LANGUAGE_PARAM } from '../../services/store-translations/language';
 import { STORE_OVERLAY_PATH, translateManifest } from '../../services/store-translations/rewrite';
 import { overlayScript } from '../../services/store-translations/overlay-script';
 
@@ -201,14 +201,9 @@ async function manifestForShopper(language: ShopperLanguage, appId: string, mani
 	}
 }
 
-/** The language of a request to this store's platform paths. */
-async function shopperLocale(request: Request, env: Env, target: StorePlatformTarget): Promise<Locale> {
-	return (await shopperLanguage(request, env, target.appId)).locale;
-}
-
 /** A refusal worded in the shopper's language. */
 async function refusedFor(request: Request, env: Env, target: StorePlatformTarget, reason: StoreCheckoutRefusal): Promise<StoreCheckoutResponse> {
-	return refusal(reason, await shopperLocale(request, env, target));
+	return refusal(reason, await shopperLocale(request, env, target.appId));
 }
 
 /**
@@ -233,8 +228,8 @@ async function serveOverlayScript(request: Request, env: Env, target: StorePlatf
 
 /** `store.js`, worded for the shopper's language; it knows the store's languages to follow the page's own. */
 async function serveStoreScript(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
-	const { locale, ctx } = await shopperLanguage(request, env, target.appId);
-	const script = storeScript(locale, ctx ? storeLanguages(ctx) : [locale]);
+	const { locale, languages } = await shopperLanguage(request, env, target.appId);
+	const script = storeScript(locale, languages);
 	return new Response(script, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 
@@ -251,7 +246,9 @@ async function servePayPage(request: Request, env: Env, target: StorePlatformTar
 	const manifest = parsed?.ok ? (await manifestForShopper(language, target.appId, parsed.manifest)).manifest : null;
 	const info = manifest ? storeInfoOf(manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test') : null;
 	const query = new URL(request.url).searchParams;
-	const returnPaths = { successPath: safeReturnPath(query.get('success'), '/'), cancelPath: safeReturnPath(query.get('cancel'), '/') };
+	// A page asked for in a language sends the shopper back, and on to the confirmation page, in it.
+	const carried = (path: string): string => (isLocale(query.get(STORE_LANGUAGE_PARAM)) ? returnPathInLanguage(path, language.locale) : path);
+	const returnPaths = { successPath: carried(safeReturnPath(query.get('success'), '/')), cancelPath: carried(safeReturnPath(query.get('cancel'), '/')) };
 	const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 	const appOrigin = env.CUSTOM_DOMAIN ? `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}` : null;
 	const html = renderPayPage({ basePath: target.basePath, publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, info, nonce, returnPaths, locale: language.locale });
@@ -383,7 +380,7 @@ async function serveReturn(request: Request, env: Env, target: StorePlatformTarg
 	const processing = async (path: string): Promise<Response> =>
 		target.closed
 			? plainPage(
-					await shopperLocale(request, env, target),
+					await shopperLocale(request, env, target.appId),
 					200,
 					msg('Your payment is being confirmed'),
 					msg("This store's pages aren't open right now. If your payment goes through, the store has your order."),
@@ -416,7 +413,7 @@ async function withReceipt(request: Request, env: Env, target: StorePlatformTarg
 	const cookie = receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:');
 	if (target.closed) {
 		return plainPage(
-			await shopperLocale(request, env, target),
+			await shopperLocale(request, env, target.appId),
 			200,
 			msg('Thank you for your order'),
 			msg("Your payment went through and the store has your order. Its pages aren't open right now."),
@@ -454,7 +451,7 @@ export async function handleStorePlatform(request: Request, env: Env, target: St
 		return json({ error: 'Not found' }, 404);
 	} catch (error) {
 		logger.error('Store platform request failed', { appId: target.appId, path, error });
-		const locale = await shopperLocale(request, env, target);
+		const locale = await shopperLocale(request, env, target.appId);
 		return path === `${STORE_PLATFORM_PREFIX}/checkout` ? json(refusal('stripe_failed', locale), 502) : json({ error: translateFor(locale, STORE_CHECKOUT_MESSAGES.payments_unavailable) }, 500);
 	}
 }

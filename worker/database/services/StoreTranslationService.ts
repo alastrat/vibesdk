@@ -10,16 +10,17 @@ import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { LocalePreferenceService } from './LocalePreferenceService';
 import { DEFAULT_LOCALE, LOCALES, type Locale } from '../../../shared/i18n/locales';
-import type {
-	MachineTranslation,
-	StoreExtractionNotes,
-	StoreText,
-	StoreTranslationCounts,
-	StoreTranslationPage,
-	StoreTranslationRow,
-	StoreTranslationSettings,
-	StoreTranslationSettingsPatch,
-	StoreTranslationStoreSummary,
+import {
+	UNTOUCHED_SETTINGS_VERSION,
+	type MachineTranslation,
+	type StoreExtractionNotes,
+	type StoreText,
+	type StoreTranslationCounts,
+	type StoreTranslationPage,
+	type StoreTranslationRow,
+	type StoreTranslationSettings,
+	type StoreTranslationSettingsPatch,
+	type StoreTranslationStoreSummary,
 } from '../../../shared/types/store-translations';
 
 /** D1 binds at most 100 parameters per statement, so a bulk insert goes in chunks of whole rows under it. */
@@ -29,7 +30,7 @@ const TRANSLATION_COLUMNS = 8;
 const MAX_LIST_ROWS = 200;
 const MAX_QUERY_CHARS = 200;
 
-const DEFAULT_SETTINGS = { matchBrowser: true, showSwitcher: true, autoTranslate: true, version: 1 } as const;
+const DEFAULT_SETTINGS = { matchBrowser: true, showSwitcher: true, autoTranslate: true, version: UNTOUCHED_SETTINGS_VERSION } as const;
 
 /** A translation as serving reads it: the source text's hash, the normalized source text, and the translation. */
 export interface StoreTranslationEntry {

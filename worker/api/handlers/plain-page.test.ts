@@ -46,6 +46,13 @@ describe('plainPage', () => {
 		}
 	});
 
+	it("words the payment pages as Estori's Portuguese does", async () => {
+		const thanks = await plainPage('pt-BR', 200, 'Thank you for your order', "Your payment went through and the store has your order. Its pages aren't open right now.").text();
+		expect(thanks).toContain('<h1>Agradecemos seu pedido</h1>');
+		const confirming = await plainPage('es', 200, 'Your payment is being confirmed', "This store's pages aren't open right now. If your payment goes through, the store has your order.").text();
+		expect(confirming).toContain('<h1>Estamos confirmando tu pago</h1>');
+	});
+
 	it('shows the English for text no catalog has, and escapes what it writes', async () => {
 		const html = await plainPage('es', 200, '<b>A title</b> & more', 'Plain "words" <script>alert(1)</script>').text();
 		expect(html).toContain('<h1>&lt;b&gt;A title&lt;/b&gt; &amp; more</h1>');

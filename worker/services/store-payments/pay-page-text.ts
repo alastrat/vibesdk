@@ -57,7 +57,9 @@ export function payPageText(locale: Locale, brandName: string): PayPageText {
 		emailPlaceholder: t('you@example.com'),
 		shippingAddress: t('Shipping address'),
 		payment: t('Payment'),
-		fine: t('Payments are processed securely by Stripe. {store} is the seller.', { store: brandName || t('This store') }),
+		fine: brandName
+			? t('Payments are processed securely by Stripe. {store} is the seller.', { store: brandName })
+			: t('Payments are processed securely by Stripe. This store is the seller.'),
 		orderSummary: t('Order summary'),
 		shipTo: t('Ship to'),
 		subtotal: t('Subtotal'),

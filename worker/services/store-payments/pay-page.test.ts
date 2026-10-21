@@ -128,7 +128,7 @@ describe("renderPayPage in the shopper's language", () => {
 				'<h2><span>3</span> Pago</h2>',
 			],
 			pay: '<button class="pay" id="pay" type="button" disabled>Pagar</button>',
-			fine: '<p class="fine">Los pagos se procesan de forma segura con Stripe. Ember Roasters es el vendedor.</p>',
+			fine: '<p class="fine">Los pagos se procesan de forma segura con Stripe. Vendido por Ember Roasters.</p>',
 			summary: '<aside class="panel summary" id="summary" aria-label="Resumen del pedido">',
 			toggle: '<span id="summary-toggle-label">Mostrar resumen del pedido</span>',
 			totals: ['<label for="country">Enviar a</label>', '<dt>Subtotal</dt>', '<dt>Envío</dt>', '<dt class="total">Total</dt>'],
@@ -146,7 +146,7 @@ describe("renderPayPage in the shopper's language", () => {
 				'<h2><span>3</span> Pagamento</h2>',
 			],
 			pay: '<button class="pay" id="pay" type="button" disabled>Pagar</button>',
-			fine: '<p class="fine">Os pagamentos são processados com segurança pela Stripe. Ember Roasters é o vendedor.</p>',
+			fine: '<p class="fine">Os pagamentos são processados com segurança pela Stripe. Vendido por Ember Roasters.</p>',
 			summary: '<aside class="panel summary" id="summary" aria-label="Resumo do pedido">',
 			toggle: '<span id="summary-toggle-label">Mostrar resumo do pedido</span>',
 			totals: ['<label for="country">Enviar para</label>', '<dt>Subtotal</dt>', '<dt>Envio</dt>', '<dt class="total">Total</dt>'],
@@ -167,7 +167,7 @@ describe("renderPayPage in the shopper's language", () => {
 		expect(html).toContain('<html lang="en">');
 		expect(html).toContain('<h2>Order summary</h2>');
 		expect(html).toContain('<dd id="subtotal">&mdash;</dd>');
-		expect(configOf(html)).toMatchObject({ locale: 'en', stripeLocale: 'en', intlLocale: 'en-US', unavailable: "This store can't take payments right now." });
+		expect(configOf(html)).toMatchObject({ locale: 'en', stripeLocale: 'auto', intlLocale: 'en-US', unavailable: "This store can't take payments right now." });
 	});
 
 	it("gives Stripe's form the language: Latin American Spanish for es, Brazilian Portuguese for pt-BR", () => {
@@ -177,7 +177,10 @@ describe("renderPayPage in the shopper's language", () => {
 
 	it('hands the script its own words in the language, so a message it shows is the shopper\'s', () => {
 		const text = configOf(page({ locale: 'es' })).text as Record<string, string>;
-		expect(text.checkoutFailed).toBe('No se pudo iniciar el pago. Actualiza la página e inténtalo de nuevo.');
+		expect(text.checkoutFailed).toBe('No se pudo iniciar la compra. Actualiza la página e inténtalo de nuevo.');
+		expect(text.cannotContinue).toBe('Esta compra no puede continuar. Actualiza la página e inténtalo de nuevo.');
+		expect((configOf(page({ locale: 'pt-BR' })).text as Record<string, string>).checkoutFailed).toBe('Não foi possível iniciar a compra. Atualize a página e tente novamente.');
+		expect((configOf(page({ locale: 'pt-BR' })).text as Record<string, string>).cannotContinue).toBe('Esta compra não pode continuar. Atualize a página e tente novamente.');
 		expect(text.payAmount).toBe('Pagar {amount}');
 		expect(configOf(page({ locale: 'es' })).unavailable).toBe('Esta tienda no puede recibir pagos en este momento.');
 		expect((configOf(page({ locale: 'pt-BR' })).text as Record<string, string>).free).toBe('Grátis');
@@ -189,15 +192,15 @@ describe("renderPayPage in the shopper's language", () => {
 	});
 
 	it("names no seller in the language's words on a store without a brand", () => {
-		expect(page({ locale: 'es', info: { ...INFO, brand: null } })).toContain('Esta tienda es el vendedor.');
-		expect(page({ locale: 'pt-BR', info: { ...INFO, brand: null } })).toContain('Esta loja é o vendedor.');
+		expect(page({ locale: 'es', info: { ...INFO, brand: null } })).toContain('Los pagos se procesan de forma segura con Stripe. Vendido por esta tienda.');
+		expect(page({ locale: 'pt-BR', info: { ...INFO, brand: null } })).toContain('Os pagamentos são processados com segurança pela Stripe. Vendido por esta loja.');
 		expect(page({ locale: 'es', info: { ...INFO, brand: null } })).toContain('<title>Finalizar compra</title>');
 	});
 
 	it('escapes a brand name in a translated sentence, so store text still cannot add markup', () => {
 		const html = page({ locale: 'es', info: { ...INFO, brand: { ...INFO.brand!, name: '<b>"Ember" & Co</b>' } } });
 		expect(html).toContain('<title>Finalizar compra · &lt;b&gt;&quot;Ember&quot; &amp; Co&lt;/b&gt;</title>');
-		expect(html).toContain('&lt;b&gt;&quot;Ember&quot; &amp; Co&lt;/b&gt; es el vendedor.');
+		expect(html).toContain('Vendido por &lt;b&gt;&quot;Ember&quot; &amp; Co&lt;/b&gt;.');
 		expect(html).not.toContain('<b>"Ember"');
 	});
 

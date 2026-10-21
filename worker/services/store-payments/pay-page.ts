@@ -4,9 +4,9 @@
  * Session, and the email is the page's own field, sent to each session. Store code never runs here, and the page loads only its own script, the store script and Stripe.js.
  */
 
-import { INTL_LOCALE, type Locale } from '../../../shared/i18n/locales';
+import { DEFAULT_LOCALE, INTL_LOCALE, type Locale } from '../../../shared/i18n/locales';
 import { STORE_CHECKOUT_MESSAGES, type StoreBrand, type StoreInfo } from '../../../shared/types/store-payments';
-import { STRIPE_JS_URL, STRIPE_LOCALES } from '../../../shared/types/stripe';
+import { STRIPE_JS_URL, STRIPE_LOCALES, type StripeLocale } from '../../../shared/types/stripe';
 import { jsonForScript } from '../../utils/html';
 import { translateFor } from '../../utils/server-translate';
 import { payPageText } from './pay-page-text';
@@ -75,6 +75,11 @@ export function payPageHeaders(nonce: string, appOrigin: string | null): Record<
 	};
 }
 
+/** The language of Stripe's form: the shopper's, or for English Stripe's own pick from the browser, as English pages always had. */
+function stripeLocaleOf(locale: Locale): StripeLocale | 'auto' {
+	return locale === DEFAULT_LOCALE ? 'auto' : STRIPE_LOCALES[locale];
+}
+
 export function renderPayPage(input: PayPageInput): string {
 	const brand = input.info?.brand ?? NEUTRAL_BRAND;
 	const text = payPageText(input.locale, brand.name);
@@ -89,7 +94,7 @@ export function renderPayPage(input: PayPageInput): string {
 	const config = {
 		basePath: input.basePath,
 		locale: input.locale,
-		stripeLocale: STRIPE_LOCALES[input.locale],
+		stripeLocale: stripeLocaleOf(input.locale),
 		intlLocale: INTL_LOCALE[input.locale],
 		text: text.script,
 		publishableKey: input.publishableKey,

@@ -29,6 +29,12 @@ export interface StoreText {
 export const STORE_TRANSLATION_ORIGINS = ['machine', 'seller'] as const;
 export type StoreTranslationOrigin = (typeof STORE_TRANSLATION_ORIGINS)[number];
 
+/**
+ * The `version` of settings nothing has changed: a store with no settings row reads as this, and a row made only by
+ * reading the store's texts starts here. Saving settings, finishing a translation and editing one all raise it.
+ */
+export const UNTOUCHED_SETTINGS_VERSION = 1;
+
 /** A store's language settings. `version` goes up whenever the settings or what shoppers would see change. */
 export interface StoreTranslationSettings {
 	sourceLocale: Locale;

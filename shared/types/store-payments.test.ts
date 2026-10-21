@@ -38,6 +38,17 @@ describe('checkout refusal messages', () => {
 		for (const reason of REASONS) expect(translate(null, STORE_CHECKOUT_MESSAGES[reason])).toBe(STORE_CHECKOUT_MESSAGES[reason]);
 	});
 
+	it('write around "checkout" instead of calling it a payment, as the glossary asks, in the refusals that name it', () => {
+		const naming = REASONS.filter((reason) => /checkout/i.test(STORE_CHECKOUT_MESSAGES[reason]));
+		expect(naming).toEqual(['demo_only', 'too_many_checkouts', 'stripe_failed']);
+		for (const reason of naming) {
+			expect(translate(es, STORE_CHECKOUT_MESSAGES[reason]), reason).not.toMatch(/\bpagos?\b/i);
+			expect(translate(ptBR, STORE_CHECKOUT_MESSAGES[reason]), reason).not.toMatch(/\bpagamentos?\b/i);
+		}
+		expect(translate(es, STORE_CHECKOUT_MESSAGES.stripe_failed)).toBe('No se pudo iniciar la compra. Inténtalo de nuevo en un momento.');
+		expect(translate(ptBR, STORE_CHECKOUT_MESSAGES.stripe_failed)).toBe('Não foi possível iniciar a compra. Tente novamente em instantes.');
+	});
+
 	it.each([
 		['es', es],
 		['pt-BR', ptBR],

@@ -6,10 +6,10 @@
  */
 
 import { DEFAULT_LOCALE, LOCALES, type Locale } from '../../../shared/i18n/locales';
-import type { StoreTranslationSettings } from '../../../shared/types/store-translations';
+import { UNTOUCHED_SETTINGS_VERSION, type StoreTranslationSettings } from '../../../shared/types/store-translations';
 import { StoreTranslationService, unsavedSettings, type StoreTranslationEntry } from '../../database/services/StoreTranslationService';
 import { createLogger } from '../../logger';
-import { languageCookie, resolveShopperLanguage } from './language';
+import { languageCookie, resolveShopperLanguage, storeLanguages } from './language';
 import { isStorePage, translateStoreHtml } from './rewrite';
 
 const logger = createLogger('StoreLanguages');
@@ -135,22 +135,32 @@ export async function loadStoreLanguageContext(env: Env, appId: string): Promise
 /** The language a request's shopper reads a store in, with the store's languages when they could be read. */
 export interface ShopperLanguage {
 	locale: Locale;
+	/** The languages a page of the store can be in, which a page's own language is matched against. */
+	languages: Locale[];
 	/** Null when the store's languages could not be read. */
 	ctx: StoreLanguageContext | null;
 }
 
 /**
- * The language of Estori's own pages and data on a store's address. A store with no ready language is read in its
- * source, and one that saved no settings in English. English too when the store's languages can't be read.
+ * The language of Estori's own pages and data on a store's address. A store whose seller has set a language is read in
+ * the shopper's choice among its languages, else its source. English before that, as it was before stores had
+ * languages: the owner's own language is only the default the Translations page offers, and a settings row made by
+ * reading the store's texts has changed nothing. English too when the store's languages can't be read.
  */
 export async function shopperLanguage(request: Request, env: Env, appId: string): Promise<ShopperLanguage> {
 	try {
 		const ctx = await loadStoreLanguageContext(env, appId);
-		return { locale: resolveShopperLanguage(request, ctx).locale, ctx };
+		if (ctx.settings.version <= UNTOUCHED_SETTINGS_VERSION) return { locale: DEFAULT_LOCALE, languages: [DEFAULT_LOCALE], ctx };
+		return { locale: resolveShopperLanguage(request, ctx).locale, languages: storeLanguages(ctx), ctx };
 	} catch (error) {
 		logger.warn('Store languages could not be read; the shopper is answered in English', { appId, error });
-		return { locale: DEFAULT_LOCALE, ctx: null };
+		return { locale: DEFAULT_LOCALE, languages: [DEFAULT_LOCALE], ctx: null };
 	}
+}
+
+/** Just the language of `shopperLanguage`, for the pages and messages that need no more. */
+export async function shopperLocale(request: Request, env: Env, appId: string): Promise<Locale> {
+	return (await shopperLanguage(request, env, appId)).locale;
 }
 
 export interface StorePage {

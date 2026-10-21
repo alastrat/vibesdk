@@ -7,8 +7,10 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Locale } from '../../../shared/i18n/locales';
 import type { StoreInfo, StoreManifest } from '../../../shared/types/store-payments';
+import { UNTOUCHED_SETTINGS_VERSION } from '../../../shared/types/store-translations';
 import { RateLimitExceededError } from '../../../shared/types/errors';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { LocalePreferenceService } from '../../database/services/LocalePreferenceService';
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
 import { normalizeText, textHash } from '../../services/store-translations/extract';
 import type { StoreHost } from '../../services/live-stores/hosts';
@@ -68,6 +70,9 @@ let db: D1Database;
 beforeAll(async () => {
 	db = await migratedD1();
 	await insertUser(db, 'seller_1');
+	// A seller who uses Estori in Spanish.
+	await insertUser(db, 'seller_es');
+	await new LocalePreferenceService(envWith(db)).setLocale('seller_es', 'es', new Date());
 });
 
 // The platform logs each refusal; these tests read answers, not logs.
@@ -126,6 +131,8 @@ interface PayConfig {
 	stripeLocale: string;
 	intlLocale: string;
 	products: StoreInfo['products'];
+	successPath: string;
+	cancelPath: string;
 	unavailable: string;
 	text: Record<string, string>;
 }
@@ -171,10 +178,24 @@ describe("the checkout page in the shopper's language", () => {
 			const { html, config } = await payPage(appId, spaceEnv(), init);
 			expect(html, JSON.stringify(init)).toContain('<html lang="en">');
 			expect(html).toContain('<h1>Checkout</h1>');
-			expect(config).toMatchObject({ locale: 'en', stripeLocale: 'en', intlLocale: 'en-US' });
+			expect(config).toMatchObject({ locale: 'en', stripeLocale: 'auto', intlLocale: 'en-US' });
 			expect(config.products[0].name).toBe('Trail mug');
 			expect(config.unavailable).toBe("This store can't take payments right now.");
 		}
+	});
+
+	it("sends the shopper back to the store, and on to its confirmation page, in the page's language when the page was asked for one", async () => {
+		const appId = await storeWith({ ready: ['es'] });
+		const paths = async (init: { query?: string; headers?: Record<string, string> }) => {
+			const { config } = await payPage(appId, spaceEnv(), init);
+			return { successPath: config.successPath, cancelPath: config.cancelPath };
+		};
+		expect(await paths({ query: '?lang=es&success=%2Fthanks&cancel=%2Fcart' })).toEqual({ successPath: '/thanks?lang=es', cancelPath: '/cart?lang=es' });
+		expect(await paths({ query: '?lang=es&success=%2Forders%2Fdone%3Fx%3D1&cancel=%2Fcart%3Flang%3Den' })).toEqual({ successPath: '/orders/done?x=1&lang=es', cancelPath: '/cart?lang=es' });
+		expect(await paths({ query: '?lang=en&success=%2Fthanks&cancel=%2Fcart' })).toEqual({ successPath: '/thanks?lang=en', cancelPath: '/cart?lang=en' });
+		// A page reached with no language in its address, or one the store doesn't know, keeps its paths as they were.
+		expect(await paths({ query: '?success=%2Fthanks&cancel=%2Fcart', headers: { Cookie: 'estori_lang=es' } })).toEqual({ successPath: '/thanks', cancelPath: '/cart' });
+		expect(await paths({ query: '?lang=xx&success=%2Fthanks&cancel=%2Fcart' })).toEqual({ successPath: '/thanks', cancelPath: '/cart' });
 	});
 
 	it('never changes a price, an id, a country or the currency, whatever the language', async () => {
@@ -222,6 +243,61 @@ describe("the checkout page in the shopper's language", () => {
 		expect(html).toContain('<html lang="en">');
 		expect(config.products[0].name).toBe('Trail mug');
 		expect(warned).toHaveBeenCalled();
+	});
+});
+
+describe('a store whose seller has not set a language', () => {
+	/** A store of a seller who uses Estori in Spanish, with no settings of its own; `readTexts` reads its texts, as opening the Translations page does. */
+	async function unsetStore(options: { readTexts?: boolean } = {}): Promise<string> {
+		const appId = `shopper_app_${++stores}`;
+		await insertApp(db, { id: appId, userId: 'seller_es' });
+		if (options.readTexts) await new StoreTranslationService(envWith(db)).replaceTexts(appId, [], NOW);
+		return appId;
+	}
+
+	it("serves an English checkout, as it always has, to the shoppers of a Spanish-speaking seller's store", async () => {
+		const appId = await unsetStore();
+		expect((await new StoreTranslationService(envWith(db)).settingsOf(appId)).sourceLocale).toBe('es');
+		for (const init of [{}, { query: '?lang=es' }, { headers: { Cookie: 'estori_lang=es' } }, { headers: { 'Accept-Language': 'es-MX,es;q=0.9' } }]) {
+			const { response, html, config } = await payPage(appId, spaceEnv(), init);
+			expect(html, JSON.stringify(init)).toContain('<html lang="en">');
+			expect(html).toContain('<h1>Checkout</h1>');
+			expect(config).toMatchObject({ locale: 'en', stripeLocale: 'auto', intlLocale: 'en-US' });
+			expect(response.headers.get('Content-Language')).toBe('en');
+		}
+	});
+
+	it('stays English when its texts have only been read, which is all that opening the Translations page does', async () => {
+		const appId = await unsetStore({ readTexts: true });
+		const settings = await new StoreTranslationService(envWith(db)).settingsOf(appId);
+		// A row exists and names the owner's language, but nobody has saved anything.
+		expect(settings.sourceLocale).toBe('es');
+		expect(settings.version).toBe(UNTOUCHED_SETTINGS_VERSION);
+		expect((await payPage(appId, spaceEnv())).html).toContain('<html lang="en">');
+	});
+
+	it('is English in store.js, the plain pages and the refusals, whatever the shopper asks for', async () => {
+		const appId = await unsetStore({ readTexts: true });
+		const script = await (await platform(appId, spaceEnv(), '/__estori/store.js?lang=es', { headers: { Cookie: 'estori_lang=es' } })).text();
+		expect(script).toContain('var DEFAULT_LANGUAGE = "en";');
+		expect(script).toContain('var LANGUAGES = ["en"];');
+		const closed = await handleLiveStore(new Request(`${ORIGIN}/?lang=es`, { headers: { 'Accept-Language': 'es' } }), spaceEnv(), CTX, liveHost(appId, 'offline'));
+		expect(await closed.text()).toContain("<html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><meta name=\"robots\" content=\"noindex\"><title>This store isn't open right now</title>");
+		vi.spyOn(RateLimitService, 'enforceStoreCheckoutRateLimit').mockResolvedValue(undefined);
+		const refused = await platform(appId, spaceEnv(), '/__estori/checkout?lang=es', {
+			method: 'POST',
+			headers: { Origin: ORIGIN, 'Content-Type': 'application/json', Cookie: 'estori_lang=es' },
+			body: JSON.stringify({ items: [{ variantId: 'trail-mug-blue', quantity: 1 }], shipTo: 'US' }),
+		});
+		expect(await refused.json()).toMatchObject({ reason: 'store_paused', message: "This store isn't taking new orders right now. Try again later." });
+	});
+
+	it("takes the owner's language as the store's once the seller has saved its settings", async () => {
+		const appId = await unsetStore({ readTexts: true });
+		await new StoreTranslationService(envWith(db)).saveSettings(appId, { sourceLocale: 'es' }, NOW);
+		const { html, config } = await payPage(appId, spaceEnv({ manifest: SPANISH_MANIFEST }));
+		expect(html).toContain('<html lang="es">');
+		expect(config).toMatchObject({ locale: 'es', stripeLocale: 'es-419' });
 	});
 });
 
@@ -362,7 +438,7 @@ describe("the checkout endpoint's refusals", () => {
 		vi.spyOn(RateLimitService, 'enforceStoreCheckoutRateLimit').mockRejectedValue(new RateLimitExceededError('Store checkout limit reached', RateLimitType.STORE_CHECKOUT));
 		const response = await checkout(appId, spaceEnv(), { Cookie: 'estori_lang=pt-BR' });
 		expect(response.status).toBe(429);
-		expect(await response.json()).toMatchObject({ reason: 'too_many_checkouts', message: 'Muitos pagamentos foram iniciados daqui. Aguarde alguns minutos e tente novamente.' });
+		expect(await response.json()).toMatchObject({ reason: 'too_many_checkouts', message: 'Muitas compras foram iniciadas daqui. Aguarde alguns minutos e tente novamente.' });
 	});
 
 	it("words a demo's refusal in the shopper's language on a preview", async () => {
@@ -372,7 +448,7 @@ describe("the checkout endpoint's refusals", () => {
 			new Request(`${ORIGIN}${target.basePath}/__estori/checkout`, { method: 'POST', headers: { Origin: ORIGIN, 'Content-Type': 'application/json', ...headers }, body: JSON.stringify({ items: [], shipTo: 'US' }) });
 		const spanish = await handleStorePlatform(request({ Cookie: 'estori_lang=es' }), spaceEnv(), target, CTX);
 		expect(spanish.status).toBe(403);
-		expect(await spanish.json()).toEqual({ ok: false, reason: 'demo_only', message: 'Esto es una demostración. El pago funciona en la tienda publicada.' });
+		expect(await spanish.json()).toEqual({ ok: false, reason: 'demo_only', message: 'Esto es una demostración. Las compras funcionan en la tienda publicada.' });
 		const english = await handleStorePlatform(request({}), spaceEnv(), target, CTX);
 		expect(await english.json()).toEqual({ ok: false, reason: 'demo_only', message: 'This is a demo. Checkout works on the live store.' });
 	});

@@ -458,7 +458,7 @@ describe("Estori's checkout page script in the shopper's language", () => {
 	it("shows the page's own messages in the shopper's language, and Estori's refusals as the server worded them", async () => {
 		const failed = openPage(tabWith(), [], 'es');
 		await settle();
-		expect(failed.elements.get('notice')).toMatchObject({ hidden: false, textContent: 'No se pudo iniciar el pago. Actualiza la página e inténtalo de nuevo.' });
+		expect(failed.elements.get('notice')).toMatchObject({ hidden: false, textContent: 'No se pudo iniciar la compra. Actualiza la página e inténtalo de nuevo.' });
 
 		const page = openPage(tabWith(), [started('chk_1')], 'pt-BR');
 		await settle();
@@ -467,7 +467,7 @@ describe("Estori's checkout page script in the shopper's language", () => {
 		page.stripe.control.loadFails = true;
 		page.elements.get('pay')?.onclick?.();
 		await settle();
-		expect(page.elements.get('notice')?.textContent).toBe('Este pagamento não pode continuar. Atualize a página e tente novamente.');
+		expect(page.elements.get('notice')?.textContent).toBe('Esta compra não pode continuar. Atualize a página e tente novamente.');
 
 		const refused = openPage(tabWith(), [{ ok: false, reason: 'store_paused', message: 'Esta tienda no está recibiendo pedidos nuevos en este momento. Inténtalo más tarde.' }], 'es');
 		await settle();
@@ -495,7 +495,8 @@ describe("Estori's checkout page script in the shopper's language", () => {
 		expect(portuguese.stripe.stripeOptions).toEqual([{ locale: 'pt-BR' }]);
 		const english = openPage(tabWith(), [started('chk_4')]);
 		await settle();
-		expect(english.stripe.stripeOptions).toEqual([{ locale: 'en' }]);
+		// English pages keep Stripe's own choice, from the browser, as they did before the page was translated.
+		expect(english.stripe.stripeOptions).toEqual([{ locale: 'auto' }]);
 	});
 
 	it('keeps the cart, the checkout request and every amount when the shopper switches language mid-checkout', async () => {
