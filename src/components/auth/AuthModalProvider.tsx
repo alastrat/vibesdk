@@ -16,6 +16,7 @@ export interface ShowAuthModalOptions {
 }
 
 interface AuthModalContextType {
+  /** `context` is why sign-in was asked for: a whole sentence marked with `msg`, such as `msg('Sign in to star this app')`. */
   showAuthModal: (context?: string, onSuccess?: () => void, intendedUrl?: string, options?: ShowAuthModalOptions) => void;
   hideAuthModal: () => void;
   isAuthModalOpen: boolean;

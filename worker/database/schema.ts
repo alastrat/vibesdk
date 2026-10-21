@@ -856,6 +856,9 @@ export const oauthStates = sqliteTable('oauth_states', {
     codeVerifier: text('code_verifier'), // For PKCE
     nonce: text('nonce'),
     
+    // The language picked on the sign-in page, for a new account the callback creates
+    locale: text('locale'),
+    
     // Metadata
     createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`CURRENT_TIMESTAMP`),
     expiresAt: integer('expires_at', { mode: 'timestamp' }).notNull(),

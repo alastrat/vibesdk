@@ -1,4 +1,7 @@
-/** A provider sign-up saves the language the browser asked for on the new account, and never touches an existing one. */
+/**
+ * A provider sign-up saves a language on the new account, and never touches an existing one. The language is the one the
+ * visitor picked before leaving for the provider, stored on the OAuth state, and otherwise the one the browser asked for.
+ */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { envWith, insertUser, migratedD1 } from '../test-support/real-d1';
 import type { BaseOAuthProvider } from '../../services/oauth/base';
@@ -19,12 +22,12 @@ afterEach(() => {
 	vi.restoreAllMocks();
 });
 
-/** Signs in through `provider` as `info`, sending `acceptLanguage` (or none). */
-async function signIn(provider: OAuthProvider, info: OAuthUserInfo, acceptLanguage?: string) {
+/** Signs in through `provider` as `info`, sending `acceptLanguage` (or none), from a flow that started with `stateLocale` (or none). */
+async function signIn(provider: OAuthProvider, info: OAuthUserInfo, acceptLanguage?: string, stateLocale: string | null = null) {
 	const state = `state-${++states}`;
 	await db
-		.prepare(`INSERT INTO oauth_states (id, state, provider, scopes, code_verifier, nonce, created_at, expires_at, is_used) VALUES (?, ?, ?, '[]', 'verifier', ?, ?, ?, 0)`)
-		.bind(`state-row-${states}`, state, provider, NONCE, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 300)
+		.prepare(`INSERT INTO oauth_states (id, state, provider, scopes, code_verifier, nonce, locale, created_at, expires_at, is_used) VALUES (?, ?, ?, '[]', 'verifier', ?, ?, ?, ?, 0)`)
+		.bind(`state-row-${states}`, state, provider, NONCE, stateLocale, Math.floor(Date.now() / 1000), Math.floor(Date.now() / 1000) + 300)
 		.run();
 	const fake = { exchangeCodeForTokens: async () => ({ accessToken: 'token', tokenType: 'Bearer' }), getUserInfo: async () => info } as unknown as BaseOAuthProvider;
 	vi.spyOn(AuthService.prototype, 'getOauthProvider').mockResolvedValue(fake);
@@ -70,7 +73,68 @@ describe('a new account made through a provider', () => {
 	});
 });
 
+describe('a new account made through a provider, after a language was picked on the sign-in page', () => {
+	it.each([
+		['Spanish over a Portuguese browser', 'es', 'pt-BR,pt;q=0.9'],
+		['Portuguese over an English browser', 'pt-BR', 'en-US,en;q=0.9'],
+		['English over a Spanish browser', 'en', 'es-MX,es;q=0.9'],
+		['Spanish with no browser languages at all', 'es', undefined],
+	])('starts in the picked language, which beats the browser: %s', async (_label, picked, header) => {
+		const email = `picked-${picked}-${states}@example.test`.toLowerCase();
+		const result = await signIn('google', person(`g-picked-${picked}-${states}`, email), header, picked);
+		expect(result.isNewUser).toBe(true);
+		expect(result.user.locale).toBe(picked);
+		expect(await storedPreferences(email)).toEqual({ locale: picked });
+	});
+
+	it.each([
+		['one we do not speak', 'fr'],
+		['one in the wrong case', 'PT-br'],
+		['an empty one', ''],
+		['markup', '<b>es</b>'],
+	])('falls back to the browser when the stored language is not one we speak: %s', async (_label, stored) => {
+		const email = `fallback-${states}@example.test`;
+		const result = await signIn('github', person(`gh-fallback-${states}`, email), 'es-MX,es;q=0.9', stored);
+		expect(result.isNewUser).toBe(true);
+		expect(result.user.locale).toBe('es');
+		expect(await storedPreferences(email)).toEqual({ locale: 'es' });
+	});
+
+	it('uses the browser when no language was picked', async () => {
+		const email = `unpicked-${states}@example.test`;
+		const result = await signIn('google', person(`g-unpicked-${states}`, email), 'pt-PT,pt;q=0.9', null);
+		expect(result.user.locale).toBe('pt-BR');
+	});
+});
+
 describe('an account that already exists', () => {
+	it('keeps the language it saved when the sign-in page picked another', async () => {
+		await insertUser(db, 'saved_2', { emailVerified: true });
+		await db.prepare(`UPDATE users SET preferences = '{"theme":"dark","locale":"es"}' WHERE id = 'saved_2'`).run();
+		const result = await signIn('google', person('g-saved-2', 'saved_2@example.test'), 'pt-BR', 'pt-BR');
+		expect(result.isNewUser).toBe(false);
+		expect(result.user.locale).toBe('es');
+		expect(await storedPreferences('saved_2@example.test')).toEqual({ theme: 'dark', locale: 'es' });
+	});
+
+	it('is not given the picked language when it never chose one', async () => {
+		await insertUser(db, 'none_2', { emailVerified: true });
+		const before = await storedPreferences('none_2@example.test');
+		const result = await signIn('github', person('gh-none-2', 'none_2@example.test'), 'en-US', 'es');
+		expect(result.isNewUser).toBe(false);
+		expect(result.user.locale).toBeNull();
+		expect(await storedPreferences('none_2@example.test')).toEqual(before);
+		expect(before).not.toHaveProperty('locale');
+	});
+
+	it('keeps the language it was made with when the same person signs in again after picking another', async () => {
+		await signIn('google', person('g-again-2', 'again-2@example.test'), 'es-MX', 'es');
+		const again = await signIn('google', person('g-again-2', 'again-2@example.test'), 'pt-BR', 'pt-BR');
+		expect(again.isNewUser).toBe(false);
+		expect(again.user.locale).toBe('es');
+		expect(await storedPreferences('again-2@example.test')).toEqual({ locale: 'es' });
+	});
+
 	it('keeps the language it saved when a provider links to it', async () => {
 		await insertUser(db, 'saved_1', { emailVerified: true });
 		await db.prepare(`UPDATE users SET preferences = '{"theme":"dark","locale":"es"}' WHERE id = 'saved_1'`).run();

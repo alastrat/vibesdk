@@ -21,7 +21,7 @@ import {
     SecurityErrorType 
 } from 'shared/types/errors';
 import { SignupsPausedError } from '../../../shared/types/pauses';
-import { localeFromAcceptLanguage, type Locale } from '../../../shared/i18n/locales';
+import { isLocale, localeFromAcceptLanguage, type Locale } from '../../../shared/i18n/locales';
 import { isFlagOn } from '../../services/posthog/flags';
 import { AuthResult, AuthUserSession, OAuthUserInfo } from '../../types/auth-types';
 import { generateId } from '../../utils/idGenerator';
@@ -699,13 +699,15 @@ export class AuthService extends BaseService {
     }
     
     /**
-     * Get OAuth authorization URL
+     * Get OAuth authorization URL. `locale` is the language picked before leaving for the provider: the callback is a
+     * top-level navigation that carries only the browser's languages, so the pick travels on the state row.
      */
     async getOAuthAuthorizationUrl(
         provider: OAuthProvider,
         request: Request,
         intendedRedirectUrl?: string,
-        linkUserId?: string
+        linkUserId?: string,
+        locale: Locale | null = null
     ): Promise<{ authUrl: string; nonce: string }> {
         const oauthProvider = await this.getOauthProvider(provider, request);
         if (!oauthProvider) {
@@ -749,7 +751,8 @@ export class AuthService extends BaseService {
             isUsed: false,
             scopes: [],
             userId: linkUserId ?? null,
-            nonce
+            nonce,
+            locale
         });
         
         // Get authorization URL
@@ -904,12 +907,12 @@ export class AuthService extends BaseService {
             // user row or session is created so a rejected email never gets admitted.
             enforceAllowedEmail(this.env, oauthUserInfo.email, 'oauth');
 
-            // Find or create user. A new account starts in the language the browser asked for, so its emails do;
-            // an existing one keeps its own.
+            // Find or create user. A new account starts in the language picked on the sign-in page, else the one the
+            // browser asked for, so its emails do; an existing one keeps its own.
             const { user, created } = await this.findOrCreateOAuthUser(
                 provider,
                 oauthUserInfo,
-                localeFromAcceptLanguage(request.headers.get('Accept-Language'))
+                isLocale(oauthState.locale) ? oauthState.locale : localeFromAcceptLanguage(request.headers.get('Accept-Language'))
             );
             
             // Create session

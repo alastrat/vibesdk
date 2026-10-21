@@ -24,6 +24,7 @@ import { checkCanSendPrompt } from '@/utils/usage-limit-checker';
 import { PromptBox } from '@/components/prompt-box';
 import { ThinkModelPicker } from '@/components/ThinkModelPicker';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
+import { msg } from '@/lib/i18n';
 
 const DEFAULT_PLACEHOLDER_PHRASES = ['todo list app', 'F1 fantasy game', 'personal finance tracker'];
 
@@ -132,7 +133,7 @@ export function BuildBox({
 		if (
 			!requireAuth({
 				requireFullAuth: true,
-				actionContext: 'to create applications',
+				actionContext: msg('Sign in to create applications'),
 				intendedUrl: intendedUrl,
 			})
 		) {

@@ -42,6 +42,17 @@ export function tn(singular: string, plural: string, count: number, values?: Mes
 	return translatePlural(active.catalog, active.locale, singular, plural, count, values);
 }
 
+/** Marks an English text for the catalogs where it is written; `t` translates it where it is shown. */
+export { msg } from '../../../shared/i18n/translate';
+
+/**
+ * Whether `received`, a message an API answered, is the English `english` or its translation in the active language. An
+ * API that answers in the visitor's language still matches the message the code compares it with.
+ */
+export function isMessage(received: string, english: string): boolean {
+	return received === english || received === t(english);
+}
+
 export function subscribe(listener: () => void): () => void {
 	listeners.add(listener);
 	return () => {

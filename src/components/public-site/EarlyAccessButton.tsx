@@ -4,6 +4,7 @@ import type { EarlyAccessCapability } from '@/api-types';
 import { EARLY_ACCESS_CONFIRMATION, useMyEarlyAccess, useRequestEarlyAccess } from '@/hooks/use-early-access';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { earlyAccessReturnUrl } from '@/lib/early-access';
+import { msg } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import { pillClass, type PillVariant } from './primitives';
 
@@ -55,7 +56,7 @@ export function EarlyAccessButton({
 				}
 				requireAuth({
 					requireFullAuth: true,
-					actionContext: 'to request early access',
+					actionContext: msg('Sign in to request early access'),
 					intendedUrl: earlyAccessReturnUrl(pathname, capability),
 				});
 			}}

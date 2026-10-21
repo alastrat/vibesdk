@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/auth-context';
 import { apiClient } from '@/lib/api-client';
+import { isMessage, useI18n } from '@/lib/i18n';
 import { RESET_PASSWORD_PATH, TERMS_OUTDATED_MESSAGE, TERMS_VERSION, VERIFY_EMAIL_PATH } from '@/api-types';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
@@ -29,6 +30,7 @@ export function TermsGate() {
 
 /** Owns the agreement state, so it starts unticked for each person. */
 function TermsDialog() {
+	const { t } = useI18n();
 	const { refreshUser, logout } = useAuth();
 	const [agreed, setAgreed] = useState(false);
 	const [pending, setPending] = useState(false);
@@ -37,12 +39,13 @@ function TermsDialog() {
 	const accept = async () => {
 		setPending(true);
 		setError(null);
+		const failed = t("Couldn't record your agreement");
 		try {
 			const response = await apiClient.acceptTerms(TERMS_VERSION);
-			if (!response.success) throw new Error(response.error?.message || "Couldn't record your agreement");
+			if (!response.success) throw new Error(response.error?.message || failed);
 			await refreshUser();
 		} catch (failure) {
-			setError(failure instanceof Error ? failure.message : "Couldn't record your agreement");
+			setError(failure instanceof Error ? failure.message : failed);
 		} finally {
 			setPending(false);
 		}
@@ -52,9 +55,9 @@ function TermsDialog() {
 		<Dialog open onOpenChange={() => undefined}>
 			<DialogContent className="sm:max-w-md" showCloseButton={false}>
 				<DialogHeader>
-					<DialogTitle>We've published our Terms of Service and Privacy Policy</DialogTitle>
+					<DialogTitle>{t("We've published our Terms of Service and Privacy Policy")}</DialogTitle>
 					<DialogDescription>
-						Please read and agree to them to keep using Estori.
+						{t('Please read and agree to them to keep using Estori.')}
 					</DialogDescription>
 				</DialogHeader>
 				<label className="flex items-start gap-2 text-sm text-kumo-default">
@@ -64,16 +67,16 @@ function TermsDialog() {
 				{error && <p className="text-sm text-kumo-danger">{error}</p>}
 				<div className="flex justify-end gap-2">
 					<Button variant="secondary" onClick={() => void logout()} disabled={pending}>
-						Sign out
+						{t('Sign out')}
 					</Button>
 					{/* Terms updated since this page loaded: only a reload fetches the new version. */}
-					{error === TERMS_OUTDATED_MESSAGE ? (
+					{error !== null && isMessage(error, TERMS_OUTDATED_MESSAGE) ? (
 						<Button variant="primary" onClick={() => window.location.reload()}>
-							Reload
+							{t('Reload')}
 						</Button>
 					) : (
 						<Button variant="primary" onClick={() => void accept()} disabled={!agreed} loading={pending}>
-							{error ? 'Try again' : 'Continue'}
+							{error ? t('Try again') : t('Continue')}
 						</Button>
 					)}
 				</div>

@@ -15,6 +15,7 @@ import { MoreFromCreator } from '@/components/site-page/MoreFromCreator';
 import { StickyBuyBar } from '@/components/site-page/StickyBuyBar';
 import type { SiteActions } from '@/components/site-page/SiteMainButton';
 import { SITE_PAGE_UNAVAILABLE_MESSAGE } from '@/api-types';
+import { msg } from '@/lib/i18n';
 
 /** A Discover site's product page: the live site, its page text and the action that fits the viewer. */
 export default function SitePage() {
@@ -68,10 +69,10 @@ export default function SitePage() {
 	const intendedUrl = `/discover/${data.id}`;
 	const actions: SiteActions = {
 		use: () => {
-			if (requireAuth({ requireFullAuth: true, actionContext: 'to use this site', intendedUrl })) setUseOpen(true);
+			if (requireAuth({ requireFullAuth: true, actionContext: msg('Sign in to use this site'), intendedUrl })) setUseOpen(true);
 		},
 		buy: () => {
-			if (!requireAuth({ requireFullAuth: true, actionContext: 'to buy this site', intendedUrl })) return;
+			if (!requireAuth({ requireFullAuth: true, actionContext: msg('Sign in to buy this site'), intendedUrl })) return;
 			checkout.mutate(data.id, {
 				onSuccess: (result) => window.location.assign(result.checkoutUrl),
 				onError: (error) => toast.error(error.message),

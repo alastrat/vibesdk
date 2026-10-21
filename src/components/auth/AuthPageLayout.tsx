@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EstoriLogo } from '@/brand';
 import { PageMeta } from '@/components/public-site/solution-page';
+import { t } from '@/lib/i18n';
 import { AuthPhoto, type PhotoView } from './AuthPhoto';
 import { LanguagePicker } from './LanguagePicker';
 
@@ -28,7 +29,7 @@ export function AuthPageLayout({
 			<PageMeta title={pageTitle} description={description} />
 			<AuthPhoto view={view} className="hidden lg:block lg:w-1/2" />
 			<main className="relative flex min-w-0 flex-1 flex-col overflow-y-auto px-6 py-6 sm:px-12 sm:py-8">
-				<Link to="/" aria-label="Estori home" className="self-center text-public-brand lg:self-end dark:text-white">
+				<Link to="/" aria-label={t('Estori home')} className="self-center text-public-brand lg:self-end dark:text-white">
 					<EstoriLogo className="h-7 w-auto" />
 				</Link>
 				<div className="mt-3 self-center lg:absolute lg:left-12 lg:top-8 lg:mt-0">

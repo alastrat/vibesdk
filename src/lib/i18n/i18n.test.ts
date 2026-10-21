@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { loadCatalog } from './catalog-loader';
-import { I18nProvider, LocaleLoadError, LocaleSaveError, STORAGE_KEY, T, applyAccountLocale, bindAccountSaver, getLocale, initialLocale, setLocale, subscribe, t, tn, useI18n } from './index';
+import { I18nProvider, LocaleLoadError, LocaleSaveError, STORAGE_KEY, T, applyAccountLocale, bindAccountSaver, getLocale, initialLocale, isMessage, msg, setLocale, subscribe, t, tn, useI18n } from './index';
 
 vi.mock('./catalog-loader', async (importOriginal) => {
 	const actual = await importOriginal<typeof import('./catalog-loader')>();
@@ -325,5 +325,33 @@ describe('I18nProvider', () => {
 	it('shows its child at once when the visit starts in English', () => {
 		stubBrowser();
 		expect(html(createElement(I18nProvider, null, page))).toBe('<p>page</p>');
+	});
+});
+
+describe('msg and isMessage', () => {
+	it('msg marks a text for the catalogs and answers it unchanged, in every language', async () => {
+		const marked = msg('Choose your language');
+		expect(marked).toBe('Choose your language');
+		stubBrowser();
+		await setLocale('es');
+		expect(msg('Choose your language')).toBe('Choose your language');
+		expect(t(marked)).toBe('Elige tu idioma');
+	});
+
+	it('isMessage knows an answer by its English text, and by its translation in the active language', async () => {
+		stubBrowser();
+		expect(isMessage('Choose your language', 'Choose your language')).toBe(true);
+		expect(isMessage('Something else', 'Choose your language')).toBe(false);
+		await setLocale('es');
+		expect(isMessage('Elige tu idioma', 'Choose your language')).toBe(true);
+		expect(isMessage('Choose your language', 'Choose your language')).toBe(true);
+		expect(isMessage('Escolha seu idioma', 'Choose your language')).toBe(false);
+		await setLocale('pt-BR');
+		expect(isMessage('Escolha seu idioma', 'Choose your language')).toBe(true);
+		expect(isMessage('Elige tu idioma', 'Choose your language')).toBe(false);
+	});
+
+	it('isMessage never matches an empty answer against a message with no translation', () => {
+		expect(isMessage('', 'A message with no translation')).toBe(false);
 	});
 });

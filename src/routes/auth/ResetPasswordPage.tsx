@@ -10,11 +10,12 @@ import { PasswordField } from '@/components/auth/PasswordField';
 import { OrangeButton } from '@/components/shared/OrangeButton';
 import { apiClient } from '@/lib/api-client';
 import { newPasswordErrors, type NewPasswordErrors } from '@/lib/auth-validation';
+import { isMessage, msg, t } from '@/lib/i18n';
 import { AccountEmailCard } from './AccountEmailCard';
 
 type ResetOutcome = 'form' | 'updated' | 'invalid';
 
-const RESET_FAILED_MESSAGE = "Couldn't update your password. Try again.";
+const RESET_FAILED_MESSAGE = msg("Couldn't update your password. Try again.");
 
 /** Sets a new password from an emailed reset link. */
 export default function ResetPasswordPage() {
@@ -43,13 +44,13 @@ export default function ResetPasswordPage() {
 		setFormError(null);
 		try {
 			const response = await apiClient.resetPassword(token, newPassword, confirmPassword);
-			if (!response.success) throw new Error(response.error?.message || RESET_FAILED_MESSAGE);
+			if (!response.success) throw new Error(response.error?.message || t(RESET_FAILED_MESSAGE));
 			// The reset signs out every session, including any in this browser.
 			await refreshUser();
 			setOutcome('updated');
 		} catch (error) {
-			const message = error instanceof Error && error.message ? error.message : RESET_FAILED_MESSAGE;
-			if (message === RESET_LINK_INVALID_MESSAGE) {
+			const message = error instanceof Error && error.message ? error.message : t(RESET_FAILED_MESSAGE);
+			if (isMessage(message, RESET_LINK_INVALID_MESSAGE)) {
 				setOutcome('invalid');
 			} else {
 				setFormError(message);
@@ -61,14 +62,14 @@ export default function ResetPasswordPage() {
 
 	return (
 		<>
-			<title>{pageTitle('Reset password')}</title>
-			<AccountEmailCard title="Reset your password">
+			<title>{pageTitle(t('Reset password'))}</title>
+			<AccountEmailCard title={t('Reset your password')}>
 				{outcome === 'form' && (
 					<form onSubmit={handleSubmit} className="grid gap-3" noValidate>
-						<p className="text-sm text-kumo-subtle">Choose a new password for your account.</p>
+						<p className="text-sm text-kumo-subtle">{t('Choose a new password for your account.')}</p>
 						{formError && <Banner variant="error" icon={<WarningCircleIcon />} title={formError} />}
 						<PasswordField
-							label="New password"
+							label={t('New password')}
 							value={newPassword}
 							onChange={setNewPassword}
 							error={fieldErrors.password}
@@ -79,9 +80,9 @@ export default function ResetPasswordPage() {
 						/>
 						<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
 							<Input
-								label="Confirm password"
+								label={t('Confirm password')}
 								type="password"
-								placeholder="Confirm password"
+								placeholder={t('Confirm password')}
 								value={confirmPassword}
 								onChange={(e) => setConfirmPassword(e.target.value)}
 								error={fieldErrors.confirmPassword}
@@ -91,7 +92,7 @@ export default function ResetPasswordPage() {
 							/>
 						</div>
 						<OrangeButton type="submit" disabled={submitting} className="mt-1 w-full justify-center">
-							{submitting ? 'Updating...' : 'Update password'}
+							{submitting ? t('Updating...') : t('Update password')}
 						</OrangeButton>
 					</form>
 				)}
@@ -100,16 +101,16 @@ export default function ResetPasswordPage() {
 					<>
 						<Banner
 							icon={<CheckCircleIcon />}
-							description="Your password is updated. Sign in with your new password."
+							description={t('Your password is updated. Sign in with your new password.')}
 						/>
 						{/* Signed in as another account in this browser: the sign-in window would close at once. */}
 						{isAuthenticated ? (
 							<Link to="/" className={cn(buttonVariants({ variant: 'secondary' }), 'w-full justify-center')}>
-								Open app
+								{t('Open app')}
 							</Link>
 						) : (
 							<OrangeButton className="w-full justify-center" onClick={() => showAuthModal()}>
-								Sign in
+								{t('Sign in')}
 							</OrangeButton>
 						)}
 					</>
@@ -117,12 +118,12 @@ export default function ResetPasswordPage() {
 
 				{outcome === 'invalid' && (
 					<>
-						<Banner variant="error" icon={<WarningCircleIcon />} title={RESET_LINK_INVALID_MESSAGE} />
+						<Banner variant="error" icon={<WarningCircleIcon />} title={t(RESET_LINK_INVALID_MESSAGE)} />
 						<OrangeButton
 							className="w-full justify-center"
 							onClick={() => showAuthModal(undefined, undefined, undefined, { initialMode: 'forgot' })}
 						>
-							Request a new link
+							{t('Request a new link')}
 						</OrangeButton>
 					</>
 				)}

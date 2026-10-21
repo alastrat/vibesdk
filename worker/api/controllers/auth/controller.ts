@@ -18,6 +18,7 @@ import {
 } from './authSchemas';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import { SIGNUPS_PAUSED_ERROR_CODE, SignupsPausedError } from '../../../../shared/types/pauses';
+import { isLocale } from '../../../../shared/i18n/locales';
 import {
     formatAuthResponse,
     mapUserResponse,
@@ -461,12 +462,17 @@ export class AuthController extends BaseController {
             
             // Get intended redirect URL from query parameter
             const intendedRedirectUrl = routeContext.queryParams.get('redirect_url') || undefined;
+
+            // The language picked on the sign-in page, for the account a new visitor is about to create
+            const pickedLocale = routeContext.queryParams.get('locale');
             
             const authService = new AuthService(env);
             const { authUrl, nonce } = await authService.getOAuthAuthorizationUrl(
                 validatedProvider,
                 request,
-                intendedRedirectUrl
+                intendedRedirectUrl,
+                undefined,
+                isLocale(pickedLocale) ? pickedLocale : null
             );
 
             // Set the state nonce as an HttpOnly cookie so the callback can verify the

@@ -6,12 +6,13 @@
 // By its alias, as the Worker's SecurityError checks import it; under Vitest a relative path loads a second copy that
 // `instanceof SecurityError` wouldn't match.
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
+import { msg } from '../i18n/translate';
 
 export const AI_BUILDS_PAUSED_MESSAGE = 'Building is paused for a few minutes. Your stores keep working.';
 /** The editor's WebSocket error code for a refused turn; it shows as a popup. */
 export const AI_BUILDS_PAUSED_CODE = 'AI_BUILDS_PAUSED';
 
-export const SIGNUPS_PAUSED_MESSAGE = 'Sign-ups are paused for a moment. Please try again soon.';
+export const SIGNUPS_PAUSED_MESSAGE = msg('Sign-ups are paused for a moment. Please try again soon.');
 /** The `?error=` code a provider sign-in comes back with when it would have created an account. */
 export const SIGNUPS_PAUSED_ERROR_CODE = 'signups_paused';
 

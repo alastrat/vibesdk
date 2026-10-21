@@ -4,6 +4,7 @@ import { Button } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { formatTemplatePrice, type AppDetailsData } from '@/api-types';
+import { msg } from '@/lib/i18n';
 import { UseSiteDialog } from './UseSiteDialog';
 
 interface UseSiteButtonProps {
@@ -22,7 +23,7 @@ export function UseSiteButton({ app, autoOpen = false }: UseSiteButtonProps) {
 	const intendedUrl = `/app/${app.id}?use=1`;
 
 	const startUse = () => {
-		if (!requireAuth({ requireFullAuth: true, actionContext: 'to use this site', intendedUrl })) return;
+		if (!requireAuth({ requireFullAuth: true, actionContext: msg('Sign in to use this site'), intendedUrl })) return;
 		setOpen(true);
 	};
 

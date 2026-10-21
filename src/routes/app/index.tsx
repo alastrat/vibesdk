@@ -20,7 +20,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { useAuthGuard } from '@/hooks/useAuthGuard';
 import { ApiError } from '@/lib/api-client';
 import { getPreviewUrl } from '@/lib/utils';
-import { useI18n } from '@/lib/i18n';
+import { msg, useI18n } from '@/lib/i18n';
 import { visibilityLabel } from '@/lib/visibility-label';
 import { getFileType } from '@/utils/string';
 import {
@@ -202,7 +202,7 @@ export default function AppView() {
 		() => ({
 			favorite: {
 				action: 'favorite',
-				context: t('to bookmark apps'),
+				context: msg('Sign in to bookmark apps'),
 				handler: async () => {
 					const newState = await toggleFavorite();
 					toast.add({
@@ -216,7 +216,7 @@ export default function AppView() {
 			},
 			star: {
 				action: 'star',
-				context: t('to star apps'),
+				context: msg('Sign in to star apps'),
 				handler: async () => {
 					const data = await toggleStar();
 					toast.add({

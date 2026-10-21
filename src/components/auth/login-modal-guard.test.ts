@@ -89,7 +89,7 @@ describe('signing in and up', () => {
 		const layout = source('/src/components/auth/AuthPageLayout.tsx');
 		expect(layout).toContain('<AuthPhoto view={view}');
 		// Centred on phones and tablets, on the right once the photo takes the left half.
-		expect(layout).toMatch(/<Link to="\/" aria-label="Estori home" className="[^"]*self-center[^"]*lg:self-end/);
+		expect(layout).toMatch(/<Link to="\/" aria-label=\{t\('Estori home'\)\} className="[^"]*self-center[^"]*lg:self-end/);
 		expect(layout).toContain('<h1');
 	});
 

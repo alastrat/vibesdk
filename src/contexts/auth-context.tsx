@@ -19,7 +19,8 @@ import {
 } from '@tanstack/react-query';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useSentryUser } from '@/hooks/useSentryUser';
-import { applyAccountLocale, bindAccountSaver, getLocale } from '@/lib/i18n';
+import { applyAccountLocale, bindAccountSaver, getLocale, t } from '@/lib/i18n';
+import { oauthStartPath } from '@/lib/oauth-start';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 import type {
@@ -164,6 +165,7 @@ async function fetchAuthProviders(): Promise<AuthProvidersResponseData> {
 	const response = await apiClient.getAuthProviders();
 	if (!response.success || !response.data) {
 		throw new Error(
+			// i18n-ignore: never shown, the sign-in form falls back to email only
 			response.error?.message || 'Failed to fetch auth providers',
 		);
 	}
@@ -175,7 +177,7 @@ function getAuthActionError(error: unknown): string {
 	if (error instanceof Error && error.message) {
 		return error.message;
 	}
-	return 'Connection error. Please try again.';
+	return t('Connection error. Please try again.');
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -272,6 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	useEffect(() => {
 		if (!signedIn) return;
 		return bindAccountSaver(async (locale) => {
+			// i18n-ignore: a developer message, the seller sees the toast
 			await unwrap(apiClient.setLocale(locale), 'Language not saved');
 			// A profile request sent before the save could land after it with the old language, and flip the app back.
 			await queryClient.cancelQueries({ queryKey: queryKeys.auth.session() });
@@ -327,12 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 				window.location.pathname + window.location.search;
 			setIntendedUrl(intendedUrl);
 
-			const oauthUrl = new URL(
-				`/api/auth/oauth/${provider}`,
-				window.location.origin,
-			);
-			oauthUrl.searchParams.set('redirect_url', intendedUrl);
-			window.location.href = oauthUrl.toString();
+			window.location.href = oauthStartPath(provider, intendedUrl);
 		},
 		[setIntendedUrl],
 	);
@@ -345,7 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			const response = await apiClient.loginWithEmail(credentials);
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || 'Login failed',
+					response.error?.message || t('Login failed'),
 				);
 			}
 			return response.data;
@@ -373,7 +371,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			const response = await apiClient.register({ ...data, locale: getLocale() });
 			if (!response.success || !response.data) {
 				throw new Error(
-					response.error?.message || 'Registration failed',
+					response.error?.message || t('Registration failed'),
 				);
 			}
 			return response.data;

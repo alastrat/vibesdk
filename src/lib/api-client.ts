@@ -152,6 +152,8 @@ import {
 } from '@/api-types';
 import { filenameOfDisposition } from './download';
 import { announcePlanLimit } from './plan-limit-events';
+import { msg } from './i18n';
+import { oauthStartPath } from './oauth-start';
 import { toast } from 'sonner';
 
 /** An invoice's PDF, ready to save. */
@@ -376,17 +378,18 @@ class ApiClient {
 	}
 
 	/**
-	 * Get authentication context message based on endpoint
+	 * Get the message that says why sign-in was asked for, from the endpoint that answered 401. The sign-in window
+	 * translates it as it shows it.
 	 */
 	private getAuthContextForEndpoint(endpoint: string): string {
-		if (endpoint.includes('/api/agent')) return 'to create applications';
-		if (endpoint.includes('/favorite')) return 'to favorite this app';
-		if (endpoint.includes('/star')) return 'to star this app';
-		// if (endpoint.includes('/fork')) return 'to fork this app';
-		// if (endpoint.includes('/apps')) return 'to access your apps';
-		if (endpoint.includes('/profile')) return 'to access your profile';
-		if (endpoint.includes('/settings')) return 'to access settings';
-		return 'to continue';
+		if (endpoint.includes('/api/agent')) return msg('Sign in to create applications');
+		if (endpoint.includes('/favorite')) return msg('Sign in to favorite this app');
+		if (endpoint.includes('/star')) return msg('Sign in to star this app');
+		// if (endpoint.includes('/fork')) return msg('Sign in to fork this app');
+		// if (endpoint.includes('/apps')) return msg('Sign in to access your apps');
+		if (endpoint.includes('/profile')) return msg('Sign in to access your profile');
+		if (endpoint.includes('/settings')) return msg('Sign in to access settings');
+		return msg('Sign in to continue');
 	}
 
 	/**
@@ -1823,16 +1826,8 @@ class ApiClient {
 	 * Initiate OAuth flow (redirects to provider)
 	 */
 	initiateOAuth(provider: OAuthProvider, redirectUrl?: string): void {
-		const oauthUrl = new URL(
-			`/api/auth/oauth/${provider}`,
-			window.location.origin,
-		);
-		if (redirectUrl) {
-			oauthUrl.searchParams.set('redirect_url', redirectUrl);
-		}
-
 		// Redirect to OAuth provider
-		window.location.href = oauthUrl.toString();
+		window.location.href = oauthStartPath(provider, redirectUrl);
 	}
 
 	/**
