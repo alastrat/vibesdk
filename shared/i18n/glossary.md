@@ -186,7 +186,8 @@ Listed in the masculine singular, because the things they label most often (pedi
 | sign out | cerrar sesión | sair |
 | account | cuenta | conta |
 | profile | perfil | perfil |
-| settings | configuración | configurações |
+| settings (the page's name, as a title or menu item) | Configuración | Configurações |
+| settings (in a sentence or after a verb: "Abrir configuración") | configuración, "la configuración" | configurações, "as configurações" |
 | language | idioma | idioma |
 | password | contraseña | senha |
 | email | correo electrónico | e-mail |
@@ -249,6 +250,6 @@ Listed in the masculine singular, because the things they label most often (pedi
 - **Rejected and declined.** Portuguese tells them apart: "rejeitado" for a review, "recusado" for a card. Spanish uses "rechazado" for both.
 - **Done.** Spanish buttons take the infinitive ("Guardar", "Cancelar"), with one exception: the button that closes a dialog or finishes a step is "Listo", the word Spanish interfaces use, not "Terminar" or "Finalizar". Portuguese keeps the rule with "Concluir".
 - **Sign in.** Portuguese uses "entrar" for the action and "login" for the page and the provider ("Voltar para o login", "provedor de login"). It never says "fazer login" on a button, and never "provedor de acesso", which in Brazil means an internet provider. Spanish says "iniciar sesión" for the action and "inicio de sesión" for the page.
-- **Why sign-in is asked for.** Each reason is a whole sentence of its own ("Inicia sesión para destacar esta app", "Entre para dar uma estrela neste app"), never a fragment joined to "Sign in", because the word order differs.
+- **Why sign-in is asked for.** Each reason is a whole sentence of its own ("Inicia sesión para destacar esta app", "Entre para dar estrela neste app"), never a fragment joined to "Sign in", because the word order differs.
 - **The legal documents.** Their names are translated, and each link says the document is in English: "(en inglés)", "(em inglês)", shown only outside English.
 - **Shopper.** Always "comprador", never "cliente": Estori's own customers are the sellers, and "cliente" would blur the two.

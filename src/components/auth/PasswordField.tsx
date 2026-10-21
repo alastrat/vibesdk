@@ -35,6 +35,7 @@ export function PasswordField({
 				<InputGroup.Input
 					type={visible ? 'text' : 'password'}
 					placeholder={label}
+					aria-label={label}
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					autoComplete={autoComplete}
