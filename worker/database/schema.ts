@@ -33,6 +33,8 @@ import { LIVE_STORE_STATUSES, STORE_DOMAIN_PROVIDERS, STORE_DOMAIN_STATUSES } fr
 import { BILLING_EVENT_RESULTS, BILLING_NOTICE_KINDS, CREDIT_USE_SOURCES, SUBSCRIPTION_STATUSES } from '../../shared/types/billing';
 import { PAID_PLAN_IDS, PLAN_IDS } from '../../shared/types/plans';
 import { TASK_KINDS, TASK_PAUSE_REASONS, TASK_STATUSES } from '../../shared/types/tasks';
+import { LOCALES } from '../../shared/i18n/locales';
+import { STORE_TEXT_KINDS, STORE_TRANSLATION_ORIGINS, type StoreTranslationSettings } from '../../shared/types/store-translations';
 
 // Schema enum arrays derived from config types  
 const REASONING_EFFORT_VALUES = ['low', 'medium', 'high'] as const;
@@ -1436,4 +1438,49 @@ export const tasks = sqliteTable('tasks', {
     dueIdx: index('tasks_status_run_idx').on(table.status, table.runAt),
     userCreatedIdx: index('tasks_user_created_idx').on(table.userId, table.createdAt),
     appIdx: index('tasks_app_idx').on(table.appId),
+}));
+
+// ========================================
+// STORE TRANSLATIONS
+// ========================================
+
+/** A store's language settings. Times are epoch milliseconds; `version` goes up whenever what shoppers would see changes. */
+export const storeTranslationSettings = sqliteTable('store_translation_settings', {
+    appId: text('app_id').primaryKey().references(() => apps.id, { onDelete: 'cascade' }),
+    sourceLocale: text('source_locale', { enum: LOCALES }).notNull(),
+    /** JSON: each language to its `enabled` and `ready` flags. */
+    targets: text('targets', { mode: 'json' }).$type<StoreTranslationSettings['targets']>().notNull().default({}),
+    matchBrowser: integer('match_browser', { mode: 'boolean' }).notNull().default(true),
+    showSwitcher: integer('show_switcher', { mode: 'boolean' }).notNull().default(true),
+    autoTranslate: integer('auto_translate', { mode: 'boolean' }).notNull().default(true),
+    version: integer('version').notNull().default(1),
+    /** When the store's texts were last read from its deployments. */
+    extractedAt: integer('extracted_at'),
+    updatedAt: integer('updated_at').notNull(),
+});
+
+/** A store's text in one language. `machineText` keeps what the machine wrote when the seller edits it, so they can go back. */
+export const storeTranslations = sqliteTable('store_translations', {
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    locale: text('locale', { enum: LOCALES }).notNull(),
+    sourceHash: text('source_hash').notNull(),
+    sourceText: text('source_text').notNull(),
+    text: text('text').notNull(),
+    origin: text('origin', { enum: STORE_TRANSLATION_ORIGINS }).notNull(),
+    machineText: text('machine_text'),
+    updatedAt: integer('updated_at').notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.appId, table.locale, table.sourceHash] }),
+}));
+
+/** The texts of a store's last extraction, replaced by each one; translations outlive the texts that go away. */
+export const storeTexts = sqliteTable('store_texts', {
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    sourceHash: text('source_hash').notNull(),
+    sourceText: text('source_text').notNull(),
+    kind: text('kind', { enum: STORE_TEXT_KINDS }).notNull(),
+    seenAt: integer('seen_at').notNull(),
+}, (table) => ({
+    pk: primaryKey({ columns: [table.appId, table.sourceHash] }),
+    seenIdx: index('store_texts_app_seen_idx').on(table.appId, table.seenAt),
 }));

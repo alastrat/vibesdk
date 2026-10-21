@@ -6,17 +6,11 @@
 import { Parser } from 'htmlparser2';
 import { tokenizer, tokTypes, type Token } from 'acorn';
 import type { DeploymentTexts } from '@space-do/space';
-import { MAX_STORE_TEXTS, MAX_TEXT_CHARS, type StoreTextKind } from '../../../shared/types/store-translations';
+import { MAX_STORE_TEXTS, MAX_TEXT_CHARS, type StoreText, type StoreTextKind } from '../../../shared/types/store-translations';
 import { parseStoreManifest } from '../store-payments/manifest';
 
-export interface ExtractedText {
-	hash: string;
-	text: string;
-	kind: StoreTextKind;
-}
-
 export interface StoreTexts {
-	texts: ExtractedText[];
+	texts: StoreText[];
 	/** The store has more texts than MAX_STORE_TEXTS, so the extraction stopped at the limit. */
 	truncated: boolean;
 }

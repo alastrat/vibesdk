@@ -1,5 +1,8 @@
+import type { Locale } from '../i18n/locales';
+
 /** Where a store text came from: page markup, scripts and server modules, or the product manifest. */
-export type StoreTextKind = 'page' | 'script' | 'product';
+export const STORE_TEXT_KINDS = ['page', 'script', 'product'] as const;
+export type StoreTextKind = (typeof STORE_TEXT_KINDS)[number];
 
 /** A text longer than this is not translated. */
 export const MAX_TEXT_CHARS = 5_000;
@@ -13,3 +16,65 @@ export const TASK_MODEL_ID = 'google-ai-studio/gemini-3.6-flash';
 /** A task's step translates one batch: at most this many texts or characters. */
 export const TRANSLATION_BATCH_MAX_TEXTS = 40;
 export const TRANSLATION_BATCH_MAX_CHARS = 12_000;
+
+/** A text a store shows shoppers, keyed by the hash of its normalized form. */
+export interface StoreText {
+	hash: string;
+	text: string;
+	kind: StoreTextKind;
+}
+
+/** Who wrote a translation: the machine, or the seller, whose edit no task overwrites. */
+export const STORE_TRANSLATION_ORIGINS = ['machine', 'seller'] as const;
+export type StoreTranslationOrigin = (typeof STORE_TRANSLATION_ORIGINS)[number];
+
+/** A store's language settings. `version` goes up whenever the settings or what shoppers would see change. */
+export interface StoreTranslationSettings {
+	sourceLocale: Locale;
+	/** Each language the seller has turned on or off, and whether its first translation finished. */
+	targets: Partial<Record<Locale, { enabled: boolean; ready: boolean }>>;
+	matchBrowser: boolean;
+	showSwitcher: boolean;
+	autoTranslate: boolean;
+	version: number;
+}
+
+/** The seller's changes to the settings; what a change leaves out stays. `ready` is only set by finishing a translation. */
+export interface StoreTranslationSettingsPatch {
+	sourceLocale?: Locale;
+	targets?: Partial<Record<Locale, { enabled: boolean }>>;
+	matchBrowser?: boolean;
+	showSwitcher?: boolean;
+	autoTranslate?: boolean;
+}
+
+/** One current text of a store with its translation into a language; `text` and `origin` are null until it is translated. */
+export interface StoreTranslationRow {
+	hash: string;
+	source: string;
+	text: string | null;
+	origin: StoreTranslationOrigin | null;
+	/** What the machine wrote, which the seller can go back to; null when the machine never translated it. */
+	machineText: string | null;
+}
+
+/** A page of a language's texts; `nextCursor` is null on the last page. */
+export interface StoreTranslationPage {
+	rows: StoreTranslationRow[];
+	nextCursor: string | null;
+}
+
+/** How far a language is, against the store's current texts. */
+export interface StoreTranslationCounts {
+	total: number;
+	translated: number;
+	/** Translated texts the seller wrote or changed. */
+	edited: number;
+}
+
+/** A machine translation to store: the text it translates, and what it came to. */
+export interface MachineTranslation {
+	hash: string;
+	source: string;
+	text: string;
+}
