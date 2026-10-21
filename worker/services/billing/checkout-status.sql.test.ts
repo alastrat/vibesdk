@@ -173,6 +173,32 @@ describe('the status of a paid checkout', () => {
 		expect(sent.sort()).toEqual(['Welcome to Estori Pro', 'Your Estori receipt: 12,000 AI credits']);
 	});
 
+	it('records one subscription and one event when the return and the webhook run at once', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const customer = await seller('u_race_plan');
+		const plan = paidPlan('u_race_plan', customer);
+		stripeServes({ cs_u_race_plan: plan, sub_u_race_plan: subscription('u_race_plan', customer) });
+		const webhook = billingEventDepsFromEnv(env());
+		const [answer] = await Promise.all([status('u_race_plan', 'cs_u_race_plan'), handleBillingEvent(webhook, completed('evt_race_plan', plan))]);
+		expect(answer).toEqual({ ok: true, value: { state: 'paid', kind: 'plan' } });
+		expect((await subscriptionRows('u_race_plan')).results).toEqual([{ id: 'sub_u_race_plan', status: 'active', plan: 'pro' }]);
+		expect(captured).toEqual([['subscription_started', 'u_race_plan', { plan: 'pro' }]]);
+		expect(sent).toEqual(['Welcome to Estori Pro']);
+	});
+
+	it('records one purchase and one event when the return and the webhook run at once', async () => {
+		vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+		const customer = await seller('u_race_credits');
+		const credits = paidCredits('u_race_credits', customer);
+		stripeServes({ cs_u_race_credits: credits });
+		const webhook = billingEventDepsFromEnv(env());
+		const [answer] = await Promise.all([status('u_race_credits', 'cs_u_race_credits'), handleBillingEvent(webhook, completed('evt_race_credits', credits))]);
+		expect(answer).toEqual({ ok: true, value: { state: 'paid', kind: 'credits' } });
+		expect(await purchaseCount('u_race_credits')).toBe(1);
+		expect(captured).toEqual([['credits_purchased', 'u_race_credits', { credits: 12_000, amount_cents: 1_800 }]]);
+		expect(sent).toEqual(['Your Estori receipt: 12,000 AI credits']);
+	});
+
 	it('records one purchase and one subscription event when the webhook comes first', async () => {
 		const subscriber = await seller('u_first_plan');
 		const buyer = await seller('u_first_credits');
