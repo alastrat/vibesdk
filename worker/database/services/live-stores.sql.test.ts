@@ -40,6 +40,23 @@ describe('live stores on real SQL', () => {
 		expect(await stores.getByApp('app_home')).toBeNull();
 	});
 
+	it('names the live store published last, for the heartbeat, and nothing when none is live', async () => {
+		const stores = new LiveStoreService(envWith(db));
+		expect(await stores.newestLiveSlug()).toBeNull();
+		await stores.publish({ appId: 'app_tea', slug: 'northwind-tea', commit: 'c1', now: DAY_AGO });
+		await stores.publish({ appId: 'app_home', slug: 'lumen-home', commit: 'c2', now: NOW });
+		expect(await stores.newestLiveSlug()).toBe('lumen-home');
+		await stores.setOffline('app_home', NOW);
+		expect(await stores.newestLiveSlug()).toBe('northwind-tea');
+		await stores.setOffline('app_tea', NOW);
+		expect(await stores.newestLiveSlug()).toBeNull();
+		// An offline store published later than a live one never counts.
+		await stores.publish({ appId: 'app_tea', slug: 'northwind-tea', commit: 'c3', now: DAY_AGO });
+		await stores.publish({ appId: 'app_home', slug: 'lumen-home', commit: 'c4', now: NOW });
+		await stores.setOffline('app_home', NOW);
+		expect(await stores.newestLiveSlug()).toBe('northwind-tea');
+	});
+
 	it('connects a domain to one store only, finds the store by it once it is active, and removes it', async () => {
 		const stores = new LiveStoreService(envWith(db));
 		await stores.publish({ appId: 'app_tea', slug: 'northwind-tea', commit: 'c1', now: NOW });

@@ -23,6 +23,7 @@ interface AuthButtonProps {
 
 function getLimitsStatusText(limits: UsageLimitsBadgeState) {
 	if (limits.loading) return 'Checking credits...';
+	if (limits.billing) return limits.isExhausted ? 'Out of AI credits' : limits.usageText;
 	if (limits.needsConfiguration) return 'Configure AI Gateway';
 	if (limits.showCredits) return limits.creditsText;
 	if (limits.isExhausted && !limits.hasUserToken)
@@ -33,6 +34,7 @@ function getLimitsStatusText(limits: UsageLimitsBadgeState) {
 
 function getLimitsDetailText(limits: UsageLimitsBadgeState) {
 	if (limits.loading) return 'Loading your usage status';
+	if (limits.billing) return "This month's AI credits";
 	if (limits.needsConfiguration) return 'Select an account and AI Gateway';
 	if (limits.showCredits && limits.showUsage && !limits.isExhausted)
 		return limits.usageText;

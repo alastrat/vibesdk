@@ -1,7 +1,8 @@
-import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { DEFAULT_SELLER_LIMITS, EXTRA_CREDITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
-export type PlanId = 'basic' | 'premium' | 'enterprise';
+export { formatCredits, formatUsd, limitFeatures, storeAllowance };
+export type { PlanId };
 
 export interface Plan {
 	id: PlanId;
@@ -11,6 +12,7 @@ export interface Plan {
 
 export const PLANS: readonly Plan[] = [
 	{ id: 'basic', name: 'Basic', tagline: 'Build and preview your stores with AI, free.' },
+	{ id: 'pro', name: 'Pro', tagline: 'More credits and live stores for sellers growing a few stores.' },
 	{ id: 'premium', name: 'Premium', tagline: 'A monthly pool of credits for brands building and running their stores.' },
 	{ id: 'enterprise', name: 'Enterprise', tagline: 'Custom credits, terms and support for larger teams.' },
 ];
@@ -21,34 +23,8 @@ export function planById(id: PlanId): Plan {
 	return plan;
 }
 
-/** A Premium credit pool and its monthly price. */
-export interface PremiumTier {
-	credits: number;
-	priceCents: number;
-}
-
-/** Premium's monthly credit pools, smallest first; the first sets the advertised price. Bigger pools cost less per credit. */
-export const PREMIUM_TIERS: readonly PremiumTier[] = [
-	{ credits: 20_000, priceCents: 9_900 },
-	{ credits: 50_000, priceCents: 19_900 },
-	{ credits: 100_000, priceCents: 34_900 },
-	{ credits: 200_000, priceCents: 59_900 },
-];
-
-/** The smallest Premium pool that covers `credits` a month, or null when only Enterprise can. */
-export function premiumTierFor(credits: number): PremiumTier | null {
-	return PREMIUM_TIERS.find((tier) => tier.credits >= credits) ?? null;
-}
-
-/** "$99", or "$349.50" when there are cents. */
-export function formatUsd(cents: number): string {
-	const dollars = cents / 100;
-	return `$${Number.isInteger(dollars) ? dollars.toLocaleString('en-US') : dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-export function formatCredits(credits: number): string {
-	return credits.toLocaleString('en-US');
-}
+/** "$1.50 per 1,000", the price of extra credits. */
+export const EXTRA_CREDITS_PRICE = `${formatUsd(EXTRA_CREDITS.unitPriceCents)} per ${formatCredits(EXTRA_CREDITS.creditsPerUnit)}`;
 
 /** A check (true), a dash (false) or a short text. */
 export type PlanCell = boolean | string;
@@ -56,6 +32,8 @@ export type PlanCell = boolean | string;
 export interface ComparisonRow {
 	label: string;
 	cells: Readonly<Record<PlanId, PlanCell>>;
+	/** A row about the limits billing introduces; the table leaves it out while billing is off. */
+	billingOnly?: boolean;
 }
 
 export interface ComparisonSection {
@@ -67,11 +45,16 @@ export interface ComparisonSection {
 	everyPlan?: boolean;
 }
 
-const ALL: Record<PlanId, PlanCell> = { basic: true, premium: true, enterprise: true };
-const PAID: Record<PlanId, PlanCell> = { basic: false, premium: true, enterprise: true };
-const ENTERPRISE: Record<PlanId, PlanCell> = { basic: false, premium: false, enterprise: true };
-/** The plans with the supplier catalog; its fee row follows them. */
-const CATALOG_PLANS: Record<PlanId, PlanCell> = PAID;
+const ALL: Record<PlanId, PlanCell> = { basic: true, pro: true, premium: true, enterprise: true };
+const PAID: Record<PlanId, PlanCell> = { basic: false, pro: true, premium: true, enterprise: true };
+const ENTERPRISE: Record<PlanId, PlanCell> = { basic: false, pro: false, premium: false, enterprise: true };
+/** The plans with the supplier catalog, from the shared limits; its fee row follows them. */
+const CATALOG_PLANS: Record<PlanId, PlanCell> = {
+	basic: PLAN_LIMITS.basic.supplierCatalog,
+	pro: PLAN_LIMITS.pro.supplierCatalog,
+	premium: PLAN_LIMITS.premium.supplierCatalog,
+	enterprise: PLAN_LIMITS.enterprise.supplierCatalog,
+};
 
 /** A seller level's limits as the public site states them, from the settings checkout enforces. */
 export interface SellerLevelLimitsCopy {
@@ -98,12 +81,17 @@ export const OWN_PRODUCTS_WEIGHTING = 'Your own products count twice toward the 
 
 /** The same value on every plan: seller levels set the payment limits, not plans. */
 function onEveryPlan(value: PlanCell): Record<PlanId, PlanCell> {
-	return { basic: value, premium: value, enterprise: value };
+	return { basic: value, pro: value, premium: value, enterprise: value };
 }
 
 /** A value on the plans that have the catalog, and a dash on the others. */
 function onCatalogPlans(value: PlanCell): Record<PlanId, PlanCell> {
-	return { basic: CATALOG_PLANS.basic && value, premium: CATALOG_PLANS.premium && value, enterprise: CATALOG_PLANS.enterprise && value };
+	return {
+		basic: CATALOG_PLANS.basic && value,
+		pro: CATALOG_PLANS.pro && value,
+		premium: CATALOG_PLANS.premium && value,
+		enterprise: CATALOG_PLANS.enterprise && value,
+	};
 }
 
 /** A section titled with the capability's registry name, so renaming a capability reaches pricing. */
@@ -111,14 +99,36 @@ function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRo
 	return { title: CAPABILITIES[capability].name, capability, rows, ...options };
 }
 
-/** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PREMIUM_TIERS. */
+/** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PLAN_LIMITS. */
 export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 	capabilitySection('store-builder', [
 		{ label: 'Build and change stores just by asking', cells: ALL },
 		{ label: 'Live preview on desktop and phone', cells: ALL },
+		{
+			label: 'Stores',
+			cells: {
+				basic: `${PLAN_LIMITS.basic.storesLifetime}`,
+				pro: `${PLAN_LIMITS.pro.newStoresPerDay} new a day`,
+				premium: `${PLAN_LIMITS.premium.newStoresPerDay} new a day`,
+				enterprise: 'Custom',
+			},
+			billingOnly: true,
+		},
+		{
+			label: 'Live stores at once',
+			cells: {
+				basic: String(PLAN_LIMITS.basic.liveStores),
+				pro: String(PLAN_LIMITS.pro.liveStores),
+				premium: String(PLAN_LIMITS.premium.liveStores),
+				enterprise: 'Custom',
+			},
+			billingOnly: true,
+		},
+		{ label: 'Your own domain', cells: { basic: false, pro: 'One per live store', premium: 'One per live store', enterprise: 'One per live store' }, billingOnly: true },
+		{ label: 'Extra AI credits', cells: { basic: false, pro: false, premium: EXTRA_CREDITS_PRICE, enterprise: true }, billingOnly: true },
 		{ label: 'Start from templates in Discover', cells: ALL },
 		{ label: 'Sell your stores as templates', cells: ALL },
-		{ label: 'Fee on template sales', cells: { basic: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL } },
+		{ label: 'Fee on template sales', cells: onEveryPlan(PLATFORM_FEE_LABEL) },
 		{ label: 'Email receipts for your template buyers', cells: ALL },
 	]),
 	capabilitySection('agentic-commerce', [{ label: 'Get recommended by AI assistants', cells: PAID }]),
@@ -154,9 +164,20 @@ export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 		title: 'Support and billing',
 		capability: null,
 		rows: [
-			{ label: 'Support', cells: { basic: 'Email', premium: 'Priority email', enterprise: 'A named contact' } },
+			{ label: 'Support', cells: { basic: 'Email', pro: 'Email', premium: 'Priority email', enterprise: 'A named contact' } },
 			{ label: 'Custom credit volume', cells: ENTERPRISE },
 			{ label: 'Invoiced billing', cells: ENTERPRISE },
 		],
 	},
 ];
+
+const PLANS_WITHOUT_BILLING = PLANS.filter((plan) => plan.id !== 'pro');
+const COMPARISON_WITHOUT_BILLING: readonly ComparisonSection[] = PLAN_COMPARISON.map((section) => ({
+	...section,
+	rows: section.rows.filter((row) => !row.billingOnly),
+}));
+
+/** The columns and sections the comparison shows. With billing off it is today's table: no Pro column and none of the limit rows. */
+export function comparisonFor(billing: boolean): { plans: readonly Plan[]; sections: readonly ComparisonSection[] } {
+	return billing ? { plans: PLANS, sections: PLAN_COMPARISON } : { plans: PLANS_WITHOUT_BILLING, sections: COMPARISON_WITHOUT_BILLING };
+}

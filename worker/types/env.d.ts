@@ -58,6 +58,22 @@ declare namespace Cloudflare {
 		STRIPE_PUBLISHABLE_KEY?: string;
 		// Signing secret of the Connect webhook endpoint: events on sellers' accounts, such as payout.paid.
 		STRIPE_CONNECT_WEBHOOK_SECRET?: string;
+		// PostHog's public, write-only project token; set only in wrangler.estori.jsonc. Unset, nothing is sent and every flag is off.
+		POSTHOG_PROJECT_KEY?: string;
+		// The project's id, for links to it in PostHog.
+		POSTHOG_PROJECT_ID?: string;
+		// Optional, a secret: a personal API key that lets the flags admin page show each flag's rollout.
+		POSTHOG_PERSONAL_API_KEY?: string;
+		// Outside production only: flag values that win over PostHog, such as "billing=on,catalog-paused=on".
+		FEATURE_FLAG_OVERRIDES?: string;
+		// "on" turns plans, billing and plan limits on for everyone.
+		BILLING?: string;
+		// Comma-separated user ids that get billing while BILLING isn't "on": the owner-only phase.
+		BILLING_USER_IDS?: string;
+		// "YYYY-MM-DD": the day plan limits start; the hourly run emails every account the week before.
+		BILLING_ENFORCEMENT_FROM?: string;
+		// JSON {"pro":"price_...","premium":"price_...","credits":"price_..."}, in the Stripe key's mode.
+		STRIPE_PRICE_IDS?: string;
 		CATALOG_ORDER_RUNNER: DurableObjectNamespace<import('../services/catalog/CatalogOrderRunner').CatalogOrderRunner>;
 	}
 }

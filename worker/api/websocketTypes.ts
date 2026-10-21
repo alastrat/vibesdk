@@ -6,12 +6,15 @@ import type { CodeFixResult } from "../services/code-fixer";
 import { IssueReport } from "../agents/domain/values/IssueReport";
 import type { RateLimitExceededError } from 'shared/types/errors';
 import type { ModelUnavailableNotice } from '../agents/think/model-config';
+import type { PlanLimitRefusal } from 'shared/types/plans';
 
 type ErrorMessage = {
     type: 'error';
     error: string;
     code?: string; // Error code (e.g., 'USAGE_LIMIT_EXCEEDED')
     showAsPopup?: boolean; // Flag to show as popup/toast instead of chat message
+    /** The plan limit behind a PLAN_LIMIT error, for the shared Upgrade dialog. */
+    planLimit?: PlanLimitRefusal;
 };
 
 type StateMessage = {

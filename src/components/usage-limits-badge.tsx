@@ -5,6 +5,7 @@
 
 import { useLimitsContext } from '@/contexts/limits-context';
 import type { UsageSummary } from '@/hooks/use-limits';
+import { formatCredits } from '@/api-types';
 import { Loader2, LucideGlobeLock } from 'lucide-react';
 
 interface UsageLimitsBadgeProps {
@@ -24,6 +25,8 @@ export interface UsageLimitsBadgeState {
 	creditsText: string;
 	needsConfiguration: boolean;
 	showUsage: boolean;
+	/** Billing is on for the account: the limit is its plan's credits, with no Cloudflare account to connect. */
+	billing: boolean;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- Shared with the sidebar menu to reuse the badge's exact derived state.
@@ -39,7 +42,9 @@ export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 	let creditsText = '';
 	let needsConfiguration = false;
 	let showUsage = false;
-	const hidden = !loading && Boolean(data && !data.cloudflareConnectEnabled);
+	const billing = Boolean(data?.billing);
+	// With billing on, everyone sees the credits left.
+	const hidden = !loading && Boolean(data && !data.cloudflareConnectEnabled && !data.billing);
 
 	if (!hidden && !loading && !error && data && data.config) {
 		const {
@@ -108,8 +113,10 @@ export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 				}
 			};
 
-			usageText = `${formatValue(remaining)} free ${getUnit()} left`.trim();
-			mobileUsageText = `${formatValue(remaining)} ${getUnit()}`.trim();
+			// A plan's credits aren't all free, so billing drops the word.
+			const amount = billing ? formatCredits(remaining) : formatValue(remaining);
+			usageText = `${amount} ${billing ? '' : 'free '}${getUnit()} left`.trim();
+			mobileUsageText = `${amount} ${getUnit()}`.trim();
 			showUsage = true;
 		}
 	}
@@ -127,6 +134,7 @@ export function useUsageLimitsBadgeState(): UsageLimitsBadgeState {
 		creditsText,
 		needsConfiguration,
 		showUsage,
+		billing,
 	};
 }
 

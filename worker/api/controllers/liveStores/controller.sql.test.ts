@@ -8,12 +8,20 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
 import { LiveStoreController } from './controller';
 import type { RouteContext } from '../../types/route-context';
+import { LiveStoreService } from '../../../database/services/LiveStoreService';
+import { CUSTOM_DOMAINS_PAUSED_MESSAGE, STORE_PUBLISHING_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
 
 /** The agent's calls to clear a leftover merge, in order with SpaceDO's publishes when a test records those too. */
 const calls = vi.hoisted((): string[] => []);
 
 /** How the agent fails in a test: `lookup` throws when the stub is fetched, `cancel` when the cleanup call runs. */
 const agentFailure = vi.hoisted((): { mode: 'none' | 'lookup' | 'cancel' } => ({ mode: 'none' }));
+
+const captured = vi.hoisted((): Array<[string, string, unknown]> => []);
+vi.mock('../../../services/posthog/analytics', () => ({
+	serverAnalytics: () => ({ capture: (name: string, userId: string, properties: unknown) => captured.push([name, userId, properties]) }),
+}));
+vi.mock('../../../services/posthog/person', () => ({ personUpdateOf: async () => ({ set: { has_live_store: true } }) }));
 
 // The agents module pulls in the Durable Object classes, which the test runtime can't load.
 vi.mock('../../../agents', () => ({
@@ -59,7 +67,7 @@ function spaces(duringPublish?: () => Promise<void>) {
 function publishAs(appId: string, slug: string, namespace: unknown, draftId?: string) {
 	const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace });
 	const request = new Request(`https://estori.app/api/stores/${appId}/live/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftId ? { slug, draftId } : { slug }) });
-	return LiveStoreController.publish(request, env, {} as ExecutionContext, { pathParams: { id: appId } } as unknown as RouteContext);
+	return LiveStoreController.publish(request, env, {} as ExecutionContext, { pathParams: { id: appId }, user: { id: appId === 'app_tea' ? 'seller_1' : 'seller_2' } } as unknown as RouteContext);
 }
 
 async function bodyOf(response: Response): Promise<{ success: boolean; data?: { status: string; slug: string; url: string }; error?: { message?: string } | string }> {
@@ -69,6 +77,7 @@ async function bodyOf(response: Response): Promise<{ success: boolean; data?: { 
 describe('publishing a live store', () => {
 	beforeEach(() => {
 		calls.length = 0;
+		captured.length = 0;
 		agentFailure.mode = 'none';
 	});
 
@@ -80,6 +89,26 @@ describe('publishing a live store', () => {
 		expect(published).toEqual(['app_tea']);
 		const row = await db.prepare("SELECT slug, status, published_commit FROM live_stores WHERE app_id = 'app_tea'").first();
 		expect(row).toEqual({ slug: 'northwind-tea', status: 'live', published_commit: 'c0ffee1' });
+	});
+
+	it('sends store_published, the first time as the first publish, naming the draft', async () => {
+		const { namespace } = spaces();
+		await publishAs('app_tea', 'northwind-tea', namespace);
+		await publishAs('app_tea', 'northwind-tea', namespace, 'typo');
+		expect(captured).toEqual([
+			['store_published', 'seller_1', { app_id: 'app_tea', first_publish: true, draft: 'main' }],
+			['store_published', 'seller_1', { app_id: 'app_tea', first_publish: false, draft: 'other' }],
+		]);
+	});
+
+	it('sends store_unpublished when the owner takes a live store offline', async () => {
+		const { namespace } = spaces();
+		await publishAs('app_tea', 'northwind-tea', namespace);
+		captured.length = 0;
+		const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace });
+		const response = await LiveStoreController.offline(new Request('https://estori.app/api/stores/app_tea/live/offline', { method: 'POST' }), env, {} as ExecutionContext, { pathParams: { id: 'app_tea' }, user: { id: 'seller_1' } } as unknown as RouteContext);
+		expect(response.status).toBe(200);
+		expect(captured).toEqual([['store_unpublished', 'seller_1', { app_id: 'app_tea' }]]);
 	});
 
 	it("clears a merge a crashed turn left behind before publishing, so it can't block the seller", async () => {
@@ -147,5 +176,43 @@ describe('publishing a live store', () => {
 		expect(response.status).toBe(409);
 		expect(published).toEqual(['app_tea']);
 		expect(await db.prepare("SELECT app_id FROM live_stores WHERE app_id = 'app_tea'").first()).toBeNull();
+		expect(captured).toEqual([]);
+	});
+});
+
+describe('while publishing or new domains are paused', () => {
+	const owner = (appId: string) => ({ pathParams: { id: appId }, user: { id: 'seller_1' } }) as unknown as RouteContext;
+	const envPausing = (pauses: string, namespace: unknown) =>
+		envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace, FEATURE_FLAG_OVERRIDES: pauses });
+	const post = (path: string, body: unknown) => new Request(`https://estori.app${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+
+	beforeEach(() => {
+		calls.length = 0;
+		agentFailure.mode = 'none';
+	});
+
+	it('refuses Go live and republishing, publishing nothing and asking no agent', async () => {
+		const { namespace, published } = spaces();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('store-publishing-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(await response.json())).toContain(STORE_PUBLISHING_PAUSED_MESSAGE);
+		expect(published).toEqual([]);
+		expect(calls).toEqual([]);
+	});
+
+	it('refuses connecting a new domain, storing nothing', async () => {
+		const { namespace } = spaces();
+		const env = envPausing('custom-domains-paused=on', namespace);
+		const response = await LiveStoreController.addDomain(post('/api/stores/app_tea/live/domain', { hostname: 'shop.northwind.example' }), env, {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(503);
+		expect(JSON.stringify(await response.json())).toContain(CUSTOM_DOMAINS_PAUSED_MESSAGE);
+		expect(await new LiveStoreService(env).domainOfApp('app_tea')).toBeNull();
+	});
+
+	it('still publishes while only new domains are paused', async () => {
+		const { namespace, published } = spaces();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('custom-domains-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		expect(response.status).toBe(200);
+		expect(published).toEqual(['app_tea']);
 	});
 });

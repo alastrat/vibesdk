@@ -97,6 +97,11 @@ export type PublishDraftResult =
 	| { commitHash: string; storeManifest: string | null; draftId: string; draftName: string }
 	| { error: string };
 
+export interface PublishDraftOptions {
+	/** The account's plan lacks the catalog: refuse a version selling catalog products the live store doesn't. */
+	refuseNewCatalogProducts?: boolean;
+}
+
 /** What the Go live panel needs: the draft being edited, and the draft the live store came from. */
 export interface PublishContext {
 	active: { id: string; name: string; tip: string | null };
@@ -131,6 +136,10 @@ export interface MergeState {
 	/** The merge (or fast-forward) commit once there is one. */
 	merged: string | null;
 }
+
+// ── Store manifest (mirrors src/space/store-manifest.ts) ────────────────────
+/** The catalog variants a manifest sells; a manifest that doesn't parse sells none. */
+export function catalogVariantIdsOf(manifest: string | null): Set<string>;
 
 // ── Env shape (minimum). The host worker's Env satisfies this. ─────────────
 export interface Env {

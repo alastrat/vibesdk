@@ -3,14 +3,11 @@
 import { and, eq, gt, inArray, lt, sql } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
+import { isUniqueViolation } from './unique-violation';
 import type { CatalogOrderRow, CatalogOrderStore, ItemPatch, NewCatalogOrder } from '../../services/catalog/store';
 import type { ShippingAddress } from '../../services/catalog/supplier';
 import type { CatalogOrderStatus } from '../../../shared/types/catalog';
 import type { CatalogItemProgress } from '../../../shared/types/store-payments';
-
-function isUniqueViolation(error: unknown): boolean {
-    return error instanceof Error && error.message.includes('UNIQUE constraint failed');
-}
 
 export class CatalogOrderService extends BaseService implements CatalogOrderStore {
     async insertPaidOrder(order: NewCatalogOrder): Promise<boolean> {

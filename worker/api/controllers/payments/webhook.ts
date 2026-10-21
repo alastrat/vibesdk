@@ -1,5 +1,5 @@
 /**
- * Stripe webhook: verifies the signature, then records paid Checkout
+ * Stripe webhook: verifies the signature, then records plans, extra credits and their refunds, records paid Checkout
  * sessions, settles store sales once their transfer exists, handles disputes of store payments and refreshes sellers'
  * payout flags. Public and exempt from CSRF;
  * the signature is the authentication.
@@ -17,6 +17,8 @@ import { fulfillCheckoutSession, isCheckoutSession, isStripeAccount, isStripePay
 import { fulfillDepsFromEnv } from '../../../services/payments/purchase-wiring';
 import { chargesForPayout } from '../../../services/payments/seller-costs';
 import { getGlobalConfigurableSettings } from '../../../config';
+import { handleBillingEvent } from '../../../services/billing/events';
+import { billingEventDepsFromEnv } from '../../../services/billing/wiring';
 
 const logger = createLogger('StripeWebhook');
 
@@ -52,6 +54,11 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
     const object = event.data.object;
     if (event.account && !CONNECT_EVENT_TYPES.includes(event.type)) {
         logger.info('Connect event ignored', { id: event.id, type: event.type });
+        return;
+    }
+    const billing = await handleBillingEvent(billingEventDepsFromEnv(env), event);
+    if (billing !== null) {
+        logger.info('Billing event handled', { id: event.id, type: event.type, result: billing });
         return;
     }
     if (event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded') {

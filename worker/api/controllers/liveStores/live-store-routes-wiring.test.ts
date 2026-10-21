@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { NEW_CATALOG_PRODUCTS_ERROR } from '../../../../shared/types/billing';
 
 const sources = import.meta.glob<string>(['/worker/api/routes/liveStoreRoutes.ts', '/worker/api/routes/index.ts', '/worker/api/controllers/liveStores/controller.ts'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
 });
+const spaceSources = import.meta.glob<string>('/space/src/space/store-manifest.ts', { query: '?raw', import: 'default', eager: true });
 
 function source(path: string): string {
 	const text = sources[path];
@@ -32,7 +34,24 @@ describe('live store routes', () => {
 		const controller = source('/worker/api/controllers/liveStores/controller.ts');
 		const cancel = controller.indexOf('.cancelLeftoverMerge()');
 		expect(cancel).toBeGreaterThan(-1);
-		expect(cancel).toBeLessThan(controller.indexOf('space.publishDraft(draftId)'));
+		expect(cancel).toBeLessThan(controller.indexOf('space.publishDraft(draftId, { refuseNewCatalogProducts })'));
+	});
+
+	it('checks the live-store limit before publishing, and the domain limit before adding one', () => {
+		const controller = source('/worker/api/controllers/liveStores/controller.ts');
+		const publish = controller.slice(controller.indexOf('static async publish('), controller.indexOf('static async offline('));
+		expect(publish.indexOf("assertWithinLimit(account, 'liveStores'")).toBeGreaterThan(-1);
+		expect(publish.indexOf("assertWithinLimit(account, 'liveStores'")).toBeLessThan(publish.indexOf('space.publishDraft('));
+		expect(publish).toContain('published.error === NEW_CATALOG_PRODUCTS_ERROR');
+		const addDomain = controller.slice(controller.indexOf('static async addDomain('), controller.indexOf('static async checkDomain('));
+		const check = addDomain.indexOf("assertWithinLimit(account, 'ownDomainsPerLiveStore', 0)");
+		expect(check).toBeGreaterThan(-1);
+		expect(check).toBeLessThan(addDomain.indexOf('addStoreDomain('));
+	});
+
+	it('mirrors the catalog refusal SpaceDO answers', () => {
+		const space = Object.values(spaceSources)[0] ?? '';
+		expect(space).toContain(`"${NEW_CATALOG_PRODUCTS_ERROR}"`);
 	});
 
 	it('takes a store offline through the flow that also expires its open checkouts', () => {

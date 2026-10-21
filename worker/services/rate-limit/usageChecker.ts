@@ -74,6 +74,19 @@ export function isCloudflareGatewayLimitsEnabled(env: Env): boolean {
 	return env.ENABLE_CLOUDFLARE_LIMITS === 'true' && !!env.CF_OAUTH_ENCRYPTION_KEY;
 }
 
+/** No limit applies: the answer while Cloudflare limits are off, and for builds the billing credits gate instead. */
+export function unlimitedUsage(): UsageCheckResult {
+	return {
+		allowed: true,
+		shouldUseByok: false,
+		withinLimits: true,
+		remaining: Infinity,
+		limit: Infinity,
+		balance: null,
+		hasUserToken: false,
+	};
+}
+
 /**
  * Check if user can proceed based on rate limits and Cloudflare balance
  */
@@ -86,15 +99,7 @@ export async function checkUsageAndBalance(
 ): Promise<UsageCheckResult> {
 	// If Cloudflare limits feature is disabled, always allow (self-deployed instances)
 	if (!isCloudflareGatewayLimitsEnabled(env)) {
-		return {
-			allowed: true,
-			shouldUseByok: false,
-			withinLimits: true,
-			remaining: Infinity,
-			limit: Infinity,
-			balance: null,
-			hasUserToken: false,
-		};
+		return unlimitedUsage();
 	}
 
 	const config = await getUserConfigurableSettings(env, userId);

@@ -6,6 +6,8 @@ import { BaseService } from './BaseService';
 import { isMissingAccountError, type SellerFlags } from '../../services/payments/stripe-client';
 import type { PayoutInterval } from '../../../shared/types/store-payments';
 import type { SellerLevel } from '../../../shared/types/seller-levels';
+import { serverAnalytics } from '../../services/posthog/analytics';
+import { stripeReady } from '../../services/posthog/commerce-events';
 
 export class StripeConnectService extends BaseService {
     async getByUser(userId: string): Promise<schema.StripeConnectAccount | null> {
@@ -40,11 +42,17 @@ export class StripeConnectService extends BaseService {
             .where(eq(schema.stripeConnectAccounts.userId, userId));
     }
 
-    async updateFlags(stripeAccountId: string, flags: SellerFlags): Promise<void> {
+    /** Stores Stripe's flags; the update that first makes the account ready sends `payments_ready`. Null for an unknown account. */
+    async updateFlags(stripeAccountId: string, flags: SellerFlags): Promise<{ userId: string; becameReady: boolean } | null> {
+        const before = await this.getByAccountId(stripeAccountId);
         await this.database
             .update(schema.stripeConnectAccounts)
             .set({ ...flags, updatedAt: new Date() })
             .where(eq(schema.stripeConnectAccounts.stripeAccountId, stripeAccountId));
+        if (!before) return null;
+        const becameReady = !stripeReady(before) && stripeReady(flags);
+        if (becameReady) serverAnalytics(this.env).capture('payments_ready', before.userId, {});
+        return { userId: before.userId, becameReady };
     }
 
     /**

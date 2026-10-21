@@ -31,6 +31,7 @@ import { modelUnavailableNotice, resolveThinkModel } from '../../think/model-con
 import type { ProviderFailure } from '../../think/model-transport';
 import { resolveGatewayAuth } from '../../think/gateway-auth';
 import { BuildProgressTracker } from '../../think/build-progress';
+import { buildFinishedProperties, buildStartedProperties, type BuildTurnUsage } from '../../think/build-events';
 import { screenshotTarget } from '../../think/screenshot-policy';
 import { createShowcaseCaptureDeps } from '../../../services/showcase/showcase-capture';
 import { captureShowcaseScreenshot, showcaseEligible } from '../../../services/showcase/showcase-screenshot';
@@ -42,6 +43,7 @@ import type {
 	DraftStart,
 } from '@space-do/space';
 import { CloudflareAccountService } from '../../../services/cloudflare/CloudflareAccountService';
+import { serverAnalytics } from '../../../services/posthog/analytics';
 import { deployThinkBundleToPlatform, deployThinkBundleToUserAccount } from '../../../services/deployer/think-user-deploy';
 import { resolveCloudflareAccessToken } from '../../../services/rate-limit/usageChecker';
 import type { BuildProgress, CloudflareDeploymentErrorCode, ReferenceCard } from '../../../api/websocketTypes';
@@ -74,6 +76,7 @@ type ThinkAgentStub = {
 	getMessages: () => Promise<UIMessage[]>;
 	clearMessages: () => Promise<void>;
 	getProviderFailure: () => Promise<ProviderFailure | null>;
+	getTurnUsage: () => Promise<BuildTurnUsage | null>;
 };
 
 /** SpaceDO RPC surface this behavior drives (see `space/src/space/durable-object.ts`). */
@@ -670,8 +673,11 @@ export class ThinkCodingBehavior
 		);
 
 		const stub = await this.getThinkStub();
+		const build = this.startBuildAnalytics();
+		let chatFinished = false;
 		try {
 			await stub.chat(message, forwarder);
+			chatFinished = true;
 		} finally {
 			this.broadcast(WebSocketMessageResponses.USAGE_UPDATED, {
 				message: 'Usage data updated',
@@ -691,6 +697,7 @@ export class ThinkCodingBehavior
 				});
 			}
 			await this.cancelUnfinishedMerge();
+			await build.finish(chatFinished && turnError === undefined, stub);
 		}
 		if (turnError !== undefined) {
 			await this.reportTurnError(turnError);
@@ -747,6 +754,24 @@ export class ThinkCodingBehavior
 
 	private sendBuildProgress(progress: BuildProgress | null | undefined): void {
 		if (progress) this.broadcast(WebSocketMessageResponses.BUILD_PROGRESS, { progress });
+	}
+
+	/** Sends `build_started` now, and answers how to send `build_finished` with the turn's usage. Never throws. */
+	private startBuildAnalytics(): { finish(completed: boolean, stub: ThinkAgentStub): Promise<void> } {
+		const userId = this.state.metadata?.userId;
+		const appId = this.getAgentId();
+		const model = resolveThinkModel(this.state.thinkModelId).id;
+		const firstBuild = !this.isMVPGenerated();
+		const startedAtMs = Date.now();
+		const analytics = serverAnalytics(this.env);
+		if (userId) analytics.capture('build_started', userId, buildStartedProperties({ appId, model, firstBuild }));
+		return {
+			finish: async (completed, stub) => {
+				if (!userId) return;
+				const usage = await stub.getTurnUsage().catch(() => null);
+				analytics.capture('build_finished', userId, buildFinishedProperties({ appId, model, firstBuild, completed, usage, startedAtMs, nowMs: Date.now() }));
+			},
+		};
 	}
 
 	/**

@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { AuthController } from './controller';
+import { SignupsPausedError } from '../../../../shared/types/pauses';
 import type { RouteContext } from '../../types/route-context';
 
 const { mockGetOAuthAuthorizationUrl, mockHandleOAuthCallback, mockGetPendingLinkUserId, mockProvisionFromToken } =
@@ -143,5 +144,51 @@ describe('AuthController.handleOAuthCallback Cloudflare auto-connect failure', (
 		expect(response.status).toBe(302);
 		const location = new URL(response.headers.get('Location')!);
 		expect(location.searchParams.get('gateway')).toBeNull();
+	});
+});
+
+describe('AuthController.handleOAuthCallback while sign-ups are paused', () => {
+	const callback = () =>
+		AuthController.handleOAuthCallback(
+			new Request(`${BASE_URL}/api/auth/callback/google?code=abc&state=xyz`),
+			testEnv,
+			{} as ExecutionContext,
+			makeContext({
+				sessionId: null,
+				pathParams: { provider: 'google' },
+				queryParams: new URLSearchParams({ code: 'abc', state: 'xyz' }),
+			}),
+		);
+
+	beforeEach(() => {
+		vi.clearAllMocks();
+		mockGetPendingLinkUserId.mockResolvedValue(null);
+	});
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('comes back home with its own code, logged as a warning so it is never reported as an error', async () => {
+		mockHandleOAuthCallback.mockRejectedValue(new SignupsPausedError());
+		const warn = vi.spyOn(AuthController.logger, 'warn').mockImplementation(() => undefined);
+		const error = vi.spyOn(AuthController.logger, 'error').mockImplementation(() => undefined);
+
+		const response = await callback();
+
+		expect(response.status).toBe(302);
+		expect(response.headers.get('Location')).toBe(`${BASE_URL}/?error=signups_paused`);
+		expect(warn).toHaveBeenCalledOnce();
+		expect(error).not.toHaveBeenCalled();
+	});
+
+	it('still logs any other failed sign-in as an error', async () => {
+		mockHandleOAuthCallback.mockRejectedValue(new Error('provider down'));
+		const error = vi.spyOn(AuthController.logger, 'error').mockImplementation(() => undefined);
+
+		const response = await callback();
+
+		expect(response.headers.get('Location')).toBe(`${BASE_URL}/?error=auth_failed`);
+		expect(error).toHaveBeenCalledOnce();
 	});
 });

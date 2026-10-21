@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ConfirmButton } from '@/components/confirm-button';
 import { MAIN_DRAFT_ID, type DraftSummary } from '@/api-types';
 import { useActivateDraft, useDeleteDraft, useDrafts } from '@/hooks/use-drafts';
+import { useFlag } from '@/hooks/use-flag';
 import { bringInRequest, canDeleteDraft, draftBadges } from './draft-view';
 import { DraftNameDialog } from './DraftNameDialog';
 
@@ -37,10 +38,13 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 	const remove = useDeleteDraft(appId);
 	const [open, setOpen] = useState(false);
 	const [naming, setNaming] = useState<{ draft?: DraftSummary } | null>(null);
+	const draftsPaused = useFlag('store-drafts-paused');
 
 	const snapshot = drafts.data;
 	const active = snapshot?.drafts.find((draft) => draft.active) ?? snapshot?.drafts[0];
 	if (!snapshot || !active) return null;
+	// Drafts that exist keep working while starting new ones is paused; with only Main there is nothing to switch to.
+	if (draftsPaused && snapshot.drafts.length === 1) return null;
 	const atLimit = snapshot.drafts.length >= snapshot.limit;
 	const onError = (error: Error) => toast.error(error.message);
 	const switchTo = (draft: DraftSummary) => {
@@ -100,10 +104,14 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 						</div>
 					))}
 					{isGenerating && <p className="px-2 text-xs text-kumo-subtle">Wait for the AI to finish, then switch drafts.</p>}
-					<Button variant="secondary" size="sm" onClick={() => startNaming()} disabled={atLimit || isGenerating}>
-						New draft
-					</Button>
-					{atLimit && <p className="px-2 text-xs text-kumo-subtle">Delete a draft to start a new one.</p>}
+					{!draftsPaused && (
+						<>
+							<Button variant="secondary" size="sm" onClick={() => startNaming()} disabled={atLimit || isGenerating}>
+								New draft
+							</Button>
+							{atLimit && <p className="px-2 text-xs text-kumo-subtle">Delete a draft to start a new one.</p>}
+						</>
+					)}
 				</PopoverContent>
 			</Popover>
 			<DraftNameDialog appId={appId} open={naming !== null} onOpenChange={(next) => !next && setNaming(null)} draft={naming?.draft} published={snapshot.published} />

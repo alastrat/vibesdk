@@ -22,9 +22,11 @@ import { setupCodegenRoutes } from './codegenRoutes';
 import { setupScreenshotRoutes } from './imagesRoutes';
 import { setupSentryRoutes } from './sentryRoutes';
 import { setupCapabilitiesRoutes } from './capabilitiesRoutes';
+import { setupTelemetryRoutes } from './telemetryRoutes';
 import { setupTicketRoutes } from './ticketRoutes';
 import { setupCloudflareConnectRoutes } from './cloudflareConnectRoutes';
 import { setupCloudflareAccountRoutes } from './cloudflareAccountRoutes';
+import { setupBillingRoutes } from './billingRoutes';
 import { setupLimitsRoutes } from './limitsRoutes';
 import { Hono } from "hono";
 import { AppEnv } from "../../types/appenv";
@@ -44,6 +46,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Platform capabilities routes (public)
     setupCapabilitiesRoutes(app);
+
+    // PostHog config, the analytics setting and the flags admin view
+    setupTelemetryRoutes(app);
 
     // Authentication and user management routes
     setupAuthRoutes(app);
@@ -112,6 +117,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Screenshot serving routes (public)
     setupScreenshotRoutes(app);
+
+    // The seller's own plan and billing
+    setupBillingRoutes(app);
 
     // Usage limits and free tier routes
     setupLimitsRoutes(app);

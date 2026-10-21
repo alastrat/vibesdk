@@ -8,8 +8,10 @@ import { PlanCards } from '@/components/pricing/PlanCards';
 import { Eyebrow, HEADING_SECTION, LEAD } from '@/components/public-site/primitives';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { PageMeta } from '@/components/public-site/solution-page';
-import { PRICING_FAQ } from '@/content/positioning';
+import { pricingFaq } from '@/content/positioning';
 import { PRICING_PAGE } from '@/content/public-pages';
+import { useBillingOn } from '@/hooks/use-billing';
+import { useModelRates } from '@/hooks/use-model-rates';
 import { formatCents, sellerKeepsTable } from '@/lib/pricing';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +29,8 @@ const CARD_LABEL = 'text-xs uppercase tracking-[0.02em]';
 
 /** 1Password's business pricing with Apollo's comparison and credits explainer, then template selling and questions. */
 export default function PricingPage() {
+	const billing = useBillingOn();
+	const { rates } = useModelRates();
 	return (
 		<div>
 			<PageMeta {...PRICING_PAGE} />
@@ -34,11 +38,11 @@ export default function PricingPage() {
 				<Eyebrow tone="dark">Pricing</Eyebrow>
 				<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-3xl text-balance')}>Pricing that grows with your stores</h1>
 				<p className={cn(LEAD, 'mx-auto mt-5 max-w-xl text-white/80')}>
-					Start free on Basic. Move to Premium when you need more AI credits, or talk to us about Enterprise.
+					Start free on Basic. Move to Pro or Premium when you need more AI credits, or talk to us about Enterprise.
 				</p>
 			</section>
 			<PlanCards />
-			<ComparePlans />
+			<ComparePlans billing={billing} />
 			<CreditsExplainer />
 			<section id="developers" className="scroll-mt-36 border-t border-public-line bg-white px-4 py-16 sm:px-6 sm:py-20">
 				<div className="mx-auto max-w-[1248px]">
@@ -94,7 +98,7 @@ export default function PricingPage() {
 					</div>
 				</div>
 			</section>
-			<PublicFaq leading={PRICING_FAQ} />
+			<PublicFaq leading={pricingFaq(billing, rates)} />
 		</div>
 	);
 }

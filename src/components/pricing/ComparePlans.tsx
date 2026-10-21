@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { CaretDownIcon, CheckIcon, MinusIcon } from '@phosphor-icons/react';
+import { PlanButton } from '@/components/billing/PlanButton';
+import { ComingSoon } from '@/components/marketing/ComingSoon';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { PillLink } from '@/components/public-site/primitives';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
@@ -7,44 +9,59 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePublicPlan } from '@/hooks/use-public-plan';
 import { CAPABILITIES, STATUS_LABELS, type CapabilityId } from '@/lib/capabilities';
 import { contactPath } from '@/lib/contact';
-import { PLANS, PLAN_COMPARISON, PREMIUM_TIERS, formatCredits, formatUsd, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
+import { LEGACY_CREDIT_FACTOR, PLAN_LIMITS, PLAN_PRICES_CENTS } from '@/api-types';
+import { comparisonFor, formatCredits, formatUsd, planById, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
 import { cn } from '@/lib/utils';
-
-const SMALLEST = PREMIUM_TIERS[0];
-const LARGEST = PREMIUM_TIERS[PREMIUM_TIERS.length - 1];
 
 const ACTION = 'mt-4 w-full py-2 text-sm';
 
-/** What each column header shows under the plan's name, and its button: sign up for Basic, contact sales otherwise. */
-const HEADERS: Readonly<Record<PlanId, { price: string; note: string; action: ReactNode }>> = {
-	basic: {
-		price: '$0',
-		note: 'Free forever',
-		action: (
-			<StartBuildingButton variant="blue" className={ACTION}>
-				Start building
-			</StartBuildingButton>
-		),
-	},
-	premium: {
-		price: `From ${formatUsd(SMALLEST.priceCents)}`,
-		note: `${formatCredits(SMALLEST.credits)} to ${formatCredits(LARGEST.credits)} credits a month`,
-		action: (
-			<PillLink to={contactPath('premium')} variant="charcoal" className={ACTION}>
-				Get Premium
-			</PillLink>
-		),
-	},
-	enterprise: {
-		price: 'Custom',
-		note: 'Volume credits and terms',
-		action: (
-			<PillLink to={contactPath('enterprise')} variant="outline-on-light" className={ACTION}>
-				Talk to sales
-			</PillLink>
-		),
-	},
-};
+interface Header {
+	price: string;
+	note: string;
+	action: ReactNode;
+	/** Pro and Premium aren't sold until billing is on. */
+	comingSoon?: boolean;
+}
+
+/** What each column header shows under the plan's name, and its button: sign up for Basic, buy Pro and Premium once billing is on, contact sales otherwise. */
+function headerFor(id: PlanId, billing: boolean): Header {
+	switch (id) {
+		case 'basic':
+			return {
+				price: '$0',
+				note: 'Free forever',
+				action: (
+					<StartBuildingButton variant="blue" className={ACTION}>
+						Start building
+					</StartBuildingButton>
+				),
+			};
+		case 'pro':
+		case 'premium':
+			return {
+				price: formatUsd(PLAN_PRICES_CENTS[id]),
+				note: `${formatCredits(PLAN_LIMITS[id].aiCredits)} AI credits a month`,
+				comingSoon: !billing,
+				action: billing ? (
+					<PlanButton plan={id} className={ACTION} />
+				) : (
+					<PillLink to={contactPath(id)} variant="charcoal" className={ACTION}>
+						Get {planById(id).name}
+					</PillLink>
+				),
+			};
+		case 'enterprise':
+			return {
+				price: 'Custom',
+				note: 'Volume credits and terms',
+				action: (
+					<PillLink to={contactPath('enterprise')} variant="outline-on-light" className={ACTION}>
+						Talk to sales
+					</PillLink>
+				),
+			};
+	}
+}
 
 function Cell({ value }: { value: PlanCell }) {
 	if (value === true) {
@@ -105,13 +122,21 @@ function Row({
  * Apollo's comparison: the plan headers stay pinned under the top bar while the rows scroll by, and each group of
  * rows folds away. Phones show one plan at a time beside the labels, picked from the corner of the header.
  */
-export function ComparePlans() {
+export function ComparePlans({ billing }: { billing: boolean }) {
 	const plan = usePublicPlan();
 	const isPhone = useIsMobile();
-	const [phonePlan, setPhonePlan] = useState<PlanId>('premium');
-	const shown = isPhone ? PLANS.filter((entry) => entry.id === phonePlan) : PLANS;
+	const { plans, sections } = comparisonFor(billing);
+	// Phones open on Pro once it's sold, and on Premium until then; a pick stays while its column is shown.
+	const [picked, setPicked] = useState<PlanId | null>(null);
+	const phonePlan = plans.find((entry) => entry.id === picked)?.id ?? (billing ? 'pro' : 'premium');
+	const shown = isPhone ? plans.filter((entry) => entry.id === phonePlan) : plans;
 	const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
-	const freeCredits = plan.data?.aiCreditsPerDay == null ? 'A daily allowance' : `${formatCredits(plan.data.aiCreditsPerDay)} a day`;
+	// Today's daily allowance is set in the older unit, so it is shown in the one steps are priced in, as the calculator does.
+	const basicCredits = billing
+		? `${formatCredits(PLAN_LIMITS.basic.aiCredits)} a month`
+		: plan.data?.aiCreditsPerDay == null
+			? 'A daily allowance'
+			: `${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} a day`;
 	const toggle = (title: string) =>
 		setFolded((current) => {
 			const next = new Set(current);
@@ -140,12 +165,12 @@ export function ComparePlans() {
 												aria-label="Plan to compare"
 												value={phonePlan}
 												onChange={(event) => {
-													const next = PLANS.find((entry) => entry.id === event.target.value);
-													if (next) setPhonePlan(next.id);
+													const next = plans.find((entry) => entry.id === event.target.value);
+													if (next) setPicked(next.id);
 												}}
 												className="w-full cursor-pointer appearance-none rounded-xl bg-[#f5f6f8] py-2.5 pr-8 pl-3 text-sm text-public-ink outline-none focus-visible:ring-2 focus-visible:ring-public-blue"
 											>
-												{PLANS.map((entry) => (
+												{plans.map((entry) => (
 													<option key={entry.id} value={entry.id}>
 														{entry.name}
 													</option>
@@ -156,14 +181,17 @@ export function ComparePlans() {
 									)}
 								</td>
 								{shown.map((entry) => {
-									const header = HEADERS[entry.id];
+									const header = headerFor(entry.id, billing);
 									return (
 										<th
 											key={entry.id}
 											scope="col"
 											className="sticky top-[var(--public-header-h)] z-10 border-b border-l border-public-line bg-white px-3 pt-3 pb-5 text-left align-top font-normal lg:px-5"
 										>
-											<span className="block text-lg text-public-ink">{entry.name}</span>
+											<span className="flex flex-wrap items-center gap-2 text-lg text-public-ink">
+												{entry.name}
+												{header.comingSoon && <ComingSoon />}
+											</span>
 											<span className="mt-2 block text-3xl font-light tracking-[-0.02em] text-public-ink">{header.price}</span>
 											<span className="mt-2 block min-h-10 text-[13px] font-light text-public-muted">{header.note}</span>
 											{header.action}
@@ -172,7 +200,7 @@ export function ComparePlans() {
 								})}
 							</tr>
 						</thead>
-						{PLAN_COMPARISON.map((section, sectionIndex) => {
+						{sections.map((section, sectionIndex) => {
 							const isFolded = folded.has(section.title);
 							const rowsId = `compare-rows-${sectionIndex}`;
 							return (
@@ -200,8 +228,9 @@ export function ComparePlans() {
 											hidden={isFolded}
 											plans={shown}
 											cells={{
-												basic: freeCredits,
-												premium: `${formatCredits(SMALLEST.credits)} to ${formatCredits(LARGEST.credits)} a month`,
+												basic: basicCredits,
+												pro: `${formatCredits(PLAN_LIMITS.pro.aiCredits)} a month`,
+												premium: `${formatCredits(PLAN_LIMITS.premium.aiCredits)} a month`,
 												enterprise: 'Custom',
 											}}
 										/>

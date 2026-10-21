@@ -81,6 +81,16 @@ export class StoreOrderService extends BaseService {
         return order ?? null;
     }
 
+    /** How many orders the seller's stores have recorded in this mode; 1 right after their first sale. */
+    async sellerOrderCount(sellerUserId: string, mode: StoreMode): Promise<number> {
+        const row = await this.database
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.storeOrders)
+            .where(and(eq(schema.storeOrders.sellerUserId, sellerUserId), eq(schema.storeOrders.mode, mode)))
+            .get();
+        return row?.count ?? 0;
+    }
+
     /** The seller's share of their paid sales since this time: what their payouts carry. */
     /** What the seller's paid sales in this mode since `since` paid them, net of Estori's fee and refunds; disputed sales pay nothing. */
     async salesVolumeSince(sellerUserId: string, mode: StoreMode, since: Date): Promise<number> {

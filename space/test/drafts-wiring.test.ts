@@ -179,4 +179,28 @@ describe("SpaceDO drafts wiring", () => {
     expect(publish.indexOf("await this.deploy(draft.branch)")).toBeLessThan(publish.indexOf("publishLiveDeployment(sql, Date.now(), draft.branch)"))
     expect(spaceDo).not.toContain("async publishLive(")
   })
+
+  it("refuses new catalog products only when asked, after deploying and before publishing", () => {
+    const publish = methodBody(spaceDo, "async publishDraft(")
+    const check = publish.indexOf("newCatalogVariantIds(")
+    expect(publish).toContain("options.refuseNewCatalogProducts")
+    expect(check).toBeGreaterThan(publish.indexOf("await this.deploy(draft.branch)"))
+    expect(check).toBeLessThan(publish.indexOf("publishLiveDeployment(sql, Date.now(), draft.branch)"))
+    expect(publish).toContain("return { error: NEW_CATALOG_PRODUCTS_ERROR }")
+  })
+
+  it("exports the publish options and the catalog reader to the worker, in the package's hand-kept types too", () => {
+    const entry = packageSources["/space/src/index.ts"] ?? ""
+    const types = packageSources["/space/types/index.d.ts"] ?? ""
+    expect(entry).toMatch(/export \{[^}]*\bcatalogVariantIdsOf\b[^}]*\} from "\.\/space\/store-manifest"/)
+    expect(entry).toMatch(/export type \{[^}]*\bPublishDraftOptions\b[^}]*\} from "\.\/space\/drafts-store"/)
+    expect(types).toContain("export function catalogVariantIdsOf(manifest: string | null): Set<string>;")
+    expect(types).toContain("export interface PublishDraftOptions {")
+  })
+})
+
+const packageSources = import.meta.glob<string>(["/space/src/index.ts", "/space/types/index.d.ts"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
 })

@@ -112,7 +112,7 @@ describe('model picker: provider failure card', () => {
 	});
 
 	it('names the price change when offering a switch', () => {
-		expect(source('/src/components/ModelUnavailableNotice.tsx')).toContain('describeCreditChange(failed.creditCost, alternative.creditCost)');
+		expect(source('/src/components/ModelUnavailableNotice.tsx')).toContain('describeCreditChange(failed.creditsPerStep, alternative.creditsPerStep)');
 	});
 
 	it('passes the socket state to the card as well as the picker', () => {

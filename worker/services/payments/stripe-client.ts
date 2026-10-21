@@ -1,31 +1,36 @@
 /**
  * Minimal Stripe REST client for Workers: form-encoded requests over fetch,
- * no SDK. Covers Connect Express onboarding and Checkout for paid sites.
+ * no SDK. Covers Connect Express onboarding, Checkout for paid sites, and Stripe Billing for plans, extra credits, cards and invoices.
  */
 
+import { CHECKOUT_KIND_CARD, CHECKOUT_KIND_CREDITS, type CardSetupMode, type SubscriptionStatus } from '../../../shared/types/billing';
+import { EXTRA_CREDITS, formatCredits, type PaidPlanId } from '../../../shared/types/plans';
 import type { SellerReadiness } from '../../../shared/types/seller-setup';
+import { STRIPE_API_VERSION } from '../../../shared/types/stripe';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 /** Stripe replays a failed request for 24 hours per idempotency key, so keys rotate every 10 minutes. */
-const IDEMPOTENCY_BUCKET_MS = 600_000;
+export const IDEMPOTENCY_BUCKET_MS = 600_000;
 
 /** A Checkout session closes 35 minutes after it opens, so a buyer can't pay long after the listing changed. Stripe's minimum is 30. */
 const CHECKOUT_SESSION_TTL_SECONDS = 35 * 60;
-/** Every request names its API version, so a new account default can't change what Stripe returns; Stripe.js on the
- * store checkout page loads the same version. */
-export const STRIPE_API_VERSION = '2026-03-25.dahlia';
 
 export type FormValue = string | number | boolean | null | undefined | FormValue[] | { [key: string]: FormValue };
 
+/** Cards only, and no Link, which would also offer bank payments and its own sign-up; billing's card setup takes this alone. */
+const CARD_ONLY_CHECKOUT: Record<string, FormValue> = {
+	payment_method_types: ['card'],
+	wallet_options: { link: { display: 'never' } },
+};
+
 /**
- * Every Checkout session charges in US dollars by card or a card wallet (Apple Pay, Google Pay): no prices in the
- * shopper's local currency, and no Link, which would also offer bank payments. Estori's fees assume Stripe's card rate.
+ * Every Checkout session that charges does so in US dollars by card or a card wallet (Apple Pay, Google Pay; billing's
+ * page hides those too): no prices in the buyer's local currency, and no Link. Estori's fees assume Stripe's card rate.
  */
 const USD_CARD_CHECKOUT: Record<string, FormValue> = {
-	payment_method_types: ['card'],
+	...CARD_ONLY_CHECKOUT,
 	adaptive_pricing: { enabled: false },
-	wallet_options: { link: { display: 'never' } },
 };
 
 export class StripeApiError extends Error {
@@ -78,11 +83,38 @@ export interface StripeShippingDetails {
 	address: StripeAddress | null;
 }
 
+export interface StripeCoupon {
+	id: string;
+	duration: 'once' | 'repeating' | 'forever';
+	/** Set only for a repeating coupon. */
+	duration_in_months: number | null;
+}
+
+/** A promotion code. The coupon sits under `promotion` in the pinned API version, not on the code itself. */
+export interface StripePromotionCode {
+	id: string;
+	promotion: { type: string; coupon: StripeCoupon | string | null };
+}
+
+/** What a billing session is read with: the discounts down to their coupons, and a card setup's SetupIntent. */
+export const BILLING_CHECKOUT_EXPAND = ['discounts.coupon', 'discounts.promotion_code.promotion.coupon', 'setup_intent'] as const;
+
 export interface StripeCheckoutSession {
 	id: string;
+	/** Billing sessions: a subscription checkout, an extra-credits payment. */
+	mode?: 'payment' | 'subscription' | 'setup';
+	subscription?: string | null;
+	customer?: string | null;
+	/** The hosted page; null for an Elements session, which is paid on Estori's own page. */
 	url: string | null;
 	/** Elements sessions: what Stripe.js on Estori's checkout page starts the payment form with. */
 	client_secret?: string | null;
+	/** Unix seconds at which the session stops accepting payment. */
+	expires_at?: number;
+	/** What the session applied; each reference is an id, or the object when the request expanded it. */
+	discounts?: Array<{ coupon?: StripeCoupon | string | null; promotion_code?: StripePromotionCode | string | null }> | null;
+	/** A card setup session's SetupIntent: the id, or the object when the request expanded it. */
+	setup_intent?: { id: string; payment_method: string | null } | string | null;
 	payment_status: 'paid' | 'unpaid' | 'no_payment_required';
 	status: 'open' | 'complete' | 'expired' | null;
 	client_reference_id: string | null;
@@ -105,6 +137,9 @@ export interface StripeTransferSummary {
 
 export interface StripePaymentIntent {
 	id: string;
+	status?: 'requires_payment_method' | 'requires_confirmation' | 'requires_action' | 'processing' | 'requires_capture' | 'canceled' | 'succeeded';
+	/** Why the last confirmation failed; `code` is Stripe's error code, such as `card_declined` or `authentication_required`. */
+	last_payment_error?: { code?: string | null } | null;
 	/** What the Checkout session put on it; a store payment carries its kind and checkout id. */
 	metadata?: Record<string, string> | null;
 	/** Expanded on request: the charge, with the transfer that paid the seller and the balance transaction Stripe's fee is on. */
@@ -129,6 +164,162 @@ export interface StripeRefund {
 export interface StripeTransferReversal {
 	id: string;
 	amount: number;
+}
+
+/** A payment method as Stripe refers to it: its id, or the object when the request expanded it. */
+export type StripePaymentMethodRef = string | { id: string };
+
+export interface StripeCustomer {
+	id: string;
+	email: string | null;
+	metadata: Record<string, string> | null;
+	/** What the customer's invoices charge when the subscription names no payment method of its own. */
+	invoice_settings?: { default_payment_method: StripePaymentMethodRef | null } | null;
+}
+
+export interface StripePrice {
+	id: string;
+	metadata?: Record<string, string> | null;
+	unit_amount?: number | null;
+	lookup_key?: string | null;
+}
+
+export interface StripeSubscriptionItem {
+	id: string;
+	price: StripePrice;
+	current_period_start: number;
+	current_period_end: number;
+}
+
+/** One discount on a schedule phase: Stripe sets exactly one of the three. */
+export interface StripeDiscountRef {
+	coupon: string | null;
+	discount: string | null;
+	promotion_code: string | null;
+}
+
+export interface StripeSchedulePhase {
+	start_date: number;
+	end_date: number | null;
+	items: Array<{ price: string | StripePrice; quantity?: number }>;
+	discounts?: StripeDiscountRef[];
+}
+
+export interface StripeSubscriptionSchedule {
+	id: string;
+	status: string;
+	subscription: string | null;
+	released_subscription?: string | null;
+	current_phase: { start_date: number; end_date: number } | null;
+	phases: StripeSchedulePhase[];
+}
+
+export interface StripeSubscription {
+	id: string;
+	customer: string;
+	status: SubscriptionStatus;
+	created: number;
+	cancel_at_period_end: boolean;
+	cancel_at: number | null;
+	metadata: Record<string, string> | null;
+	items: { data: StripeSubscriptionItem[] };
+	/** The schedule's id, or the schedule itself when the request expanded it. */
+	schedule: string | StripeSubscriptionSchedule | null;
+	/** What the subscription's invoices charge; null falls back to the customer's default. */
+	default_payment_method?: StripePaymentMethodRef | null;
+}
+
+export type StripeInvoiceStatus = 'draft' | 'open' | 'paid' | 'void' | 'uncollectible';
+
+/** One payment toward an invoice. In the pinned API version this replaces the invoice's `payment_intent`. */
+export interface StripeInvoicePayment {
+	status: 'open' | 'paid' | 'canceled';
+	payment: { type: 'charge' | 'payment_intent' | 'payment_record'; payment_intent?: string | null };
+}
+
+export interface StripeInvoice {
+	id: string;
+	customer: string | null;
+	status: StripeInvoiceStatus;
+	created: number;
+	amount_due: number;
+	amount_paid: number;
+	total: number;
+	currency: string;
+	hosted_invoice_url: string | null;
+	invoice_pdf: string | null;
+	number: string | null;
+	description: string | null;
+	/** `amount` is in cents, negative for a credit such as a plan change's unused time. */
+	lines?: { data: Array<{ description: string | null; amount: number }> };
+	billing_reason: string | null;
+	attempt_count?: number;
+	parent: { type: string; subscription_details?: { subscription: string } | null } | null;
+	/** Only when the request expanded it: the client secret of the PaymentIntent that collects this invoice, which Stripe.js confirms. */
+	confirmation_secret?: { client_secret: string; type: string } | null;
+	/** Only when the request expanded it: the invoice's payments, each with its PaymentIntent's id. */
+	payments?: { data: StripeInvoicePayment[] } | null;
+}
+
+export interface StripePaymentMethod {
+	id: string;
+	card: { brand: string; last4: string; exp_month: number; exp_year: number } | null;
+}
+
+export interface StripeCharge {
+	id: string;
+	payment_intent: string | null;
+	amount: number;
+	amount_refunded: number;
+}
+
+/** A session Stripe closed before its key's bucket ended, which a new one replaces; see `replacementKey`. */
+interface Replacing {
+	replaces?: string | null;
+}
+
+export interface SubscriptionCheckoutInput extends Replacing {
+	customerId: string;
+	priceId: string;
+	userId: string;
+	plan: PaidPlanId;
+	/** Where Stripe sends the seller after paying on Estori's checkout page; `{CHECKOUT_SESSION_ID}` is filled in by Stripe. */
+	returnUrl: string;
+	nowMs: number;
+}
+
+export interface CreditsCheckoutInput extends Replacing {
+	customerId: string;
+	priceId: string;
+	userId: string;
+	credits: number;
+	returnUrl: string;
+	nowMs: number;
+	/**
+	 * The caller's key: it must change once a purchase is recorded, or a second purchase of the same amount replays the paid
+	 * session, and rotate with `idempotencyBucket(nowMs)`, which also sets the session's expiry.
+	 */
+	idempotencyKey: string;
+}
+
+export interface CardSetupInput extends Replacing {
+	customerId: string;
+	userId: string;
+	mode: CardSetupMode;
+	/**
+	 * The card Stripe charges when the setup starts: the subscription's own default, else the customer's
+	 * `invoice_settings.default_payment_method`. A finished setup changes it, so the next setup gets a new session instead
+	 * of the finished one replayed, while a retry of an unfinished setup shares its session.
+	 */
+	afterCardId: string | null;
+	returnUrl: string;
+	nowMs: number;
+}
+
+export interface SubscriptionPriceChange {
+	subscription: StripeSubscription;
+	priceId: string;
+	idempotencyKey: string;
 }
 
 export interface CheckoutSessionInput {
@@ -190,7 +381,8 @@ export interface StripeClient {
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
 	createStoreCheckoutSession(input: StoreCheckoutSessionInput): Promise<StripeCheckoutSession>;
-	retrieveCheckoutSession(sessionId: string): Promise<StripeCheckoutSession>;
+	/** `expand` names the objects to return in full, such as `BILLING_CHECKOUT_EXPAND`. */
+	retrieveCheckoutSession(sessionId: string, expand?: readonly string[]): Promise<StripeCheckoutSession>;
 	/** Closes an open session so it can't be paid; one already expired or completed counts as done. */
 	expireCheckoutSession(sessionId: string): Promise<void>;
 	retrievePaymentIntent(paymentIntentId: string): Promise<StripePaymentIntent>;
@@ -201,6 +393,39 @@ export interface StripeClient {
 	updatePayoutSchedule(accountId: string, schedule: PayoutSchedule): Promise<StripeAccount>;
 	/** Only the payout delay, so payout days the seller chose stay as they are. */
 	updatePayoutDelay(accountId: string, delayDays: number): Promise<StripeAccount>;
+	createCustomer(input: { userId: string; email: string }): Promise<StripeCustomer>;
+	retrieveCustomer(customerId: string): Promise<StripeCustomer>;
+	/** Card only: renewals and Smart Retries charge the card on file, and bank methods would settle days later. */
+	createSubscriptionCheckoutSession(input: SubscriptionCheckoutInput): Promise<StripeCheckoutSession>;
+	createCreditsCheckoutSession(input: CreditsCheckoutInput): Promise<StripeCheckoutSession>;
+	/** Saves a new card for the customer's invoices, on Estori's own page. */
+	createCardSetupSession(input: CardSetupInput): Promise<StripeCheckoutSession>;
+	/** The card the customer's next invoices are charged to, and the subscription's own when it has one. */
+	setDefaultPaymentMethod(input: { customerId: string; subscriptionId: string | null; paymentMethodId: string; nowMs: number }): Promise<void>;
+	/** Adds or replaces only the keys given; Stripe leaves the subscription's other metadata as it is. */
+	updateSubscriptionMetadata(subscriptionId: string, metadata: Record<string, string>, idempotencyKey: string): Promise<void>;
+	retrievePaymentMethod(id: string): Promise<StripePaymentMethod>;
+	/** Newest first. */
+	listInvoices(customerId: string, limit: number): Promise<StripeInvoice[]>;
+	/** With `confirmation_secret` and `payments` expanded, so a payment that needs the seller's action can be finished in the browser. */
+	retrieveInvoice(id: string): Promise<StripeInvoice>;
+	/**
+	 * Pays with the seller present, so the bank may ask them to authenticate. That answers 402 with code
+	 * `invoice_payment_intent_requires_action`; the invoice's `confirmation_secret` then finishes the payment.
+	 */
+	payInvoice(id: string, paymentMethodId: string | null, idempotencyKey: string): Promise<StripeInvoice>;
+	/** The PDF of an invoice, from its `invoice_pdf` address; the caller checks the response. */
+	fetchInvoicePdf(url: string): Promise<Response>;
+	/** The subscription with its schedule expanded. */
+	retrieveSubscription(subscriptionId: string): Promise<StripeSubscription>;
+	/** Moves to the price now, prorated and invoiced; Stripe refuses the change when the invoice can't be paid. */
+	changeSubscriptionPrice(input: SubscriptionPriceChange): Promise<StripeSubscription>;
+	/** Moves to the price at the renewal, keeping the subscription's discounts and charging no proration. */
+	scheduleSubscriptionPrice(input: SubscriptionPriceChange): Promise<StripeSubscriptionSchedule>;
+	/** Drops a pending plan change; a schedule already released counts as done. */
+	releaseSubscriptionSchedule(scheduleId: string): Promise<void>;
+	cancelAtPeriodEnd(subscriptionId: string, idempotencyKey: string): Promise<StripeSubscription>;
+	resumeSubscription(subscription: StripeSubscription, idempotencyKey: string): Promise<StripeSubscription>;
 }
 
 /** Encode nested params the way Stripe expects: a[b][c]=v and a[0]=v; null and undefined are left out. */
@@ -248,6 +473,50 @@ interface StripeErrorBody {
 	error?: { message?: string; type?: string; code?: string };
 }
 
+export function idempotencyBucket(nowMs: number): number {
+	return Math.floor(nowMs / IDEMPOTENCY_BUCKET_MS);
+}
+
+/**
+ * A plan or credits checkout closes 35 minutes after its key's bucket ends: every request under one key sends the same
+ * expiry (Stripe refuses a key replayed with other parameters), and each session stays open 35 to 45 minutes.
+ */
+function billingCheckoutExpiresAt(nowMs: number): number {
+	return (idempotencyBucket(nowMs) + 1) * (IDEMPOTENCY_BUCKET_MS / 1000) + CHECKOUT_SESSION_TTL_SECONDS;
+}
+
+/**
+ * The key of a session made in place of `replaces`: Stripe replays a key's first session within its bucket, even one it
+ * has since closed, so the new one is keyed on the closed one, and a repeat of the same start shares it.
+ */
+function replacementKey(key: string, replaces: string | null | undefined): string {
+	return replaces ? `${key}-retry-${replaces}` : key;
+}
+
+function isStripeUrl(url: string): boolean {
+	try {
+		const { protocol, hostname } = new URL(url);
+		return protocol === 'https:' && (hostname === 'stripe.com' || hostname.endsWith('.stripe.com'));
+	} catch {
+		return false;
+	}
+}
+
+function priceIdOf(price: string | StripePrice): string {
+	return typeof price === 'string' ? price : price.id;
+}
+
+/** A phase's discounts as a phase accepts them: an applied discount by id, else its coupon or promotion code. */
+function phaseDiscounts(refs: readonly StripeDiscountRef[] | undefined): Array<Record<string, string>> | undefined {
+	const mapped: Array<Record<string, string>> = [];
+	for (const ref of refs ?? []) {
+		if (ref.discount) mapped.push({ discount: ref.discount });
+		else if (ref.coupon) mapped.push({ coupon: ref.coupon });
+		else if (ref.promotion_code) mapped.push({ promotion_code: ref.promotion_code });
+	}
+	return mapped.length > 0 ? mapped : undefined;
+}
+
 export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = fetch): StripeClient {
 	async function request<T>(
 		method: 'GET' | 'POST',
@@ -276,6 +545,13 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 			throw new StripeApiError(error?.message ?? 'Stripe request failed', response.status, error?.code ?? null, error?.type ?? null);
 		}
 		return json as T;
+	}
+
+	/** Stripe's schedule for a subscription: the one it already has, or a new one that starts from the subscription. */
+	async function scheduleFor(subscription: StripeSubscription, idempotencyKey: string): Promise<StripeSubscriptionSchedule> {
+		const existing = typeof subscription.schedule === 'string' ? subscription.schedule : subscription.schedule?.id;
+		if (existing) return request<StripeSubscriptionSchedule>('GET', `/subscription_schedules/${encodeURIComponent(existing)}`);
+		return request<StripeSubscriptionSchedule>('POST', '/subscription_schedules', { from_subscription: subscription.id }, `${idempotencyKey}-create`);
 	}
 
 	return {
@@ -374,8 +650,8 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				throw error;
 			}
 		},
-		retrieveCheckoutSession: (sessionId) =>
-			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}`),
+		retrieveCheckoutSession: (sessionId, expand) =>
+			request<StripeCheckoutSession>('GET', `/checkout/sessions/${encodeURIComponent(sessionId)}${expand && expand.length > 0 ? `?${encodeForm({ expand: [...expand] })}` : ''}`),
 		retrievePaymentIntent: (paymentIntentId) =>
 			request<StripePaymentIntent>('GET', `/payment_intents/${encodeURIComponent(paymentIntentId)}?${encodeForm({ expand: ['latest_charge.transfer', 'latest_charge.balance_transaction'] })}`),
 		// Catalog refunds carry stable idempotency keys, so a retried refund is never paid twice.
@@ -417,5 +693,173 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					},
 				},
 			}),
+		// One customer per account: the key is stable, so a retried first purchase can't make a second.
+		createCustomer: ({ userId, email }) =>
+			request<StripeCustomer>('POST', '/customers', { email: email || undefined, metadata: { estori_user_id: userId } }, `billing-customer-${userId}`),
+		retrieveCustomer: (customerId) => request<StripeCustomer>('GET', `/customers/${encodeURIComponent(customerId)}`),
+		createSubscriptionCheckoutSession: (input) =>
+			request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'subscription',
+					customer: input.customerId,
+					client_reference_id: input.userId,
+					line_items: [{ price: input.priceId, quantity: 1 }],
+					...USD_CARD_CHECKOUT,
+					allow_promotion_codes: true,
+					subscription_data: { metadata: { estori_user_id: input.userId } },
+					metadata: { estori_user_id: input.userId, plan: input.plan },
+					// Paid on Estori's own checkout page; Estori records the seller's agreement to the renewal terms itself.
+					ui_mode: 'elements',
+					return_url: input.returnUrl,
+					expires_at: billingCheckoutExpiresAt(input.nowMs),
+				},
+				replacementKey(`billing-checkout-${input.userId}-${input.plan}-${idempotencyBucket(input.nowMs)}`, input.replaces),
+			),
+		createCreditsCheckoutSession: (input) => {
+			const metadata = { kind: CHECKOUT_KIND_CREDITS, estori_user_id: input.userId, credits: String(input.credits) };
+			return request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'payment',
+					customer: input.customerId,
+					client_reference_id: input.userId,
+					line_items: [{ price: input.priceId, quantity: input.credits / EXTRA_CREDITS.creditsPerUnit }],
+					...USD_CARD_CHECKOUT,
+					metadata,
+					payment_intent_data: { metadata },
+					// The purchase's invoice is its receipt in billing history, which shows its description.
+					invoice_creation: { enabled: true, invoice_data: { description: `${formatCredits(input.credits)} extra AI credits`, metadata } },
+					ui_mode: 'elements',
+					return_url: input.returnUrl,
+					expires_at: billingCheckoutExpiresAt(input.nowMs),
+				},
+				replacementKey(input.idempotencyKey, input.replaces),
+			);
+		},
+		// The session's metadata names the seller and whether a failed invoice is paid with the new card.
+		createCardSetupSession: (input) =>
+			request<StripeCheckoutSession>(
+				'POST',
+				'/checkout/sessions',
+				{
+					mode: 'setup',
+					ui_mode: 'elements',
+					customer: input.customerId,
+					currency: 'usd',
+					...CARD_ONLY_CHECKOUT,
+					metadata: { kind: CHECKOUT_KIND_CARD, estori_user_id: input.userId, card_mode: input.mode },
+					return_url: input.returnUrl,
+					expires_at: billingCheckoutExpiresAt(input.nowMs),
+				},
+				replacementKey(`billing-card-${input.userId}-${input.mode}-${input.afterCardId ?? 'none'}-${idempotencyBucket(input.nowMs)}`, input.replaces),
+			),
+		// Each key names the payment method, which a card setup creates new every time, so a retry replays and a later change is
+		// a new request. It rotates with the bucket, so a failure Stripe saved under it is retried in the next one.
+		setDefaultPaymentMethod: async ({ customerId, subscriptionId, paymentMethodId, nowMs }) => {
+			const bucket = idempotencyBucket(nowMs);
+			await request<StripeCustomer>(
+				'POST',
+				`/customers/${encodeURIComponent(customerId)}`,
+				{ invoice_settings: { default_payment_method: paymentMethodId } },
+				`billing-default-card-${customerId}-${paymentMethodId}-${bucket}`,
+			);
+			if (subscriptionId === null) return;
+			await request<StripeSubscription>(
+				'POST',
+				`/subscriptions/${encodeURIComponent(subscriptionId)}`,
+				{ default_payment_method: paymentMethodId },
+				`billing-default-card-${subscriptionId}-${paymentMethodId}-${bucket}`,
+			);
+		},
+		updateSubscriptionMetadata: async (subscriptionId, metadata, idempotencyKey) => {
+			await request<StripeSubscription>('POST', `/subscriptions/${encodeURIComponent(subscriptionId)}`, { metadata }, idempotencyKey);
+		},
+		retrievePaymentMethod: async (id) => {
+			const method = await request<{ id: string; card?: StripePaymentMethod['card'] }>('GET', `/payment_methods/${encodeURIComponent(id)}`);
+			const card = method.card ?? null;
+			return { id: method.id, card: card && { brand: card.brand, last4: card.last4, exp_month: card.exp_month, exp_year: card.exp_year } };
+		},
+		listInvoices: async (customerId, limit) => {
+			const invoices = await request<{ data: StripeInvoice[] }>('GET', `/invoices?${encodeForm({ customer: customerId, limit })}`);
+			return invoices.data;
+		},
+		retrieveInvoice: (id) => request<StripeInvoice>('GET', `/invoices/${encodeURIComponent(id)}?${encodeForm({ expand: ['confirmation_secret', 'payments'] })}`),
+		payInvoice: (id, paymentMethodId, idempotencyKey) =>
+			request<StripeInvoice>('POST', `/invoices/${encodeURIComponent(id)}/pay`, { payment_method: paymentMethodId, off_session: false }, idempotencyKey),
+		fetchInvoicePdf: async (url) => {
+			// `invoice_pdf` is a signed address that needs no key, so none is sent, and a redirect carries nothing; it is still checked to be Stripe's.
+			if (!isStripeUrl(url)) throw new Error('The invoice PDF is not on a Stripe address');
+			return fetchImpl(url);
+		},
+		retrieveSubscription: (subscriptionId) =>
+			request<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}?${encodeForm({ expand: ['schedule'] })}`),
+		changeSubscriptionPrice: async ({ subscription, priceId, idempotencyKey }) => {
+			const item = subscription.items.data[0];
+			if (!item) throw new Error(`Subscription ${subscription.id} has no items`);
+			return request<StripeSubscription>(
+				'POST',
+				`/subscriptions/${encodeURIComponent(subscription.id)}`,
+				{
+					items: [{ id: item.id, price: priceId }],
+					proration_behavior: 'always_invoice',
+					payment_behavior: 'error_if_incomplete',
+					expand: ['schedule'],
+				},
+				idempotencyKey,
+			);
+		},
+		scheduleSubscriptionPrice: async ({ subscription, priceId, idempotencyKey }) => {
+			const schedule = await scheduleFor(subscription, idempotencyKey);
+			const currentPhase = schedule.current_phase;
+			const current = currentPhase && schedule.phases.find((phase) => phase.start_date === currentPhase.start_date);
+			const currentItem = current?.items[0];
+			if (!currentPhase || !current || !currentItem) throw new Error(`Schedule ${schedule.id} has no current phase`);
+			const discounts = phaseDiscounts(current.discounts);
+			return request<StripeSubscriptionSchedule>(
+				'POST',
+				`/subscription_schedules/${encodeURIComponent(schedule.id)}`,
+				{
+					end_behavior: 'release',
+					proration_behavior: 'none',
+					phases: [
+						{
+							items: [{ price: priceIdOf(currentItem.price), quantity: 1 }],
+							start_date: currentPhase.start_date,
+							end_date: currentPhase.end_date,
+							discounts,
+						},
+						{
+							items: [{ price: priceId, quantity: 1 }],
+							duration: { interval: 'month', interval_count: 1 },
+							proration_behavior: 'none',
+							discounts,
+						},
+					],
+				},
+				`${idempotencyKey}-phases`,
+			);
+		},
+		releaseSubscriptionSchedule: async (scheduleId) => {
+			try {
+				await request<StripeSubscriptionSchedule>('POST', `/subscription_schedules/${encodeURIComponent(scheduleId)}/release`);
+			} catch (error) {
+				// Stripe refuses to release a schedule that isn't active: it was already released, completed or canceled.
+				if (error instanceof StripeApiError && error.status === 400) return;
+				throw error;
+			}
+		},
+		cancelAtPeriodEnd: (subscriptionId, idempotencyKey) =>
+			request<StripeSubscription>('POST', `/subscriptions/${encodeURIComponent(subscriptionId)}`, { cancel_at_period_end: true }, idempotencyKey),
+		// A subscription ends through cancel_at_period_end or through a cancel_at date; resuming clears whichever is set.
+		resumeSubscription: (subscription, idempotencyKey) =>
+			request<StripeSubscription>(
+				'POST',
+				`/subscriptions/${encodeURIComponent(subscription.id)}`,
+				subscription.cancel_at !== null && !subscription.cancel_at_period_end ? { cancel_at: '' } : { cancel_at_period_end: false },
+				idempotencyKey,
+			),
 	};
 }

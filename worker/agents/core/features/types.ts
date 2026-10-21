@@ -97,8 +97,8 @@ export interface ThinkModelOption {
 	id: string;
 	label: string;
 	provider: string;
-	/** Credits charged per build step ($0.25 per 1M input tokens = 1 credit). */
-	creditCost: number;
+	/** Typical credits per step, from measured usage; each step is charged from its real cost. */
+	creditsPerStep: number;
 }
 
 /**

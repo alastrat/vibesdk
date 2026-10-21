@@ -3,6 +3,11 @@
 #ENVIRONMENT="prod" # Options: dev, staging, prod
 
 # Feature flags
+# PostHog: unset, local development sends nothing. To try analytics locally, set the production token from
+# wrangler.estori.jsonc; events carry $host localhost, which PostHog's test-account filter keeps out of production numbers.
+#POSTHOG_PROJECT_KEY=""
+# Flag values for local development, e.g. "billing=on,catalog-paused=on"; production ignores them.
+#FEATURE_FLAG_OVERRIDES=""
 
 # Cloudflare Credentials (Required for manual deployment via `bun run deploy`)
 # These are automatically provided when using "Deploy to Cloudflare" button

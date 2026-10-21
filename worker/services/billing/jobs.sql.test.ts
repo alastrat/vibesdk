@@ -1,0 +1,214 @@
+/** The daily and hourly billing runs on real SQL, with Stripe stood in by fetch. */
+
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { envWith, insertBillingCustomer, insertPurchase, insertSubscription, insertUser, migratedD1 } from '../../database/test-support/real-d1';
+import { BillingService } from '../../database/services/BillingService';
+import { CreditLedgerService } from '../../database/services/CreditLedgerService';
+import { handleBillingEvent } from './events';
+import { runDailyBilling, runHourlyBilling } from './jobs';
+import { billingEventDepsFromEnv } from './wiring';
+import { FLAGS_URL } from '../posthog/flags';
+
+let db: D1Database;
+const DAY = 86_400_000;
+const sent: string[] = [];
+
+beforeAll(async () => {
+	db = await migratedD1();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	sent.length = 0;
+});
+
+function env(extra: Record<string, unknown> = {}): Env {
+	return envWith(db, {
+		BILLING: 'on',
+		STRIPE_SECRET_KEY: 'sk_test_fake',
+		STRIPE_PRICE_IDS: JSON.stringify({ pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' }),
+		CUSTOM_DOMAIN: 'estori.app',
+		ENVIRONMENT: 'prod',
+		EMAIL: {
+			send: async (message: { to: string }) => {
+				sent.push(message.to);
+				return { messageId: 'm1' };
+			},
+		},
+		VibecoderStore: { get: async () => null, put: async () => undefined },
+		...extra,
+	});
+}
+
+describe('the daily billing run', () => {
+	it('re-reads a subscription a webhook may have missed', async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		await insertUser(db, 'u_rep');
+		await insertBillingCustomer(db, 'u_rep', 'cus_rep');
+		await insertSubscription(db, { userId: 'u_rep', stripeSubscriptionId: 'sub_rep', status: 'past_due', currentPeriodStart: new Date(now - 3 * DAY), currentPeriodEnd: new Date(now + 27 * DAY) });
+		const paid = { id: 'sub_rep', customer: 'cus_rep', status: 'active', created: 1, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_rep' }, schedule: null, items: { data: [{ id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: (now - 3 * DAY) / 1000, current_period_end: (now + 27 * DAY) / 1000 }] } };
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(paid));
+		await runDailyBilling(env(), now);
+		expect(await db.prepare("SELECT status FROM subscriptions WHERE user_id = 'u_rep'").first()).toEqual({ status: 'active' });
+		expect(await db.prepare("SELECT result FROM billing_events WHERE stripe_event_id = 'repair:sub_rep:2026-10-19'").first()).toEqual({ result: 'applied' });
+	});
+
+	it("stores the plan's pool for a renewal the repair finds paid, ending the grace hold's pool of 0", async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		const start = now - 3 * DAY;
+		await insertUser(db, 'u_hold');
+		await insertBillingCustomer(db, 'u_hold', 'cus_hold');
+		await insertSubscription(db, { userId: 'u_hold', stripeSubscriptionId: 'sub_hold', status: 'past_due', currentPeriodStart: new Date(start), currentPeriodEnd: new Date(now + 27 * DAY) });
+		const period = { key: `sub:sub_hold:${start / 1000}`, startMs: start, endMs: now + 27 * DAY };
+		await new CreditLedgerService(env()).recordUse({ userId: 'u_hold', period, pool: 0, useKey: 'k_hold', credits: 2_000, source: 'think', model: 'm', usage: null, now: new Date(now - DAY) });
+		const paid = { id: 'sub_hold', customer: 'cus_hold', status: 'active', created: 1, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_hold' }, schedule: null, items: { data: [{ id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: start / 1000, current_period_end: (now + 27 * DAY) / 1000 }] } };
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(paid));
+		await runDailyBilling(env(), now);
+		expect(await db.prepare("SELECT pool FROM credit_periods WHERE user_id = 'u_hold'").first('pool')).toBe(20_000);
+	});
+
+	it("takes nothing from purchases for a grace hold's usage, so the pool restored when the renewal is paid counts it once", async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		const p1 = { key: `sub:sub_held:${(now - 32 * DAY) / 1000}`, startMs: now - 32 * DAY, endMs: now - 2 * DAY };
+		const p2 = { key: `sub:sub_held:${(now - 2 * DAY) / 1000}`, startMs: now - 2 * DAY, endMs: now + 28 * DAY };
+		await insertUser(db, 'u_held');
+		await insertBillingCustomer(db, 'u_held', 'cus_held');
+		await insertSubscription(db, { userId: 'u_held', stripeSubscriptionId: 'sub_held', status: 'past_due', currentPeriodStart: new Date(p2.startMs), currentPeriodEnd: new Date(p2.endMs) });
+		await insertPurchase(db, { id: 'cp_held', userId: 'u_held', credits: 5_000, purchasedAt: new Date(now - 60 * DAY), expiresAt: new Date(now + 300 * DAY) });
+		const ledger = new CreditLedgerService(env());
+		await ledger.recordUse({ userId: 'u_held', period: p1, pool: 20_000, useKey: 'k_p1', credits: 1_000, source: 'think', model: 'm', usage: null, now: new Date(now - 10 * DAY) });
+		await ledger.recordUse({ userId: 'u_held', period: p2, pool: 0, useKey: 'k_p2', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date(now - DAY) });
+		const stripeSub = (status: string) => ({ id: 'sub_held', customer: 'cus_held', status, created: 1, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_held' }, schedule: null, items: { data: [{ id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: p2.startMs / 1000, current_period_end: p2.endMs / 1000 }] } });
+		const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(stripeSub('past_due')));
+		await runDailyBilling(env(), now);
+		const periods = () => db.prepare("SELECT period_key AS key, pool, settled, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_held' ORDER BY period_start").all();
+		expect((await periods()).results).toEqual([
+			{ key: p1.key, pool: 20_000, settled: 0, closed: 1 },
+			{ key: p2.key, pool: 0, settled: 0, closed: 0 },
+		]);
+		fetch.mockImplementation(async () => Response.json(stripeSub('active')));
+		const invoice = { id: 'in_held', customer: 'cus_held', amount_paid: 4_900, currency: 'usd', hosted_invoice_url: null, number: 'EST-0010', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_held' } } };
+		const deps = { ...billingEventDepsFromEnv(env()), nowMs: () => now + 3_600_000 };
+		expect(await handleBillingEvent(deps, { id: 'evt_held_paid', type: 'invoice.paid', data: { object: invoice } })).toBe('applied');
+		expect((await periods()).results[1]).toEqual({ key: p2.key, pool: 20_000, settled: 0, closed: 0 });
+		expect(await ledger.settle('u_held', now + DAY)).toBe('nothing');
+		expect(await db.prepare("SELECT used FROM credit_purchases WHERE id = 'cp_held'").first('used')).toBe(0);
+	});
+
+	it('keeps holding an unpaid renewal after the grace ends, so a renewal paid on day 9 counts its usage once', async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		const held = { key: `sub:sub_late:${(now - 9 * DAY) / 1000}`, startMs: now - 9 * DAY, endMs: now + 21 * DAY };
+		const ended = { key: `acct:${(now - 70 * DAY) / 1000}`, startMs: now - 70 * DAY, endMs: now - 40 * DAY };
+		await insertUser(db, 'u_late');
+		await insertBillingCustomer(db, 'u_late', 'cus_late');
+		await insertSubscription(db, { userId: 'u_late', stripeSubscriptionId: 'sub_late', status: 'past_due', currentPeriodStart: new Date(held.startMs), currentPeriodEnd: new Date(held.endMs) });
+		await insertPurchase(db, { id: 'cp_late', userId: 'u_late', credits: 5_000, purchasedAt: new Date(now - 60 * DAY), expiresAt: new Date(now + 300 * DAY) });
+		const ledger = new CreditLedgerService(env());
+		await ledger.recordUse({ userId: 'u_late', period: ended, pool: 5_000, useKey: 'k_late_old', credits: 100, source: 'think', model: 'm', usage: null, now: new Date(now - 50 * DAY) });
+		await ledger.recordUse({ userId: 'u_late', period: held, pool: 0, useKey: 'k_late_hold', credits: 3_000, source: 'think', model: 'm', usage: null, now: new Date(now - 7 * DAY) });
+		const stripeSub = (status: string) => ({ id: 'sub_late', customer: 'cus_late', status, created: 1, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_late' }, schedule: null, items: { data: [{ id: 'si_1', price: { id: 'price_pro', metadata: null }, current_period_start: held.startMs / 1000, current_period_end: held.endMs / 1000 }] } });
+		const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json(stripeSub('past_due')));
+		await runDailyBilling(env(), now);
+		const used = () => db.prepare("SELECT used FROM credit_purchases WHERE id = 'cp_late'").first('used');
+		const heldPeriod = () => db.prepare('SELECT pool, settled, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = ? AND period_key = ?').bind('u_late', held.key).first();
+		expect(await db.prepare('SELECT closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = ? AND period_key = ?').bind('u_late', ended.key).first('closed')).toBe(1);
+		expect(await used()).toBe(0);
+		expect(await heldPeriod()).toEqual({ pool: 0, settled: 0, closed: 0 });
+
+		fetch.mockImplementation(async () => Response.json(stripeSub('active')));
+		const invoice = { id: 'in_late', customer: 'cus_late', amount_paid: 4_900, currency: 'usd', hosted_invoice_url: null, number: 'EST-0011', billing_reason: 'subscription_cycle', parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_late' } } };
+		const deps = { ...billingEventDepsFromEnv(env()), nowMs: () => now + 3_600_000 };
+		expect(await handleBillingEvent(deps, { id: 'evt_late_paid', type: 'invoice.paid', data: { object: invoice } })).toBe('applied');
+		expect(await heldPeriod()).toEqual({ pool: 20_000, settled: 0, closed: 0 });
+		expect(await used()).toBe(0);
+	});
+
+	it('settles overruns, closes ended periods, expires purchases and forgets old usage', async () => {
+		const now = Date.parse('2026-10-19T06:35:00Z');
+		await insertUser(db, 'u_day');
+		await insertPurchase(db, { id: 'cp_day', userId: 'u_day', credits: 5_000, purchasedAt: new Date(now - 366 * DAY), expiresAt: new Date(now - DAY) });
+		const ledger = new CreditLedgerService(env());
+		const ended = { key: 'acct:ended', startMs: now - 40 * DAY, endMs: now - 10 * DAY };
+		await ledger.recordUse({ userId: 'u_day', period: ended, pool: 5_000, useKey: 'k_old', credits: 6_000, source: 'think', model: 'm', usage: null, now: new Date(now - 100 * DAY) });
+		await runDailyBilling(env(), now);
+		expect(await db.prepare("SELECT settled, forgiven, closed_at IS NOT NULL AS closed FROM credit_periods WHERE user_id = 'u_day'").first()).toEqual({ settled: 1_000, forgiven: 0, closed: 1 });
+		expect(await db.prepare("SELECT used, expired_at IS NOT NULL AS expired FROM credit_purchases WHERE id = 'cp_day'").first()).toEqual({ used: 1_000, expired: 1 });
+		expect(await db.prepare("SELECT COUNT(*) AS n FROM credit_uses WHERE user_id = 'u_day'").first()).toEqual({ n: 0 });
+	});
+});
+
+describe('the hourly billing run', () => {
+	it('tells Basic accounts with a verified email that their credits renewed, once, on their day', async () => {
+		const now = Date.parse('2026-10-19T10:05:00Z');
+		const signedUp = new Date('2026-09-19T08:00:00Z');
+		await insertUser(db, 'u_today', { createdAt: signedUp, emailVerified: true });
+		await insertUser(db, 'u_unverified', { createdAt: signedUp, emailVerified: false });
+		await insertUser(db, 'u_other_day', { createdAt: new Date('2026-09-18T08:00:00Z'), emailVerified: true });
+		await insertUser(db, 'u_paying', { createdAt: signedUp, emailVerified: true });
+		await insertUser(db, 'u_new', { createdAt: new Date('2026-10-19T09:00:00Z'), emailVerified: true });
+		await insertSubscription(db, { userId: 'u_paying', stripeSubscriptionId: 'sub_paying', status: 'active', currentPeriodStart: new Date(now - DAY), currentPeriodEnd: new Date(now + 29 * DAY) });
+		await runHourlyBilling(env(), now);
+		await runHourlyBilling(env(), now + 3_600_000);
+		expect(sent).toHaveLength(1);
+		expect(await db.prepare("SELECT user_id FROM billing_notices WHERE kind = 'credits_renewed'").all()).toMatchObject({ results: [{ user_id: 'u_today' }] });
+	});
+
+	it("renews an account made on the 31st on a short month's last day, and only for listed accounts while billing is limited", async () => {
+		await insertUser(db, 'u_31', { createdAt: new Date('2026-08-31T08:00:00Z'), emailVerified: true });
+		await runHourlyBilling(env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else' }), Date.parse('2026-09-30T10:05:00Z'));
+		expect(sent).toHaveLength(0);
+		await runHourlyBilling(env(), Date.parse('2026-09-30T10:05:00Z'));
+		expect(sent).toHaveLength(1);
+	});
+
+	it("with PostHog, tells the accounts its billing flag is on for, beside the switches' accounts, and no one else", async () => {
+		const now = Date.parse('2026-10-23T10:05:00Z');
+		const signedUp = new Date('2026-09-23T08:00:00Z');
+		for (const id of ['u_ph_on', 'u_ph_off', 'u_ph_listed']) await insertUser(db, id, { createdAt: signedUp, emailVerified: true });
+		const asked: string[] = [];
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+			if (String(input) !== FLAGS_URL) throw new Error(`Unexpected fetch: ${String(input)}`);
+			const distinctId = (JSON.parse(String(init?.body)) as { distinct_id: string }).distinct_id;
+			asked.push(distinctId);
+			return Response.json({ flags: distinctId === 'u_ph_on' ? { billing: { enabled: true } } : {} });
+		});
+		await runHourlyBilling(env({ BILLING: undefined, BILLING_USER_IDS: 'u_ph_listed', POSTHOG_PROJECT_KEY: 'phc_test' }), now);
+		expect([...sent].sort()).toEqual(['u_ph_listed@example.test', 'u_ph_on@example.test']);
+		expect(asked).toContain('u_ph_off');
+	});
+
+	it('outside production, tells the accounts an override puts on billing, without PostHog', async () => {
+		const now = Date.parse('2026-10-24T10:05:00Z');
+		await insertUser(db, 'u_override', { createdAt: new Date('2026-09-24T08:00:00Z'), emailVerified: true });
+		await runHourlyBilling(env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else', ENVIRONMENT: 'dev', FEATURE_FLAG_OVERRIDES: 'billing=on' }), now);
+		expect(sent).toEqual(['u_override@example.test']);
+	});
+
+	it('sends the enforcement notice while billing is still off, once, and not once the start date has come', async () => {
+		const now = Date.parse('2026-10-25T10:05:00Z');
+		await insertUser(db, 'u_notice', { emailVerified: true });
+		const billingOff = { BILLING: undefined, BILLING_USER_IDS: undefined, BILLING_ENFORCEMENT_FROM: '2026-11-01' };
+		await runHourlyBilling(env(billingOff), now);
+		await runHourlyBilling(env(billingOff), now + 3_600_000);
+		expect(sent.filter((to) => to === 'u_notice@example.test')).toHaveLength(1);
+		expect(await db.prepare("SELECT kind FROM billing_notices WHERE user_id = 'u_notice'").all()).toMatchObject({ results: [{ kind: 'enforcement_notice' }] });
+
+		await insertUser(db, 'u_after', { emailVerified: true });
+		await runHourlyBilling(env(billingOff), Date.parse('2026-11-01T00:05:00Z'));
+		expect(sent).not.toContain('u_after@example.test');
+	});
+
+	it('sends no enforcement notice when no start date is set, and still sends renewal emails when the notice fails', async () => {
+		await insertUser(db, 'u_quiet');
+		const now = Date.parse('2026-10-19T10:05:00Z');
+		await runHourlyBilling(env(), now + 2 * DAY);
+		expect(sent).not.toContain('u_quiet@example.test');
+
+		await insertUser(db, 'u_renewal', { createdAt: new Date('2026-08-21T08:00:00Z'), emailVerified: true });
+		vi.spyOn(BillingService.prototype, 'accountsWithoutNotice').mockRejectedValue(new Error('D1 is unavailable'));
+		const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		await runHourlyBilling(env({ BILLING_ENFORCEMENT_FROM: '2026-12-01' }), now + 2 * DAY);
+		expect(errorLog).toHaveBeenCalledTimes(1);
+		expect(sent).toContain('u_renewal@example.test');
+	});
+});
