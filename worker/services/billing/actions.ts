@@ -522,7 +522,7 @@ export async function completeCardSetup(deps: BillingActionDeps, userId: string,
 		try {
 			await setDefaultCard(stripe, customerId, subscription?.stripeSubscriptionId ?? null, cardId, deps.nowMs);
 		} catch (error) {
-			// The webhook sets the same card under the same keys; an overlap means it is being set, and a payment names its card itself.
+			// The webhook sets the same card under the same keys within a bucket; an overlap means it is being set, and a payment names its card itself.
 			if (!isConcurrentRequest(error)) throw error;
 		}
 		// Only a pay setup, from the failed-payment banner, pays; with no payable subscription there is nothing to pay.
@@ -549,8 +549,9 @@ async function confirmationNeeded(deps: BillingActionDeps, stripe: BillingStripe
 
 /**
  * Pays the subscription's newest open invoice with `paymentMethod`, else with the card it renews on. No open invoice is
- * `nothing_due`: Stripe's own retry or an earlier press paid it, and so is one it paid between the list and the payment.
- * A card refusal is `declined` and an authentication need `requires_action`; any other Stripe error is thrown for `askStripe`.
+ * `nothing_due`: Stripe's own retry or an earlier press paid it. One Stripe pays between the list and the payment is
+ * `paid`, read again after Stripe refuses to pay it twice. A card refusal is `declined` and an authentication need
+ * `requires_action`; any other Stripe error is thrown for `askStripe`.
  */
 async function payNewestOpenInvoice(
 	deps: BillingActionDeps,

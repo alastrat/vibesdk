@@ -382,12 +382,13 @@ describe('how a refusal reads', () => {
 		expect(startRefusalOf(failure(409, 'You already have a plan. Change it on the billing page.'), 'fallback')).toEqual({ kind: 'already-paying' });
 	});
 
-	it("shows the server's words for a pause, a missing key or a closed flag, and offers a retry only for the pause", () => {
+	it("shows the server's words for a pause, a missing key, a closed flag or a plan limit, and offers a retry for any 503", () => {
 		expect(startRefusalOf(failure(503, 'Plan changes and credit purchases are paused for a few minutes.'), 'fallback')).toEqual({
 			kind: 'refused',
 			message: 'Plan changes and credit purchases are paused for a few minutes.',
 			retryable: true,
 		});
+		expect(startRefusalOf(failure(503, "Payments aren't set up yet."), 'fallback')).toEqual({ kind: 'refused', message: "Payments aren't set up yet.", retryable: true });
 		expect(startRefusalOf(failure(403, "Plans aren't open for your account yet."), 'fallback')).toEqual({ kind: 'refused', message: "Plans aren't open for your account yet.", retryable: false });
 		expect(startRefusalOf(failure(402, 'Extra credits come with Premium.'), 'fallback')).toEqual({ kind: 'refused', message: 'Extra credits come with Premium.', retryable: false });
 	});

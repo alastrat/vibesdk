@@ -129,8 +129,8 @@ export type StartRefusal = { kind: 'already-paying' } | { kind: 'refused'; messa
 
 /**
  * What a refused start means. An account that already has a plan goes back to billing. The server's own words (a pause,
- * a missing key, a closed flag, a plan limit) replace the form, with a retry only for the pause. Anything else is the
- * plain failure, which a retry may fix.
+ * a missing key, a closed flag, a plan limit) replace the form, with a retry for any 503, since a pause or a missing key
+ * can pass. Anything else is the plain failure, which a retry may fix.
  */
 export function startRefusalOf(error: unknown, fallback: string): StartRefusal {
 	const { status, message } = refusalOf(error, fallback);

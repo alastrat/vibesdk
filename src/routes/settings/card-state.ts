@@ -48,7 +48,7 @@ export interface CardRefusal {
 
 /**
  * What a refused call means. The server's own words (no billing details, a missing key, a pause) replace the form, and a
- * retry is offered when the cause is the pause or a failure that may pass. Anything else is the `plain` failure.
+ * retry is offered for any 503 (a missing key, a pause) or a failure that may pass. Anything else is the `plain` failure.
  */
 export function cardRefusalOf(error: unknown, plain: string = CARD_FAILED_MESSAGE): CardRefusal {
 	const { status, message } = refusalOf(error, plain);
