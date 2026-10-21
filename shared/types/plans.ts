@@ -1,3 +1,5 @@
+import { formatDollars, formatMonthDay, formatNumber } from '../i18n/format';
+import { DEFAULT_LOCALE, type Locale } from '../i18n/locales';
 import { DRAFT_LIMIT } from './drafts';
 
 export const PLAN_IDS = ['basic', 'pro', 'premium', 'enterprise'] as const;
@@ -118,21 +120,18 @@ export function planName(plan: PlanId): string {
 	return PLAN_NAMES[plan];
 }
 
-/** "$99", or "$349.50" when there are cents. */
-export function formatUsd(cents: number): string {
-	const dollars = cents / 100;
-	return `$${Number.isInteger(dollars) ? dollars.toLocaleString('en-US') : dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** "$99", or "$349.50" when there are cents; "USD 99" in Spanish and "US$ 99" in Portuguese. */
+export function formatUsd(cents: number, locale: Locale = DEFAULT_LOCALE): string {
+	return formatDollars(cents / 100, locale);
 }
 
-export function formatCredits(credits: number): string {
-	return credits.toLocaleString('en-US');
+export function formatCredits(credits: number, locale: Locale = DEFAULT_LOCALE): string {
+	return formatNumber(credits, locale);
 }
 
-const BILLING_DATE = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
-
-/** "November 19", the UTC day of a timestamp. */
-export function formatBillingDate(ms: number): string {
-	return BILLING_DATE.format(ms);
+/** "November 19", or "19 de noviembre": the UTC day of a timestamp. */
+export function formatBillingDate(ms: number, locale: Locale = DEFAULT_LOCALE): string {
+	return formatMonthDay(ms, locale);
 }
 
 /** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. */

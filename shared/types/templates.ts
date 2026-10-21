@@ -1,5 +1,8 @@
 /** Template catalog values shared by the database schema, the worker and the UI. */
 
+import { DEFAULT_LOCALE, type Locale } from '../i18n/locales';
+import { formatUsd } from './plans';
+
 export const TEMPLATE_CATEGORIES = [
 	'store',
 	'landing',
@@ -43,10 +46,12 @@ export type TemplatePaymentProvider = (typeof TEMPLATE_PAYMENT_PROVIDERS)[number
 export const DISCOVER_PRICING_FILTERS = ['all', 'free', 'paid'] as const;
 export type DiscoverPricing = (typeof DISCOVER_PRICING_FILTERS)[number];
 
-export function formatTemplatePrice(priceCents: number): string {
-	if (priceCents <= 0) return 'Free';
-	const dollars = priceCents / 100;
-	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+/**
+ * A template's price: "$29", "USD 29" or "US$ 29,50". Shared code can't reach the browser's translations, so the word
+ * for a free template is the caller's `free`, which a translating caller sets to `t('Free')`.
+ */
+export function formatTemplatePrice(priceCents: number, locale: Locale = DEFAULT_LOCALE, free = 'Free'): string {
+	return priceCents <= 0 ? free : formatUsd(priceCents, locale);
 }
 
 /** Estori's share of every sale: a percent of the price plus a fixed amount that covers Stripe's card fee. */

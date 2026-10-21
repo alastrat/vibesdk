@@ -7,6 +7,8 @@ import {
 	assertWithinLimit,
 	extraCreditsPriceCents,
 	formatBillingDate,
+	formatCredits,
+	formatUsd,
 	isExtraCreditsAmount,
 	isPlanLimitRefusal,
 	limitsFor,
@@ -125,5 +127,57 @@ describe('admin limit overrides', () => {
 describe('formatBillingDate', () => {
 	it('names the day in UTC', () => {
 		expect(formatBillingDate(Date.UTC(2026, 10, 19, 23, 59))).toBe('November 19');
+	});
+
+	it('names the month in the seller\'s language, still without a year', () => {
+		expect(formatBillingDate(Date.UTC(2026, 10, 20), 'en')).toBe('November 20');
+		expect(formatBillingDate(Date.UTC(2026, 10, 20), 'es')).toBe('20 de noviembre');
+		expect(formatBillingDate(Date.UTC(2026, 10, 20), 'pt-BR')).toBe('20 de novembro');
+		expect(formatBillingDate(Date.UTC(2026, 0, 1, 23, 59), 'pt-BR')).toBe('1 de janeiro');
+	});
+});
+
+// Intl writes a no-break space between the currency and the amount in Spanish and Portuguese.
+const NBSP = '\u00a0';
+
+describe('formatUsd', () => {
+	it('keeps the English outputs it always had', () => {
+		expect(formatUsd(9_900)).toBe('$99');
+		expect(formatUsd(0)).toBe('$0');
+		expect(formatUsd(34_950)).toBe('$349.50');
+		expect(formatUsd(123_456_00)).toBe('$123,456');
+		expect(formatUsd(4_900, 'en')).toBe('$49');
+	});
+
+	it('writes dollars the local way, never as pesos or reais', () => {
+		expect(formatUsd(4_900, 'es')).toBe(`USD${NBSP}49`);
+		expect(formatUsd(4_900, 'pt-BR')).toBe(`US$${NBSP}49`);
+		expect(formatUsd(0, 'es')).toBe(`USD${NBSP}0`);
+		expect(formatUsd(0, 'pt-BR')).toBe(`US$${NBSP}0`);
+	});
+
+	it('shows cents only when there are some, with the language\'s decimal mark', () => {
+		expect(formatUsd(2_450, 'en')).toBe('$24.50');
+		expect(formatUsd(2_450, 'es')).toBe(`USD${NBSP}24.50`);
+		expect(formatUsd(2_450, 'pt-BR')).toBe(`US$${NBSP}24,50`);
+	});
+
+	it('groups thousands the local way', () => {
+		expect(formatUsd(123_450, 'es')).toBe(`USD${NBSP}1,234.50`);
+		expect(formatUsd(123_450, 'pt-BR')).toBe(`US$${NBSP}1.234,50`);
+		expect(formatUsd(1_990_000, 'pt-BR')).toBe(`US$${NBSP}19.900`);
+	});
+});
+
+describe('formatCredits', () => {
+	it('keeps the English outputs it always had', () => {
+		expect(formatCredits(20_000)).toBe('20,000');
+		expect(formatCredits(500, 'en')).toBe('500');
+	});
+
+	it('groups by language: Spanish like Mexico, Portuguese with points', () => {
+		expect(formatCredits(100_000, 'es')).toBe('100,000');
+		expect(formatCredits(100_000, 'pt-BR')).toBe('100.000');
+		expect(formatCredits(1_500, 'pt-BR')).toBe('1.500');
 	});
 });

@@ -11,7 +11,7 @@ import {
 	purchaseDecision,
 	supersededVersionId,
 } from './catalog';
-import { formatTemplatePrice } from '../../../shared/types/templates';
+import { TEMPLATE_PRICE_OPTIONS_CENTS, formatTemplatePrice } from '../../../shared/types/templates';
 
 describe('isTemplateCategory and isTemplatePrice', () => {
 	it('accepts only the listed values', () => {
@@ -118,5 +118,24 @@ describe('formatTemplatePrice', () => {
 		expect(formatTemplatePrice(0)).toBe('Free');
 		expect(formatTemplatePrice(2900)).toBe('$29');
 		expect(formatTemplatePrice(950)).toBe('$9.50');
+	});
+
+	it('keeps every price option a creator can choose as it was', () => {
+		expect(TEMPLATE_PRICE_OPTIONS_CENTS.map((cents) => formatTemplatePrice(cents))).toEqual(['Free', '$9', '$19', '$29', '$49']);
+		expect(formatTemplatePrice(-100)).toBe('Free');
+	});
+
+	it('writes a paid price the way the language writes dollars', () => {
+		expect(formatTemplatePrice(2900, 'es')).toBe('USD\u00a029');
+		expect(formatTemplatePrice(950, 'es')).toBe('USD\u00a09.50');
+		expect(formatTemplatePrice(950, 'pt-BR')).toBe('US$\u00a09,50');
+		expect(formatTemplatePrice(4900, 'pt-BR')).toBe('US$\u00a049');
+	});
+
+	it('leaves the word for free to the caller, who has the translated catalog', () => {
+		expect(formatTemplatePrice(0, 'es')).toBe('Free');
+		expect(formatTemplatePrice(0, 'es', 'Gratis')).toBe('Gratis');
+		expect(formatTemplatePrice(0, 'pt-BR', 'Grátis')).toBe('Grátis');
+		expect(formatTemplatePrice(2900, 'es', 'Gratis')).toBe('USD\u00a029');
 	});
 });
