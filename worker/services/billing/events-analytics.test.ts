@@ -5,7 +5,7 @@ import type { SubscriptionRecord } from '../../database/schema';
 import type { StripeSubscription } from '../payments/stripe-client';
 import type { StripeEvent } from '../payments/webhook';
 import type { BillingAnalyticsEvent } from '../posthog/billing-events';
-import { handleBillingEvent, type BillingEventDeps } from './events';
+import { applyCreditPurchase, handleBillingEvent, type BillingEventDeps } from './events';
 
 const PRICES = { pro: 'price_pro', premium: 'price_premium', credits: 'price_credits' };
 const START = Date.parse('2026-10-05T10:00:00Z') / 1000;
@@ -90,6 +90,31 @@ function world(options: { recordFails?: boolean; stored?: SubscriptionRecord } =
 }
 
 describe('billing events to PostHog', () => {
+	it('resumes credit-paused work after a recorded subscription change', async () => {
+		const { deps } = world();
+		let resumed = false;
+		Object.assign(deps, { resumeTasks: async (userId: string) => {
+			expect(userId).toBe('u1');
+			expect((await deps.store.subscriptionOf(userId))?.plan).toBe('pro');
+			resumed = true;
+		} });
+		expect(await handleBillingEvent(deps, CHECKOUT)).toBe('applied');
+		expect(resumed).toBe(true);
+	});
+
+	it('resumes work after buying credits and keeps the payment applied if resuming fails', async () => {
+		const { deps } = world();
+		deps.ledger.purchaseBySession = async () => null;
+		deps.stripe.retrieveCheckoutSession = async () => ({
+			id: 'cs_credits', url: null, customer: 'cus_1', payment_status: 'paid', status: 'complete',
+			client_reference_id: 'u1', metadata: { kind: 'credits', estori_user_id: 'u1', credits: '5000' },
+			amount_total: 750, currency: 'usd', payment_intent: 'pi_credits',
+		});
+		let resumed = false;
+		Object.assign(deps, { resumeTasks: async () => { resumed = true; throw new Error('runner unavailable'); } });
+		expect(await applyCreditPurchase(deps, { eventId: 'evt_credits', eventType: 'checkout.session.completed', sessionId: 'cs_credits' })).toBe('applied');
+		expect(resumed).toBe(true);
+	});
 	it('sends subscription_started once for a completed checkout, and nothing on the retry', async () => {
 		const { deps, tracked } = world();
 		expect(await handleBillingEvent(deps, CHECKOUT)).toBe('applied');

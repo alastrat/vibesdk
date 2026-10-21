@@ -1,18 +1,22 @@
+import { INTL_LOCALE } from 'shared/i18n/locales';
+import { getLocale, t, useI18n, msg } from '@/lib/i18n';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Badge, Button, Empty, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
 import { sellerOrderPath, type SellerOrderRow, type SellerOrderView } from '@/api-types';
 import { useSellerOrders } from '@/hooks/use-seller-orders';
-import { formatCents } from '@/lib/pricing';
+import { formatCents as centsInLocale } from '@/lib/pricing';
+const formatCents = (cents: number) => centsInLocale(cents, getLocale());
 import { PAYMENT_LABELS, customerLabel, itemsSummary, shippingStatus, storeLabel } from './order-format';
 
 const VIEWS: ReadonlyArray<{ id: SellerOrderView; label: string }> = [
-	{ id: 'to-ship', label: 'To ship' },
-	{ id: 'all', label: 'All orders' },
+	{ id: 'to-ship', label: msg("To ship") },
+	{ id: 'all', label: msg("All orders") },
 ];
 
 export default function SellerOrdersPage() {
+	useI18n();
 	const [view, setView] = useState<SellerOrderView>('to-ship');
 	const [showTest, setShowTest] = useState(false);
 	const [store, setStore] = useState<string | null>(null);
@@ -25,23 +29,21 @@ export default function SellerOrdersPage() {
 			<title>{pageTitle('Orders')}</title>
 			<div className="container max-w-6xl mx-auto px-4 py-8 grid gap-6">
 				<div className="grid gap-1">
-					<h1 className="text-3xl font-semibold text-kumo-strong">Orders</h1>
-					<p className="text-kumo-subtle">Orders from all your stores. Ship the items you sell yourself; Estori ships the catalog items.</p>
+					<h1 className="text-3xl font-semibold text-kumo-strong">{t("Orders")}</h1>
+					<p className="text-kumo-subtle">{t("Orders from all your stores. Ship the items you sell yourself; Estori ships the catalog items.")}</p>
 				</div>
 
 				<div className="flex flex-wrap items-center gap-3">
-					<div className="flex gap-2" role="group" aria-label="Which orders">
+					<div className="flex gap-2" role="group" aria-label={t("Which orders")}>
 						{VIEWS.map((option) => (
 							<Button key={option.id} size="sm" variant={view === option.id ? 'primary' : 'secondary'} aria-pressed={view === option.id} onClick={() => setView(option.id)}>
-								{option.label}
+								{t(option.label)}
 							</Button>
 						))}
 					</div>
 					{data && data.stores.length > 1 && (
-						<label className="flex items-center gap-2 text-sm text-kumo-subtle">
-							Store
-							<select className="rounded-md border border-kumo-line bg-kumo-base px-2 py-1 text-sm text-kumo-default" value={store ?? ''} onChange={(event) => setStore(event.target.value || null)}>
-								<option value="">All stores</option>
+						<label className="flex items-center gap-2 text-sm text-kumo-subtle">{t("Store")}<select className="rounded-md border border-kumo-line bg-kumo-base px-2 py-1 text-sm text-kumo-default" value={store ?? ''} onChange={(event) => setStore(event.target.value || null)}>
+								<option value="">{t("All stores")}</option>
 								{data.stores.map((option) => (
 									<option key={option.appId} value={option.appId}>
 										{storeLabel(option.title)}
@@ -51,9 +53,7 @@ export default function SellerOrdersPage() {
 						</label>
 					)}
 					<label className="flex items-center gap-2 text-sm text-kumo-subtle">
-						<input type="checkbox" checked={showTest} onChange={(event) => setShowTest(event.target.checked)} />
-						Show test orders
-					</label>
+						<input type="checkbox" checked={showTest} onChange={(event) => setShowTest(event.target.checked)} />{t("Show test orders")}</label>
 				</div>
 
 				{orders.data ? (
@@ -65,15 +65,12 @@ export default function SellerOrdersPage() {
 					) : (
 						<div className="grid justify-items-center gap-3">
 							<Empty
-								title={view === 'to-ship' ? 'Nothing to ship' : 'No orders yet'}
-								description={view === 'to-ship' ? 'Orders with items you ship yourself show up here.' : 'Orders from your stores show up here once shoppers buy.'}
+								title={view === 'to-ship' ? t("Nothing to ship") : t("No orders yet")}
+								description={view === 'to-ship' ? t("Orders with items you ship yourself show up here.") : t("Orders from your stores show up here once shoppers buy.")}
 							/>
 							{!showTest && data?.hasTestOrders && (
-								<p className="text-sm text-kumo-subtle">
-									Your test orders are hidden.{' '}
-									<button type="button" className="underline underline-offset-2" onClick={() => setShowTest(true)}>
-										Show test orders
-									</button>
+								<p className="text-sm text-kumo-subtle">{t("Your test orders are hidden.")}{' '}
+									<button type="button" className="underline underline-offset-2" onClick={() => setShowTest(true)}>{t("Show test orders")}</button>
 								</p>
 							)}
 						</div>
@@ -83,13 +80,11 @@ export default function SellerOrdersPage() {
 						<Loader />
 					</div>
 				) : (
-					<Empty title="Couldn't load your orders" description={orders.error?.message} />
+					<Empty title={t("Couldn't load your orders")} description={orders.error?.message} />
 				)}
 
 				{orders.hasNextPage && (
-					<Button variant="secondary" size="sm" className="w-fit" onClick={() => void orders.fetchNextPage()} loading={orders.isFetchingNextPage}>
-						Load more
-					</Button>
+					<Button variant="secondary" size="sm" className="w-fit" onClick={() => void orders.fetchNextPage()} loading={orders.isFetchingNextPage}>{t("Load more")}</Button>
 				)}
 			</div>
 		</div>
@@ -97,38 +92,39 @@ export default function SellerOrdersPage() {
 }
 
 function PaymentBadges({ order }: { order: SellerOrderRow }) {
+	useI18n();
 	return (
 		<span className="flex flex-wrap gap-1">
-			<Badge variant={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'disputed' || order.paymentStatus === 'dispute_lost' ? 'error' : 'secondary'}>{PAYMENT_LABELS[order.paymentStatus]}</Badge>
-			{order.mode === 'test' && <Badge variant="outline">Test</Badge>}
+			<Badge variant={order.paymentStatus === 'paid' ? 'success' : order.paymentStatus === 'disputed' || order.paymentStatus === 'dispute_lost' ? 'error' : 'secondary'}>{t(PAYMENT_LABELS[order.paymentStatus])}</Badge>
+			{order.mode === 'test' && <Badge variant="outline">{t("Test")}</Badge>}
 		</span>
 	);
 }
 
 function OrdersTable({ rows }: { rows: SellerOrderRow[] }) {
+	useI18n();
 	return (
 		<div className="hidden overflow-x-auto sm:block">
 			<table className="w-full text-left text-sm">
-				<caption className="sr-only">Your orders, newest first</caption>
+				<caption className="sr-only">{t("Your orders, newest first")}</caption>
 				<thead className="text-kumo-subtle">
 					<tr>
-						<th scope="col" className="py-2 pr-4 font-normal">Order</th>
-						<th scope="col" className="py-2 pr-4 font-normal">Store</th>
-						<th scope="col" className="py-2 pr-4 font-normal">Customer</th>
-						<th scope="col" className="py-2 pr-4 font-normal">Items</th>
-						<th scope="col" className="py-2 pr-4 font-normal">Total</th>
-						<th scope="col" className="py-2 pr-4 font-normal">Payment</th>
-						<th scope="col" className="py-2 font-normal">Shipping</th>
+						<th scope="col" className="py-2 pr-4 font-normal">{t("Order")}</th>
+						<th scope="col" className="py-2 pr-4 font-normal">{t("Store")}</th>
+						<th scope="col" className="py-2 pr-4 font-normal">{t("Customer")}</th>
+						<th scope="col" className="py-2 pr-4 font-normal">{t("Items")}</th>
+						<th scope="col" className="py-2 pr-4 font-normal">{t("Total")}</th>
+						<th scope="col" className="py-2 pr-4 font-normal">{t("Payment")}</th>
+						<th scope="col" className="py-2 font-normal">{t("Shipping")}</th>
 					</tr>
 				</thead>
 				<tbody>
 					{rows.map((order) => (
 						<tr key={order.id} className="border-t border-kumo-line align-top text-kumo-default">
 							<th scope="row" className="py-2.5 pr-4 font-normal">
-								<Link to={sellerOrderPath(order.id)} className="underline underline-offset-2">
-									Order #{order.orderNumber}
+								<Link to={sellerOrderPath(order.id)} className="underline underline-offset-2">{t('Order #{number}', { number: order.orderNumber })}
 								</Link>
-								<span className="block text-xs text-kumo-subtle">{new Date(order.createdAt).toLocaleString()}</span>
+								<span className="block text-xs text-kumo-subtle">{new Date(order.createdAt).toLocaleString(INTL_LOCALE[getLocale()])}</span>
 							</th>
 							<td className="py-2.5 pr-4">{storeLabel(order.storeTitle)}</td>
 							<td className="py-2.5 pr-4">
@@ -151,18 +147,18 @@ function OrdersTable({ rows }: { rows: SellerOrderRow[] }) {
 
 /** The same orders as cards, for phones. */
 function OrderCards({ rows }: { rows: SellerOrderRow[] }) {
+	useI18n();
 	return (
 		<ul className="grid gap-3 sm:hidden">
 			{rows.map((order) => (
 				<li key={order.id} className="grid gap-1.5 rounded-lg border border-kumo-line p-3 text-sm">
 					<div className="flex items-center justify-between gap-2">
-						<Link to={sellerOrderPath(order.id)} className="font-medium underline underline-offset-2">
-							Order #{order.orderNumber}
+						<Link to={sellerOrderPath(order.id)} className="font-medium underline underline-offset-2">{t("Order #")}{order.orderNumber}
 						</Link>
 						<span>{formatCents(order.totalCents)}</span>
 					</div>
 					<span className="text-kumo-subtle">
-						{storeLabel(order.storeTitle)} · {new Date(order.createdAt).toLocaleDateString()}
+						{storeLabel(order.storeTitle)} · {new Date(order.createdAt).toLocaleDateString(INTL_LOCALE[getLocale()])}
 					</span>
 					<span>{customerLabel(order.customerName, order.customerEmail)}</span>
 					<span>

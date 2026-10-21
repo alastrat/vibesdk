@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { DotsThreeVertical, Trash } from '@phosphor-icons/react';
-import { Button, DeleteResource, DropdownMenu } from '@cloudflare/kumo';
+import { Button, DropdownMenu } from '@cloudflare/kumo';
 import { apiClient } from '@/lib/api-client';
 import { toast } from 'sonner';
 import { appEvents } from '@/lib/app-events';
+import { t } from '@/lib/i18n';
+import { ConfirmDeleteDialog } from './ConfirmDeleteDialog';
 
 interface AppActionsDropdownProps {
   appId: string;
@@ -35,7 +37,7 @@ export function AppActionsDropdown({
       const response = await apiClient.deleteApp(appId);
 
       if (response.success) {
-        toast.success('App deleted successfully');
+        toast.success(t('App deleted successfully'));
         setIsDeleteDialogOpen(false);
 
         appEvents.emitAppDeleted(appId);
@@ -43,7 +45,7 @@ export function AppActionsDropdown({
       }
     } catch (error) {
       console.error('Error deleting app:', error);
-      setDeleteError('An unexpected error occurred while deleting the app');
+      setDeleteError(t('An unexpected error occurred while deleting the app'));
     } finally {
       setIsDeleting(false);
     }
@@ -65,7 +67,7 @@ export function AppActionsDropdown({
             variant={kumoVariant}
             size={kumoSize}
             shape="square"
-            aria-label="App actions"
+            aria-label={t('App actions')}
             className={buttonClasses}
             onClick={(e) => {
               e.stopPropagation();
@@ -87,16 +89,17 @@ export function AppActionsDropdown({
               setIsDeleteDialogOpen(true);
             }}
           >
-            Delete app
+            {t('Delete app')}
           </DropdownMenu.Item>
 
         </DropdownMenu.Content>
       </DropdownMenu>
 
-      <DeleteResource
+      <ConfirmDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
-        resourceType="App"
+        resourceType={t('app')}
+        deleteButtonText={t('Delete App')}
         resourceName={appTitle}
         onDelete={handleDeleteApp}
         isDeleting={isDeleting}

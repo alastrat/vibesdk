@@ -1,3 +1,5 @@
+import { t } from '../services/i18n/request-locale';
+import { msg } from '../../shared/i18n/translate';
 /**
  * Centralized Validation Utilities
  */
@@ -33,7 +35,7 @@ export function validateEmail(
 	config: EmailValidationConfig = DEFAULT_EMAIL_CONFIG,
 ): { valid: boolean; error?: string } {
 	if (!email || typeof email !== 'string') {
-		return { valid: false, error: 'Email is required' };
+		return { valid: false, error: t('Email is required') };
 	}
 
 	// Length check
@@ -41,7 +43,7 @@ export function validateEmail(
 	if (email.length > maxLength) {
 		return {
 			valid: false,
-			error: `Email must be less than ${maxLength} characters`,
+			error: t("Email must be less than {value1} characters", { value1: String(maxLength) }),
 		};
 	}
 
@@ -51,18 +53,18 @@ export function validateEmail(
 		: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/; // ASCII only
 
 	if (!emailRegex.test(email)) {
-		return { valid: false, error: 'Invalid email format' };
+		return { valid: false, error: t('Invalid email format') };
 	}
 
 	// Domain validation
 	const domain = email.split('@')[1]?.toLowerCase();
 	if (config.blockedDomains?.includes(domain)) {
-		return { valid: false, error: 'Email domain is not allowed' };
+		return { valid: false, error: t('Email domain is not allowed') };
 	}
 
 	// Plus addressing check (if disabled)
 	if (!config.allowPlusAddressing && email.includes('+')) {
-		return { valid: false, error: 'Plus addressing is not allowed' };
+		return { valid: false, error: t('Plus addressing is not allowed') };
 	}
 
 	return { valid: true };
@@ -73,11 +75,11 @@ export function validateEmail(
  */
 const passwordSchema = z
 	.string()
-	.min(8, 'Password must be at least 8 characters')
-	.max(128, 'Password must be less than 128 characters')
-	.regex(/[a-z]/, 'Password must contain at least one lowercase letter')
-	.regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-	.regex(/[0-9]/, 'Password must contain at least one number');
+	.min(8, msg('Password must be at least 8 characters'))
+	.max(128, msg('Password must be less than 128 characters'))
+	.regex(/[a-z]/, msg('Password must contain at least one lowercase letter'))
+	.regex(/[A-Z]/, msg('Password must contain at least one uppercase letter'))
+	.regex(/[0-9]/, msg('Password must contain at least one number'));
 
 /**
  * Password validation using Zod
@@ -90,7 +92,7 @@ export function validatePassword(
 	if (!password || typeof password !== 'string') {
 		return {
 			valid: false,
-			errors: ['Password is required'],
+			errors: [t('Password is required')],
 			score: 0,
 			requirements: {
 				minLength: false,
@@ -127,16 +129,16 @@ export function validatePassword(
 	// Generate suggestions
 	const suggestions: string[] = [];
 	if (password.length < 12) {
-		suggestions.push('Use at least 12 characters for better security');
+		suggestions.push(t('Use at least 12 characters for better security'));
 	}
 	if (!requirements.hasSpecialChars) {
-		suggestions.push('Add special characters for enhanced security');
+		suggestions.push(t('Add special characters for enhanced security'));
 	}
 
 	if (!result.success) {
 		return {
 			valid: false,
-			errors: result.error.issues.map(e => e.message),
+			errors: result.error.issues.map(e => t(e.message)),
 			score,
 			requirements,
 			suggestions: suggestions.length > 0 ? suggestions : undefined,
@@ -171,20 +173,20 @@ export function validateUsername(
 	} = config || {};
 
 	if (!username || typeof username !== 'string') {
-		return { valid: false, error: 'Username is required' };
+		return { valid: false, error: t('Username is required') };
 	}
 
 	if (username.length < minLength) {
 		return {
 			valid: false,
-			error: `Username must be at least ${minLength} characters`,
+			error: t("Username must be at least {value1} characters", { value1: String(minLength) }),
 		};
 	}
 
 	if (username.length > maxLength) {
 		return {
 			valid: false,
-			error: `Username must be less than ${maxLength} characters`,
+			error: t("Username must be less than {value1} characters", { value1: String(maxLength) }),
 		};
 	}
 
@@ -197,21 +199,21 @@ export function validateUsername(
 		return {
 			valid: false,
 			error: allowSpecialChars
-				? 'Username can only contain letters, numbers, underscores, dots, and hyphens'
-				: 'Username can only contain letters, numbers, and underscores',
+				? t('Username can only contain letters, numbers, underscores, dots, and hyphens')
+				: t('Username can only contain letters, numbers, and underscores'),
 		};
 	}
 
 	// Reserved names check
 	if (reservedNames.includes(username.toLowerCase())) {
-		return { valid: false, error: 'Username is reserved' };
+		return { valid: false, error: t('Username is reserved') };
 	}
 
 	// Must start with letter or number
 	if (!/^[a-zA-Z0-9]/.test(username)) {
 		return {
 			valid: false,
-			error: 'Username must start with a letter or number',
+			error: t('Username must start with a letter or number'),
 		};
 	}
 

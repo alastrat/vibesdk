@@ -36,6 +36,7 @@ vi.mock('../../services/rate-limit/rateLimits', () => ({
 
 const { handleSpacePreview } = await import('./space-preview');
 const { signSpacePreviewToken } = await import('../../utils/spacePreviewToken');
+const { recordingD1 } = await import('../../database/test-support/recording-d1');
 
 const JWT_SECRET = 'test-secret-for-space-preview-token-validation-1234567890';
 
@@ -50,6 +51,8 @@ function makeEnv(): HandlerEnv {
 		CUSTOM_DOMAIN: 'example.com',
 		CUSTOM_PREVIEW_DOMAIN: '',
 		SPACE_DO: { idFromName: (n: string) => n, get: () => stub },
+		// The store has no language settings, so its pages are served as written.
+		DB: recordingD1().d1,
 	} as unknown as HandlerEnv;
 }
 

@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Analytics Controller
  * Handles AI Gateway analytics API endpoints
@@ -33,7 +34,7 @@ export class AnalyticsController extends BaseController {
 
 			if (!userId) {
 				return AnalyticsController.createErrorResponse<UserAnalyticsResponseData>(
-					'User ID is required',
+					msg('User ID is required'),
 					400,
 				);
 			}
@@ -41,7 +42,7 @@ export class AnalyticsController extends BaseController {
 			// Verify user can only access their own analytics
 			if (authUser.id !== userId) {
 				return AnalyticsController.createErrorResponse<UserAnalyticsResponseData>(
-					'You can only access your own analytics',
+					msg('You can only access your own analytics'),
 					403,
 				);
 			}
@@ -56,7 +57,7 @@ export class AnalyticsController extends BaseController {
 				days = parseInt(daysParam);
 				if (isNaN(days) || days < 1 || days > 365) {
 					return AnalyticsController.createErrorResponse<UserAnalyticsResponseData>(
-						'Days must be between 1 and 365',
+						msg('Days must be between 1 and 365'),
 						400,
 					);
 				}
@@ -89,7 +90,7 @@ export class AnalyticsController extends BaseController {
 			}
 
 			return AnalyticsController.createErrorResponse<UserAnalyticsResponseData>(
-				'Failed to fetch user analytics',
+				msg('Failed to fetch user analytics'),
 				500,
 			);
 		}
@@ -113,7 +114,7 @@ export class AnalyticsController extends BaseController {
 
 			if (!agentId) {
 				return AnalyticsController.createErrorResponse<AgentAnalyticsResponseData>(
-					'Agent ID is required',
+					msg('Agent ID is required'),
 					400,
 				);
 			}
@@ -130,7 +131,7 @@ export class AnalyticsController extends BaseController {
 				days = parseInt(daysParam);
 				if (isNaN(days) || days < 1 || days > 365) {
 					return AnalyticsController.createErrorResponse<AgentAnalyticsResponseData>(
-						'Days must be between 1 and 365',
+						msg('Days must be between 1 and 365'),
 						400,
 					);
 				}
@@ -163,7 +164,7 @@ export class AnalyticsController extends BaseController {
 			}
 
 			return AnalyticsController.createErrorResponse<AgentAnalyticsResponseData>(
-				'Failed to fetch agent analytics',
+				msg('Failed to fetch agent analytics'),
 				500,
 			);
 		}

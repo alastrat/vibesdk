@@ -49,7 +49,7 @@ describe('the Go live panel', () => {
 	it('shows the records and Check now again, with a warning badge, when a connected domain has a warning', () => {
 		const dialog = source('/src/components/live-store/GoLiveDialog.tsx');
 		expect(dialog.match(/domainNeedsRecords\(domain\)/g) ?? []).toHaveLength(2);
-		expect(dialog).toContain('<Badge variant="warning">Check DNS</Badge>');
+		expect(dialog).toContain('<Badge variant="warning">{t("Check DNS")}</Badge>');
 	});
 
 	it('keeps the panel current from what each call answers, without refetching', () => {

@@ -4,6 +4,7 @@
 
 import type { ApiKey, AuthAttempt as SchemaAuthAttempt, AuditLog, OAuthState } from '../database/schema';
 import type { SessionTelemetry } from '../../shared/types/telemetry';
+import type { Locale } from '../../shared/i18n/locales';
 
 /**
  * OAuth provider types
@@ -27,6 +28,8 @@ export interface AuthUser {
     isAnonymous?: boolean;
 	/** Whether the user agreed to the current terms version; absent when unknown. */
 	termsAccepted?: boolean;
+	/** The language the user chose, or null before they have. */
+	locale: Locale | null;
 }
 
 /**

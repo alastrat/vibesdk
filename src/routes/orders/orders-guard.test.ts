@@ -16,14 +16,17 @@ function source(path: string): string {
 describe('the seller Orders pages', () => {
 	it('are routed for signed-in users', () => {
 		const routes = source('/src/routes.tsx');
-		expect(routes).toMatch(/path: 'orders',\s*element: \(\s*<ProtectedRoute>\s*<SellerOrdersPage \/>/);
-		expect(routes).toMatch(/path: 'orders\/:id',\s*element: \(\s*<ProtectedRoute>\s*<SellerOrderPage \/>/);
+		expect(routes).toMatch(/path: 'orders',\s*Component: protectedPage\(SellerOrdersPage\)/);
+		expect(routes).toMatch(/path: 'orders\/:id',\s*Component: protectedPage\(SellerOrderPage\)/);
 	});
 
 	it('open from an Orders item in the sidebar, folded and open', () => {
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
 		expect(sidebar.match(/navigate\(SELLER_ORDERS_PATH\)/g) ?? []).toHaveLength(2);
 		expect(sidebar).toContain('id="orders-link"');
+		// Orders comes before Emails and Translations, folded and open.
+		const items = [...sidebar.matchAll(/id="(orders|emails|translations)-link"/g)].map((match) => match[1]);
+		expect(items).toEqual(['orders', 'emails', 'translations', 'orders', 'emails', 'translations']);
 	});
 
 	it('list orders to ship by default, with test orders hidden behind a switch, a store filter and Load more', () => {
@@ -53,7 +56,7 @@ describe('the seller Orders pages', () => {
 		const page = source('/src/routes/orders/order.tsx');
 		expect(page).toContain('SELLER_CARRIERS.map');
 		expect(page).toContain('shipment.mutate(');
-		expect(page).toMatch(/<ConfirmButton[^>]*label="Mark as not shipped"/);
+		expect(page).toMatch(/<ConfirmButton[^>]*label=\{t\(["']Mark as not shipped["']\)\}/);
 		expect(page).toContain('disabled={shipment.isPending}');
 	});
 

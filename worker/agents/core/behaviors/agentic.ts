@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 
 import { AgentInitArgs } from '../types';
 import { AgenticState } from '../state';
@@ -267,7 +268,7 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
 
         // Broadcast generation started
         this.broadcast(WebSocketMessageResponses.GENERATION_STARTED, {
-            message: 'Starting project generation...',
+            message: msg('Starting project generation...'),
             totalFiles: 1
         });
 
@@ -303,7 +304,7 @@ export class AgenticCodingBehavior extends BaseCodingBehavior<AgenticState> impl
             if (!this.isMVPGenerated()) {
                 if (attempt === 0) {
                     this.broadcast(WebSocketMessageResponses.CONVERSATION_RESPONSE, {
-                        message: 'Initializing project builder...',
+                        message: msg('Initializing project builder...'),
                         conversationId: aiConversationId,
                         isStreaming: false
                     });

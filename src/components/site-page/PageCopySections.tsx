@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import type { ReactNode } from 'react';
 import type { SitePageCopy } from '@/api-types';
 
@@ -18,11 +19,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 /** Page text rendered as plain text: About, Features, What's included and Made for. */
 export function PageCopySections({ copy, fallbackDescription }: PageCopySectionsProps) {
+	useI18n();
 	const about = copy?.about ?? (fallbackDescription ? fallbackDescription.split(/\n\s*\n/).filter(Boolean) : []);
 	return (
 		<div className="grid gap-8">
 			{about.length > 0 && (
-				<Section title="About">
+				<Section title={t("About")}>
 					{about.map((paragraph, index) => (
 						<p key={index} className="text-sm leading-relaxed text-kumo-default">
 							{paragraph}
@@ -31,7 +33,7 @@ export function PageCopySections({ copy, fallbackDescription }: PageCopySections
 				</Section>
 			)}
 			{copy && (
-				<Section title="Features">
+				<Section title={t("Features")}>
 					<ul className="grid list-disc gap-1.5 pl-5 text-sm text-kumo-default">
 						{copy.features.map((feature) => (
 							<li key={feature}>{feature}</li>
@@ -40,7 +42,7 @@ export function PageCopySections({ copy, fallbackDescription }: PageCopySections
 				</Section>
 			)}
 			{copy && (
-				<Section title="What's included">
+				<Section title={t("What's included")}>
 					<dl className="grid gap-3 text-sm">
 						{copy.includes.map((item) => (
 							<div key={item.name} className="grid gap-0.5">
@@ -52,7 +54,7 @@ export function PageCopySections({ copy, fallbackDescription }: PageCopySections
 				</Section>
 			)}
 			{copy && (
-				<Section title="Made for">
+				<Section title={t("Made for")}>
 					<ul className="flex flex-wrap gap-2">
 						{copy.madeFor.map((item) => (
 							<li key={item} className="rounded-full px-3 py-1 text-sm text-kumo-default ring ring-kumo-hairline">

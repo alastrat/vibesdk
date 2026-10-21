@@ -29,7 +29,7 @@ describe('showcased stores', () => {
 
 	it('refreshes the store and the landing page data after a change', () => {
 		const hooks = source('/src/hooks/use-publishing.ts');
-		expect(hooks).toMatch(/export function useSetShowcased\(\) \{\s*return usePublishingMutation\(/);
+		expect(hooks).toMatch(/export function useSetShowcased\(\) \{\s*(?:useI18n\(\);\s*)?return usePublishingMutation\(/);
 		// The shared publishing mutation refreshes every app query, the landing page's showcase included.
 		expect(hooks).toContain('queryClient.invalidateQueries({ queryKey: queryKeys.apps.all })');
 	});

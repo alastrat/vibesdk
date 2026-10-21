@@ -1,3 +1,4 @@
+import { t, tn, useI18n } from '@/lib/i18n';
 /**
  * Redesigned Model Configuration Modal
  * Three-mode interface: Platform Models, BYOK (Bring Your Own Key), Custom Providers
@@ -62,18 +63,18 @@ const hasUserKeyForModel = (modelName: string, byokProviders: Array<{ provider: 
 // Model recommendations by agent
 const getModelRecommendation = (agentAction: string) => {
   const recommendations: Record<string, string> = {
-    templateSelection: 'Recommended: Fast models for quick template selection',
-    blueprint: 'Recommended: Creative models for architecture design',
-    projectSetup: 'Recommended: Reliable models for precise setup',
-    phaseGeneration: 'Recommended: Large context models for comprehensive planning',
-    firstPhaseImplementation: 'Recommended: High-capability models for foundation development',
-    phaseImplementation: 'Recommended: Strong coding models for implementation',
-    realtimeCodeFixer: 'Recommended: Fast debugging models',
-    fastCodeFixer: 'Recommended: Ultra-fast models for quick fixes',
-    conversationalResponse: 'Recommended: Balanced models for natural conversation',
-    codeReview: 'Recommended: Analytical models with large context',
-    fileRegeneration: 'Recommended: Pure coding models',
-    screenshotAnalysis: 'Recommended: Vision-capable models for image analysis'
+    templateSelection: t("Recommended: Fast models for quick template selection"),
+    blueprint: t("Recommended: Creative models for architecture design"),
+    projectSetup: t("Recommended: Reliable models for precise setup"),
+    phaseGeneration: t("Recommended: Large context models for comprehensive planning"),
+    firstPhaseImplementation: t("Recommended: High-capability models for foundation development"),
+    phaseImplementation: t("Recommended: Strong coding models for implementation"),
+    realtimeCodeFixer: t("Recommended: Fast debugging models"),
+    fastCodeFixer: t("Recommended: Ultra-fast models for quick fixes"),
+    conversationalResponse: t("Recommended: Balanced models for natural conversation"),
+    codeReview: t("Recommended: Analytical models with large context"),
+    fileRegeneration: t("Recommended: Pure coding models"),
+    screenshotAnalysis: t("Recommended: Vision-capable models for image analysis")
   };
   return recommendations[agentAction] || '';
 };
@@ -89,6 +90,7 @@ export function ConfigModal({
   onReset,
   isTesting
 }: ConfigModalProps) {
+	useI18n();
   // Form state
   const [formData, setFormData] = useState({
     modelName: userConfig?.name || 'default',
@@ -266,8 +268,7 @@ export function ConfigModal({
       <DialogContent className="overflow-y-auto max-w-3xl w-[90vw] max-h-[90vh] sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
-            Configure {agentConfig.name}
+            <Settings className="h-5 w-5" />{t('Configure {name}', { name: t(agentConfig.name) })}
           </DialogTitle>
           <DialogDescription>
             {agentConfig.description}
@@ -279,9 +280,7 @@ export function ConfigModal({
           {agentConfig.constraint?.enabled && (
             <Alert>
               <Info className="h-4 w-4" />
-              <AlertDescription className="text-sm">
-                Model selection limited to {agentConfig.constraint.allowedModels.length} allowed model{agentConfig.constraint.allowedModels.length !== 1 ? 's' : ''} for this operation.
-              </AlertDescription>
+              <AlertDescription className="text-sm">{tn('Model selection limited to {count} allowed model for this operation.', 'Model selection limited to {count} allowed models for this operation.', agentConfig.constraint.allowedModels.length)}</AlertDescription>
             </Alert>
           )}
           {getModelRecommendation(agentConfig.key) && (
@@ -298,13 +297,13 @@ export function ConfigModal({
           {/* Current Status */}
           <div className="flex items-center justify-between p-3 bg-kumo-base/50 rounded-lg">
             <div>
-              <p className="font-medium text-sm">Configuration Status</p>
+              <p className="font-medium text-sm">{t("Configuration Status")}</p>
               <p className="text-xs text-kumo-subtle">
-                {isUserOverride ? 'Using custom configuration' : 'Using system defaults'}
+                {isUserOverride ? t("Using custom configuration") : t("Using system defaults")}
               </p>
             </div>
             <Badge variant={isUserOverride ? "default" : "outline"}>
-              {isUserOverride ? "Custom" : "Default"}
+              {isUserOverride ? t("Custom") : t("Default")}
             </Badge>
           </div>
 
@@ -313,18 +312,14 @@ export function ConfigModal({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-sm font-medium">Model Configuration</Label>
-                <p className="text-xs text-kumo-subtle mt-1">
-                  Select primary and fallback models - we'll use your API keys if available
-                </p>
+                <Label className="text-sm font-medium">{t("Model Configuration")}</Label>
+                <p className="text-xs text-kumo-subtle mt-1">{t("Select primary and fallback models - we'll use your API keys if available")}</p>
               </div>
               <Button variant="outline" size="sm"
               disabled // DISABLED: BYOK Disabled for security reasons
               className="gap-2">
                 <Key className="h-4 w-4" />
-                {/* Manage Keys */}
-                Coming Soon
-              </Button>
+                {/* Manage Keys */}{t("Coming Soon")}</Button>
             </div>
 
             {/* Two-Column Model Layout */}
@@ -335,8 +330,8 @@ export function ConfigModal({
                   value={formData.modelName}
                   onValueChange={(value) => setFormData({...formData, modelName: value})}
                   availableModels={availableModels}
-                  placeholder="Select model..."
-                  label="AI Model"
+                  placeholder={t("Select model...")}
+                  label={t("AI Model")}
                   systemDefault={defaultConfig?.name}
                   disabled={loadingByok}
                 />
@@ -345,7 +340,7 @@ export function ConfigModal({
                 {selectedModelInfo.requiresBYOK && (
                   <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 dark:bg-amber-950/20 px-3 py-2 rounded-md border border-amber-200 dark:border-amber-800">
                     <Key className="h-4 w-4" />
-                    <span>API key needed for {selectedModelInfo.provider}</span>
+                    <span>{t('API key needed for {provider}', { provider: selectedModelInfo.provider })}</span>
                   </div>
                 )}
 
@@ -354,14 +349,14 @@ export function ConfigModal({
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>Platform model with usage limits. Consider BYOK for higher usage.</span>
+                    <span>{t("Platform model with usage limits. Consider BYOK for higher usage.")}</span>
                   </div>
                 )}
 
                 {formData.modelName && formData.modelName !== 'default' && selectedModelInfo.hasUserKey && (
                   <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 dark:bg-green-950/20 px-3 py-2 rounded-md border border-green-200 dark:border-green-800">
                     <Check className="h-4 w-4" />
-                    <span>Using your {selectedModelInfo.provider} API key</span>
+                    <span>{t('Using your {provider} API key', { provider: selectedModelInfo.provider })}</span>
                   </div>
                 )}
               </div>
@@ -372,8 +367,8 @@ export function ConfigModal({
                   value={formData.fallbackModel}
                   onValueChange={(value) => setFormData({...formData, fallbackModel: value})}
                   availableModels={availableModels}
-                  placeholder="Select fallback model..."
-                  label="Fallback Model"
+                  placeholder={t("Select fallback model...")}
+                  label={t("Fallback Model")}
                   systemDefault={defaultConfig?.fallbackModel}
                   includeDefaultOption={true}
                   disabled={loadingByok}
@@ -391,21 +386,17 @@ export function ConfigModal({
               <div className="p-4 rounded-lg border bg-blue-50/50 border-blue-200">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-2 w-2 rounded-full bg-blue-500"></div>
-                  <h4 className="font-medium text-sm text-blue-900">Platform Models</h4>
+                  <h4 className="font-medium text-sm text-blue-900">{t("Platform Models")}</h4>
                 </div>
-                <p className="text-xs text-blue-700">
-                  Models served through our platform with limited quota. No API keys required.
-                </p>
+                <p className="text-xs text-blue-700">{t("Models served through our platform with limited quota. No API keys required.")}</p>
               </div>
 
               <div className="p-4 rounded-lg border bg-green-50/50 border-green-200">
                 <div className="flex items-center gap-2 mb-2">
                   <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                  <h4 className="font-medium text-sm text-green-900">BYOK (Your Keys)</h4>
+                  <h4 className="font-medium text-sm text-green-900">{t("BYOK (Your Keys)")}</h4>
                 </div>
-                <p className="text-xs text-green-700">
-                  Your API keys are used for direct billing with providers. Unlimited usage based on your provider account.
-                </p>
+                <p className="text-xs text-green-700">{t("Your API keys are used for direct billing with providers. Unlimited usage based on your provider account.")}</p>
               </div>
             </div>
           </div>
@@ -414,12 +405,12 @@ export function ConfigModal({
 
           {/* Parameters */}
           <div className="space-y-4">
-            <h4 className="font-medium text-sm">Parameters</h4>
+            <h4 className="font-medium text-sm">{t("Parameters")}</h4>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Temperature */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Temperature</Label>
+                <Label className="text-sm font-medium">{t("Temperature")}</Label>
                 <Input
                   type="number"
                   min="0"
@@ -431,29 +422,27 @@ export function ConfigModal({
                   className="h-10"
                 />
                 {defaultConfig?.temperature && (
-                  <p className="text-xs text-kumo-subtle">
-                    🔧 Default: {defaultConfig.temperature}
+                  <p className="text-xs text-kumo-subtle">{t("Default:")}{defaultConfig.temperature}
                   </p>
                 )}
               </div>
 
               {/* Reasoning Effort */}
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Reasoning Effort</Label>
+                <Label className="text-sm font-medium">{t("Reasoning Effort")}</Label>
                 <Select value={formData.reasoningEffort} onValueChange={(value) => setFormData({...formData, reasoningEffort: value})}>
                   <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Select effort..." />
+                    <SelectValue placeholder={t("Select effort...")} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Use default</SelectItem>
-                    <SelectItem value="low">Low (Fast)</SelectItem>
-                    <SelectItem value="medium">Medium (Balanced)</SelectItem>
-                    <SelectItem value="high">High (Deep)</SelectItem>
+                    <SelectItem value="default">{t("Use default")}</SelectItem>
+                    <SelectItem value="low">{t("Low (Fast)")}</SelectItem>
+                    <SelectItem value="medium">{t("Medium (Balanced)")}</SelectItem>
+                    <SelectItem value="high">{t("High (Deep)")}</SelectItem>
                   </SelectContent>
                 </Select>
                 {defaultConfig?.reasoning_effort && (
-                  <p className="text-xs text-kumo-subtle">
-                    🔧 Default: {defaultConfig.reasoning_effort}
+                  <p className="text-xs text-kumo-subtle">{t("Default:")}{defaultConfig.reasoning_effort}
                   </p>
                 )}
               </div>
@@ -472,14 +461,10 @@ export function ConfigModal({
             >
               {isTesting ? (
                 <>
-                  <Settings className="h-4 w-4 animate-spin" />
-                  Testing...
-                </>
+                  <Settings className="h-4 w-4 animate-spin" />{t("Testing...")}</>
               ) : (
                 <>
-                  <Play className="h-4 w-4" />
-                  Test Config
-                </>
+                  <Play className="h-4 w-4" />{t("Test Config")}</>
               )}
             </Button>
 
@@ -490,22 +475,16 @@ export function ConfigModal({
                 onClick={handleReset}
                 className="gap-2 text-kumo-subtle"
               >
-                <RotateCcw className="h-4 w-4" />
-                Reset to Default
-              </Button>
+                <RotateCcw className="h-4 w-4" />{t("Reset to Default")}</Button>
             )}
           </div>
 
           <div className="flex gap-2 flex-wrap sm:justify-end">
-            <Button variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={onClose}>{t("Cancel")}</Button>
             <Button
               onClick={handleSave}
               disabled={!hasChanges}
-            >
-              Save Changes
-            </Button>
+            >{t("Save Changes")}</Button>
           </div>
         </DialogFooter>
       </DialogContent>

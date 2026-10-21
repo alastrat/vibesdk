@@ -18,7 +18,8 @@ import { SectionTitle } from '@/components/billing/SectionTitle';
 import { Stopped } from '@/components/billing/Stopped';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useBillingCheckout } from '@/hooks/use-billing-checkout';
-import { EXTRA_CREDITS_PRICE } from '@/lib/plans';
+import { getLocale, msg, t, useI18n } from '@/lib/i18n';
+import { extraCreditsPriceLabel } from '@/lib/plans';
 import { canPayNow, checkoutExpiredOf, checkoutPathOf, checkoutRequestOf, consentPartsOf, dueTodayLabel, type CheckoutRequest, type CheckoutState } from './checkout-state';
 
 /** How long the amount of credits holds still before a new session is opened for it. */
@@ -29,7 +30,7 @@ const TERMS_LINK_CLASS = 'underline hover:text-kumo-strong';
 function DueToday({ label }: { label: string }) {
 	return (
 		<div className="flex items-baseline justify-between gap-3 rounded-lg bg-kumo-elevated px-3 py-2 text-sm">
-			<span className="text-kumo-subtle">Due today</span>
+			<span className="text-kumo-subtle">{t('Due today')}</span>
 			<span className="text-lg font-medium text-kumo-default">{label}</span>
 		</div>
 	);
@@ -46,12 +47,12 @@ function ApplyCode({ busy, disabled, error, onApply }: { busy: boolean; disabled
 			}}
 		>
 			<div className="flex items-center gap-2">
-				<Input aria-label="Promotion code" placeholder="Promotion code" value={draft} disabled={disabled || busy} onChange={(event) => setDraft(event.target.value)} className="w-full" />
+				<Input aria-label={t('Promotion code')} placeholder={t('Promotion code')} value={draft} disabled={disabled || busy} onChange={(event) => setDraft(event.target.value)} className="w-full" />
 				<Button type="submit" variant="secondary" loading={busy} disabled={disabled || draft.trim() === ''}>
-					Apply
+					{t('Apply')}
 				</Button>
 			</div>
-			{error && <p className="text-xs text-kumo-danger">{error}</p>}
+			{error && <p className="text-xs text-kumo-danger">{t(error)}</p>}
 		</form>
 	);
 }
@@ -62,12 +63,12 @@ function PromotionCode({ state, onApply, onRemove }: { state: CheckoutState; onA
 	return (
 		<div className="grid gap-1.5">
 			<div className="flex items-center justify-between gap-2 text-sm">
-				<p className="text-kumo-default">Code {code.applied} applied</p>
+				<p className="text-kumo-default">{t('Code {code} applied', { code: code.applied })}</p>
 				<Button variant="secondary" size="sm" loading={code.busy} disabled={paying} onClick={onRemove}>
-					Remove
+					{t('Remove')}
 				</Button>
 			</div>
-			{code.error && <p className="text-xs text-kumo-danger">{code.error}</p>}
+			{code.error && <p className="text-xs text-kumo-danger">{t(code.error)}</p>}
 		</div>
 	);
 }
@@ -77,10 +78,10 @@ function PlanOrder({ order, state, onApply, onRemove }: { order: Extract<Checkou
 	return (
 		<div className="grid gap-4">
 			<div className="grid gap-1">
-				<h2 className="text-2xl font-semibold text-kumo-strong">Estori {planName(order.plan)}</h2>
+				<h2 className="text-2xl font-semibold text-kumo-strong">{t('Estori {plan}', { plan: planName(order.plan) })}</h2>
 				<p className="text-lg text-kumo-default">
-					{formatUsd(order.priceCents)}
-					<span className="text-sm text-kumo-subtle"> a month</span>
+					{formatUsd(order.priceCents, getLocale())}
+					<span className="text-sm text-kumo-subtle"> {t('a month')}</span>
 				</p>
 			</div>
 			<ul className="grid gap-1.5 text-sm text-kumo-subtle">
@@ -109,17 +110,18 @@ function CreditsOrder({
 	disabled: boolean;
 	onChange: (credits: number) => void;
 }) {
+	const i18n = useI18n();
 	return (
 		<div className="grid gap-4">
 			<div className="grid gap-1">
-				<h2 className="text-2xl font-semibold text-kumo-strong">Extra AI credits</h2>
-				<p className="text-sm text-kumo-subtle">{EXTRA_CREDITS_PRICE}</p>
+				<h2 className="text-2xl font-semibold text-kumo-strong">{t('Extra AI credits')}</h2>
+				<p className="text-sm text-kumo-subtle">{extraCreditsPriceLabel(i18n)}</p>
 			</div>
 			<div className="flex flex-wrap items-center gap-4">
 				<CreditsStepper value={credits} onChange={onChange} disabled={disabled} />
-				<p className="text-sm text-kumo-subtle">{formatCredits(credits)} credits</p>
+				<p className="text-sm text-kumo-subtle">{t('{credits} credits', { credits: formatCredits(credits, getLocale()) })}</p>
 			</div>
-			<DueToday label={changing ? formatUsd(amountCents) : dueTodayLabel(dueToday, amountCents)} />
+			<DueToday label={changing ? formatUsd(amountCents, getLocale()) : dueTodayLabel(dueToday, amountCents)} />
 		</div>
 	);
 }
@@ -152,13 +154,13 @@ function ConsentRow({ state, onToggle, onRetry }: { state: CheckoutState; onTogg
 					className="mt-0.5"
 				/>
 				{terms.status === 'ready' && <ConsentText text={terms.view.consentText} />}
-				{terms.status === 'loading' && <span className="text-kumo-subtle">Checking the price…</span>}
-				{terms.status === 'failed' && <span>Couldn't check the price.</span>}
+				{terms.status === 'loading' && <span className="text-kumo-subtle">{t('Checking the price…')}</span>}
+				{terms.status === 'failed' && <span>{t("Couldn't check the price.")}</span>}
 			</label>
 			{terms.status === 'failed' && (
 				<div>
 					<Button variant="secondary" size="sm" onClick={onRetry}>
-						Try again
+						{t('Try again')}
 					</Button>
 				</div>
 			)}
@@ -168,15 +170,15 @@ function ConsentRow({ state, onToggle, onRetry }: { state: CheckoutState; onTogg
 
 /** The small print by the button: what extra credits are, or the renewal the server worded with the plan's terms. */
 function smallPrintOf(request: CheckoutRequest, state: CheckoutState): string | null {
-	if (request.kind === 'credits') return EXTRA_CREDITS_DISCLOSURE;
+	if (request.kind === 'credits') return t(EXTRA_CREDITS_DISCLOSURE);
 	return state.terms?.status === 'ready' ? state.terms.view.disclosure : null;
 }
 
 /** The pay button's words: the server's for a plan, and the amount for credits. */
 function payLabel(request: CheckoutRequest, state: CheckoutState, creditsCents: number): string {
-	if (request.kind === 'credits') return `Pay ${formatUsd(creditsCents)}`;
+	if (request.kind === 'credits') return t('Pay {amount}', { amount: formatUsd(creditsCents, getLocale()) });
 	if (state.terms?.status === 'ready') return state.terms.view.buttonText;
-	return state.terms?.status === 'loading' ? 'Checking the price…' : 'Subscribe';
+	return state.terms?.status === 'loading' ? t('Checking the price…') : t('Subscribe');
 }
 
 /**
@@ -211,17 +213,17 @@ export default function BillingCheckoutPage() {
 	const stopped = request === null || state.phase.name === 'expired' || state.phase.name === 'refused';
 	let body: ReactNode;
 	if (request === null) {
-		body = <Stopped message="Choose a plan, or an amount of extra credits, on the billing page." action={null} />;
+		body = <Stopped message={msg('Choose a plan, or an amount of extra credits, on the billing page.')} action={null} />;
 	} else if (state.phase.name === 'expired') {
-		body = <Stopped message={CHECKOUT_EXPIRED_MESSAGE} action={{ label: 'Start again', onClick: checkout.restart }} />;
+		body = <Stopped message={CHECKOUT_EXPIRED_MESSAGE} action={{ label: t('Start again'), onClick: checkout.restart }} />;
 	} else if (state.phase.name === 'refused') {
-		body = <Stopped message={state.phase.message} action={state.phase.retryable ? { label: 'Try again', onClick: checkout.restart } : null} />;
+		body = <Stopped message={state.phase.message} action={state.phase.retryable ? { label: t('Try again'), onClick: checkout.restart } : null} />;
 	} else {
 		body = (
 			<div className="grid gap-6 md:grid-cols-5">
 				<div className="md:col-span-2">
 					<LayerCard>
-						<SectionTitle icon={<ReceiptIcon className="size-4" aria-hidden />}>Your order</SectionTitle>
+						<SectionTitle icon={<ReceiptIcon className="size-4" aria-hidden />}>{t('Your order')}</SectionTitle>
 						<LayerCard.Primary>
 							{credits !== null ? (
 								<CreditsOrder
@@ -244,7 +246,7 @@ export default function BillingCheckoutPage() {
 				</div>
 				<div className="md:col-span-3">
 					<LayerCard>
-						<SectionTitle icon={<CreditCardIcon className="size-4" aria-hidden />}>Payment</SectionTitle>
+						<SectionTitle icon={<CreditCardIcon className="size-4" aria-hidden />}>{t('Payment')}</SectionTitle>
 						<LayerCard.Primary>
 							<div className="grid gap-4">
 								<div className="relative min-h-40" aria-busy={!state.formReady}>
@@ -255,7 +257,7 @@ export default function BillingCheckoutPage() {
 										</div>
 									)}
 								</div>
-								{state.notice && <Banner variant="alert" icon={<WarningCircleIcon />} description={state.notice} />}
+								{state.notice && <Banner variant="alert" icon={<WarningCircleIcon />} description={t(state.notice)} />}
 								<ConsentRow state={state} onToggle={checkout.toggleConsent} onRetry={checkout.retryTerms} />
 								{smallPrint && <p className="text-xs text-kumo-subtle">{smallPrint}</p>}
 								<Button variant="primary" className="w-full justify-center" loading={state.paying} disabled={!canPayNow(state) || changing} onClick={() => void checkout.pay()}>
@@ -271,10 +273,10 @@ export default function BillingCheckoutPage() {
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('Checkout')}</title>
+			<title>{pageTitle(t('Checkout'))}</title>
 			<div className="container mx-auto grid max-w-5xl gap-6 px-4 py-8">
 				<div className="flex flex-wrap items-center justify-between gap-4">
-					<h1 className="text-3xl font-semibold text-kumo-strong">Checkout</h1>
+					<h1 className="text-3xl font-semibold text-kumo-strong">{t('Checkout')}</h1>
 					{!stopped && <BackToBilling />}
 				</div>
 				{body}

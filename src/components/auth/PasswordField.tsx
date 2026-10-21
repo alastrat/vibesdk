@@ -1,5 +1,6 @@
 import { InputGroup } from '@cloudflare/kumo';
 import { EyeIcon, EyeSlashIcon } from '@phosphor-icons/react';
+import { t } from '@/lib/i18n';
 
 interface PasswordFieldProps {
 	label: string;
@@ -23,7 +24,7 @@ export function PasswordField({
 	visible,
 	onVisibleChange,
 }: PasswordFieldProps) {
-	const toggleLabel = visible ? 'Hide password' : 'Show password';
+	const toggleLabel = visible ? t('Hide password') : t('Show password');
 	return (
 		<div className="w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5">
 			<InputGroup
@@ -34,6 +35,7 @@ export function PasswordField({
 				<InputGroup.Input
 					type={visible ? 'text' : 'password'}
 					placeholder={label}
+					aria-label={label}
 					value={value}
 					onChange={(e) => onChange(e.target.value)}
 					autoComplete={autoComplete}

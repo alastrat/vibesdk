@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Input } from '@cloudflare/kumo';
 import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
 import { EXTRA_CREDITS, formatCredits } from '@/api-types';
+import { getLocale, t } from '@/lib/i18n';
 import { clampExtraCredits } from '@/routes/settings/billing-view';
 
 /** Whole thousands of extra credits, typed or stepped; the field settles on the nearest amount when it's left. */
@@ -16,15 +17,15 @@ export function CreditsStepper({ value, onChange, disabled = false }: { value: n
 			<Button
 				variant="secondary"
 				shape="square"
-				aria-label="Fewer credits"
+				aria-label={t('Fewer credits')}
 				icon={<MinusIcon />}
 				disabled={disabled || value <= EXTRA_CREDITS.minCredits}
 				onClick={() => step(-EXTRA_CREDITS.creditsPerUnit)}
 			/>
 			<Input
-				aria-label="Extra credits"
+				aria-label={t('Extra credits')}
 				inputMode="numeric"
-				value={draft ?? formatCredits(value)}
+				value={draft ?? formatCredits(value, getLocale())}
 				disabled={disabled}
 				onChange={(event) => setDraft(event.target.value)}
 				onBlur={() => {
@@ -37,7 +38,7 @@ export function CreditsStepper({ value, onChange, disabled = false }: { value: n
 			<Button
 				variant="secondary"
 				shape="square"
-				aria-label="More credits"
+				aria-label={t('More credits')}
 				icon={<PlusIcon />}
 				disabled={disabled || value >= EXTRA_CREDITS.maxCredits}
 				onClick={() => step(EXTRA_CREDITS.creditsPerUnit)}

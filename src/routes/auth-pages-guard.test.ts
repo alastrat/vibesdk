@@ -68,7 +68,7 @@ describe('account email pages', () => {
 		expect(publicBlock).toContain("path: 'verify-email'");
 		expect(publicBlock).toContain('ResetPasswordPage');
 		expect(publicBlock).toContain('VerifyEmailPage');
-		expect(publicBlock).not.toContain('ProtectedRoute');
+		expect(publicBlock).not.toContain('protectedPage');
 		const appBlock = routes.slice(routes.indexOf('Component: AppShell'), routes.indexOf('Component: PublicShell'));
 		expect(appBlock).not.toContain('reset-password');
 		expect(appBlock).not.toContain('verify-email');
@@ -124,7 +124,7 @@ describe('account email pages', () => {
 		expect(page).toContain("initialMode: 'forgot'");
 		expect(page).toContain('showAuthModal()');
 		expect(page).toContain("searchParams.get('token')");
-		expect(page).toContain("pageTitle('Reset password')");
+		expect(page).toContain("pageTitle(t('Reset password'))");
 		expect(page).toContain('refreshUser');
 	});
 
@@ -167,7 +167,7 @@ describe('account email pages', () => {
 		expect(page).toContain('to="/settings"');
 		expect(page).toContain('Try again');
 		expect(page).toContain('refreshUser()');
-		expect(page).toContain("pageTitle('Confirm email')");
+		expect(page).toContain("pageTitle(t('Confirm email'))");
 	});
 
 	it('shows the confirmation status in Settings and resends the email for unconfirmed email accounts', () => {

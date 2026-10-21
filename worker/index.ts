@@ -24,6 +24,7 @@ import { handleLiveStore } from './api/handlers/live-store';
 import { runLiveStoresSchedule } from './services/live-stores/wiring';
 import { runShopperEmailSchedule } from './services/shopper-emails/wiring';
 import { runBillingSchedule } from './services/billing/wiring';
+import { runTaskSchedule } from './services/tasks/scheduler';
 import { stagingGate } from './services/staging-gate';
 import { runInRequestScope } from './services/posthog/request-scope';
 import { runHeartbeat } from './services/posthog/heartbeat';
@@ -41,6 +42,7 @@ export { UserAppSandboxService } from './services/sandbox/sandboxSdkClient';
 export { CodeGeneratorAgent } from './agents/core/codingAgent';
 export { UserSecretsStore } from './services/secrets/UserSecretsStore';
 export { CatalogOrderRunner } from './services/catalog/CatalogOrderRunner';
+export { TaskRunner } from './services/tasks/TaskRunner';
 // SpaceDO (same-worker integration) — git-backed files + preview/deploy for
 // `think` apps. Re-exported so wrangler can bind it via durable_objects.bindings.
 // AppDatabase is NOT exported here — it lives inside SpaceDO's Worker Loader
@@ -399,6 +401,7 @@ const worker = {
 			ctx.waitUntil(runLiveStoresSchedule(controller.cron, env));
 			ctx.waitUntil(runShopperEmailSchedule(controller.cron, env));
 			ctx.waitUntil(runBillingSchedule(controller.cron, env));
+			ctx.waitUntil(runTaskSchedule(controller.cron, env));
 			ctx.waitUntil(runHeartbeat(controller.cron, env, (request) => worker.fetch(request, env, ctx)));
 		});
 	},

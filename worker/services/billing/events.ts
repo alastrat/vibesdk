@@ -42,6 +42,16 @@ export interface BillingEventDeps {
 	nowMs(): number;
 	/** Sends billing's analytics events about the account; called only once the event is recorded the first time. Never throws. */
 	track(userId: string, events: readonly BillingAnalyticsEvent[]): Promise<void>;
+	/** Rechecks this seller's paused work after a credit or plan update. */
+	resumeTasks?(userId: string): Promise<void>;
+}
+
+async function resumeTasksQuietly(deps: BillingEventDeps, userId: string): Promise<void> {
+	try {
+		await deps.resumeTasks?.(userId);
+	} catch (error) {
+		logger.error('Could not resume tasks after billing update', { userId, error });
+	}
 }
 
 type EventAccount = Pick<BillingAccount, 'billing' | 'period' | 'limits' | 'subscription'>;
@@ -232,6 +242,7 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
 	if (recorded === 'duplicate') return 'duplicate';
 	// Like its notices, a subscription that replaces another live one starts nothing new for the account.
+	await resumeTasksQuietly(deps, userId);
 	if (!replacing) {
 		const failedAttempt = input.eventType === 'invoice.payment_failed' ? (input.invoice?.attempt_count ?? 1) : null;
 		await deps.track(userId, subscriptionEventsFor({ previous, next, failedAttempt }));
@@ -334,6 +345,7 @@ export async function applyCreditPurchase(deps: BillingEventDeps, input: { event
 	});
 	if (recorded === 'duplicate') return 'duplicate';
 	await deps.track(userId, [{ name: 'credits_purchased', properties: { credits, amount_cents: amountCents } }]);
+	await resumeTasksQuietly(deps, userId);
 	await notifyOrAlert(deps, userId, [notice]);
 	return 'applied';
 }

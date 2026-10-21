@@ -1,3 +1,4 @@
+import { msg } from '../../../shared/i18n/translate';
 import { Connection } from 'agents';
 import { createLogger } from '../../logger';
 import { WebSocketMessageRequests, WebSocketMessageResponses } from '../constants';
@@ -13,6 +14,8 @@ import type { CodeGeneratorAgent } from './codingAgent';
 import type { DeploymentTarget } from './types';
 import { isThinkModelId } from '../think/model-config';
 import { RESUME_BUILD_MESSAGE } from '../../../shared/think';
+import { currentLocale, t } from '../../services/i18n/request-locale';
+import { localizeAgentStatus } from '../../services/i18n/agent-status';
 
 // Type for incoming WebSocket messages
 interface IncomingWebSocketMessage {
@@ -72,7 +75,7 @@ export async function handleWebSocketMessage(
                 logger.info('Starting code generation process');
                 agent.getBehavior().generateAllFiles().catch(error => {
                     logger.error('Error during code generation:', error);
-                    sendError(connection, `Error generating files: ${error instanceof Error ? error.message : String(error)}`);
+                    sendError(connection, t("Error generating files: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                 }).finally(() => {
                     // Only clear shouldBeGenerating on successful completion
                     // (errors might want to retry, so this could be handled differently)
@@ -88,7 +91,7 @@ export async function handleWebSocketMessage(
                 const target = parsedMessage.target ??
                     (agent.state.behaviorType === 'think' ? 'user' : 'platform');
                 if (target !== 'platform' && target !== 'user') {
-                    sendError(connection, `Unsupported deployment target: ${String(target)}`);
+                    sendError(connection, t("Unsupported deployment target: {value1}", { value1: String(String(target)) }));
                     return;
                 }
                 agent.deployToCloudflare(target).then((deploymentResult) => {
@@ -115,41 +118,41 @@ export async function handleWebSocketMessage(
             case WebSocketMessageRequests.ROLLBACK_TO_COMMIT: {
                 const commitHash = parsedMessage.commitHash;
                 if (!commitHash) {
-                    sendError(connection, 'Missing commitHash for rollback');
+                    sendError(connection, msg('Missing commitHash for rollback'));
                     return;
                 }
                 const behavior = agent.getBehavior() as unknown as {
                     rollbackToCommit?: (commitHash: string) => Promise<void>;
                 };
                 if (typeof behavior.rollbackToCommit !== 'function') {
-                    sendError(connection, 'Rollback is not supported for this app');
+                    sendError(connection, msg('Rollback is not supported for this app'));
                     return;
                 }
                 logger.info('Rolling back to commit', { commitHash });
                 behavior.rollbackToCommit(commitHash).catch((error: unknown) => {
                     logger.error('Error during rollback:', error);
-                    sendError(connection, `Error during rollback: ${error instanceof Error ? error.message : String(error)}`);
+                    sendError(connection, t("Error during rollback: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                 });
                 break;
             }
             case WebSocketMessageRequests.SET_MODEL: {
                 const modelId = parsedMessage.modelId;
                 if (!isThinkModelId(modelId)) {
-                    sendError(connection, 'Unknown model');
+                    sendError(connection, msg('Unknown model'));
                     return;
                 }
                 const behavior = agent.getBehavior() as unknown as {
                     setModel?: (modelId: string) => Promise<void>;
                 };
                 if (typeof behavior.setModel !== 'function') {
-                    sendError(connection, 'Model selection is not supported for this app');
+                    sendError(connection, msg('Model selection is not supported for this app'));
                     return;
                 }
                 logger.info('Switching build model', { modelId, resume: parsedMessage.resume === true });
                 try {
                     await behavior.setModel(modelId);
                 } catch (error) {
-                    sendError(connection, `Could not switch model: ${error instanceof Error ? error.message : String(error)}`);
+                    sendError(connection, t("Could not switch model: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                     return;
                 }
                 if (parsedMessage.resume === true) {
@@ -158,14 +161,14 @@ export async function handleWebSocketMessage(
                     }
                     agent.handleUserInput(RESUME_BUILD_MESSAGE).catch((error: unknown) => {
                         logger.error('Error resuming after model switch:', error);
-                        sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
+                        sendError(connection, t("Error processing user suggestion: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                     });
                 }
                 break;
             }
             case WebSocketMessageRequests.CAPTURE_SCREENSHOT:
                 if (!parsedMessage.data?.url) {
-                    sendError(connection, 'Missing url for screenshot capture');
+                    sendError(connection, msg('Missing url for screenshot capture'));
                     return;
                 }
                 agent.getBehavior().captureScreenshot(parsedMessage.data.url, parsedMessage.data.viewport as { width: number; height: number } | undefined).then((screenshotResult) => {
@@ -208,11 +211,11 @@ export async function handleWebSocketMessage(
                 
                 if (!agent.getBehavior().isCodeGenerating()) {
                     sendToConnection(connection, WebSocketMessageResponses.GENERATION_RESUMED, {
-                        message: 'Code generation resumed'
+                        message: msg('Code generation resumed')
                     });
                     agent.getBehavior().generateAllFiles().catch(error => {
                         logger.error('Error resuming code generation:', error);
-                        sendError(connection, `Error resuming generation: ${error instanceof Error ? error.message : String(error)}`);
+                        sendError(connection, t("Error resuming generation: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                     });
                 } else {
                     // sendToConnection(connection, WebSocketMessageResponses.GENERATION_STARTED, {
@@ -224,8 +227,8 @@ export async function handleWebSocketMessage(
                 // DEPRECATED: WebSocket-based GitHub export replaced with OAuth flow
                 // GitHub Apps require OAuth user access tokens for user repository creation
                 sendToConnection(connection, WebSocketMessageResponses.GITHUB_EXPORT_ERROR, {
-                    message: 'GitHub export via WebSocket is deprecated',
-                    error: 'Please use the GitHub export button which will redirect you to authorize with GitHub OAuth'
+                    message: msg('GitHub export via WebSocket is deprecated'),
+                    error: msg('Please use the GitHub export button which will redirect you to authorize with GitHub OAuth')
                 });
                 break;
             case WebSocketMessageRequests.USER_SUGGESTION:
@@ -237,21 +240,21 @@ export async function handleWebSocketMessage(
                 });
                 
                 if (!parsedMessage.message) {
-                    sendError(connection, 'No message provided in user suggestion');
+                    sendError(connection, msg('No message provided in user suggestion'));
                     return;
                 }
                 
                 // Validate image count and size
                 if (parsedMessage.images && parsedMessage.images.length > 0) {
                     if (parsedMessage.images.length > MAX_IMAGES_PER_MESSAGE) {
-                        sendError(connection, `Maximum ${MAX_IMAGES_PER_MESSAGE} images allowed per message. Received ${parsedMessage.images.length} images.`);
+                        sendError(connection, t("Maximum {value1} images allowed per message. Received {value2} images.", { value1: String(MAX_IMAGES_PER_MESSAGE), value2: String(parsedMessage.images.length) }));
                         return;
                     }
                     
                     // Validate each image size
                     for (const image of parsedMessage.images) {
                         if (image.size && image.size > MAX_IMAGE_SIZE_BYTES) {
-                            sendError(connection, `Image "${image.filename}" exceeds maximum size of ${MAX_IMAGE_SIZE_BYTES / (1024 * 1024)}MB`);
+                            sendError(connection, t("Image \"{value1}\" exceeds maximum size of {value2}MB", { value1: String(image.filename), value2: String(MAX_IMAGE_SIZE_BYTES / (1024 * 1024)) }));
                             return;
                         }
                     }
@@ -263,19 +266,19 @@ export async function handleWebSocketMessage(
                 
                 agent.handleUserInput(parsedMessage.message, parsedMessage.images).catch((error: unknown) => {
                     logger.error('Error handling user suggestion:', error);
-                    sendError(connection, `Error processing user suggestion: ${error instanceof Error ? error.message : String(error)}`);
+                    sendError(connection, t("Error processing user suggestion: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                 });
                 break;
             case WebSocketMessageRequests.GET_MODEL_CONFIGS:
                 logger.info('Fetching model configurations');
                 agent.getBehavior().getModelConfigsInfo().then(configsInfo => {
                     sendToConnection(connection, WebSocketMessageResponses.MODEL_CONFIGS_INFO, {
-                        message: 'Model configurations retrieved',
+                        message: msg('Model configurations retrieved'),
                         configs: configsInfo
                     });
                 }).catch((error: unknown) => {
                     logger.error('Error fetching model configs:', error);
-                    sendError(connection, `Error fetching model configurations: ${error instanceof Error ? error.message : String(error)}`);
+                    sendError(connection, t("Error fetching model configurations: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                 });
                 break;
             case WebSocketMessageRequests.CLEAR_CONVERSATION:
@@ -302,7 +305,7 @@ export async function handleWebSocketMessage(
                     });
                 } catch (error) {
                     logger.error('Error fetching conversation state:', error);
-                    sendError(connection, `Error fetching conversation state: ${error instanceof Error ? error.message : String(error)}`);
+                    sendError(connection, t("Error fetching conversation state: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
                 }
                 break;
             // Disabled it for now
@@ -330,11 +333,11 @@ export async function handleWebSocketMessage(
             //         });
             //     break;
             default:
-                sendError(connection, `Unknown message type: ${parsedMessage.type}`);
+                sendError(connection, t("Unknown message type: {value1}", { value1: String(parsedMessage.type) }));
         }
     } catch (error) {
         logger.error('Error processing WebSocket message:', error);
-        sendError(connection, `Error processing message: ${error instanceof Error ? error.message : String(error)}`);
+        sendError(connection, t("Error processing message: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }));
     }
 }
 
@@ -421,7 +424,7 @@ async function ensureCanPrompt(
     } catch (error) {
         logger.error('Failed to check usage:', error);
         sendToConnection(connection, WebSocketMessageResponses.ERROR, {
-            error: `Error processing request: ${error instanceof Error ? error.message : String(error)}`,
+            error: t("Error processing request: {value1}", { value1: String(error instanceof Error ? error.message : String(error)) }),
             showAsPopup: true,
         });
         return false;
@@ -452,7 +455,7 @@ export function sendToConnection<T extends WebSocketMessageType>(
     data: WebSocketMessageData<T>
 ): void {
     try {
-        const message: WebSocketMessage = { type, ...data } as WebSocketMessage;
+        const message: WebSocketMessage = { type, ...localizeAgentStatus(type, data, currentLocale()) } as WebSocketMessage;
         connection.send(JSON.stringify(message));
     } catch (error) {
         console.error(`Error sending message to connection ${connection.url}:`, error);

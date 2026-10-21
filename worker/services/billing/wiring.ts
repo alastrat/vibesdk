@@ -13,6 +13,7 @@ import type { BillingEventDeps } from './events';
 import { runDailyBilling, runHourlyBilling } from './jobs';
 import { billingMailFromEnv, sendBillingEmails } from './notices';
 import { stripePriceIds } from './prices';
+import { resumeCreditPausedTasks } from '../tasks/task-meter';
 
 const logger = createLogger('BillingWiring');
 
@@ -38,15 +39,27 @@ export function billingEventDepsFromEnv(env: Env): BillingEventDeps {
 		alert: platformAlertsFromEnv(env),
 		nowMs: () => Date.now(),
 		track: (userId, events) => trackBilling(env, userId, events),
+		resumeTasks: async (userId) => { await resumeCreditPausedTasks(env, Date.now(), userId); },
 	};
 }
 
-/** Daily: repair, settle, expire and prune. Hourly: the notice before limits start, and renewal emails for accounts without a subscription. Never throws. */
+/**
+ * Daily: repair, settle, expire and prune, then resume tasks paused for credits, which runs even when the daily run failed
+ * so a seller's credits aren't held back by an unrelated error. Hourly: the notice before limits start, and renewal emails
+ * for accounts without a subscription. Never throws.
+ */
 export async function runBillingSchedule(cron: string, env: Env): Promise<void> {
+	const nowMs = Date.now();
 	try {
-		if (cron === CATALOG_HEALTH_CRON) await runDailyBilling(env, Date.now());
-		else if (cron === CATALOG_SWEEP_CRON) await runHourlyBilling(env, Date.now());
+		if (cron === CATALOG_HEALTH_CRON) await runDailyBilling(env, nowMs);
+		else if (cron === CATALOG_SWEEP_CRON) await runHourlyBilling(env, nowMs);
 	} catch (error) {
 		logger.error('Billing schedule failed', { cron, error });
+	}
+	if (cron !== CATALOG_HEALTH_CRON) return;
+	try {
+		await resumeCreditPausedTasks(env, nowMs);
+	} catch (error) {
+		logger.error('Could not resume tasks paused for credits', { error });
 	}
 }

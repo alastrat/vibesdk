@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { t } from '@/lib/i18n';
 
 interface ModelOption {
   value: string;
@@ -63,7 +64,7 @@ export function ModelSelector({
   // Get display name for selected value
   const getSelectedDisplay = () => {
     if (value === 'default' && includeDefaultOption) {
-      return 'Use default';
+      return t('Use default');
     }
     if (value && value !== 'default') {
       const selectedModel = availableModels.find((model) => model.value === value);
@@ -79,13 +80,13 @@ export function ModelSelector({
       if (model.hasUserKey) {
         return (
           <Badge variant="default" className="text-xs">
-            BYOK
+            {t('BYOK')}
           </Badge>
         );
       } else {
         return (
           <Badge variant="outline" className="text-xs">
-            Key needed
+            {t('Key needed')}
           </Badge>
         );
       }
@@ -93,7 +94,7 @@ export function ModelSelector({
       // Platform model
       return (
         <Badge variant="secondary" className="text-xs">
-          Platform
+          {t('Platform')}
         </Badge>
       );
     }
@@ -120,7 +121,7 @@ export function ModelSelector({
           <div className="flex items-center border-b px-3 py-2">
             <Search className="mr-2 h-4 w-4 shrink-0 text-text-tertiary" />
             <Input
-              placeholder="Search models..."
+              placeholder={t('Search models...')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-8 border-0 bg-transparent p-0 placeholder:text-text-tertiary focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -139,7 +140,7 @@ export function ModelSelector({
             {/* No results */}
             {filteredModels.length === 0 && !includeDefaultOption && (
               <div className="py-6 text-center text-sm text-text-tertiary">
-                No models found.
+                {t('No models found.')}
               </div>
             )}
 
@@ -164,7 +165,7 @@ export function ModelSelector({
                       value === 'default' ? "opacity-100" : "opacity-0"
                     )}
                   />
-                  <span className="font-medium">Use default</span>
+                  <span className="font-medium">{t('Use default')}</span>
                 </div>
               </div>
             )}
@@ -204,7 +205,7 @@ export function ModelSelector({
       {/* System default display */}
       {systemDefault && (
         <p className="text-xs text-text-tertiary truncate">
-          🔧 System default: {getModelDisplayName(systemDefault)}
+          🔧 {t('System default:')} {getModelDisplayName(systemDefault)}
         </p>
       )}
     </div>

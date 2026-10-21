@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Publishing endpoints: make an app public or private, manage its paid
  * listing, and buy a paid site through Stripe Checkout. Review endpoints live
@@ -98,7 +99,7 @@ export class PublishingController extends BaseController {
                 return PublishingController.createErrorResponse<PublishSiteData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error publishing site', error);
-            return PublishingController.createErrorResponse<PublishSiteData>('Failed to update app visibility', 500);
+            return PublishingController.createErrorResponse<PublishSiteData>(msg('Failed to update app visibility'), 500);
         }
     }
 
@@ -120,7 +121,7 @@ export class PublishingController extends BaseController {
                 listings.getPaidCopyOrigin(appId),
             ]);
             if (!state) {
-                return PublishingController.createErrorResponse<SitePublishingData>('App not found', 404);
+                return PublishingController.createErrorResponse<SitePublishingData>(msg('App not found'), 404);
             }
             const paidCopy = isPaidCopy(paidOrigin, context.user!.id);
             const [versions, buyerCount] = listing
@@ -140,7 +141,7 @@ export class PublishingController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error loading publishing state', error);
-            return PublishingController.createErrorResponse<SitePublishingData>('Failed to load publishing settings', 500);
+            return PublishingController.createErrorResponse<SitePublishingData>(msg('Failed to load publishing settings'), 500);
         }
     }
 
@@ -156,7 +157,7 @@ export class PublishingController extends BaseController {
             const listings = new TemplateService(env);
             const listing = await listings.getListingByApp(appId);
             if (!listing || listing.status !== 'listed') {
-                return PublishingController.createErrorResponse<PaidVersionActionData>('Set a price for this site first', 400);
+                return PublishingController.createErrorResponse<PaidVersionActionData>(msg('Set a price for this site first'), 400);
             }
             const versions = await listings.listVersions(listing.id);
             if (!canSubmitNewVersion(versions.map((version) => version.status))) {
@@ -187,7 +188,7 @@ export class PublishingController extends BaseController {
                 return PublishingController.createErrorResponse<PaidVersionActionData>(error.message, error.status);
             }
             this.logger.error('Error submitting paid update', error);
-            return PublishingController.createErrorResponse<PaidVersionActionData>('Failed to send the update for review', 500);
+            return PublishingController.createErrorResponse<PaidVersionActionData>(msg('Failed to send the update for review'), 500);
         }
     }
 
@@ -202,18 +203,18 @@ export class PublishingController extends BaseController {
             const listings = new TemplateService(env);
             const [listing, version] = await Promise.all([listings.getListingByApp(appId), listings.getVersion(versionId)]);
             if (!listing || !version || version.templateId !== listing.id) {
-                return PublishingController.createErrorResponse<PaidVersionActionData>('Version not found', 404);
+                return PublishingController.createErrorResponse<PaidVersionActionData>(msg('Version not found'), 404);
             }
             if (!canWithdraw(version.status)) {
-                return PublishingController.createErrorResponse<PaidVersionActionData>('Only versions in review can be withdrawn', 400);
+                return PublishingController.createErrorResponse<PaidVersionActionData>(msg('Only versions in review can be withdrawn'), 400);
             }
             if (!(await listings.withdrawVersion(versionId))) {
-                return PublishingController.createErrorResponse<PaidVersionActionData>('This version is no longer in review', 409);
+                return PublishingController.createErrorResponse<PaidVersionActionData>(msg('This version is no longer in review'), 409);
             }
             return PublishingController.createSuccessResponse<PaidVersionActionData>({ versionId, status: 'withdrawn' });
         } catch (error) {
             this.logger.error('Error withdrawing paid version', error);
-            return PublishingController.createErrorResponse<PaidVersionActionData>('Failed to withdraw the version', 500);
+            return PublishingController.createErrorResponse<PaidVersionActionData>(msg('Failed to withdraw the version'), 500);
         }
     }
 
@@ -283,7 +284,7 @@ export class PublishingController extends BaseController {
                 return PublishingController.createErrorResponse<SiteCheckoutData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error starting checkout', error);
-            return PublishingController.createErrorResponse<SiteCheckoutData>('Failed to start checkout', 500);
+            return PublishingController.createErrorResponse<SiteCheckoutData>(msg('Failed to start checkout'), 500);
         }
     }
 
@@ -301,7 +302,7 @@ export class PublishingController extends BaseController {
             if (!bodyResult.success) return bodyResult.response! as ControllerResponse<ApiResponse<ConfirmPurchaseData>>;
             const sessionId = bodyResult.data?.sessionId;
             if (typeof sessionId !== 'string' || !sessionId.startsWith('cs_')) {
-                return PublishingController.createErrorResponse<ConfirmPurchaseData>('sessionId is required', 400);
+                return PublishingController.createErrorResponse<ConfirmPurchaseData>(msg('sessionId is required'), 400);
             }
             const session = await stripe.retrieveCheckoutSession(sessionId);
             const decision = confirmDecision(session, { appId: context.pathParams.id, userId: context.user!.id });
@@ -325,7 +326,7 @@ export class PublishingController extends BaseController {
                 return PublishingController.createErrorResponse<ConfirmPurchaseData>(STRIPE_REQUEST_FAILED_MESSAGE, 502);
             }
             this.logger.error('Error confirming purchase', error);
-            return PublishingController.createErrorResponse<ConfirmPurchaseData>('Failed to confirm the purchase', 500);
+            return PublishingController.createErrorResponse<ConfirmPurchaseData>(msg('Failed to confirm the purchase'), 500);
         }
     }
 
@@ -349,7 +350,7 @@ export class PublishingController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error loading paid listings', error);
-            return PublishingController.createErrorResponse<MyPaidListingsData>('Failed to load your paid listings', 500);
+            return PublishingController.createErrorResponse<MyPaidListingsData>(msg('Failed to load your paid listings'), 500);
         }
     }
 

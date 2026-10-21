@@ -3,6 +3,8 @@ import { Bug, X, Download, Mail, Maximize2, Minimize2, Clock, BookmarkPlus, Book
 import { Button } from '../../../components/primitives/button';
 import { LEGAL_CONTACT } from '@/api-types';
 import { captureDebugScreenshot } from '../../../utils/screenshot';
+import { t, useI18n } from '@/lib/i18n';
+import { INTL_LOCALE } from '../../../../shared/i18n/locales';
 
 // Custom Error Boundary to prevent debug panel crashes from affecting main site
 class DebugPanelErrorBoundary extends Component<
@@ -29,17 +31,13 @@ class DebugPanelErrorBoundary extends Component<
         <div className="fixed bottom-6 right-6 z-50 p-4 bg-red-50 border border-red-200 rounded-lg shadow-lg max-w-sm">
           <div className="flex items-center gap-2 text-red-800 mb-2">
             <Bug className="w-4 h-4" />
-            <span className="font-medium">Debug Panel Error</span>
+            <span className="font-medium">{t("Debug Panel Error")}</span>
           </div>
-          <p className="text-sm text-red-700 mb-3">
-            The debug panel encountered an error but your main application is still working normally.
-          </p>
+          <p className="text-sm text-red-700 mb-3">{t("The debug panel encountered an error but your main application is still working normally.")}</p>
           <button
             onClick={() => this.setState({ hasError: false, error: undefined })}
             className="px-3 py-1 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition-colors"
-          >
-            Retry Debug Panel
-          </button>
+          >{t("Retry Debug Panel")}</button>
         </div>
       );
     }
@@ -86,6 +84,7 @@ interface DebugDump {
 }
 
 function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
+  const { locale, t, tn } = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
@@ -319,7 +318,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
       const events = messages.map((msg, index) => ({
         id: msg.id || `msg-${index}`,
         timestamp: msg.timestamp || Date.now(),
-        message: msg.message || 'Unknown message',
+        message: msg.message || t("Unknown message"),
         type: msg.type || 'info',
         messageType: msg.messageType,
         category: msg.wsCategory || categorizeWebSocketMessage(msg.messageType),
@@ -329,11 +328,11 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
 
       // Group events into lanes by category for better visualization
       const lanes = [
-        { id: 'generation', label: 'Generation', color: 'bg-blue-100 border-blue-300' },
-        { id: 'phase', label: 'Phases', color: 'bg-green-100 border-green-300' },
-        { id: 'file', label: 'Files', color: 'bg-purple-100 border-purple-300' },
-        { id: 'deployment', label: 'Deployment', color: 'bg-orange-100 border-orange-300' },
-        { id: 'system', label: 'System', color: 'bg-red-100 border-red-300' }
+        { id: 'generation', label: t("Generation"), color: 'bg-blue-100 border-blue-300' },
+        { id: 'phase', label: t("Phases"), color: 'bg-green-100 border-green-300' },
+        { id: 'file', label: t("Files"), color: 'bg-purple-100 border-purple-300' },
+        { id: 'deployment', label: t("Deployment"), color: 'bg-orange-100 border-orange-300' },
+        { id: 'system', label: t("System"), color: 'bg-red-100 border-red-300' }
       ];
 
       return { events, lanes };
@@ -341,7 +340,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
       console.error('Error processing timeline data:', error);
       return { events: [], lanes: [] };
     }
-  }, [bookmarkedMessages, categorizeWebSocketMessage]);
+  }, [bookmarkedMessages, categorizeWebSocketMessage, t]);
 
   // Advanced performance analytics - only compute when panel is open
   const analyticsData = useMemo(() => {
@@ -502,8 +501,8 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
     setIsGeneratingDump(true);
     try {
       const dump = await generateDebugDump();
-      const subject = `Debug Dump - ${chatSessionId || 'Unknown Session'}`;
-      const body = `Debug dump generated at ${new Date().toISOString()}\n\nDump data attached as JSON.`;
+      const subject = t("Debug Dump - {value1}", { value1: chatSessionId || t("Unknown Session") });
+      const body = t("Debug dump generated at {value1}\n\nDump data attached as JSON.", { value1: new Date().toISOString() });
 
       // Create mailto link with dump as attachment workaround
       const mailtoLink = `mailto:${LEGAL_CONTACT.support}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body + '\n\n' + JSON.stringify(dump, null, 2))}`;
@@ -526,7 +525,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
             ? 'bg-red-500 text-white animate-pulse'
             : 'bg-zinc-800 text-white hover:bg-zinc-700'
         }`}
-        title={`Debug Console (${errorCount + warningCount} issues)`}
+        title={tn('Debug console ({count} issue)', 'Debug console ({count} issues)', errorCount + warningCount)}
       >
         <Bug className="w-4 h-4" />
         {(errorCount > 0 || warningCount > 0) && (
@@ -547,7 +546,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
         <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-muted to-brand">
           <div className="flex items-center gap-2">
             <Bug className="w-5 h-5 text-text-primary" />
-            <h3 className="font-semibold text-text-primary">Debug Console</h3>
+            <h3 className="font-semibold text-text-primary">{t("Debug Console")}</h3>
             <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">
               {filteredMessages.length}/{messages.length}
             </span>
@@ -562,9 +561,9 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
             {/* View Mode Toggle */}
             <div className="flex bg-kumo-base dark:bg-zinc-800 rounded p-0.5">
               {[
-                { key: 'list' as const, icon: Bug, label: 'List' },
-                { key: 'analytics' as const, icon: BarChart3, label: 'Analytics' },
-                { key: 'timeline' as const, icon: Activity, label: 'Timeline' }
+                { key: 'list' as const, icon: Bug, label: t("List") },
+                { key: 'analytics' as const, icon: BarChart3, label: t("Analytics") },
+                { key: 'timeline' as const, icon: Activity, label: t("Timeline") }
               ].map(({ key, icon: Icon, label }) => (
                 <button
                   key={key}
@@ -574,7 +573,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                       ? 'bg-kumo-base text-text-primary shadow-sm'
                       : 'text-text-tertiary hover:text-text-primary'
                   }`}
-                  title={`${label} view`}
+                  title={t("{value1} view", { value1: label })}
                 >
                   <Icon className="w-3 h-3" />
                   {label}
@@ -587,34 +586,30 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
               <Button
                 onClick={downloadDump}
                 disabled={isGeneratingDump}
-                title="Download debug dump"
+                title={t("Download debug dump")}
               >
                 <Download className="w-4 h-4" />
-                {isGeneratingDump ? 'Generating...' : 'Download'}
+                {isGeneratingDump ? t("Generating...") : t("Download")}
               </Button>
               <Button
                 onClick={emailDump}
                 disabled={isGeneratingDump}
-                title="Email debug dump to developers"
+                title={t("Email debug dump to developers")}
               >
-                <Mail className="w-4 h-4" />
-                Email
-              </Button>
+                <Mail className="w-4 h-4" />{t("Email")}</Button>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto pt-2 sm:pt-0">
               <button
                 onClick={() => setIsMaximized(!isMaximized)}
                 className="text-text-tertiary hover:text-text-primary p-1 hover:bg-kumo-base rounded transition-colors"
-                title={isMaximized ? 'Minimize panel' : 'Maximize panel'}
+                title={isMaximized ? t("Minimize panel") : t("Maximize panel")}
               >
                 {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
               </button>
               <button
                 onClick={onClear}
                 className="text-xs text-text-tertiary hover:text-text-primary px-2 py-1 hover:bg-kumo-base rounded transition-colors"
-              >
-                Clear
-              </button>
+              >{t("Clear")}</button>
               <button
                 onClick={() => setIsOpen(false)}
                 className="text-text-tertiary hover:text-text-primary p-1 hover:bg-kumo-base rounded transition-colors"
@@ -630,7 +625,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
           <div className="flex gap-2 mb-3">
             <input
               type="text"
-              placeholder="Search messages..."
+              placeholder={t("Search messages...")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1 px-3 py-1.5 text-sm bg-input border rounded focus:outline-none focus:ring-2 focus:ring-ring text-text-primary"
@@ -638,11 +633,11 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
           </div>
           <div className="flex gap-1 flex-wrap">
             {[
-              { key: 'all' as const, label: 'All', count: messages.length },
-              { key: 'error' as const, label: 'Errors', count: errorCount },
-              { key: 'warning' as const, label: 'Warnings', count: warningCount },
-              { key: 'websocket' as const, label: 'WebSocket', count: messages.filter(m => m.type === 'websocket').length },
-              { key: 'info' as const, label: 'Info', count: messages.filter(m => m.type === 'info').length }
+              { key: 'all' as const, label: t("All"), count: messages.length },
+              { key: 'error' as const, label: t("Errors"), count: errorCount },
+              { key: 'warning' as const, label: t("Warnings"), count: warningCount },
+              { key: 'websocket' as const, label: t("WebSocket"), count: messages.filter(m => m.type === 'websocket').length },
+              { key: 'info' as const, label: t("Info"), count: messages.filter(m => m.type === 'info').length }
             ].map(({ key, label, count }) => (
               <button
                 key={key}
@@ -666,15 +661,15 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
           {/* WebSocket Category Filters - Show only when WebSocket filter is active */}
           {filter === 'websocket' && (
             <div className="mt-3 pt-3 border-t">
-              <div className="text-xs text-text-tertiary mb-2 font-medium">WebSocket Message Types:</div>
+              <div className="text-xs text-text-tertiary mb-2 font-medium">{t("WebSocket Message Types:")}</div>
               <div className="flex gap-1 flex-wrap">
                 {[
-                  { key: 'all' as const, label: 'All WS', count: messages.filter(m => m.type === 'websocket').length },
-                  { key: 'generation' as const, label: 'Generation', count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'generation' || categorizeWebSocketMessage(m.messageType) === 'generation')).length },
-                  { key: 'phase' as const, label: 'Phases', count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'phase' || categorizeWebSocketMessage(m.messageType) === 'phase')).length },
-                  { key: 'file' as const, label: 'Files', count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'file' || categorizeWebSocketMessage(m.messageType) === 'file')).length },
-                  { key: 'deployment' as const, label: 'Deploy', count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'deployment' || categorizeWebSocketMessage(m.messageType) === 'deployment')).length },
-                  { key: 'system' as const, label: 'System', count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'system' || categorizeWebSocketMessage(m.messageType) === 'system')).length }
+                  { key: 'all' as const, label: t("All WS"), count: messages.filter(m => m.type === 'websocket').length },
+                  { key: 'generation' as const, label: t("Generation"), count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'generation' || categorizeWebSocketMessage(m.messageType) === 'generation')).length },
+                  { key: 'phase' as const, label: t("Phases"), count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'phase' || categorizeWebSocketMessage(m.messageType) === 'phase')).length },
+                  { key: 'file' as const, label: t("Files"), count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'file' || categorizeWebSocketMessage(m.messageType) === 'file')).length },
+                  { key: 'deployment' as const, label: t("Deploy"), count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'deployment' || categorizeWebSocketMessage(m.messageType) === 'deployment')).length },
+                  { key: 'system' as const, label: t("System"), count: messages.filter(m => m.type === 'websocket' && (m.wsCategory === 'system' || categorizeWebSocketMessage(m.messageType) === 'system')).length }
                 ].map(({ key, label, count }) => (
                   <button
                     key={key}
@@ -703,59 +698,57 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-blue-600">{analyticsData.totalMessages}</div>
-                      <div className="text-sm text-blue-800">Total Messages</div>
+                      <div className="text-sm text-blue-800">{t("Total Messages")}</div>
                     </div>
                     <div className="bg-red-50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-red-600">{analyticsData.errorRate}%</div>
-                      <div className="text-sm text-red-800">Error Rate</div>
+                      <div className="text-sm text-red-800">{t("Error Rate")}</div>
                     </div>
                     <div className="bg-yellow-50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-yellow-600">{analyticsData.warningRate}%</div>
-                      <div className="text-sm text-yellow-800">Warning Rate</div>
+                      <div className="text-sm text-yellow-800">{t("Warning Rate")}</div>
                     </div>
                     <div className="bg-green-50 p-4 rounded-lg">
                       <div className="text-2xl font-bold text-green-600">{analyticsData.intervals.avg}</div>
-                      <div className="text-sm text-green-800">Avg Interval</div>
+                      <div className="text-sm text-green-800">{t("Avg Interval")}</div>
                     </div>
                   </div>
 
                   {/* Statistical Analysis */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="bg-kumo-base/50 p-4 rounded-lg">
-                      <h4 className="font-medium text-text-primary mb-2">Response Time Statistics</h4>
+                      <h4 className="font-medium text-text-primary mb-2">{t("Response Time Statistics")}</h4>
                       <div className="space-y-1 text-sm">
-                        <div>Average: <span className="font-mono">{analyticsData.intervals.avg}</span></div>
-                        <div>Median: <span className="font-mono">{analyticsData.intervals.median}</span></div>
-                        <div>P99: <span className="font-mono">{analyticsData.intervals.p99}</span></div>
+                        <div>{t("Average:")}<span className="font-mono">{analyticsData.intervals.avg}</span></div>
+                        <div>{t("Median:")}<span className="font-mono">{analyticsData.intervals.median}</span></div>
+                        <div>{t("P99:")}<span className="font-mono">{analyticsData.intervals.p99}</span></div>
                       </div>
                     </div>
                     <div className="bg-purple-50 p-4 rounded-lg">
                       <h4 className="font-medium text-purple-800 mb-2 flex items-center gap-2">
-                        <BarChart3 className="w-4 h-4" />
-                        WebSocket Activity
-                      </h4>
-                      <div className="text-lg font-bold text-purple-600">{analyticsData.wsMessages} messages</div>
-                      <div className="text-sm text-purple-700">Last 24h: {analyticsData.last24h} messages</div>
+                        <BarChart3 className="w-4 h-4" />{t("WebSocket Activity")}</h4>
+                      <div className="text-lg font-bold text-purple-600">{tn('{count} message', '{count} messages', analyticsData.wsMessages)}</div>
+                      <div className="text-sm text-purple-700">{tn('Last 24h: {count} message', 'Last 24h: {count} messages', analyticsData.last24h)}</div>
                     </div>
                     <div className="bg-amber-50 p-4 rounded-lg">
-                      <h4 className="font-medium text-amber-800 mb-2">Performance Score</h4>
+                      <h4 className="font-medium text-amber-800 mb-2">{t("Performance Score")}</h4>
                       <div className="text-2xl font-bold text-amber-600">
                         {analyticsData.errorRate === '0' ? '100' : (100 - parseFloat(analyticsData.errorRate)).toFixed(0)}%
                       </div>
-                      <div className="text-sm text-amber-700">System Health</div>
+                      <div className="text-sm text-amber-700">{t("System Health")}</div>
                     </div>
                   </div>
 
                   {/* Enhanced Operation-Specific Metrics */}
                   <div className="space-y-6">
-                    <h4 className="font-medium text-text-primary text-lg">🚀 Operation Performance Metrics</h4>
+                    <h4 className="font-medium text-text-primary text-lg">{t("Operation Performance Metrics")}</h4>
 
                     {/* File Generation - Special Enhanced Display */}
                     {analyticsData.operations.fileGeneration.duration.count > 0 && (
                       <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-6">
                         <div className="flex items-center gap-3 mb-4">
                           <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                          <h5 className="font-bold text-purple-900 text-lg">📝 File Generation Performance</h5>
+                          <h5 className="font-bold text-purple-900 text-lg">{t("File Generation Performance")}</h5>
                         </div>
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
@@ -763,51 +756,50 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                             <div className="text-2xl font-bold text-purple-600">
                               {analyticsData.operations.fileGeneration.linesPerSecond.avg.toFixed(1)}
                             </div>
-                            <div className="text-sm text-purple-800">Lines/sec (avg)</div>
+                            <div className="text-sm text-purple-800">{t("Lines/sec (avg)")}</div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4 text-center">
                             <div className="text-2xl font-bold text-indigo-600">
-                              {(analyticsData.operations.fileGeneration.charsPerSecond.avg / 1000).toFixed(1)}k
-                            </div>
-                            <div className="text-sm text-indigo-800">Chars/sec (avg)</div>
+                              {(analyticsData.operations.fileGeneration.charsPerSecond.avg / 1000).toFixed(1)}{t("k")}</div>
+                            <div className="text-sm text-indigo-800">{t("Chars/sec (avg)")}</div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4 text-center">
                             <div className="text-2xl font-bold text-blue-600">
-                              {analyticsData.operations.fileGeneration.totalLines.toLocaleString()}
+                              {analyticsData.operations.fileGeneration.totalLines.toLocaleString(INTL_LOCALE[locale])}
                             </div>
-                            <div className="text-sm text-blue-800">Total Lines</div>
+                            <div className="text-sm text-blue-800">{t("Total Lines")}</div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4 text-center">
                             <div className="text-2xl font-bold text-teal-600">
                               {analyticsData.operations.fileGeneration.duration.count}
                             </div>
-                            <div className="text-sm text-teal-800">Files Generated</div>
+                            <div className="text-sm text-teal-800">{t("Files Generated")}</div>
                           </div>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4">
-                            <h6 className="font-medium text-text-primary mb-2">⚡ Generation Speed</h6>
+                            <h6 className="font-medium text-text-primary mb-2">{t("Generation Speed")}</h6>
                             <div className="space-y-1 text-sm">
-                              <div>Avg: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.avg.toFixed(1)} lines/s</span></div>
-                              <div>Median: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.median.toFixed(1)} lines/s</span></div>
-                              <div>Peak (P99): <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.p99.toFixed(1)} lines/s</span></div>
+                              <div>{t("Avg:")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.avg.toFixed(1)}{t("lines/s")}</span></div>
+                              <div>{t("Median:")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.median.toFixed(1)}{t("lines/s")}</span></div>
+                              <div>{t("Peak (P99):")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.linesPerSecond.p99.toFixed(1)}{t("lines/s")}</span></div>
                             </div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4">
-                            <h6 className="font-medium text-text-primary mb-2">⏱️ Duration Stats</h6>
+                            <h6 className="font-medium text-text-primary mb-2">{t("Duration Stats")}</h6>
                             <div className="space-y-1 text-sm">
-                              <div>Avg: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.avg > 1000 ? `${(analyticsData.operations.fileGeneration.duration.avg/1000).toFixed(1)}s` : `${analyticsData.operations.fileGeneration.duration.avg.toFixed(0)}ms`}</span></div>
-                              <div>Median: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.median > 1000 ? `${(analyticsData.operations.fileGeneration.duration.median/1000).toFixed(1)}s` : `${analyticsData.operations.fileGeneration.duration.median.toFixed(0)}ms`}</span></div>
-                              <div>P99: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.p99 > 1000 ? `${(analyticsData.operations.fileGeneration.duration.p99/1000).toFixed(1)}s` : `${analyticsData.operations.fileGeneration.duration.p99.toFixed(0)}ms`}</span></div>
+                              <div>{t("Avg:")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.avg > 1000 ? t("{value1}s", { value1: (analyticsData.operations.fileGeneration.duration.avg/1000).toFixed(1) }) : t("{value1}ms", { value1: analyticsData.operations.fileGeneration.duration.avg.toFixed(0) })}</span></div>
+                              <div>{t("Median:")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.median > 1000 ? t("{value1}s", { value1: (analyticsData.operations.fileGeneration.duration.median/1000).toFixed(1) }) : t("{value1}ms", { value1: analyticsData.operations.fileGeneration.duration.median.toFixed(0) })}</span></div>
+                              <div>{t("P99:")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.duration.p99 > 1000 ? t("{value1}s", { value1: (analyticsData.operations.fileGeneration.duration.p99/1000).toFixed(1) }) : t("{value1}ms", { value1: analyticsData.operations.fileGeneration.duration.p99.toFixed(0) })}</span></div>
                             </div>
                           </div>
                           <div className="bg-bg-4/70 dark:bg-bg-4/50 rounded-lg p-4">
-                            <h6 className="font-medium text-text-primary mb-2">📊 Content Volume</h6>
+                            <h6 className="font-medium text-text-primary mb-2">{t("Content Volume")}</h6>
                             <div className="space-y-1 text-sm">
-                              <div>Total Characters: <span className="font-mono font-medium">{analyticsData.operations.fileGeneration.totalChars.toLocaleString()}</span></div>
-                              <div>Avg File Size: <span className="font-mono font-medium">{Math.round(analyticsData.operations.fileGeneration.totalChars / analyticsData.operations.fileGeneration.duration.count).toLocaleString()} chars</span></div>
-                              <div>Avg Lines/File: <span className="font-mono font-medium">{Math.round(analyticsData.operations.fileGeneration.totalLines / analyticsData.operations.fileGeneration.duration.count)}</span></div>
+                              <div>{t("Total Characters:")}<span className="font-mono font-medium">{analyticsData.operations.fileGeneration.totalChars.toLocaleString(INTL_LOCALE[locale])}</span></div>
+                              <div>{t("Avg File Size:")}<span className="font-mono font-medium">{Math.round(analyticsData.operations.fileGeneration.totalChars / analyticsData.operations.fileGeneration.duration.count).toLocaleString(INTL_LOCALE[locale])}{t("chars")}</span></div>
+                              <div>{t("Avg Lines/File:")}<span className="font-mono font-medium">{Math.round(analyticsData.operations.fileGeneration.totalLines / analyticsData.operations.fileGeneration.duration.count)}</span></div>
                             </div>
                           </div>
                         </div>
@@ -821,9 +813,9 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                         .map(([operation, stats]) => {
                           const simpleStats = stats as { avg: number; median: number; p99: number; count: number };
                           const operationConfig = {
-                            phaseGeneration: { icon: '🔄', color: 'green', label: 'Phase Generation' },
-                            cfDeployment: { icon: '☁️', color: 'orange', label: 'CF Deployment' },
-                            runnerDeployment: { icon: '🚀', color: 'blue', label: 'Runner Deployment' }
+                            phaseGeneration: { icon: '🔄', color: 'green', label: t("Phase Generation") },
+                            cfDeployment: { icon: '☁️', color: 'orange', label: t("Deployment") },
+                            runnerDeployment: { icon: '🚀', color: 'blue', label: t("Preview deployment") }
                           }[operation] || { icon: '⚙️', color: 'gray', label: operation };
 
                           return (
@@ -836,26 +828,26 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                                 <div className="space-y-3">
                                   <div className="text-center">
                                     <div className={`text-2xl font-bold text-${operationConfig.color}-600`}>
-                                      {simpleStats.avg > 1000 ? `${(simpleStats.avg/1000).toFixed(1)}s` : `${simpleStats.avg.toFixed(0)}ms`}
+                                      {simpleStats.avg > 1000 ? t("{value1}s", { value1: (simpleStats.avg/1000).toFixed(1) }) : t("{value1}ms", { value1: simpleStats.avg.toFixed(0) })}
                                     </div>
-                                    <div className={`text-sm text-${operationConfig.color}-800`}>Average Duration</div>
+                                    <div className={`text-sm text-${operationConfig.color}-800`}>{t("Average Duration")}</div>
                                   </div>
                                   <div className="grid grid-cols-2 gap-2 text-xs">
                                     <div>
-                                      <div className="text-text-tertiary">Median</div>
-                                      <div className="font-mono font-medium">{simpleStats.median > 1000 ? `${(simpleStats.median/1000).toFixed(1)}s` : `${simpleStats.median.toFixed(0)}ms`}</div>
+                                      <div className="text-text-tertiary">{t("Median")}</div>
+                                      <div className="font-mono font-medium">{simpleStats.median > 1000 ? t("{value1}s", { value1: (simpleStats.median/1000).toFixed(1) }) : t("{value1}ms", { value1: simpleStats.median.toFixed(0) })}</div>
                                     </div>
                                     <div>
-                                      <div className="text-text-tertiary">P99</div>
-                                      <div className="font-mono font-medium">{simpleStats.p99 > 1000 ? `${(simpleStats.p99/1000).toFixed(1)}s` : `${simpleStats.p99.toFixed(0)}ms`}</div>
+                                      <div className="text-text-tertiary">{t("P99")}</div>
+                                      <div className="font-mono font-medium">{simpleStats.p99 > 1000 ? t("{value1}s", { value1: (simpleStats.p99/1000).toFixed(1) }) : t("{value1}ms", { value1: simpleStats.p99.toFixed(0) })}</div>
                                     </div>
                                   </div>
                                   <div className="pt-2 border-t text-center">
-                                    <div className="text-text-tertiary text-sm">{simpleStats.count} operations</div>
+                                    <div className="text-text-tertiary text-sm">{tn('{count} operation', '{count} operations', simpleStats.count)}</div>
                                   </div>
                                 </div>
                               ) : (
-                                <div className="text-text-tertiary text-sm text-center py-4">No operations recorded</div>
+                                <div className="text-text-tertiary text-sm text-center py-4">{t("No operations recorded")}</div>
                               )}
                             </div>
                           );
@@ -866,25 +858,23 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
               ) : (
                 <div className="text-center py-12 text-text-tertiary">
                   <BarChart3 className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                  <p className="text-sm">Analytics loading...</p>
+                  <p className="text-sm">{t("Analytics loading...")}</p>
                 </div>
               )}
 
               {bookmarkedMessages.size > 0 && (
                 <div className="bg-amber-50 p-4 rounded-lg">
                   <h4 className="font-medium text-amber-800 mb-3 flex items-center gap-2">
-                    <Bookmark className="w-4 h-4" />
-                    Bookmarked Messages
-                  </h4>
+                    <Bookmark className="w-4 h-4" />{t("Bookmarked Messages")}</h4>
                   <div className="space-y-2">
                     {messages.filter(m => bookmarkedMessages.has(m.id)).slice(0, 5).map(msg => (
                       <div key={msg.id} className="text-sm text-amber-700 truncate">
                         <Clock className="w-3 h-3 inline mr-1" />
-                        {new Date(msg.timestamp).toLocaleTimeString()}: {msg.message}
+                        {new Date(msg.timestamp).toLocaleTimeString(INTL_LOCALE[locale])}: {msg.message}
                       </div>
                     ))}
                     {bookmarkedMessages.size > 5 && (
-                      <div className="text-xs text-amber-600">+{bookmarkedMessages.size - 5} more...</div>
+                      <div className="text-xs text-amber-600">{t('+{count} more…', { count: bookmarkedMessages.size - 5 })}</div>
                     )}
                   </div>
                 </div>
@@ -898,13 +888,10 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                   {/* Timeline Header */}
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-text-primary flex items-center gap-2">
-                      <Activity className="w-4 h-4" />
-                      Message Timeline ({timelineData.events.length} events)
-                    </h4>
-                    <div className="text-sm text-text-tertiary">
-                      Duration: {((timelineData.events[timelineData.events.length - 1]?.timestamp || 0) - (timelineData.events[0]?.timestamp || 0)) > 1000 ?
-                        `${(((timelineData.events[timelineData.events.length - 1]?.timestamp || 0) - (timelineData.events[0]?.timestamp || 0)) / 1000).toFixed(1)}s` :
-                        `${((timelineData.events[timelineData.events.length - 1]?.timestamp || 0) - (timelineData.events[0]?.timestamp || 0)).toFixed(0)}ms`}
+                      <Activity className="w-4 h-4" />{tn('Message timeline ({count} event)', 'Message timeline ({count} events)', timelineData.events.length)}</h4>
+                    <div className="text-sm text-text-tertiary">{t("Duration:")}{((timelineData.events[timelineData.events.length - 1]?.timestamp || 0) - (timelineData.events[0]?.timestamp || 0)) > 1000 ?
+                        t("{value1}s", { value1: (((timelineData.events[timelineData.events.length - 1]?.timestamp || 0) - (timelineData.events[0]?.timestamp || 0)) / 1000).toFixed(1) }) :
+                        t("{value1}ms", { value1: ((timelineData.events[timelineData.events.length - 1]?.timestamp || 0) - (timelineData.events[0]?.timestamp || 0)).toFixed(0) })}
                     </div>
                   </div>
 
@@ -959,8 +946,8 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                                   )}
                                 </div>
                                 <div className="flex items-center gap-2 text-xs text-text-tertiary">
-                                  <span>+{relativeTime > 1000 ? `${(relativeTime/1000).toFixed(1)}s` : `${relativeTime.toFixed(0)}ms`}</span>
-                                  <span>{new Date(event.timestamp).toLocaleTimeString()}</span>
+                                  <span>+{relativeTime > 1000 ? t("{value1}s", { value1: (relativeTime/1000).toFixed(1) }) : t("{value1}ms", { value1: relativeTime.toFixed(0) })}</span>
+                                  <span>{new Date(event.timestamp).toLocaleTimeString(INTL_LOCALE[locale])}</span>
                                 </div>
                               </div>
 
@@ -969,8 +956,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                               </div>
 
                               {event.duration > 0 && (
-                                <div className="mt-1 text-xs text-text-tertiary">
-                                  Duration: {event.duration > 1000 ? `${(event.duration/1000).toFixed(1)}s` : `${event.duration.toFixed(0)}ms`}
+                                <div className="mt-1 text-xs text-text-tertiary">{t("Duration:")}{event.duration > 1000 ? t("{value1}s", { value1: (event.duration/1000).toFixed(1) }) : t("{value1}ms", { value1: event.duration.toFixed(0) })}
                                 </div>
                               )}
                             </div>
@@ -983,8 +969,8 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
               ) : (
                 <div className="text-center py-12 text-text-tertiary">
                   <Activity className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                  <p className="text-sm">No timeline events to display</p>
-                  <p className="text-xs text-text-tertiary/70 mt-2">Messages will appear here as they are logged</p>
+                  <p className="text-sm">{t("No timeline events to display")}</p>
+                  <p className="text-xs text-text-tertiary/70 mt-2">{t("Messages will appear here as they are logged")}</p>
                 </div>
               )}
             </div>
@@ -994,7 +980,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
               {filteredMessages.length === 0 ? (
                 <div className="text-center py-12 text-text-tertiary">
                   <Bug className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                  <p className="text-sm">No messages match your filters</p>
+                  <p className="text-sm">{t("No messages match your filters")}</p>
                 </div>
               ) : (
             filteredMessages
@@ -1023,7 +1009,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                           ? 'text-amber-500 hover:text-amber-600'
                           : 'text-text-tertiary hover:text-amber-500'
                       }`}
-                      title={bookmarkedMessages.has(message.id) ? 'Remove bookmark' : 'Add bookmark'}
+                      title={bookmarkedMessages.has(message.id) ? t("Remove bookmark") : t("Add bookmark")}
                     >
                       {bookmarkedMessages.has(message.id) ? (
                         <Bookmark className="w-4 h-4 fill-current" />
@@ -1043,7 +1029,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                         )}
                       </div>
                       <span className="text-xs text-text-tertiary">
-                        {new Date(message.timestamp).toLocaleTimeString()}
+                        {new Date(message.timestamp).toLocaleTimeString(INTL_LOCALE[locale])}
                       </span>
                     </div>
 
@@ -1057,7 +1043,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
                           onClick={() => toggleExpanded(message.id)}
                           className="text-xs text-blue-600 hover:text-blue-800 underline"
                         >
-                          {isExpanded ? 'Hide details' : 'Show details'}
+                          {isExpanded ? t("Hide details") : t("Show details")}
                         </button>
                         {isExpanded && (
                           <pre className="mt-2 text-xs bg-kumo-base dark:bg-zinc-900 p-2 rounded overflow-x-auto text-text-tertiary whitespace-pre-wrap max-h-40">
@@ -1092,6 +1078,7 @@ function DebugPanelCore({ messages, onClear, chatSessionId }: DebugPanelProps) {
 
 // Wrap DebugPanel with Error Boundary to prevent crashes from affecting main site
 export function DebugPanel(props: DebugPanelProps) {
+  useI18n();
   return (
     <DebugPanelErrorBoundary>
       <DebugPanelCore {...props} />

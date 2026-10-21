@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 /** A seller's shopper emails: each store's templates and reply-to setting, previews and test sends. Store routes are owner-only. */
 
 import { BaseController } from '../baseController';
@@ -64,11 +66,11 @@ export class ShopperEmailsController extends BaseController {
 
     static async read(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailsData>>> {
         const appId = context.pathParams.id;
-        if (!appId) return ShopperEmailsController.createErrorResponse('Missing store id', 400);
+        if (!appId) return ShopperEmailsController.createErrorResponse(msg('Missing store id'), 400);
         try {
             const emails = new ShopperEmailService(env);
             const store = await shopperEmailStoreFromEnv(env)(appId);
-            if (!store) return ShopperEmailsController.createErrorResponse('Store not found', 404);
+            if (!store) return ShopperEmailsController.createErrorResponse(msg('Store not found'), 404);
             const [saved, replyTo, recent] = await Promise.all([emails.templates(appId), emails.replyTo(appId), emails.recent(appId, RECENT_EMAILS)]);
             return ShopperEmailsController.createSuccessResponse<ShopperEmailsData>({
                 templates: SHOPPER_EMAIL_KINDS.map((kind) => templateView(kind, saved.get(kind))),
@@ -85,7 +87,7 @@ export class ShopperEmailsController extends BaseController {
 
     static async saveTemplate(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailTemplateView>>> {
         const target = ShopperEmailsController.target(context);
-        if (!target) return ShopperEmailsController.createErrorResponse('No such email', 404);
+        if (!target) return ShopperEmailsController.createErrorResponse(msg('No such email'), 404);
         const body = await ShopperEmailsController.parseJsonBody<unknown>(request);
         const parsed = body.success ? parseTemplateRequest(target.kind, body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the email as JSON', 400);
@@ -99,7 +101,7 @@ export class ShopperEmailsController extends BaseController {
 
     static async resetTemplate(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailTemplateView>>> {
         const target = ShopperEmailsController.target(context);
-        if (!target) return ShopperEmailsController.createErrorResponse('No such email', 404);
+        if (!target) return ShopperEmailsController.createErrorResponse(msg('No such email'), 404);
         try {
             const kept = await new ShopperEmailService(env).resetTemplate(target.appId, target.kind, new Date());
             return ShopperEmailsController.createSuccessResponse(templateView(target.kind, kept ?? undefined));
@@ -110,7 +112,7 @@ export class ShopperEmailsController extends BaseController {
 
     static async saveSettings(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailSettings>>> {
         const appId = context.pathParams.id;
-        if (!appId) return ShopperEmailsController.createErrorResponse('Missing store id', 400);
+        if (!appId) return ShopperEmailsController.createErrorResponse(msg('Missing store id'), 400);
         const body = await ShopperEmailsController.parseJsonBody<unknown>(request);
         const parsed = body.success ? parseReplyTo(body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the setting as JSON', 400);
@@ -125,13 +127,13 @@ export class ShopperEmailsController extends BaseController {
     /** Renders a template, saved or not, with a sample order. */
     static async preview(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailPreview>>> {
         const target = ShopperEmailsController.target(context);
-        if (!target) return ShopperEmailsController.createErrorResponse('No such email', 404);
+        if (!target) return ShopperEmailsController.createErrorResponse(msg('No such email'), 404);
         const body = await ShopperEmailsController.parseJsonBody<unknown>(request);
         const parsed = body.success ? parseTemplateFields(target.kind, body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the email as JSON', 400);
         try {
             const store = await shopperEmailStoreFromEnv(env)(target.appId);
-            if (!store) return ShopperEmailsController.createErrorResponse('Store not found', 404);
+            if (!store) return ShopperEmailsController.createErrorResponse(msg('Store not found'), 404);
             return ShopperEmailsController.createSuccessResponse<ShopperEmailPreview>(renderShopperEmail(parsed.value, sampleContent(target.kind, storeName(store.title), store.storeUrl)));
         } catch (error) {
             return ShopperEmailsController.handleError(error, 'preview a shopper email') as ControllerResponse<ApiResponse<ShopperEmailPreview>>;
@@ -141,22 +143,22 @@ export class ShopperEmailsController extends BaseController {
     /** Sends a template, saved or not, filled in with a sample order, to the store's seller once their email is confirmed. */
     static async test(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ShopperEmailTestResult>>> {
         const target = ShopperEmailsController.target(context);
-        if (!target) return ShopperEmailsController.createErrorResponse('No such email', 404);
+        if (!target) return ShopperEmailsController.createErrorResponse(msg('No such email'), 404);
         const body = await ShopperEmailsController.parseJsonBody<unknown>(request);
         const parsed = body.success ? parseTemplateFields(target.kind, body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the email as JSON', 400);
         const sender = createEmailSender(env);
-        if (!sender) return ShopperEmailsController.createErrorResponse("Email sending isn't set up on this deployment", 400);
+        if (!sender) return ShopperEmailsController.createErrorResponse(msg("Email sending isn't set up on this deployment"), 400);
         const user = context.user!;
         try {
             const [store, replyTo] = await Promise.all([shopperEmailStoreFromEnv(env)(target.appId), new ShopperEmailService(env).replyTo(target.appId)]);
-            if (!store) return ShopperEmailsController.createErrorResponse('Store not found', 404);
+            if (!store) return ShopperEmailsController.createErrorResponse(msg('Store not found'), 404);
             // Only to the store's seller at a confirmed address, so an account can't aim Estori's email at a stranger.
             const to = store.sellerEmailConfirmed ? store.sellerEmail : null;
-            if (!to) return ShopperEmailsController.createErrorResponse('Confirm your email address to send yourself tests. Use the link Estori emailed you when you signed up.', 403);
+            if (!to) return ShopperEmailsController.createErrorResponse(msg('Confirm your email address to send yourself tests. Use the link Estori emailed you when you signed up.'), 403);
             const key = `shopper-email-tests:${user.id}:${new Date().toISOString().slice(0, 13)}`;
             const sentThisHour = Number((await env.VibecoderStore.get(key)) ?? '0');
-            if (sentThisHour >= TEST_SENDS_PER_HOUR) return ShopperEmailsController.createErrorResponse(`You can send ${TEST_SENDS_PER_HOUR} test emails an hour. Try again later.`, 429);
+            if (sentThisHour >= TEST_SENDS_PER_HOUR) return ShopperEmailsController.createErrorResponse(t("You can send {value1} test emails an hour. Try again later.", { value1: TEST_SENDS_PER_HOUR }), 429);
             const content = { ...sampleContent(target.kind, storeName(store.title), store.storeUrl), testNote: TEMPLATE_TEST_NOTE };
             const email = renderShopperEmail(parsed.value, content);
             // Counted before sending, so a failing send can't be retried without limit.

@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { toast } from 'sonner';
@@ -15,9 +16,11 @@ import { MoreFromCreator } from '@/components/site-page/MoreFromCreator';
 import { StickyBuyBar } from '@/components/site-page/StickyBuyBar';
 import type { SiteActions } from '@/components/site-page/SiteMainButton';
 import { SITE_PAGE_UNAVAILABLE_MESSAGE } from '@/api-types';
+import { isMessage, msg } from '@/lib/i18n';
 
 /** A Discover site's product page: the live site, its page text and the action that fits the viewer. */
 export default function SitePage() {
+	useI18n();
 	const { appId } = useParams<{ appId: string }>();
 	const page = useSitePage(appId);
 	const checkout = useCreateSiteCheckout();
@@ -39,18 +42,14 @@ export default function SitePage() {
 	// A failed background refetch keeps the page it already loaded.
 	const data = page.data;
 	if (!appId || (page.isError && !data)) {
-		const unavailable = !page.error || page.error.message === SITE_PAGE_UNAVAILABLE_MESSAGE;
+		const unavailable = !page.error || isMessage(page.error.message, SITE_PAGE_UNAVAILABLE_MESSAGE);
 		return (
 			<div className="mx-auto grid max-w-md justify-items-center gap-3 px-4 py-24 text-center">
-				<p className="text-kumo-default">{unavailable ? SITE_PAGE_UNAVAILABLE_MESSAGE : page.error?.message}</p>
+				<p className="text-kumo-default">{unavailable ? t(SITE_PAGE_UNAVAILABLE_MESSAGE) : page.error?.message}</p>
 				{unavailable ? (
-					<Link to="/discover" className="text-sm text-kumo-subtle underline-offset-2 hover:underline">
-						Back to Discover
-					</Link>
+					<Link to="/discover" className="text-sm text-kumo-subtle underline-offset-2 hover:underline">{t("Back to Discover")}</Link>
 				) : (
-					<Button variant="secondary" onClick={() => page.refetch()}>
-						Try again
-					</Button>
+					<Button variant="secondary" onClick={() => page.refetch()}>{t("Try again")}</Button>
 				)}
 			</div>
 		);
@@ -68,10 +67,10 @@ export default function SitePage() {
 	const intendedUrl = `/discover/${data.id}`;
 	const actions: SiteActions = {
 		use: () => {
-			if (requireAuth({ requireFullAuth: true, actionContext: 'to use this site', intendedUrl })) setUseOpen(true);
+			if (requireAuth({ requireFullAuth: true, actionContext: msg('Sign in to use this site'), intendedUrl })) setUseOpen(true);
 		},
 		buy: () => {
-			if (!requireAuth({ requireFullAuth: true, actionContext: 'to buy this site', intendedUrl })) return;
+			if (!requireAuth({ requireFullAuth: true, actionContext: msg('Sign in to buy this site'), intendedUrl })) return;
 			checkout.mutate(data.id, {
 				onSuccess: (result) => window.location.assign(result.checkoutUrl),
 				onError: (error) => toast.error(error.message),

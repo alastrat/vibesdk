@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 import { 
     PhaseConceptGenerationSchemaType, 
     PhaseConceptType,
@@ -539,7 +541,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
             this.logger.info("No files generated for next phase");
             // Notify phase generation complete
             this.broadcast(WebSocketMessageResponses.PHASE_GENERATED, {
-                message: `No files generated for next phase`,
+                message: t("No files generated for next phase", {  }),
                 phase: undefined
             });
             return undefined;
@@ -548,7 +550,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         this.createNewIncompletePhase(result);
         // Notify phase generation complete
         this.broadcast(WebSocketMessageResponses.PHASE_GENERATED, {
-            message: `Generated next phase: ${result.name}`,
+            message: t("Generated next phase: {value1}", { value1: String(result.name) }),
             phase: result
         });
 
@@ -583,7 +585,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 isFirstPhase: this.state.generatedPhases.filter(p => p.completed).length === 0,
                 fileGeneratingCallback: (filePath: string, filePurpose: string) => {
                     this.broadcast(WebSocketMessageResponses.FILE_GENERATING, {
-                        message: `Generating file: ${filePath}`,
+                        message: t("Generating file: {value1}", { value1: String(filePath) }),
                         filePath: filePath,
                         filePurpose: filePurpose
                     });
@@ -592,7 +594,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 shouldAutoFix: this.getInferenceContext().enableRealtimeCodeFix,
                 fileChunkGeneratedCallback: streamChunks ? (filePath: string, chunk: string, format: 'full_content' | 'unified_diff') => {
                     this.broadcast(WebSocketMessageResponses.FILE_CHUNK_GENERATED, {
-                        message: `Generating file: ${filePath}`,
+                        message: t("Generating file: {value1}", { value1: String(filePath) }),
                         filePath: filePath,
                         chunk,
                         format,
@@ -609,7 +611,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
         );
         
         this.broadcast(WebSocketMessageResponses.PHASE_VALIDATING, {
-            message: `Validating files for phase: ${phase.name}`,
+            message: t("Validating files for phase: {value1}", { value1: String(phase.name) }),
             phase: phase,
         });
 
@@ -657,7 +659,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
 
         // Validation complete
         this.broadcast(WebSocketMessageResponses.PHASE_VALIDATED, {
-            message: `Files validated for phase: ${phase.name}`,
+            message: t("Files validated for phase: {value1}", { value1: String(phase.name) }),
             phase: phase
         });
     
@@ -676,7 +678,7 @@ export class PhasicCodingBehavior extends BaseCodingBehavior<PhasicState> implem
                 })),
                 description: phase.description
             },
-            message: "Files generated successfully for phase"
+            message: msg("Files generated successfully for phase")
         });
     
         this.markPhaseComplete(phase.name);

@@ -1,3 +1,6 @@
+import { formatDollars, formatMonthDay, formatNumber } from '../i18n/format';
+import { DEFAULT_LOCALE, type Locale } from '../i18n/locales';
+import { ENGLISH, type Translator } from '../i18n/translate';
 import { DRAFT_LIMIT } from './drafts';
 
 export const PLAN_IDS = ['basic', 'pro', 'premium', 'enterprise'] as const;
@@ -118,42 +121,47 @@ export function planName(plan: PlanId): string {
 	return PLAN_NAMES[plan];
 }
 
-/** "$99", or "$349.50" when there are cents. */
-export function formatUsd(cents: number): string {
-	const dollars = cents / 100;
-	return `$${Number.isInteger(dollars) ? dollars.toLocaleString('en-US') : dollars.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+/** "$99", or "$349.50" when there are cents; "USD 99" in Spanish and "US$ 99" in Portuguese. */
+export function formatUsd(cents: number, locale: Locale = DEFAULT_LOCALE): string {
+	return formatDollars(cents / 100, locale);
 }
 
-export function formatCredits(credits: number): string {
-	return credits.toLocaleString('en-US');
+export function formatCredits(credits: number, locale: Locale = DEFAULT_LOCALE): string {
+	return formatNumber(credits, locale);
 }
 
-const BILLING_DATE = new Intl.DateTimeFormat('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
-
-/** "November 19", the UTC day of a timestamp. */
-export function formatBillingDate(ms: number): string {
-	return BILLING_DATE.format(ms);
+/** "November 19", or "19 de noviembre": the UTC day of a timestamp. */
+export function formatBillingDate(ms: number, locale: Locale = DEFAULT_LOCALE): string {
+	return formatMonthDay(ms, locale);
 }
 
-/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. */
-export function storeAllowance(plan: PaidPlanId): string {
+/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. English unless a translator is passed. */
+export function storeAllowance(plan: PaidPlanId, i18n: Translator = ENGLISH): string {
 	const { liveStores, newStoresPerDay } = PLAN_LIMITS[plan];
 	const parts: string[] = [];
-	if (liveStores !== null) parts.push(`Up to ${liveStores} live stores`);
-	if (newStoresPerDay !== null) parts.push(`${newStoresPerDay} new stores a day`);
+	if (liveStores !== null) parts.push(i18n.tn('Up to {count} live store', 'Up to {count} live stores', liveStores));
+	if (newStoresPerDay !== null) parts.push(i18n.tn('{count} new store a day', '{count} new stores a day', newStoresPerDay));
 	return parts.join(', ');
 }
 
-/** A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. */
-export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId): string[] {
+/**
+ * A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. English
+ * unless a translator is passed, so the public pricing page keeps its English.
+ */
+export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId, i18n: Translator = ENGLISH): string[] {
 	const limits = PLAN_LIMITS[plan];
-	const lines = [storeAllowance(plan)];
-	if (limits.ownDomainsPerLiveStore > 0) lines.push('Your own domain on each live store');
-	if (limits.supplierCatalog) lines.push('The supplier catalog');
-	if (limits.extraCredits) lines.push('Buy extra credits any time');
+	const lines = [storeAllowance(plan, i18n)];
+	if (limits.ownDomainsPerLiveStore > 0) lines.push(i18n.t('Your own domain on each live store'));
+	if (limits.supplierCatalog) lines.push(i18n.t('The supplier catalog'));
+	if (limits.extraCredits) lines.push(i18n.t('Buy extra credits any time'));
 	if (over === undefined) return lines;
-	const already = limitFeatures(over);
+	const already = limitFeatures(over, undefined, i18n);
 	return lines.filter((line) => !already.includes(line));
+}
+
+/** "$1.50 per 1,000", the price of extra credits. English unless a translator is passed. */
+export function extraCreditsPriceLabel(i18n: Translator = ENGLISH): string {
+	return i18n.t('{price} per {credits}', { price: formatUsd(EXTRA_CREDITS.unitPriceCents, i18n.locale), credits: formatCredits(EXTRA_CREDITS.creditsPerUnit, i18n.locale) });
 }
 
 export function extraCreditsPriceCents(credits: number): number {
@@ -195,83 +203,81 @@ function upgradeTargetFor(account: PlanAccount, key: PlanLimitKey): PlanLimitRef
 	return target === undefined || target === 'basic' ? null : target;
 }
 
-function count(n: number, noun: string): string {
-	return `${n} ${noun}${n === 1 ? '' : 's'}`;
-}
-
-/** "get" before the first paid plan, "move to" after it. */
-function switchTo(account: PlanAccount, plan: PaidPlanId): string {
-	return `${account.plan === 'basic' ? 'get' : 'move to'} ${planName(plan)}`;
-}
-
-function creditsMessage(account: PlanAccount): string {
-	const reset = formatBillingDate(account.creditsResetAt);
+function creditsMessage(account: PlanAccount, i18n: Translator): string {
+	const reset = formatBillingDate(account.creditsResetAt, i18n.locale);
 	switch (account.plan) {
 		case 'basic':
-			return `You've used this month's free AI credits. They refill on ${reset}, or get Pro for ${formatCredits(PLAN_LIMITS.pro.aiCredits)} a month.`;
+			return i18n.t("You've used this month's free AI credits. They refill on {reset}, or get Pro for {credits} a month.", { reset, credits: formatCredits(PLAN_LIMITS.pro.aiCredits, i18n.locale) });
 		case 'pro':
-			return `You've used this month's AI credits. They refill on ${reset}, or move to Premium for ${formatCredits(PLAN_LIMITS.premium.aiCredits)} a month.`;
+			return i18n.t("You've used this month's AI credits. They refill on {reset}, or move to Premium for {credits} a month.", { reset, credits: formatCredits(PLAN_LIMITS.premium.aiCredits, i18n.locale) });
 		case 'premium':
-			return `You've used this month's AI credits. Buy more credits now, or wait until ${reset}.`;
+			return i18n.t("You've used this month's AI credits. Buy more credits now, or wait until {reset}.", { reset });
 		case 'enterprise':
-			return `You've used this month's AI credits. Talk to us about more, or wait until ${reset}.`;
+			return i18n.t("You've used this month's AI credits. Talk to us about more, or wait until {reset}.", { reset });
 	}
 }
 
-function newStoresMessage(account: PlanAccount, upgradeTo: PlanLimitRefusal['upgradeTo']): string {
-	const started = `You've started ${count(account.limits.newStoresPerDay ?? 0, 'new store')} today. Start more tomorrow`;
-	if (account.plan === 'premium') return `${started}, or talk to us about Enterprise.`;
-	if (account.plan === 'enterprise') return `${started}.`;
+function newStoresMessage(account: PlanAccount, upgradeTo: PlanLimitRefusal['upgradeTo'], i18n: Translator): string {
+	const used = account.limits.newStoresPerDay ?? 0;
+	if (account.plan === 'premium') return i18n.tn("You've started {count} new store today. Start more tomorrow, or talk to us about Enterprise.", "You've started {count} new stores today. Start more tomorrow, or talk to us about Enterprise.", used);
 	if (isPaidPlanId(upgradeTo)) {
-		const cap = PLAN_LIMITS[upgradeTo].newStoresPerDay;
-		return cap === null ? `${started}, or ${switchTo(account, upgradeTo)}.` : `${started}, or ${switchTo(account, upgradeTo)} for up to ${cap} a day.`;
+		const values = { plan: planName(upgradeTo), cap: formatNumber(PLAN_LIMITS[upgradeTo].newStoresPerDay ?? 0, i18n.locale) };
+		if (PLAN_LIMITS[upgradeTo].newStoresPerDay === null) {
+			return account.plan === 'basic'
+				? i18n.tn("You've started {count} new store today. Start more tomorrow, or get {plan}.", "You've started {count} new stores today. Start more tomorrow, or get {plan}.", used, values)
+				: i18n.tn("You've started {count} new store today. Start more tomorrow, or move to {plan}.", "You've started {count} new stores today. Start more tomorrow, or move to {plan}.", used, values);
+		}
+		return account.plan === 'basic'
+			? i18n.tn("You've started {count} new store today. Start more tomorrow, or get {plan} for up to {cap} a day.", "You've started {count} new stores today. Start more tomorrow, or get {plan} for up to {cap} a day.", used, values)
+			: i18n.tn("You've started {count} new store today. Start more tomorrow, or move to {plan} for up to {cap} a day.", "You've started {count} new stores today. Start more tomorrow, or move to {plan} for up to {cap} a day.", used, values);
 	}
-	return `${started}.`;
+	return i18n.tn("You've started {count} new store today. Start more tomorrow.", "You've started {count} new stores today. Start more tomorrow.", used);
 }
 
-function liveStoresMessage(account: PlanAccount): string {
-	const included = `${planName(account.plan)} includes ${count(account.limits.liveStores ?? 0, 'live store')}.`;
+function liveStoresMessage(account: PlanAccount, i18n: Translator): string {
+	const count = account.limits.liveStores ?? 0;
+	const values = { plan: planName(account.plan), pro: formatNumber(PLAN_LIMITS.pro.liveStores ?? 0, i18n.locale), premium: formatNumber(PLAN_LIMITS.premium.liveStores ?? 0, i18n.locale) };
 	switch (account.plan) {
 		case 'basic':
-			return `${included} Get Pro for up to ${PLAN_LIMITS.pro.liveStores}, or Premium for up to ${PLAN_LIMITS.premium.liveStores}.`;
+			return i18n.tn('{plan} includes {count} live store. Get Pro for up to {pro}, or Premium for up to {premium}.', '{plan} includes {count} live stores. Get Pro for up to {pro}, or Premium for up to {premium}.', count, values);
 		case 'pro':
-			return `${included} Move to Premium for up to ${PLAN_LIMITS.premium.liveStores}.`;
+			return i18n.tn('{plan} includes {count} live store. Move to Premium for up to {premium}.', '{plan} includes {count} live stores. Move to Premium for up to {premium}.', count, values);
 		case 'premium':
-			return `${included} Talk to us about Enterprise for more.`;
+			return i18n.tn('{plan} includes {count} live store. Talk to us about Enterprise for more.', '{plan} includes {count} live stores. Talk to us about Enterprise for more.', count, values);
 		case 'enterprise':
-			return `${included} Talk to us to raise it.`;
+			return i18n.tn('{plan} includes {count} live store. Talk to us to raise it.', '{plan} includes {count} live stores. Talk to us to raise it.', count, values);
 	}
 }
 
-function storesLifetimeMessage(account: PlanAccount): string {
-	const stores = count(account.limits.storesLifetime ?? 0, 'store');
-	if (account.plan === 'basic') return `Basic includes ${stores}, counting ones you've deleted. Get Pro to start up to ${PLAN_LIMITS.pro.newStoresPerDay} a day.`;
-	return `Your plan includes ${stores}. Talk to us to raise it.`;
+function storesLifetimeMessage(account: PlanAccount, i18n: Translator): string {
+	const count = account.limits.storesLifetime ?? 0;
+	if (account.plan === 'basic') return i18n.tn("Basic includes {count} store, counting ones you've deleted. Get Pro to start up to {cap} a day.", "Basic includes {count} stores, counting ones you've deleted. Get Pro to start up to {cap} a day.", count, { cap: formatNumber(PLAN_LIMITS.pro.newStoresPerDay ?? 0, i18n.locale) });
+	return i18n.tn('Your plan includes {count} store. Talk to us to raise it.', 'Your plan includes {count} stores. Talk to us to raise it.', count);
 }
 
 /** With an allowance the refusal is for one more than it covers; with none, the plan lacks own domains. */
-function ownDomainsMessage(account: PlanAccount): string {
+function ownDomainsMessage(account: PlanAccount, i18n: Translator): string {
 	const allowed = account.limits.ownDomainsPerLiveStore;
-	if (allowed > 0) return `Your plan includes ${count(allowed, 'own domain')} per live store. Talk to us to add more.`;
-	return account.plan === 'basic' ? 'Own domains come with Pro and Premium.' : "Own domains aren't on your plan. Talk to us to add them.";
+	if (allowed > 0) return i18n.tn('Your plan includes {count} own domain per live store. Talk to us to add more.', 'Your plan includes {count} own domains per live store. Talk to us to add more.', allowed);
+	return account.plan === 'basic' ? i18n.t('Own domains come with Pro and Premium.') : i18n.t("Own domains aren't on your plan. Talk to us to add them.");
 }
 
-function messageFor(account: PlanAccount, key: PlanLimitKey, upgradeTo: PlanLimitRefusal['upgradeTo']): string {
+function messageFor(account: PlanAccount, key: PlanLimitKey, upgradeTo: PlanLimitRefusal['upgradeTo'], i18n: Translator): string {
 	switch (key) {
 		case 'aiCredits':
-			return creditsMessage(account);
+			return creditsMessage(account, i18n);
 		case 'storesLifetime':
-			return storesLifetimeMessage(account);
+			return storesLifetimeMessage(account, i18n);
 		case 'newStoresPerDay':
-			return newStoresMessage(account, upgradeTo);
+			return newStoresMessage(account, upgradeTo, i18n);
 		case 'liveStores':
-			return liveStoresMessage(account);
+			return liveStoresMessage(account, i18n);
 		case 'ownDomainsPerLiveStore':
-			return ownDomainsMessage(account);
+			return ownDomainsMessage(account, i18n);
 		case 'supplierCatalog':
-			return 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.';
+			return i18n.t('Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.');
 		case 'extraCredits':
-			return account.plan === 'enterprise' ? "Buying extra credits isn't on your plan. Talk to us to add it." : 'Buying extra credits comes with Premium.';
+			return account.plan === 'enterprise' ? i18n.t("Buying extra credits isn't on your plan. Talk to us to add it.") : i18n.t('Buying extra credits comes with Premium.');
 	}
 }
 
@@ -280,13 +286,13 @@ function messageFor(account: PlanAccount, key: PlanLimitKey, upgradeTo: PlanLimi
  * the limit; for `aiCredits` it is the pool minus the credits left, so it refuses once nothing is left. Flags are reached
  * when the plan lacks them. Nothing is refused while billing is off.
  */
-export function assertWithinLimit(account: PlanAccount, key: PlanLimitKey, current = 0): PlanLimitRefusal | null {
+export function assertWithinLimit(account: PlanAccount, key: PlanLimitKey, current = 0, i18n: Translator = ENGLISH): PlanLimitRefusal | null {
 	if (!account.billing) return null;
 	const limit = account.limits[key];
 	const reached = typeof limit === 'boolean' ? !limit : limit !== null && current >= limit;
 	if (!reached) return null;
 	const upgradeTo = upgradeTargetFor(account, key);
-	return { code: PLAN_LIMIT_CODE, limit: key, plan: account.plan, upgradeTo, message: messageFor(account, key, upgradeTo) };
+	return { code: PLAN_LIMIT_CODE, limit: key, plan: account.plan, upgradeTo, message: messageFor(account, key, upgradeTo, i18n) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

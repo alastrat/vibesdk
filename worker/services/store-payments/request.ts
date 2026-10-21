@@ -1,6 +1,8 @@
 /** What a store may send to start a checkout: variant ids, quantities, a ship-to country, return paths and a note. Pure. */
 
+import type { Locale } from '../../../shared/i18n/locales';
 import { STORE_CART_MAX_LINES, STORE_NOTE_MAX_LENGTH, type StoreCheckoutRequest } from '../../../shared/types/store-payments';
+import { STORE_LANGUAGE_PARAM } from '../store-translations/language';
 
 const REQUEST_KEYS = ['items', 'shipTo', 'successPath', 'cancelPath', 'note', 'replaces'];
 const CHECKOUT_ID = /^chk_[a-z0-9_]{1,64}$/;
@@ -35,6 +37,18 @@ export function safeReturnPath(value: unknown, fallback: string): string {
 	if (!value.startsWith('/') || value.startsWith('//') || value.includes('\\') || hasControlCharacter(value)) return fallback;
 	const url = new URL(value, RESOLVE_BASE);
 	return url.origin === RESOLVE_BASE ? `${url.pathname}${url.search}` : fallback;
+}
+
+/**
+ * A return path that names the language, so a shopper who leaves the checkout page lands back on the store in it even
+ * where the browser keeps no language cookie. A path already naming a language takes this one, and one that would
+ * outgrow the limit for return paths stays as it was.
+ */
+export function returnPathInLanguage(path: string, locale: Locale): string {
+	const url = new URL(path, RESOLVE_BASE);
+	url.searchParams.set(STORE_LANGUAGE_PARAM, locale);
+	const named = `${url.pathname}${url.search}`;
+	return named.length <= MAX_PATH ? named : path;
 }
 
 /** Null for any other shape, including one carrying an amount, price, fee or account: Estori derives those itself. */

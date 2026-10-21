@@ -1,16 +1,14 @@
+import { t, useI18n, msg } from '@/lib/i18n';
 import type { ViewDefinition } from '@/api-types';
 import type { FeatureModule, FeatureContext } from '../core/types';
 
 // General projects don't have a preview - show a placeholder
 function GeneralPreview({ className }: { className?: string }) {
+	useI18n();
 	return (
 		<div className={`${className ?? ''} flex items-center justify-center bg-kumo-base border border-text/10 rounded-lg`}>
 			<div className="text-center p-8">
-				<p className="text-text-primary/70 text-sm">
-					This project type does not have a live preview.
-					<br />
-					View the generated code in the Editor tab.
-				</p>
+				<p className="text-text-primary/70 text-sm">{t("This project type does not have a live preview.")}<br />{t("View the generated code in the Editor tab.")}</p>
 			</div>
 		</div>
 	);
@@ -19,15 +17,15 @@ function GeneralPreview({ className }: { className?: string }) {
 const GENERAL_VIEWS: ViewDefinition[] = [
 	{
 		id: 'editor',
-		label: 'Code',
+		label: msg("Code"),
 		iconName: 'Code2',
-		tooltip: 'View and edit code',
+		tooltip: msg("View and edit code"),
 	},
 	{
 		id: 'docs',
-		label: 'Docs',
+		label: msg("Docs"),
 		iconName: 'FileText',
-		tooltip: 'View documentation',
+		tooltip: msg("View documentation"),
 	},
 ];
 
@@ -35,7 +33,7 @@ const generalFeatureModule: FeatureModule = {
 	id: 'general',
 
 	getViews(): ViewDefinition[] {
-		return GENERAL_VIEWS;
+		return GENERAL_VIEWS.map((view) => ({ ...view, label: t(view.label), tooltip: view.tooltip ? t(view.tooltip) : undefined }));
 	},
 
 	PreviewComponent: GeneralPreview,

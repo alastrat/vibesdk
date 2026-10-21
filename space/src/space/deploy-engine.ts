@@ -110,6 +110,60 @@ export function publishedVersion(sql: SqlStorage): PublishedVersion | null {
   return { commit: String(row.commit_hash), sourceBranch: typeof source === "string" && source.length > 0 ? source : PREVIEW_BRANCH }
 }
 
+/** The text files of a deployment's stored bundle, which a store's translations are read from. */
+export interface DeploymentTexts {
+  branch: string
+  commitHash: string
+  /** Text assets, then server modules. Asset paths start with a slash; module names don't. */
+  files: { path: string; kind: "html" | "script"; text: string }[]
+  /** The raw `estori-store.json` the deployment was built from, or null when it has none. */
+  manifest: string | null
+}
+
+const HTML_ASSET_PATTERN = /\.html?$/i
+const SCRIPT_ASSET_PATTERN = /\.m?js$/i
+
+function storedRecord(json: unknown): Record<string, unknown> {
+  try {
+    const value: unknown = JSON.parse(typeof json === "string" && json.length > 0 ? json : "{}")
+    return typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>) : {}
+  } catch {
+    return {}
+  }
+}
+
+/** The JavaScript of a stored module: a plain string, or the `js` or `cjs` source of a module object. */
+function moduleScript(module: unknown): string | null {
+  if (typeof module === "string") return module
+  if (typeof module !== "object" || module === null) return null
+  const { js, cjs } = module as { js?: unknown; cjs?: unknown }
+  if (typeof js === "string") return js
+  return typeof cjs === "string" ? cjs : null
+}
+
+/**
+ * The text files of `branch`'s stored deployment: HTML and JavaScript assets, and the server's modules. It reads the
+ * row alone, so it works on a cold start and for `live`, whose bundle no branch's git history reproduces. Binary
+ * assets and non-JavaScript modules are left out. Null when the branch was never deployed.
+ */
+export function readDeploymentTexts(sql: SqlStorage, branch: string): DeploymentTexts | null {
+  const row = sql
+    .exec("SELECT commit_hash, modules, assets, store_manifest FROM deployments WHERE branch = ?", branch)
+    .toArray()[0]
+  if (!row) return null
+  const files: DeploymentTexts["files"] = []
+  for (const [path, content] of Object.entries(storedRecord(row.assets))) {
+    if (typeof content !== "string") continue
+    if (HTML_ASSET_PATTERN.test(path)) files.push({ path, kind: "html", text: content })
+    else if (SCRIPT_ASSET_PATTERN.test(path)) files.push({ path, kind: "script", text: content })
+  }
+  for (const [name, module] of Object.entries(storedRecord(row.modules))) {
+    const text = moduleScript(module)
+    if (text !== null) files.push({ path: name, kind: "script", text })
+  }
+  return { branch, commitHash: String(row.commit_hash), files, manifest: row.store_manifest === null ? null : String(row.store_manifest) }
+}
+
 export interface DeployContext {
   sql: SqlStorage
   git: Git

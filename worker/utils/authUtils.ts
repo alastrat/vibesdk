@@ -1,3 +1,4 @@
+import { t } from '../services/i18n/request-locale';
 /**
  * Centralized Authentication Utilities
  */
@@ -7,6 +8,7 @@ import type { User } from '../database/schema';
 import { createLogger } from '../logger';
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
 import { TERMS_VERSION } from '../../shared/types/legal';
+import { isLocale, type Locale } from '../../shared/i18n/locales';
 
 const logger = createLogger('AuthUtils');
 
@@ -28,7 +30,7 @@ export function enforceAllowedEmail(
 	if (email.toLowerCase() !== allowedEmail.toLowerCase()) {
 		throw new SecurityError(
 			SecurityErrorType.UNAUTHORIZED,
-			`Email Whitelisting is enabled. Please use the allowed email to ${action}.`,
+			t("Email Whitelisting is enabled. Please use the allowed email to {value1}.", { value1: String(action) }),
 			403,
 		);
 	}
@@ -268,6 +270,15 @@ export function extractRequestMetadata(request: Request): RequestMetadata {
 
 export type { SessionResponse } from '../types/auth-types';
 
+/** The language a user chose: read from `preferences` on a stored row, or `locale` on a user already mapped. */
+function savedLocale(user: object): Locale | null {
+	if ('locale' in user) return isLocale(user.locale) ? user.locale : null;
+	if ('preferences' in user && typeof user.preferences === 'object' && user.preferences !== null && 'locale' in user.preferences) {
+		return isLocale(user.preferences.locale) ? user.preferences.locale : null;
+	}
+	return null;
+}
+
 export function mapUserResponse(
 	user: (Partial<User> & { id: string; email: string }) | AuthUser,
 ): AuthUser {
@@ -288,6 +299,7 @@ export function mapUserResponse(
 		provider: user.provider || undefined,
 		emailVerified: user.emailVerified || undefined,
 		createdAt: user.createdAt || undefined,
+		locale: savedLocale(user),
 		...('termsVersion' in user
 			? { termsAccepted: user.termsVersion === TERMS_VERSION }
 			: 'termsAccepted' in user && typeof user.termsAccepted === 'boolean'

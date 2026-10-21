@@ -6,7 +6,7 @@ describe('the flags admin page', () => {
 	const page = sources['/src/routes/admin/flags.tsx'] ?? '';
 
 	it('is behind sign-in at /admin/flags', () => {
-		expect(sources['/src/routes.tsx']).toMatch(/path: 'admin\/flags',\s*element: \(\s*<ProtectedRoute>\s*<AdminFlagsPage \/>/);
+		expect(sources['/src/routes.tsx']).toMatch(/path: 'admin\/flags',\s*Component: protectedPage\(AdminFlagsPage\)/);
 	});
 
 	it('shows values only, and sends edits to PostHog', () => {

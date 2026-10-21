@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ENGLISH } from '../../../shared/i18n/translate';
 import type { StripeCheckoutSession, StripeCoupon } from '../payments/stripe-client';
 import { billingSessionOf, creditsOrder, planOrder, promotionTermsOf, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
 
@@ -84,13 +85,13 @@ describe('what a checkout session sells', () => {
 	});
 
 	it("shows a plan's price and what it includes from the plan table", () => {
-		expect(planOrder('pro')).toEqual({
+		expect(planOrder('pro', ENGLISH)).toEqual({
 			kind: 'plan',
 			plan: 'pro',
 			priceCents: 4_900,
 			includes: ['20,000 AI credits a month', 'Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog'],
 		});
-		expect(planOrder('premium')).toMatchObject({ priceCents: 19_900, includes: expect.arrayContaining(['100,000 AI credits a month', 'Buy extra credits any time']) });
+		expect(planOrder('premium', ENGLISH)).toMatchObject({ priceCents: 19_900, includes: expect.arrayContaining(['100,000 AI credits a month', 'Buy extra credits any time']) });
 	});
 
 	it("shows a credits purchase's amount at the table's price", () => {
@@ -100,27 +101,27 @@ describe('what a checkout session sells', () => {
 
 describe('the terms of a plan checkout', () => {
 	it('says the plain price without a code, and falls back to the plan price when the session has no total yet', () => {
-		expect(termsViewOf('pro', SESSION)).toEqual({
+		expect(termsViewOf('pro', SESSION, ENGLISH)).toEqual({
 			consentText: 'I agree to the Terms, and that Estori Pro renews at $49 a month until I cancel.',
 			buttonText: 'Subscribe: $49 a month',
 			dueTodayCents: 4_900,
 			disclosure: 'Pro renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 		});
-		expect(termsViewOf('premium', { ...SESSION, amount_total: null }).dueTodayCents).toBe(19_900);
+		expect(termsViewOf('premium', { ...SESSION, amount_total: null }, ENGLISH).dueTodayCents).toBe(19_900);
 	});
 
 	it('follows the promotion code: the wording and what is due today', () => {
-		expect(termsViewOf('pro', viaPromotionCode(coupon()))).toEqual({
+		expect(termsViewOf('pro', viaPromotionCode(coupon()), ENGLISH)).toEqual({
 			consentText: 'I agree to the Terms, and that Estori Pro costs $24.50 today, then $49 a month, until I cancel.',
 			buttonText: 'Subscribe: $24.50 today, then $49 a month',
 			dueTodayCents: 2_450,
 			disclosure: 'Pro costs $24.50 today, then renews every month at $49 until you cancel. Cancel any time in Estori; it ends at the end of the period.',
 		});
 		const repeating = viaPromotionCode(coupon({ duration: 'repeating', duration_in_months: 3 }));
-		expect(termsViewOf('pro', repeating).buttonText).toBe('Subscribe: $24.50 a month for 3 months, then $49 a month');
+		expect(termsViewOf('pro', repeating, ENGLISH).buttonText).toBe('Subscribe: $24.50 a month for 3 months, then $49 a month');
 	});
 
 	it('fails for a promotion it cannot state exactly, rather than show a wrong price', () => {
-		expect(() => termsViewOf('pro', viaPromotionCode(coupon({ duration: 'repeating', duration_in_months: null })))).toThrow(UnreadablePromotionError);
+		expect(() => termsViewOf('pro', viaPromotionCode(coupon({ duration: 'repeating', duration_in_months: null })), ENGLISH)).toThrow(UnreadablePromotionError);
 	});
 });

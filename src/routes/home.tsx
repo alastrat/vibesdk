@@ -9,6 +9,7 @@ import { BuildBox } from '@/components/build-box';
 import { DiscoverStrip } from '@/components/publishing/DiscoverStrip';
 import { PaymentsSetupPrompt } from '@/components/payments/PaymentsSetupPrompt';
 import { pageTitle } from '@/brand';
+import { T, t } from '@/lib/i18n';
 
 export default function Home() {
 	const navigate = useNavigate();
@@ -51,9 +52,10 @@ export default function Home() {
 					>
 						<div className="mb-6 sm:mb-7 grid gap-2">
 							<h1 className="w-full text-center text-[clamp(1.75rem,4.5vw,2.5rem)] font-semibold leading-[1.12] text-kumo-strong z-20">
-								What should we{' '}
-								<span className="text-brand-emphasis">build</span>{' '}
-								today?
+								<T
+									text="What should we <em>build</em> today?"
+									components={{ em: (children) => <span className="text-brand-emphasis">{children}</span> }}
+								/>
 							</h1>
 						</div>
 						<BuildBox />
@@ -80,7 +82,7 @@ export default function Home() {
 								<div className="flex items-end justify-between gap-4">
 									<div className="grid gap-1.5 min-w-0">
 										<h2 className="text-xl sm:text-2xl font-semibold text-kumo-default/90">
-											Discover apps from the community
+											{t('Discover apps from the community')}
 										</h2>
 									</div>
 									<div ref={discoverLinkRef}>
@@ -89,7 +91,7 @@ export default function Home() {
 											size="sm"
 											href="/discover"
 										>
-											View all
+											{t('View all')}
 											<ArrowUpRight className="size-3.5 opacity-70" />
 										</LinkButton>
 									</div>
@@ -261,6 +263,7 @@ export const CurvedArrow: React.FC<ArrowProps> = ({
 			y: end.y,
 		};
 
+		// i18n-ignore: SVG path data
 		return `M ${start.x},${start.y} C ${c1.x},${c1.y} ${c2.x},${c2.y} ${end.x},${end.y}`;
 	}, [start, end, curvature]);
 

@@ -23,8 +23,8 @@ function source(path: string): string {
 describe('the admin catalog orders pages', () => {
 	it('are routed for signed-in users at the path alert emails link to', () => {
 		const routes = source('/src/routes.tsx');
-		expect(routes).toMatch(/path: 'admin\/catalog-orders',\s*element: \(\s*<ProtectedRoute>\s*<AdminCatalogOrdersPage \/>/);
-		expect(routes).toMatch(/path: 'admin\/catalog-orders\/:id',\s*element: \(\s*<ProtectedRoute>\s*<AdminCatalogOrderPage \/>/);
+		expect(routes).toMatch(/path: 'admin\/catalog-orders',\s*Component: protectedPage\(AdminCatalogOrdersPage\)/);
+		expect(routes).toMatch(/path: 'admin\/catalog-orders\/:id',\s*Component: protectedPage\(AdminCatalogOrderPage\)/);
 	});
 
 	it('are linked from the admin pages', () => {

@@ -4,8 +4,12 @@
  * Session, and the email is the page's own field, sent to each session. Store code never runs here, and the page loads only its own script, the store script and Stripe.js.
  */
 
+import { DEFAULT_LOCALE, INTL_LOCALE, type Locale } from '../../../shared/i18n/locales';
 import { STORE_CHECKOUT_MESSAGES, type StoreBrand, type StoreInfo } from '../../../shared/types/store-payments';
-import { STRIPE_JS_URL } from '../../../shared/types/stripe';
+import { STRIPE_JS_URL, STRIPE_LOCALES, type StripeLocale } from '../../../shared/types/stripe';
+import { jsonForScript } from '../../utils/html';
+import { translateFor } from '../../utils/server-translate';
+import { payPageText } from './pay-page-text';
 
 const NEUTRAL_BRAND: StoreBrand = {
 	name: '',
@@ -28,15 +32,12 @@ export interface PayPageInput {
 	nonce: string;
 	/** Checked on the server with the checkout request's own rule, so the page never builds a link off the store. */
 	returnPaths: { successPath: string; cancelPath: string };
+	/** The shopper's language: the page's words, its dollars and Stripe's form are written in it. */
+	locale: Locale;
 }
 
 function escapeHtml(text: string): string {
 	return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-/** JSON that can sit inside a script element: nothing in it can close the element or start markup. */
-function jsonForScript(value: unknown): string {
-	return JSON.stringify(value).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026').replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
 
 function isDark(hex: string): boolean {
@@ -74,8 +75,15 @@ export function payPageHeaders(nonce: string, appOrigin: string | null): Record<
 	};
 }
 
+/** The language of Stripe's form: the shopper's, or for English Stripe's own pick from the browser, as English pages always had. */
+function stripeLocaleOf(locale: Locale): StripeLocale | 'auto' {
+	return locale === DEFAULT_LOCALE ? 'auto' : STRIPE_LOCALES[locale];
+}
+
 export function renderPayPage(input: PayPageInput): string {
 	const brand = input.info?.brand ?? NEUTRAL_BRAND;
+	const text = payPageText(input.locale, brand.name);
+	const unavailable = translateFor(input.locale, STORE_CHECKOUT_MESSAGES.payments_unavailable);
 	const radius = RADIUS[brand.corners];
 	const products = (input.info?.products ?? []).map((product) => ({
 		id: product.id,
@@ -85,6 +93,10 @@ export function renderPayPage(input: PayPageInput): string {
 	}));
 	const config = {
 		basePath: input.basePath,
+		locale: input.locale,
+		stripeLocale: stripeLocaleOf(input.locale),
+		intlLocale: INTL_LOCALE[input.locale],
+		text: text.script,
 		publishableKey: input.publishableKey,
 		paymentsAvailable: input.info?.paymentsAvailable ?? false,
 		brand: { ...brand, logo: imageOnStore(input.basePath, brand.logo) },
@@ -92,7 +104,7 @@ export function renderPayPage(input: PayPageInput): string {
 		radius,
 		countries: input.info?.shipping.countries ?? [],
 		products,
-		unavailable: STORE_CHECKOUT_MESSAGES.payments_unavailable,
+		unavailable,
 		successPath: input.returnPaths.successPath,
 		cancelPath: input.returnPaths.cancelPath,
 	};
@@ -101,14 +113,14 @@ export function renderPayPage(input: PayPageInput): string {
 		: '';
 	const fontFamily = brand.font ? `'${brand.font}', ui-sans-serif, system-ui, sans-serif` : 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 	const logo = config.brand.logo ? `<img class="logo" src="${escapeHtml(config.brand.logo)}" alt="">` : '';
-	const notice = !input.publishableKey || !input.info ? `<div class="notice" id="notice">${escapeHtml(STORE_CHECKOUT_MESSAGES.payments_unavailable)}</div>` : '<div class="notice" id="notice" hidden></div>';
+	const notice = !input.publishableKey || !input.info ? `<div class="notice" id="notice">${escapeHtml(unavailable)}</div>` : '<div class="notice" id="notice" hidden></div>';
 	return `<!doctype html>
-<html lang="en">
+<html lang="${input.locale}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>${brand.name ? `Checkout · ${escapeHtml(brand.name)}` : 'Checkout'}</title>
+<title>${escapeHtml(text.title)}</title>
 ${fontLink}
 <style>
 :root {
@@ -187,38 +199,38 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
 </head>
 <body>
 <header class="bar">
-  <a class="back" id="back" href="${escapeHtml(input.basePath)}/">&larr; Continue shopping</a>
+  <a class="back" id="back" href="${escapeHtml(input.basePath)}/">&larr; ${escapeHtml(text.continueShopping)}</a>
   <div class="brand">${logo}${brand.name ? `<span>${escapeHtml(brand.name)}</span>` : ''}</div>
 </header>
 <main class="page">
-  <h1>Checkout</h1>
+  <h1>${escapeHtml(text.checkout)}</h1>
   ${notice}
   <div class="grid" id="checkout">
     <section class="panel" id="steps">
-      <div class="step"><h2><span>1</span> Contact</h2><label class="field-label" for="email">Email</label><input class="field" id="email" type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="you@example.com"><p class="field-error" id="email-error" hidden></p></div>
-      <div class="step"><h2><span>2</span> Shipping address</h2><div id="shipping-element"></div></div>
-      <div class="step"><h2><span>3</span> Payment</h2><div id="payment-element"></div></div>
-      <button class="pay" id="pay" type="button" disabled>Pay</button>
-      <p class="fine">Payments are processed securely by Stripe. ${brand.name ? escapeHtml(brand.name) : 'This store'} is the seller.</p>
+      <div class="step"><h2><span>1</span> ${escapeHtml(text.contact)}</h2><label class="field-label" for="email">${escapeHtml(text.email)}</label><input class="field" id="email" type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="${escapeHtml(text.emailPlaceholder)}"><p class="field-error" id="email-error" hidden></p></div>
+      <div class="step"><h2><span>2</span> ${escapeHtml(text.shippingAddress)}</h2><div id="shipping-element"></div></div>
+      <div class="step"><h2><span>3</span> ${escapeHtml(text.payment)}</h2><div id="payment-element"></div></div>
+      <button class="pay" id="pay" type="button" disabled>${escapeHtml(text.script.pay)}</button>
+      <p class="fine">${escapeHtml(text.fine)}</p>
     </section>
-    <aside class="panel summary" id="summary" aria-label="Order summary">
-      <button class="summary-toggle" id="summary-toggle" type="button" aria-expanded="false" aria-controls="summary-body"><span id="summary-toggle-label">Show order summary</span><span id="summary-toggle-total">&mdash;</span></button>
-      <h2>Order summary</h2>
-      <div class="country" id="country-row" hidden><label for="country">Ship to</label><select id="country"></select></div>
+    <aside class="panel summary" id="summary" aria-label="${escapeHtml(text.orderSummary)}">
+      <button class="summary-toggle" id="summary-toggle" type="button" aria-expanded="false" aria-controls="summary-body"><span id="summary-toggle-label">${escapeHtml(text.script.showSummary)}</span><span id="summary-toggle-total">&mdash;</span></button>
+      <h2>${escapeHtml(text.orderSummary)}</h2>
+      <div class="country" id="country-row" hidden><label for="country">${escapeHtml(text.shipTo)}</label><select id="country"></select></div>
       <div class="summary-body" id="summary-body">
         <ul class="lines" id="lines"></ul>
         <dl class="totals">
-          <dt>Subtotal</dt><dd id="subtotal">&mdash;</dd>
-          <dt>Shipping</dt><dd id="shipping">&mdash;</dd>
-          <dt class="total">Total</dt><dd class="total" id="total">&mdash;</dd>
+          <dt>${escapeHtml(text.subtotal)}</dt><dd id="subtotal">&mdash;</dd>
+          <dt>${escapeHtml(text.shipping)}</dt><dd id="shipping">&mdash;</dd>
+          <dt class="total">${escapeHtml(text.total)}</dt><dd class="total" id="total">&mdash;</dd>
         </dl>
-        <div class="note" id="note-row" hidden><h3>Order note</h3><p id="note-text"></p></div>
+        <div class="note" id="note-row" hidden><h3>${escapeHtml(text.orderNote)}</h3><p id="note-text"></p></div>
       </div>
     </aside>
   </div>
   <div class="panel empty" id="empty" hidden>
-    <h2>Your cart is empty</h2>
-    <p><a id="empty-back" href="${escapeHtml(input.basePath)}/">Continue shopping</a></p>
+    <h2>${escapeHtml(text.cartEmpty)}</h2>
+    <p><a id="empty-back" href="${escapeHtml(input.basePath)}/">${escapeHtml(text.continueShopping)}</a></p>
   </div>
 </main>
 <script type="application/json" id="estori-pay-config">${jsonForScript(config)}</script>
@@ -238,7 +250,14 @@ export const PAY_PAGE_SCRIPT = `(function () {
   $('back').href = config.basePath + cancelPath;
   $('empty-back').href = config.basePath + cancelPath;
 
-  function money(cents) { return '$' + (cents / 100).toFixed(2); }
+  var text = config.text;
+  // US dollars written the way the shopper's language writes them, like formatUsd: "$20.00", "USD 20.00" or "US$ 20,00".
+  var dollars = new Intl.NumberFormat(config.intlLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function money(cents) { return dollars.format(cents / 100); }
+  // Fills the {placeholders} of a message in one pass, so a value is never read as another placeholder.
+  function fill(template, values) {
+    return template.replace(/\\{(\\w+)\\}/g, function (match, name) { return Object.prototype.hasOwnProperty.call(values, name) ? values[name] : match; });
+  }
   function showNotice(message) { var notice = $('notice'); notice.textContent = message; notice.hidden = false; }
   function hideNotice() { $('notice').hidden = true; }
 
@@ -344,10 +363,10 @@ export const PAY_PAGE_SCRIPT = `(function () {
       var body = document.createElement('div');
       var name = document.createElement('div');
       name.className = 'line-name';
-      name.textContent = known ? known.product.name : 'An item no longer sold here';
+      name.textContent = known ? known.product.name : text.removedItem;
       var variant = document.createElement('div');
       variant.className = 'line-variant';
-      variant.textContent = known ? known.variant.name + ' \\u00b7 ' + money(priced ? priced.unitPriceCents : known.variant.priceCents) + ' each' : '';
+      variant.textContent = known ? fill(text.variantLine, { variant: known.variant.name, price: money(priced ? priced.unitPriceCents : known.variant.priceCents) }) : '';
       var controls = document.createElement('div');
       controls.className = 'controls';
       var stepper = document.createElement('div');
@@ -355,14 +374,14 @@ export const PAY_PAGE_SCRIPT = `(function () {
       var minus = document.createElement('button');
       minus.type = 'button';
       minus.textContent = '\\u2212';
-      minus.setAttribute('aria-label', 'One fewer');
+      minus.setAttribute('aria-label', text.oneFewer);
       minus.onclick = function () { cart.setQuantity(item.variantId, item.quantity - 1); };
       var count = document.createElement('output');
       count.textContent = String(item.quantity);
       var plus = document.createElement('button');
       plus.type = 'button';
       plus.textContent = '+';
-      plus.setAttribute('aria-label', 'One more');
+      plus.setAttribute('aria-label', text.oneMore);
       plus.onclick = function () { cart.setQuantity(item.variantId, item.quantity + 1); };
       stepper.appendChild(minus);
       stepper.appendChild(count);
@@ -370,7 +389,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
       var remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'remove';
-      remove.textContent = 'Remove';
+      remove.textContent = text.remove;
       remove.onclick = function () { cart.remove(item.variantId); };
       controls.appendChild(stepper);
       controls.appendChild(remove);
@@ -386,7 +405,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
       list.appendChild(li);
     });
     $('subtotal').textContent = summary ? money(summary.subtotalCents) : '\\u2014';
-    $('shipping').textContent = summary ? (summary.shippingCents === 0 ? 'Free' : money(summary.shippingCents)) : '\\u2014';
+    $('shipping').textContent = summary ? (summary.shippingCents === 0 ? text.free : money(summary.shippingCents)) : '\\u2014';
     $('total').textContent = summary ? money(summary.totalCents) : '\\u2014';
     $('summary-toggle-total').textContent = $('total').textContent;
   }
@@ -431,10 +450,10 @@ export const PAY_PAGE_SCRIPT = `(function () {
     var address = typedAddress;
     unmount();
     // Stripe.js can't confirm a second session started on the same instance, so each session gets its own.
-    checkout = window.Stripe(config.publishableKey).initCheckoutElementsSdk({ clientSecret: clientSecret, elementsOptions: { appearance: appearance(), fonts: fonts() } });
+    checkout = window.Stripe(config.publishableKey, { locale: config.stripeLocale }).initCheckoutElementsSdk({ clientSecret: clientSecret, elementsOptions: { appearance: appearance(), fonts: fonts() } });
     checkout.on('change', function (session) {
       var cents = session.total && session.total.total ? session.total.total.minorUnitsAmount : null;
-      $('pay').textContent = typeof cents === 'number' ? 'Pay ' + money(cents) : 'Pay';
+      $('pay').textContent = typeof cents === 'number' ? fill(text.payAmount, { amount: money(cents) }) : text.pay;
     });
     // Stripe's address field shows only what it is given when created, so a typed address comes back as a saved one.
     var shipping = null;
@@ -476,7 +495,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
     $('note-row').hidden = !note;
     if (note) body.note = note;
     if (checkoutId) body.replaces = checkoutId;
-    fetch(config.basePath + '/__estori/checkout', {
+    fetch(config.basePath + '/__estori/checkout?lang=' + encodeURIComponent(config.locale), {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -487,7 +506,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
       .then(function (answer) {
         if (!answer || answer.ok !== true) {
           renderLines(null);
-          showNotice(answer && answer.message ? answer.message : "Checkout couldn't start. Refresh the page and try again.");
+          showNotice(answer && answer.message ? answer.message : text.checkoutFailed);
           if (answer && answer.ok === false) {
             checkoutId = null;
             remember(null);
@@ -503,7 +522,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
         return mount(answer.clientSecret);
       })
       .catch(function () {
-        showNotice("Checkout couldn't start. Refresh the page and try again.");
+        showNotice(text.checkoutFailed);
       })
       .then(function () {
         starting = false;
@@ -522,7 +541,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
       timer = null;
       start();
     }, 400);
-    $('pay').textContent = 'Pay';
+    $('pay').textContent = text.pay;
     holdPay();
   });
 
@@ -532,7 +551,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
     summaryOpen = !summaryOpen;
     $('summary').classList.toggle('open', summaryOpen);
     $('summary-toggle').setAttribute('aria-expanded', summaryOpen ? 'true' : 'false');
-    $('summary-toggle-label').textContent = summaryOpen ? 'Hide order summary' : 'Show order summary';
+    $('summary-toggle-label').textContent = summaryOpen ? text.hideSummary : text.showSummary;
   };
 
   $('pay').onclick = function () {
@@ -544,7 +563,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
     sendEmail(true).then(function (sent) {
       if (sent !== 'sent') {
         // A refused email is explained under its field; a session that can't be used can't be paid either.
-        if (sent === 'unavailable') showNotice("This checkout can't continue. Refresh the page and try again.");
+        if (sent === 'unavailable') showNotice(text.cannotContinue);
         return null;
       }
       return current.loadActions().then(function (loaded) {
@@ -556,7 +575,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
       if (result && result.type === 'error') showNotice(result.error.message);
     }).catch(function (error) {
       if (window.console) window.console.error('Estori checkout: the payment could not be confirmed', error);
-      showNotice("The payment didn't go through. Check your details and try again.");
+      showNotice(text.paymentFailed);
     }).then(function () {
       confirming = false;
       holdPay();

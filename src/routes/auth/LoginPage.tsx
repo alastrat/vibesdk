@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router';
 import { AuthForm, authCopy, type SignInView } from '@/components/auth/AuthForm';
 import { AuthPageLayout } from '@/components/auth/AuthPageLayout';
 import { useAuth } from '@/contexts/auth-context';
+import { t } from '@/lib/i18n';
 
 /** Signing in, on a page of its own, for links that lead straight here. People already signed in go to the builder. */
 export default function LoginPage() {
@@ -13,7 +14,7 @@ export default function LoginPage() {
 
 	const { title, description } = authCopy(mode);
 	return (
-		<AuthPageLayout view="login" pageTitle="Sign in" title={title} description={description}>
+		<AuthPageLayout view="login" pageTitle={t('Sign in')} title={title} description={description}>
 			<AuthForm
 				mode={mode}
 				onModeChange={(next) => next !== 'register' && setMode(next)}

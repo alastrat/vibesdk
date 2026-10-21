@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PAY_PAGE_SCRIPT, renderPayPage } from './pay-page';
-import { STORE_SCRIPT } from './store-script';
+import { storeScript } from './store-script';
+import { formatDollars } from '../../../shared/i18n/format';
+import { LOCALES, type Locale } from '../../../shared/i18n/locales';
 import { STORE_CHECKOUT_MESSAGES, type StoreCheckoutResponse, type StoreInfo } from '../../../shared/types/store-payments';
 
 const BASE = '/space/app_1/preview/main';
@@ -80,7 +82,8 @@ function fakeStripe() {
 	const confirmed: string[] = [];
 	const shippingOptions: unknown[] = [];
 	const instances: number[] = [];
-	const Stripe = () => (instances.push(instances.length), {
+	const stripeOptions: unknown[] = [];
+	const Stripe = (_publishableKey: string, options?: unknown) => (instances.push(instances.length), stripeOptions.push(options), {
 		initCheckoutElementsSdk: ({ clientSecret }: { clientSecret: string }) => {
 			mounted.push(clientSecret);
 			let contactField = false;
@@ -124,13 +127,13 @@ function fakeStripe() {
 			};
 		},
 	});
-	return { Stripe, mounted, emails, confirmed, shippingOptions, instances, held, control };
+	return { Stripe, mounted, emails, confirmed, shippingOptions, instances, stripeOptions, held, control };
 }
 
 /** Opens the checkout page in a fake browser tab whose storage survives a reload, answering checkouts in turn. */
-function openPage(tab: { local: Map<string, string>; session: Map<string, string> }, answers: StoreCheckoutResponse[]) {
+function openPage(tab: { local: Map<string, string>; session: Map<string, string> }, answers: StoreCheckoutResponse[], locale: Locale = 'en') {
 	const elements = new Map<string, FakeElement>();
-	const html = renderPayPage({ basePath: BASE, publishableKey: 'pk_test_123', info: INFO, nonce: 'n', returnPaths: { successPath: '/thanks', cancelPath: '/' } });
+	const html = renderPayPage({ basePath: BASE, publishableKey: 'pk_test_123', info: INFO, nonce: 'n', returnPaths: { successPath: '/thanks', cancelPath: '/' }, locale });
 	const config = html.match(/<script type="application\/json" id="estori-pay-config">([\s\S]*?)<\/script>/)?.[1] ?? '';
 	const document = {
 		currentScript: { src: `https://preview.test${BASE}/__estori/store.js` },
@@ -156,14 +159,16 @@ function openPage(tab: { local: Map<string, string>; session: Map<string, string
 		Stripe: stripe.Stripe,
 	};
 	const posted: Record<string, unknown>[] = [];
-	const fetchFake = async (_url: string, init: { body: string }) => {
+	const requested: string[] = [];
+	const fetchFake = async (url: string, init: { body: string }) => {
+		requested.push(url);
 		posted.push(JSON.parse(init.body));
 		const answer = answers.shift();
 		return { json: async () => answer };
 	};
-	new Function('window', 'document', 'fetch', STORE_SCRIPT)(window, document, fetchFake);
+	new Function('window', 'document', 'fetch', storeScript(locale))(window, document, fetchFake);
 	new Function('window', 'document', 'fetch', PAY_PAGE_SCRIPT)(window, document, fetchFake);
-	return { posted, stripe, elements, cart: (window.Estori as { cart: { add(id: string, quantity?: number): void; setQuantity(id: string, quantity: number): void } }).cart };
+	return { posted, requested, stripe, elements, cart: (window.Estori as { cart: { add(id: string, quantity?: number): void; setQuantity(id: string, quantity: number): void } }).cart };
 }
 
 /** The shopper types an email in the page's own field and leaves it. */
@@ -393,5 +398,121 @@ describe("Estori's checkout page script", () => {
 		await settle();
 		expect(page.posted).toHaveLength(2);
 		expect(page.posted[1]).toMatchObject({ items: [{ variantId: 'kenya-250', quantity: 2 }], replaces: 'chk_first' });
+	});
+});
+
+describe("Estori's checkout page script in the shopper's language", () => {
+	beforeEach(() => vi.useFakeTimers());
+	afterEach(() => vi.useRealTimers());
+
+	const SPANISH_MUG = JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 2 }] });
+	const tabWith = (cart = SPANISH_MUG) => ({ local: new Map([[`estori:cart:${BASE}`, cart]]), session: new Map<string, string>() });
+
+	it.each(LOCALES)('writes every amount in %s as US dollars the way the language does, with the same amounts in each', async (locale) => {
+		const page = openPage(tabWith(), [started('chk_1')], locale);
+		await settle();
+		const [, body, total] = page.elements.get('lines')?.children[0].children ?? [];
+		// Two units at $20.00 each, priced from the store's own file until the session's summary says otherwise.
+		expect(total.textContent).toBe(formatDollars(40, locale, 'always'));
+		const each = { en: 'each', es: 'c/u', 'pt-BR': 'cada' }[locale];
+		expect(body.children[1].textContent).toBe(`Whole bean, 250g · ${formatDollars(20, locale, 'always')} ${each}`);
+		expect(page.elements.get('subtotal')?.textContent).toBe(formatDollars(20, locale, 'always'));
+		expect(page.elements.get('total')?.textContent).toBe(formatDollars(20, locale, 'always'));
+		expect(page.elements.get('summary-toggle-total')?.textContent).toBe(formatDollars(20, locale, 'always'));
+		expect(page.elements.get('shipping')?.textContent).toBe({ en: 'Free', es: 'Gratis', 'pt-BR': 'Grátis' }[locale]);
+	});
+
+	it("names the amount on the Pay button in the shopper's language", async () => {
+		const spanish = openPage(tabWith(), [started('chk_1')], 'es');
+		await settle();
+		expect(spanish.elements.get('pay')?.textContent).toBe(`Pagar ${formatDollars(20, 'es', 'always')}`);
+		const portuguese = openPage(tabWith(), [started('chk_2')], 'pt-BR');
+		await settle();
+		expect(portuguese.elements.get('pay')?.textContent).toBe(`Pagar ${formatDollars(20, 'pt-BR', 'always')}`);
+		const english = openPage(tabWith(), [started('chk_3')]);
+		await settle();
+		expect(english.elements.get('pay')?.textContent).toBe('Pay $20.00');
+	});
+
+	it("labels the cart's controls and the removed-item line in the shopper's language", async () => {
+		const tab = tabWith(JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }, { variantId: 'gone', quantity: 1 }] }));
+		const page = openPage(tab, [started('chk_1')], 'es');
+		await settle();
+		const [first, gone] = page.elements.get('lines')?.children ?? [];
+		const controls = first.children[1].children[2];
+		expect(controls.children[0].children[0].attributes['aria-label']).toBe('Uno menos');
+		expect(controls.children[0].children[2].attributes['aria-label']).toBe('Uno más');
+		expect(controls.children[1].textContent).toBe('Quitar');
+		expect(gone.children[1].children[0].textContent).toBe('Un artículo que ya no se vende aquí');
+	});
+
+	it("folds and opens the phone summary with the language's words", async () => {
+		const page = openPage(tabWith(), [started('chk_1')], 'pt-BR');
+		await settle();
+		page.elements.get('summary-toggle')?.onclick?.();
+		expect(page.elements.get('summary-toggle-label')?.textContent).toBe('Ocultar resumo do pedido');
+		page.elements.get('summary-toggle')?.onclick?.();
+		expect(page.elements.get('summary-toggle-label')?.textContent).toBe('Mostrar resumo do pedido');
+	});
+
+	it("shows the page's own messages in the shopper's language, and Estori's refusals as the server worded them", async () => {
+		const failed = openPage(tabWith(), [], 'es');
+		await settle();
+		expect(failed.elements.get('notice')).toMatchObject({ hidden: false, textContent: 'No se pudo iniciar la compra. Actualiza la página e inténtalo de nuevo.' });
+
+		const page = openPage(tabWith(), [started('chk_1')], 'pt-BR');
+		await settle();
+		typeEmail(page, 'shopper@example.com');
+		await settle();
+		page.stripe.control.loadFails = true;
+		page.elements.get('pay')?.onclick?.();
+		await settle();
+		expect(page.elements.get('notice')?.textContent).toBe('Esta compra não pode continuar. Atualize a página e tente novamente.');
+
+		const refused = openPage(tabWith(), [{ ok: false, reason: 'store_paused', message: 'Esta tienda no está recibiendo pedidos nuevos en este momento. Inténtalo más tarde.' }], 'es');
+		await settle();
+		expect(refused.elements.get('notice')?.textContent).toBe('Esta tienda no está recibiendo pedidos nuevos en este momento. Inténtalo más tarde.');
+	});
+
+	it("starts a checkout in the page's language, so a refusal is worded for the shopper even without the language cookie", async () => {
+		const spanish = openPage(tabWith(), [started('chk_1')], 'es');
+		await settle();
+		expect(spanish.requested).toEqual([`${BASE}/__estori/checkout?lang=es`]);
+		const english = openPage(tabWith(), [started('chk_2')]);
+		await settle();
+		expect(english.requested).toEqual([`${BASE}/__estori/checkout?lang=en`]);
+	});
+
+	it("gives Stripe's card form the language, on every session it starts", async () => {
+		const spanish = openPage(tabWith(), [started('chk_1'), started('chk_2')], 'es');
+		await settle();
+		spanish.cart.setQuantity('kenya-250', 3);
+		vi.advanceTimersByTime(400);
+		await settle();
+		expect(spanish.stripe.stripeOptions).toEqual([{ locale: 'es-419' }, { locale: 'es-419' }]);
+		const portuguese = openPage(tabWith(), [started('chk_3')], 'pt-BR');
+		await settle();
+		expect(portuguese.stripe.stripeOptions).toEqual([{ locale: 'pt-BR' }]);
+		const english = openPage(tabWith(), [started('chk_4')]);
+		await settle();
+		// English pages keep Stripe's own choice, from the browser, as they did before the page was translated.
+		expect(english.stripe.stripeOptions).toEqual([{ locale: 'auto' }]);
+	});
+
+	it('keeps the cart, the checkout request and every amount when the shopper switches language mid-checkout', async () => {
+		const tab = tabWith();
+		const english = openPage(tab, [started('chk_en')]);
+		await settle();
+		typeEmail(english, 'shopper@example.com');
+		await settle();
+
+		const spanish = openPage(tab, [started('chk_es')], 'es');
+		await settle();
+		// The same cart is priced again, replacing the checkout the English page opened; only the words differ.
+		expect(spanish.posted[0]).toEqual({ ...english.posted[0], replaces: 'chk_en' });
+		expect(spanish.elements.get('lines')?.children).toHaveLength(1);
+		expect(spanish.elements.get('lines')?.children[0].children[1].children[2].children[0].children[1].textContent).toBe('2');
+		expect(spanish.elements.get('total')?.textContent).toBe(formatDollars(20, 'es', 'always'));
+		expect(spanish.stripe.mounted).toEqual(['cs_secret_chk_es']);
 	});
 });

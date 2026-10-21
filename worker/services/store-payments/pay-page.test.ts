@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PAY_PAGE_SCRIPT, payPageHeaders, renderPayPage } from './pay-page';
+import { formatDollars } from '../../../shared/i18n/format';
+import { LOCALES, type Locale } from '../../../shared/i18n/locales';
 import type { StoreInfo } from '../../../shared/types/store-payments';
 import { STRIPE_JS_URL } from '../../../shared/types/stripe';
 
@@ -13,7 +15,7 @@ const INFO: StoreInfo = {
 };
 
 const page = (overrides: Partial<Parameters<typeof renderPayPage>[0]> = {}) =>
-	renderPayPage({ basePath: '/space/app_1/preview/main', publishableKey: 'pk_test_123', info: INFO, nonce: 'n0nce', returnPaths: { successPath: '/thanks', cancelPath: '/cart' }, ...overrides });
+	renderPayPage({ basePath: '/space/app_1/preview/main', publishableKey: 'pk_test_123', info: INFO, nonce: 'n0nce', returnPaths: { successPath: '/thanks', cancelPath: '/cart' }, locale: 'en', ...overrides });
 
 function configOf(html: string): Record<string, unknown> {
 	const match = html.match(/<script type="application\/json" id="estori-pay-config">([\s\S]*?)<\/script>/);
@@ -91,6 +93,142 @@ describe('renderPayPage', () => {
 		const neutral = page({ info: null });
 		expect(neutral).toContain("This store can't take payments right now.");
 		expect(neutral).toContain('<title>Checkout</title>');
+	});
+});
+
+describe("renderPayPage in the shopper's language", () => {
+	/** The page's copy as the template writes it, for the three languages; the English is the page as it was before translation. */
+	const COPY: Record<Locale, { title: string; heading: string; back: string; steps: string[]; pay: string; fine: string; summary: string; toggle: string; totals: string[]; note: string; empty: string }> = {
+		en: {
+			title: '<title>Checkout · Ember Roasters</title>',
+			heading: '<h1>Checkout</h1>',
+			back: '<a class="back" id="back" href="/space/app_1/preview/main/">&larr; Continue shopping</a>',
+			steps: [
+				'<h2><span>1</span> Contact</h2><label class="field-label" for="email">Email</label>',
+				'placeholder="you@example.com"',
+				'<h2><span>2</span> Shipping address</h2>',
+				'<h2><span>3</span> Payment</h2>',
+			],
+			pay: '<button class="pay" id="pay" type="button" disabled>Pay</button>',
+			fine: '<p class="fine">Payments are processed securely by Stripe. Ember Roasters is the seller.</p>',
+			summary: '<aside class="panel summary" id="summary" aria-label="Order summary">',
+			toggle: '<span id="summary-toggle-label">Show order summary</span>',
+			totals: ['<label for="country">Ship to</label>', '<dt>Subtotal</dt>', '<dt>Shipping</dt>', '<dt class="total">Total</dt>'],
+			note: '<div class="note" id="note-row" hidden><h3>Order note</h3>',
+			empty: '<h2>Your cart is empty</h2>\n    <p><a id="empty-back" href="/space/app_1/preview/main/">Continue shopping</a></p>',
+		},
+		es: {
+			title: '<title>Finalizar compra · Ember Roasters</title>',
+			heading: '<h1>Finalizar compra</h1>',
+			back: '<a class="back" id="back" href="/space/app_1/preview/main/">&larr; Seguir comprando</a>',
+			steps: [
+				'<h2><span>1</span> Contacto</h2><label class="field-label" for="email">Correo electrónico</label>',
+				'placeholder="tu@ejemplo.com"',
+				'<h2><span>2</span> Dirección de envío</h2>',
+				'<h2><span>3</span> Pago</h2>',
+			],
+			pay: '<button class="pay" id="pay" type="button" disabled>Pagar</button>',
+			fine: '<p class="fine">Los pagos se procesan de forma segura con Stripe. Vendido por Ember Roasters.</p>',
+			summary: '<aside class="panel summary" id="summary" aria-label="Resumen del pedido">',
+			toggle: '<span id="summary-toggle-label">Mostrar resumen del pedido</span>',
+			totals: ['<label for="country">Enviar a</label>', '<dt>Subtotal</dt>', '<dt>Envío</dt>', '<dt class="total">Total</dt>'],
+			note: '<div class="note" id="note-row" hidden><h3>Nota del pedido</h3>',
+			empty: '<h2>Tu carrito está vacío</h2>\n    <p><a id="empty-back" href="/space/app_1/preview/main/">Seguir comprando</a></p>',
+		},
+		'pt-BR': {
+			title: '<title>Finalizar compra · Ember Roasters</title>',
+			heading: '<h1>Finalizar compra</h1>',
+			back: '<a class="back" id="back" href="/space/app_1/preview/main/">&larr; Continuar comprando</a>',
+			steps: [
+				'<h2><span>1</span> Contato</h2><label class="field-label" for="email">E-mail</label>',
+				'placeholder="voce@exemplo.com"',
+				'<h2><span>2</span> Endereço de entrega</h2>',
+				'<h2><span>3</span> Pagamento</h2>',
+			],
+			pay: '<button class="pay" id="pay" type="button" disabled>Pagar</button>',
+			fine: '<p class="fine">Os pagamentos são processados com segurança pela Stripe. Vendido por Ember Roasters.</p>',
+			summary: '<aside class="panel summary" id="summary" aria-label="Resumo do pedido">',
+			toggle: '<span id="summary-toggle-label">Mostrar resumo do pedido</span>',
+			totals: ['<label for="country">Enviar para</label>', '<dt>Subtotal</dt>', '<dt>Envio</dt>', '<dt class="total">Total</dt>'],
+			note: '<div class="note" id="note-row" hidden><h3>Nota do pedido</h3>',
+			empty: '<h2>Seu carrinho está vazio</h2>\n    <p><a id="empty-back" href="/space/app_1/preview/main/">Continuar comprando</a></p>',
+		},
+	};
+
+	it.each(LOCALES)('writes every line of the %s page in that language, with the language on the document', (locale) => {
+		const html = page({ locale });
+		const copy = COPY[locale];
+		expect(html).toContain(`<html lang="${locale}">`);
+		for (const line of [copy.title, copy.heading, copy.back, ...copy.steps, copy.pay, copy.fine, copy.summary, copy.toggle, ...copy.totals, copy.note, copy.empty]) expect(html).toContain(line);
+	});
+
+	it('leaves the English page as it was, so nothing in it says it was translated', () => {
+		const html = page();
+		expect(html).toContain('<html lang="en">');
+		expect(html).toContain('<h2>Order summary</h2>');
+		expect(html).toContain('<dd id="subtotal">&mdash;</dd>');
+		expect(configOf(html)).toMatchObject({ locale: 'en', stripeLocale: 'auto', intlLocale: 'en-US', unavailable: "This store can't take payments right now." });
+	});
+
+	it("gives Stripe's form the language: Latin American Spanish for es, Brazilian Portuguese for pt-BR", () => {
+		expect(configOf(page({ locale: 'es' }))).toMatchObject({ locale: 'es', stripeLocale: 'es-419', intlLocale: 'es-419' });
+		expect(configOf(page({ locale: 'pt-BR' }))).toMatchObject({ locale: 'pt-BR', stripeLocale: 'pt-BR', intlLocale: 'pt-BR' });
+	});
+
+	it('hands the script its own words in the language, so a message it shows is the shopper\'s', () => {
+		const text = configOf(page({ locale: 'es' })).text as Record<string, string>;
+		expect(text.checkoutFailed).toBe('No se pudo iniciar la compra. Actualiza la página e inténtalo de nuevo.');
+		expect(text.cannotContinue).toBe('Esta compra no puede continuar. Actualiza la página e inténtalo de nuevo.');
+		expect((configOf(page({ locale: 'pt-BR' })).text as Record<string, string>).checkoutFailed).toBe('Não foi possível iniciar a compra. Atualize a página e tente novamente.');
+		expect((configOf(page({ locale: 'pt-BR' })).text as Record<string, string>).cannotContinue).toBe('Esta compra não pode continuar. Atualize a página e tente novamente.');
+		expect(text.payAmount).toBe('Pagar {amount}');
+		expect(configOf(page({ locale: 'es' })).unavailable).toBe('Esta tienda no puede recibir pagos en este momento.');
+		expect((configOf(page({ locale: 'pt-BR' })).text as Record<string, string>).free).toBe('Grátis');
+	});
+
+	it("says the store can't take payments in the shopper's language", () => {
+		expect(page({ locale: 'es', publishableKey: null })).toContain('<div class="notice" id="notice">Esta tienda no puede recibir pagos en este momento.</div>');
+		expect(page({ locale: 'pt-BR', info: null })).toContain('Esta loja não pode receber pagamentos agora.');
+	});
+
+	it("names no seller in the language's words on a store without a brand", () => {
+		expect(page({ locale: 'es', info: { ...INFO, brand: null } })).toContain('Los pagos se procesan de forma segura con Stripe. Vendido por esta tienda.');
+		expect(page({ locale: 'pt-BR', info: { ...INFO, brand: null } })).toContain('Os pagamentos são processados com segurança pela Stripe. Vendido por esta loja.');
+		expect(page({ locale: 'es', info: { ...INFO, brand: null } })).toContain('<title>Finalizar compra</title>');
+	});
+
+	it('escapes a brand name in a translated sentence, so store text still cannot add markup', () => {
+		const html = page({ locale: 'es', info: { ...INFO, brand: { ...INFO.brand!, name: '<b>"Ember" & Co</b>' } } });
+		expect(html).toContain('<title>Finalizar compra · &lt;b&gt;&quot;Ember&quot; &amp; Co&lt;/b&gt;</title>');
+		expect(html).toContain('Vendido por &lt;b&gt;&quot;Ember&quot; &amp; Co&lt;/b&gt;.');
+		expect(html).not.toContain('<b>"Ember"');
+	});
+
+	it('keeps the products, ids and prices the page was given, whatever the language', () => {
+		const products = INFO.products.map((product) => ({ ...product, name: 'Café de Kenia', variants: product.variants.map((variant) => ({ ...variant, name: 'Grano entero, 250 g' })) }));
+		const spanish = configOf(page({ locale: 'es', info: { ...INFO, products } }));
+		expect(spanish.products).toEqual([
+			{ id: 'kenya', name: 'Café de Kenia', image: '/space/app_1/preview/main/images/kenya.jpg', variants: [{ id: 'kenya-250', name: 'Grano entero, 250 g', priceCents: 2000 }] },
+		]);
+		expect(spanish).toMatchObject({ countries: ['US', 'CA'] });
+	});
+
+	it('writes dollars the way the language does, so they cannot be taken for pesos or reais', () => {
+		const money = (locale: Locale, cents: number) => {
+			const { intlLocale } = configOf(page({ locale })) as { intlLocale: string };
+			return new Intl.NumberFormat(intlLocale, { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(cents / 100);
+		};
+		for (const locale of LOCALES) for (const cents of [0, 5, 2000, 2450, 123_450]) expect(money(locale, cents), `${locale} ${cents}`).toBe(formatDollars(cents / 100, locale, 'always'));
+		expect(money('es', 2450)).toBe('USD\u00a024.50');
+		expect(money('pt-BR', 123_450)).toBe('US$\u00a01.234,50');
+	});
+
+	it('keeps its security policy and nonce in every language', () => {
+		for (const locale of LOCALES) {
+			const html = page({ locale });
+			expect(html).toContain('<script nonce="n0nce">');
+			expect(html.match(/<script(?![^>]*type="application\/json")[^>]*>/g)).toHaveLength(3);
+		}
 	});
 });
 

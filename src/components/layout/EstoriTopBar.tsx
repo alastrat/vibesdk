@@ -5,6 +5,7 @@ import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { AuthButton } from '@/components/auth/auth-button';
 import { OrangeButton } from '@/components/shared/OrangeButton';
 import { BRAND, EstoriLogo } from '@/brand';
+import { t } from '@/lib/i18n';
 
 /** Full-width navy bar above the sidebar: logo, account menu and Sign In. */
 export function EstoriTopBar() {
@@ -13,7 +14,7 @@ export function EstoriTopBar() {
 
 	return (
 		<header className="flex h-(--estori-topbar-h) shrink-0 items-center justify-between border-b border-(--estori-topbar-line) bg-(--estori-topbar) px-4 text-(--estori-topbar-text)">
-			<Link to="/" aria-label={`${BRAND.name} home`} className="flex items-center">
+			<Link to="/" aria-label={t('{brand} home', { brand: BRAND.name })} className="flex items-center">
 				<EstoriLogo className="h-6 w-auto" />
 			</Link>
 			<div className="flex items-center gap-2">
@@ -24,7 +25,7 @@ export function EstoriTopBar() {
 						onClick={() => showAuthModal()}
 						icon={<SignInIcon className="size-4" />}
 					>
-						Sign In
+						{t('Sign In')}
 					</OrangeButton>
 				)}
 			</div>

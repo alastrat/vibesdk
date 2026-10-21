@@ -1,5 +1,7 @@
 import { Think } from '@cloudflare/think';
 import type { PrepareStepContext, StepConfig, StepContext, Session, TurnContext, TurnConfig } from '@cloudflare/think';
+import { savedUserLocale } from '../../services/i18n/saved-locale';
+import { sellerLanguageInstruction } from './language';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModel, ToolSet } from 'ai';
 import {
@@ -26,15 +28,13 @@ import { catalogToolDepsFromEnv, createCatalogTools } from './catalog-tools';
 import { createPaymentsSetupTool, paymentsSetupDepsFromEnv } from './payments-setup-tool';
 import { serializeTools } from './serial-tools';
 import { selectThinkContextMessages } from './context-selector';
-import { getUserConfigurableSettings } from '../../config';
-import { RateLimitService } from '../../services/rate-limit/rateLimits';
-import { hasCloudflareConfigured } from '../../services/rate-limit/usageChecker';
-import type { RateLimitSettings } from '../../services/rate-limit/config';
+import { countDailyCall, loadDailyAllowance, type DailyAllowance } from '../../services/rate-limit/daily-allowance';
 import { isFlagOn } from '../../services/posthog/flags';
 import { chargeStep, loadTurnAccount, meteringDepsFromEnv, type TurnAccount } from '../../services/billing/metering';
 import { stepCredits, stepUsageFrom } from '../../services/billing/step-credits';
 import { resolveThinkModel, type TokenPrices } from './model-config';
 import { createModelTransport, type ProviderFailure } from './model-transport';
+import { storedKeysFetch } from './gateway-auth';
 import { getThoughtSignature, injectThoughtSignatures } from './thought-signatures';
 import { createAssetCache, inlineAgentAssets } from './agent-assets';
 import type { BuildTurnUsage } from './build-events';
@@ -60,7 +60,7 @@ interface TurnPricing {
  */
 type TurnUsage =
 	| (TurnPricing & { mode: 'credits'; userId: string; account: TurnAccount | null })
-	| (TurnPricing & { mode: 'daily'; config: RateLimitSettings; hasCloudflareConfigured: boolean; creditCost: number })
+	| (TurnPricing & DailyAllowance & { mode: 'daily'; creditCost: number })
 	| (TurnPricing & { mode: 'unmetered' });
 
 /**
@@ -244,10 +244,9 @@ export class ThinkAgent extends Think<Env> {
 				this.providerFailure = failure;
 			},
 		});
+		const send = storedKeysFetch(model.useStoredKeys ?? false, transport);
 		const gatewayFetch: typeof fetch = async (input, init) => {
-			const headers = new Headers(init?.headers);
-			if (model.useStoredKeys) headers.delete('authorization');
-			const res = await transport(input, { ...(init ?? {}), headers });
+			const res = await send(input, init);
 			if (!res.body) return res;
 			const outHeaders = new Headers(res.headers);
 			// Body length/encoding change after transforming the stream.
@@ -304,6 +303,7 @@ export class ThinkAgent extends Think<Env> {
 		this.turnCredits = 0;
 		const messages = selectThinkContextMessages(ctx.messages);
 		const config = this.getConfig<ThinkAgentConfig>();
+		const turnLocale = await savedUserLocale(this.env, config?.userId);
 		this.providerFailure = null;
 		// ctx.model is the model this turn runs on; the config may change before the turn ends.
 		const turnModelId = typeof ctx.model === 'string' ? ctx.model : ctx.model.modelId;
@@ -315,14 +315,8 @@ export class ThinkAgent extends Think<Env> {
 			this.turnUsage = { ...pricing, mode: 'credits', userId: config.userId, account: await loadTurnAccount(this.env, config.userId) };
 		} else if (config) {
 			try {
-				const userConfig = await getUserConfigurableSettings(this.env, config.userId);
-				this.turnUsage = {
-					...pricing,
-					mode: 'daily',
-					config: userConfig.security.rateLimit,
-					hasCloudflareConfigured: await hasCloudflareConfigured(this.env, config.userId),
-					creditCost: model.config.creditCost,
-				};
+				const allowance = await loadDailyAllowance(this.env, config.userId, { ownAccountPays: true });
+				this.turnUsage = { ...pricing, mode: 'daily', ...allowance, creditCost: model.config.creditCost };
 			} catch (error) {
 				console.warn('Failed to resolve Think credit metering configuration', error);
 			}
@@ -333,7 +327,9 @@ export class ThinkAgent extends Think<Env> {
 			originalMessageCount: ctx.messages.length,
 			selectedMessageCount: messages.length,
 		});
-		return { messages, maxRetries: TURN_MAX_RETRIES };
+		// Think freezes session context before beforeTurn; override the final turn system to avoid a stale preference.
+		const system = [ctx.system, sellerLanguageInstruction(turnLocale)].filter(Boolean).join('\n\n');
+		return { messages, system, maxRetries: TURN_MAX_RETRIES };
 	}
 
 	override getSkills(): SkillSource[] {
@@ -397,16 +393,7 @@ export class ThinkAgent extends Think<Env> {
 		if (this.turnSteps !== null) this.turnSteps += 1;
 		const config = this.getConfig<ThinkAgentConfig>();
 		if (this.turnUsage?.mode === 'daily' && config) {
-			await RateLimitService.enforceLLMCallsRateLimit(
-				this.env,
-				this.turnUsage.config,
-				config.userId,
-				'Think',
-				'',
-				false,
-				this.turnUsage.hasCloudflareConfigured,
-				{ creditCost: this.turnUsage.creditCost, throwOnExceeded: false },
-			);
+			await countDailyCall(this.env, this.turnUsage, config.userId, this.turnUsage.creditCost, 'Think');
 		}
 		if (ctx.stepNumber >= this.maxSteps - 1) {
 			return {

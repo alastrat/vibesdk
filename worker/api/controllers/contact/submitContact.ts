@@ -2,6 +2,7 @@ import type { ContactRequestInput } from '../../../../shared/types/contact';
 import type { OutgoingEmail } from '../../../services/email/types';
 import { contactNotificationEmail, contactReceivedEmail } from '../../../services/email/templates';
 import { isHoneypotFilled, parseContactRequest } from './contactDto';
+import { currentLocale } from '../../../services/i18n/request-locale';
 
 /** What a submission needs from the outside world, so its order of steps can be tested on its own. */
 export interface ContactSubmissionDeps {
@@ -35,7 +36,7 @@ export async function submitContact(body: unknown, deps: ContactSubmissionDeps):
 	let confirmationSent = false;
 	try {
 		if (await deps.canConfirm(parsed.value.email)) {
-			await deps.send(contactReceivedEmail(parsed.value));
+			await deps.send(contactReceivedEmail(parsed.value, currentLocale()));
 			confirmationSent = true;
 		}
 	} catch (error) {

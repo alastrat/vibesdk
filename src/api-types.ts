@@ -49,6 +49,7 @@ export type {
 export type {
   UserAppsData,
   ProfileUpdateData,
+  LocalePreferenceData,
 } from 'worker/api/controllers/user/types';
 
 // Stats API Types
@@ -255,6 +256,7 @@ export {
 	PLAN_PRICES_CENTS,
 	assertWithinLimit,
 	extraCreditsPriceCents,
+	extraCreditsPriceLabel,
 	formatBillingDate,
 	formatCredits,
 	formatUsd,
@@ -333,6 +335,22 @@ export type {
 	ShopperEmailTestResult,
 } from '../shared/types/shopper-emails';
 export { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_LABELS, SHOPPER_EMAIL_LIMITS, SHOPPER_EMAIL_STATUSES, SHOPPER_EMAILS_PATH } from '../shared/types/shopper-emails';
+export type { TaskKind, TaskPauseReason, TaskProgressView, TaskStatus, TaskView, TaskViewPayloads } from '../shared/types/tasks';
+export { TASK_FAILED_MESSAGE, TASK_KINDS, TASK_STATUSES, UNFINISHED_TASK_STATUSES, isUnfinishedStatus } from '../shared/types/tasks';
+export type {
+	StoreLanguageStatus,
+	StoreText,
+	StoreTranslationOrigin,
+	StoreTranslationOverview,
+	StoreTranslationPage,
+	StoreTranslationRow,
+	StoreTranslationRun,
+	StoreTranslationSettings,
+	StoreTranslationSettingsPatch,
+	StoreTranslationStoreSummary,
+	StoreTranslationTextRequest,
+} from '../shared/types/store-translations';
+export { MAX_TEXT_CHARS, STORE_TRANSLATION_ORIGINS, STORE_TRANSLATION_PAGE_SIZE, STORE_TRANSLATIONS_PATH, UNTOUCHED_SETTINGS_VERSION } from '../shared/types/store-translations';
 export type { CatalogProductsData, CatalogProductView, CatalogVariantView } from '../shared/types/catalog';
 export type {
 	AdminCatalogOrderDetail,
@@ -587,3 +605,5 @@ export type {
 	TelemetryConfigData,
 } from '../shared/types/telemetry.js';
 export { GPC_ANALYTICS_MESSAGE } from '../shared/types/telemetry.js';
+export type { Locale } from '../shared/i18n/locales.js';
+export { DEFAULT_LOCALE, LOCALES, LOCALE_NAMES, isLocale, negotiateLocale } from '../shared/i18n/locales.js';

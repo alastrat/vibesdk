@@ -10,6 +10,7 @@ import {
 	PackageIcon,
 	ReceiptIcon,
 	PlusIcon,
+	TranslateIcon,
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { isValid } from 'date-fns';
@@ -30,7 +31,10 @@ import { useUsageLimitsBadgeState } from '@/components/usage-limits-badge';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
-import { SELLER_ORDERS_PATH, SHOPPER_EMAILS_PATH } from '@/api-types';
+import { legalLinkLabel } from '@/lib/legal-link-label';
+import type { AppVisibility } from '@/lib/visibility-label';
+import { t, tn } from '@/lib/i18n';
+import { SELLER_ORDERS_PATH, SHOPPER_EMAILS_PATH, STORE_TRANSLATIONS_PATH } from '@/api-types';
 import { useFlag } from '@/hooks/use-flag';
 
 interface App {
@@ -39,7 +43,7 @@ interface App {
 	framework?: string | null;
 	updatedAt: Date | string | null;
 	updatedAtFormatted?: string;
-	visibility: 'private' | 'team' | 'board' | 'public';
+	visibility: AppVisibility;
 	userId?: string | null;
 	isFavorite?: boolean;
 }
@@ -87,21 +91,21 @@ function AppMenuItem({
 				(Date.now() - updatedAt.getTime()) / 1000,
 			);
 
-			if (diffInSeconds < 60) return 'now';
+			if (diffInSeconds < 60) return t('now');
 			if (diffInSeconds < 3600)
-				return `${Math.floor(diffInSeconds / 60)}m ago`;
+				return t('{count}m ago', { count: Math.floor(diffInSeconds / 60) });
 			if (diffInSeconds < 86400)
-				return `${Math.floor(diffInSeconds / 3600)}h ago`;
+				return t('{count}h ago', { count: Math.floor(diffInSeconds / 3600) });
 			if (diffInSeconds < 604800)
-				return `${Math.floor(diffInSeconds / 86400)}d ago`;
+				return t('{count}d ago', { count: Math.floor(diffInSeconds / 86400) });
 			if (diffInSeconds < 2592000)
-				return `${Math.floor(diffInSeconds / 604800)}w ago`;
+				return t('{count}w ago', { count: Math.floor(diffInSeconds / 604800) });
 			if (diffInSeconds < 31536000)
-				return `${Math.floor(diffInSeconds / 2592000)}mo ago`;
-			return `${Math.floor(diffInSeconds / 31536000)}y ago`;
+				return tn('{count}mo ago', '{count}mo ago', Math.floor(diffInSeconds / 2592000));
+			return tn('{count}y ago', '{count}y ago', Math.floor(diffInSeconds / 31536000));
 		}
 		if (app.updatedAtFormatted) return app.updatedAtFormatted;
-		return 'Recently';
+		return t('Recently');
 	};
 
 	return (
@@ -160,6 +164,7 @@ export function AppSidebar() {
 	const isCollapsed = state === 'collapsed';
 	const usageLimits = useUsageLimitsBadgeState();
 	const catalogPaused = useFlag('catalog-paused');
+	const translationsPaused = useFlag('store-translations-paused');
 	// Show only when action is needed: not connected, or token without gateway.
 	// Hide when configured even if cloudflareCredits is still null, and while
 	// billing is on, where plans replace the seller's own Cloudflare account.
@@ -170,8 +175,8 @@ export function AppSidebar() {
 		!usageLimits.loading &&
 		(!usageLimits.hasUserToken || usageLimits.needsConfiguration);
 	const cloudflareCtaLabel = usageLimits.needsConfiguration
-		? 'Configure AI Gateway'
-		: 'Connect Cloudflare';
+		? t('Configure AI Gateway')
+		: t('Connect Cloudflare');
 
 	const handleCloudflareCta = () => {
 		if (usageLimits.needsConfiguration) {
@@ -234,14 +239,14 @@ export function AppSidebar() {
 	const showAppsSection =
 		isSearching || appsWithoutBookmarks.length > 0 || moreAvailable;
 
-	const bookmarkSearchEmptyMessage = `No bookmarks found for "${trimmedSearchQuery}"`;
+	const bookmarkSearchEmptyMessage = t('No bookmarks found for "{query}"', { query: trimmedSearchQuery });
 
 	const appSearchEmptyMessage =
 		allApps.length === 0
-			? 'No apps yet'
+			? t('No apps yet')
 			: favoriteSearchResults.length > 0
-				? `No other apps found for "${trimmedSearchQuery}"`
-				: `No apps found for "${trimmedSearchQuery}"`;
+				? t('No other apps found for "{query}"', { query: trimmedSearchQuery })
+				: t('No apps found for "{query}"', { query: trimmedSearchQuery });
 
 	const getVisibilityIcon = (visibility: App['visibility']) => {
 		switch (visibility) {
@@ -269,7 +274,7 @@ export function AppSidebar() {
 				)}
 			>
 				<Sidebar.Trigger
-					aria-label={isCollapsed ? 'Open sidebar' : 'Collapse sidebar'}
+					aria-label={isCollapsed ? t('Open sidebar') : t('Collapse sidebar')}
 					className="flex size-9 shrink-0 items-center justify-center"
 				/>
 			</Sidebar.Header>
@@ -280,8 +285,8 @@ export function AppSidebar() {
 						{pathname !== '/' && (
 							<OrangeButton
 								shape="square"
-								aria-label="New build"
-								title="New build"
+								aria-label={t('New build')}
+								title={t('New build')}
 								onClick={() => navigate('/')}
 								className="size-8!"
 								icon={
@@ -297,8 +302,8 @@ export function AppSidebar() {
 							size="base"
 							variant="ghost"
 							id="discover-link"
-							aria-label="Discover"
-							title="Discover"
+							aria-label={t('Discover')}
+							title={t('Discover')}
 							aria-current={
 								pathname === '/discover' ? 'page' : undefined
 							}
@@ -316,8 +321,8 @@ export function AppSidebar() {
 								size="base"
 								variant="ghost"
 								id="catalog-link"
-								aria-label="Catalog"
-								title="Catalog"
+								aria-label={t('Catalog')}
+								title={t('Catalog')}
 								aria-current={pathname === '/catalog' ? 'page' : undefined}
 								onClick={() => navigate('/catalog')}
 								className={cn(
@@ -333,8 +338,8 @@ export function AppSidebar() {
 								size="base"
 								variant="ghost"
 								id="orders-link"
-								aria-label="Orders"
-								title="Orders"
+								aria-label={t('Orders')}
+								title={t('Orders')}
 								aria-current={pathname.startsWith(SELLER_ORDERS_PATH) ? 'page' : undefined}
 								onClick={() => navigate(SELLER_ORDERS_PATH)}
 								className={cn(
@@ -350,8 +355,8 @@ export function AppSidebar() {
 								size="base"
 								variant="ghost"
 								id="emails-link"
-								aria-label="Emails"
-								title="Emails"
+								aria-label={t('Emails')}
+								title={t('Emails')}
 								aria-current={pathname.startsWith(SHOPPER_EMAILS_PATH) ? 'page' : undefined}
 								onClick={() => navigate(SHOPPER_EMAILS_PATH)}
 								className={cn(
@@ -359,6 +364,23 @@ export function AppSidebar() {
 									pathname.startsWith(SHOPPER_EMAILS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
 								)}
 								icon={<EnvelopeSimpleIcon className="size-4" />}
+							/>
+						)}
+						{user && !translationsPaused && (
+							<Button
+								shape="square"
+								size="base"
+								variant="ghost"
+								id="translations-link"
+								aria-label={t('Translations')}
+								title={t('Translations')}
+								aria-current={pathname.startsWith(STORE_TRANSLATIONS_PATH) ? 'page' : undefined}
+								onClick={() => navigate(STORE_TRANSLATIONS_PATH)}
+								className={cn(
+									'text-kumo-subtle hover:text-kumo-default',
+									pathname.startsWith(STORE_TRANSLATIONS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
+								)}
+								icon={<TranslateIcon className="size-4" />}
 							/>
 						)}
 					</div>
@@ -373,13 +395,13 @@ export function AppSidebar() {
 											weight="bold"
 										/>
 									}
-									title="New build"
+									title={t('New build')}
 									onClick={() => {
 										navigate('/');
 									}}
 									className="h-8! w-full justify-start text-sm"
 								>
-									New build
+									{t('New build')}
 								</OrangeButton>
 							)}
 
@@ -392,20 +414,20 @@ export function AppSidebar() {
 									/>
 								}
 								id="discover-link"
-								tooltip="Discover"
+								tooltip={t('Discover')}
 								onClick={() => navigate('/discover')}
 							>
-								Discover
+								{t('Discover')}
 							</Sidebar.MenuButton>
 							{user && !catalogPaused && (
 								<Sidebar.MenuButton
 									active={pathname === '/catalog'}
 									icon={<PackageIcon weight="duotone" className="size-4 -mr-1" />}
 									id="catalog-link"
-									tooltip="Catalog"
+									tooltip={t('Catalog')}
 									onClick={() => navigate('/catalog')}
 								>
-									Catalog
+									{t('Catalog')}
 								</Sidebar.MenuButton>
 							)}
 							{user && (
@@ -413,10 +435,10 @@ export function AppSidebar() {
 									active={pathname.startsWith(SELLER_ORDERS_PATH)}
 									icon={<ReceiptIcon weight="duotone" className="size-4 -mr-1" />}
 									id="orders-link"
-									tooltip="Orders"
+									tooltip={t('Orders')}
 									onClick={() => navigate(SELLER_ORDERS_PATH)}
 								>
-									Orders
+									{t('Orders')}
 								</Sidebar.MenuButton>
 							)}
 							{user && (
@@ -424,10 +446,21 @@ export function AppSidebar() {
 									active={pathname.startsWith(SHOPPER_EMAILS_PATH)}
 									icon={<EnvelopeSimpleIcon weight="duotone" className="size-4 -mr-1" />}
 									id="emails-link"
-									tooltip="Emails"
+									tooltip={t('Emails')}
 									onClick={() => navigate(SHOPPER_EMAILS_PATH)}
 								>
-									Emails
+									{t('Emails')}
+								</Sidebar.MenuButton>
+							)}
+							{user && !translationsPaused && (
+								<Sidebar.MenuButton
+									active={pathname.startsWith(STORE_TRANSLATIONS_PATH)}
+									icon={<TranslateIcon weight="duotone" className="size-4 -mr-1" />}
+									id="translations-link"
+									tooltip={t('Translations')}
+									onClick={() => navigate(STORE_TRANSLATIONS_PATH)}
+								>
+									{t('Translations')}
 								</Sidebar.MenuButton>
 							)}
 						</Sidebar.Menu>
@@ -439,8 +472,8 @@ export function AppSidebar() {
 										<MagnifyingGlassIcon className="size-4 text-kumo-subtle" />
 									</InputGroup.Addon>
 									<InputGroup.Input
-										aria-label="Search apps"
-										placeholder="Search apps"
+										aria-label={t('Search apps')}
+										placeholder={t('Search apps')}
 										value={searchQuery}
 										onChange={(event) =>
 											setSearchQuery(event.target.value)
@@ -458,7 +491,7 @@ export function AppSidebar() {
 					<Sidebar.Group>
 						<Sidebar.GroupLabel>
 							<span className="text-xs font-funky-mono">
-								Bookmarked
+								{t('Bookmarked')}
 							</span>
 						</Sidebar.GroupLabel>
 						<Sidebar.Menu>
@@ -466,7 +499,7 @@ export function AppSidebar() {
 								favoriteAppsLoading ? (
 									<Sidebar.MenuItem>
 										<div className="px-3 py-3 text-sm text-kumo-subtle">
-											Searching bookmarks...
+											{t('Searching bookmarks...')}
 										</div>
 									</Sidebar.MenuItem>
 								) : favoriteSearchResults.length > 0 ? (
@@ -519,7 +552,7 @@ export function AppSidebar() {
 					<Sidebar.Group>
 						<Sidebar.GroupLabel>
 							<span className="text-xs font-funky-mono">
-								Apps
+								{t('Apps')}
 							</span>
 						</Sidebar.GroupLabel>
 						<Sidebar.Menu>
@@ -527,7 +560,7 @@ export function AppSidebar() {
 								allAppsLoading ? (
 									<Sidebar.MenuItem>
 										<div className="px-3 py-3 text-sm text-kumo-subtle">
-											Searching apps...
+											{t('Searching apps...')}
 										</div>
 									</Sidebar.MenuItem>
 								) : appSearchResults.length > 0 ? (
@@ -578,10 +611,10 @@ export function AppSidebar() {
 										<Sidebar.MenuButton
 											active={pathname === '/apps'}
 											icon={CaretRightIcon}
-											tooltip="View all apps"
+											tooltip={t('View all apps')}
 											onClick={() => navigate('/apps')}
 										>
-											View all apps
+											{t('View all apps')}
 										</Sidebar.MenuButton>
 									)}
 								</>
@@ -602,7 +635,7 @@ export function AppSidebar() {
 												<Sidebar.MenuButton
 													icon={UsersThreeIcon}
 												>
-													My boards
+													{t('My boards')}
 													<Sidebar.MenuChevron />
 												</Sidebar.MenuButton>
 											}
@@ -623,12 +656,9 @@ export function AppSidebar() {
 																{board.name}
 															</span>
 															<span className="truncate text-xs font-normal text-kumo-subtle">
-																{
-																	board.memberCount
-																}{' '}
-																members /{' '}
-																{board.appCount}{' '}
-																apps
+																{tn('{count} member', '{count} members', board.memberCount)}
+																{' / '}
+																{tn('{count} app', '{count} apps', board.appCount)}
 															</span>
 														</span>
 													</Sidebar.MenuSubButton>
@@ -638,7 +668,7 @@ export function AppSidebar() {
 														navigate('/boards')
 													}
 												>
-													Browse all boards
+													{t('Browse all boards')}
 												</Sidebar.MenuSubButton>
 											</Sidebar.MenuSub>
 										</Sidebar.CollapsibleContent>
@@ -680,10 +710,10 @@ export function AppSidebar() {
 					)}
 					{!isCollapsed && (
 						<nav className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-xs text-kumo-subtle">
-							<Link to={'/pricing'} className="hover:text-kumo-default">Pricing</Link>
+							<Link to={'/pricing'} className="hover:text-kumo-default">{t('Pricing')}</Link>
 							{LEGAL_LINKS.map((link) => (
 								<Link key={link.slug} to={link.path} className="hover:text-kumo-default">
-									{link.label}
+									{legalLinkLabel(link.slug)}
 								</Link>
 							))}
 						</nav>

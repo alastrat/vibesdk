@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import React from 'react';
 import { MagnifyingGlassIcon } from '@phosphor-icons/react';
 import { Input, Button } from '@cloudflare/kumo';
@@ -33,10 +34,11 @@ export const AppFiltersForm: React.FC<AppFiltersFormProps> = ({
 	searchQuery,
 	onSearchChange,
 	onSearchSubmit,
-	searchPlaceholder = 'Search apps...',
+	searchPlaceholder = t("Search apps..."),
 	showSearchButton = false,
 	className = '',
 }) => {
+	useI18n();
 	return (
 		<div className={`max-w-4xl ${className}`}>
 			<form onSubmit={onSearchSubmit} className="flex gap-2 mb-4">
@@ -54,7 +56,7 @@ export const AppFiltersForm: React.FC<AppFiltersFormProps> = ({
 					/>
 				</div>
 
-				{showSearchButton && <Button type="submit">Search</Button>}
+				{showSearchButton && <Button type="submit">{t("Search")}</Button>}
 			</form>
 		</div>
 	);

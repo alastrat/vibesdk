@@ -24,6 +24,7 @@ describe('session telemetry', () => {
 				'session-replay-paused': false,
 				'store-publishing-paused': false,
 				'custom-domains-paused': false,
+				'store-translations-paused': false,
 			},
 			analyticsOptOut: false,
 		});

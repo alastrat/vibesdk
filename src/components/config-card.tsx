@@ -1,9 +1,11 @@
+import { INTL_LOCALE } from 'shared/i18n/locales';
+import { t, useI18n } from '@/lib/i18n';
 import { Settings, Play, RotateCcw, Zap, Brain, Code2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { getModelDisplayName, getProviderInfo } from '@/utils/model-helpers';
+import { getModelDisplayName, getProviderInfo, reasoningEffortLabel } from '@/utils/model-helpers';
 import type { ModelConfig, UserModelConfigWithMetadata, AgentDisplayConfig } from '@/api-types';
 
 interface ConfigCardProps {
@@ -30,11 +32,11 @@ const formatParameterValue = (value: unknown, type: string): string | null => {
 
   switch (type) {
     case 'temperature':
-      return `T: ${value}`;
+      return t("T: {value1}", { value1: String(value) });
     case 'maxTokens':
-      return typeof value === 'number' ? `${Math.round(value / 1000)}K tokens` : String(value);
+      return typeof value === 'number' ? t("{value1}K tokens", { value1: Math.round(value / 1000) }) : String(value);
     case 'reasoningEffort':
-      return typeof value === 'string' ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : String(value);
+      return typeof value === 'string' ? reasoningEffortLabel(value) : String(value);
     default:
       return String(value);
   }
@@ -49,6 +51,7 @@ export function ConfigCard({
   onReset,
   isTesting
 }: ConfigCardProps) {
+  const { locale } = useI18n();
   const isCustomized = userConfig?.isUserOverride || false;
   const currentModel = userConfig?.name || defaultConfig?.name;
   const modelDisplayName = getModelDisplayName(currentModel);
@@ -69,10 +72,10 @@ export function ConfigCard({
               <AgentIcon className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1 overflow-hidden">
-              <h5 className="font-medium text-md leading-tight mb-1 break-words" title={agent.name}>
+              <h5 className="font-medium text-md leading-tight mb-1 break-words" title={t(agent.name)}>
                 {agent.name}
               </h5>
-              <p className="text-xs text-text-tertiary line-clamp-3 leading-tight overflow-hidden break-words" title={agent.description}>
+              <p className="text-xs text-text-tertiary line-clamp-3 leading-tight overflow-hidden break-words" title={t(agent.description)}>
                 {agent.description}
               </p>
             </div>
@@ -83,7 +86,7 @@ export function ConfigCard({
               variant={isCustomized ? "default" : "outline"}
               className="text-xs px-1.5 py-0.5 whitespace-nowrap dark:!bg-bg-1"
             >
-              {isCustomized ? "Custom" : "Default"}
+              {isCustomized ? t("Custom") : t("Default")}
             </Badge>
           </div>
         </div>
@@ -116,7 +119,7 @@ export function ConfigCard({
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Temperature: {temperature}</p>
+                      <p>{t("Temperature:")}{temperature}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -131,7 +134,7 @@ export function ConfigCard({
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Max Tokens: {maxTokens?.toLocaleString()}</p>
+                      <p>{t("Max Tokens:")}{maxTokens?.toLocaleString(INTL_LOCALE[locale])}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -146,7 +149,7 @@ export function ConfigCard({
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p>Reasoning Effort: {reasoningEffort}</p>
+                      <p>{t("Reasoning Effort:")}{reasoningEffort}</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -164,7 +167,7 @@ export function ConfigCard({
             className="flex-1 h-8 text-xs font-medium min-w-0 dark:bg-kumo-elevated"
           >
             <Settings className="h-3 w-3 mr-1" />
-            <span className="truncate">Configure</span>
+            <span className="truncate">{t("Configure")}</span>
           </Button>
 
           <TooltipProvider>
@@ -185,7 +188,7 @@ export function ConfigCard({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{isTesting ? 'Testing...' : 'Test Config'}</p>
+                <p>{isTesting ? t("Testing...") : t("Test Config")}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -204,7 +207,7 @@ export function ConfigCard({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Reset to Default</p>
+                  <p>{t("Reset to Default")}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

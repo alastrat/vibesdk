@@ -3,6 +3,11 @@
  */
 
 import type { UserAnalyticsResponseData, AgentAnalyticsResponseData } from '@/api-types';
+import { formatNumber as formatCount, perLocale } from '../../shared/i18n/format';
+import { DEFAULT_LOCALE, type Locale } from '../../shared/i18n/locales';
+
+/** "1.2K" in English and "1,2 mil" in Portuguese: a thousand and above, with one decimal. */
+const compactNumbers = perLocale((intl) => new Intl.NumberFormat(intl, { notation: 'compact', minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 
 /**
  * Standardized analytics display props interface
@@ -77,11 +82,10 @@ export function formatCost(amount?: number): string {
 /**
  * Format numbers for display with consistent formatting rules
  */
-export function formatNumber(num?: number): string {
+export function formatNumber(num?: number, locale: Locale = DEFAULT_LOCALE): string {
   if (typeof num !== 'number' || isNaN(num)) return '0';
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toLocaleString();
+  if (num >= 1000) return compactNumbers(locale).format(num);
+  return formatCount(num, locale);
 }
 
 /**

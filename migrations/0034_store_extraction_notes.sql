@@ -1,0 +1,2 @@
+ALTER TABLE `store_translation_settings` ADD `texts_truncated` integer DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE `store_translation_settings` ADD `manifest_invalid` integer DEFAULT false NOT NULL;

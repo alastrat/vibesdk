@@ -1,9 +1,12 @@
+import { t } from '../../services/i18n/request-locale';
 /**
  * The platform's paths on a store's address (`/__estori/*`): the store script, store data, checkout, the return from
  * Stripe and receipts. They are answered here, before SpaceDO, so generated code never handles payments.
  */
 
-import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal, type StoreMode } from '../../../shared/types/store-payments';
+import { STORE_CHECKOUT_MESSAGES, STORE_PLATFORM_PREFIX, type StoreCheckoutRefusal, type StoreCheckoutResponse, type StoreManifest, type StoreMode } from '../../../shared/types/store-payments';
+import { isLocale } from '../../../shared/i18n/locales';
+import { msg } from '../../../shared/i18n/translate';
 import { createLogger } from '../../logger';
 import { SellerTermsService, StoreCheckoutService, StoreOrderService, StripeConnectService } from '../../database';
 import { AppService } from '../../database/services/AppService';
@@ -13,13 +16,14 @@ import { sellerSetupStep, type SellerReadiness } from '../../../shared/types/sel
 import { lockCatalogPricesFor } from '../../services/store-payments/catalog-locks';
 import { isFlagOn } from '../../services/posthog/flags';
 import { checkoutModeOf, refusal, startStoreCheckout, storeInfoOf, type StartCheckoutInput } from '../../services/store-payments/checkout';
-import { safeReturnPath } from '../../services/store-payments/request';
+import { returnPathInLanguage, safeReturnPath } from '../../services/store-payments/request';
 import { recordStoreOrder } from '../../services/store-payments/fulfill';
 import { parseStoreManifest } from '../../services/store-payments/manifest';
 import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader, receiptOf, signReceipt, verifyReceipt } from '../../services/store-payments/receipts';
-import { STORE_SCRIPT } from '../../services/store-payments/store-script';
+import { storeScript } from '../../services/store-payments/store-script';
 import { payPageHeaders, renderPayPage } from '../../services/store-payments/pay-page';
 import { getProtocolForHost } from '../../utils/urls';
+import { translateFor } from '../../utils/server-translate';
 import { returnPageRecordDeps } from '../../services/store-payments/wiring';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
 import { getGlobalConfigurableSettings, getSellerLimitsSettings } from '../../config';
@@ -32,6 +36,10 @@ import { releaseOldestHolds } from '../../services/store-payments/holds';
 import { replaceCheckout } from '../../services/store-payments/replace';
 import { LiveStoreService } from '../../database/services/LiveStoreService';
 import { plainPage } from './plain-page';
+import { loadServingLanguages, shopperLanguage, shopperLocale, type ShopperLanguage } from '../../services/store-translations/serve-context';
+import { STORE_LANGUAGE_PARAM } from '../../services/store-translations/language';
+import { STORE_OVERLAY_PATH, translateManifest } from '../../services/store-translations/rewrite';
+import { overlayScript } from '../../services/store-translations/overlay-script';
 
 const logger = createLogger('StorePlatform');
 
@@ -166,28 +174,86 @@ async function livePaymentsOn(env: Env, access: StartCheckoutInput['access'], se
 	return !(await isFlagOn(env, 'live-store-payments-paused', sellerUserId));
 }
 
-async function serveStoreInfo(env: Env, target: StorePlatformTarget): Promise<Response> {
+async function serveStoreInfo(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const file = await loadManifest(env, target);
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	if (!parsed?.ok) return json({ error: 'This store has no valid estori-store.json' }, 404);
 	const { mode } = await checkoutModeFor(env, target);
 	const seller = mode ? await sellerAccount(env, sellerIdOf(target), null) : null;
-	return json(storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test'));
+	const { manifest, varies } = await manifestForShopper(await shopperLanguage(request, env, target.appId), target.appId, parsed.manifest);
+	const response = json(storeInfoOf(manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test'));
+	if (varies) response.headers.set('Vary', 'Cookie, Accept-Language');
+	return response;
 }
 
-/** Estori's checkout page: the store's brand and products from its file, and a fresh nonce for the page's own script. */
+/**
+ * The store's products in the shopper's language when the store has ready languages; `varies` says the answer depends
+ * on the shopper. Prices and everything else are untouched, and a failure answers in the store's own words.
+ */
+async function manifestForShopper(language: ShopperLanguage, appId: string, manifest: StoreManifest): Promise<{ manifest: StoreManifest; varies: boolean }> {
+	const { ctx, locale } = language;
+	if (!ctx || ctx.ready.length === 0) return { manifest, varies: false };
+	if (locale === ctx.settings.sourceLocale) return { manifest, varies: true };
+	try {
+		return { manifest: await translateManifest(manifest, await ctx.dictionary(locale)), varies: true };
+	} catch (error) {
+		logger.warn('Store products could not be translated; they are served as written', { appId, error });
+		return { manifest, varies: false };
+	}
+}
+
+/** A refusal worded in the shopper's language. */
+async function refusedFor(request: Request, env: Env, target: StorePlatformTarget, reason: StoreCheckoutRefusal): Promise<StoreCheckoutResponse> {
+	return refusal(reason, await shopperLocale(request, env, target.appId));
+}
+
+/**
+ * `/__estori/i18n.js?lang=xx&v=n`: the overlay for a ready language, kept by browsers while `v` is the current version.
+ * It is always a script: a failure answers an empty one, since the page itself is already translated.
+ */
+async function serveOverlayScript(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
+	const query = new URL(request.url).searchParams;
+	const headers = { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' };
+	try {
+		const ctx = await loadServingLanguages(env, target.appId);
+		const locale = query.get(STORE_LANGUAGE_PARAM);
+		if (!ctx || !isLocale(locale) || !ctx.ready.includes(locale)) return new Response('', { status: 404, headers });
+		const current = query.get('v') === String(ctx.settings.version);
+		const script = overlayScript(locale, await ctx.scriptEntries(locale));
+		return new Response(script, { headers: { ...headers, 'Cache-Control': current ? 'public, max-age=31536000, immutable' : 'no-store' } });
+	} catch (error) {
+		logger.warn('The store overlay script could not be built', { appId: target.appId, error });
+		return new Response('', { status: 503, headers });
+	}
+}
+
+/** `store.js`, worded for the shopper's language; it knows the store's languages to follow the page's own. */
+async function serveStoreScript(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
+	const { locale, languages } = await shopperLanguage(request, env, target.appId);
+	const script = storeScript(locale, languages);
+	return new Response(script, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
+}
+
+/**
+ * Estori's checkout page: the store's brand and products from its file, in the shopper's language, and a fresh nonce
+ * for the page's own script.
+ */
 async function servePayPage(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const file = await loadManifest(env, target);
 	const parsed = file ? parseStoreManifest(file.text) : null;
 	const { mode } = await checkoutModeFor(env, target);
 	const seller = parsed?.ok && mode ? await sellerAccount(env, sellerIdOf(target), null) : null;
-	const info = parsed?.ok ? storeInfoOf(parsed.manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test') : null;
+	const language = await shopperLanguage(request, env, target.appId);
+	const manifest = parsed?.ok ? (await manifestForShopper(language, target.appId, parsed.manifest)).manifest : null;
+	const info = manifest ? storeInfoOf(manifest, seller !== null && sellerSetupStep(seller.readiness) === null, mode ?? 'test') : null;
 	const query = new URL(request.url).searchParams;
-	const returnPaths = { successPath: safeReturnPath(query.get('success'), '/'), cancelPath: safeReturnPath(query.get('cancel'), '/') };
+	// A page asked for in a language sends the shopper back, and on to the confirmation page, in it.
+	const carried = (path: string): string => (language.languages.length > 1 && isLocale(query.get(STORE_LANGUAGE_PARAM)) ? returnPathInLanguage(path, language.locale) : path);
+	const returnPaths = { successPath: carried(safeReturnPath(query.get('success'), '/')), cancelPath: carried(safeReturnPath(query.get('cancel'), '/')) };
 	const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 	const appOrigin = env.CUSTOM_DOMAIN ? `${getProtocolForHost(env.CUSTOM_DOMAIN)}://${env.CUSTOM_DOMAIN}` : null;
-	const html = renderPayPage({ basePath: target.basePath, publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, info, nonce, returnPaths });
-	return new Response(html, { headers: payPageHeaders(nonce, appOrigin) });
+	const html = renderPayPage({ basePath: target.basePath, publishableKey: env.STRIPE_PUBLISHABLE_KEY ?? null, info, nonce, returnPaths, locale: language.locale });
+	return new Response(html, { headers: { ...payPageHeaders(nonce, appOrigin), 'Content-Language': language.locale } });
 }
 
 /** The seller's limits: an admin's pin wins over the stored level, which Estori keeps current. */
@@ -199,6 +265,7 @@ async function sellerLimitsOf(env: Env, sellerUserId: string): Promise<SellerLev
 
 async function serveCheckout(request: Request, env: Env, target: StorePlatformTarget, ctx: ExecutionContext): Promise<Response> {
 	const url = new URL(request.url);
+	// A request refused before anything is read is answered in English, since the checkout page never sends one.
 	const sameOrigin = request.headers.get('Origin') === url.origin;
 	const isJson = (request.headers.get('Content-Type') ?? '').toLowerCase().startsWith('application/json');
 	if (!sameOrigin || !isJson) return json(refusal('invalid_request'), 400);
@@ -212,9 +279,9 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 	}
 
 	if (target.viewer.kind === 'live') {
-		if (await liveCheckoutLimited(env, request, target.appId)) return json(refusal('too_many_checkouts'), 429);
+		if (await liveCheckoutLimited(env, request, target.appId)) return json(await refusedFor(request, env, target, 'too_many_checkouts'), 429);
 		// The address cache can trail a Take offline by seconds; a new checkout reads the store's status itself.
-		if ((await new LiveStoreService(env).getByApp(target.appId))?.status !== 'live') return json(refusal('store_paused'), 409);
+		if ((await new LiveStoreService(env).getByApp(target.appId))?.status !== 'live') return json(await refusedFor(request, env, target, 'store_paused'), 409);
 	}
 
 	const access = await storeAccess(env, target);
@@ -271,7 +338,7 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			limitReached: async (weeklySalesCents) => {
 				ctx.waitUntil(
 					(async () => {
-						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: sellerIdOf(target), message: `A store reached its weekly limit of $${(weeklySalesCents / 100).toFixed(2)}.` });
+						await platformAlertsFromEnv(env)({ kind: 'seller-limit-reached', subject: sellerIdOf(target), message: t("A store reached its weekly limit of ${value1}.", { value1: (weeklySalesCents / 100).toFixed(2) }) });
 						await sellerNoticesFromEnv(env)({ sellerUserId: sellerIdOf(target), kind: 'limit-reached', weeklySalesCents });
 					})(),
 				);
@@ -289,8 +356,9 @@ async function serveCheckout(request: Request, env: Env, target: StorePlatformTa
 			storeBaseUrl: `${url.origin}${target.basePath}`,
 		},
 	);
-	if (!response.ok) logger.info('Store checkout refused', { appId: target.appId, reason: response.reason });
-	return json(response, response.ok ? 200 : REFUSAL_STATUS[response.reason]);
+	if (response.ok) return json(response, 200);
+	logger.info('Store checkout refused', { appId: target.appId, reason: response.reason });
+	return json(await refusedFor(request, env, target, response.reason), REFUSAL_STATUS[response.reason]);
 }
 
 /** True when this shopper started too many checkouts on this live store; an unexpected limiter error lets them through. */
@@ -310,9 +378,14 @@ async function liveCheckoutLimited(env: Env, request: Request, appId: string): P
 async function serveReturn(request: Request, env: Env, target: StorePlatformTarget): Promise<Response> {
 	const url = new URL(request.url);
 	const home = `${url.origin}${target.basePath}/`;
-	const processing = (path: string): Response =>
+	const processing = async (path: string): Promise<Response> =>
 		target.closed
-			? plainPage(200, 'Your payment is being confirmed', "This store's pages aren't open right now. If your payment goes through, the store has your order.")
+			? plainPage(
+					await shopperLocale(request, env, target.appId),
+					200,
+					msg('Your payment is being confirmed'),
+					msg("This store's pages aren't open right now. If your payment goes through, the store has your order."),
+				)
 			: Response.redirect(`${url.origin}${target.basePath}${path}${path.includes('?') ? '&' : '?'}status=processing`, 303);
 	const sessionId = url.searchParams.get('session_id');
 	const stripe = stripeFromEnv(env);
@@ -324,7 +397,7 @@ async function serveReturn(request: Request, env: Env, target: StorePlatformTarg
 		const recorded = await recordStoreOrder(returnPageRecordDeps(env), session);
 		if (recorded.result === 'not-ours') return Response.redirect(home, 303);
 		successPath = recorded.checkout.successPath;
-		if (recorded.result === 'not-paid') return processing(successPath);
+		if (recorded.result === 'not-paid') return await processing(successPath);
 		return await withReceipt(request, env, target, recorded.orderId, `${url.origin}${target.basePath}${successPath}`);
 	} catch (error) {
 		logger.error('Store return could not record the order; the webhook will', { appId: target.appId, sessionId, error });
@@ -340,7 +413,13 @@ async function withReceipt(request: Request, env: Env, target: StorePlatformTarg
 	const token = await signReceipt(env, claims);
 	const cookie = receiptCookieHeader(token, `${target.basePath}${STORE_PLATFORM_PREFIX}/`, url.protocol === 'https:');
 	if (target.closed) {
-		return plainPage(200, 'Thank you for your order', "Your payment went through and the store has your order. Its pages aren't open right now.", { 'Set-Cookie': cookie });
+		return plainPage(
+			await shopperLocale(request, env, target.appId),
+			200,
+			msg('Thank you for your order'),
+			msg("Your payment went through and the store has your order. Its pages aren't open right now."),
+			{ 'Set-Cookie': cookie },
+		);
 	}
 	return new Response(null, {
 		status: 303,
@@ -362,10 +441,9 @@ async function serveReceipt(request: Request, env: Env, target: StorePlatformTar
 export async function handleStorePlatform(request: Request, env: Env, target: StorePlatformTarget, ctx: ExecutionContext): Promise<Response> {
 	const path = target.platformPath;
 	try {
-		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store.js`) {
-			return new Response(STORE_SCRIPT, { headers: { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-store' } });
-		}
-		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(env, target);
+		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store.js`) return await serveStoreScript(request, env, target);
+		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/store`) return await serveStoreInfo(request, env, target);
+		if (request.method === 'GET' && path === STORE_OVERLAY_PATH) return await serveOverlayScript(request, env, target);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/pay`) return await servePayPage(request, env, target);
 		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target, ctx);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/return`) return await serveReturn(request, env, target);
@@ -374,6 +452,7 @@ export async function handleStorePlatform(request: Request, env: Env, target: St
 		return json({ error: 'Not found' }, 404);
 	} catch (error) {
 		logger.error('Store platform request failed', { appId: target.appId, path, error });
-		return path === `${STORE_PLATFORM_PREFIX}/checkout` ? json(refusal('stripe_failed'), 502) : json({ error: STORE_CHECKOUT_MESSAGES.payments_unavailable }, 500);
+		const locale = await shopperLocale(request, env, target.appId);
+		return path === `${STORE_PLATFORM_PREFIX}/checkout` ? json(refusal('stripe_failed', locale), 502) : json({ error: translateFor(locale, STORE_CHECKOUT_MESSAGES.payments_unavailable) }, 500);
 	}
 }

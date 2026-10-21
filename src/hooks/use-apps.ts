@@ -7,6 +7,7 @@ import {
 import { apiClient, ApiError } from '@/lib/api-client';
 import type { AppDetailsData, AppWithFavoriteStatus } from '@/api-types';
 import { appEvents } from '@/lib/app-events';
+import { msg } from '@/lib/i18n';
 import type {
 	AppDeletedEvent,
 	AppEvent,
@@ -271,7 +272,7 @@ export function useToggleFavorite() {
 
 	const protectedToggleFavorite = async (
 		appId: string,
-		actionContext = 'to favorite this app',
+		actionContext = msg('Sign in to favorite this app'),
 	): Promise<boolean | null> => {
 		if (
 			!requireAuth({

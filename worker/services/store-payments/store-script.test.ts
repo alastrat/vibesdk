@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { STORE_SCRIPT } from './store-script';
+import { storeScript } from './store-script';
+import type { Locale } from '../../../shared/i18n/locales';
 import { STORE_NOTE_MAX_LENGTH, type StoreCartApi } from '../../../shared/types/store-payments';
 
 interface FakeEstori {
@@ -9,8 +10,16 @@ interface FakeEstori {
 	store(): Promise<unknown>;
 }
 
+interface BrowserOptions {
+	/** The language the script was served for, and the store's languages. */
+	locale?: Locale;
+	languages?: Locale[];
+	/** The page's `<html lang>`. */
+	pageLanguage?: string;
+}
+
 /** Runs the store script in a fake browser: a store at `basePath`, its own `localStorage`, and recorded navigation. */
-function browser(basePath = '/space/app_1/preview/main', storage = new Map<string, string>()) {
+function browser(basePath = '/space/app_1/preview/main', storage = new Map<string, string>(), options: BrowserOptions = {}) {
 	const assigned: string[] = [];
 	const storageListeners: Array<(event: { key: string }) => void> = [];
 	const responses = new Map<string, unknown>();
@@ -25,10 +34,14 @@ function browser(basePath = '/space/app_1/preview/main', storage = new Map<strin
 			if (type === 'storage') storageListeners.push(listener);
 		},
 	};
-	const document = { currentScript: { src: `https://preview.test${basePath}/__estori/store.js` } };
-	const fetchFake = async (url: string) => ({ json: async () => responses.get(url) ?? null });
-	new Function('window', 'document', 'fetch', STORE_SCRIPT)(window, document, fetchFake);
-	return { Estori: window.Estori as FakeEstori, storage, assigned, responses, storageListeners };
+	const document = { currentScript: { src: `https://preview.test${basePath}/__estori/store.js` }, documentElement: { lang: options.pageLanguage ?? '' } };
+	const requested: string[] = [];
+	const fetchFake = async (url: string) => {
+		requested.push(url);
+		return { json: async () => responses.get(url) ?? null };
+	};
+	new Function('window', 'document', 'fetch', storeScript(options.locale ?? 'en', options.languages))(window, document, fetchFake);
+	return { Estori: window.Estori as FakeEstori, storage, assigned, responses, storageListeners, requested };
 }
 
 describe('Estori.cart', () => {
@@ -146,5 +159,62 @@ describe('Estori.order', () => {
 		Estori.cart.add('mug-red', 2);
 		await Estori.order('ord_1');
 		expect(Estori.cart.count()).toBe(2);
+	});
+});
+
+describe("store.js in the shopper's language", () => {
+	const BASE = '/space/app_1/preview/main';
+	it('keeps a single-language store request and checkout URLs unchanged', async () => {
+		const page = browser(BASE, new Map(), { locale: 'en', languages: ['en'], pageLanguage: 'en' });
+		await page.Estori.store();
+		await page.Estori.order('ord_1');
+		expect(page.requested).toEqual([`${BASE}/__estori/store`, `${BASE}/__estori/orders/ord_1`]);
+		page.Estori.cart.add('mug-blue');
+		await page.Estori.checkout({ successPath: '/thanks', cancelPath: '/cart' });
+		expect(page.assigned).toEqual([`${BASE}/__estori/pay?success=%2Fthanks&cancel=%2Fcart`]);
+	});
+
+	it("words its own message in the language it was served for, and in English for English", async () => {
+		const empty = async (locale: Locale) => (await browser(BASE, new Map(), { locale }).Estori.checkout()).message;
+		expect(await empty('en')).toBe('Your cart is empty.');
+		expect(await empty('es')).toBe('Tu carrito está vacío.');
+		expect(await empty('pt-BR')).toBe('Seu carrinho está vazio.');
+	});
+
+	it("follows the page's own language when it is one of the store's, which the script was not served for", async () => {
+		const options = { locale: 'es', languages: ['es', 'pt-BR'] } satisfies BrowserOptions;
+		expect((await browser(BASE, new Map(), { ...options, pageLanguage: 'pt-BR' }).Estori.checkout()).message).toBe('Seu carrinho está vazio.');
+		expect((await browser(BASE, new Map(), { ...options, pageLanguage: 'PT-br' }).Estori.checkout()).message).toBe('Seu carrinho está vazio.');
+		// A page language the store doesn't offer leaves the language the script was served for.
+		expect((await browser(BASE, new Map(), { ...options, pageLanguage: 'en' }).Estori.checkout()).message).toBe('Tu carrito está vacío.');
+	});
+
+	it("sends the page's language with every request to the store, so a browser without the language cookie gets the same language", async () => {
+		const page = browser(BASE, new Map(), { locale: 'en', languages: ['en', 'es'], pageLanguage: 'es' });
+		await page.Estori.store();
+		await page.Estori.order('ord_1');
+		expect(page.requested).toEqual([`${BASE}/__estori/store?lang=es`, `${BASE}/__estori/orders/ord_1?lang=es`]);
+		page.Estori.cart.add('mug-blue');
+		await page.Estori.checkout({ cancelPath: '/cart' });
+		expect(page.assigned).toEqual([`${BASE}/__estori/pay?cancel=%2Fcart&lang=es`]);
+	});
+
+	it("sends no language when the page names none of the store's languages, or none at all", async () => {
+		for (const pageLanguage of ['', 'fr', 'es-MX', 'de-DE']) {
+			const page = browser(BASE, new Map(), { locale: 'en', languages: ['en', 'es'], pageLanguage });
+			await page.Estori.store();
+			expect(page.requested, pageLanguage).toEqual([`${BASE}/__estori/store`]);
+		}
+		const english = browser(BASE, new Map(), { locale: 'en', languages: ['en'], pageLanguage: 'es' });
+		await english.Estori.store();
+		expect(english.requested).toEqual([`${BASE}/__estori/store`]);
+	});
+
+	it('works on a page with no root element to read, as in a worker or a frame being torn down', async () => {
+		const window: Record<string, unknown> = { location: { href: 'https://preview.test/x', assign: () => undefined }, localStorage: { getItem: () => null, setItem: () => undefined, removeItem: () => undefined }, addEventListener: () => undefined };
+		const requested: string[] = [];
+		new Function('window', 'document', 'fetch', storeScript('es', ['es', 'en']))(window, { currentScript: { src: `https://preview.test${BASE}/__estori/store.js` } }, async (url: string) => (requested.push(url), { json: async () => null }));
+		await (window.Estori as FakeEstori).store();
+		expect(requested).toEqual([`${BASE}/__estori/store`]);
 	});
 });

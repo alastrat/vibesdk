@@ -11,8 +11,13 @@ import { getGlobalConfigurableSettings } from '../../config';
 import { RateLimitExceededError } from 'shared/types/errors';
 import { JWTUtils } from '../../utils/jwtUtils';
 import { handleStorePlatform, matchStorePlatformPath } from './store-platform';
+import { serveStorePage } from '../../services/store-translations/serve-context';
 
 const SPACE_PREVIEW_ROUTE_PATTERN = /^\/space\/([^/]+)\/preview\/([^/]+)(?:\/.*)?$/;
+/** A preview's base path as the request spells it: Estori's links and cookies on the page sit under it. */
+const PREVIEW_BASE_PATH = /^\/space\/[^/]+\/preview\/[^/]+/;
+/** The preview token's query parameter, which the generated app and the page's links never see. */
+const PREVIEW_TOKEN_PARAM = 't';
 
 type SpaceNamespace = {
 	SPACE_DO?: DurableObjectNamespace;
@@ -48,7 +53,7 @@ async function forwardToSpacePreview(
 	}
 	// Strip `?t=` so the generated app never sees the token.
 	const forwardedUrl = new URL(request.url);
-	forwardedUrl.searchParams.delete('t');
+	forwardedUrl.searchParams.delete(PREVIEW_TOKEN_PARAM);
 	const forwardedRequest = new Request(forwardedUrl.toString(), request);
 	const stub = namespace.get(namespace.idFromName(spaceName));
 	try {
@@ -131,11 +136,16 @@ async function serveAuthorizedPreview(
 	claims: SpacePreviewClaims,
 	ctx: ExecutionContext,
 ): Promise<Response> {
-	const platform = matchStorePlatformPath(new URL(request.url).pathname);
+	const url = new URL(request.url);
+	const platform = matchStorePlatformPath(url.pathname);
 	if (platform) {
 		return handleStorePlatform(request, env, { appId: spaceName, branch, ...platform, viewer: { kind: 'preview', userId: claims.userId } }, ctx);
 	}
-	return forwardToSpacePreview(request, env, spaceName);
+	const basePath = url.pathname.match(PREVIEW_BASE_PATH)?.[0];
+	if (basePath === undefined) return forwardToSpacePreview(request, env, spaceName);
+	const pageUrl = new URL(url);
+	pageUrl.searchParams.delete(PREVIEW_TOKEN_PARAM);
+	return serveStorePage(request, env, ctx, { appId: spaceName, basePath, pageUrl }, (page) => forwardToSpacePreview(page, env, spaceName));
 }
 
 /**
@@ -167,7 +177,7 @@ export async function handleSpacePreview(
 	}
 
 	// 2. `?t=` token: forward and bootstrap the cookie (serve-in-place).
-	const queryToken = url.searchParams.get('t') ?? '';
+	const queryToken = url.searchParams.get(PREVIEW_TOKEN_PARAM) ?? '';
 	if (queryToken) {
 		const claims = await verifySpacePreviewToken(env, queryToken, spaceName, branch);
 		if (claims && (await isPreviewVersionCurrent(env, spaceName, claims))) {

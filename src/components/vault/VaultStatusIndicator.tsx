@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { useVault } from '@/hooks/use-vault';
 import { Button } from '@/components/ui/button';
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 
 export function VaultStatusIndicator() {
+	useI18n();
 	const { state, lockVault } = useVault();
 	const [showUnlock, setShowUnlock] = useState(false);
 	const [showSetup, setShowSetup] = useState(false);
@@ -23,7 +25,7 @@ export function VaultStatusIndicator() {
 		return (
 			<Button variant="ghost" size="sm" disabled className="gap-1.5">
 				<Loader2 className="h-4 w-4 animate-spin" />
-				<span className="hidden sm:inline">Vault</span>
+				<span className="hidden sm:inline">{t("Vault")}</span>
 			</Button>
 		);
 	}
@@ -43,7 +45,7 @@ export function VaultStatusIndicator() {
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent>
-						<p>Set up your secure vault to store API keys</p>
+						<p>{t("Set up your secure vault to store API keys")}</p>
 					</TooltipContent>
 				</Tooltip>
 				<Dialog open={showSetup} onOpenChange={setShowSetup}>
@@ -74,7 +76,7 @@ export function VaultStatusIndicator() {
 						</Button>
 					</TooltipTrigger>
 					<TooltipContent>
-						<p>Unlock vault to access your secrets</p>
+						<p>{t("Unlock vault to access your secrets")}</p>
 					</TooltipContent>
 				</Tooltip>
 				<VaultUnlockModal open={showUnlock} onOpenChange={setShowUnlock} />
@@ -96,7 +98,7 @@ export function VaultStatusIndicator() {
 					</Button>
 				</TooltipTrigger>
 				<TooltipContent>
-					<p>Click to lock your vault</p>
+					<p>{t("Click to lock your vault")}</p>
 				</TooltipContent>
 			</Tooltip>
 		);

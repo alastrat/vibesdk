@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@cloudflare/kumo';
@@ -18,6 +19,7 @@ interface DraftNameDialogProps {
 }
 
 export function DraftNameDialog({ appId, open, onOpenChange, draft, published }: DraftNameDialogProps) {
+	useI18n();
 	const create = useCreateDraft(appId);
 	const rename = useRenameDraft(appId);
 	const [name, setName] = useState(draft?.name ?? '');
@@ -42,33 +44,30 @@ export function DraftNameDialog({ appId, open, onOpenChange, draft, published }:
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent>
 				<DialogHeader>
-					<DialogTitle>{draft ? 'Rename draft' : 'New draft'}</DialogTitle>
+					<DialogTitle>{draft ? t("Rename draft") : t("New draft")}</DialogTitle>
 					<DialogDescription>
-						{draft ? 'Only the name changes.' : 'A draft is a version of your store with its own preview. Nothing reaches shoppers until you publish it.'}
+						{draft ? t("Only the name changes.") : t("A draft is a version of your store with its own preview. Nothing reaches shoppers until you publish it.")}
 					</DialogDescription>
 				</DialogHeader>
 				<form className="grid gap-4" onSubmit={onSubmit}>
-					<Input aria-label="Name" value={name} maxLength={DRAFT_NAME_MAX_LENGTH} onChange={(event) => setName(event.target.value)} placeholder="Spring sale" autoFocus />
+					<Input aria-label={t("Name")} value={name} maxLength={DRAFT_NAME_MAX_LENGTH} onChange={(event) => setName(event.target.value)} placeholder={t("Spring sale")} autoFocus />
 					{!draft && (
 						<fieldset className="grid gap-2">
-							<legend className="text-sm font-medium">Start from</legend>
+							<legend className="text-sm font-medium">{t("Start from")}</legend>
 							<RadioGroup value={from} onValueChange={(value) => setFrom(value === 'live' ? 'live' : 'main')}>
 								<label className="flex items-center gap-2 text-sm">
-									<RadioGroupItem value="main" /> Main
-								</label>
+									{/* i18n-ignore: Main is a draft name. */}
+									<RadioGroupItem value="main" />{'Main'}</label>
 								<label className={published ? 'flex items-center gap-2 text-sm' : 'flex items-center gap-2 text-sm text-kumo-subtle'}>
-									<RadioGroupItem value="live" disabled={!published} /> The live store (quick fix)
-								</label>
+									<RadioGroupItem value="live" disabled={!published} />{t("The live store (quick fix)")}</label>
 							</RadioGroup>
-							{!published && <p className="text-sm text-kumo-subtle">Publish your store to start a quick fix from it.</p>}
+							{!published && <p className="text-sm text-kumo-subtle">{t("Publish your store to start a quick fix from it.")}</p>}
 						</fieldset>
 					)}
 					<div className="flex justify-end gap-2">
-						<Button type="button" variant="secondary" size="sm" onClick={done}>
-							Cancel
-						</Button>
+						<Button type="button" variant="secondary" size="sm" onClick={done}>{t("Cancel")}</Button>
 						<Button type="submit" variant="primary" size="sm" disabled={name.trim() === '' || pending} loading={pending}>
-							{draft ? 'Rename' : 'Start draft'}
+							{draft ? t("Rename") : t("Start draft")}
 						</Button>
 					</div>
 				</form>

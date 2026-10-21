@@ -1,6 +1,7 @@
 import { normalizeAppTitle } from '@/utils/string';
 import { Button, ClipboardText } from '@cloudflare/kumo';
 import { FolderSimpleLockIcon } from '@phosphor-icons/react';
+import { t } from '@/lib/i18n';
 
 interface GitCloneCommandProps {
 	cloneUrl: string;
@@ -33,7 +34,7 @@ export function GitClonePrivatePrompt({
 			}
 			onClick={onOpenModal}
 		>
-			Clone with authentication
+			{t('Clone with authentication')}
 		</Button>
 	);
 }

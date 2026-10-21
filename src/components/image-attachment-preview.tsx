@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import type { ImageAttachment } from '@/api-types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { t } from '@/lib/i18n';
 
 export interface ImageAttachmentPreviewProps {
 	images: ImageAttachment[];
@@ -42,7 +43,7 @@ export function ImageAttachmentPreview({
 								type="button"
 								onClick={() => onRemove(image.id)}
 								className="absolute top-1 right-1 p-0.5 rounded-full bg-bg-1/90 hover:bg-bg-1 text-text-primary opacity-0 group-hover:opacity-100 transition-opacity"
-								aria-label={`Remove ${image.filename}`}
+								aria-label={t('Remove {name}', { name: image.filename })}
 							>
 								<X className="size-3" />
 							</button>

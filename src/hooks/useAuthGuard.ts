@@ -10,7 +10,7 @@ import { AuthUser } from '@/api-types';
 
 export interface AuthGuardOptions {
   requireFullAuth?: boolean; // If true, anonymous users are not allowed
-  actionContext?: string; // Context message for the login modal
+  actionContext?: string; // Why sign-in is asked for: a whole sentence marked with msg(), which the login modal translates
   onSuccess?: () => void; // Callback to execute after successful authentication
   intendedUrl?: string; // URL to redirect to after authentication
 }

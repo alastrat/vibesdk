@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Input } from '@/components/ui/input';
+import { t } from '@/lib/i18n';
 import type { ClarifyingQuestion } from '../utils/message-helpers';
 
 export type QuestionAnswer = {
@@ -127,10 +128,10 @@ export function ClarifyingQuestionsPopup({
 							</div>
 							<div className="flex-1 min-w-0">
 								<h3 className="text-sm font-medium text-text-primary">
-									Clarifying questions
+									{t('Clarifying questions')}
 								</h3>
 								<p className="text-xs text-text-tertiary mt-0.5">
-									Answer to help me build what you want.
+									{t('Answer to help me build what you want.')}
 								</p>
 							</div>
 							<span className="shrink-0 text-xs font-medium text-text-tertiary tabular-nums mt-0.5">
@@ -142,7 +143,7 @@ export function ClarifyingQuestionsPopup({
 									size="icon"
 									className="size-7 -mr-2 -mt-2 text-text-tertiary hover:text-text-primary"
 									onClick={onDismiss}
-									aria-label="Skip all questions"
+									aria-label={t('Skip all questions')}
 								>
 									<X className="size-4" />
 								</Button>
@@ -223,7 +224,7 @@ export function ClarifyingQuestionsPopup({
 										)}
 										{q.allow_custom !== false && (
 											<Input
-												placeholder="Or add your own answer"
+												placeholder={t('Or add your own answer')}
 												value={currentAnswer?.custom ?? ''}
 												onChange={(e) => setCustom(current, e.target.value)}
 												className="text-sm"
@@ -243,21 +244,21 @@ export function ClarifyingQuestionsPopup({
 								className="text-text-tertiary hover:text-text-primary"
 							>
 								<ArrowLeft className="size-4 mr-1" />
-								Back
+								{t('Back')}
 							</Button>
 							<div className="flex items-center gap-2">
 								<Button variant="outline" size="sm" onClick={goNext}>
-									{isLast ? 'Skip & finish' : 'Skip'}
+									{isLast ? t('Skip & finish') : t('Skip')}
 								</Button>
 								<Button size="sm" onClick={goNext} disabled={!isAnswered}>
 									{isLast ? (
 										<>
 											<Check className="size-4 mr-1" />
-											Submit
+											{t('Submit')}
 										</>
 									) : (
 										<>
-											Next
+											{t('Next')}
 											<ArrowRight className="size-4 ml-1" />
 										</>
 									)}

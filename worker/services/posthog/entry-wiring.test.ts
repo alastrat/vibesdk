@@ -24,6 +24,7 @@ describe('the Worker entry and the request scope', () => {
 			'ctx.waitUntil(runLiveStoresSchedule(controller.cron, env))',
 			'ctx.waitUntil(runShopperEmailSchedule(controller.cron, env))',
 			'ctx.waitUntil(runBillingSchedule(controller.cron, env))',
+			'ctx.waitUntil(runTaskSchedule(controller.cron, env))',
 		]) {
 			expect(scheduled.indexOf(run), run).toBeGreaterThan(scope);
 		}

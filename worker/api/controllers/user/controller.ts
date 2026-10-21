@@ -4,8 +4,11 @@ import { RouteContext } from '../../types/route-context';
 import { UserService } from '../../../database/services/UserService';
 import { AppService } from '../../../database/services/AppService';
 import { Visibility, AppSortOption, SortOrder, TimePeriod } from '../../../database/types';
-import { UserAppsData, ProfileUpdateData } from './types';
+import { LocalePreferenceService } from '../../../database/services/LocalePreferenceService';
+import { UserAppsData, ProfileUpdateData, LocalePreferenceData } from './types';
 import { createLogger } from '../../../logger';
+import { isLocale } from '../../../../shared/i18n/locales';
+import { msg } from '../../../../shared/i18n/translate';
 
 const logger = createLogger('UserController');
 
@@ -68,7 +71,7 @@ export class UserController extends BaseController {
             return UserController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting user apps:', error);
-            return UserController.createErrorResponse<UserAppsData>('Failed to get user apps', 500);
+            return UserController.createErrorResponse<UserAppsData>(msg('Failed to get user apps'), 500);
         }
     }
 
@@ -101,7 +104,32 @@ export class UserController extends BaseController {
             return UserController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error updating user profile:', error);
-            return UserController.createErrorResponse<ProfileUpdateData>('Failed to update profile', 500);
+            return UserController.createErrorResponse<ProfileUpdateData>(msg('Failed to update profile'), 500);
+        }
+    }
+
+    /**
+     * Save the language the user chose
+     * PUT /api/user/locale
+     */
+    static async setLocale(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<LocalePreferenceData>>> {
+        const user = context.user;
+        if (!user) {
+            return UserController.createErrorResponse<LocalePreferenceData>(msg('Unauthorized'), 401);
+        }
+
+        const body = await UserController.parseJsonBody<{ locale?: unknown }>(request);
+        const locale = body.success ? body.data?.locale : undefined;
+        if (!isLocale(locale)) {
+            return UserController.createErrorResponse<LocalePreferenceData>(msg("That language isn't available."), 400);
+        }
+
+        try {
+            await new LocalePreferenceService(env).setLocale(user.id, locale, new Date());
+            return UserController.createSuccessResponse({ locale });
+        } catch (error) {
+            this.logger.error('Error saving the language:', error);
+            return UserController.createErrorResponse<LocalePreferenceData>(msg('Failed to save the language'), 500);
         }
     }
 }

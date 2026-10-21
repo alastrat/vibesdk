@@ -3,6 +3,7 @@ import { GitBranch, Github, Expand } from 'lucide-react';
 import { ModelConfigInfo } from '@/components/shared/ModelConfigInfo';
 import { HeaderButton } from '@/components/shared/header-actions';
 import type { ModelConfigsInfo } from '@/api-types';
+import { t } from '@/lib/i18n';
 
 export interface BaseHeaderActionsProps {
 	containerRef: RefObject<HTMLElement | null>;
@@ -36,23 +37,24 @@ export function BaseHeaderActions({
 			{showGitActions && (
 				<HeaderButton
 					icon={GitBranch}
-					label="Clone"
+					label={t('Clone')}
 					onClick={onGitCloneClick}
-					title="Clone to local machine"
+					title={t('Clone to local machine')}
 				/>
 			)}
 			{showGitActions && isGitHubExportReady && (
 				<HeaderButton
 					icon={Github}
+					// i18n-ignore: a brand name
 					label="GitHub"
 					onClick={onGitHubExportClick}
-					title="Export to GitHub"
+					title={t('Export to GitHub')}
 				/>
 			)}
 			<HeaderButton
 				icon={Expand}
 				onClick={() => containerRef.current?.requestFullscreen()}
-				title="Fullscreen"
+				title={t('Fullscreen')}
 				iconOnly
 			/>
 		</>

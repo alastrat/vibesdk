@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { Button } from '@cloudflare/kumo';
 import {
@@ -27,6 +28,7 @@ export function ConfirmButton({
 	onConfirm: () => void;
 	variant?: 'secondary' | 'ghost';
 }) {
+	useI18n();
 	const [open, setOpen] = useState(false);
 	return (
 		<>
@@ -40,7 +42,7 @@ export function ConfirmButton({
 						<AlertDialogDescription>{description}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
 						<AlertDialogAction onClick={onConfirm}>{label}</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>

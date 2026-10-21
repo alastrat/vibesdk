@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addReceiptOrder, readReceiptCookie, receiptAllows, receiptCookieHeader, receiptOf, signReceipt, verifyReceipt } from './receipts';
-import { STORE_SCRIPT } from './store-script';
+import { storeScript } from './store-script';
 import { JWTUtils } from '../../utils/jwtUtils';
 import type { StoreOrderView } from './store';
 
@@ -90,11 +90,11 @@ describe('receiptOf', () => {
 
 describe('the store script', () => {
 	it('finds the platform from its own address and exposes the cart, store, checkout and order', () => {
-		expect(STORE_SCRIPT).toContain('document.currentScript');
-		for (const call of ["'/store'", "'/pay'", "'/orders/'", 'window.Estori', 'cart: cart']) expect(STORE_SCRIPT).toContain(call);
+		expect(storeScript('en')).toContain('document.currentScript');
+		for (const call of ["'/store'", "'/pay'", "'/orders/'", 'window.Estori', 'cart: cart']) expect(storeScript('en')).toContain(call);
 	});
 
 	it('always resolves, so a store never waits on an unreadable answer', () => {
-		expect(STORE_SCRIPT).toContain('.catch(');
+		expect(storeScript('en')).toContain('.catch(');
 	});
 });

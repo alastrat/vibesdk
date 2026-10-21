@@ -1,3 +1,5 @@
+import { INTL_LOCALE } from 'shared/i18n/locales';
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button } from '@cloudflare/kumo';
@@ -21,6 +23,7 @@ interface DraftSwitcherProps {
 
 /** `limit` caps how many badges show; the menu lists them all, the header trigger shows one. */
 function Badges({ draft, limit }: { draft: DraftSummary; limit?: number }) {
+	useI18n();
 	return (
 		<>
 			{draftBadges(draft).slice(0, limit).map((badge) => (
@@ -33,6 +36,7 @@ function Badges({ draft, limit }: { draft: DraftSummary; limit?: number }) {
 }
 
 export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }: DraftSwitcherProps) {
+	const { locale } = useI18n();
 	const drafts = useDrafts(appId, true, refreshKey);
 	const activate = useActivateDraft(appId);
 	const remove = useDeleteDraft(appId);
@@ -64,7 +68,7 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 		<>
 			<Popover open={open} onOpenChange={setOpen}>
 				<PopoverTrigger asChild>
-					<button type="button" className="flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-sm hover:bg-kumo-elevated" title="Drafts">
+					<button type="button" className="flex shrink-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-sm hover:bg-kumo-elevated" title={t("Drafts")}>
 						<span className="min-w-[3.5rem] max-w-[10rem] truncate font-medium">{active.name}</span>
 						<Badges draft={active} limit={1} />
 						<CaretDown className="size-3.5 shrink-0 text-text-primary/50" />
@@ -79,23 +83,19 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 								<Badges draft={draft} />
 							</button>
 							<div className="flex flex-wrap items-center gap-2 pl-6 text-xs text-kumo-subtle">
-								<span>Changed {new Date(draft.updatedAt).toLocaleString()}</span>
+								<span>{t('Changed {date}', { date: new Date(draft.updatedAt).toLocaleString(INTL_LOCALE[locale]) })}</span>
 								{draft.behindLive && !draft.bringingInLiveChanges && (
-									<Button variant="ghost" size="sm" onClick={() => bringIn(draft)}>
-										Bring in live changes
-									</Button>
+									<Button variant="ghost" size="sm" onClick={() => bringIn(draft)}>{t("Bring in live changes")}</Button>
 								)}
 								{draft.id !== MAIN_DRAFT_ID && (
-									<Button variant="ghost" size="sm" onClick={() => startNaming(draft)}>
-										Rename
-									</Button>
+									<Button variant="ghost" size="sm" onClick={() => startNaming(draft)}>{t("Rename")}</Button>
 								)}
 								{canDeleteDraft(draft) && (
 									<ConfirmButton
 										variant="ghost"
-										label="Delete"
-										title={`Delete '${draft.name}'?`}
-										description="Its preview is removed. Its earlier versions stay in the store's history."
+										label={t("Delete")}
+										title={t("Delete '{value1}'?", { value1: draft.name })}
+										description={t("Its preview is removed. Its earlier versions stay in the store's history.")}
 										pending={remove.isPending}
 										onConfirm={() => remove.mutate(draft.id, { onError })}
 									/>
@@ -103,13 +103,11 @@ export function DraftSwitcher({ appId, refreshKey, isGenerating, onSendMessage }
 							</div>
 						</div>
 					))}
-					{isGenerating && <p className="px-2 text-xs text-kumo-subtle">Wait for the AI to finish, then switch drafts.</p>}
+					{isGenerating && <p className="px-2 text-xs text-kumo-subtle">{t("Wait for the AI to finish, then switch drafts.")}</p>}
 					{!draftsPaused && (
 						<>
-							<Button variant="secondary" size="sm" onClick={() => startNaming()} disabled={atLimit || isGenerating}>
-								New draft
-							</Button>
-							{atLimit && <p className="px-2 text-xs text-kumo-subtle">Delete a draft to start a new one.</p>}
+							<Button variant="secondary" size="sm" onClick={() => startNaming()} disabled={atLimit || isGenerating}>{t("New draft")}</Button>
+							{atLimit && <p className="px-2 text-xs text-kumo-subtle">{t("Delete a draft to start a new one.")}</p>}
 						</>
 					)}
 				</PopoverContent>

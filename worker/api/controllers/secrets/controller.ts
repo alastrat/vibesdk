@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 import { BaseController } from '../baseController';
 import { ApiResponse, ControllerResponse } from '../types';
 import { SecretTemplatesData } from './types';
@@ -20,7 +21,7 @@ export class SecretsController extends BaseController {
             return SecretsController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting secret templates:', error);
-            return SecretsController.createErrorResponse<SecretTemplatesData>('Failed to get secret templates', 500);
+            return SecretsController.createErrorResponse<SecretTemplatesData>(msg('Failed to get secret templates'), 500);
         }
     }
 }

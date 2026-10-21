@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { User, Monitor, Expand, FileDown } from 'lucide-react';
 import { HeaderButton, HeaderToggleButton, HeaderDivider } from '@/components/shared/header-actions';
 import type { HeaderActionsProps } from '../../core/types';
@@ -11,6 +12,7 @@ export function PresentationHeaderActions({
 	featureState,
 	setFeatureState,
 }: HeaderActionsProps) {
+	useI18n();
 	const speakerMode = featureState[SPEAKER_MODE_KEY] as boolean | undefined;
 	const previewMode = featureState[PREVIEW_MODE_KEY] as boolean | undefined;
 
@@ -55,24 +57,24 @@ export function PresentationHeaderActions({
 		<>
 			<HeaderToggleButton
 				icon={User}
-				label="Speaker"
+				label={t("Speaker")}
 				onClick={handleToggleSpeakerMode}
-				title="Speaker Mode (with notes and preview)"
+				title={t("Speaker Mode (with notes and preview)")}
 				active={speakerMode}
 			/>
 
 			<HeaderToggleButton
 				icon={Monitor}
-				label="Preview"
+				label={t("Preview")}
 				onClick={handleTogglePreviewMode}
-				title="Preview Mode (current and next slide)"
+				title={t("Preview Mode (current and next slide)")}
 				active={previewMode}
 			/>
 
 			<HeaderButton
 				icon={Expand}
 				onClick={handleFullscreen}
-				title="Fullscreen"
+				title={t("Fullscreen")}
 				iconOnly
 			/>
 
@@ -80,9 +82,9 @@ export function PresentationHeaderActions({
 
 			<HeaderButton
 				icon={FileDown}
-				label="Export PDF"
+				label={t("Export PDF")}
 				onClick={handleExportPdf}
-				title="Export presentation as PDF"
+				title={t("Export presentation as PDF")}
 			/>
 		</>
 	);

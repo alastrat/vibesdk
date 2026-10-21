@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, InputArea } from '@cloudflare/kumo';
@@ -19,6 +20,7 @@ interface SiteReuseBarProps {
 
 /** The app page strip: where the app came from, the owner's paid listing, and admin moderation. */
 export function SiteReuseBar({ app, isOwner }: SiteReuseBarProps) {
+	useI18n();
 	const isPublic = app.visibility === 'public';
 	const showOwner = isOwner && isPublic;
 	const showModeration = app.canModerate && isPublic;
@@ -29,9 +31,7 @@ export function SiteReuseBar({ app, isOwner }: SiteReuseBarProps) {
 			{app.startedFrom ? <StartedFromLine startedFrom={app.startedFrom} /> : <span />}
 			<div className="flex flex-wrap items-center gap-2">
 				{app.removedFromDiscover && (
-					<span className="text-sm text-kumo-danger">
-						Removed from Discover by an admin
-						{app.removedFromDiscover.reason ? `: ${app.removedFromDiscover.reason}` : ''}
+					<span className="text-sm text-kumo-danger">{t("Removed from Discover by an admin")}{app.removedFromDiscover.reason ? `: ${app.removedFromDiscover.reason}` : ''}
 					</span>
 				)}
 				{showOwner && <OwnerPaidListing appId={app.id} />}
@@ -45,6 +45,7 @@ export function SiteReuseBar({ app, isOwner }: SiteReuseBarProps) {
 }
 
 function OwnerPaidListing({ appId }: { appId: string }) {
+	useI18n();
 	const publishing = useSitePublishing(appId, true);
 	const submitUpdate = useSubmitPaidUpdate(appId);
 	const withdraw = useWithdrawPaidVersion(appId);
@@ -66,13 +67,11 @@ function OwnerPaidListing({ appId }: { appId: string }) {
 					loading={withdraw.isPending}
 					onClick={() =>
 						withdraw.mutate(pendingVersionId, {
-							onSuccess: () => toast.success('The version was withdrawn'),
+							onSuccess: () => toast.success(t("The version was withdrawn")),
 							onError: (error) => toast.error(error.message),
 						})
 					}
-				>
-					Withdraw
-				</Button>
+				>{t("Withdraw")}</Button>
 			)}
 			{canSendUpdate && (
 				<Button
@@ -81,13 +80,11 @@ function OwnerPaidListing({ appId }: { appId: string }) {
 					loading={submitUpdate.isPending}
 					onClick={() =>
 						submitUpdate.mutate(undefined, {
-							onSuccess: () => toast.success('Your latest deploy was sent for review'),
+							onSuccess: () => toast.success(t("Your latest deploy was sent for review")),
 							onError: (error) => toast.error(error.message),
 						})
 					}
-				>
-					Send update for review
-				</Button>
+				>{t("Send update for review")}</Button>
 			)}
 		</>
 	);
@@ -95,6 +92,7 @@ function OwnerPaidListing({ appId }: { appId: string }) {
 
 /** Admins only: put a public Discover store in the landing page's showcase, or take it out. */
 function ShowcaseSwitch({ appId, showcased }: { appId: string; showcased: boolean }) {
+	useI18n();
 	const change = useSetShowcased();
 	return (
 		<Button
@@ -105,18 +103,19 @@ function ShowcaseSwitch({ appId, showcased }: { appId: string; showcased: boolea
 				change.mutate(
 					{ appId, showcased: !showcased },
 					{
-						onSuccess: () => toast.success(showcased ? 'Removed from the landing page' : 'Shown on the landing page'),
+						onSuccess: () => toast.success(showcased ? t("Removed from the landing page") : t("Shown on the landing page")),
 						onError: (error) => toast.error(error.message),
 					},
 				)
 			}
 		>
-			{showcased ? 'Remove from the landing page' : 'Show on the landing page'}
+			{showcased ? t("Remove from the landing page") : t("Show on the landing page")}
 		</Button>
 	);
 }
 
 function DiscoverModeration({ appId, removed }: { appId: string; removed: boolean }) {
+	useI18n();
 	const removal = useSetDiscoverRemoval();
 	const [open, setOpen] = useState(false);
 	const [reason, setReason] = useState('');
@@ -131,35 +130,29 @@ function DiscoverModeration({ appId, removed }: { appId: string; removed: boolea
 					removal.mutate(
 						{ appId, body: { removed: false } },
 						{
-							onSuccess: () => toast.success('Restored to Discover'),
+							onSuccess: () => toast.success(t("Restored to Discover")),
 							onError: (error) => toast.error(error.message),
 						},
 					)
 				}
-			>
-				Restore to Discover
-			</Button>
+			>{t("Restore to Discover")}</Button>
 		);
 	}
 	if (!open) {
 		return (
-			<Button size="sm" variant="secondary-destructive" onClick={() => setOpen(true)}>
-				Remove from Discover
-			</Button>
+			<Button size="sm" variant="secondary-destructive" onClick={() => setOpen(true)}>{t("Remove from Discover")}</Button>
 		);
 	}
 	return (
 		<div className="flex flex-wrap items-end gap-2">
 			<InputArea
 				id={`discover-removal-${appId}`}
-				label="Reason the owner will see"
+				label={t("Reason the owner will see")}
 				value={reason}
 				maxLength={500}
 				onChange={(event) => setReason(event.target.value)}
 			/>
-			<Button size="sm" variant="ghost" onClick={() => setOpen(false)}>
-				Cancel
-			</Button>
+			<Button size="sm" variant="ghost" onClick={() => setOpen(false)}>{t("Cancel")}</Button>
 			<Button
 				size="sm"
 				variant="destructive"
@@ -170,16 +163,14 @@ function DiscoverModeration({ appId, removed }: { appId: string; removed: boolea
 						{ appId, body: { removed: true, reason } },
 						{
 							onSuccess: () => {
-								toast.success('Removed from Discover');
+								toast.success(t("Removed from Discover"));
 								setOpen(false);
 							},
 							onError: (error) => toast.error(error.message),
 						},
 					)
 				}
-			>
-				Remove
-			</Button>
+			>{t("Remove")}</Button>
 		</div>
 	);
 }

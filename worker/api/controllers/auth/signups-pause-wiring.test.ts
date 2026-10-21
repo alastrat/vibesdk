@@ -10,6 +10,6 @@ describe('a provider sign-in refused while sign-ups are paused', () => {
 	});
 
 	it('shows the pause message there', () => {
-		expect(sources['/src/hooks/use-oauth-error-toast.ts']).toContain('[SIGNUPS_PAUSED_ERROR_CODE]: SIGNUPS_PAUSED_MESSAGE');
+		expect(sources['/src/hooks/use-oauth-error-toast.ts']).toContain('[SIGNUPS_PAUSED_ERROR_CODE]: t(SIGNUPS_PAUSED_MESSAGE)');
 	});
 });

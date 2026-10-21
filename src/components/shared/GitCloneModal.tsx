@@ -20,6 +20,7 @@ import {
 	ClockIcon,
 } from '@phosphor-icons/react';
 import { apiClient } from '@/lib/api-client';
+import { T, t } from '@/lib/i18n';
 import { normalizeAppTitle } from '@/utils/string';
 import type { GitCloneTokenData } from '@/api-types';
 
@@ -69,13 +70,20 @@ function CodeCommandBlock({
 					>
 						<span className="inline-flex items-center gap-2 text-sm font-medium text-kumo-default">
 							<EyeIcon className="size-4" weight="duotone" />
-							Click to reveal token
+							{t('Click to reveal token')}
 						</span>
 					</button>
 				)}
 			</div>
 		</div>
 	);
+}
+
+/** Minutes and seconds left, such as "12m 30s". */
+function formatRemaining(ms: number): string {
+	const minutes = Math.floor(ms / 60000);
+	const seconds = Math.floor((ms % 60000) / 1000);
+	return t('{minutes}m {seconds}s', { minutes, seconds });
 }
 
 export function GitCloneModal({
@@ -89,7 +97,8 @@ export function GitCloneModal({
 	const [tokenData, setTokenData] = useState<GitCloneTokenData | null>(null);
 	const [isGenerating, setIsGenerating] = useState(false);
 	const [tokenRevealed, setTokenRevealed] = useState(false);
-	const [timeRemaining, setTimeRemaining] = useState<string | null>(null);
+	/** Milliseconds until the token expires; null before one is generated. */
+	const [remainingMs, setRemainingMs] = useState<number | null>(null);
 
 	const host = window.location.host;
 	const protocol =
@@ -103,7 +112,7 @@ export function GitCloneModal({
 			setTokenData(null);
 			setIsGenerating(false);
 			setTokenRevealed(false);
-			setTimeRemaining(null);
+			setRemainingMs(null);
 		}
 	}, [open]);
 
@@ -114,14 +123,8 @@ export function GitCloneModal({
 			const expiresAt = new Date(tokenData.expiresAt).getTime();
 			const diff = expiresAt - Date.now();
 
-			if (diff <= 0) {
-				setTimeRemaining('Expired');
-				clearInterval(interval);
-			} else {
-				const minutes = Math.floor(diff / 60000);
-				const seconds = Math.floor((diff % 60000) / 1000);
-				setTimeRemaining(`${minutes}m ${seconds}s`);
-			}
+			setRemainingMs(Math.max(diff, 0));
+				if (diff <= 0) clearInterval(interval);
 		}, 1000);
 
 		return () => clearInterval(interval);
@@ -135,14 +138,14 @@ export function GitCloneModal({
 				setTokenData(response.data);
 				setTokenRevealed(false);
 				toast.add({
-					title: 'Token generated successfully',
+					title: t('Token generated successfully'),
 					variant: 'success',
 				});
 			}
 		} catch (error) {
 			console.error('Failed to generate token:', error);
 			toast.add({
-				title: 'Failed to generate token',
+				title: t('Failed to generate token'),
 				variant: 'error',
 			});
 		} finally {
@@ -172,12 +175,12 @@ export function GitCloneModal({
 									weight="duotone"
 								/>
 							</span>
-							Clone repository
+							{t('Clone repository')}
 						</DialogTitle>
 						<DialogDescription className="text-sm text-kumo-subtle">
 							{isPublic
-								? 'Clone this app to your local machine'
-								: 'Generate a temporary access token to clone this private repository'}
+								? t('Clone this app to your local machine')
+								: t('Generate a temporary access token to clone this private repository')}
 						</DialogDescription>
 					</div>
 					<DialogClose
@@ -187,7 +190,7 @@ export function GitCloneModal({
 								variant="ghost"
 								shape="square"
 								size="sm"
-								aria-label="Close"
+								aria-label={t('Close')}
 							>
 								<XIcon className="size-4.5" />
 							</Button>
@@ -200,11 +203,11 @@ export function GitCloneModal({
 						{isPublic ? (
 							<>
 								<CodeCommandBlock
-									label="Clone command"
+									label={t('Clone command')}
 									code={gitCloneCommand}
 								/>
 								<CodeCommandBlock
-									label="Quick start"
+									label={t('Quick start')}
 									code={setupCommands}
 								/>
 							</>
@@ -212,9 +215,7 @@ export function GitCloneModal({
 							<div className="grid gap-4">
 								<Banner
 									icon={<WarningCircleIcon />}
-									description="Generate a temporary access token to clone
-									this private repository. The token expires
-									in 1 hour."
+									description={t('Generate a temporary access token to clone this private repository. The token expires in 1 hour.')}
 								/>
 
 								<div className="flex w-full">
@@ -236,15 +237,15 @@ export function GitCloneModal({
 										}
 									>
 										{isGenerating
-											? 'Generating token...'
-											: 'Generate clone token'}
+											? t('Generating token...')
+											: t('Generate clone token')}
 									</Button>
 								</div>
 							</div>
 						) : (
 							<>
 								<CodeCommandBlock
-									label="Clone command"
+									label={t('Clone command')}
 									code={gitCloneCommand}
 									blurred={!tokenRevealed}
 									onReveal={() => setTokenRevealed(true)}
@@ -255,8 +256,8 @@ export function GitCloneModal({
 											shape="square"
 											aria-label={
 												tokenRevealed
-													? 'Hide token'
-													: 'Reveal token'
+													? t('Hide token')
+													: t('Reveal token')
 											}
 											onClick={() =>
 												setTokenRevealed(
@@ -282,15 +283,20 @@ export function GitCloneModal({
 										/>
 									</span>
 									<span className="text-sm text-kumo-subtle">
-										Token expires in{' '}
-										<span className="font-medium text-kumo-default tabular-nums">
-											{timeRemaining}
-										</span>
+										{remainingMs !== null && remainingMs <= 0 ? (
+											t('Expired')
+										) : (
+											<T
+												text="Token expires in <time>{time}</time>"
+												values={{ time: remainingMs === null ? '' : formatRemaining(remainingMs) }}
+												components={{ time: (children) => <span className="font-medium text-kumo-default tabular-nums">{children}</span> }}
+											/>
+										)}
 									</span>
 								</div>
 
 								<CodeCommandBlock
-									label="Quick start"
+									label={t('Quick start')}
 									code={setupCommands}
 								/>
 
@@ -303,8 +309,8 @@ export function GitCloneModal({
 									loading={isGenerating}
 								>
 									{isGenerating
-										? 'Generating...'
-										: 'Generate new token'}
+										? t('Generating...')
+										: t('Generate new token')}
 								</Button>
 							</>
 						)}

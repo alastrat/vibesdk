@@ -3,6 +3,7 @@
  * hears of it, and the Checkout session. Previews take Stripe test-mode payments only, and only from the app's owner.
  */
 
+import { DEFAULT_LOCALE, type Locale } from '../../../shared/i18n/locales';
 import {
 	STORE_CHECKOUT_MESSAGES,
 	STORE_ORDER_KIND,
@@ -15,6 +16,7 @@ import {
 	type StoreManifest,
 	type StoreMode,
 } from '../../../shared/types/store-payments';
+import { translateFor } from '../../utils/server-translate';
 import type { StoreCheckoutSessionInput } from '../payments/stripe-client';
 import { parseStoreManifest } from './manifest';
 import { priceCart, requestedCatalogVariantIds, type CatalogLock } from './pricing';
@@ -79,8 +81,9 @@ export function checkoutModeOf(input: Pick<StartCheckoutInput, 'access' | 'strip
 	return input.access === 'live' && input.livePayments ? 'live' : null;
 }
 
-export function refusal(reason: StoreCheckoutRefusal): StoreCheckoutResponse {
-	return { ok: false, reason, message: STORE_CHECKOUT_MESSAGES[reason] };
+/** A refusal, worded in English unless the caller has the shopper's language to hand. */
+export function refusal(reason: StoreCheckoutRefusal, locale: Locale = DEFAULT_LOCALE): StoreCheckoutResponse {
+	return { ok: false, reason, message: translateFor(locale, STORE_CHECKOUT_MESSAGES[reason]) };
 }
 
 export function storeInfoOf(manifest: StoreManifest, paymentsAvailable: boolean, mode: StoreMode): StoreInfo {

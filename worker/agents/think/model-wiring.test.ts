@@ -7,6 +7,7 @@ const sources = import.meta.glob<string>(
 		'/worker/agents/think/model-config.ts',
 		'/worker/api/controllers/agent/controller.ts',
 		'/worker/agents/inferutils/core.ts',
+		'/worker/services/tasks/task-model.ts',
 	],
 	{ query: '?raw', import: 'default', eager: true },
 );
@@ -88,6 +89,14 @@ describe('think model wiring', () => {
 		const infer = source('/worker/agents/inferutils/core.ts');
 		expect(infer.indexOf('chargeLegacyCall(env,')).toBeGreaterThan(-1);
 		expect(infer.indexOf('chargeLegacyCall(env,')).toBeLessThan(infer.indexOf('RateLimitService.enforceLLMCallsRateLimit('));
+	});
+
+	it('keeps one stored-keys rule for the agent and for tasks: a gateway holding the keys never gets a forwarded Authorization', () => {
+		for (const path of ['/worker/agents/think/ThinkAgent.ts', '/worker/services/tasks/task-model.ts']) {
+			const text = source(path);
+			expect(text, path).toContain('storedKeysFetch(');
+			expect(text, path).not.toMatch(/headers\.delete\('authorization'\)/i);
+		}
 	});
 
 	it('keeps the catalog as the only model list', () => {

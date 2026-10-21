@@ -4,9 +4,18 @@ vi.mock('./ticketAuth', () => ({ authenticateViaTicket: vi.fn(), hasTicketParam:
 
 import { AuthConfig, checkAdminRole, routeAuthChecks, type AuthRequirement } from './routeAuth';
 import type { AuthUser } from '../../types/auth-types';
+import { runWithLocale } from '../../services/i18n/request-locale';
 
 const env = {} as Env;
 const member: AuthUser = { id: 'user-1', email: 'member@example.com' };
+
+it('translates middleware refusals while preserving the sign-in action', async () => {
+	const result = await runWithLocale('es', () => routeAuthChecks(null, env, AuthConfig.authenticated));
+	expect(result.response?.status).toBe(401);
+	expect(await result.response?.json()).toMatchObject({
+		error: { message: 'Se necesita iniciar sesión', type: 'AUTHENTICATION_REQUIRED', action: 'login' },
+	});
+});
 
 function adminRequirement(isAdmin: boolean): AuthRequirement {
 	return { required: true, level: 'admin', roleCheck: async () => isAdmin };

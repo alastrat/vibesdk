@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect, useState } from 'react';
 import { useVault } from '@/hooks/use-vault';
 import { Button } from '@/components/ui/button';
@@ -33,6 +34,7 @@ type UnlockMethod = 'passkey' | 'password' | 'recovery';
 type UnlockResult = { success: boolean; error?: string };
 
 export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
+	useI18n();
 	const { unlockWithPassword, unlockWithPasskey, unlockWithRecoveryCode, resetVault, state } = useVault();
 	const hasPasskey = state.unlockMethod === 'webauthn-prf';
 
@@ -56,7 +58,7 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 		setIsUnlocking(true);
 
 		try {
-			let result: UnlockResult = { success: false, error: 'Unlock failed' };
+			let result: UnlockResult = { success: false, error: t("Unlock failed") };
 
 			switch (method) {
 				case 'passkey':
@@ -64,7 +66,7 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 					break;
 				case 'password':
 					if (!password) {
-						setError('Please enter your password');
+						setError(t("Please enter your password"));
 						setIsUnlocking(false);
 						return;
 					}
@@ -72,7 +74,7 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 					break;
 				case 'recovery':
 					if (!recoveryCode) {
-						setError('Please enter a recovery code');
+						setError(t("Please enter a recovery code"));
 						setIsUnlocking(false);
 						return;
 					}
@@ -85,10 +87,10 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 				setPassword('');
 				setRecoveryCode('');
 			} else {
-				setError(result.error ?? 'Unlock failed');
+				setError(result.error ?? t("Unlock failed"));
 			}
 		} catch (err) {
-			setError(err instanceof Error ? err.message : 'Unlock failed');
+			setError(err instanceof Error ? err.message : t("Unlock failed"));
 		} finally {
 			setIsUnlocking(false);
 		}
@@ -99,9 +101,9 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 			<Dialog open={open} onOpenChange={onOpenChange}>
 				<DialogContent className="sm:max-w-md">
 					<DialogHeader>
-						<DialogTitle>Unlock Vault</DialogTitle>
+						<DialogTitle>{t("Unlock Vault")}</DialogTitle>
 						<DialogDescription>
-							{reason ?? 'Your secrets are encrypted. Unlock your vault to access them.'}
+							{reason ?? t("Your secrets are encrypted. Unlock your vault to access them.")}
 						</DialogDescription>
 					</DialogHeader>
 
@@ -113,39 +115,33 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 									onClick={() => setMethod('passkey')}
 									className="flex-1"
 								>
-									<Fingerprint className="h-4 w-4 mr-2" />
-									Passkey
-								</Button>
+									<Fingerprint className="h-4 w-4 mr-2" />{t("Passkey")}</Button>
 							)}
 							<Button
 								variant={method === 'password' ? 'default' : 'outline'}
 								onClick={() => setMethod('password')}
 								className="flex-1"
 							>
-								<KeyRound className="h-4 w-4 mr-2" />
-								Password
-							</Button>
+								<KeyRound className="h-4 w-4 mr-2" />{t("Password")}</Button>
 						</div>
 
 						{method === 'passkey' && (
 							<div className="text-center py-4">
 								<Fingerprint className="h-12 w-12 mx-auto text-primary mb-3" />
-								<p className="text-sm text-muted-foreground">
-									Click unlock to authenticate with your passkey
-								</p>
+								<p className="text-sm text-muted-foreground">{t("Click unlock to authenticate with your passkey")}</p>
 							</div>
 						)}
 
 						{method === 'password' && (
 							<div className="space-y-2">
-								<Label htmlFor="unlock-password">Vault Password</Label>
+								<Label htmlFor="unlock-password">{t("Vault Password")}</Label>
 								<Input
 									id="unlock-password"
 									type="password"
 									value={password}
 									onChange={(e) => setPassword(e.target.value)}
 									onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-									placeholder="Enter your vault password"
+									placeholder={t("Enter your vault password")}
 									autoFocus
 								/>
 							</div>
@@ -153,13 +149,13 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 
 						{method === 'recovery' && (
 							<div className="space-y-2">
-								<Label htmlFor="recovery-code">Recovery Code</Label>
+								<Label htmlFor="recovery-code">{t("Recovery Code")}</Label>
 								<Input
 									id="recovery-code"
 									value={recoveryCode}
 									onChange={(e) => setRecoveryCode(e.target.value.toUpperCase())}
 									onKeyDown={(e) => e.key === 'Enter' && handleUnlock()}
-									placeholder="XXXXX-XXXXX"
+									placeholder={t("XXXXX-XXXXX")}
 									className="font-mono"
 									autoFocus
 								/>
@@ -173,20 +169,16 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 							</div>
 						)}
 
-						{error?.includes('Vault configuration invalid') && (
-							<Button variant="destructive" onClick={() => setShowResetConfirm(true)} className="w-full">
-								Reset Vault
-							</Button>
+						{error?.includes('Vault configuration invalid') /* i18n-ignore */ && (
+							<Button variant="destructive" onClick={() => setShowResetConfirm(true)} className="w-full">{t("Reset Vault")}</Button>
 						)}
 
 						<Button onClick={handleUnlock} disabled={isUnlocking} className="w-full">
 							{isUnlocking ? (
 								<>
-									<Loader2 className="h-4 w-4 mr-2 animate-spin" />
-									Unlocking...
-								</>
+									<Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Unlocking...")}</>
 							) : (
-								'Unlock'
+								t("Unlock")
 							)}
 						</Button>
 
@@ -194,9 +186,7 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 							<button
 								onClick={() => setMethod('recovery')}
 								className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors"
-							>
-								Use recovery code instead
-							</button>
+							>{t("Use recovery code instead")}</button>
 						)}
 					</div>
 				</DialogContent>
@@ -205,22 +195,18 @@ export function VaultUnlockModal({ open, onOpenChange, reason }: Props) {
 			<AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Reset vault?</AlertDialogTitle>
-						<AlertDialogDescription>
-							This deletes all vault secrets and configuration for this account.
-						</AlertDialogDescription>
+						<AlertDialogTitle>{t("Reset vault?")}</AlertDialogTitle>
+						<AlertDialogDescription>{t("This deletes all vault secrets and configuration for this account.")}</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
-						<AlertDialogCancel>Cancel</AlertDialogCancel>
+						<AlertDialogCancel>{t("Cancel")}</AlertDialogCancel>
 						<AlertDialogAction
 							onClick={async () => {
 								setShowResetConfirm(false);
 								const ok = await resetVault();
 								if (ok) onOpenChange(false);
 							}}
-						>
-							Reset
-						</AlertDialogAction>
+						>{t("Reset")}</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
 			</AlertDialog>

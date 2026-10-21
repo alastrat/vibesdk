@@ -12,7 +12,7 @@ describe('shopper email formatting', () => {
 	});
 
 	it("tells an edited email from Estori's default", () => {
-		expect(templateOrigin({ edited: true })).toBe('Edited');
+		expect(templateOrigin({ edited: true })).toBe('Edited by you');
 		expect(templateOrigin({ edited: false })).toBe("Estori's default");
 	});
 

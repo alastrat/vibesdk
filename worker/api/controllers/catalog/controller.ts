@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** Catalog images for stores and shoppers, and catalog operations for admins. */
 
 import { BaseController } from '../baseController';
@@ -26,10 +27,10 @@ export class CatalogController extends BaseController {
     ): Promise<ControllerResponse<ApiResponse<never>>> {
         const { productId, file } = context.pathParams;
         if (!productId || !file || !PRODUCT_ID.test(productId) || !FILE.test(file)) {
-            return CatalogController.createErrorResponse('Image not found', 404);
+            return CatalogController.createErrorResponse(msg('Image not found'), 404);
         }
         const object = await env.TEMPLATES_BUCKET.get(`catalog/${productId}/${file}`);
-        if (!object?.body) return CatalogController.createErrorResponse('Image not found', 404);
+        if (!object?.body) return CatalogController.createErrorResponse(msg('Image not found'), 404);
         // A naked Response: this route is binary, and the router passes it through unchanged.
         return new Response(object.body, {
             headers: {
@@ -50,7 +51,7 @@ export class CatalogController extends BaseController {
     ): Promise<ControllerResponse<ApiResponse<{ refreshed: number; failed: number; stoppedForPoints: boolean }>>> {
         try {
             const result = await runCatalogRefresh(env);
-            if (!result) return this.createErrorResponse('The catalog supplier is not configured', 409);
+            if (!result) return this.createErrorResponse(msg('The catalog supplier is not configured'), 409);
             return this.createSuccessResponse(result);
         } catch (error) {
             return this.handleError(error, 'refresh the catalog') as ControllerResponse<ApiResponse<{ refreshed: number; failed: number; stoppedForPoints: boolean }>>;
@@ -66,8 +67,8 @@ export class CatalogController extends BaseController {
         const params = new URL(request.url).searchParams;
         const view = params.get('view') ?? 'attention';
         const cursor = params.get('cursor');
-        if (!isAdminCatalogOrderView(view)) return CatalogController.createErrorResponse('Unknown view', 400);
-        if (cursor && !parseKeysetCursor(cursor)) return CatalogController.createErrorResponse('Invalid cursor', 400);
+        if (!isAdminCatalogOrderView(view)) return CatalogController.createErrorResponse(msg('Unknown view'), 400);
+        if (cursor && !parseKeysetCursor(cursor)) return CatalogController.createErrorResponse(msg('Invalid cursor'), 400);
         try {
             return CatalogController.createSuccessResponse(await new CatalogOrderAdminService(env).listOrders({ view, late: lateCutoffs(Date.now()), cursor }));
         } catch (error) {
@@ -78,10 +79,10 @@ export class CatalogController extends BaseController {
     /** One catalog order for admins, with where its runner stands; a runner that can't be read leaves that part out. */
     static async orderDetail(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<AdminCatalogOrderDetail>>> {
         const orderId = context.pathParams.id;
-        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        if (!orderId) return CatalogController.createErrorResponse(msg('Missing order id'), 400);
         try {
             const order = await new CatalogOrderAdminService(env).getOrder(orderId);
-            if (!order) return CatalogController.createErrorResponse('Order not found', 404);
+            if (!order) return CatalogController.createErrorResponse(msg('Order not found'), 404);
             const state = await CatalogController.runner(env, orderId)
                 .snapshot()
                 .catch(() => null);
@@ -93,20 +94,20 @@ export class CatalogController extends BaseController {
 
     static async runnerSnapshot(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ runner: unknown }>>> {
         const orderId = context.pathParams.id;
-        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        if (!orderId) return CatalogController.createErrorResponse(msg('Missing order id'), 400);
         return CatalogController.createSuccessResponse({ runner: await CatalogController.runner(env, orderId).snapshot() });
     }
 
     static async syncNow(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ signalled: true }>>> {
         const orderId = context.pathParams.id;
-        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        if (!orderId) return CatalogController.createErrorResponse(msg('Missing order id'), 400);
         await CatalogController.runner(env, orderId).signal();
         return CatalogController.createSuccessResponse({ signalled: true });
     }
 
     static async retryOrder(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ retried: true }>>> {
         const orderId = context.pathParams.id;
-        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        if (!orderId) return CatalogController.createErrorResponse(msg('Missing order id'), 400);
         await CatalogController.runner(env, orderId).retry(orderId);
         return CatalogController.createSuccessResponse({ retried: true });
     }
@@ -114,7 +115,7 @@ export class CatalogController extends BaseController {
     /** Places a catalog order held for a risky payment, after an admin reviewed it. */
     static async releaseOrder(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<{ released: boolean }>>> {
         const orderId = context.pathParams.id;
-        if (!orderId) return CatalogController.createErrorResponse('Missing order id', 400);
+        if (!orderId) return CatalogController.createErrorResponse(msg('Missing order id'), 400);
         return CatalogController.createSuccessResponse({ released: await CatalogController.runner(env, orderId).release() });
     }
 
@@ -124,11 +125,11 @@ export class CatalogController extends BaseController {
             const orderId = context.pathParams.id;
             const body = (await request.json().catch(() => null)) as { action?: unknown } | null;
             const action = body?.action === 'ship' || body?.action === 'deliver' ? body.action : null;
-            if (!orderId || !action) return CatalogController.createErrorResponse('Send { action: "ship" | "deliver" }', 400);
-            if (catalogSupplierMode(env, await paymentModeOf(env, orderId)) !== 'sandbox') return CatalogController.createErrorResponse('Only sandbox orders can be moved', 409);
+            if (!orderId || !action) return CatalogController.createErrorResponse(msg('Send { action: "ship" | "deliver" }'), 400);
+            if (catalogSupplierMode(env, await paymentModeOf(env, orderId)) !== 'sandbox') return CatalogController.createErrorResponse(msg('Only sandbox orders can be moved'), 409);
             const client = cjClientFromEnv(env);
             const order = await new CatalogOrderService(env).getOrder(orderId);
-            if (!client || !order) return CatalogController.createErrorResponse('Order not found', 404);
+            if (!client || !order) return CatalogController.createErrorResponse(msg('Order not found'), 404);
             const supplierOrderIds = [...new Set(order.items.flatMap((item) => (item.supplierOrderId ? [item.supplierOrderId] : [])))];
             for (const supplierOrderId of supplierOrderIds) {
                 // CJ's sandbox finds an order only by its SD order code.

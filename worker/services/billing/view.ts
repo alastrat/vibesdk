@@ -1,8 +1,9 @@
+import { assertWithinLimit } from '../i18n/plan-limits';
 /** The billing page's view of an account: its plan and subscription, this period's credits, its purchases, its card, and what it may do. */
 
 import type { CreditPurchaseRecord } from '../../database/schema';
 import type { BillingView, CardOnFile, PurchaseView } from '../../../shared/types/billing';
-import { assertWithinLimit, isPaidPlanId } from '../../../shared/types/plans';
+import { isPaidPlanId } from '../../../shared/types/plans';
 import { createLogger } from '../../logger';
 import type { StripeClient } from '../payments/stripe-client';
 import { liveSubscription, payableSubscription, type BillingAccount } from './account';

@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { Rocket, Brain, Code, Bug, Settings } from 'lucide-react';
+import { msg } from '@/lib/i18n';
 
 export interface WorkflowTab {
 	id: string;
@@ -9,40 +10,41 @@ export interface WorkflowTab {
 	patterns?: string[];
 }
 
+/** Labels and descriptions are marked as messages here and translated where they are shown. */
 export const WORKFLOW_TABS = {
 	quickstart: {
 		id: 'quickstart',
-		label: 'Quick Start',
+		label: msg('Quick Start'),
 		icon: Rocket,
-		description: 'Most commonly customized settings',
+		description: msg('Most commonly customized settings'),
 		patterns: ['template', 'blueprint', 'conversational'],
 	},
 	planning: {
 		id: 'planning',
-		label: 'Planning',
+		label: msg('Planning'),
 		icon: Brain,
-		description: 'Project planning and setup',
+		description: msg('Project planning and setup'),
 		patterns: ['phase', 'project', 'suggestion', 'generation'],
 	},
 	coding: {
 		id: 'coding',
-		label: 'Coding',
+		label: msg('Coding'),
 		icon: Code,
-		description: 'Development and implementation',
+		description: msg('Development and implementation'),
 		patterns: ['implementation', 'file', 'regeneration'],
 	},
 	debugging: {
 		id: 'debugging',
-		label: 'Debugging',
+		label: msg('Debugging'),
 		icon: Bug,
-		description: 'Code fixing and review',
+		description: msg('Code fixing and review'),
 		patterns: ['fixer', 'fix', 'review', 'debug'],
 	},
 	advanced: {
 		id: 'advanced',
-		label: 'Advanced',
+		label: msg('Advanced'),
 		icon: Settings,
-		description: 'Specialized operations',
+		description: msg('Specialized operations'),
 		patterns: ['screenshot', 'analysis', 'vision'],
 	},
 } as const;

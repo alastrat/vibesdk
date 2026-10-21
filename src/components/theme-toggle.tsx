@@ -1,6 +1,7 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 import { Button, DropdownMenu, cn } from '@cloudflare/kumo';
 import { useTheme } from '../contexts/theme-context';
+import { t } from '@/lib/i18n';
 
 interface ThemeToggleProps {
 	className?: string;
@@ -17,9 +18,9 @@ export function ThemeToggle({
 	const TriggerIcon =
 		theme === 'system' ? Monitor : theme === 'dark' ? Moon : Sun;
 	const themeItems = [
-		{ value: 'light', label: 'Light', icon: Sun },
-		{ value: 'dark', label: 'Dark', icon: Moon },
-		{ value: 'system', label: 'System', icon: Monitor },
+		{ value: 'light', label: t('Light'), icon: Sun },
+		{ value: 'dark', label: t('Dark'), icon: Moon },
+		{ value: 'system', label: t('System'), icon: Monitor },
 	] as const;
 
 	return (
@@ -30,7 +31,7 @@ export function ThemeToggle({
 						variant="secondary"
 						size="base"
 						shape="square"
-						aria-label="Toggle theme"
+						aria-label={t('Toggle theme')}
 						className={cn(
 							'text-kumo-subtle hover:text-kumo-default',
 							className,

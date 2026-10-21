@@ -13,10 +13,11 @@ const ALL_KEYS = [
 	'custom-domains-paused',
 	'template-sales-paused',
 	'billing-checkout-paused',
+	'store-translations-paused',
 ] as const;
 
 describe('the flag registry', () => {
-	it('holds the eleven flags the production project has, keys in kebab case', () => {
+	it('holds the twelve flags the production project has, keys in kebab case', () => {
 		expect(FLAG_KEYS).toEqual([...ALL_KEYS]);
 		for (const key of FLAG_KEYS) expect(key).toMatch(/^[a-z]+(-[a-z]+)*$/);
 	});
@@ -39,6 +40,7 @@ describe('the flag registry', () => {
 			'session-replay-paused',
 			'store-publishing-paused',
 			'custom-domains-paused',
+			'store-translations-paused',
 		]);
 	});
 

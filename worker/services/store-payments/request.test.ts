@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCheckoutRequest, safeReturnPath } from './request';
+import { parseCheckoutRequest, returnPathInLanguage, safeReturnPath } from './request';
 
 describe('safeReturnPath', () => {
 	it('keeps a path on the store', () => {
@@ -26,6 +26,27 @@ describe('safeReturnPath and control characters', () => {
 			expect(safeReturnPath(`/thanks${character}/x`, '/'), JSON.stringify(character)).toBe('/');
 		}
 		expect(safeReturnPath('/thank you', '/')).toBe('/thank%20you');
+	});
+});
+
+describe('returnPathInLanguage', () => {
+	it('names the language in the path, keeping what the path already carries', () => {
+		expect(returnPathInLanguage('/thanks', 'es')).toBe('/thanks?lang=es');
+		expect(returnPathInLanguage('/orders/done?x=1', 'pt-BR')).toBe('/orders/done?x=1&lang=pt-BR');
+		expect(returnPathInLanguage('/', 'en')).toBe('/?lang=en');
+	});
+
+	it('replaces a language the path already names, so the shopper keeps the one of the page they were on', () => {
+		expect(returnPathInLanguage('/cart?lang=en&x=1', 'es')).toBe('/cart?lang=es&x=1');
+	});
+
+	it('is still a path safeReturnPath accepts, and never leaves the store', () => {
+		for (const path of ['/thanks', '/a/b?x=1&y=2', '/caf%C3%A9']) expect(safeReturnPath(returnPathInLanguage(path, 'es'), '/fallback')).toBe(returnPathInLanguage(path, 'es'));
+	});
+
+	it('leaves a path that would grow past the limit for return paths as it was', () => {
+		const long = `/${'a'.repeat(195)}`;
+		expect(returnPathInLanguage(long, 'es')).toBe(long);
 	});
 });
 

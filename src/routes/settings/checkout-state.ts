@@ -13,11 +13,13 @@ import {
 	type CheckoutTermsView,
 	type PaidPlanId,
 } from '@/api-types';
+import { getLocale, isMessage, msg, t } from '@/lib/i18n';
 import type { StripeCheckoutActionResult } from '@/lib/stripe/stripe-js';
 
-export const FORM_NOT_LOADED_MESSAGE = "The payment form didn't load. Check your connection and try again.";
-export const PAYMENT_FAILED_MESSAGE = "The payment didn't go through. Check your details and try again.";
-export const CODE_FAILED_MESSAGE = "Couldn't check that code. Try again.";
+// The messages below are translated where they are shown, so a language picked meanwhile still applies.
+export const FORM_NOT_LOADED_MESSAGE = msg("The payment form didn't load. Check your connection and try again.");
+export const PAYMENT_FAILED_MESSAGE = msg("The payment didn't go through. Check your details and try again.");
+export const CODE_FAILED_MESSAGE = msg("Couldn't check that code. Try again.");
 
 export type CheckoutRequest = { kind: 'plan'; plan: PaidPlanId } | { kind: 'credits'; credits: number };
 
@@ -94,18 +96,24 @@ export function returnTargetOf(status: CheckoutStatusView, request: CheckoutRequ
 	}
 }
 
+/** The word in the server's English wording, which a sentence worded in English still carries. */
 const TERMS_WORD = 'Terms';
 
-/** The consent sentence split around the word the page links to the Terms; the sentence itself is the server's. */
+/**
+ * The consent sentence split around the word the page links to the Terms; the sentence itself is the server's, in the
+ * seller's language, so the word is that language's "Terms" (or the English one, for a sentence the server worded in English).
+ */
 export function consentPartsOf(text: string): { before: string; link: string | null; after: string } {
-	const at = text.indexOf(TERMS_WORD);
-	if (at < 0) return { before: text, link: null, after: '' };
-	return { before: text.slice(0, at), link: TERMS_WORD, after: text.slice(at + TERMS_WORD.length) };
+	for (const word of new Set([t('Terms'), TERMS_WORD])) {
+		const at = text.indexOf(word);
+		if (at >= 0) return { before: text.slice(0, at), link: word, after: text.slice(at + word.length) };
+	}
+	return { before: text, link: null, after: '' };
 }
 
 /** What is due today: the total Stripe reports once it has, and the server's figure until then. */
 export function dueTodayLabel(stripeAmount: string | null, fallbackCents: number): string {
-	return stripeAmount !== null && stripeAmount.trim() !== '' ? stripeAmount : formatUsd(fallbackCents);
+	return stripeAmount !== null && stripeAmount.trim() !== '' ? stripeAmount : formatUsd(fallbackCents, getLocale());
 }
 
 export interface Refusal {
@@ -122,7 +130,7 @@ export function refusalOf(error: unknown, fallback: string): Refusal {
 /** True for the server's answer to a call on a checkout that has timed out. */
 export function isExpiredRefusal(error: unknown): boolean {
 	const { status, message } = refusalOf(error, '');
-	return status === 400 && message === CHECKOUT_EXPIRED_MESSAGE;
+	return status === 400 && isMessage(message, CHECKOUT_EXPIRED_MESSAGE);
 }
 
 export type StartRefusal = { kind: 'already-paying' } | { kind: 'refused'; message: string; retryable: boolean };

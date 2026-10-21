@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiClient } from '@/lib/api-client';
+import { msg } from '@/lib/i18n';
 import type {
 	ListAppTablesResponse,
 	QueryAppTableResponse,
@@ -19,6 +20,7 @@ export interface DatabaseViewerState {
 	queryResult: QueryAppTableResponse | null;
 	loadingTables: boolean;
 	loadingQuery: boolean;
+	/** An English message, or text a server sent; the viewer translates it where it is shown. */
 	error: string | null;
 	selectedTable: string | null;
 	page: number;
@@ -83,7 +85,7 @@ export function useDatabaseViewer(
 				setTables(res.data);
 			} else {
 				setTables(null);
-				setError(res.error?.message ?? 'Failed to load tables');
+				setError(res.error?.message ?? msg('Failed to load tables'));
 			}
 		} catch (e) {
 			if (reqId !== tablesReqIdRef.current) return;
@@ -113,7 +115,7 @@ export function useDatabaseViewer(
 				setQueryResult(res.data);
 			} else {
 				setQueryResult(null);
-				setError(res.error?.message ?? 'Failed to load rows');
+				setError(res.error?.message ?? msg('Failed to load rows'));
 			}
 		} catch (e) {
 			if (reqId !== queryReqIdRef.current) return;
@@ -137,7 +139,7 @@ export function useDatabaseViewer(
 		try {
 			const res = await apiClient.wipeAppDatabase(agentId);
 			if (!res.success) {
-				setError(res.error?.message ?? 'Wipe failed');
+				setError(res.error?.message ?? msg('Wipe failed'));
 				return;
 			}
 			setQueryResult(null);

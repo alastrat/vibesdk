@@ -7,7 +7,7 @@ describe('the flags admin view', () => {
 	it('lists every registry flag with its value, whether PostHog answered for it, and its rollout when known', () => {
 		const evaluation = { values: { ...defaultFlagValues(), billing: true, 'catalog-paused': true }, source: 'posthog' as const, inPostHog: ['billing' as const, 'catalog-paused' as const] };
 		const rows = adminFlagRows(evaluation, { billing: 10, 'catalog-paused': 100 });
-		expect(rows).toHaveLength(11);
+		expect(rows).toHaveLength(12);
 		expect(rows[0]).toEqual({
 			key: 'billing',
 			description: 'Plans, subscriptions and the billing page. Also on with BILLING=on, or for a user in BILLING_USER_IDS.',

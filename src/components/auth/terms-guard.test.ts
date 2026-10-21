@@ -28,7 +28,7 @@ describe('agreeing to the terms', () => {
 
 	it('takes the missing-agreement message from the shared constant', () => {
 		const modal = source('/src/components/auth/AuthForm.tsx');
-		expect(modal).toContain('errors.terms = TERMS_REQUIRED_MESSAGE;');
+		expect(modal).toContain('errors.terms = t(TERMS_REQUIRED_MESSAGE);');
 		expect(modal).toMatch(/import \{[^}]*TERMS_REQUIRED_MESSAGE[^}]*\} from '@\/api-types'/);
 		expect(modal).not.toContain('Agree to the Terms of Service and Privacy Policy to create an account');
 	});
@@ -58,6 +58,8 @@ describe('agreeing to the terms', () => {
 	it('offers a reload instead of a retry when the terms changed since the page loaded', () => {
 		const gate = source('/src/components/auth/TermsGate.tsx');
 		expect(gate).toContain('TERMS_OUTDATED_MESSAGE');
+		// The server answers in the person's language, so the answer is recognised in it too.
+		expect(gate).toContain('isMessage(error, TERMS_OUTDATED_MESSAGE)');
 		expect(gate).toContain('window.location.reload()');
 		expect(gate).toContain('Reload');
 		expect(gate).toContain('Try again');

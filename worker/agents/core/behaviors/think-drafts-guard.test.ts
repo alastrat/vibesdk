@@ -61,7 +61,8 @@ describe('the Think host and drafts', () => {
 		expect(body).toContain('currentBranch: draft.branch');
 		expect(body).toContain('await this.deployCurrentBranch()');
 		expect(body).toContain('WebSocketMessageResponses.DEPLOYMENT_COMPLETED');
-		expect(body).toContain("`Now working on '${draft.name}'.`");
+		expect(body).toContain("Now working on '{value1}'.");
+		expect(body).toContain('value1: String(draft.name)');
 		expect(body).toContain('.setPreviewUrl(await this.getBrowserPreviewURL())');
 		expect(body).not.toContain('configureThinkAgent(');
 	});

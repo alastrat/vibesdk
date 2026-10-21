@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Cloudflare Account Controller
  * Manage user's Cloudflare accounts and AI Gateways
@@ -33,7 +34,7 @@ export class CloudflareAccountController extends BaseController {
 		const user = context.user;
 		if (!user) {
 			return CloudflareAccountController.createErrorResponse(
-				'Authentication required',
+				msg('Authentication required'),
 				401,
 			);
 		}
@@ -86,7 +87,7 @@ export class CloudflareAccountController extends BaseController {
 		const user = context.user;
 		if (!user) {
 			return CloudflareAccountController.createErrorResponse(
-				'Authentication required',
+				msg('Authentication required'),
 				401,
 			);
 		}
@@ -96,7 +97,7 @@ export class CloudflareAccountController extends BaseController {
 
 			if (!body.accountId || !body.gatewayId) {
 				return CloudflareAccountController.createErrorResponse(
-					'accountId and gatewayId are required',
+					msg('accountId and gatewayId are required'),
 					400,
 				);
 			}
@@ -110,12 +111,12 @@ export class CloudflareAccountController extends BaseController {
 
 			if (!success) {
 				return CloudflareAccountController.createErrorResponse(
-					'Invalid account or gateway selection',
+					msg('Invalid account or gateway selection'),
 					400,
 				);
 			}
 
-			return CloudflareAccountController.createSuccessResponse({ message: 'Selection updated successfully' });
+			return CloudflareAccountController.createSuccessResponse({ message: msg('Selection updated successfully') });
 		} catch (error) {
 			this.logger.error('Error setting user selection', error);
 			return CloudflareAccountController.createErrorResponse(
@@ -141,7 +142,7 @@ export class CloudflareAccountController extends BaseController {
 		const user = context.user;
 		if (!user) {
 			return CloudflareAccountController.createErrorResponse(
-				'Authentication required',
+				msg('Authentication required'),
 				401,
 			);
 		}
@@ -158,7 +159,7 @@ export class CloudflareAccountController extends BaseController {
 			);
 		}
 
-		const response = CloudflareAccountController.createSuccessResponse({ message: 'Disconnected' });
+		const response = CloudflareAccountController.createSuccessResponse({ message: msg('Disconnected') });
 		response.headers.append('Set-Cookie', buildClearTokenCookie(env));
 		return response;
 	}
@@ -175,7 +176,7 @@ export class CloudflareAccountController extends BaseController {
 	): Promise<Response> {
 		const user = context.user;
 		if (!user) {
-			return CloudflareAccountController.createErrorResponse('Authentication required', 401);
+			return CloudflareAccountController.createErrorResponse(msg('Authentication required'), 401);
 		}
 
 		try {
@@ -202,14 +203,14 @@ export class CloudflareAccountController extends BaseController {
 	): Promise<Response> {
 		const user = context.user;
 		if (!user) {
-			return CloudflareAccountController.createErrorResponse('Authentication required', 401);
+			return CloudflareAccountController.createErrorResponse(msg('Authentication required'), 401);
 		}
 
 		try {
 			const body = (await request.json()) as { enabled?: unknown };
 			if (typeof body.enabled !== 'boolean') {
 				return CloudflareAccountController.createErrorResponse(
-					'enabled (boolean) is required',
+					msg('enabled (boolean) is required'),
 					400,
 				);
 			}

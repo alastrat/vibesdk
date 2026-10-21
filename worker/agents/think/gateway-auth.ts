@@ -29,3 +29,41 @@ export function resolveGatewayAuth(conf: GatewayModelConfig, gatewayToken: strin
 		useStoredKeys,
 	};
 }
+
+/** The settings that locate and authorize Estori's AI Gateway. */
+export interface GatewayEnv {
+	CLOUDFLARE_ACCOUNT_ID?: string;
+	CLOUDFLARE_AI_GATEWAY?: string;
+	CLOUDFLARE_AI_GATEWAY_TOKEN?: string;
+	CLOUDFLARE_API_TOKEN?: string;
+}
+
+export interface ThinkGateway extends GatewayAuth {
+	baseURL: string;
+}
+
+/**
+ * Where and how a Think model is called through Estori's gateway. The gateway is addressed by account and gateway id
+ * when both are set; `CLOUDFLARE_AI_GATEWAY_URL` is deliberately ignored then, since it may name a gateway the platform
+ * token isn't authorized for. Otherwise the URL `getConfigurationForModel` resolved is used.
+ */
+export function resolveThinkGateway(conf: GatewayModelConfig & { baseURL: string }, env: GatewayEnv): ThinkGateway {
+	const auth = resolveGatewayAuth(conf, env.CLOUDFLARE_AI_GATEWAY_TOKEN || env.CLOUDFLARE_API_TOKEN);
+	const baseURL =
+		env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_AI_GATEWAY
+			? `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.CLOUDFLARE_AI_GATEWAY}/compat`
+			: conf.baseURL;
+	return { ...auth, baseURL };
+}
+
+/**
+ * `base` for a gateway that may hold the provider keys: then a forwarded `Authorization` would override the gateway's
+ * stored key, so it is never sent. `cf-aig-authorization` and everything else go through.
+ */
+export function storedKeysFetch(useStoredKeys: boolean, base: typeof fetch): typeof fetch {
+	return (input, init) => {
+		const headers = new Headers(init?.headers);
+		if (useStoredKeys) headers.delete('authorization');
+		return base(input, { ...(init ?? {}), headers });
+	};
+}

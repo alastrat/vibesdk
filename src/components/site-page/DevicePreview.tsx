@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { PREVIEW_IFRAME_SANDBOX } from '@/lib/preview-sandbox';
 
@@ -16,6 +17,7 @@ interface DevicePreviewProps {
 
 /** The live site in a desktop or phone frame; the screenshot stands in when the preview can't load. */
 export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePreviewProps) {
+	useI18n();
 	const [device, setDevice] = useState<Device>('desktop');
 	const [status, setStatus] = useState<'loading' | 'loaded' | 'failed'>(previewUrl ? 'loading' : 'failed');
 	const frameRef = useRef<HTMLDivElement>(null);
@@ -44,7 +46,7 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 
 	return (
 		<section className="grid gap-3">
-			<div className="flex justify-center gap-1" role="group" aria-label="Preview size">
+			<div className="flex justify-center gap-1" role="group" aria-label={t("Preview size")}>
 				{(['desktop', 'phone'] as const).map((option) => (
 					<button
 						key={option}
@@ -53,7 +55,7 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 						onClick={() => setDevice(option)}
 						className={`rounded-lg px-3 py-1 text-sm ${device === option ? 'bg-kumo-elevated text-kumo-strong ring ring-kumo-line' : 'text-kumo-subtle'}`}
 					>
-						{option === 'desktop' ? 'Desktop' : 'Phone'}
+						{option === 'desktop' ? t("Desktop") : t("Phone")}
 					</button>
 				))}
 			</div>
@@ -64,7 +66,7 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 			>
 				{live && device === 'desktop' && (
 					<iframe
-						title={`${title} preview`}
+						title={t("{value1} preview", { value1: title })}
 						src={previewUrl}
 						sandbox={PREVIEW_IFRAME_SANDBOX}
 						onLoad={() => setStatus('loaded')}
@@ -80,7 +82,7 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 				{live && device === 'phone' && (
 					<div className="flex h-full justify-center py-4">
 						<iframe
-							title={`${title} preview on a phone`}
+							title={t("{value1} preview on a phone", { value1: title })}
 							src={previewUrl}
 							sandbox={PREVIEW_IFRAME_SANDBOX}
 							onLoad={() => setStatus('loaded')}
@@ -91,9 +93,9 @@ export function DevicePreview({ title, previewUrl, screenshotUrl }: DevicePrevie
 				)}
 				{!live &&
 					(screenshotUrl ? (
-						<img src={screenshotUrl} alt={`${title} screenshot`} className="size-full object-cover object-top" />
+						<img src={screenshotUrl} alt={t("{value1} screenshot", { value1: title })} className="size-full object-cover object-top" />
 					) : (
-						<div className="flex h-full items-center justify-center text-sm text-kumo-subtle">Preview unavailable</div>
+						<div className="flex h-full items-center justify-center text-sm text-kumo-subtle">{t("Preview unavailable")}</div>
 					))}
 			</div>
 		</section>

@@ -7,6 +7,7 @@ import { AuthUserSession } from '../../types/auth-types';
 import { createLogger } from '../../logger';
 import { AuthService } from '../../database/services/AuthService';
 import { extractToken } from '../../utils/authUtils';
+import { requestLocale, setRequestLocale } from '../../services/i18n/request-locale';
 
 const logger = createLogger('AuthMiddleware');
 /**
@@ -40,6 +41,7 @@ export async function authMiddleware(
         if (token) {
             const userResponse = await validateToken(token, env);
             if (userResponse) {
+                setRequestLocale(await requestLocale(env, request, userResponse.user));
                 logger.debug('User authenticated', { userId: userResponse.user.id });
                 return userResponse;
             }

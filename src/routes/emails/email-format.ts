@@ -1,12 +1,13 @@
+import { t, msg } from '@/lib/i18n';
 import type { ShopperEmailStatus } from '@/api-types';
 
 export const STATUS_LABELS: Readonly<Record<ShopperEmailStatus, string>> = {
-	queued: 'Sending',
-	sent: 'Sent',
-	failed: 'Not sent',
-	suppressed: 'Address blocked',
-	disabled: 'Turned off',
-	capped: 'Over the daily limit',
+	queued: msg('Sending'),
+	sent: msg('Sent'),
+	failed: msg("Not sent"),
+	suppressed: msg("Address blocked"),
+	disabled: msg("Turned off"),
+	capped: msg("Over the daily limit"),
 };
 
 export function statusVariant(status: ShopperEmailStatus): 'success' | 'error' | 'secondary' {
@@ -16,7 +17,7 @@ export function statusVariant(status: ShopperEmailStatus): 'success' | 'error' |
 }
 
 export function templateOrigin(template: { edited: boolean }): string {
-	return template.edited ? 'Edited' : "Estori's default";
+	return template.edited ? t('Edited by you') : t("Estori's default");
 }
 
 /** Puts `{{name}}` in place of the selection and returns where the cursor goes after it. */

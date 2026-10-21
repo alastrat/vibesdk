@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState, useCallback, useEffect } from 'react';
 import { WebSocket } from 'partysocket';
 import { useAuth } from '@/contexts/auth-context';
@@ -43,6 +44,7 @@ export function useGitHubExport(
     user: AuthUser | null;
     retry: () => void;
 } {
+	useI18n();
     const { user, isAuthenticated } = useAuth();
     const [state, setState] = useState<GitHubExportState>({
         isExporting: false,
@@ -92,14 +94,14 @@ export function useGitHubExport(
             window.history.replaceState({}, '', newUrl.toString());
             
         } else if (githubExport === 'error') {
-            const reason = urlParams.get('reason') || 'Unknown error';
+            const reason = urlParams.get('reason') || t("Unknown error");
             setState(prev => ({
                 ...prev,
                 isExporting: false,
                 isModalOpen: true, // Auto-open modal to show error result
                 result: {
                     success: false,
-                    error: `GitHub export failed: ${reason}`
+                    error: t("GitHub export failed: {value1}", { value1: reason })
                 }
             }));
             
@@ -115,7 +117,7 @@ export function useGitHubExport(
         setState(prev => ({
             ...prev,
             isExporting: true,
-            progress: { message: 'Initiating GitHub authorization...', step: 'creating_repository', progress: 10 },
+            progress: { message: t("Initiating GitHub authorization..."), step: 'creating_repository', progress: 10 },
             result: undefined
         }));
 
@@ -126,7 +128,7 @@ export function useGitHubExport(
                     isExporting: false,
                     result: {
                         success: false,
-                        error: 'Invalid chat session'
+                        error: t("Invalid chat session")
                     }
                 }));
                 return;
@@ -145,7 +147,7 @@ export function useGitHubExport(
                     isExporting: false,
                     result: {
                         success: false,
-                        error: 'Repository already exists',
+                        error: t("Repository already exists"),
                         repositoryAlreadyExists: true,
                         existingRepositoryUrl: response.data?.existingRepositoryUrl || ''
                     }
@@ -168,7 +170,7 @@ export function useGitHubExport(
             if (response.data?.authUrl) {
                 setState(prev => ({
                     ...prev,
-                    progress: { message: 'Redirecting to GitHub...', step: 'creating_repository', progress: 25 }
+                    progress: { message: t("Redirecting to GitHub..."), step: 'creating_repository', progress: 25 }
                 }));
                 setTimeout(() => {
                     window.location.href = response.data?.authUrl || '';
@@ -179,7 +181,7 @@ export function useGitHubExport(
                     isExporting: false,
                     result: {
                         success: false,
-                        error: 'Failed to initiate GitHub authorization'
+                        error: t("Failed to initiate GitHub authorization")
                     }
                 }));
             }
@@ -204,7 +206,7 @@ export function useGitHubExport(
                     isExporting: false,
                     result: {
                         success: false,
-                        error: 'Repository already exists',
+                        error: t("Repository already exists"),
                         repositoryAlreadyExists: true,
                         existingRepositoryUrl: errorData.existingRepositoryUrl
                     }
@@ -217,7 +219,7 @@ export function useGitHubExport(
                 isExporting: false,
                 result: {
                     success: false,
-                    error: apiError?.message || 'Failed to initiate GitHub export'
+                    error: apiError?.message || t("Failed to initiate GitHub export")
                 }
             }));
         }

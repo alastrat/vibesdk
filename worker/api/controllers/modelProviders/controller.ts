@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Model Providers Controller
  */
@@ -54,13 +56,13 @@ export class ModelProvidersController extends BaseController {
             const user = context.user!;
             const modelProvidersService = new ModelProvidersService(env);
             const providers = await modelProvidersService.getUserProviders(user.id);
-            
+
             return ModelProvidersController.createSuccessResponse({
                 providers: providers.filter(p => p.isActive)
             });
         } catch (error) {
             this.logger.error('Error getting providers:', error);
-            return ModelProvidersController.createErrorResponse<ModelProvidersListData>('Failed to get providers', 500);
+            return ModelProvidersController.createErrorResponse<ModelProvidersListData>(msg('Failed to get providers'), 500);
         }
     }
 
@@ -70,17 +72,17 @@ export class ModelProvidersController extends BaseController {
     static async getProvider(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<ModelProviderData>>> {
         try {
             const user = context.user!;
-    
+
             const url = new URL(request.url);
             const providerId = url.pathname.split('/').pop();
-    
+
             if (!providerId) {
-                return ModelProvidersController.createErrorResponse<ModelProviderData>('Provider ID is required', 400);
+                return ModelProvidersController.createErrorResponse<ModelProviderData>(msg('Provider ID is required'), 400);
             }
 
             const modelProvidersService = new ModelProvidersService(env);
             const provider = await modelProvidersService.getProvider(user.id, providerId);
-            
+
             if (!provider) {
                 throw new Error('Provider not found');
             }
@@ -90,7 +92,7 @@ export class ModelProvidersController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error getting provider:', error);
-            return ModelProvidersController.createErrorResponse<ModelProviderData>('Failed to get provider', 500);
+            return ModelProvidersController.createErrorResponse<ModelProviderData>(msg('Failed to get provider'), 500);
         }
     }
 
@@ -104,23 +106,23 @@ export class ModelProvidersController extends BaseController {
             if (!bodyResult.success) {
                 return bodyResult.response as ControllerResponse<ApiResponse<ModelProviderCreateData>>;
             }
-    
+
             const validation = createProviderSchema.safeParse(bodyResult.data);
             if (!validation.success) {
                 return ModelProvidersController.createErrorResponse<ModelProviderCreateData>(
-                    `Validation error: ${validation.error.issues.map(e => e.message).join(', ')}`, 
+                    t("Validation error: {value1}", { value1: validation.error.issues.map(e => e.message).join(', ') }),
                     400
                 );
             }
-    
+
 
             return ModelProvidersController.createErrorResponse<ModelProviderCreateData>(
-                'Custom model providers are temporarily disabled. Please use BYOK (Bring Your Own Key) in the vault settings.',
+                msg('Custom model providers are temporarily disabled. Please use BYOK (Bring Your Own Key) in the vault settings.'),
                 503
             );
         } catch (error) {
             return ModelProvidersController.createErrorResponse<ModelProviderCreateData>(
-                'Failed to create provider',
+                msg('Failed to create provider'),
                 500
             );
         }
@@ -134,32 +136,32 @@ export class ModelProvidersController extends BaseController {
         try {
             const url = new URL(request.url);
             const providerId = url.pathname.split('/').pop();
-    
+
             if (!providerId) {
-                return ModelProvidersController.createErrorResponse<ModelProviderUpdateData>('Provider ID is required', 400);
+                return ModelProvidersController.createErrorResponse<ModelProviderUpdateData>(msg('Provider ID is required'), 400);
             }
-    
+
             const bodyResult = await ModelProvidersController.parseJsonBody<UpdateProviderRequest>(request);
             if (!bodyResult.success) {
                 return bodyResult.response as ControllerResponse<ApiResponse<ModelProviderUpdateData>>;
             }
-    
+
             const validation = updateProviderSchema.safeParse(bodyResult.data);
             if (!validation.success) {
                 return ModelProvidersController.createErrorResponse<ModelProviderUpdateData>(
-                    `Validation error: ${validation.error.issues.map(e => e.message).join(', ')}`, 
+                    t("Validation error: {value1}", { value1: validation.error.issues.map(e => e.message).join(', ') }),
                     400
                 );
             }
-    
+
 
             return ModelProvidersController.createErrorResponse<ModelProviderUpdateData>(
-                'Custom model providers are temporarily disabled. Please use BYOK (Bring Your Own Key) in the vault settings.',
+                msg('Custom model providers are temporarily disabled. Please use BYOK (Bring Your Own Key) in the vault settings.'),
                 503
             );
         } catch (error) {
             this.logger.error('Error updating provider:', error);
-            return ModelProvidersController.createErrorResponse<ModelProviderUpdateData>('Failed to update provider', 500);
+            return ModelProvidersController.createErrorResponse<ModelProviderUpdateData>(msg('Failed to update provider'), 500);
         }
     }
 
@@ -171,18 +173,18 @@ export class ModelProvidersController extends BaseController {
         try {
             const url = new URL(request.url);
             const providerId = url.pathname.split('/').pop();
-    
+
             if (!providerId) {
-                return ModelProvidersController.createErrorResponse<ModelProviderDeleteData>('Provider ID is required', 400);
+                return ModelProvidersController.createErrorResponse<ModelProviderDeleteData>(msg('Provider ID is required'), 400);
             }
 
             return ModelProvidersController.createErrorResponse<ModelProviderDeleteData>(
-                'Custom model providers are temporarily disabled.',
+                msg('Custom model providers are temporarily disabled.'),
                 503
             );
         } catch (error) {
             this.logger.error('Error deleting provider:', error);
-            return ModelProvidersController.createErrorResponse<ModelProviderDeleteData>('Failed to delete provider', 500);
+            return ModelProvidersController.createErrorResponse<ModelProviderDeleteData>(msg('Failed to delete provider'), 500);
         }
     }
 
@@ -196,26 +198,26 @@ export class ModelProvidersController extends BaseController {
             if (!bodyResult.success) {
                 return bodyResult.response as ControllerResponse<ApiResponse<ModelProviderTestData>>;
             }
-    
+
             const validation = testProviderSchema.safeParse(bodyResult.data);
             if (!validation.success) {
                 return ModelProvidersController.createErrorResponse<ModelProviderTestData>(
-                    `Validation error: ${validation.error.issues.map(e => e.message).join(', ')}`, 
+                    t("Validation error: {value1}", { value1: validation.error.issues.map(e => e.message).join(', ') }),
                     400
                 );
             }
-            
+
 
             if (validation.data.providerId) {
                 return ModelProvidersController.createErrorResponse<ModelProviderTestData>(
-                    'Testing stored providers is temporarily disabled. Please provide baseUrl and apiKey directly.',
+                    msg('Testing stored providers is temporarily disabled. Please provide baseUrl and apiKey directly.'),
                     503
                 );
             }
-    
+
             const baseUrl = validation.data.baseUrl!;
             const apiKey = validation.data.apiKey!;
-    
+
             const startTime = Date.now();
             try {
                 const testUrl = `${baseUrl.replace(/\/$/, '')}/models`;
@@ -226,9 +228,9 @@ export class ModelProvidersController extends BaseController {
                         'Content-Type': 'application/json'
                     }
                 });
-    
+
                 const responseTime = Date.now() - startTime;
-    
+
                 if (response.ok) {
                     return ModelProvidersController.createSuccessResponse<ModelProviderTestData>({
                         success: true,
@@ -237,19 +239,19 @@ export class ModelProvidersController extends BaseController {
                 } else {
                     const errorText = await response.text();
                     return ModelProvidersController.createErrorResponse<ModelProviderTestData>(
-                        `API request failed: ${response.status} ${errorText}`,
+                        t("API request failed: {value1} {value2}", { value1: response.status, value2: errorText }),
                         500
                     );
                 }
             } catch (error) {
                 return ModelProvidersController.createErrorResponse<ModelProviderTestData>(
-                    `Connection failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    t("Connection failed: {value1}", { value1: error instanceof Error ? error.message : 'Unknown error' }),
                     500
                 );
             }
         } catch (error) {
             this.logger.error('Error testing provider:', error);
-            return ModelProvidersController.createErrorResponse<ModelProviderTestData>('Failed to test provider', 500);
+            return ModelProvidersController.createErrorResponse<ModelProviderTestData>(msg('Failed to test provider'), 500);
         }
     }
 }

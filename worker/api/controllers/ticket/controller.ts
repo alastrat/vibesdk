@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Ticket Controller
  *
@@ -70,7 +71,7 @@ export class TicketController extends BaseController {
 	): Promise<Response> {
 		const user = context.user;
 		if (!user) {
-			return this.createErrorResponse('Authentication required', 401);
+			return this.createErrorResponse(msg('Authentication required'), 401);
 		}
 
 		// Parse and validate request
@@ -78,11 +79,11 @@ export class TicketController extends BaseController {
 		try {
 			body = await request.json() as CreateTicketRequest;
 		} catch {
-			return this.createErrorResponse('Invalid JSON body', 400);
+			return this.createErrorResponse(msg('Invalid JSON body'), 400);
 		}
 
 		if (!body.resourceType || !['agent', 'vault'].includes(body.resourceType)) {
-			return this.createErrorResponse('Invalid resourceType', 400);
+			return this.createErrorResponse(msg('Invalid resourceType'), 400);
 		}
 
 		// Resolve resource ID
@@ -95,7 +96,7 @@ export class TicketController extends BaseController {
 		// Verify ownership
 		if (!await verifyOwnership(user, body.resourceType, resourceId, env)) {
 			this.logger.warn('Ticket creation denied', { userId: user.id, resourceType: body.resourceType, resourceId });
-			return this.createErrorResponse('Access denied', 403);
+			return this.createErrorResponse(msg('Access denied'), 403);
 		}
 
 		// Create and store ticket
@@ -121,7 +122,7 @@ export class TicketController extends BaseController {
 			});
 		} catch (error) {
 			this.logger.error('Failed to create ticket', { resourceType: body.resourceType, resourceId, error });
-			return this.createErrorResponse('Failed to create ticket', 500);
+			return this.createErrorResponse(msg('Failed to create ticket'), 500);
 		}
 	}
 }

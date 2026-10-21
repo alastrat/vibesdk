@@ -97,6 +97,6 @@ describe('a stored Stripe account that Stripe no longer has', () => {
 		const forget = dashboard.indexOf('accounts.forgetIfMissing(stored, (accountId) => stripe.createLoginLink(accountId))');
 		expect(forget).toBeGreaterThan(-1);
 		expect(dashboard.indexOf('FINISH_ONBOARDING_MESSAGE, 400', forget)).toBeGreaterThan(forget);
-		expect(controller).toContain("const FINISH_ONBOARDING_MESSAGE = 'Finish Stripe onboarding first';");
+		expect(controller).toContain("const FINISH_ONBOARDING_MESSAGE = msg('Finish Stripe onboarding first');");
 	});
 });

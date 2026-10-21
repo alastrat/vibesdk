@@ -3,8 +3,10 @@ import { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertCircle } from 'lucide-react';
 import { captureBrowserException } from '@/lib/analytics/posthog-browser';
+import { t } from '@/lib/i18n';
 
 function ErrorFallback({ error, resetError }: { error: Error | unknown; resetError: () => void; }) {
+  // i18n-ignore: the message shows only in development builds
   const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
@@ -14,9 +16,9 @@ function ErrorFallback({ error, resetError }: { error: Error | unknown; resetErr
         </div>
         
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold">Something went wrong</h1>
+          <h1 className="text-2xl font-bold">{t('Something went wrong')}</h1>
           <p className="text-muted-foreground">
-            An unexpected error occurred. Our team has been notified.
+            {t('An unexpected error occurred. Our team has been notified.')}
           </p>
         </div>
         
@@ -30,13 +32,13 @@ function ErrorFallback({ error, resetError }: { error: Error | unknown; resetErr
         
         <div className="flex gap-3 justify-center">
           <Button onClick={resetError} variant="default">
-            Try Again
+            {t('Try Again')}
           </Button>
           <Button
             onClick={() => window.location.href = '/'}
             variant="outline"
           >
-            Go Home
+            {t('Go Home')}
           </Button>
         </div>
       </div>

@@ -4,11 +4,13 @@ import { Button, buttonVariants, cn } from '@cloudflare/kumo';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { PlanLimitRefusal } from '@/api-types';
 import { usePlanCheckout } from '@/hooks/use-billing';
+import { useI18n } from '@/lib/i18n';
 import { onPlanLimit } from '@/lib/plan-limit-events';
 import { upgradeActionFor, upgradeTitleFor } from './upgrade-action';
 
 /** One plan-limit refusal: its title and message, and the next step it offers. */
 export function UpgradeDialog({ refusal, onClose }: { refusal: PlanLimitRefusal; onClose: () => void }) {
+	const { t } = useI18n();
 	const checkout = usePlanCheckout();
 	const action = upgradeActionFor(refusal);
 
@@ -17,11 +19,11 @@ export function UpgradeDialog({ refusal, onClose }: { refusal: PlanLimitRefusal;
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>{upgradeTitleFor(refusal)}</DialogTitle>
-					<DialogDescription>{refusal.message}</DialogDescription>
+					<DialogDescription>{t(refusal.message)}</DialogDescription>
 				</DialogHeader>
 				<div className="flex justify-end gap-2">
 					<Button variant="secondary" onClick={onClose}>
-						{action.kind === 'none' ? 'Close' : 'Not now'}
+						{action.kind === 'none' ? t('Close') : t('Not now')}
 					</Button>
 					{action.kind === 'checkout' && (
 						<Button

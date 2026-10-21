@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * ArtifactsController
  *
@@ -110,12 +111,12 @@ export class ArtifactsController extends BaseController {
 		try {
 			const agentId = context.pathParams.agentId;
 			if (!agentId) {
-				return this.createErrorResponse<ListAppBranchesResponse>('Missing agent ID', 400);
+				return this.createErrorResponse<ListAppBranchesResponse>(msg('Missing agent ID'), 400);
 			}
 			const ns = (env as unknown as { SPACE_DO?: DurableObjectNamespace }).SPACE_DO;
 			if (!ns) {
 				return this.createErrorResponse<ListAppBranchesResponse>(
-					'SPACE_DO binding is not configured',
+					msg('SPACE_DO binding is not configured'),
 					503,
 				);
 			}

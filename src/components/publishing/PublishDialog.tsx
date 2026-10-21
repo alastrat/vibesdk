@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
 import { Button, LinkButton, Loader } from '@cloudflare/kumo';
@@ -67,6 +68,7 @@ interface PublishDialogBodyProps {
  * so it waits for the fresh result instead of the cache a make-private elsewhere may have left behind.
  */
 function PublishDialogBody({ appId, pending, onSubmit }: PublishDialogBodyProps) {
+	useI18n();
 	const publishing = useSitePublishing(appId, true, { refetchOnMount: 'always' });
 	const ready = publishing.isFetchedAfterMount;
 	const data = publishing.data;
@@ -75,11 +77,8 @@ function PublishDialogBody({ appId, pending, onSubmit }: PublishDialogBodyProps)
 	return (
 		<>
 			<DialogHeader>
-				<DialogTitle>{isPublic ? 'Publishing settings' : 'Make public'}</DialogTitle>
-				<DialogDescription>
-					Public sites appear in Discover, where anyone can start a new app from a copy of yours. A paid site can be
-					used once an Estori admin approves its price.
-				</DialogDescription>
+				<DialogTitle>{isPublic ? t("Publishing settings") : t("Make public")}</DialogTitle>
+				<DialogDescription>{t("Public sites appear in Discover, where anyone can start a new app from a copy of yours. A paid site can be used once an Estori admin approves its price.")}</DialogDescription>
 			</DialogHeader>
 			{!ready ? (
 				<div className="flex justify-center py-6">
@@ -105,6 +104,7 @@ interface PublishFormProps {
 
 /** Mounted only while the form shows, so each open starts from the saved settings. */
 function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
+	const { locale } = useI18n();
 	const isPublic = data.visibility === 'public';
 	const [category, setCategory] = useState<TemplateCategory | typeof NO_CATEGORY>(data.category ?? NO_CATEGORY);
 	const [priceCents, setPriceCents] = useState<number>(savedListingPrice(data.listing));
@@ -131,7 +131,7 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 			{isPublic && data.ineligibleReason && <p className="text-sm text-kumo-subtle">{data.ineligibleReason}</p>}
 			<div className="grid grid-cols-2 gap-3">
 				<div className="grid gap-1.5">
-					<span className="text-sm font-medium text-kumo-default">Category</span>
+					<span className="text-sm font-medium text-kumo-default">{t("Category")}</span>
 					<Select
 						value={category}
 						onValueChange={(value) => {
@@ -143,29 +143,29 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 							if (match) setCategory(match);
 						}}
 					>
-						<SelectTrigger aria-label="Category">
+						<SelectTrigger aria-label={t("Category")}>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value={NO_CATEGORY}>No category</SelectItem>
+							<SelectItem value={NO_CATEGORY}>{t("No category")}</SelectItem>
 							{TEMPLATE_CATEGORIES.map((value) => (
 								<SelectItem key={value} value={value}>
-									{TEMPLATE_CATEGORY_LABELS[value]}
+									{t(TEMPLATE_CATEGORY_LABELS[value])}
 								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
 				</div>
 				<div className="grid gap-1.5">
-					<span className="text-sm font-medium text-kumo-default">Price</span>
+					<span className="text-sm font-medium text-kumo-default">{t("Price")}</span>
 					<Select value={String(priceCents)} onValueChange={(value) => setPriceCents(Number(value))}>
-						<SelectTrigger aria-label="Price">
+						<SelectTrigger aria-label={t("Price")}>
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
 							{TEMPLATE_PRICE_OPTIONS_CENTS.map((value) => (
 								<SelectItem key={value} value={String(value)}>
-									{formatTemplatePrice(value)}
+									{formatTemplatePrice(value, locale, t('Free'))}
 								</SelectItem>
 							))}
 						</SelectContent>
@@ -173,31 +173,24 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 				</div>
 			</div>
 			{paid && (
-				<p className="text-xs text-kumo-subtle">
-					An admin reviews the price before anyone can use your site. Estori keeps {PLATFORM_FEE_LABEL} of each
-					sale.
-				</p>
+				<p className="text-xs text-kumo-subtle">{t("An admin reviews the price before anyone can use your site. Estori keeps {fee} of each sale.", { fee: PLATFORM_FEE_LABEL })}</p>
 			)}
-			{paid && payouts.isPending && <p className="text-sm text-kumo-subtle">Checking your Stripe account…</p>}
+			{paid && payouts.isPending && <p className="text-sm text-kumo-subtle">{t("Checking your Stripe account…")}</p>}
 			{paid && payouts.isError && (
 				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
 					<span className="text-sm text-kumo-subtle">{payouts.error.message}</span>
-					<Button size="sm" variant="secondary" onClick={() => payouts.refetch()}>
-						Try again
-					</Button>
+					<Button size="sm" variant="secondary" onClick={() => payouts.refetch()}>{t("Try again")}</Button>
 				</div>
 			)}
 			{paid && payouts.data && !payouts.data.configured && (
-				<p className="text-sm text-kumo-subtle">{PAYMENTS_NOT_CONFIGURED_MESSAGE}</p>
+				<p className="text-sm text-kumo-subtle">{t(PAYMENTS_NOT_CONFIGURED_MESSAGE)}</p>
 			)}
 			{paid && payouts.data?.configured && !payouts.data.transfersActive && (
 				<div className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 ring ring-kumo-hairline">
-					<span className="text-sm text-kumo-default">Connect Stripe to sell this site</span>
+					<span className="text-sm text-kumo-default">{t("Connect Stripe to sell this site")}</span>
 					{/* Stripe onboarding starts only after the selling terms, which live with the payments setup. */}
 					{payouts.data.setupStep === 'accept-terms' ? (
-						<LinkButton size="sm" variant="secondary" href={SELLER_SETUP_PATH}>
-							Set up payments
-						</LinkButton>
+						<LinkButton size="sm" variant="secondary" href={SELLER_SETUP_PATH}>{t("Set up payments")}</LinkButton>
 					) : (
 						<Button
 							size="sm"
@@ -205,7 +198,7 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 							loading={onboarding.isPending}
 							onClick={onboarding.start}
 						>
-							{payouts.data.connected ? 'Continue Stripe setup' : 'Connect Stripe'}
+							{payouts.data.connected ? t("Continue Stripe setup") : t("Connect Stripe")}
 						</Button>
 					)}
 				</div>
@@ -219,13 +212,11 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 			/>
 			<label className="flex items-start gap-2 text-sm text-kumo-default">
 				<Checkbox checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} />
-				<span>Others may copy and adapt this site.</span>
+				<span>{t("Others may copy and adapt this site.")}</span>
 			</label>
 			<div className="flex justify-end gap-2">
 				{isPublic && (
-					<Button variant="secondary" disabled={pending} onClick={() => onSubmit({ visibility: 'private' })}>
-						Make private
-					</Button>
+					<Button variant="secondary" disabled={pending} onClick={() => onSubmit({ visibility: 'private' })}>{t("Make private")}</Button>
 				)}
 				<Button
 					variant="primary"
@@ -233,7 +224,7 @@ function PublishForm({ appId, data, pending, onSubmit }: PublishFormProps) {
 					disabled={!consent || !sellerReady || !pageCopy.valid}
 					onClick={publish}
 				>
-					{isPublic ? 'Save' : 'Publish'}
+					{isPublic ? t("Save") : t("Publish")}
 				</Button>
 			</div>
 		</div>

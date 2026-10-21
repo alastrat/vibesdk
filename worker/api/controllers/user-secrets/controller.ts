@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Vault Controller - API endpoints for the user secrets vault
  */
@@ -84,7 +85,7 @@ export class UserSecretsController extends BaseController {
 			this.logger.error('Failed to establish vault WebSocket connection:', error);
 			const { 0: client, 1: server } = new WebSocketPair();
 			server.accept();
-			server.send(JSON.stringify({ type: 'error', message: 'Failed to connect to vault' }));
+			server.send(JSON.stringify({ type: 'error', message: msg('Failed to connect to vault') }));
 			server.close(1011, 'Internal error');
 			return new Response(null, { status: 101, webSocket: client });
 		}
@@ -107,7 +108,7 @@ export class UserSecretsController extends BaseController {
 			return this.createSuccessResponse(status);
 		} catch (error) {
 			this.logger.error('Error getting vault status:', error);
-			return this.createErrorResponse<VaultStatusData>('Failed to get vault status', 500);
+			return this.createErrorResponse<VaultStatusData>(msg('Failed to get vault status'), 500);
 		}
 	}
 
@@ -125,7 +126,7 @@ export class UserSecretsController extends BaseController {
 			const config = await stub.getVaultConfig();
 
 			if (!config) {
-				return this.createErrorResponse<VaultConfigData>('Vault not set up', 404);
+				return this.createErrorResponse<VaultConfigData>(msg('Vault not set up'), 404);
 			}
 
 			const isInvalidConfig =
@@ -136,7 +137,7 @@ export class UserSecretsController extends BaseController {
 
 			if (isInvalidConfig) {
 				return this.createErrorResponse<VaultConfigData>(
-					'Vault configuration invalid. Reset your vault and set it up again.',
+					msg('Vault configuration invalid. Reset your vault and set it up again.'),
 					500
 				);
 			}
@@ -156,7 +157,7 @@ export class UserSecretsController extends BaseController {
 			return this.createSuccessResponse({ config: configResponse });
 		} catch (error) {
 			this.logger.error('Error getting vault config:', error);
-			return this.createErrorResponse<VaultConfigData>('Failed to get vault config', 500);
+			return this.createErrorResponse<VaultConfigData>(msg('Failed to get vault config'), 500);
 		}
 	}
 
@@ -182,7 +183,7 @@ export class UserSecretsController extends BaseController {
 			const trimmedVerificationNonce = body.verificationNonce?.trim();
 
 			if (!trimmedKdfSalt || !trimmedVerificationBlob || !trimmedVerificationNonce) {
-				return this.createErrorResponse<VaultSetupData>('Invalid vault setup payload', 400);
+				return this.createErrorResponse<VaultSetupData>(msg('Invalid vault setup payload'), 400);
 			}
 
 			let kdfSalt: ArrayBuffer;
@@ -198,18 +199,18 @@ export class UserSecretsController extends BaseController {
 				verificationNonce = this.base64ToArrayBuffer(trimmedVerificationNonce);
 
 				if (kdfSalt.byteLength !== 32 || verificationBlob.byteLength === 0 || verificationNonce.byteLength === 0) {
-					return this.createErrorResponse<VaultSetupData>('Invalid vault setup payload', 400);
+					return this.createErrorResponse<VaultSetupData>(msg('Invalid vault setup payload'), 400);
 				}
 
 				if (body.kdfAlgorithm === 'webauthn-prf') {
 					const trimmedPrfSalt = body.prfSalt?.trim();
 					const trimmedCredentialId = body.prfCredentialId?.trim();
 					if (!trimmedCredentialId || !trimmedPrfSalt) {
-						return this.createErrorResponse<VaultSetupData>('Passkey vault requires PRF configuration', 400);
+						return this.createErrorResponse<VaultSetupData>(msg('Passkey vault requires PRF configuration'), 400);
 					}
 					prfSalt = this.base64ToArrayBuffer(trimmedPrfSalt);
 					if (prfSalt.byteLength !== 32) {
-						return this.createErrorResponse<VaultSetupData>('Invalid PRF salt', 400);
+						return this.createErrorResponse<VaultSetupData>(msg('Invalid PRF salt'), 400);
 					}
 				}
 
@@ -217,16 +218,16 @@ export class UserSecretsController extends BaseController {
 					const trimmedEncryptedRecoveryCodes = body.encryptedRecoveryCodes?.trim();
 					const trimmedRecoveryCodesNonce = body.recoveryCodesNonce?.trim();
 					if (!trimmedEncryptedRecoveryCodes || !trimmedRecoveryCodesNonce) {
-						return this.createErrorResponse<VaultSetupData>('Invalid recovery codes payload', 400);
+						return this.createErrorResponse<VaultSetupData>(msg('Invalid recovery codes payload'), 400);
 					}
 					encryptedRecoveryCodes = this.base64ToArrayBuffer(trimmedEncryptedRecoveryCodes);
 					recoveryCodesNonce = this.base64ToArrayBuffer(trimmedRecoveryCodesNonce);
 					if (encryptedRecoveryCodes.byteLength === 0 || recoveryCodesNonce.byteLength === 0) {
-						return this.createErrorResponse<VaultSetupData>('Invalid recovery codes payload', 400);
+						return this.createErrorResponse<VaultSetupData>(msg('Invalid recovery codes payload'), 400);
 					}
 				}
 			} catch {
-				return this.createErrorResponse<VaultSetupData>('Invalid vault setup payload', 400);
+				return this.createErrorResponse<VaultSetupData>(msg('Invalid vault setup payload'), 400);
 			}
 
 			const setupRequest: SetupVaultRequest = {
@@ -245,13 +246,13 @@ export class UserSecretsController extends BaseController {
 			const success = await stub.setupVault(setupRequest);
 
 			if (!success) {
-				return this.createErrorResponse<VaultSetupData>('Vault already exists', 409);
+				return this.createErrorResponse<VaultSetupData>(msg('Vault already exists'), 409);
 			}
 
 			return this.createSuccessResponse({ success: true });
 		} catch (error) {
 			this.logger.error('Error setting up vault:', error);
-			return this.createErrorResponse<VaultSetupData>('Failed to setup vault', 500);
+			return this.createErrorResponse<VaultSetupData>(msg('Failed to setup vault'), 500);
 		}
 	}
 
@@ -270,7 +271,7 @@ export class UserSecretsController extends BaseController {
 			return this.createSuccessResponse({ success: true });
 		} catch (error) {
 			this.logger.error('Error resetting vault:', error);
-			return this.createErrorResponse<{ success: boolean }>('Failed to reset vault', 500);
+			return this.createErrorResponse<{ success: boolean }>(msg('Failed to reset vault'), 500);
 		}
 	}
 }

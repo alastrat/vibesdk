@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 import { BaseController } from '../baseController';
 import type { ControllerResponse, ApiResponse } from '../types';
 import type { RouteContext } from '../../types/route-context';
@@ -62,17 +63,17 @@ export class ScreenshotsController extends BaseController {
             const file = context.pathParams.file;
 
             if (!appId || !file) {
-                return ScreenshotsController.createErrorResponse('Missing path parameters', 400);
+                return ScreenshotsController.createErrorResponse(msg('Missing path parameters'), 400);
             }
 
             // Validate and sanitize path parameters
             if (!isValidAppId(appId)) {
-                return ScreenshotsController.createErrorResponse('Invalid app id', 400);
+                return ScreenshotsController.createErrorResponse(msg('Invalid app id'), 400);
             }
 
             const validatedFile = validateFileName(file);
             if (!validatedFile) {
-                return ScreenshotsController.createErrorResponse('Invalid file name', 400);
+                return ScreenshotsController.createErrorResponse(msg('Invalid file name'), 400);
             }
 
             // Verify screenshot access token
@@ -80,19 +81,19 @@ export class ScreenshotsController extends BaseController {
             const token = url.searchParams.get('token');
 
             if (!token) {
-                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
+                return ScreenshotsController.createErrorResponse(msg('Screenshot not found'), 404);
             }
 
             const security = new ScreenshotSecurity(env);
             const isValidToken = await security.verifyToken(token, appId);
             if (!isValidToken) {
-                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
+                return ScreenshotsController.createErrorResponse(msg('Screenshot not found'), 404);
             }
 
             const key = `screenshots/${appId}/${validatedFile}`;
             const obj = await env.TEMPLATES_BUCKET.get(key);
             if (!obj || !obj.body) {
-                return ScreenshotsController.createErrorResponse('Screenshot not found', 404);
+                return ScreenshotsController.createErrorResponse(msg('Screenshot not found'), 404);
             }
 
             const contentType = obj.httpMetadata?.contentType || getMimeByExtension(validatedFile) || 'image/png';
@@ -109,7 +110,7 @@ export class ScreenshotsController extends BaseController {
 			}) as unknown as ControllerResponse<ApiResponse<never>>;
 		        } catch (error) {
             this.logger.error('Error serving screenshot', { error });
-            return ScreenshotsController.createErrorResponse('Internal server error', 500);
+            return ScreenshotsController.createErrorResponse(msg('Internal server error'), 500);
         }
     }
 }

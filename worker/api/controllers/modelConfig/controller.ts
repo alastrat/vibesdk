@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Model Configuration Controller
  * Handles CRUD operations for user model configurations
@@ -68,13 +70,13 @@ export class ModelConfigController extends BaseController {
             const responseData: ModelConfigsData = {
                 configs,
                 defaults,
-                message: 'Model configurations retrieved successfully'
+                message: msg('Model configurations retrieved successfully')
             };
 
             return ModelConfigController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting model configurations:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigsData>('Failed to get model configurations', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigsData>(msg('Failed to get model configurations'), 500);
         }
     }
 
@@ -90,7 +92,7 @@ export class ModelConfigController extends BaseController {
             const agentAction = url.pathname.split('/').pop() as AgentActionKey;
 
             if (!agentAction || !(agentAction in AGENT_CONFIG)) {
-                return ModelConfigController.createErrorResponse<ModelConfigData>('Invalid agent action name', 400);
+                return ModelConfigController.createErrorResponse<ModelConfigData>(msg('Invalid agent action name'), 400);
             }
             const modelConfigService = new ModelConfigService(env);
 
@@ -100,13 +102,13 @@ export class ModelConfigController extends BaseController {
             const responseData: ModelConfigData = {
                 config,
                 defaultConfig,
-                message: 'Model configuration retrieved successfully'
+                message: msg('Model configuration retrieved successfully')
             };
 
             return ModelConfigController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting model configuration:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigData>('Failed to get model configuration', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigData>(msg('Failed to get model configuration'), 500);
         }
     }
 
@@ -122,7 +124,7 @@ export class ModelConfigController extends BaseController {
             const agentAction = url.pathname.split('/').pop() as AgentActionKey;
 
             if (!agentAction || !(agentAction in AGENT_CONFIG)) {
-                return ModelConfigController.createErrorResponse<ModelConfigUpdateData>('Invalid agent action name', 400);
+                return ModelConfigController.createErrorResponse<ModelConfigUpdateData>(msg('Invalid agent action name'), 400);
             }
 
             const bodyResult = await ModelConfigController.parseJsonBody(request);
@@ -166,7 +168,7 @@ export class ModelConfigController extends BaseController {
                     if (!isValidAccess) {
                         const provider = modelConfig.name.split('/')[0];
                         return ModelConfigController.createErrorResponse<ModelConfigUpdateData>(
-                            `Model requires API key for provider '${provider}'. Please add your API key in the BYOK settings or contact your platform administrator.`,
+                            t("Model requires API key for provider '{value1}'. Please add your API key in the BYOK settings or contact your platform administrator.", { value1: provider }),
                             403
                         );
                     }
@@ -183,7 +185,7 @@ export class ModelConfigController extends BaseController {
                     if (!isValidAccess) {
                         const provider = modelConfig.fallbackModel.split('/')[0];
                         return ModelConfigController.createErrorResponse<ModelConfigUpdateData>(
-                            `Fallback model requires API key for provider '${provider}'. Please add your API key in the BYOK settings or contact your platform administrator.`,
+                            t("Fallback model requires API key for provider '{value1}'. Please add your API key in the BYOK settings or contact your platform administrator.", { value1: provider }),
                             403
                         );
                     }
@@ -192,7 +194,7 @@ export class ModelConfigController extends BaseController {
 
             if (!modelConfig.name) {
                 return ModelConfigController.createErrorResponse<ModelConfigUpdateData>(
-                    'Model name is required',
+                    msg('Model name is required'),
                     400
                 );
             }
@@ -206,7 +208,7 @@ export class ModelConfigController extends BaseController {
 
             const responseData: ModelConfigUpdateData = {
                 config: updatedConfig,
-                message: 'Model configuration updated successfully'
+                message: msg('Model configuration updated successfully')
             };
 
             return ModelConfigController.createSuccessResponse(responseData);
@@ -221,7 +223,7 @@ export class ModelConfigController extends BaseController {
             }
 
             this.logger.error('Error updating model configuration:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigUpdateData>('Failed to update model configuration', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigUpdateData>(msg('Failed to update model configuration'), 500);
         }
     }
 
@@ -237,24 +239,24 @@ export class ModelConfigController extends BaseController {
             const agentAction = url.pathname.split('/').pop() as AgentActionKey;
 
             if (!agentAction || !(agentAction in AGENT_CONFIG)) {
-                return ModelConfigController.createErrorResponse<ModelConfigDeleteData>('Invalid agent action name', 400);
+                return ModelConfigController.createErrorResponse<ModelConfigDeleteData>(msg('Invalid agent action name'), 400);
             }
 
             const modelConfigService = new ModelConfigService(env);
             const deleted = await modelConfigService.deleteUserModelConfig(user.id, agentAction);
 
             if (!deleted) {
-                return ModelConfigController.createErrorResponse<ModelConfigDeleteData>('Configuration not found or already using defaults', 404);
+                return ModelConfigController.createErrorResponse<ModelConfigDeleteData>(msg('Configuration not found or already using defaults'), 404);
             }
 
             const responseData: ModelConfigDeleteData = {
-                message: 'Model configuration reset to default successfully'
+                message: msg('Model configuration reset to default successfully')
             };
 
             return ModelConfigController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error deleting model configuration:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigDeleteData>('Failed to delete model configuration', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigDeleteData>(msg('Failed to delete model configuration'), 500);
         }
     }
 
@@ -275,7 +277,7 @@ export class ModelConfigController extends BaseController {
             const agentAction = validatedData.agentActionName as AgentActionKey;
 
             if (!(agentAction in AGENT_CONFIG)) {
-                return ModelConfigController.createErrorResponse<ModelConfigTestData>('Invalid agent action name', 400);
+                return ModelConfigController.createErrorResponse<ModelConfigTestData>(msg('Invalid agent action name'), 400);
             }
 
             const modelConfigService = new ModelConfigService(env);
@@ -318,7 +320,7 @@ export class ModelConfigController extends BaseController {
                 return ModelConfigController.createErrorResponse<ModelConfigTestData>('Validation failed: ' + JSON.stringify(error.issues), 400);
             }
             this.logger.error('Error testing model configuration:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigTestData>('Failed to test model configuration', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigTestData>(msg('Failed to test model configuration'), 500);
         }
     }
 
@@ -335,13 +337,13 @@ export class ModelConfigController extends BaseController {
 
             const responseData: ModelConfigResetData = {
                 resetCount,
-                message: `${resetCount} model configurations reset to defaults`
+                message: t("{value1} model configurations reset to defaults", { value1: resetCount })
             };
 
             return ModelConfigController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error resetting all model configurations:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigResetData>('Failed to reset model configurations', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigResetData>(msg('Failed to reset model configurations'), 500);
         }
     }
 
@@ -356,13 +358,13 @@ export class ModelConfigController extends BaseController {
             
             const responseData: ModelConfigDefaultsData = {
                 defaults,
-                message: 'Default configurations retrieved successfully'
+                message: msg('Default configurations retrieved successfully')
             };
 
             return ModelConfigController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting default configurations:', error);
-            return ModelConfigController.createErrorResponse<ModelConfigDefaultsData>('Failed to get default configurations', 500);
+            return ModelConfigController.createErrorResponse<ModelConfigDefaultsData>(msg('Failed to get default configurations'), 500);
         }
     }
 
@@ -386,7 +388,7 @@ export class ModelConfigController extends BaseController {
                 agentAction = agentActionParam as AgentActionKey;
             } else if (agentActionParam) {
                 return ModelConfigController.createErrorResponse<ByokProvidersData>(
-                    `Invalid agentAction: '${agentActionParam}'. Must be one of: ${validAgentActions.join(', ')}`,
+                    t("Invalid agentAction: '{value1}'. Must be one of: {value2}", { value1: agentActionParam, value2: validAgentActions.join(', ') }),
                     400
                 );
             }
@@ -439,7 +441,7 @@ export class ModelConfigController extends BaseController {
             return ModelConfigController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error getting BYOK providers:', error);
-            return ModelConfigController.createErrorResponse<ByokProvidersData>('Failed to get BYOK providers', 500);
+            return ModelConfigController.createErrorResponse<ByokProvidersData>(msg('Failed to get BYOK providers'), 500);
         }
     }
 }

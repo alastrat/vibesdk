@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { BILLING_PATH, TERMS_VERSION, type CheckoutClientStart } from '@/api-types';
 import { apiClient } from '@/lib/api-client';
 import { loadWithin, singleFlight } from '@/lib/async';
+import { getLocale } from '@/lib/i18n';
 import { queryKeys } from '@/lib/query-keys';
 import { CARD_ONLY_PAYMENT_ELEMENT, loadStripe, type StripeCheckoutActionResult, type StripeCheckoutActions, type StripeCheckoutSdk, type StripePaymentElement } from '@/lib/stripe/stripe-js';
 import { unwrap } from '@/lib/unwrap-response';
@@ -22,6 +23,7 @@ import {
 	type CheckoutRequest,
 } from '@/routes/settings/checkout-state';
 import { CHECKOUT_FAILED_MESSAGE } from './use-billing';
+import { useAccountLocaleChange } from './use-account-locale-change';
 import { useStripeAppearance } from './use-stripe-appearance';
 
 /** Where the page keeps what it asked for, so the return route can send an open or expired checkout back to it. */
@@ -100,13 +102,14 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 			dispatch({ type: 'started', start });
 
 			try {
-				const stripe = await loadWithin(loadStripe(start.publishableKey));
+				const stripe = await loadWithin(loadStripe(start.publishableKey, getLocale()));
 				if (!current) return;
 				const checkout = stripe.initCheckoutElementsSdk({ clientSecret: start.clientSecret, elementsOptions: { appearance: appearance() } });
 				sdk.current = checkout;
 				// Stripe.js refuses to confirm until the page has read the total, so every change reads it.
 				checkout.on('change', (session) => dispatch({ type: 'sessionChanged', sessionId: start.sessionId, status: session.status.type, amount: session.total.total.amount }));
 				const target = container.current;
+				// i18n-ignore: a developer message, the seller sees the form's failure notice
 				if (!target) throw new Error('The card form has nowhere to open');
 				// The form is mounted before its actions load, as the store checkout does, so it shows while they are fetched.
 				payment = checkout.createPaymentElement(CARD_ONLY_PAYMENT_ELEMENT);
@@ -114,6 +117,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 				payment.mount(target);
 				const loaded = await loadWithin(checkout.loadActions());
 				if (!current) return;
+				// i18n-ignore: a developer message, the seller sees the form's failure notice
 				if (loaded.type !== 'success') throw new Error('The card form could not open');
 				const session = loaded.actions.getSession();
 				dispatch({ type: 'sessionChanged', sessionId: start.sessionId, status: session.status.type, amount: session.total.total.amount });
@@ -148,6 +152,18 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 		dispatch({ type: 'termsRequested' });
 		void refreshTerms(sessionId);
 	}, [refreshTerms]);
+
+	/**
+	 * The terms are worded in the seller's saved language. When they switch it mid-checkout the terms are read again and
+	 * the box is unticked, so what they agree to is the wording they can now read.
+	 */
+	const refreshTermsForLanguage = useCallback(() => {
+		const { sessionId, terms } = latest.current;
+		if (sessionId === null || terms === null) return;
+		dispatch({ type: 'termsRequested' });
+		void refreshTerms(sessionId);
+	}, [refreshTerms]);
+	useAccountLocaleChange(refreshTermsForLanguage);
 
 	/** A code applied or removed changes the price, so the terms are fetched again and the box is unticked. */
 	const changeCode = useCallback(

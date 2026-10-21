@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** Early-access requests: a signed-in user's own, and every request for admins. */
 
 import { BaseController } from '../baseController';
@@ -33,7 +34,7 @@ export class EarlyAccessController extends BaseController {
             return EarlyAccessController.createSuccessResponse<MyEarlyAccessData>({ capabilities: await service.listForUser(userId) });
         } catch (error) {
             this.logger.error('Error recording an early access request', error);
-            return EarlyAccessController.createErrorResponse<MyEarlyAccessData>("Couldn't save your request", 500);
+            return EarlyAccessController.createErrorResponse<MyEarlyAccessData>(msg("Couldn't save your request"), 500);
         }
     }
 
@@ -48,7 +49,7 @@ export class EarlyAccessController extends BaseController {
             return EarlyAccessController.createSuccessResponse<MyEarlyAccessData>({ capabilities });
         } catch (error) {
             this.logger.error('Error listing early access requests', error);
-            return EarlyAccessController.createErrorResponse<MyEarlyAccessData>("Couldn't load your early access requests", 500);
+            return EarlyAccessController.createErrorResponse<MyEarlyAccessData>(msg("Couldn't load your early access requests"), 500);
         }
     }
 
@@ -63,7 +64,7 @@ export class EarlyAccessController extends BaseController {
             return EarlyAccessController.createSuccessResponse<EarlyAccessAdminData>(toEarlyAccessAdminData(rows));
         } catch (error) {
             this.logger.error('Error listing all early access requests', error);
-            return EarlyAccessController.createErrorResponse<EarlyAccessAdminData>("Couldn't load early access requests", 500);
+            return EarlyAccessController.createErrorResponse<EarlyAccessAdminData>(msg("Couldn't load early access requests"), 500);
         }
     }
 }

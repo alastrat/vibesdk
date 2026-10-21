@@ -3,6 +3,7 @@ import type { WebSocketMessage, BlueprintType, ConversationMessage, AgentState, 
 import { AI_BUILDS_PAUSED_CODE, PLAN_LIMIT_ERROR_CODE, isPlanLimitRefusal } from '@/api-types';
 import { announcePlanLimit } from '@/lib/plan-limit-events';
 import { deduplicateMessages, isAssistantMessageDuplicate } from './deduplicate-messages';
+import { t, tn } from '@/lib/i18n';
 import { logger } from '@/utils/logger';
 import { getFileType } from '@/utils/string';
 import { getPreviewUrl } from '@/lib/utils';
@@ -210,7 +211,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'conversation_cleared': {
                 // Reset chat messages to a subtle tool-event entry indicating success
                 setMessages(() => appendToolEvent([], 'conversation_cleared', {
-                    name: message.message || 'conversation reset',
+                    name: 'conversation_reset',
                     status: 'success'
                 }));
                 break;
@@ -488,7 +489,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
 
                         // Text part (archived turns collapse to a compaction notice).
                         const content = msg.conversationId.startsWith('archive-')
-                            ? 'previous history was compacted'
+                            ? t('previous history was compacted')
                             : (text || '');
                         if (content) {
                             currentParts.push({ type: 'text', text: content });
@@ -573,7 +574,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         const debugBubble: ChatMessage = {
                             role: 'assistant',
                             conversationId: deepDebugSession.conversationId,
-                            content: 'Deep debug session in progress...',
+                            content: t('Deep debug session in progress...'),
                             ui: {
                                 toolEvents: [{
                                     name: 'deep_debug',
@@ -605,7 +606,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         
                         if (hasFetching) {
                             const next = appendToolEvent(prev, 'fetching-chat', { 
-                                name: 'fetching your latest conversations', 
+                                name: 'fetching_conversations', 
                                 status: 'success' 
                             });
                             return [...next, ...deduplicated];
@@ -664,7 +665,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'file_regenerating': {
-                setFiles((prev) => setFileGenerating(prev, message.filePath, 'File being regenerated...'));
+                setFiles((prev) => setFileGenerating(prev, message.filePath, t('File being regenerated...')));
                 setPhaseTimeline((prev) => updatePhaseFileStatus(prev, message.filePath, 'generating'));
                 break;
             }
@@ -691,7 +692,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // of a multi-phase build, which is when the banner
                 // makes sense.
                 if (behaviorType !== 'think') {
-                    sendMessage(createAIMessage('generation-complete', 'Code generation has been completed.'));
+                    sendMessage(createAIMessage('generation-complete', t('Code generation has been completed.')));
                 }
 
                 // Reset all phase indicators
@@ -744,11 +745,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 const totalIssues = reviewData?.filesToFix?.reduce((count: number, file: { issues: unknown[] }) =>
                     count + file.issues.length, 0) || 0;
 
-                let reviewMessage = 'Code review complete';
+                let reviewMessage: string;
                 if (reviewData?.issuesFound) {
-                    reviewMessage = `Code review complete - ${totalIssues} issue${totalIssues !== 1 ? 's' : ''} found across ${reviewData.filesToFix?.length || 0} file${reviewData.filesToFix?.length !== 1 ? 's' : ''}`;
+                    reviewMessage = t('Code review complete - {issues} found across {files}', {
+                        issues: tn('{count} issue', '{count} issues', totalIssues),
+                        files: tn('{count} file', '{count} files', reviewData.filesToFix?.length || 0),
+                    });
                 } else {
-                    reviewMessage = 'Code review complete - no issues found';
+                    reviewMessage = t('Code review complete - no issues found');
                 }
 
                 sendMessage(createAIMessage('code_reviewed', reviewMessage));
@@ -761,9 +765,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 // Update runtime error count
                 deps.setRuntimeErrorCount(message.count || message.errors?.length || 0);
                 
+                // The debug panel is for developers and stays in English.
                 onDebugMessage?.('error', 
+                    // i18n-ignore
                     `Runtime Error (${message.count} errors)`,
                     message.errors.map((e: { message: string; stack?: string }) => `${e.message}\nStack: ${e.stack || 'N/A'}`).join('\n\n'),
+                    // i18n-ignore
                     'Runtime Detection'
                 );
                 break;
@@ -780,18 +787,24 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 deps.setRuntimeErrorCount(runtimeErrors);
 
                 // Show review start message
-                sendMessage(createAIMessage('review_start', 'App generation complete, now reviewing code indepth'));
+                sendMessage(createAIMessage('review_start', t('App generation complete, now reviewing code in depth')));
 
                 if (totalIssues > 0) {
+                    // The debug panel is for developers and stays in English.
                     const errorDetails = [
+                        // i18n-ignore
                         `Lint Issues: ${JSON.stringify(message.staticAnalysis?.lint?.issues)}`,
+                        // i18n-ignore
                         `Type Errors: ${JSON.stringify(message.staticAnalysis?.typecheck?.issues)}`,
+                        // i18n-ignore
                         `Runtime Errors: ${JSON.stringify(message.runtimeErrors)}`,
                     ].filter(Boolean).join('\n');
 
                     onDebugMessage?.('warning',
+                        // i18n-ignore
                         `Generation Issues Found (${totalIssues} total)`,
                         errorDetails,
+                        // i18n-ignore
                         'Code Generation'
                     );
                 }
@@ -895,9 +908,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         setShouldRefreshPreview(false);
                     }, 100);
                     
+                    // The debug panel is for developers and stays in English.
                     onDebugMessage?.('info',
+                        // i18n-ignore
                         'Preview Auto-Refresh Triggered',
+                        // i18n-ignore
                         `Preview refreshed 1 second after deployment completion`,
+                        // i18n-ignore
                         'Preview Auto-Refresh'
                     );
                 }, 1000);
@@ -939,8 +956,8 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 );
                 
                 // Show toast notification for user-initiated stop
-                toast.info('Generation stopped', {
-                    description: message.message || 'Code generation has been stopped'
+                toast.info(t('Generation stopped'), {
+                    description: message.message || t('Code generation has been stopped')
                 });
                 
                 sendMessage(createAIMessage('generation_stopped', message.message));
@@ -967,11 +984,15 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 setDeploymentError('');
                 setIsRedeployReady(false);
 
-                sendMessage(createAIMessage('cloudflare_deployment_completed', `Your project has been permanently deployed to Cloudflare Workers: ${message.deploymentUrl}`));
+                sendMessage(createAIMessage('cloudflare_deployment_completed', t('Your project has been permanently deployed to Cloudflare Workers: {url}', { url: message.deploymentUrl })));
 
+                // The debug panel is for developers and stays in English.
                 onDebugMessage?.('info',
+                    // i18n-ignore
                     'Deployment Completed - Redeploy Reset',
+                    // i18n-ignore
                     `Deployment URL: ${message.deploymentUrl}\nPhase count at deployment: ${phaseTimeline.length}\nRedeploy button disabled until next phase`,
+                    // i18n-ignore
                     'Redeployment Management'
                 );
                 break;
@@ -980,13 +1001,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             case 'cloudflare_deployment_error': {
                 clearDeploymentTimeout?.();
                 setIsDeploying(false);
-                setDeploymentError(message.error || 'Unknown deployment error');
+                setDeploymentError(message.error || t('Unknown deployment error'));
                 setCloudflareDeploymentUrl('');
                 setIsRedeployReady(true);
 
-                sendMessage(createAIMessage('cloudflare_deployment_error', `Deployment failed: ${message.error}\n\nYou can try deploying again.`));
+                sendMessage(createAIMessage('cloudflare_deployment_error', `${t('Deployment failed: {error}', { error: message.error })}\n\n${t('You can try deploying again.')}`));
 
-                toast.error(`Error: ${message.error}`);
+                toast.error(t('Error: {error}', { error: message.error }));
 
                 // Connection-gate failures (no OAuth token / no account selected)
                 // additionally surface a connect/configure popup.
@@ -994,9 +1015,13 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     onCloudflareDeployGate?.(message.code);
                 }
                 
+                // The debug panel is for developers and stays in English.
                 onDebugMessage?.('error', 
+                    // i18n-ignore
                     'Deployment Failed - State Reset',
+                    // i18n-ignore
                     `Error: ${message.error}\nDeployment button reset for retry`,
+                    // i18n-ignore
                     'Deployment Error Recovery'
                 );
                 break;
@@ -1018,9 +1043,9 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
             }
 
             case 'github_export_error': {
-                sendMessage(createAIMessage('github_export_error', `❌ GitHub export failed: ${message.error}`));
+                sendMessage(createAIMessage('github_export_error', t('GitHub export failed: {error}', { error: message.error })));
 
-                toast.error(`Error: ${message.error}`);
+                toast.error(t('Error: {error}', { error: message.error }));
                 
                 break;
             }
@@ -1043,7 +1068,7 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                 }
 
                 const isArchive = conversationId.startsWith('archive-');
-                const placeholder = 'previous history was compacted';
+                const placeholder = t('previous history was compacted');
 
                 if (message.tool) {
                     const tool = message.tool;
@@ -1072,10 +1097,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                         setTimeout(() => {
                             setShouldRefreshPreview(true);
                             setTimeout(() => setShouldRefreshPreview(false), 100);
+                            // The debug panel is for developers and stays in English.
                             onDebugMessage?.(
                                 'info',
+                                // i18n-ignore
                                 'Preview Auto-Refresh Triggered',
+                                // i18n-ignore
                                 'Preview refreshed after deploy tool completed',
+                                // i18n-ignore
                                 'Preview Auto-Refresh',
                             );
                         }, 500);
@@ -1226,12 +1255,12 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     setBackendErrorDialog({
                         isOpen: true,
                         errorCode: errorData.code,
-                        errorMessage: errorData.error || 'An error occurred'
+                        errorMessage: errorData.error || t('An error occurred')
                     });
                 } else if (errorData.showAsPopup) {
                     logger.info('🚨 Showing toast for popup error');
                     // Show other popup errors as toast
-                    toast.error(errorData.error || 'An error occurred', {
+                    toast.error(errorData.error || t('An error occurred'), {
                         duration: 5000
                     });
                 } else {
@@ -1239,12 +1268,14 @@ export function createWebSocketMessageHandler(deps: HandleMessageDeps) {
                     // Show as chat message for non-popup errors
                     setMessages(prev => [
                         ...prev,
-                        createAIMessage(`error_${Date.now()}`, `❌ ${errorData.error}`)
+                        createAIMessage(`error_${Date.now()}`, errorData.error)
                     ]);
                 }
                 
+                // The debug panel is for developers and stays in English.
                 onDebugMessage?.(
                     'error',
+                    // i18n-ignore
                     'WebSocket Error',
                     errorData.error,
                     'WebSocket',

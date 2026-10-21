@@ -1,3 +1,4 @@
+import { t, msg } from '@/lib/i18n';
 /**
  * Presentation Feature Module
  *
@@ -13,21 +14,21 @@ import { PresentationHeaderActions } from './components/PresentationHeaderAction
 const PRESENTATION_VIEWS: ViewDefinition[] = [
 	{
 		id: 'preview',
-		label: 'Preview',
+		label: msg("Preview"),
 		iconName: 'Presentation',
-		tooltip: 'View presentation slides',
+		tooltip: msg("View presentation slides"),
 	},
 	{
 		id: 'editor',
-		label: 'Code',
+		label: msg("Code"),
 		iconName: 'Code2',
-		tooltip: 'Edit slide source code',
+		tooltip: msg("Edit slide source code"),
 	},
 	{
 		id: 'docs',
-		label: 'Docs',
+		label: msg("Docs"),
 		iconName: 'FileText',
-		tooltip: 'View documentation',
+		tooltip: msg("View documentation"),
 	},
 ];
 
@@ -77,7 +78,7 @@ const presentationFeatureModule: FeatureModule = {
 	id: 'presentation',
 
 	getViews(): ViewDefinition[] {
-		return PRESENTATION_VIEWS;
+		return PRESENTATION_VIEWS.map((view) => ({ ...view, label: t(view.label), tooltip: view.tooltip ? t(view.tooltip) : undefined }));
 	},
 
 	PreviewComponent: PresentationPreview,

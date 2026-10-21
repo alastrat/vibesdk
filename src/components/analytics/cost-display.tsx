@@ -6,6 +6,7 @@
 import { DollarSign } from 'lucide-react';
 import { cn } from '@cloudflare/kumo';
 
+import { t } from '@/lib/i18n';
 import { formatCost, type AnalyticsDisplayProps } from '@/utils/analytics';
 
 interface CostDisplayProps extends AnalyticsDisplayProps {
@@ -58,7 +59,7 @@ export function CostDisplay({
       )}>
         <div className="flex items-center gap-2">
           <DollarSign className="h-4 w-4 text-muted-foreground" />
-          <h3 className="text-sm font-medium">{label || 'Total Cost'}</h3>
+          <h3 className="text-sm font-medium">{label || t('Total Cost')}</h3>
         </div>
         <div className="text-2xl font-bold tabular-nums">
           {formatCost(cost)}

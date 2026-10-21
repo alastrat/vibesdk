@@ -8,6 +8,10 @@ import {
 	SUPPORTED_IMAGE_MIME_TYPES
 } from '@/api-types';
 import { downscaleImageFile } from '@/utils/image-resize';
+import { getLocale, t, tn } from '@/lib/i18n';
+import { perLocale } from '../../shared/i18n/format';
+
+const megabytes = perLocale((intl) => new Intl.NumberFormat(intl, { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 
 export interface UseImageUploadOptions {
 	maxImages?: number;
@@ -24,7 +28,7 @@ export interface UseImageUploadReturn {
 }
 
 /**
- * Hook for handling image uploads
+ * Hook for handling image uploads. It shows each error as a toast, once, so callers' `onError` only needs to log or react.
  */
 export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUploadReturn {
 	const {
@@ -36,23 +40,26 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const [isProcessing, setIsProcessing] = useState(false);
 
+	const fail = useCallback((message: string) => {
+		toast.error(message);
+		onError?.(message);
+	}, [onError]);
+
 	const processImageFile = useCallback(async (file: File): Promise<ImageAttachment | null> => {
 		// Validate MIME type
 		if (!isSupportedImageType(file.type)) {
-			const supportedTypes = SUPPORTED_IMAGE_MIME_TYPES.map(t => t.replace('image/', '').toUpperCase());
-			const errorMsg = `Unsupported image type: ${file.type}. Only ${supportedTypes.join(', ')} are supported.`;
-			toast.error(errorMsg);
-			onError?.(errorMsg);
+			const supportedTypes = SUPPORTED_IMAGE_MIME_TYPES.map(mimeType => mimeType.replace('image/', '').toUpperCase());
+			fail(t('Unsupported image type: {type}. Only {types} are supported.', { type: file.type, types: supportedTypes.join(', ') }));
 			return null;
 		}
 
 		// Validate file size
 		if (file.size > maxSizeBytes) {
-			const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
-			const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1);
-			const errorMsg = `Image too large: ${fileSizeMB}MB. Maximum allowed is ${maxSizeMB}MB.`;
-			toast.error(errorMsg);
-			onError?.(errorMsg);
+			const locale = getLocale();
+			fail(t('Image too large: {size}MB. Maximum allowed is {max}MB.', {
+				size: megabytes(locale).format(file.size / (1024 * 1024)),
+				max: megabytes(locale).format(maxSizeBytes / (1024 * 1024)),
+			}));
 			return null;
 		}
 
@@ -68,12 +75,10 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 			};
 		} catch (error) {
 			console.error('Failed to process image:', error);
-			const errorMsg = `Could not read image: ${file.name}`;
-			toast.error(errorMsg);
-			onError?.(errorMsg);
+			fail(t('Could not read image: {name}', { name: file.name }));
 			return null;
 		}
-	}, [maxSizeBytes, onError]);
+	}, [maxSizeBytes, fail]);
 
 	const addImages = useCallback(async (files: File[]) => {
 		setIsProcessing(true);
@@ -81,9 +86,7 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 		try {
 			// Check if adding these files would exceed the limit
 			if (images.length + files.length > maxImages) {
-				const errorMsg = `Maximum ${maxImages} images allowed per message.`;
-				toast.error(errorMsg);
-				onError?.(errorMsg);
+				fail(tn('Maximum {count} image allowed per message.', 'Maximum {count} images allowed per message.', maxImages));
 				return;
 			}
 
@@ -99,11 +102,11 @@ export function useImageUpload(options: UseImageUploadOptions = {}): UseImageUpl
 				setImages(prev => [...prev, ...validImages]);
 			}
 		} catch (error) {
-			onError?.(error instanceof Error ? error.message : 'Failed to process images');
+			fail(error instanceof Error ? error.message : t('Failed to process images'));
 		} finally {
 			setIsProcessing(false);
 		}
-	}, [images.length, maxImages, processImageFile, onError]);
+	}, [images.length, maxImages, processImageFile, fail]);
 
 	const removeImage = useCallback((id: string) => {
 		setImages(prev => prev.filter(img => img.id !== id));

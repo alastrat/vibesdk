@@ -1,16 +1,18 @@
 /** The card page's decisions, with no React and no DOM: what was asked for, when saving is allowed and where each result leads. */
 
 import { BILLING_CARD_PATH, BILLING_CARD_RETURN_PATH, BILLING_PATH, type CardSetupMode } from '@/api-types';
+import { msg, t } from '@/lib/i18n';
 import type { SettledPayment } from '@/lib/stripe/next-action';
 import type { StripeSessionStatus } from '@/lib/stripe/session';
 import type { StripeCheckoutActionResult } from '@/lib/stripe/stripe-js';
 import { PAYMENT_FAILED_MESSAGE, refusalOf } from './checkout-state';
 
-export const CARD_FAILED_MESSAGE = "Couldn't open the card form. Try again in a moment.";
-export const CARD_EXPIRED_MESSAGE = 'This card form timed out.';
+// The messages below are translated where they are shown, so a language picked meanwhile still applies.
+export const CARD_FAILED_MESSAGE = msg("Couldn't open the card form. Try again in a moment.");
+export const CARD_EXPIRED_MESSAGE = msg('This card form timed out.');
 
 /** Shown on the return page when the card could not be checked; the webhook sets the card either way. */
-export const CARD_NOT_CHECKED_MESSAGE = "We couldn't check your card. If you saved it, it shows on the billing page in a minute.";
+export const CARD_NOT_CHECKED_MESSAGE = msg("We couldn't check your card. If you saved it, it shows on the billing page in a minute.");
 
 /** The card page saves the card unless its address asks to pay the failed invoice with it too. */
 export function cardModeOf(search: string): CardSetupMode {
@@ -38,7 +40,7 @@ export function sessionIdOfReturn(search: string): string | null {
 
 /** The button's words: saving the card, and in pay mode paying the failed invoice with it. */
 export function saveLabelFor(mode: CardSetupMode): string {
-	return mode === 'pay' ? 'Save card and pay' : 'Save card';
+	return mode === 'pay' ? t('Save card and pay') : t('Save card');
 }
 
 export interface CardRefusal {

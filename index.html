@@ -27,6 +27,14 @@
 				} catch (_) {}
 			})();
 		</script>
+		<script>
+			(function () {
+				try {
+					var stored = localStorage.getItem('estori:locale');
+					if (['en', 'es', 'pt-BR'].indexOf(stored) !== -1) document.documentElement.lang = stored;
+				} catch (_) {}
+			})();
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>

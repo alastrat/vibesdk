@@ -218,6 +218,34 @@
       "when": 1792521370940,
       "tag": "0030_billing_consents",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1792555137294,
+      "tag": "0031_oauth_state_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1792558045348,
+      "tag": "0032_seller_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1792560450265,
+      "tag": "0033_store_translations",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1792563138296,
+      "tag": "0034_store_extraction_notes",
+      "breakpoints": true
     }
   ]
 }

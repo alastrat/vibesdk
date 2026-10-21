@@ -99,7 +99,8 @@ import {
 } from '@/utils/usage-limit-checker';
 import { queryKeys } from '@/lib/query-keys';
 import { ApiError } from '@/lib/api-client';
-import { capitalizeFirstLetter } from '@/lib/utils';
+import { useI18n } from '@/lib/i18n';
+import { visibilityLabel } from '@/lib/visibility-label';
 import { usePageHeader } from '@/components/layout/header-context';
 import { CloudflareLogo } from '@/components/icons/logos';
 import { pageTitle } from '@/brand';
@@ -127,6 +128,7 @@ function dropLeadingUserForThink(
 }
 
 function ChatSession() {
+	const { t } = useI18n();
 	const { chatId: urlChatId } = useParams();
 
 	const [searchParams] = useSearchParams();
@@ -299,7 +301,7 @@ function ChatSession() {
 	const handleMakePrivate = useCallback(async () => {
 		if (!app || !user || !isOwner) {
 			toast.add({
-				title: 'You can only change visibility of your own apps',
+				title: t('You can only change visibility of your own apps'),
 				variant: 'error',
 			});
 			return;
@@ -314,11 +316,11 @@ function ChatSession() {
 				title:
 					error instanceof Error
 						? error.message
-						: 'Failed to update visibility',
+						: t('Failed to update visibility'),
 				variant: 'error',
 			});
 		}
-	}, [app, user, isOwner, publishSite, toast]);
+	}, [app, user, isOwner, publishSite, toast, t]);
 
 	const handleFavorite = useCallback(async () => {
 		if (!app) return;
@@ -326,8 +328,8 @@ function ChatSession() {
 			const newState = await toggleFavorite();
 			toast.add({
 				title: newState
-					? 'Added to bookmarks'
-					: 'Removed from bookmarks',
+					? t('Added to bookmarks')
+					: t('Removed from bookmarks'),
 				variant: 'success',
 			});
 		} catch (error) {
@@ -336,11 +338,11 @@ function ChatSession() {
 				title:
 					error instanceof ApiError
 						? error.message
-						: 'Failed to update bookmarks',
+						: t('Failed to update bookmarks'),
 				variant: 'error',
 			});
 		}
-	}, [app, toggleFavorite, toast]);
+	}, [app, toggleFavorite, toast, t]);
 
 	const navigate = useNavigate();
 
@@ -388,7 +390,7 @@ function ChatSession() {
 				leading: (
 					<div className="flex items-center gap-2 text-kumo-subtle text-sm">
 						<LoaderCircle className="size-4 animate-spin" />
-						Loading app...
+						{t('Loading app...')}
 					</div>
 				),
 			};
@@ -414,7 +416,7 @@ function ChatSession() {
 						>
 							<span className="inline-flex items-center gap-1">
 								<Globe className="h-3 w-3" weight="duotone" />
-								{capitalizeFirstLetter(app.visibility)}
+								{visibilityLabel(app.visibility)}
 							</span>
 						</Badge>
 					)}
@@ -431,7 +433,7 @@ function ChatSession() {
 									onClick={() => window.open(cloudflareDeploymentUrl, '_blank', 'noopener,noreferrer')}
 								>
 									<ExternalLink className="size-3.5" />
-									View Live
+									{t('View Live')}
 								</Button>
 							)}
 							<Button
@@ -448,18 +450,18 @@ function ChatSession() {
 									<Rocket className="size-3.5" />
 								)}
 								{isDeploying
-									? 'Deploying...'
+									? t('Deploying...')
 									: cloudflareDeploymentUrl
-										? 'Redeploy'
+										? t('Redeploy')
 										: userAccountDeployEnabled
-											? 'Deploy to My Account'
-											: 'Deploy'}
+											? t('Deploy to My Account')
+											: t('Deploy')}
 							</Button>
 						</>
 					)}
 					{isOwner && app && (
 						<Button variant="primary" size="sm" onClick={() => setIsGoLiveOpen(true)} icon={<Storefront className="size-3.5" weight="duotone" />}>
-							Go live
+							{t('Go live')}
 						</Button>
 					)}
 					{isOwner && app?.visibility === 'private' && (
@@ -476,7 +478,7 @@ function ChatSession() {
 								/>
 							}
 						>
-							Make public
+							{t('Make public')}
 						</Button>
 					)}
 					{isOwner && app?.visibility === 'public' && (
@@ -486,7 +488,7 @@ function ChatSession() {
 							onClick={() => navigate(`/app/${app.id}`)}
 							icon={<ExternalLink className="size-3.5" />}
 						>
-							View public preview
+							{t('View public preview')}
 						</Button>
 					)}
 					{app && (
@@ -497,7 +499,7 @@ function ChatSession() {
 										variant="secondary"
 										size="sm"
 										shape="square"
-										aria-label="More actions"
+										aria-label={t('More actions')}
 										icon={<DotsThree className="h-4 w-4" />}
 									/>
 								}
@@ -509,21 +511,21 @@ function ChatSession() {
 										void handleFavorite();
 									}}
 								>
-									{isFavorited ? 'Bookmarked' : 'Bookmark'}
+									{isFavorited ? t('Bookmarked') : t('Bookmark')}
 								</DropdownMenu.Item>
 								{isOwner && app.visibility === 'public' && (
 									<DropdownMenu.Item
 										icon={Lock}
 										onClick={handleMakePrivate}
 									>
-										Make private
+										{t('Make private')}
 									</DropdownMenu.Item>
 								)}
 								<DropdownMenu.Item
 									icon={GitBranch}
 									onClick={() => setIsGitCloneModalOpen(true)}
 								>
-									Clone
+									{t('Clone')}
 								</DropdownMenu.Item>
 							</DropdownMenu.Content>
 						</DropdownMenu>
@@ -550,6 +552,7 @@ function ChatSession() {
 		handleDeployToCloudflare,
 		userAccountDeployEnabled,
 		deployAvailable,
+		t,
 	]);
 
 	usePageHeader(headerContent);
@@ -706,7 +709,7 @@ function ChatSession() {
 			if (!websocket) return;
 			if (isGenerating || isDeploying) {
 				toast.add({
-					title: 'Please wait for the current action to finish before rolling back.',
+					title: t('Please wait for the current action to finish before rolling back.'),
 					type: 'error',
 				});
 				return;
@@ -715,11 +718,11 @@ function ChatSession() {
 				commitHash,
 			});
 			toast.add({
-				title: 'Rolling back and redeploying…',
+				title: t('Rolling back and redeploying…'),
 				type: 'info',
 			});
 		};
-	}, [behaviorType, websocket, isGenerating, isDeploying, toast]);
+	}, [behaviorType, websocket, isGenerating, isDeploying, toast, t]);
 
 	// // Terminal functions
 	// const handleTerminalCommand = useCallback((command: string) => {
@@ -1118,14 +1121,13 @@ function ChatSession() {
 	if (awaitingStartConfirmation) {
 		return (
 			<div className="size-full flex items-center justify-center p-6 text-text-primary">
-				<title>{pageTitle('Start building')}</title>
+				<title>{pageTitle(t('Start building'))}</title>
 				<div className="max-w-lg w-full flex flex-col gap-4 rounded-xl border bg-kumo-elevated p-6">
 					<h1 className="text-lg font-medium">
-						Start building this app?
+						{t('Start building this app?')}
 					</h1>
 					<p className="text-sm text-text-secondary">
-						This link wants to start a new project with the prompt
-						below. Review it before continuing.
+						{t('This link wants to start a new project with the prompt below. Review it before continuing.')}
 					</p>
 					<div className="rounded-lg border p-4 max-h-64 overflow-y-auto">
 						<p className="text-sm text-text-primary whitespace-pre-wrap break-words">
@@ -1137,10 +1139,10 @@ function ChatSession() {
 							variant="secondary"
 							onClick={() => navigate('/')}
 						>
-							Cancel
+							{t('Cancel')}
 						</Button>
 						<Button variant="primary" onClick={confirmStart}>
-							Start building
+							{t('Start building')}
 						</Button>
 					</div>
 				</div>
@@ -1151,7 +1153,7 @@ function ChatSession() {
 	return (
 		<RollbackContext.Provider value={rollbackHandler}>
 			<title>
-				{pageTitle(headerTitle || 'Chat')}
+				{pageTitle(headerTitle || t('Chat'))}
 			</title>
 			<div className="size-full flex flex-col min-h-0 text-text-primary">
 				<div className="flex-1 flex min-h-0 overflow-hidden justify-center">
@@ -1195,7 +1197,7 @@ function ChatSession() {
 																variant="ghost"
 																size="sm"
 																shape="square"
-																aria-label="Chat actions"
+																aria-label={t('Chat actions')}
 																icon={
 																	<DotsThreeIcon className="size-4.5" />
 																}
@@ -1211,7 +1213,7 @@ function ChatSession() {
 																)
 															}
 														>
-															Reset conversation
+															{t('Reset conversation')}
 														</DropdownMenu.Item>
 													</DropdownMenu.Content>
 												</DropdownMenu>
@@ -1251,7 +1253,7 @@ function ChatSession() {
 									) && (
 										<div className="mb-4">
 											<AIMessage
-												message="Planning next phase..."
+												message={t('Planning next phase...')}
 												isThinking={true}
 												richToolPreview={
 													richToolPreview

@@ -8,6 +8,7 @@ import { NO_IMAGE_MARKDOWN_COMPONENTS } from './markdown-components';
 import { ExportButton } from './export-button';
 import { exportMarkdownAsFile } from '@/utils/markdown-export';
 import type { FileType } from '@/api-types';
+import { useI18n } from '@/lib/i18n';
 import './markdown-docs-preview.css';
 
 interface MarkdownDocsPreviewProps {
@@ -19,6 +20,7 @@ export function MarkdownDocsPreview({
 	files,
 	isGenerating: _isGenerating,
 }: MarkdownDocsPreviewProps) {
+	const { t } = useI18n();
 	// Prioritize README as default, otherwise first file
 	const defaultFile = useMemo(() => {
 		const readmeFile = files.find((f) =>
@@ -87,11 +89,11 @@ export function MarkdownDocsPreview({
 
 		// Add generating indicator if still streaming
 		if (activeFile.isGenerating && content) {
-			content += '\n\n_Generating..._';
+			content += `\n\n_${t('Generating...')}_`;
 		}
 
 		return content;
-	}, [activeFile]);
+	}, [activeFile, t]);
 
 	return (
 		<div className="flex-1 flex overflow-hidden">
@@ -109,12 +111,12 @@ export function MarkdownDocsPreview({
 					{/* Left: File name and status */}
 					<div className="flex items-center gap-3 flex-1">
 						<span className="text-sm font-medium text-text-primary">
-							{activeFile?.filePath || 'Documentation'}
+							{activeFile?.filePath || t('Documentation')}
 						</span>
 						{activeFile?.isGenerating && (
 							<div className="flex items-center gap-2 text-xs text-kumo-brand">
 								<Loader className="size-3 animate-spin" />
-								<span>Generating...</span>
+								<span>{t('Generating...')}</span>
 							</div>
 						)}
 					</div>
@@ -124,13 +126,13 @@ export function MarkdownDocsPreview({
 						<ExportButton
 							icon={FileText}
 							onClick={handleExportMarkdown}
-							tooltip="Download Markdown"
+							tooltip={t('Download Markdown')}
 							disabled={!activeFile}
 						/>
 						<ExportButton
 							icon={FileDown}
 							onClick={handlePrint}
-							tooltip="Print to PDF"
+							tooltip={t('Print to PDF')}
 							disabled={!activeFile}
 						/>
 					</div>
@@ -142,12 +144,12 @@ export function MarkdownDocsPreview({
 					<div className="flex-1 overflow-y-auto px-6 py-8">
 						{!activeFile ? (
 							<div className="flex flex-col items-center justify-center h-full gap-4 text-text-secondary">
-								<p>No documentation file selected</p>
+								<p>{t('No documentation file selected')}</p>
 							</div>
 						) : !markdownContent ? (
 							<div className="flex flex-col items-center justify-center h-full gap-4 text-text-secondary">
 								<Loader className="size-8 animate-spin text-kumo-brand" />
-								<p>Waiting for content...</p>
+								<p>{t('Waiting for content...')}</p>
 							</div>
 						) : (
 							<article ref={contentRef} className="prose prose-sm prose-invert max-w-none">
@@ -177,7 +179,7 @@ export function MarkdownDocsPreview({
 					{tableOfContents.length > 0 && (
 						<div className="w-56 border-l bg-kumo-elevated overflow-y-auto py-6 px-4">
 							<h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-3">
-								On This Page
+								{t('On This Page')}
 							</h4>
 							<nav>
 								<ul className="space-y-2">

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { handleLiveStore } from './live-store';
 import type { StoreHost } from '../../services/live-stores/hosts';
+import { recordingD1 } from '../../database/test-support/recording-d1';
 
 const CTX = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
 const LIVE: StoreHost = { kind: 'subdomain', store: { appId: 'app_tea', slug: 'northwind-tea', status: 'live', sellerUserId: 'seller_1' } };
@@ -18,7 +19,8 @@ function spaces(fail = false) {
 			},
 		}),
 	};
-	return { env: { SPACE_DO: namespace } as unknown as Env, seen };
+	// The store has no language settings, so its pages are served as written.
+	return { env: { SPACE_DO: namespace, DB: recordingD1().d1 } as unknown as Env, seen };
 }
 
 describe('a live store request', () => {

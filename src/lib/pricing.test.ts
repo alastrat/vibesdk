@@ -25,4 +25,20 @@ describe('formatCents', () => {
 		expect(formatCents(2637)).toBe('$26.37');
 		expect(formatCents(900)).toBe('$9.00');
 	});
+
+	it('keeps English exactly as it was, even for amounts the other languages would group or sign differently', () => {
+		expect(formatCents(2637, 'en')).toBe('$26.37');
+		expect(formatCents(123_450)).toBe('$1234.50');
+		expect(formatCents(-300)).toBe('$-3.00');
+	});
+
+	it('always shows the cents, in the language\'s own marks', () => {
+		const nbsp = '\u00a0';
+		expect(formatCents(900, 'es')).toBe(`USD${nbsp}9.00`);
+		expect(formatCents(900, 'pt-BR')).toBe(`US$${nbsp}9,00`);
+		expect(formatCents(2637, 'pt-BR')).toBe(`US$${nbsp}26,37`);
+		expect(formatCents(123_450, 'es')).toBe(`USD${nbsp}1,234.50`);
+		expect(formatCents(123_450, 'pt-BR')).toBe(`US$${nbsp}1.234,50`);
+		expect(formatCents(-300, 'pt-BR')).toBe(`-US$${nbsp}3,00`);
+	});
 });

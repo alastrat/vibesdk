@@ -1,3 +1,4 @@
+import { t, msg, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { Bot, Layers } from 'lucide-react';
 import type { BehaviorType } from '@/api-types';
@@ -10,8 +11,8 @@ interface BehaviorModeOption {
 }
 
 const OPTIONS: BehaviorModeOption[] = [
-	{ id: 'think', label: 'Agent', description: 'Adaptive agentic coding loop', icon: <Bot className="size-3" /> },
-	{ id: 'phasic', label: 'Phasic', description: 'Structured phase-by-phase generation', icon: <Layers className="size-3" /> },
+	{ id: 'think', label: msg("Agent"), description: msg("Adaptive agentic coding loop"), icon: <Bot className="size-3" /> },
+	{ id: 'phasic', label: msg("Phasic"), description: msg("Structured phase-by-phase generation"), icon: <Layers className="size-3" /> },
 ];
 
 interface BehaviorModeToggleProps {
@@ -22,6 +23,7 @@ interface BehaviorModeToggleProps {
 }
 
 export function BehaviorModeToggle({ value, onChange, disabled = false, className = '' }: BehaviorModeToggleProps) {
+	useI18n();
 	const [hovered, setHovered] = useState<string | null>(null);
 	return (
 		<div className={`flex items-center gap-1 ${className}`}>
@@ -42,13 +44,13 @@ export function BehaviorModeToggle({ value, onChange, disabled = false, classNam
 							}
 						>
 							{opt.icon}
-							{opt.label}
+							{t(opt.label)}
 							{isSelected && (
 								<div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-accent" />
 							)}
 							{hovered === opt.id && !disabled && (
 								<div className="absolute -bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 bg-kumo-elevated/95 backdrop-blur-sm border border-text-primary/10 rounded-md text-xs text-text-secondary pointer-events-none z-50">
-									{opt.description}
+									{t(opt.description)}
 									<div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-kumo-elevated border-l border-t border-text-primary/10 rotate-45" />
 								</div>
 							)}

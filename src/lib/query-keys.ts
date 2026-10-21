@@ -157,6 +157,21 @@ export const queryKeys = {
 			store: (appId: string) => [...queryKeys.account.shopperEmails.all(), 'store', appId] as const,
 			preview: (appId: string, kind: string, subject: string, heading: string, body: string) => [...queryKeys.account.shopperEmails.all(), 'preview', appId, kind, subject, heading, body] as const,
 		},
+		/** Each store's languages and translations: never persisted, like the rest of `account`. */
+		storeTranslations: {
+			all: () => [...queryKeys.account.all, 'store-translations'] as const,
+			stores: () => [...queryKeys.account.storeTranslations.all(), 'stores'] as const,
+			store: (appId: string) => [...queryKeys.account.storeTranslations.all(), 'store', appId] as const,
+			/** The editor's texts, beside `store` rather than under it: reading a store's languages again leaves a list the seller is working in alone. */
+			textsOf: (appId: string) => [...queryKeys.account.storeTranslations.all(), 'texts', appId] as const,
+			languageTexts: (appId: string, locale: string) => [...queryKeys.account.storeTranslations.textsOf(appId), locale] as const,
+			texts: (appId: string, locale: string, query: string) => [...queryKeys.account.storeTranslations.languageTexts(appId, locale), query] as const,
+		},
+		/** The seller's background tasks: never persisted, like the rest of `account`. */
+		tasks: {
+			all: () => [...queryKeys.account.all, 'tasks'] as const,
+			store: (appId: string) => [...queryKeys.account.tasks.all(), 'store', appId] as const,
+		},
 		/** Admins' catalog orders: never persisted, like the rest of `account`. */
 		catalogOrders: {
 			all: () => [...queryKeys.account.all, 'catalog-orders'] as const,

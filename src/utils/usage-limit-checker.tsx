@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle, ExternalLink } from 'lucide-react';
 import { CloudflareLogo } from '@/components/icons/logos';
 import { MINIMUM_CLOUDFLARE_BALANCE } from '../../shared/constants/limits';
+import { formatDollars } from '../../shared/i18n/format';
+import { getLocale, t } from '@/lib/i18n';
 
 export interface LimitCheckDialogResult {
 	canProceed: boolean;
@@ -36,17 +38,17 @@ function createNoTokenDialog(onConnect: () => void, onClose: () => void): React.
 						<AlertCircle className="h-10 w-10 text-text-tertiary" />
 					</div>
 					<DialogTitle className="text-xl">
-						Daily free limit exhausted
+						{t('Daily free limit exhausted')}
 					</DialogTitle>
 					<DialogDescription className="pt-2 text-sm">
-						You've used your free credits. Connect your Cloudflare account to continue building with your own credits.{' '}
+						{t("You've used your free credits. Connect your Cloudflare account to continue building with your own credits.")}{' '}
 						<a
 							href="https://developers.cloudflare.com/ai-gateway/"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-blue-500 hover:text-blue-600 inline-flex items-center gap-0.5"
 						>
-							Learn more
+							{t('Learn more')}
 							<ExternalLink className="h-3 w-3" />
 						</a>
 					</DialogDescription>
@@ -61,7 +63,7 @@ function createNoTokenDialog(onConnect: () => void, onClose: () => void): React.
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>
 						<CloudflareLogo className="w-4 h-4 mr-2" color1="#fff" color2="#fff" />
-						Connect Cloudflare
+						{t('Connect Cloudflare')}
 					</Button>
 					<Button
 						type="button"
@@ -69,7 +71,7 @@ function createNoTokenDialog(onConnect: () => void, onClose: () => void): React.
 						onClick={onClose}
 						className="w-full sm:w-auto"
 					>
-						Cancel
+						{t('Cancel')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
@@ -89,10 +91,10 @@ function createNotConfiguredDialog(onClose: () => void): React.ReactElement {
 						<AlertCircle className="h-10 w-10 text-text-tertiary" />
 					</div>
 					<DialogTitle className="text-xl">
-						Configure AI Gateway
+						{t('Configure AI Gateway')}
 					</DialogTitle>
 					<DialogDescription className="pt-2 text-sm">
-						Your Cloudflare account is connected but you need to select an AI Gateway to continue.
+						{t('Your Cloudflare account is connected but you need to select an AI Gateway to continue.')}
 					</DialogDescription>
 				</DialogHeader>
 				<DialogFooter className="sm:justify-start gap-2">
@@ -105,7 +107,7 @@ function createNotConfiguredDialog(onClose: () => void): React.ReactElement {
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>
 						<CloudflareLogo className="w-4 h-4 mr-2" color1="#fff" color2="#fff" />
-						Configure Gateway
+						{t('Configure Gateway')}
 					</Button>
 					<Button
 						type="button"
@@ -113,7 +115,7 @@ function createNotConfiguredDialog(onClose: () => void): React.ReactElement {
 						onClick={onClose}
 						className="w-full sm:w-auto"
 					>
-						Cancel
+						{t('Cancel')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
@@ -133,17 +135,17 @@ function createInsufficientBalanceDialog(balance: number, accountId: string | un
 						<AlertCircle className="h-10 w-10 text-text-tertiary" />
 					</div>
 					<DialogTitle className="text-xl">
-						Insufficient credits
+						{t('Insufficient credits')}
 					</DialogTitle>
 					<DialogDescription className="pt-2 text-sm">
-						Your Cloudflare account has ${balance.toFixed(2)} in credits. Add more credits to continue building.{' '}
+						{t('Your Cloudflare account has {amount} in credits. Add more credits to continue building.', { amount: formatDollars(balance, getLocale(), 'always') })}{' '}
 						<a
 							href="https://developers.cloudflare.com/ai-gateway/"
 							target="_blank"
 							rel="noopener noreferrer"
 							className="text-blue-500 hover:text-blue-600 inline-flex items-center gap-0.5"
 						>
-							Learn more
+							{t('Learn more')}
 							<ExternalLink className="h-3 w-3" />
 						</a>
 					</DialogDescription>
@@ -161,7 +163,7 @@ function createInsufficientBalanceDialog(balance: number, accountId: string | un
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>
 						<ExternalLink className="w-4 h-4 mr-2" />
-						Add Credits
+						{t('Add Credits')}
 					</Button>
 					<Button
 						type="button"
@@ -169,7 +171,7 @@ function createInsufficientBalanceDialog(balance: number, accountId: string | un
 						onClick={onClose}
 						className="w-full sm:w-auto"
 					>
-						Cancel
+						{t('Cancel')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
@@ -190,10 +192,10 @@ function createDeployConnectDialog(onConnect: () => void, onClose: () => void): 
 						<AlertCircle className="h-10 w-10 text-text-tertiary" />
 					</div>
 					<DialogTitle className="text-xl">
-						Connect Cloudflare to deploy
+						{t('Connect Cloudflare to deploy')}
 					</DialogTitle>
 					<DialogDescription className="pt-2 text-sm">
-						Connect your Cloudflare account to deploy this app to your own Workers account and keep it running on your credits.
+						{t('Connect your Cloudflare account to deploy this app to your own Workers account and keep it running on your credits.')}
 					</DialogDescription>
 				</DialogHeader>
 				<DialogFooter className="sm:justify-start gap-2">
@@ -206,7 +208,7 @@ function createDeployConnectDialog(onConnect: () => void, onClose: () => void): 
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>
 						<CloudflareLogo className="w-4 h-4 mr-2" color1="#fff" color2="#fff" />
-						Connect Cloudflare
+						{t('Connect Cloudflare')}
 					</Button>
 					<Button
 						type="button"
@@ -214,7 +216,7 @@ function createDeployConnectDialog(onConnect: () => void, onClose: () => void): 
 						onClick={onClose}
 						className="w-full sm:w-auto"
 					>
-						Cancel
+						{t('Cancel')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>
@@ -235,10 +237,10 @@ function createDeployNotConfiguredDialog(onClose: () => void): React.ReactElemen
 						<AlertCircle className="h-10 w-10 text-text-tertiary" />
 					</div>
 					<DialogTitle className="text-xl">
-						Select a Cloudflare account
+						{t('Select a Cloudflare account')}
 					</DialogTitle>
 					<DialogDescription className="pt-2 text-sm">
-						You have multiple Cloudflare accounts connected. Select which one to deploy to in Settings.
+						{t('You have multiple Cloudflare accounts connected. Select which one to deploy to in Settings.')}
 					</DialogDescription>
 				</DialogHeader>
 				<DialogFooter className="sm:justify-start gap-2">
@@ -251,7 +253,7 @@ function createDeployNotConfiguredDialog(onClose: () => void): React.ReactElemen
 						className="w-full sm:w-auto bg-brand-primary hover:bg-brand-primary/90 text-white"
 					>
 						<CloudflareLogo className="w-4 h-4 mr-2" color1="#fff" color2="#fff" />
-						Open Settings
+						{t('Open Settings')}
 					</Button>
 					<Button
 						type="button"
@@ -259,7 +261,7 @@ function createDeployNotConfiguredDialog(onClose: () => void): React.ReactElemen
 						onClick={onClose}
 						className="w-full sm:w-auto"
 					>
-						Cancel
+						{t('Cancel')}
 					</Button>
 				</DialogFooter>
 			</DialogContent>

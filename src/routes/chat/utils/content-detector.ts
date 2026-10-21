@@ -1,4 +1,5 @@
 import type { FileType } from '@/api-types';
+import { t } from '@/lib/i18n';
 
 export type ContentType = 'markdown' | null;
 
@@ -74,8 +75,8 @@ export function isDocumentationFile(file: FileType): boolean {
 export function getContentTypeLabel(type: ContentType): string {
 	switch (type) {
 		case 'markdown':
-			return 'Documentation';
+			return t('Documentation');
 		default:
-            return 'unknown';
+            return t('unknown');
 	}
 }

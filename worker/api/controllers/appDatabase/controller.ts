@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * AppDatabaseController
  *
@@ -94,7 +95,7 @@ export class AppDatabaseController extends BaseController {
 			const agentId = context.pathParams.agentId;
 			if (!agentId) {
 				return this.createErrorResponse<ListAppTablesResponse>(
-					'Missing agent ID',
+					msg('Missing agent ID'),
 					400,
 				);
 			}
@@ -123,7 +124,7 @@ export class AppDatabaseController extends BaseController {
 			const agentId = context.pathParams.agentId;
 			if (!agentId) {
 				return this.createErrorResponse<QueryAppTableResponse>(
-					'Missing agent ID',
+					msg('Missing agent ID'),
 					400,
 				);
 			}
@@ -131,7 +132,7 @@ export class AppDatabaseController extends BaseController {
 			const table = params.get('table');
 			if (!table) {
 				return this.createErrorResponse<QueryAppTableResponse>(
-					'Missing table parameter',
+					msg('Missing table parameter'),
 					400,
 				);
 			}
@@ -187,7 +188,7 @@ export class AppDatabaseController extends BaseController {
 			const agentId = context.pathParams.agentId;
 			if (!agentId) {
 				return this.createErrorResponse<WipeAppDatabaseResponse>(
-					'Missing agent ID',
+					msg('Missing agent ID'),
 					400,
 				);
 			}

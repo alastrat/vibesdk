@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 import { z } from 'zod';
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
@@ -97,34 +98,34 @@ export class CloudflareConnectController extends BaseController {
 		try {
 			const user = context.user;
 			if (!user || !context.sessionId) {
-				return CloudflareConnectController.createErrorResponse('Authentication required', 401);
+				return CloudflareConnectController.createErrorResponse(msg('Authentication required'), 401);
 			}
 
 			if (request.headers.has('Authorization') || request.headers.has('X-API-Key')) {
-				return CloudflareConnectController.createErrorResponse('Browser session authentication required', 403);
+				return CloudflareConnectController.createErrorResponse(msg('Browser session authentication required'), 403);
 			}
 			const token = extractTokenWithMetadata(request);
 			if (token.method !== TokenExtractionMethod.COOKIE) {
-				return CloudflareConnectController.createErrorResponse('Browser session authentication required', 403);
+				return CloudflareConnectController.createErrorResponse(msg('Browser session authentication required'), 403);
 			}
 
 			const requestOrigin = new URL(request.url).origin;
 			if (request.headers.get('Origin') !== requestOrigin) {
 				return CloudflareConnectController.createErrorResponse(
-					new SecurityError(SecurityErrorType.CSRF_VIOLATION, 'Invalid request origin', 403),
+					new SecurityError(SecurityErrorType.CSRF_VIOLATION, msg('Invalid request origin'), 403),
 					403,
 				);
 			}
 			const fetchSite = request.headers.get('Sec-Fetch-Site');
 			if (fetchSite && fetchSite !== 'same-origin') {
 				return CloudflareConnectController.createErrorResponse(
-					new SecurityError(SecurityErrorType.CSRF_VIOLATION, 'Cross-site request blocked', 403),
+					new SecurityError(SecurityErrorType.CSRF_VIOLATION, msg('Cross-site request blocked'), 403),
 					403,
 				);
 			}
 			if (!CsrfService.validateDoubleSubmitToken(request)) {
 				return CloudflareConnectController.createErrorResponse(
-					new SecurityError(SecurityErrorType.CSRF_VIOLATION, 'CSRF validation failed', 403),
+					new SecurityError(SecurityErrorType.CSRF_VIOLATION, msg('CSRF validation failed'), 403),
 					403,
 				);
 			}
@@ -133,7 +134,7 @@ export class CloudflareConnectController extends BaseController {
 			if (!bodyResult.success) return bodyResult.response!;
 			const body = connectRequestSchema.safeParse(bodyResult.data);
 			if (!body.success) {
-				return CloudflareConnectController.createErrorResponse('Invalid connect request', 400);
+				return CloudflareConnectController.createErrorResponse(msg('Invalid connect request'), 400);
 			}
 
 			const returnPath = normalizeReturnPath(

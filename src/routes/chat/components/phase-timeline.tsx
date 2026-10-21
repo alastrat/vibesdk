@@ -5,6 +5,7 @@ import type { RefObject } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PhaseTimelineItem } from '../hooks/use-chat';
 import type { FileType } from '@/api-types';
+import { useI18n } from '@/lib/i18n';
 import { ThinkingIndicator } from './thinking-indicator';
 
 import type { ProjectStage } from '../utils/project-stage-helpers';
@@ -282,6 +283,7 @@ export function PhaseTimeline({
 	isGenerating = false,
 	isThinking = false
 }: PhaseTimelineProps) {
+	const { t, tn } = useI18n();
 	const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
 	const [showCollapsedBar, setShowCollapsedBar] = useState(false);
 	const [isCollapsedBarExpanded, setIsCollapsedBarExpanded] = useState(false);
@@ -343,8 +345,8 @@ export function PhaseTimeline({
 		const validatingPhase = getPhaseByStatus(phaseTimeline, 'validating');
 		if (validatingPhase) {
 			return {
-				text: `Reviewing: ${truncatePhaseName(validatingPhase.name)}`,
-				subtitle: 'Identifying issues...',
+				text: t('Reviewing: {name}', { name: truncatePhaseName(validatingPhase.name) }),
+				subtitle: t('Identifying issues...'),
 				icon: <StatusLoader color="blue" />,
 				badge: phaseBadge
 			};
@@ -353,8 +355,8 @@ export function PhaseTimeline({
 		const generatingPhase = getPhaseByStatus(phaseTimeline, 'generating');
 		if (generatingPhase) {
 			return {
-				text: `Implementing: ${truncatePhaseName(generatingPhase.name)}`,
-				subtitle: `${progress}/${total} phases`,
+				text: t('Implementing: {name}', { name: truncatePhaseName(generatingPhase.name) }),
+				subtitle: t('{progress}/{total} phases', { progress, total }),
 				icon: <StatusLoader color="brand" />,
 				badge: phaseBadge
 			};
@@ -362,8 +364,8 @@ export function PhaseTimeline({
 
 		if (isPreviewDeploying) {
 			return {
-				text: 'Deploying preview',
-				subtitle: 'Updating preview environment...',
+				text: t('Deploying preview'),
+				subtitle: t('Updating preview environment...'),
 				icon: <StatusLoader color="brand" />,
 				badge: phaseBadge
 			};
@@ -371,8 +373,8 @@ export function PhaseTimeline({
 
 		if (isThinkingNext) {
 			return {
-				text: 'Planning next phase',
-				subtitle: 'Analyzing requirements...',
+				text: t('Planning next phase'),
+				subtitle: t('Analyzing requirements...'),
 				icon: <StatusLoader color="tertiary" />,
 				badge: phaseBadge
 			};
@@ -381,8 +383,8 @@ export function PhaseTimeline({
 		const lastCompletedPhase = getLastCompletedPhase(phaseTimeline);
 		if (lastCompletedPhase) {
 			return {
-				text: `Completed: ${truncatePhaseName(lastCompletedPhase.name)}`,
-				subtitle: 'Ready for next phase',
+				text: t('Completed: {name}', { name: truncatePhaseName(lastCompletedPhase.name) }),
+				subtitle: t('Ready for next phase'),
 				icon: <StatusCheck color="green" />,
 				badge: phaseBadge
 			};
@@ -390,12 +392,12 @@ export function PhaseTimeline({
 
 		const completedStages = projectStages.filter(s => s.status === 'completed').length;
 		return {
-			text: 'Ready to implement',
-			subtitle: completedStages > 0 ? `${completedStages}/${projectStages.length} stages complete` : 'Waiting to begin...',
+			text: t('Ready to implement'),
+			subtitle: completedStages > 0 ? t('{completed}/{total} stages complete', { completed: completedStages, total: projectStages.length }) : t('Waiting to begin...'),
 			icon: <div className="w-4 h-4 bg-gradient-to-br from-zinc-300/30 to-zinc-400/20 dark:from-zinc-600/30 dark:to-zinc-700/20 rounded-full" />,
 			badge: undefined
 		};
-	}, [phaseTimeline, isThinkingNext, isPreviewDeploying, progress, total, projectStages]);
+	}, [phaseTimeline, isThinkingNext, isPreviewDeploying, progress, total, projectStages, t]);
 
 	const togglePhase = (phaseId: string) => {
 		setExpandedPhases(prev => {
@@ -537,15 +539,15 @@ export function PhaseTimeline({
                                         }}
                                         disabled={!!isDeploying}
                                         className="ml-2 flex items-center gap-1.5 px-2.5 py-1 bg-brand hover:bg-brand/90 disabled:bg-brand/50 text-white rounded-full text-xs font-medium transition-colors disabled:cursor-not-allowed"
-                                        title={isDeploying ? 'Deploying...' : 'Deploy'}
-                                        aria-label={isDeploying ? 'Deploying' : 'Deploy'}
+                                        title={isDeploying ? t('Deploying...') : t('Deploy')}
+                                        aria-label={isDeploying ? t('Deploying') : t('Deploy')}
                                     >
                                         {isDeploying ? (
                                             <StatusLoader size="sm" color="brand" />
                                         ) : (
                                             <Zap className="w-3 h-3" />
                                         )}
-                                        <span className="hidden sm:inline">{isDeploying ? 'Deploying...' : 'Deploy'}</span>
+                                        <span className="hidden sm:inline">{isDeploying ? t('Deploying...') : t('Deploy')}</span>
                                     </button>
                                 )}
                             </motion.div>
@@ -565,7 +567,7 @@ export function PhaseTimeline({
 											{getCurrentPhaseInfo && getCurrentPhaseInfo.files.length > 0 && (
 												<div className="space-y-1">
 													<div className="text-xs font-medium text-text-secondary mb-2">
-														Files ({getCurrentPhaseInfo.files.length}):
+														{t('Files ({count}):', { count: getCurrentPhaseInfo.files.length })}
 													</div>
 													<div className="max-h-32 overflow-y-auto">
 														{getCurrentPhaseInfo.files.slice(0, 5).map((file, index) => (
@@ -598,7 +600,7 @@ export function PhaseTimeline({
 																	</div>
 																</div>
 																<span className="text-text-tertiary ml-1">
-																	+{getCurrentPhaseInfo.files.length - 5} more files...
+																	{tn('+{count} more file...', '+{count} more files...', getCurrentPhaseInfo.files.length - 5)}
 																</span>
 															</div>
 														)}
@@ -616,7 +618,7 @@ export function PhaseTimeline({
 													className="flex items-center gap-1.5 px-3 py-1.5 bg-kumo-elevated hover:bg-bg-1 border rounded-lg text-xs font-medium text-text-primary transition-colors"
 												>
 													<ArrowUp className="w-3 h-3" />
-													Scroll to Top
+													{t('Scroll to Top')}
 												</button>
 
 												{chatId && handleDeployToCloudflare && (
@@ -633,7 +635,7 @@ export function PhaseTimeline({
 														) : (
 															<Zap className="w-3 h-3" />
 														)}
-														{isDeploying ? 'Deploying...' : 'Deploy'}
+														{isDeploying ? t('Deploying...') : t('Deploy')}
 													</button>
 												)}
 											</div>
@@ -685,7 +687,7 @@ export function PhaseTimeline({
 										? 'text-text-tertiary'
 										: 'text-text-secondary'
 								)}>
-									{stage.title}
+									{t(stage.title)}
 								</span>
 
 								{/* Progress for code stage */}
@@ -696,7 +698,7 @@ export function PhaseTimeline({
 									>
 										<span className="text-zinc-300 mx-1">&bull;</span>
 										<span className="text-text-tertiary">
-											{progress}/{total} phases
+											{t('{progress}/{total} phases', { progress, total })}
 										</span>
 									</motion.div>
 								)}
@@ -713,7 +715,7 @@ export function PhaseTimeline({
 										{runtimeErrorCount > 0 && (
 											<span className="inline-flex items-center gap-1">
 												<div className="w-1.5 h-1.5 rounded-full bg-red-400" />
-												<span className="text-red-400/80">{runtimeErrorCount} error{runtimeErrorCount > 1 ? 's' : ''}</span>
+												<span className="text-red-400/80">{tn('{count} error', '{count} errors', runtimeErrorCount)}</span>
 											</span>
 										)}
 										{runtimeErrorCount > 0 && staticIssueCount > 0 && (
@@ -722,7 +724,7 @@ export function PhaseTimeline({
 										{staticIssueCount > 0 && (
 											<span className="inline-flex items-center gap-1">
 												<div className="w-1.5 h-1.5 rounded-full bg-orange-400" />
-												<span className="text-orange-400/80">{staticIssueCount} warning{staticIssueCount > 1 ? 's' : ''}</span>
+												<span className="text-orange-400/80">{tn('{count} warning', '{count} warnings', staticIssueCount)}</span>
 											</span>
 										)}
 									</motion.span>
@@ -741,6 +743,7 @@ export function PhaseTimeline({
 									)}
 								>
 									<span className="text-xs text-left truncate">
+										{/* i18n-ignore: a file name */}
 										Blueprint.md
 									</span>
 								</button>
@@ -780,16 +783,16 @@ export function PhaseTimeline({
 													<StatusIcon status={phase.status} size="sm" />
 												</div>
 												<span className="text-sm font-medium text-text-50 flex-1 break-words">
-													{phase.status === 'completed' ? `Implemented ${phase.name}` :
-													 phase.status === 'cancelled' ? `Cancelled ${phase.name}` :
-													 phase.status === 'validating' ? `Reviewing ${phase.name}` :
-													 `Implementing ${phase.name}`}
+													{phase.status === 'completed' ? t('Implemented {name}', { name: phase.name }) :
+													 phase.status === 'cancelled' ? t('Cancelled {name}', { name: phase.name }) :
+													 phase.status === 'validating' ? t('Reviewing {name}', { name: phase.name }) :
+													 t('Implementing {name}', { name: phase.name })}
 												</span>
 
 												{/* File count badge for collapsed completed/cancelled phases */}
 												{(phase.status === 'completed' || phase.status === 'cancelled') && !expandedPhases.has(phase.id) && (
 													<span className="text-xs text-text-primary/50 bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded flex-shrink-0">
-														{phase.files.length} files
+														{tn('{count} file', '{count} files', phase.files.length)}
 													</span>
 												)}
 											</button>
@@ -843,7 +846,7 @@ export function PhaseTimeline({
 																	return (
 																		<span
 																			className="flex-shrink-0 text-text-tertiary text-xs font-mono text-right w-12 ml-2"
-																			title={`${incrementalLines} lines added in this phase`}
+																			title={tn('{count} line added in this phase', '{count} lines added in this phase', incrementalLines)}
 																		>
 																			+{displayCount}
 																		</span>
@@ -865,9 +868,9 @@ export function PhaseTimeline({
 												<div className="space-y-1 relative bg-blue-50/5 border border-blue-200/20 rounded-lg p-3">
 													<div className="flex items-center gap-2">
 														<StatusLoader size="sm" color="blue" />
-														<span className="text-sm font-medium text-blue-400">Reviewing phase...</span>
+														<span className="text-sm font-medium text-blue-400">{t('Reviewing phase...')}</span>
 													</div>
-													<span className="text-xs text-blue-300/80 ml-5">Identifying issues...</span>
+													<span className="text-xs text-blue-300/80 ml-5">{t('Identifying issues...')}</span>
 												</div>
 											);
 										} else if (isPreviewDeploying) {
@@ -875,9 +878,9 @@ export function PhaseTimeline({
 												<div className="space-y-1 relative bg-brand/5 border border-brand/20 rounded-lg p-3">
 													<div className="flex items-center gap-2">
 														<StatusLoader size="sm" color="brand" />
-														<span className="text-sm font-medium text-brand">Deploying preview...</span>
+														<span className="text-sm font-medium text-brand">{t('Deploying preview...')}</span>
 													</div>
-													<span className="text-xs text-text-tertiary ml-5">Updating your preview environment</span>
+													<span className="text-xs text-text-tertiary ml-5">{t('Updating your preview environment')}</span>
 												</div>
 											);
 										}
@@ -959,7 +962,7 @@ export function PhaseTimeline({
 									<AnimatedStatusIndicator status="completed" />
 
 									<div className="flex flex-col gap-2 flex-1">
-										<span className="font-medium text-text-secondary">Done</span>
+										<span className="font-medium text-text-secondary">{t('Done')}</span>
 									</div>
 								</motion.div>
 							);
@@ -982,7 +985,7 @@ export function PhaseTimeline({
 									<AnimatedStatusIndicator status="active" />
 
 									<div className="flex flex-col gap-2 flex-1">
-										<span className="font-medium text-text-secondary">Debugging in progress...</span>
+										<span className="font-medium text-text-secondary">{t('Debugging in progress...')}</span>
 									</div>
 								</motion.div>
 							);

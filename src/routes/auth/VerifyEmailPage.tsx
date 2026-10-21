@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { OrangeButton } from '@/components/shared/OrangeButton';
 import { apiClient } from '@/lib/api-client';
+import { T, isMessage, msg, t } from '@/lib/i18n';
 import { AccountEmailCard } from './AccountEmailCard';
 
 type ConfirmState =
@@ -17,7 +18,7 @@ type ConfirmState =
 	| { status: 'invalid' }
 	| { status: 'failed'; message: string };
 
-const CONFIRM_FAILED_MESSAGE = "Couldn't confirm your email. Try again.";
+const CONFIRM_FAILED_MESSAGE = msg("Couldn't confirm your email. Try again.");
 
 /**
  * Confirms an email address from an emailed confirmation link. It waits for a click, because
@@ -38,13 +39,13 @@ export default function VerifyEmailPage() {
 		setState({ status: 'confirming' });
 		try {
 			const response = await apiClient.verifyEmail(token);
-			if (!response.success) throw new Error(response.error?.message || CONFIRM_FAILED_MESSAGE);
+			if (!response.success) throw new Error(response.error?.message || t(CONFIRM_FAILED_MESSAGE));
 			setState({ status: 'confirmed' });
 			// Updates the confirmation status shown in Settings; a no-op when signed out.
 			await refreshUser();
 		} catch (error) {
-			const message = error instanceof Error && error.message ? error.message : CONFIRM_FAILED_MESSAGE;
-			setState(message === CONFIRM_LINK_INVALID_MESSAGE ? { status: 'invalid' } : { status: 'failed', message });
+			const message = error instanceof Error && error.message ? error.message : t(CONFIRM_FAILED_MESSAGE);
+			setState(isMessage(message, CONFIRM_LINK_INVALID_MESSAGE) ? { status: 'invalid' } : { status: 'failed', message });
 		} finally {
 			pending.current = false;
 		}
@@ -52,50 +53,55 @@ export default function VerifyEmailPage() {
 
 	return (
 		<>
-			<title>{pageTitle('Confirm email')}</title>
-			<AccountEmailCard title="Confirm your email">
+			<title>{pageTitle(t('Confirm email'))}</title>
+			<AccountEmailCard title={t('Confirm your email')}>
 				{(state.status === 'ready' || state.status === 'confirming') && (
 					<>
-						<p className="text-sm text-kumo-subtle">Confirm that this email address is yours.</p>
-						<p className="text-sm text-kumo-subtle">Only confirm if you created an Estori account with this address.</p>
+						<p className="text-sm text-kumo-subtle">{t('Confirm that this email address is yours.')}</p>
+						<p className="text-sm text-kumo-subtle">{t('Only confirm if you created an Estori account with this address.')}</p>
 						<OrangeButton
 							className="w-full justify-center"
 							loading={state.status === 'confirming'}
 							disabled={state.status === 'confirming'}
 							onClick={() => void confirm()}
 						>
-							Confirm my email
+							{t('Confirm my email')}
 						</OrangeButton>
 					</>
 				)}
 
 				{state.status === 'confirmed' && (
 					<>
-						<Banner icon={<CheckCircleIcon />} description="Your email is confirmed." />
+						<Banner icon={<CheckCircleIcon />} description={t('Your email is confirmed.')} />
 						<Link to="/" className={cn(buttonVariants({ variant: 'secondary' }), 'w-full justify-center')}>
-							Continue to {BRAND.name}
+							{t('Continue to {brand}', { brand: BRAND.name })}
 						</Link>
 					</>
 				)}
 
 				{state.status === 'invalid' && (
 					<>
-						<Banner variant="error" icon={<WarningCircleIcon />} title={CONFIRM_LINK_INVALID_MESSAGE} />
+						<Banner variant="error" icon={<WarningCircleIcon />} title={t(CONFIRM_LINK_INVALID_MESSAGE)} />
 						<p className="text-sm text-kumo-subtle">
-							Need a new link?{' '}
-							<Link
-								to="/settings"
-								className="text-kumo-link underline hover:text-kumo-strong"
-								onClick={(event) => {
-									// Settings needs a session; signed-out visitors sign in first and land there.
-									if (isAuthenticated) return;
-									event.preventDefault();
-									showAuthModal('to open Settings', undefined, '/settings');
+							<T
+								text="Need a new link? <resend>Resend it from Settings</resend>."
+								components={{
+									resend: (children) => (
+										<Link
+											to="/settings"
+											className="text-kumo-link underline hover:text-kumo-strong"
+											onClick={(event) => {
+												// Settings needs a session; signed-out visitors sign in first and land there.
+												if (isAuthenticated) return;
+												event.preventDefault();
+												showAuthModal(msg('Sign in to open Settings'), undefined, '/settings');
+											}}
+										>
+											{children}
+										</Link>
+									),
 								}}
-							>
-								Resend it from Settings
-							</Link>
-							.
+							/>
 						</p>
 					</>
 				)}
@@ -104,7 +110,7 @@ export default function VerifyEmailPage() {
 					<>
 						<Banner variant="error" icon={<WarningCircleIcon />} title={state.message} />
 						<Button variant="secondary" className="w-full justify-center" onClick={() => void confirm()}>
-							Try again
+							{t('Try again')}
 						</Button>
 					</>
 				)}

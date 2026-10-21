@@ -1,7 +1,8 @@
-import { DEFAULT_SELLER_LIMITS, EXTRA_CREDITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
+import { msg } from '../../shared/i18n/translate';
+import { DEFAULT_SELLER_LIMITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
-export { formatCredits, formatUsd, limitFeatures, storeAllowance };
+export { extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance };
 export type { PlanId };
 
 export interface Plan {
@@ -23,8 +24,8 @@ export function planById(id: PlanId): Plan {
 	return plan;
 }
 
-/** "$1.50 per 1,000", the price of extra credits. */
-export const EXTRA_CREDITS_PRICE = `${formatUsd(EXTRA_CREDITS.unitPriceCents)} per ${formatCredits(EXTRA_CREDITS.creditsPerUnit)}`;
+/** "$1.50 per 1,000", the price of extra credits, in English for the public pages; the app words it with `extraCreditsPriceLabel`. */
+export const EXTRA_CREDITS_PRICE = extraCreditsPriceLabel();
 
 /** A check (true), a dash (false) or a short text. */
 export type PlanCell = boolean | string;
@@ -77,7 +78,7 @@ export const SELLER_LEVEL_LIMITS: readonly SellerLevelLimitsCopy[] = [
 ];
 
 /** How checkout weighs a cart toward the weekly limit: Estori can't prove the delivery of the seller's own products. */
-export const OWN_PRODUCTS_WEIGHTING = 'Your own products count twice toward the weekly limit; catalog products and shipping count once.';
+export const OWN_PRODUCTS_WEIGHTING = msg('Your own products count twice toward the weekly limit; catalog products and shipping count once.');
 
 /** The same value on every plan: seller levels set the payment limits, not plans. */
 function onEveryPlan(value: PlanCell): Record<PlanId, PlanCell> {

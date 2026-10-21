@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/auth-context';
 import { apiClient } from '@/lib/api-client';
 import { emailError, newPasswordErrors, passwordError } from '@/lib/auth-validation';
+import { t } from '@/lib/i18n';
 import { PasswordField } from './PasswordField';
 import { TermsAgreementLabel } from './TermsAgreementLabel';
 
@@ -21,25 +22,26 @@ export type SignInView = 'login' | 'forgot';
 export type AuthMode = SignInView | 'register';
 export type OAuthProvider = 'google' | 'github' | 'cloudflare';
 
-const RESET_LINK_FAILED_MESSAGE = "Couldn't send the reset link. Try again.";
-
 const GOOGLE_BUTTON = 'flex h-12 w-full items-center justify-center gap-3 rounded-full bg-[#22252f] text-[15px] font-medium text-white transition-colors hover:bg-black focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue dark:bg-white dark:text-[#22252f] dark:hover:bg-white/90';
 const PROVIDER_BUTTON = 'flex h-12 w-full items-center justify-center gap-3 rounded-full text-[15px] font-medium text-kumo-default ring-1 ring-inset ring-kumo-line transition-colors hover:bg-kumo-elevated focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-public-blue';
 const TEXT_BUTTON = 'text-kumo-default underline underline-offset-4 transition-colors hover:text-public-blue';
 const FIELD = 'w-full min-w-0 [&_input]:w-full [&_[data-slot=field]]:gap-1.5';
 
-/** The heading and line above the form for each view. `actionContext` says why sign-in was asked for. */
+/**
+ * The heading and line above the form for each view. `actionContext` says why sign-in was asked for: a whole sentence,
+ * such as `msg('Sign in to star this app')`, which the form translates as it shows it.
+ */
 export function authCopy(mode: AuthMode, actionContext?: string): { title: string; description: string } {
 	if (mode === 'forgot') {
-		return { title: 'Reset your password', description: "Enter your account's email and we'll send you a link to choose a new password." };
+		return { title: t('Reset your password'), description: t("Enter your account's email and we'll send you a link to choose a new password.") };
 	}
 	if (mode === 'register') {
-		return { title: 'Create your free account', description: 'Start building your store in minutes. No credit card needed.' };
+		return { title: t('Create your free account'), description: t('Start building your store in minutes. No credit card needed.') };
 	}
 	if (actionContext) {
-		return { title: `Sign in ${actionContext}`, description: 'Sign in, or create a free account, to continue.' };
+		return { title: t(actionContext), description: t('Sign in, or create a free account, to continue.') };
 	}
-	return { title: 'Welcome back', description: 'Sign in to keep building your internet empire.' };
+	return { title: t('Welcome back'), description: t('Sign in to keep building your internet empire.') };
 }
 
 function GoogleLogo() {
@@ -133,15 +135,15 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 
 		if (mode === 'register') {
 			if (!name.trim()) {
-				errors.name = 'Name is required';
+				errors.name = t('Name is required');
 			} else if (name.trim().length < 2) {
-				errors.name = 'Name must be at least 2 characters';
+				errors.name = t('Name must be at least 2 characters');
 			}
 
 			Object.assign(errors, newPasswordErrors(password, confirmPassword));
 
 			if (!agreeToTerms) {
-				errors.terms = TERMS_REQUIRED_MESSAGE;
+				errors.terms = t(TERMS_REQUIRED_MESSAGE);
 			}
 		} else if (mode === 'login') {
 			const passwordProblem = passwordError(password);
@@ -154,14 +156,15 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 
 	const requestResetLink = async () => {
 		setForgotError(null);
+		const failed = t("Couldn't send the reset link. Try again.");
 		try {
 			const response = await apiClient.forgotPassword(email.trim());
 			if (!response.success || !response.data) {
-				throw new Error(response.error?.message || RESET_LINK_FAILED_MESSAGE);
+				throw new Error(response.error?.message || failed);
 			}
 			setResetLinkMessage(response.data.message);
 		} catch (err) {
-			setForgotError(err instanceof Error && err.message ? err.message : RESET_LINK_FAILED_MESSAGE);
+			setForgotError(err instanceof Error && err.message ? err.message : failed);
 		}
 	};
 
@@ -200,19 +203,19 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 					{showGoogle && (
 						<button type="button" onClick={() => onOAuthLogin('google')} className={GOOGLE_BUTTON}>
 							<GoogleLogo />
-							Continue with Google
+							{t('Continue with Google')}
 						</button>
 					)}
 					{showGitHub && (
 						<button type="button" onClick={() => onOAuthLogin('github')} className={PROVIDER_BUTTON}>
 							<GitHubLogo />
-							Continue with GitHub
+							{t('Continue with GitHub')}
 						</button>
 					)}
 					{showCloudflare && (
 						<button type="button" onClick={() => onOAuthLogin('cloudflare')} className={PROVIDER_BUTTON}>
 							<CloudflareLogo className="size-5" aria-hidden />
-							Continue with Cloudflare
+							{t('Continue with Cloudflare')}
 						</button>
 					)}
 				</div>
@@ -222,7 +225,7 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 			{hasEmailAuth && showProviders && (
 				<div className="my-5 flex items-center gap-3 text-xs text-kumo-subtle">
 					<span className="h-px flex-1 bg-kumo-line" />
-					or
+					{t('or')}
 					<span className="h-px flex-1 bg-kumo-line" />
 				</div>
 			)}
@@ -233,7 +236,7 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 					<div className="grid gap-4">
 						<Banner variant="default" icon={<EnvelopeSimpleIcon />} description={resetLinkMessage} />
 						<button type="button" onClick={() => switchMode('login')} className={PROVIDER_BUTTON}>
-							Back to sign in
+							{t('Back to sign in')}
 						</button>
 					</div>
 				)}
@@ -243,9 +246,9 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 						{mode === 'register' && (
 							<div className={FIELD}>
 								<Input
-									label="Full name"
+									label={t('Full name')}
 									type="text"
-									placeholder="Full name"
+									placeholder={t('Full name')}
 									value={name}
 									onChange={(e) => setName(e.target.value)}
 									error={validationErrors.name}
@@ -258,9 +261,9 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 
 						<div className={FIELD}>
 							<Input
-								label="Email address"
+								label={t('Email address')}
 								type="email"
-								placeholder="Email address"
+								placeholder={t('Email address')}
 								value={email}
 								onChange={(e) => setEmail(e.target.value)}
 								error={validationErrors.email}
@@ -272,7 +275,7 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 
 						{mode !== 'forgot' && (
 							<PasswordField
-								label="Password"
+								label={t('Password')}
 								value={password}
 								onChange={setPassword}
 								error={validationErrors.password}
@@ -291,7 +294,7 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 									disabled={isLoading}
 									className="text-sm text-kumo-subtle transition-colors hover:text-kumo-default"
 								>
-									Forgot password?
+									{t('Forgot password?')}
 								</button>
 							</div>
 						)}
@@ -299,9 +302,9 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 						{mode === 'register' && (
 							<div className={FIELD}>
 								<Input
-									label="Confirm password"
+									label={t('Confirm password')}
 									type="password"
-									placeholder="Confirm password"
+									placeholder={t('Confirm password')}
 									value={confirmPassword}
 									onChange={(e) => setConfirmPassword(e.target.value)}
 									error={validationErrors.confirmPassword}
@@ -334,15 +337,15 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 						>
 							{isLoading
 								? mode === 'register'
-									? 'Creating account...'
+									? t('Creating account...')
 									: mode === 'forgot'
-										? 'Sending...'
-										: 'Signing in...'
+										? t('Sending...')
+										: t('Signing in...')
 								: mode === 'register'
-									? 'Create account'
+									? t('Create account')
 									: mode === 'forgot'
-										? 'Send reset link'
-										: 'Sign in'}
+										? t('Send reset link')
+										: t('Sign in')}
 						</button>
 					</form>
 				)}
@@ -351,25 +354,25 @@ export function AuthForm({ mode, onModeChange, onOAuthLogin, onCreateAccount, on
 			{mode === 'forgot' && !resetLinkMessage && (
 				<p className="mt-6 text-center text-sm">
 					<button type="button" onClick={() => switchMode('login')} className={TEXT_BUTTON}>
-						Back to sign in
+						{t('Back to sign in')}
 					</button>
 				</p>
 			)}
 
 			{mode === 'login' && onCreateAccount && (
 				<p className="mt-6 text-center text-sm text-kumo-subtle">
-					New to Estori?{' '}
+					{t('New to Estori?')}{' '}
 					<button type="button" onClick={onCreateAccount} className={TEXT_BUTTON}>
-						Create an account
+						{t('Create an account')}
 					</button>
 				</p>
 			)}
 
 			{mode === 'register' && onSignIn && (
 				<p className="mt-6 text-center text-sm text-kumo-subtle">
-					Already have an account?{' '}
+					{t('Already have an account?')}{' '}
 					<button type="button" onClick={onSignIn} className={TEXT_BUTTON}>
-						Sign in
+						{t('Sign in')}
 					</button>
 				</p>
 			)}

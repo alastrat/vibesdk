@@ -5,15 +5,29 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { Locale } from '../../../shared/i18n/locales';
 
 type WaitUntil = (work: Promise<unknown>) => void;
 
-const scope = new AsyncLocalStorage<WaitUntil>();
+interface RequestScope { waitUntil: WaitUntil | null; locale: Locale }
+const scope = new AsyncLocalStorage<RequestScope>();
+
+export function runWithLocale<T>(locale: Locale, run: () => T): T {
+	return scope.run({ waitUntil: scope.getStore()?.waitUntil ?? null, locale }, run);
+}
+
+export function currentLocale(): Locale { return scope.getStore()?.locale ?? 'en'; }
+
+/** Authentication refines the browser fallback only inside this request. */
+export function setRequestLocale(locale: Locale): void {
+	const active = scope.getStore();
+	if (active) active.locale = locale;
+}
 
 export function runInRequestScope<T>(ctx: { waitUntil?: WaitUntil } | undefined, run: () => T): T {
 	// Bound: workerd refuses an unbound waitUntil. Tests pass {} as the context, which has none.
 	const waitUntil = typeof ctx?.waitUntil === 'function' ? ctx.waitUntil.bind(ctx) : null;
-	return waitUntil ? scope.run(waitUntil, run) : run();
+	return scope.run({ waitUntil, locale: scope.getStore()?.locale ?? 'en' }, run);
 }
 
 /**
@@ -26,7 +40,7 @@ export function keepAlive(work: Promise<unknown>): void {
 		() => undefined,
 	);
 	try {
-		scope.getStore()?.(settled);
+		scope.getStore()?.waitUntil?.(settled);
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);
 		console.warn(JSON.stringify({ level: 'warn', component: 'PostHog', msg: 'waitUntil refused work; it runs without being kept alive', error: reason }));

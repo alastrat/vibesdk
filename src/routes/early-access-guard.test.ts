@@ -40,7 +40,7 @@ describe('early access in the app', () => {
 
 	it('shows admins the list behind sign-in, and tells everyone else it is for admins', () => {
 		const routes = source('/src/routes.tsx');
-		expect(routes).toMatch(/path: 'admin\/early-access',\s*element: \(\s*<ProtectedRoute>/);
+		expect(routes).toMatch(/path: 'admin\/early-access',\s*Component: protectedPage\(AdminEarlyAccessPage\)/);
 		const page = source('/src/routes/admin/early-access.tsx');
 		expect(page).toContain('isForbiddenError(requests.error)');
 		expect(page).toContain('title="Admins only"');

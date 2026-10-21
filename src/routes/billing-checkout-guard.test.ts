@@ -26,6 +26,21 @@ const HOOK = '/src/hooks/use-billing-checkout.ts';
 const STATE = '/src/routes/settings/checkout-state.ts';
 
 describe("estori's own checkout page", () => {
+	it("hands the stopped panel a message to translate once, never one that is already translated", () => {
+		const page = source(PAGE);
+		expect(page).not.toMatch(/<Stopped message=\{t\(/);
+		expect(page).toContain("<Stopped message={msg('Choose a plan, or an amount of extra credits, on the billing page.')}");
+	});
+
+	it("words the terms again, and unticks the box, when the seller's saved language changes, so they agree to the wording they can read", () => {
+		const hook = source(HOOK);
+		expect(hook).toContain("import { useAccountLocaleChange } from './use-account-locale-change';");
+		const refresh = hook.slice(hook.indexOf('const refreshTermsForLanguage = useCallback('), hook.indexOf('useAccountLocaleChange(refreshTermsForLanguage);'));
+		expect(refresh).toContain("dispatch({ type: 'termsRequested' });");
+		expect(refresh).toContain('void refreshTerms(sessionId);');
+		expect(hook).toContain('useAccountLocaleChange(refreshTermsForLanguage);');
+	});
+
 	it('never sends the browser to an address in use-billing', () => {
 		const hooks = source('/src/hooks/use-billing.ts');
 		expect(hooks).not.toContain('window.location.href');
@@ -71,7 +86,7 @@ describe("estori's own checkout page", () => {
 		for (const path of ['BILLING_CHECKOUT_PATH', 'BILLING_CHECKOUT_RETURN_PATH']) {
 			const at = appRoutes.indexOf(`path: childPath(${path})`);
 			expect(at, path).toBeGreaterThan(-1);
-			expect(appRoutes.slice(at, at + 200), path).toContain('<ProtectedRoute>');
+			expect(appRoutes.slice(at, at + 200), path).toContain('protectedPage(');
 		}
 		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeGreaterThan(-1);
 		expect(appRoutes.indexOf('path: childPath(BILLING_PATH)')).toBeLessThan(appRoutes.indexOf('path: childPath(BILLING_CHECKOUT_PATH)'));

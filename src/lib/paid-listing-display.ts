@@ -1,6 +1,7 @@
-import { formatTemplatePrice, type OwnerPaidListing, type PaidListingVersionView } from '@/api-types';
+import { t, getLocale, msg } from '@/lib/i18n';
+import { formatUsd, formatTemplatePrice, type OwnerPaidListing, type PaidListingVersionView } from '@/api-types';
 
-export const PAYMENTS_NOT_CONFIGURED_MESSAGE = "Payments aren't set up on this deployment.";
+export const PAYMENTS_NOT_CONFIGURED_MESSAGE = msg("Payments aren't set up on this deployment.");
 
 export interface PaidListingStatusView {
 	label: string;
@@ -12,8 +13,8 @@ export interface PaidListingStatusView {
 function rejectedDetail(latest: PaidListingVersionView | undefined): string | null {
 	if (latest?.status !== 'rejected') return null;
 	return latest.rejectionReason
-		? `Version ${latest.version} was rejected: ${latest.rejectionReason}`
-		: `Version ${latest.version} was rejected`;
+		? t("Version {value1} was rejected: {value2}", { value1: latest.version, value2: latest.rejectionReason })
+		: t("Version {value1} was rejected", { value1: latest.version });
 }
 
 /** How the owner's paid listing stands; null when the site is free again. */
@@ -23,24 +24,24 @@ export function paidListingStatusView(listing: OwnerPaidListing): PaidListingSta
 	const latest = listing.versions[0];
 	if (listing.approvedPriceCents !== null) {
 		return {
-			label: `Approved at ${formatTemplatePrice(listing.approvedPriceCents)}`,
+			label: t("Approved at {value1}", { value1: formatTemplatePrice(listing.approvedPriceCents, getLocale(), t('Free')) }),
 			variant: 'success',
-			detail: pending ? `Version ${pending.version} is in review` : rejectedDetail(latest),
+			detail: pending ? t("Version {value1} is in review", { value1: pending.version }) : rejectedDetail(latest),
 			pendingVersionId: pending?.id ?? null,
 		};
 	}
 	if (pending) {
 		return {
-			label: 'Price in review',
+			label: t("Price in review"),
 			variant: 'warning',
-			detail: `${formatTemplatePrice(pending.priceCents)} is waiting for an admin`,
+			detail: t('{price} is waiting for an admin', { price: formatTemplatePrice(pending.priceCents, getLocale(), t('Free')) }),
 			pendingVersionId: pending.id,
 		};
 	}
 	if (latest?.status === 'rejected') {
-		return { label: 'Rejected', variant: 'error', detail: latest.rejectionReason, pendingVersionId: null };
+		return { label: t("Rejected"), variant: 'error', detail: latest.rejectionReason, pendingVersionId: null };
 	}
-	return { label: 'Not submitted', variant: 'secondary', detail: null, pendingVersionId: null };
+	return { label: t("Not submitted"), variant: 'secondary', detail: null, pendingVersionId: null };
 }
 
 /**
@@ -61,5 +62,5 @@ export function formatFileSize(bytes: number): string {
 
 /** A money amount in dollars; zero reads "$0" because formatTemplatePrice(0) is "Free". */
 export function formatMoney(cents: number): string {
-	return cents === 0 ? '$0' : formatTemplatePrice(cents);
+	return formatUsd(cents, getLocale());
 }

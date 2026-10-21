@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 import { WebSocketMessageResponses } from '../../../agents/constants';
 import { BaseController } from '../baseController';
 import { generateId } from '../../../utils/idGenerator';
@@ -74,19 +76,19 @@ export class CodingAgentController extends BaseController {
             try {
                 body = await request.json() as CodeGenArgs;
             } catch (error) {
-                return CodingAgentController.createErrorResponse(`Invalid JSON in request body: ${JSON.stringify(error, null, 2)}`, 400);
+                return CodingAgentController.createErrorResponse(t("Invalid JSON in request body: {value1}", { value1: JSON.stringify(error, null, 2) }), 400);
             }
 
             const query = body.query;
             const startsFromSite = body.sourceAppId !== undefined;
             if (typeof query !== 'string' || (query.trim().length === 0 && !startsFromSite)) {
-                return CodingAgentController.createErrorResponse('Missing "query" field in request body', 400);
+                return CodingAgentController.createErrorResponse(msg('Missing "query" field in request body'), 400);
             }
             if (query.length > MAX_AGENT_QUERY_LENGTH) {
                 return CodingAgentController.createErrorResponse(
                     new SecurityError(
                         SecurityErrorType.INVALID_INPUT,
-                        `Prompt too large (${query.length} characters). Maximum allowed is ${MAX_AGENT_QUERY_LENGTH} characters.`,
+                        t("Prompt too large ({value1} characters). Maximum allowed is {value2} characters.", { value1: String(query.length), value2: String(MAX_AGENT_QUERY_LENGTH) }),
                         413,
                     ),
                     413,
@@ -253,7 +255,7 @@ export class CodingAgentController extends BaseController {
             }
 
             writer.write({
-                message: 'Code generation started',
+                message: msg('Code generation started'),
                 agentId: agentId,
                 websocketUrl,
                 httpStatusUrl,
@@ -345,7 +347,7 @@ export class CodingAgentController extends BaseController {
         try {
             const agentId = context.pathParams.agentId;
             if (!agentId) {
-                return CodingAgentController.createErrorResponse('Missing agent ID parameter', 400);
+                return CodingAgentController.createErrorResponse(msg('Missing agent ID parameter'), 400);
             }
 
             // Ensure the request is a WebSocket upgrade request
@@ -356,7 +358,7 @@ export class CodingAgentController extends BaseController {
             // User already authenticated via ticket OR JWT by middleware
             const user = context.user;
             if (!user) {
-                return CodingAgentController.createErrorResponse('Authentication required', 401);
+                return CodingAgentController.createErrorResponse(msg('Authentication required'), 401);
             }
 
             // Origin validation only for non-ticket auth (ticket auth is origin-agnostic)
@@ -414,7 +416,7 @@ export class CodingAgentController extends BaseController {
         try {
             const agentId = context.pathParams.agentId;
             if (!agentId) {
-                return CodingAgentController.createErrorResponse<AgentConnectionData>('Missing agent ID parameter', 400);
+                return CodingAgentController.createErrorResponse<AgentConnectionData>(msg('Missing agent ID parameter'), 400);
             }
 
             this.logger.info(`Connecting to existing agent: ${agentId}`);
@@ -423,7 +425,7 @@ export class CodingAgentController extends BaseController {
                 // Verify the agent instance exists
                 const agentInstance = await getAgentStub(env, agentId);
                 if (!agentInstance || !(await agentInstance.isInitialized())) {
-                    return CodingAgentController.createErrorResponse<AgentConnectionData>('Agent instance not found or not initialized', 404);
+                    return CodingAgentController.createErrorResponse<AgentConnectionData>(msg('Agent instance not found or not initialized'), 404);
                 }
                 this.logger.info(`Successfully connected to existing agent: ${agentId}`);
 
@@ -439,7 +441,7 @@ export class CodingAgentController extends BaseController {
                 return CodingAgentController.createSuccessResponse(responseData);
             } catch (error) {
                 this.logger.error(`Failed to connect to agent ${agentId}:`, error);
-                return CodingAgentController.createErrorResponse<AgentConnectionData>(`Agent instance not found or unavailable: ${error instanceof Error ? error.message : String(error)}`, 404);
+                return CodingAgentController.createErrorResponse<AgentConnectionData>(t("Agent instance not found or unavailable: {value1}", { value1: error instanceof Error ? error.message : String(error) }), 404);
             }
         } catch (error) {
             this.logger.error('Error connecting to existing agent', error);
@@ -456,14 +458,14 @@ export class CodingAgentController extends BaseController {
         try {
             const agentId = context.pathParams.agentId;
             if (!agentId) {
-                return CodingAgentController.createErrorResponse<AgentPreviewResponse>('Missing agent ID parameter', 400);
+                return CodingAgentController.createErrorResponse<AgentPreviewResponse>(msg('Missing agent ID parameter'), 400);
             }
 
             const appService = new AppService(env);
             const appResult = await appService.getAppDetails(agentId);
 
             if (!appResult) {
-                return CodingAgentController.createErrorResponse<AgentPreviewResponse>('App not found', 404);
+                return CodingAgentController.createErrorResponse<AgentPreviewResponse>(msg('App not found'), 404);
             }
 
             // Visibility gate (intentional design — not an authorization gap):
@@ -484,7 +486,7 @@ export class CodingAgentController extends BaseController {
                 // If user is logged in and is the owner, allow preview deployment
                 const user = context.user;
                 if (!user || user.id !== appResult.userId) {
-                    return CodingAgentController.createErrorResponse<AgentPreviewResponse>('App is not public. Preview deployment is only available for public apps.', 403);
+                    return CodingAgentController.createErrorResponse<AgentPreviewResponse>(msg('App is not public. Preview deployment is only available for public apps.'), 403);
                 }
             }
             this.logger.info(`Deploying preview for agent: ${agentId}`);
@@ -496,7 +498,7 @@ export class CodingAgentController extends BaseController {
                 // Deploy the preview
                 const preview = await agentInstance.deployToSandbox();
                 if (!preview) {
-                    return CodingAgentController.createErrorResponse<AgentPreviewResponse>('Failed to deploy preview', 500);
+                    return CodingAgentController.createErrorResponse<AgentPreviewResponse>(msg('Failed to deploy preview'), 500);
                 }
                 this.logger.info('Preview deployed successfully', {
                     agentId,
@@ -506,7 +508,7 @@ export class CodingAgentController extends BaseController {
                 return CodingAgentController.createSuccessResponse(preview);
             } catch (error) {
                 this.logger.error('Failed to deploy preview', { agentId, error });
-                return CodingAgentController.createErrorResponse<AgentPreviewResponse>('Failed to deploy preview', 500);
+                return CodingAgentController.createErrorResponse<AgentPreviewResponse>(msg('Failed to deploy preview'), 500);
             }
         } catch (error) {
             this.logger.error('Error deploying preview', error);

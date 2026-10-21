@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 
 import { BaseController } from '../baseController';
 import { RouteContext } from '../../types/route-context';
@@ -23,7 +24,7 @@ export class StatsController extends BaseController {
             return StatsController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching user stats:', error);
-            return StatsController.createErrorResponse<UserStatsData>('Failed to fetch user statistics', 500);
+            return StatsController.createErrorResponse<UserStatsData>(msg('Failed to fetch user statistics'), 500);
         }
     }
 
@@ -42,7 +43,7 @@ export class StatsController extends BaseController {
             return StatsController.createSuccessResponse(responseData);
         } catch (error) {
             this.logger.error('Error fetching user activity:', error);
-            return StatsController.createErrorResponse<UserActivityData>('Failed to fetch user activity', 500);
+            return StatsController.createErrorResponse<UserActivityData>(msg('Failed to fetch user activity'), 500);
         }
     }
 }

@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 /**
  * Limits Context
  * Provides usage limits data across the application with a single API call
@@ -33,6 +34,7 @@ interface LimitsProviderProps {
 }
 
 export function LimitsProvider({ children }: LimitsProviderProps) {
+	useI18n();
 	const { user } = useAuth();
 	const enabled = !!user;
 
@@ -63,7 +65,7 @@ export function LimitsProvider({ children }: LimitsProviderProps) {
 		if (!query.data) {
 			return {
 				allowed: false,
-				reason: 'Loading usage data...',
+				reason: t("Loading usage data..."),
 				shouldUseByok: false,
 			};
 		}
@@ -81,7 +83,7 @@ export function LimitsProvider({ children }: LimitsProviderProps) {
 		error: query.error
 			? query.error instanceof Error
 				? query.error.message
-				: 'Unknown error'
+				: t("Unknown error")
 			: null,
 		refetch: async () => {
 			await query.refetch();

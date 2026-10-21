@@ -9,6 +9,7 @@ import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/te
 import { LiveStoreController } from './controller';
 import type { RouteContext } from '../../types/route-context';
 import { LiveStoreService } from '../../../database/services/LiveStoreService';
+import { StoreTranslationService } from '../../../database/services/StoreTranslationService';
 import { CUSTOM_DOMAINS_PAUSED_MESSAGE, STORE_PUBLISHING_PAUSED_MESSAGE } from '../../../../shared/types/pauses';
 
 /** The agent's calls to clear a leftover merge, in order with SpaceDO's publishes when a test records those too. */
@@ -64,10 +65,23 @@ function spaces(duringPublish?: () => Promise<void>) {
 	return { namespace, published };
 }
 
-function publishAs(appId: string, slug: string, namespace: unknown, draftId?: string) {
-	const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace });
+/** An execution context that keeps what a request hands to `waitUntil`, so the test lets it finish before the next one starts. */
+function waitingContext() {
+	const work: Promise<unknown>[] = [];
+	return { ctx: { waitUntil: (promise: Promise<unknown>) => void work.push(promise) } as unknown as ExecutionContext, work, settled: () => Promise.all(work) };
+}
+
+/** The seller's task runner, noting whose it was woken for. */
+const wakes: string[] = [];
+const taskRunner = { idFromName: (name: string) => name, get: () => ({ wake: async (userId: string) => void wakes.push(userId) }) };
+
+async function publishAs(appId: string, slug: string, namespace: unknown, draftId?: string) {
+	const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace, TASK_RUNNER: taskRunner });
 	const request = new Request(`https://estori.app/api/stores/${appId}/live/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draftId ? { slug, draftId } : { slug }) });
-	return LiveStoreController.publish(request, env, {} as ExecutionContext, { pathParams: { id: appId }, user: { id: appId === 'app_tea' ? 'seller_1' : 'seller_2' } } as unknown as RouteContext);
+	const { ctx, settled } = waitingContext();
+	const response = await LiveStoreController.publish(request, env, ctx, { pathParams: { id: appId }, user: { id: appId === 'app_tea' ? 'seller_1' : 'seller_2' } } as unknown as RouteContext);
+	await settled();
+	return response;
 }
 
 async function bodyOf(response: Response): Promise<{ success: boolean; data?: { status: string; slug: string; url: string }; error?: { message?: string } | string }> {
@@ -211,8 +225,67 @@ describe('while publishing or new domains are paused', () => {
 
 	it('still publishes while only new domains are paused', async () => {
 		const { namespace, published } = spaces();
-		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('custom-domains-paused=on', namespace), {} as ExecutionContext, owner('app_tea'));
+		const { ctx, settled } = waitingContext();
+		const response = await LiveStoreController.publish(post('/api/stores/app_tea/live/publish', { slug: 'northwind-tea' }), envPausing('custom-domains-paused=on', namespace), ctx, owner('app_tea'));
+		await settled();
 		expect(response.status).toBe(200);
 		expect(published).toEqual(['app_tea']);
+	});
+});
+
+describe('translating after a publish', () => {
+	const tasksOf = async (appId: string) => (await db.prepare('SELECT dedupe_key FROM tasks WHERE app_id = ? ORDER BY dedupe_key').bind(appId).all<{ dedupe_key: string }>()).results.map((row) => row.dedupe_key);
+
+	beforeEach(() => {
+		wakes.length = 0;
+		captured.length = 0;
+		agentFailure.mode = 'none';
+	});
+
+	async function publishLeavingTheHook(namespace: unknown) {
+		const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: namespace, TASK_RUNNER: taskRunner });
+		const { ctx, work, settled } = waitingContext();
+		const request = new Request('https://estori.app/api/stores/app_tea/live/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: 'northwind-tea' }) });
+		const response = await LiveStoreController.publish(request, env, ctx, { pathParams: { id: 'app_tea' }, user: { id: 'seller_1' } } as unknown as RouteContext);
+		return { response, work, settled };
+	}
+
+	it('publish enqueues for ready languages only when autoTranslate, after the response, never failing the publish', async () => {
+		const service = new StoreTranslationService(envWith(db));
+		await service.saveSettings('app_tea', { targets: { es: { enabled: true }, 'pt-BR': { enabled: true } } });
+		await service.markReady('app_tea', 'es');
+
+		const { namespace } = spaces();
+		const { response, work, settled } = await publishLeavingTheHook(namespace);
+		expect(response.status).toBe(200);
+		// The translations are handed to waitUntil, not awaited by the publish.
+		expect(work).toHaveLength(1);
+		await settled();
+		expect(await tasksOf('app_tea')).toEqual(['store.translate:app_tea:es']);
+		expect(wakes).toEqual(['seller_1']);
+
+		await db.prepare('DELETE FROM tasks').run();
+		wakes.length = 0;
+		await service.saveSettings('app_tea', { autoTranslate: false });
+		const second = await publishLeavingTheHook(namespace);
+		await second.settled();
+		expect(second.response.status).toBe(200);
+		expect(await tasksOf('app_tea')).toEqual([]);
+		expect(wakes).toEqual([]);
+	});
+
+	it('still answers the publish when queuing translations fails', async () => {
+		const service = new StoreTranslationService(envWith(db));
+		await service.saveSettings('app_tea', { targets: { es: { enabled: true } } });
+		await service.markReady('app_tea', 'es');
+		vi.spyOn(console, 'error').mockImplementation(() => undefined);
+		const failingRunner = { idFromName: () => 'x', get: () => ({ wake: async () => Promise.reject(new Error('runner down')) }) };
+		const env = envWith(db, { STORES_DOMAIN: 'stores.example', CUSTOM_DOMAIN: 'estori.app', ENVIRONMENT: 'prod', JWT_SECRET: 'live-store-controller-test-secret-0123', SPACE_DO: spaces().namespace, TASK_RUNNER: failingRunner });
+		const { ctx, settled } = waitingContext();
+		const request = new Request('https://estori.app/api/stores/app_tea/live/publish', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: 'northwind-tea' }) });
+		const response = await LiveStoreController.publish(request, env, ctx, { pathParams: { id: 'app_tea' }, user: { id: 'seller_1' } } as unknown as RouteContext);
+		await expect(settled()).resolves.toBeDefined();
+		expect(response.status).toBe(200);
+		expect(await tasksOf('app_tea')).toEqual(['store.translate:app_tea:es']);
 	});
 });

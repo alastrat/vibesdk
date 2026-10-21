@@ -24,7 +24,8 @@ import { PaymentMethodCard } from '@/components/billing/PaymentMethodCard';
 import { SectionTitle } from '@/components/billing/SectionTitle';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { CHANGE_FAILED_MESSAGE, showBillingError, useBilling, useBuyCredits, usePayNow, usePlanChange, usePlanCheckout, type PlanChange } from '@/hooks/use-billing';
-import { EXTRA_CREDITS_PRICE, limitFeatures } from '@/lib/plans';
+import { extraCreditsPriceLabel, limitFeatures } from '@/lib/plans';
+import { getLocale, msg, t, useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
 	CONFIRM_POLL_MS,
@@ -54,9 +55,14 @@ import {
 	type PlanChoice,
 } from './billing-view';
 
-const CHANGE_REQUESTED = 'Done. It can take a few seconds to show here.';
-const CHANGE_SLOW = "Your change is taking longer than usual to show. Refresh in a minute.";
-const RENEWAL_SLOW = 'Your payment went through. It can take a few seconds to show here. Refresh in a minute.';
+const CHANGE_REQUESTED = msg('Done. It can take a few seconds to show here.');
+const CHANGE_SLOW = msg('Your change is taking longer than usual to show. Refresh in a minute.');
+const RENEWAL_SLOW = msg('Your payment went through. It can take a few seconds to show here. Refresh in a minute.');
+
+/** Amounts and dates written the way the language writes them. */
+const creditsText = (count: number): string => formatCredits(count, getLocale());
+const usdText = (cents: number): string => formatUsd(cents, getLocale());
+const dateText = (ms: number): string => formatBillingDate(ms, getLocale());
 
 /** What the page polls for: a payment back from checkout, a failed renewal that was paid, or a change taken on this page. */
 type Waiting = { kind: 'payment'; paid: 'plan' | 'credits' } | { kind: 'renewal' } | { kind: 'change'; action: PlanAction };
@@ -134,7 +140,7 @@ function CurrentPlan({
 	const renewal = renewalLineFor(view);
 	return (
 		<LayerCard>
-			<SectionTitle icon={<StorefrontIcon className="size-4" aria-hidden />}>Your plan</SectionTitle>
+			<SectionTitle icon={<StorefrontIcon className="size-4" aria-hidden />}>{t('Your plan')}</SectionTitle>
 			<LayerCard.Primary>
 				<div className="grid gap-4">
 					<div className="flex flex-wrap items-center justify-between gap-4">
@@ -148,7 +154,7 @@ function CurrentPlan({
 						<div className="flex flex-wrap gap-2">
 							{canCancel(view) && (
 								<Button variant="secondary-destructive" onClick={onCancel}>
-									Cancel plan
+									{t('Cancel plan')}
 								</Button>
 							)}
 						</div>
@@ -189,18 +195,19 @@ function ChoiceControl({ choice, busy, disabled, onAct }: { choice: PlanChoice; 
 }
 
 function PlanOption({ choice, current, busy, disabled, onAct }: { choice: PlanChoice; current: boolean; busy: boolean; disabled: boolean; onAct: () => void }) {
+	const i18n = useI18n();
 	return (
 		<div className={cn('flex flex-col gap-4 rounded-xl bg-kumo-base p-5 ring', current ? 'ring-2 ring-kumo-brand' : 'ring-kumo-line')}>
 			<div className="grid gap-1">
 				<h3 className="text-lg font-medium text-kumo-strong">{planName(choice.plan)}</h3>
 				<p className="text-2xl text-kumo-default">
-					{formatUsd(PLAN_PRICES_CENTS[choice.plan])}
-					<span className="text-sm text-kumo-subtle"> a month</span>
+					{usdText(PLAN_PRICES_CENTS[choice.plan])}
+					<span className="text-sm text-kumo-subtle"> {t('a month')}</span>
 				</p>
 			</div>
 			<ul className="grid gap-1.5 text-sm text-kumo-subtle">
-				<li>{formatCredits(PLAN_LIMITS[choice.plan].aiCredits)} AI credits a month</li>
-				{limitFeatures(choice.plan).map((line) => (
+				<li>{t('{credits} AI credits a month', { credits: creditsText(PLAN_LIMITS[choice.plan].aiCredits) })}</li>
+				{limitFeatures(choice.plan, undefined, i18n).map((line) => (
 					<li key={line}>{line}</li>
 				))}
 			</ul>
@@ -228,7 +235,7 @@ function Credits({ view }: { view: BillingView }) {
 	if (!credits || !summary) return null;
 	return (
 		<LayerCard>
-			<SectionTitle icon={<CoinsIcon className="size-4" aria-hidden />}>AI credits</SectionTitle>
+			<SectionTitle icon={<CoinsIcon className="size-4" aria-hidden />}>{t('AI credits')}</SectionTitle>
 			<LayerCard.Primary>
 				<div className="grid gap-4">
 					<div className="grid gap-1.5">
@@ -236,11 +243,11 @@ function Credits({ view }: { view: BillingView }) {
 						{summary.overrunNote && <p className="text-xs text-kumo-subtle">{summary.overrunNote}</p>}
 					</div>
 					<dl className="grid gap-2 text-sm sm:grid-cols-2">
-						<Fact label="Monthly credits" value={formatCredits(credits.pool)} />
-						{credits.granted > 0 && <Fact label="Added by Estori" value={formatCredits(credits.granted)} />}
-						<Fact label="Left this month" value={formatCredits(summary.monthlyLeft)} />
-						{(summary.extraLeft > 0 || view.purchases.length > 0) && <Fact label="Extra credits left" value={formatCredits(summary.extraLeft)} />}
-						<Fact label="Renews on" value={formatBillingDate(credits.renewsAt)} />
+						<Fact label={t('Monthly credits')} value={creditsText(credits.pool)} />
+						{credits.granted > 0 && <Fact label={t('Added by Estori')} value={creditsText(credits.granted)} />}
+						<Fact label={t('Left this month')} value={creditsText(summary.monthlyLeft)} />
+						{(summary.extraLeft > 0 || view.purchases.length > 0) && <Fact label={t('Extra credits left')} value={creditsText(summary.extraLeft)} />}
+						<Fact label={t('Renews on')} value={dateText(credits.renewsAt)} />
 					</dl>
 					{view.purchases.length > 0 && (
 						<ul className="grid gap-1 text-sm text-kumo-subtle">
@@ -256,6 +263,7 @@ function Credits({ view }: { view: BillingView }) {
 }
 
 function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingView; premium: PlanChoice | undefined; busy: boolean; disabled: boolean; onAct: (choice: PlanChoice) => void }) {
+	const i18n = useI18n();
 	const [credits, setCredits] = useState<number>(EXTRA_CREDITS.minCredits);
 	const buyCredits = useBuyCredits();
 	const purchase = () => {
@@ -265,25 +273,25 @@ function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingV
 
 	return (
 		<LayerCard id="extra-credits" className="scroll-mt-4">
-			<SectionTitle icon={<StackPlusIcon className="size-4" aria-hidden />}>Extra credits</SectionTitle>
+			<SectionTitle icon={<StackPlusIcon className="size-4" aria-hidden />}>{t('Extra credits')}</SectionTitle>
 			<LayerCard.Primary>
 				{view.canBuyCredits ? (
 					<div className="grid gap-4">
 						<p className="text-sm text-kumo-subtle">
-							{EXTRA_CREDITS_PRICE}, from {formatCredits(EXTRA_CREDITS.minCredits)} to {formatCredits(EXTRA_CREDITS.maxCredits)} at a time.
+							{t('{price}, from {min} to {max} at a time.', { price: extraCreditsPriceLabel(i18n), min: creditsText(EXTRA_CREDITS.minCredits), max: creditsText(EXTRA_CREDITS.maxCredits) })}
 						</p>
 						<div className="flex flex-wrap items-center gap-4">
 							<CreditsStepper value={credits} onChange={setCredits} />
-							<p className="text-lg font-medium text-kumo-default">{formatUsd(extraCreditsPriceCents(credits))}</p>
+							<p className="text-lg font-medium text-kumo-default">{usdText(extraCreditsPriceCents(credits))}</p>
 							<Button variant="primary" disabled={disabled} onClick={purchase}>
-								Buy credits
+								{t('Buy credits')}
 							</Button>
 						</div>
-						<p className="text-xs text-kumo-subtle">{EXTRA_CREDITS_DISCLOSURE}</p>
+						<p className="text-xs text-kumo-subtle">{t(EXTRA_CREDITS_DISCLOSURE)}</p>
 					</div>
 				) : (
 					<div className="flex flex-wrap items-center justify-between gap-4">
-						<p className="text-sm text-kumo-default">Extra credits come with Premium.</p>
+						<p className="text-sm text-kumo-default">{t('Extra credits come with Premium.')}</p>
 						{premium && (premium.action === 'checkout' || premium.action === 'upgrade') && (
 							<Button variant="primary" loading={busy} disabled={disabled && !busy} onClick={() => onAct(premium)}>
 								{premium.label}
@@ -301,9 +309,9 @@ function NotOpen() {
 		<LayerCard>
 			<LayerCard.Primary>
 				<div className="flex flex-wrap items-center justify-between gap-4">
-					<p className="text-sm text-kumo-default">{BILLING_NOT_OPEN_MESSAGE}</p>
+					<p className="text-sm text-kumo-default">{t(BILLING_NOT_OPEN_MESSAGE)}</p>
 					<Link to="/pricing" className={buttonVariants({ variant: 'secondary', size: 'sm' })}>
-						See the plans
+						{t('See the plans')}
 					</Link>
 				</div>
 			</LayerCard.Primary>
@@ -321,7 +329,7 @@ function ConfirmDialog({ action, confirmation, pending, onClose, onConfirm }: { 
 				</DialogHeader>
 				<div className="flex justify-end gap-2">
 					<Button variant="secondary" onClick={onClose} disabled={pending}>
-						Not now
+						{t('Not now')}
 					</Button>
 					<Button variant={action === 'cancel' ? 'destructive' : 'primary'} loading={pending} onClick={onConfirm}>
 						{confirmation.confirm}
@@ -395,7 +403,7 @@ export default function BillingPage() {
 		if (!isConfirmed(waiting.paid, baseline.current, view)) return;
 		setWaiting(null);
 		forgetBaseline();
-		toast.success(waiting.paid === 'plan' ? `You're on ${planName(view.plan)} now.` : 'Your extra credits are ready.');
+		toast.success(waiting.paid === 'plan' ? t("You're on {plan} now.", { plan: planName(view.plan) }) : t('Your extra credits are ready.'));
 	}, [waiting, view]);
 
 	useEffect(() => {
@@ -403,11 +411,11 @@ export default function BillingPage() {
 		const timer = window.setTimeout(() => {
 			setWaiting(null);
 			if (waiting.kind === 'change') {
-				toast(CHANGE_SLOW);
+				toast(t(CHANGE_SLOW));
 				return;
 			}
 			if (waiting.kind === 'renewal') {
-				toast(RENEWAL_SLOW);
+				toast(t(RENEWAL_SLOW));
 				return;
 			}
 			setTimedOut(true);
@@ -435,7 +443,7 @@ export default function BillingPage() {
 		planChange.mutate(request, {
 			onSuccess: () => {
 				onDone?.();
-				toast.success(CHANGE_REQUESTED);
+				toast.success(t(CHANGE_REQUESTED));
 				setTimedOut(false);
 				setWaiting({ kind: 'change', action });
 			},
@@ -475,18 +483,18 @@ export default function BillingPage() {
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('Plan and billing')}</title>
+			<title>{pageTitle(t('Plan and billing'))}</title>
 			<div className="container mx-auto grid max-w-4xl gap-6 px-4 py-8">
 				<div className="grid gap-1">
-					<h1 className="text-3xl font-semibold text-kumo-strong">Plan and billing</h1>
-					<p className="text-kumo-subtle">Your plan, this month's AI credits and extra credits.</p>
+					<h1 className="text-3xl font-semibold text-kumo-strong">{t('Plan and billing')}</h1>
+					<p className="text-kumo-subtle">{t("Your plan, this month's AI credits and extra credits.")}</p>
 				</div>
 
 				{waiting !== null && waiting.kind !== 'change' && (
-					<Banner icon={<SpinnerGapIcon className="animate-spin motion-reduce:animate-none" />} title="Confirming your payment…" description="This takes a few seconds." />
+					<Banner icon={<SpinnerGapIcon className="animate-spin motion-reduce:animate-none" />} title={t('Confirming your payment…')} description={t('This takes a few seconds.')} />
 				)}
-				{timedOut && <Banner variant="alert" icon={<WarningCircleIcon />} description="Your payment is being confirmed. Refresh in a minute." />}
-				{cancelled && <Banner variant="secondary" icon={<InfoIcon />} description="Checkout cancelled. Nothing was charged." />}
+				{timedOut && <Banner variant="alert" icon={<WarningCircleIcon />} description={t('Your payment is being confirmed. Refresh in a minute.')} />}
+				{cancelled && <Banner variant="secondary" icon={<InfoIcon />} description={t('Checkout cancelled. Nothing was charged.')} />}
 
 				{view ? (
 					view.enabled ? (
@@ -501,7 +509,7 @@ export default function BillingPage() {
 							/>
 							<section aria-labelledby="plans-title" className="grid gap-3">
 								<h2 id="plans-title" className="text-lg font-semibold text-kumo-strong">
-									Plans
+									{t('Plans')}
 								</h2>
 								<div className="grid gap-4 sm:grid-cols-2">
 									{choices.map((choice) => (
@@ -529,7 +537,7 @@ export default function BillingPage() {
 						<NotOpen />
 					)
 				) : billing.isError ? (
-					<Empty title="Couldn't load your plan" description={billing.error.message} />
+					<Empty title={t("Couldn't load your plan")} description={t(billing.error.message)} />
 				) : (
 					<div className="flex justify-center py-16">
 						<Loader />

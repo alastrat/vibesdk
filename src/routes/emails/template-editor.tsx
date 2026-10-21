@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useMemo, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@cloudflare/kumo';
@@ -15,6 +16,7 @@ const PREVIEW_DELAY_MS = 400;
 
 /** Edits one email's subject, heading and message, with a live preview filled in with a sample order. */
 export function TemplateEditor({ appId, template, placeholders, onClose }: { appId: string; template: ShopperEmailTemplateView; placeholders: readonly string[]; onClose: () => void }) {
+	useI18n();
 	const label = SHOPPER_EMAIL_LABELS[template.kind];
 	const [values, setValues] = useState<Record<Field, string>>({ subject: template.subject, heading: template.heading, body: template.body });
 	const [focused, setFocused] = useState<Field>('body');
@@ -42,7 +44,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 			{ kind: template.kind, template: { enabled: template.enabled, ...fields } },
 			{
 				onSuccess: () => {
-					toast.success('Email saved');
+					toast.success(t("Email saved"));
 					onClose();
 				},
 			},
@@ -53,13 +55,13 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 		<Dialog open onOpenChange={(open) => !open && onClose()}>
 			<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
 				<DialogHeader>
-					<DialogTitle>{label.name} email</DialogTitle>
-					<DialogDescription>{label.when}</DialogDescription>
+					<DialogTitle>{t('{name} email', { name: t(label.name) })}</DialogTitle>
+					<DialogDescription>{t(label.when)}</DialogDescription>
 				</DialogHeader>
 				<div className="grid gap-6 md:grid-cols-2">
 					<form className="grid content-start gap-3 text-sm" onSubmit={submit}>
 						<label className="grid gap-1">
-							<span className="text-kumo-subtle">Subject</span>
+							<span className="text-kumo-subtle">{t("Subject")}</span>
 							<Input
 								ref={(element) => void (inputs.current.subject = element)}
 								value={values.subject}
@@ -70,7 +72,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 							/>
 						</label>
 						<label className="grid gap-1">
-							<span className="text-kumo-subtle">Heading</span>
+							<span className="text-kumo-subtle">{t("Heading")}</span>
 							<Input
 								ref={(element) => void (inputs.current.heading = element)}
 								value={values.heading}
@@ -81,7 +83,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 							/>
 						</label>
 						<label className="grid gap-1">
-							<span className="text-kumo-subtle">Message</span>
+							<span className="text-kumo-subtle">{t("Message")}</span>
 							<Textarea
 								ref={(element) => void (inputs.current.body = element)}
 								value={values.body}
@@ -90,10 +92,10 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 								onFocus={() => setFocused('body')}
 								onChange={(event) => change('body', event.target.value)}
 							/>
-							<span className="text-xs text-kumo-subtle">A blank line starts a new paragraph. The order's items, totals and links always follow your message.</span>
+							<span className="text-xs text-kumo-subtle">{t("A blank line starts a new paragraph. The order's items, totals and links always follow your message.")}</span>
 						</label>
 						<div className="grid gap-1.5">
-							<span className="text-kumo-subtle">Insert</span>
+							<span className="text-kumo-subtle">{t("Insert")}</span>
 							<div className="flex flex-wrap gap-1.5">
 								{placeholders.map((name) => (
 									<button key={name} type="button" className="rounded-md border border-kumo-line px-2 py-0.5 font-mono text-xs text-kumo-default hover:bg-kumo-elevated" onClick={() => insert(name)}>
@@ -108,9 +110,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 							</p>
 						)}
 						<div className="flex flex-wrap gap-2">
-							<Button type="submit" size="sm" disabled={save.isPending} loading={save.isPending}>
-								Save
-							</Button>
+							<Button type="submit" size="sm" disabled={save.isPending} loading={save.isPending}>{t("Save")}</Button>
 							<Button
 								type="button"
 								size="sm"
@@ -118,22 +118,20 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 								disabled={test.isPending}
 								loading={test.isPending}
 								onClick={() =>
-									test.mutate({ kind: template.kind, fields }, { onSuccess: (result) => toast.success(`Test sent to ${result.sentTo}`), onError: (error) => toast.error(error.message) })
+									test.mutate({ kind: template.kind, fields }, { onSuccess: (result) => toast.success(t("Test sent to {value1}", { value1: result.sentTo })), onError: (error) => toast.error(error.message) })
 								}
-							>
-								Send me a test
-							</Button>
+							>{t("Send me a test")}</Button>
 							{template.edited && (
 								<ConfirmButton
-									label="Reset to default"
-									title="Go back to Estori's default?"
-									description="Your subject, heading and message for this email are replaced with Estori's."
+									label={t("Reset to default")}
+									title={t("Go back to Estori's default?")}
+									description={t("Your subject, heading and message for this email are replaced with Estori's.")}
 									pending={reset.isPending}
 									variant="ghost"
 									onConfirm={() =>
 										reset.mutate(template.kind, {
 											onSuccess: () => {
-												toast.success("Back to Estori's default");
+												toast.success(t("Back to Estori's default"));
 												onClose();
 											},
 											onError: (error) => toast.error(error.message),
@@ -141,20 +139,18 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 									}
 								/>
 							)}
-							<Button type="button" size="sm" variant="ghost" onClick={onClose}>
-								Cancel
-							</Button>
+							<Button type="button" size="sm" variant="ghost" onClick={onClose}>{t("Cancel")}</Button>
 						</div>
 					</form>
 					<div className="grid content-start gap-2 text-sm">
-						<span className="text-kumo-subtle">Preview with a sample order</span>
+						<span className="text-kumo-subtle">{t("Preview with a sample order")}</span>
 						{preview.data ? (
 							<>
 								<p className="font-medium text-kumo-default">{preview.data.subject}</p>
-								<iframe key={preview.dataUpdatedAt} title="Email preview" sandbox="" srcDoc={preview.data.html} className="h-[480px] w-full rounded-md border border-kumo-line bg-white" />
+								<iframe key={preview.dataUpdatedAt} title={t("Email preview")} sandbox="" srcDoc={preview.data.html} className="h-[480px] w-full rounded-md border border-kumo-line bg-white" />
 							</>
 						) : (
-							<p className="text-kumo-subtle">{preview.error ? preview.error.message : 'Loading the preview'}</p>
+							<p className="text-kumo-subtle">{preview.error ? preview.error.message : t("Loading the preview")}</p>
 						)}
 						{preview.data && preview.error && <p className="text-kumo-danger">{preview.error.message}</p>}
 					</div>

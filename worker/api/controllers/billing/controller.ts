@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** The signed-in seller's own plan: the billing page's view, and the actions that ask Stripe to change it. */
 
 import { BaseController } from '../baseController';
@@ -27,7 +28,10 @@ import {
 import { stripeFromEnv } from '../../../services/payments/config';
 import { isFlagOn } from '../../../services/posthog/flags';
 import { billingView, cardForView } from '../../../services/billing/view';
+import { localeFromAcceptLanguage } from '../../../../shared/i18n/locales';
+import type { Translator } from '../../../../shared/i18n/translate';
 import { createLogger } from '../../../logger';
+import { serverT } from '../../../services/i18n/server-t';
 import type { AuthUser } from '../../../types/auth-types';
 import {
 	BILLING_NOT_OPEN_MESSAGE,
@@ -48,7 +52,7 @@ export class BillingController extends BaseController {
 
 	static async get(_request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<BillingView>>> {
 		const user = context.user;
-		if (!user) return this.createErrorResponse<BillingView>('Authentication required', 401);
+		if (!user) return this.createErrorResponse<BillingView>(msg('Authentication required'), 401);
 		try {
 			const account = await loadAccount(env, user.id);
 			if (!account.billing) return this.createSuccessResponse(billingView(account, null, [], false, null));
@@ -134,16 +138,21 @@ export class BillingController extends BaseController {
 		answer: (value: T) => R,
 	): Promise<R | ControllerResponse<ApiResponse<never>>> {
 		const user = context.user;
-		if (!user) return this.createErrorResponse('Authentication required', 401);
+		if (!user) return this.createErrorResponse(msg('Authentication required'), 401);
 		if (!(await isFlagOn(env, 'billing', user.id))) return this.createErrorResponse(BILLING_NOT_OPEN_MESSAGE, 403);
 		try {
-			const result = await action(billingActionDepsFromEnv(env, request), user);
+			const result = await action(billingActionDepsFromEnv(env, request, this.translatorFor(request, user)), user);
 			if (result.ok) return answer(result.value);
 			if ('refusal' in result) return this.createPlanLimitResponse(result.refusal);
 			return this.createErrorResponse(result.message, result.status);
 		} catch (error) {
 			return this.handleError(error, what) as ControllerResponse<ApiResponse<never>>;
 		}
+	}
+
+	/** The language the checkout's wording is written in: the seller's saved one, else their browser's, else English. */
+	private static translatorFor(request: Request, user: AuthUser): Translator {
+		return serverT(user.locale ?? localeFromAcceptLanguage(request.headers.get('Accept-Language')));
 	}
 
 	/** The JSON body as sent; an unreadable or missing body reads as undefined, which the action refuses with its own message. */

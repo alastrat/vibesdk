@@ -15,6 +15,7 @@ import {
 	FoldersIcon,
 	type IconProps,
 } from '@phosphor-icons/react';
+import { t } from '@/lib/i18n';
 
 interface FileTreeItem {
 	name: string;
@@ -190,12 +191,12 @@ export function FileExplorer({
 				className,
 			)}
 			role="tree"
-			aria-label="Project files"
+			aria-label={t('Project files')}
 		>
 			{showHeader && (
 				<div className="p-2 px-3 text-sm flex items-center gap-1 text-text-primary/50 font-medium border-b mb-1">
 					<FoldersIcon weight="duotone" className="size-4" />
-					Files
+					{t('Files')}
 				</div>
 			)}
 			<div className="flex flex-col">

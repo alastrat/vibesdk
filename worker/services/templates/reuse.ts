@@ -1,3 +1,4 @@
+import { msg } from '../../../shared/i18n/translate';
 /**
  * Discover publishing and reuse rules:
  * - what a publish request asks for, and what publishing does to a paid listing;
@@ -21,15 +22,15 @@ import {
 	type Validation,
 } from './catalog';
 
-export const SITE_UNAVAILABLE_MESSAGE = 'This site is no longer available';
-export const SITE_PURCHASE_REQUIRED_MESSAGE = 'Buy this site before using it';
-export const SITE_NOT_YET_AVAILABLE_MESSAGE = "This site isn't available to use yet";
-export const SITE_NOT_REUSABLE_MESSAGE = "This site can't be reused right now";
-export const REUSE_CONSENT_REQUIRED_MESSAGE = 'Confirm that others may copy and adapt this site';
+export const SITE_UNAVAILABLE_MESSAGE = msg('This site is no longer available');
+export const SITE_PURCHASE_REQUIRED_MESSAGE = msg('Buy this site before using it');
+export const SITE_NOT_YET_AVAILABLE_MESSAGE = msg("This site isn't available to use yet");
+export const SITE_NOT_REUSABLE_MESSAGE = msg("This site can't be reused right now");
+export const REUSE_CONSENT_REQUIRED_MESSAGE = msg('Confirm that others may copy and adapt this site');
 export const NOT_THINK_REASON = 'Only apps built with the current builder can be published';
 export const NOT_DEPLOYED_REASON = 'Deploy your app before publishing it';
 export const PAID_COPY_REASON = "This site started from a paid site, so it can't be made public";
-export const PUBLISHING_CHECK_FAILED_MESSAGE = "Couldn't check this app right now; try again";
+export const PUBLISHING_CHECK_FAILED_MESSAGE = msg("Couldn't check this app right now; try again");
 
 export type PublishRequest =
 	| { visibility: 'private' }

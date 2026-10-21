@@ -75,5 +75,7 @@ declare namespace Cloudflare {
 		// JSON {"pro":"price_...","premium":"price_...","credits":"price_..."}, in the Stripe key's mode.
 		STRIPE_PRICE_IDS?: string;
 		CATALOG_ORDER_RUNNER: DurableObjectNamespace<import('../services/catalog/CatalogOrderRunner').CatalogOrderRunner>;
+		// One per seller, named after them: runs the seller's queued tasks.
+		TASK_RUNNER: DurableObjectNamespace<import('../services/tasks/TaskRunner').TaskRunner>;
 	}
 }

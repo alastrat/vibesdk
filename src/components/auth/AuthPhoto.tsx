@@ -1,3 +1,4 @@
+import { msg, t } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 
 export type PhotoView = 'register' | 'login';
@@ -6,6 +7,7 @@ interface Photo {
 	image: string;
 	/** Keeps the subject in view when the photo is cropped to its column. */
 	position: string;
+	/** English texts marked with `msg`; the photo translates them as it shows them. */
 	title: string;
 	text: string;
 }
@@ -15,14 +17,14 @@ const PHOTOS: Readonly<Record<PhotoView, Photo>> = {
 	register: {
 		image: '/marketing/auth-signup.webp',
 		position: 'object-center',
-		title: 'From first idea to first order.',
-		text: 'Build your store with AI and launch it in minutes.',
+		title: msg('From first idea to first order.'),
+		text: msg('Build your store with AI and launch it in minutes.'),
 	},
 	login: {
 		image: '/marketing/auth-signin.webp',
 		position: 'object-[82%_center]',
-		title: 'Your stores, wherever you are.',
-		text: 'Sign in to pick up where you left off.',
+		title: msg('Your stores, wherever you are.'),
+		text: msg('Sign in to pick up where you left off.'),
 	},
 };
 
@@ -34,8 +36,8 @@ export function AuthPhoto({ view, className }: { view: PhotoView; className?: st
 			<img src={photo.image} alt="" className={cn('absolute inset-0 size-full object-cover', photo.position)} />
 			<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
 			<div className="absolute inset-x-0 bottom-0 p-8 text-white">
-				<p className="text-2xl leading-snug font-normal tracking-[-0.01em] text-balance">{photo.title}</p>
-				<p className="mt-2 text-sm text-white/80">{photo.text}</p>
+				<p className="text-2xl leading-snug font-normal tracking-[-0.01em] text-balance">{t(photo.title)}</p>
+				<p className="mt-2 text-sm text-white/80">{t(photo.text)}</p>
 			</div>
 		</aside>
 	);

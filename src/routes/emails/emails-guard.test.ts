@@ -15,11 +15,16 @@ function source(path: string): string {
 
 describe('the Emails page', () => {
 	it('is routed for signed-in users and opens from an Emails item in the sidebar, folded and open', () => {
-		expect(source('/src/routes.tsx')).toMatch(/path: 'emails',\s*element: \(\s*<ProtectedRoute>\s*<ShopperEmailsPage \/>/);
+		expect(source('/src/routes.tsx')).toMatch(/path: 'emails',\s*Component: protectedPage\(ShopperEmailsPage\)/);
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
 		expect(sidebar.match(/navigate\(SHOPPER_EMAILS_PATH\)/g) ?? []).toHaveLength(2);
 		expect(sidebar).toContain('id="emails-link"');
 		expect(sidebar.indexOf('id="orders-link"')).toBeLessThan(sidebar.indexOf('id="emails-link"'));
+		// Each form lists Orders, Emails, then Translations.
+		expect(sidebar.match(/id="emails-link"/g) ?? []).toHaveLength(2);
+		expect(sidebar.indexOf('id="emails-link"')).toBeLessThan(sidebar.indexOf('id="translations-link"'));
+		expect(sidebar.lastIndexOf('id="emails-link"')).toBeLessThan(sidebar.lastIndexOf('id="translations-link"'));
+		expect(sidebar.indexOf('id="translations-link"')).toBeLessThan(sidebar.lastIndexOf('id="emails-link"'));
 	});
 
 	it('shows each email with its switch, Edit and where it came from, a store picker, and where replies go', () => {
@@ -39,7 +44,7 @@ describe('the Emails page', () => {
 		// A new frame per preview: Chromium can drop a srcdoc change that lands while the last one still loads.
 		expect(editor).toContain('key={preview.dataUpdatedAt}');
 		expect(editor).toContain('Send me a test');
-		expect(editor).toMatch(/<ConfirmButton[^>]*label="Reset to default"/);
+		expect(editor).toMatch(/<ConfirmButton[^>]*label=\{t\(["']Reset to default["']\)\}/);
 		expect(editor).toContain('disabled={save.isPending}');
 	});
 

@@ -1,3 +1,5 @@
+import { t } from '../../../services/i18n/request-locale';
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Secure Authentication Controller
  */
@@ -7,9 +9,9 @@ import { SessionService } from '../../../database/services/SessionService';
 import { UserService } from '../../../database/services/UserService';
 import { ApiKeyService } from '../../../database/services/ApiKeyService';
 import { generateApiKey, sha256Hash } from '../../../utils/cryptoUtils';
-import { 
-    loginSchema, 
-    registerSchema, 
+import {
+    loginSchema,
+    registerSchema,
     oauthProviderSchema,
     acceptTermsSchema,
     forgotPasswordSchema,
@@ -18,6 +20,7 @@ import {
 } from './authSchemas';
 import { RateLimitExceededError, SecurityError } from 'shared/types/errors';
 import { SIGNUPS_PAUSED_ERROR_CODE, SignupsPausedError } from '../../../../shared/types/pauses';
+import { isLocale } from '../../../../shared/i18n/locales';
 import {
     formatAuthResponse,
     mapUserResponse,
@@ -55,7 +58,7 @@ import { personUpdateOf } from '../../../services/posthog/person';
  */
 export class AuthController extends BaseController {
     static logger = createLogger('AuthController');
-    
+
     /**
      * Register a new user
      * POST /api/auth/register
@@ -64,7 +67,7 @@ export class AuthController extends BaseController {
         try {
             if (!isEmailAuthEnabled(env)) {
                 return AuthController.createErrorResponse(
-                    'Email/password authentication is disabled on this deployment.',
+                    msg('Email/password authentication is disabled on this deployment.'),
                     403
                 );
             }
@@ -83,7 +86,7 @@ export class AuthController extends BaseController {
                 createEmailSender(env),
                 appBaseUrl(env, request)
             );
-            
+
             const telemetry = await sessionTelemetry(env, request, result.user.id);
             if (!telemetry.analyticsOptOut) {
                 serverAnalytics(env).capture('account_created', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
@@ -92,23 +95,23 @@ export class AuthController extends BaseController {
                 ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
                 telemetry,
             });
-            
+
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
                 accessTokenExpiry: SessionService.config.sessionTTL
             });
-            
+
             // Rotate CSRF token on successful registration if configured
             if (CsrfService.defaults.rotateOnAuth) {
                 CsrfService.rotateToken(response);
             }
-            
+
             return response;
         } catch (error) {
             if (error instanceof SecurityError) {
                 return AuthController.createErrorResponse(error.message, error.statusCode);
             }
-            
+
             return AuthController.handleError(error, 'register user');
         }
     }
@@ -122,7 +125,7 @@ export class AuthController extends BaseController {
             const bodyResult = await AuthController.parseJsonBody(request);
             if (!bodyResult.success) return bodyResult.response!;
             const parsed = acceptTermsSchema.safeParse(bodyResult.data);
-            if (!parsed.success) return AuthController.createErrorResponse('A terms version is required', 400);
+            if (!parsed.success) return AuthController.createErrorResponse(msg('A terms version is required'), 400);
             const user = await new AuthService(env).acceptTerms(routeContext.user!.id, parsed.data.version);
             return AuthController.createSuccessResponse({ user });
         } catch (error) {
@@ -139,7 +142,7 @@ export class AuthController extends BaseController {
         try {
             if (!isEmailAuthEnabled(env)) {
                 return AuthController.createErrorResponse(
-                    'Email/password authentication is disabled on this deployment.',
+                    msg('Email/password authentication is disabled on this deployment.'),
                     403
                 );
             }
@@ -153,7 +156,7 @@ export class AuthController extends BaseController {
 
             const authService = new AuthService(env);
             const result = await authService.login(validatedData, request);
-            
+
             const telemetry = await sessionTelemetry(env, request, result.user.id);
             if (!telemetry.analyticsOptOut) {
                 serverAnalytics(env).capture('signed_in', result.user.id, { method: 'password' }, await personUpdateOf(env, result.user.id));
@@ -162,27 +165,27 @@ export class AuthController extends BaseController {
                 ...formatAuthResponse(result.user, result.sessionId, result.expiresAt),
                 telemetry,
             });
-            
+
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
                 accessTokenExpiry: SessionService.config.sessionTTL
             });
-            
+
             // Rotate CSRF token on successful login if configured
             if (CsrfService.defaults.rotateOnAuth) {
                 CsrfService.rotateToken(response);
             }
-            
+
             return response;
         } catch (error) {
             if (error instanceof SecurityError) {
                 return AuthController.createErrorResponse(error.message, error.statusCode);
             }
-            
+
             return AuthController.handleError(error, 'login user');
         }
     }
-    
+
     /**
      * Email a password reset link. The answer is the same for every address.
      * POST /api/auth/forgot-password
@@ -191,7 +194,7 @@ export class AuthController extends BaseController {
         try {
             if (!isEmailAuthEnabled(env)) {
                 return AuthController.createErrorResponse(
-                    'Email/password authentication is disabled on this deployment.',
+                    msg('Email/password authentication is disabled on this deployment.'),
                     403
                 );
             }
@@ -242,7 +245,7 @@ export class AuthController extends BaseController {
         try {
             if (!isEmailAuthEnabled(env)) {
                 return AuthController.createErrorResponse(
-                    'Email/password authentication is disabled on this deployment.',
+                    msg('Email/password authentication is disabled on this deployment.'),
                     403
                 );
             }
@@ -261,7 +264,7 @@ export class AuthController extends BaseController {
 
             await new AuthService(env).resetPassword(parsed.data.token, parsed.data.newPassword, request);
 
-            return AuthController.createSuccessResponse({ message: 'Your password is updated.' });
+            return AuthController.createSuccessResponse({ message: msg('Your password is updated.') });
         } catch (error) {
             if (error instanceof RateLimitExceededError) {
                 return AuthController.createErrorResponse(error, 429);
@@ -294,7 +297,7 @@ export class AuthController extends BaseController {
             await honorAnalyticsChoice(env, request, userId);
             serverAnalytics(env).capture('email_confirmed', userId, {});
 
-            return AuthController.createSuccessResponse({ message: 'Your email is confirmed.' });
+            return AuthController.createSuccessResponse({ message: msg('Your email is confirmed.') });
         } catch (error) {
             if (error instanceof SecurityError) {
                 return AuthController.createErrorResponse(error.message, error.statusCode);
@@ -312,14 +315,14 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             await RateLimitService.enforceEmailConfirmationResendRateLimit(env, routeContext.config.security.rateLimit, user.id);
 
             await new AuthService(env).resendEmailConfirmation(user.id, createEmailSender(env), appBaseUrl(env, request));
 
-            return AuthController.createSuccessResponse({ message: 'If your email is not confirmed yet, we sent a new link.' });
+            return AuthController.createSuccessResponse({ message: msg('If your email is not confirmed yet, we sent a new link.') });
         } catch (error) {
             if (error instanceof RateLimitExceededError) {
                 return AuthController.createErrorResponse(error, 429);
@@ -347,35 +350,35 @@ export class AuthController extends BaseController {
 					);
 				}
 			}
-                        
-            const response = AuthController.createSuccessResponse({ 
-                success: true, 
-                message: 'Logged out successfully' 
+
+            const response = AuthController.createSuccessResponse({
+                success: true,
+                message: msg('Logged out successfully')
             });
-            
+
             clearAuthCookies(response);
-            
+
             // Clear CSRF token on logout
             CsrfService.clearTokenCookie(response);
-            
+
             return response;
         } catch (error) {
             this.logger.error('Logout failed', error);
-            
-            const response = AuthController.createSuccessResponse({ 
-                success: true, 
-                message: 'Logged out' 
+
+            const response = AuthController.createSuccessResponse({
+                success: true,
+                message: msg('Logged out')
             });
-            
+
             clearAuthCookies(response);
-            
+
             // Clear CSRF token on logout
             CsrfService.clearTokenCookie(response);
-            
+
             return response;
         }
     }
-    
+
     /**
      * Get current user profile
      * GET /api/auth/profile
@@ -383,7 +386,7 @@ export class AuthController extends BaseController {
     static async getProfile(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
         try {
             if (!routeContext.user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
             return AuthController.createSuccessResponse({
                 user: mapUserResponse(routeContext.user),
@@ -394,7 +397,7 @@ export class AuthController extends BaseController {
             return AuthController.handleError(error, 'get profile');
         }
     }
-    
+
     /**
      * Update user profile
      * PUT /api/auth/profile
@@ -403,9 +406,9 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
-            
+
             const bodyResult = await AuthController.parseJsonBody<{
                 displayName?: string;
                 username?: string;
@@ -413,21 +416,21 @@ export class AuthController extends BaseController {
                 theme?: 'light' | 'dark' | 'system';
                 timezone?: string;
             }>(request);
-            
+
             if (!bodyResult.success) {
                 return bodyResult.response!;
             }
-            
+
             const updateData = bodyResult.data!;
             const userService = new UserService(env);
-            
+
             if (updateData.username) {
                 const isAvailable = await userService.isUsernameAvailable(updateData.username, user.id);
                 if (!isAvailable) {
-                    return AuthController.createErrorResponse('Username already taken', 400);
+                    return AuthController.createErrorResponse(msg('Username already taken'), 400);
                 }
             }
-            
+
             await userService.updateUserProfile(user.id, {
                 displayName: updateData.displayName,
                 username: updateData.username,
@@ -435,22 +438,22 @@ export class AuthController extends BaseController {
                 avatarUrl: undefined,
                 timezone: updateData.timezone
             });
-            
+
             const updatedUser = await userService.findUser({ id: user.id });
-            
+
             if (!updatedUser) {
-                return AuthController.createErrorResponse('User not found', 404);
+                return AuthController.createErrorResponse(msg('User not found'), 404);
             }
-            
+
             return AuthController.createSuccessResponse({
                 user: mapUserResponse(updatedUser),
-                message: 'Profile updated successfully'
+                message: msg('Profile updated successfully')
             });
         } catch (error) {
             return AuthController.handleError(error, 'update profile');
         }
     }
-    
+
     /**
      * Initiate OAuth flow
      * GET /api/auth/oauth/:provider
@@ -458,15 +461,20 @@ export class AuthController extends BaseController {
     static async initiateOAuth(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
         try {
             const validatedProvider = oauthProviderSchema.parse(routeContext.pathParams.provider);
-            
+
             // Get intended redirect URL from query parameter
             const intendedRedirectUrl = routeContext.queryParams.get('redirect_url') || undefined;
-            
+
+            // The language picked on the sign-in page, for the account a new visitor is about to create
+            const pickedLocale = routeContext.queryParams.get('locale');
+
             const authService = new AuthService(env);
             const { authUrl, nonce } = await authService.getOAuthAuthorizationUrl(
                 validatedProvider,
                 request,
-                intendedRedirectUrl
+                intendedRedirectUrl,
+                undefined,
+                isLocale(pickedLocale) ? pickedLocale : null
             );
 
             // Set the state nonce as an HttpOnly cookie so the callback can verify the
@@ -480,11 +488,11 @@ export class AuthController extends BaseController {
             });
         } catch (error) {
             this.logger.error('OAuth initiation failed', error);
-            
+
             if (error instanceof SecurityError) {
                 return AuthController.createErrorResponse(error.message, error.statusCode);
             }
-            
+
             return AuthController.handleError(error, 'initiate OAuth');
         }
     }
@@ -497,7 +505,7 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             const validatedProvider = oauthProviderSchema.parse(routeContext.pathParams.provider);
@@ -534,7 +542,7 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             const authService = new AuthService(env);
@@ -561,7 +569,7 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             const validatedProvider = oauthProviderSchema.parse(routeContext.pathParams.provider);
@@ -570,7 +578,7 @@ export class AuthController extends BaseController {
             await authService.unlinkOAuthIdentity(user.id, validatedProvider);
 
             return AuthController.createSuccessResponse({
-                message: 'Provider unlinked successfully',
+                message: msg('Provider unlinked successfully'),
             });
         } catch (error) {
             if (error instanceof SecurityError) {
@@ -579,7 +587,7 @@ export class AuthController extends BaseController {
             return AuthController.handleError(error, 'unlink provider');
         }
     }
-    
+
     /**
      * Handle OAuth callback
      * GET /api/auth/callback/:provider
@@ -587,22 +595,22 @@ export class AuthController extends BaseController {
     static async handleOAuthCallback(request: Request, env: Env, _ctx: ExecutionContext, routeContext: RouteContext): Promise<Response> {
         try {
             const validatedProvider = oauthProviderSchema.parse(routeContext.pathParams.provider);
-            
+
             const code = routeContext.queryParams.get('code');
             const state = routeContext.queryParams.get('state');
             const error = routeContext.queryParams.get('error');
-            
+
             if (error) {
                 this.logger.error('OAuth provider returned error', { provider: validatedProvider, error });
                 const baseUrl = new URL(request.url).origin;
                 return Response.redirect(`${baseUrl}/?error=oauth_failed`, 302);
             }
-            
+
             if (!code || !state) {
                 const baseUrl = new URL(request.url).origin;
                 return Response.redirect(`${baseUrl}/?error=missing_params`, 302);
             }
-            
+
             const authService = new AuthService(env);
             const baseOrigin = new URL(request.url).origin;
 
@@ -654,16 +662,16 @@ export class AuthController extends BaseController {
             if (!(await honorAnalyticsChoice(env, request, result.user.id))) {
                 serverAnalytics(env).capture(result.isNewUser ? 'account_created' : 'signed_in', result.user.id, { method: validatedProvider }, await personUpdateOf(env, result.user.id));
             }
-            
+
             const baseUrl = new URL(request.url).origin;
-            
+
             // Defense-in-depth: never trust the stored redirect blindly. Re-validate it
             // at callback time and fall back to home if it is unsafe.
             const safeRedirect = result.redirectUrl
                 ? validateRedirectUrl(result.redirectUrl, request)
                 : null;
             const redirectLocation = safeRedirect || `${baseUrl}/`;
-            
+
             // Create redirect response with secure auth cookies
             const response = new Response(null, {
                 status: 302,
@@ -671,7 +679,7 @@ export class AuthController extends BaseController {
                     'Location': redirectLocation
                 }
             });
-            
+
             setSecureAuthCookies(response, {
                 accessToken: result.accessToken,
             });
@@ -696,7 +704,7 @@ export class AuthController extends BaseController {
                     response,
                 );
             }
-            
+
             return response;
         } catch (error) {
             // A paused sign-up is expected while the pause is on, so it stays out of error reporting.
@@ -720,14 +728,14 @@ export class AuthController extends BaseController {
         try {
             // Use the same middleware authentication logic but don't require auth
             const userSession = await authMiddleware(request, env);
-            
+
             if (!userSession) {
                 return AuthController.createSuccessResponse({
                     authenticated: false,
                     user: null
                 });
             }
-            
+
             return AuthController.createSuccessResponse({
                 authenticated: true,
                 user: {
@@ -753,7 +761,7 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             const sessionService = new SessionService(env);
@@ -775,18 +783,18 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             // Extract session ID from URL
             const sessionIdToRevoke = routeContext.pathParams.sessionId;
 
             const sessionService = new SessionService(env);
-            
+
             await sessionService.revokeUserSession(sessionIdToRevoke, user.id);
 
             return AuthController.createSuccessResponse({
-                message: 'Session revoked successfully'
+                message: msg('Session revoked successfully')
             });
         } catch (error) {
             return AuthController.handleError(error, 'revoke session');
@@ -801,7 +809,7 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             const apiKeyService = new ApiKeyService(env);
@@ -833,7 +841,7 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
             const bodyResult = await AuthController.parseJsonBody<{ name?: string }>(request);
@@ -844,7 +852,7 @@ export class AuthController extends BaseController {
             const { name } = bodyResult.data!;
 
             if (!name || typeof name !== 'string' || name.trim().length === 0) {
-                return AuthController.createErrorResponse('API key name is required', 400);
+                return AuthController.createErrorResponse(msg('API key name is required'), 400);
             }
 
             const sanitizedName = name.trim().substring(0, 100);
@@ -854,7 +862,7 @@ export class AuthController extends BaseController {
             const activeKeyCount = await apiKeyService.getActiveApiKeyCount(user.id);
             if (activeKeyCount >= AuthController.MAX_API_KEYS_PER_USER) {
                 return AuthController.createErrorResponse(
-                    `Maximum of ${AuthController.MAX_API_KEYS_PER_USER} API keys allowed. Please revoke an existing key before creating a new one.`,
+                    t("Maximum of {value1} API keys allowed. Please revoke an existing key before creating a new one.", { value1: AuthController.MAX_API_KEYS_PER_USER }),
                     400
                 );
             }
@@ -873,7 +881,7 @@ export class AuthController extends BaseController {
                 key, // Return the actual key only once
                 keyPreview,
                 name: sanitizedName,
-                message: 'API key created successfully'
+                message: msg('API key created successfully')
             });
         } catch (error) {
             return AuthController.handleError(error, 'create API key');
@@ -888,18 +896,18 @@ export class AuthController extends BaseController {
         try {
             const user = routeContext.user;
             if (!user) {
-                return AuthController.createErrorResponse('Unauthorized', 401);
+                return AuthController.createErrorResponse(msg('Unauthorized'), 401);
             }
 
-            const keyId = routeContext.pathParams.keyId;            
-            
+            const keyId = routeContext.pathParams.keyId;
+
             const apiKeyService = new ApiKeyService(env);
             await apiKeyService.revokeApiKey(keyId, user.id);
 
             this.logger.info('API key revoked', { userId: user.id, keyId });
 
             return AuthController.createSuccessResponse({
-                message: 'API key revoked successfully'
+                message: msg('API key revoked successfully')
             });
         } catch (error) {
             return AuthController.handleError(error, 'revoke API key');
@@ -930,38 +938,38 @@ export class AuthController extends BaseController {
             }
 
             if (!apiKeyRaw) {
-                return AuthController.createErrorResponse('Missing API key', 401);
+                return AuthController.createErrorResponse(msg('Missing API key'), 401);
             }
 
             // Basic hardening: avoid hashing arbitrarily large inputs
             if (apiKeyRaw.length > 256) {
-                return AuthController.createErrorResponse('Invalid API key', 401);
+                return AuthController.createErrorResponse(msg('Invalid API key'), 401);
             }
 
             // Only accept base64url-ish keys (matches generateApiKey())
             if (!/^[A-Za-z0-9_-]+$/.test(apiKeyRaw)) {
-                return AuthController.createErrorResponse('Invalid API key', 401);
+                return AuthController.createErrorResponse(msg('Invalid API key'), 401);
             }
 
             const keyHash = await sha256Hash(apiKeyRaw);
             const apiKeyService = new ApiKeyService(env);
             const apiKey = await apiKeyService.findApiKeyByHash(keyHash);
             if (!apiKey) {
-                return AuthController.createErrorResponse('Invalid API key', 401);
+                return AuthController.createErrorResponse(msg('Invalid API key'), 401);
             }
 
             const userService = new UserService(env);
             const user = await userService.findUser({ id: apiKey.userId });
             if (!user) {
-                return AuthController.createErrorResponse('Invalid API key', 401);
+                return AuthController.createErrorResponse(msg('Invalid API key'), 401);
             }
 
             // Check user account status
             if (user.deletedAt || !user.isActive || user.isSuspended) {
-                return AuthController.createErrorResponse('Invalid API key', 401);
+                return AuthController.createErrorResponse(msg('Invalid API key'), 401);
             }
             if (user.lockedUntil && user.lockedUntil > new Date()) {
-                return AuthController.createErrorResponse('Account temporarily locked', 401);
+                return AuthController.createErrorResponse(msg('Account temporarily locked'), 401);
             }
 
             const jwtUtils = JWTUtils.getInstance(env);
@@ -1003,23 +1011,23 @@ export class AuthController extends BaseController {
     static async getCsrfToken(request: Request, _env: Env, _ctx: ExecutionContext, _routeContext: RouteContext): Promise<Response> {
         try {
             const token = CsrfService.getOrGenerateToken(request, false);
-            
-            const response = AuthController.createSuccessResponse({ 
+
+            const response = AuthController.createSuccessResponse({
                 token,
                 headerName: CsrfService.defaults.headerName,
                 expiresIn: Math.floor(CsrfService.defaults.tokenTTL / 1000)
             });
-            
+
             // Set the token in cookie with proper expiration
             const maxAge = Math.floor(CsrfService.defaults.tokenTTL / 1000);
             CsrfService.setTokenCookie(response, token, maxAge);
-            
+
             return response;
         } catch (error) {
             return AuthController.handleError(error, 'get CSRF token');
         }
     }
-    
+
     /**
      * Get available authentication providers
      * GET /api/auth/providers
@@ -1039,10 +1047,10 @@ export class AuthController extends BaseController {
                 emailSending: isEmailSendingEnabled(env)
             };
             const hasOAuth = providers.google || providers.github || providers.cloudflare;
-            
+
             // Include CSRF token with provider info
             const csrfToken = CsrfService.getOrGenerateToken(request, false);
-            
+
             const response = AuthController.createSuccessResponse({
                 providers,
                 hasOAuth,
@@ -1050,15 +1058,15 @@ export class AuthController extends BaseController {
                 csrfToken,
                 csrfExpiresIn: Math.floor(CsrfService.defaults.tokenTTL / 1000)
             });
-            
+
             // Set CSRF token cookie with proper expiration
             const maxAge = Math.floor(CsrfService.defaults.tokenTTL / 1000);
             CsrfService.setTokenCookie(response, csrfToken, maxAge);
-            
+
             return response;
         } catch (error) {
             this.logger.error('Get auth providers error', error);
-            return AuthController.createErrorResponse('Failed to get authentication providers', 500);
+            return AuthController.createErrorResponse(msg('Failed to get authentication providers'), 500);
         }
     }
 

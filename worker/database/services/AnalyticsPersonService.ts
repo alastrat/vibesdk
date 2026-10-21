@@ -2,6 +2,7 @@
 
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import * as schema from '../schema';
+import { PREFERENCES_OBJECT } from '../preferences-sql';
 import { BaseService } from './BaseService';
 import type { AnalyticsOptOutSource } from '../../../shared/types/telemetry';
 import type { SellerLevel } from '../../../shared/types/seller-levels';
@@ -10,8 +11,6 @@ import type { SellerLevel } from '../../../shared/types/seller-levels';
 const ID_CHUNK = 50;
 const OPT_OUT = sql`json_extract(${schema.users.preferences}, '$.analyticsOptOut')`;
 const OPT_OUT_SOURCE = sql`json_extract(${schema.users.preferences}, '$.analyticsOptOutSource')`;
-/** The stored preferences when they are a JSON object; a NULL, a JSON string or invalid JSON starts over from `{}`. */
-const PREFERENCES_OBJECT = sql`CASE WHEN json_valid(${schema.users.preferences}) AND json_type(${schema.users.preferences}) = 'object' THEN ${schema.users.preferences} ELSE '{}' END`;
 
 export class AnalyticsPersonService extends BaseService {
 	async optedOutAmong(userIds: readonly string[]): Promise<Set<string>> {

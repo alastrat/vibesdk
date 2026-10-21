@@ -1,3 +1,5 @@
+import { assertWithinLimit } from '../i18n/plan-limits';
+import { msg } from '../../../shared/i18n/translate';
 /**
  * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, buy
  * extra credits, change their card, pay a failed renewal and read their invoices. Each asks Stripe and changes no row;
@@ -27,8 +29,9 @@ import {
 	type InvoiceView,
 } from '../../../shared/types/billing';
 import { isCurrentTermsVersion, TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
-import { assertWithinLimit, formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
+import { formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
+import type { Translator } from '../../../shared/i18n/translate';
 import { createLogger } from '../../logger';
 import { appBaseUrl } from '../email/links';
 import { stripeFromEnv } from '../payments/config';
@@ -45,26 +48,26 @@ import { billingEventDepsFromEnv } from './wiring';
 const logger = createLogger('BillingActions');
 
 export const BILLING_MESSAGES = {
-	notSetUp: "Plans aren't set up on this deployment yet.",
-	pickPlan: 'Pick Pro or Premium.',
-	alreadyPaying: 'You already have a plan. Change it on the billing page.',
-	noPlan: "You don't have Pro or Premium.",
-	paymentFailing: "Your last payment didn't go through. Pay it on the billing page first.",
-	declined: 'Your card was declined. Change your card on the billing page, then try again.',
-	notEnding: "Your plan isn't set to end.",
-	noCustomer: "You don't have billing details yet.",
-	creditsAmount: 'Pick 5,000 to 1,000,000 credits, in thousands.',
-	noCheckout: "We couldn't find that checkout.",
-	noRenewalTerms: 'Extra credits have no renewal to agree to.',
-	checkoutFinished: 'This checkout is already finished.',
-	consentRequest: 'Agree to the terms shown, then try again.',
-	priceChanged: 'The price changed. Check it and agree again.',
-	cardMode: 'Choose whether to save the card or pay with it.',
-	cardNotSaved: "Your card wasn't saved. Try again.",
-	noInvoice: "We couldn't find that invoice.",
-	noInvoicePdf: "That invoice doesn't have a PDF yet.",
+	notSetUp: msg("Plans aren't set up on this deployment yet."),
+	pickPlan: msg('Pick Pro or Premium.'),
+	alreadyPaying: msg('You already have a plan. Change it on the billing page.'),
+	noPlan: msg("You don't have Pro or Premium."),
+	paymentFailing: msg("Your last payment didn't go through. Pay it on the billing page first."),
+	declined: msg('Your card was declined. Change your card on the billing page, then try again.'),
+	notEnding: msg("Your plan isn't set to end."),
+	noCustomer: msg("You don't have billing details yet."),
+	creditsAmount: msg('Pick 5,000 to 1,000,000 credits, in thousands.'),
+	noCheckout: msg("We couldn't find that checkout."),
+	noRenewalTerms: msg('Extra credits have no renewal to agree to.'),
+	checkoutFinished: msg('This checkout is already finished.'),
+	consentRequest: msg('Agree to the terms shown, then try again.'),
+	priceChanged: msg('The price changed. Check it and agree again.'),
+	cardMode: msg('Choose whether to save the card or pay with it.'),
+	cardNotSaved: msg("Your card wasn't saved. Try again."),
+	noInvoice: msg("We couldn't find that invoice."),
+	noInvoicePdf: msg("That invoice doesn't have a PDF yet."),
 	/** Any Stripe failure, in Estori's words: billing is Estori's own page. */
-	paymentsUnreachable: "We couldn't reach payments. Try again in a moment.",
+	paymentsUnreachable: msg("We couldn't reach payments. Try again in a moment."),
 } as const;
 
 export type BillingActionResult<T> =
@@ -107,6 +110,8 @@ export interface BillingActionDeps {
 	nowMs: number;
 	/** The billing-checkout pause for this seller: it refuses a plan checkout, a plan change and extra credits. */
 	checkoutPaused(userId: string): Promise<boolean>;
+	/** The language the checkout's wording, which the seller agrees to, is written in. */
+	i18n: Translator;
 }
 
 type Failure = Extract<BillingActionResult<never>, { message: string }>;
@@ -169,9 +174,9 @@ function checkoutReturnUrl(deps: BillingActionDeps): string {
 }
 
 /** The wording of a plan session, or the refusal for a promotion whose terms can't be stated exactly. */
-function termsOf(plan: PaidPlanId, session: StripeCheckoutSession): BillingActionResult<CheckoutTermsView> {
+function termsOf(deps: BillingActionDeps, plan: PaidPlanId, session: StripeCheckoutSession): BillingActionResult<CheckoutTermsView> {
 	try {
-		return ok(termsViewOf(plan, session));
+		return ok(termsViewOf(plan, session, deps.i18n));
 	} catch (error) {
 		if (!(error instanceof UnreadablePromotionError)) throw error;
 		logger.warn('A checkout was refused because its promotion can not be stated exactly', { sessionId: session.id, couponId: error.couponId, message: error.message });
@@ -240,8 +245,8 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 				replaces,
 			}),
 		);
-		const terms = termsOf(plan, session);
-		return terms.ok ? clientStart(session, publishableKey, planOrder(plan), terms.value) : terms;
+		const terms = termsOf(deps, plan, session);
+		return terms.ok ? clientStart(session, publishableKey, planOrder(plan, deps.i18n), terms.value) : terms;
 	});
 }
 
@@ -401,7 +406,7 @@ async function openPlanCheckout(deps: BillingActionDeps, userId: string, session
 /** The consent sentence, button and first payment of the seller's open subscription checkout, as Stripe has it now. */
 export async function checkoutTerms(deps: BillingActionDeps, userId: string, sessionId: unknown): Promise<BillingActionResult<CheckoutTermsView>> {
 	const open = await openPlanCheckout(deps, userId, sessionId);
-	return open.ok ? termsOf(open.value.plan, open.value.session) : open;
+	return open.ok ? termsOf(deps, open.value.plan, open.value.session) : open;
 }
 
 function consentRequestOf(body: unknown): CheckoutConsentRequest | null {
@@ -422,7 +427,7 @@ export async function recordCheckoutConsent(deps: BillingActionDeps, userId: str
 	const open = await openPlanCheckout(deps, userId, request.sessionId);
 	if (!open.ok) return open;
 	const { session, plan } = open.value;
-	const terms = termsOf(plan, session);
+	const terms = termsOf(deps, plan, session);
 	if (!terms.ok) return terms;
 	if (request.consentText !== terms.value.consentText) return fail(409, BILLING_MESSAGES.priceChanged);
 	await deps.consents.recordConsent({ sessionId: session.id, userId, plan, termsVersion: TERMS_VERSION, consentText: terms.value.consentText, now: new Date(deps.nowMs) });
@@ -648,7 +653,7 @@ export async function invoicePdf(deps: BillingActionDeps, userId: string, invoic
 	});
 }
 
-export function billingActionDepsFromEnv(env: Env, request: Request): BillingActionDeps {
+export function billingActionDepsFromEnv(env: Env, request: Request, i18n: Translator): BillingActionDeps {
 	const billing = new BillingService(env);
 	return {
 		stripe: stripeFromEnv(env),
@@ -661,5 +666,6 @@ export function billingActionDepsFromEnv(env: Env, request: Request): BillingAct
 		baseUrl: appBaseUrl(env, request),
 		nowMs: Date.now(),
 		checkoutPaused: (userId) => isFlagOn(env, 'billing-checkout-paused', userId),
+		i18n,
 	};
 }

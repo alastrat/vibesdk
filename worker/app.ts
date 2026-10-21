@@ -10,10 +10,13 @@ import { CsrfService } from './services/csrf/CsrfService';
 import { SecurityError, SecurityErrorType } from 'shared/types/errors';
 import { getGlobalConfigurableSettings } from './config';
 import { AuthConfig, setAuthLevel } from './middleware/auth/routeAuth';
+import { runWithLocale, t } from './services/i18n/request-locale';
+import { localeFromAcceptLanguage } from '../shared/i18n/locales';
 // import { initHonoSentry } from './observability/sentry';
 
 export function createApp(env: Env): Hono<AppEnv> {
     const app = new Hono<AppEnv>();
+    app.use('/api/*', (c, next) => runWithLocale(localeFromAcceptLanguage(c.req.header('Accept-Language') ?? null), next));
 
     // Observability: Sentry error reporting & context
     // initHonoSentry(app);
@@ -74,7 +77,7 @@ export function createApp(env: Env): Hono<AppEnv> {
             if (error instanceof SecurityError && error.type === SecurityErrorType.CSRF_VIOLATION) {
                 return new Response(JSON.stringify({ 
                     error: { 
-                        message: 'CSRF validation failed',
+                        message: t('CSRF validation failed'),
                         type: SecurityErrorType.CSRF_VIOLATION
                     }
                 }), {

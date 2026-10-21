@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /**
  * Review and moderation for admins: the pending queue, snapshot files,
  * screenshots, approve or reject decisions, and removing a site from Discover.
@@ -36,7 +37,7 @@ import type {
 } from './types';
 
 const REVIEW_SCREENSHOT_CACHE = 'private, max-age=300';
-const NO_LONGER_IN_REVIEW_MESSAGE = 'This version is no longer in review';
+const NO_LONGER_IN_REVIEW_MESSAGE = msg('This version is no longer in review');
 
 export class ReviewAdminController extends BaseController {
     static logger = createLogger('ReviewAdminController');
@@ -54,7 +55,7 @@ export class ReviewAdminController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error listing pending templates', error);
-            return ReviewAdminController.createErrorResponse<PendingReviewsData>('Failed to load the review queue', 500);
+            return ReviewAdminController.createErrorResponse<PendingReviewsData>(msg('Failed to load the review queue'), 500);
         }
     }
 
@@ -82,7 +83,7 @@ export class ReviewAdminController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error listing sales', error);
-            return ReviewAdminController.createErrorResponse<AdminSalesData>('Failed to load sales', 500);
+            return ReviewAdminController.createErrorResponse<AdminSalesData>(msg('Failed to load sales'), 500);
         }
     }
 
@@ -95,14 +96,14 @@ export class ReviewAdminController extends BaseController {
         try {
             const files = await ReviewAdminController.loadSnapshot(env, context.pathParams.id);
             if (!files) {
-                return ReviewAdminController.createErrorResponse<ReviewVersionFilesData>('Version not found', 404);
+                return ReviewAdminController.createErrorResponse<ReviewVersionFilesData>(msg('Version not found'), 404);
             }
             return ReviewAdminController.createSuccessResponse<ReviewVersionFilesData>({
                 files: files.map((file) => ({ path: file.path, bytes: file.bytes.byteLength })),
             });
         } catch (error) {
             this.logger.error('Error listing template files', error);
-            return ReviewAdminController.createErrorResponse<ReviewVersionFilesData>('Failed to read the snapshot', 500);
+            return ReviewAdminController.createErrorResponse<ReviewVersionFilesData>(msg('Failed to read the snapshot'), 500);
         }
     }
 
@@ -115,12 +116,12 @@ export class ReviewAdminController extends BaseController {
         try {
             const path = new URL(request.url).searchParams.get('path');
             if (!path) {
-                return ReviewAdminController.createErrorResponse<ReviewVersionFileData>('path is required', 400);
+                return ReviewAdminController.createErrorResponse<ReviewVersionFileData>(msg('path is required'), 400);
             }
             const files = await ReviewAdminController.loadSnapshot(env, context.pathParams.id);
             const file = files?.find((candidate) => candidate.path === path);
             if (!file) {
-                return ReviewAdminController.createErrorResponse<ReviewVersionFileData>('File not found', 404);
+                return ReviewAdminController.createErrorResponse<ReviewVersionFileData>(msg('File not found'), 404);
             }
             const content = decodeText(file.bytes);
             return ReviewAdminController.createSuccessResponse<ReviewVersionFileData>({
@@ -131,7 +132,7 @@ export class ReviewAdminController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error reading template file', error);
-            return ReviewAdminController.createErrorResponse<ReviewVersionFileData>('Failed to read the file', 500);
+            return ReviewAdminController.createErrorResponse<ReviewVersionFileData>(msg('Failed to read the file'), 500);
         }
     }
 
@@ -144,22 +145,22 @@ export class ReviewAdminController extends BaseController {
         try {
             const { id: versionId, kind } = context.pathParams;
             if (!versionId || !kind || !isTemplateShotKind(kind)) {
-                return ReviewAdminController.createErrorResponse('Screenshot not found', 404);
+                return ReviewAdminController.createErrorResponse(msg('Screenshot not found'), 404);
             }
             const version = await new TemplateService(env).getVersion(versionId);
             if (!version) {
-                return ReviewAdminController.createErrorResponse('Screenshot not found', 404);
+                return ReviewAdminController.createErrorResponse(msg('Screenshot not found'), 404);
             }
             const key = kind === 'desktop' ? version.desktopShotKey : version.mobileShotKey;
             const image = await templateImageResponse(env.TEMPLATES_BUCKET, key, REVIEW_SCREENSHOT_CACHE);
             if (!image) {
-                return ReviewAdminController.createErrorResponse('Screenshot not found', 404);
+                return ReviewAdminController.createErrorResponse(msg('Screenshot not found'), 404);
             }
             // Binary route: the router passes this Response through unchanged.
             return image as unknown as ControllerResponse<ApiResponse<never>>;
         } catch (error) {
             this.logger.error('Error serving review screenshot', error);
-            return ReviewAdminController.createErrorResponse('Internal server error', 500);
+            return ReviewAdminController.createErrorResponse(msg('Internal server error'), 500);
         }
     }
 
@@ -175,10 +176,10 @@ export class ReviewAdminController extends BaseController {
             const listings = new TemplateService(env);
             const row = await listings.getVersionWithListing(versionId);
             if (!row) {
-                return ReviewAdminController.createErrorResponse<PaidVersionActionData>('Version not found', 404);
+                return ReviewAdminController.createErrorResponse<PaidVersionActionData>(msg('Version not found'), 404);
             }
             if (!canReview(row.version.status)) {
-                return ReviewAdminController.createErrorResponse<PaidVersionActionData>('Only versions in review can be approved', 400);
+                return ReviewAdminController.createErrorResponse<PaidVersionActionData>(msg('Only versions in review can be approved'), 400);
             }
             const approved = await listings.approveVersion({
                 listingId: row.listing.id,
@@ -192,7 +193,7 @@ export class ReviewAdminController extends BaseController {
             return ReviewAdminController.createSuccessResponse<PaidVersionActionData>({ versionId, status: 'approved' });
         } catch (error) {
             this.logger.error('Error approving template version', error);
-            return ReviewAdminController.createErrorResponse<PaidVersionActionData>('Failed to approve the version', 500);
+            return ReviewAdminController.createErrorResponse<PaidVersionActionData>(msg('Failed to approve the version'), 500);
         }
     }
 
@@ -215,10 +216,10 @@ export class ReviewAdminController extends BaseController {
             const templates = new TemplateService(env);
             const version = await templates.getVersion(versionId);
             if (!version) {
-                return ReviewAdminController.createErrorResponse<PaidVersionActionData>('Version not found', 404);
+                return ReviewAdminController.createErrorResponse<PaidVersionActionData>(msg('Version not found'), 404);
             }
             if (!canReview(version.status)) {
-                return ReviewAdminController.createErrorResponse<PaidVersionActionData>('Only versions in review can be rejected', 400);
+                return ReviewAdminController.createErrorResponse<PaidVersionActionData>(msg('Only versions in review can be rejected'), 400);
             }
             const rejected = await templates.rejectVersion(versionId, context.user!.id, reason.value);
             if (!rejected) {
@@ -227,7 +228,7 @@ export class ReviewAdminController extends BaseController {
             return ReviewAdminController.createSuccessResponse<PaidVersionActionData>({ versionId, status: 'rejected' });
         } catch (error) {
             this.logger.error('Error rejecting template version', error);
-            return ReviewAdminController.createErrorResponse<PaidVersionActionData>('Failed to reject the version', 500);
+            return ReviewAdminController.createErrorResponse<PaidVersionActionData>(msg('Failed to reject the version'), 500);
         }
     }
 
@@ -253,12 +254,12 @@ export class ReviewAdminController extends BaseController {
                 removal.value.removed ? { by: context.user!.id, reason: removal.value.reason } : null,
             );
             if (!changed) {
-                return ReviewAdminController.createErrorResponse<DiscoverRemovalData>('App not found', 404);
+                return ReviewAdminController.createErrorResponse<DiscoverRemovalData>(msg('App not found'), 404);
             }
             return ReviewAdminController.createSuccessResponse<DiscoverRemovalData>({ appId, removed: removal.value.removed });
         } catch (error) {
             this.logger.error('Error changing Discover removal', error);
-            return ReviewAdminController.createErrorResponse<DiscoverRemovalData>('Failed to change the removal', 500);
+            return ReviewAdminController.createErrorResponse<DiscoverRemovalData>(msg('Failed to change the removal'), 500);
         }
     }
 
@@ -282,13 +283,13 @@ export class ReviewAdminController extends BaseController {
             const changed = await new AppService(env).setShowcased(appId, change.value.showcased);
             if (!changed) {
                 return change.value.showcased
-                    ? ReviewAdminController.createErrorResponse<ShowcaseChangeData>('Only public stores in Discover can be shown on the landing page', 409)
-                    : ReviewAdminController.createErrorResponse<ShowcaseChangeData>('App not found', 404);
+                    ? ReviewAdminController.createErrorResponse<ShowcaseChangeData>(msg('Only public stores in Discover can be shown on the landing page'), 409)
+                    : ReviewAdminController.createErrorResponse<ShowcaseChangeData>(msg('App not found'), 404);
             }
             return ReviewAdminController.createSuccessResponse<ShowcaseChangeData>({ appId, showcased: change.value.showcased });
         } catch (error) {
             this.logger.error('Error changing the landing page showcase', error);
-            return ReviewAdminController.createErrorResponse<ShowcaseChangeData>('Failed to change the showcase', 500);
+            return ReviewAdminController.createErrorResponse<ShowcaseChangeData>(msg('Failed to change the showcase'), 500);
         }
     }
 
@@ -310,7 +311,7 @@ export class ReviewAdminController extends BaseController {
             });
         } catch (error) {
             this.logger.error('Error refreshing showcase screenshots', error);
-            return ReviewAdminController.createErrorResponse<ShowcaseRefreshData>('Failed to refresh the showcase images', 500);
+            return ReviewAdminController.createErrorResponse<ShowcaseRefreshData>(msg('Failed to refresh the showcase images'), 500);
         }
     }
 

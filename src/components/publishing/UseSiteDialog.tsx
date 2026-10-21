@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Button, InputArea } from '@cloudflare/kumo';
@@ -21,6 +22,7 @@ interface UseSiteDialogProps {
 }
 
 export function UseSiteDialog({ sourceAppId, sourceTitle, open, onOpenChange }: UseSiteDialogProps) {
+	useI18n();
 	const navigate = useNavigate();
 	const { capabilities } = useFeature();
 	const [description, setDescription] = useState('');
@@ -38,16 +40,13 @@ export function UseSiteDialog({ sourceAppId, sourceTitle, open, onOpenChange }: 
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>Use {sourceTitle}</DialogTitle>
-					<DialogDescription>
-						Your new app starts as a copy of this site. Describe your business and the agent rewrites the text,
-						names, prices and images for you, or leave it empty to keep an exact copy.
-					</DialogDescription>
+					<DialogTitle>{t("Use")}{sourceTitle}</DialogTitle>
+					<DialogDescription>{t("Your new app starts as a copy of this site. Describe your business and the agent rewrites the text, names, prices and images for you, or leave it empty to keep an exact copy.")}</DialogDescription>
 				</DialogHeader>
 				<InputArea
 					id="reuse-description"
-					label="Describe your business (optional)"
-					placeholder="A family bakery in Lisbon that sells sourdough and pastries"
+					label={t("Describe your business (optional)")}
+					placeholder={t("A family bakery in Lisbon that sells sourdough and pastries")}
 					value={description}
 					maxLength={MAX_AGENT_QUERY_LENGTH}
 					onChange={(event) => setDescription(event.target.value)}
@@ -58,9 +57,7 @@ export function UseSiteDialog({ sourceAppId, sourceTitle, open, onOpenChange }: 
 						value={effectiveModel}
 						onChange={setModelId}
 					/>
-					<Button variant="primary" onClick={start}>
-						Start building
-					</Button>
+					<Button variant="primary" onClick={start}>{t("Start building")}</Button>
 				</div>
 			</DialogContent>
 		</Dialog>

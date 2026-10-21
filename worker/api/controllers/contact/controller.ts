@@ -1,3 +1,4 @@
+import { msg } from '../../../../shared/i18n/translate';
 /** Contact-sales requests: anyone can send one, and admins can read them. */
 
 import { BaseController } from '../baseController';
@@ -76,7 +77,7 @@ export class ContactController extends BaseController {
 			return ContactController.createSuccessResponse<ContactAdminData>(toContactAdminData(await new ContactService(env).listRecent()));
 		} catch (error) {
 			this.logger.error('Error listing contact requests', error);
-			return ContactController.createErrorResponse<ContactAdminData>("Couldn't load the contact requests", 500);
+			return ContactController.createErrorResponse<ContactAdminData>(msg("Couldn't load the contact requests"), 500);
 		}
 	}
 }

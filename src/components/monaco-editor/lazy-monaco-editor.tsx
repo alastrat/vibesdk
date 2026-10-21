@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { Loader2 } from 'lucide-react';
+import { t } from '@/lib/i18n';
 import type { MonacoEditorProps, MonacoDiffEditorProps } from './monaco-editor';
 
 const MonacoEditorImpl = lazy(() =>
@@ -24,10 +25,10 @@ function MonacoEditorFallback({ className }: { className?: string }) {
 				/>
 				<div className="grid gap-1">
 					<p className="text-sm font-medium text-text-primary">
-						Preparing code editor
+						{t('Preparing code editor')}
 					</p>
 					<p className="text-xs text-kumo-subtle">
-						Loading syntax highlighting and language tools…
+						{t('Loading syntax highlighting and language tools…')}
 					</p>
 				</div>
 			</div>

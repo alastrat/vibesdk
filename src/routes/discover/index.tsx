@@ -1,3 +1,4 @@
+import { t, useI18n } from '@/lib/i18n';
 import { useNavigate, useSearchParams } from 'react-router';
 import { motion } from 'framer-motion';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
@@ -25,6 +26,7 @@ import { PageMeta } from '@/components/public-site/solution-page';
 import { DISCOVER_PAGE } from '@/content/public-pages';
 
 export default function DiscoverPage() {
+	useI18n();
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 
@@ -111,9 +113,7 @@ export default function DiscoverPage() {
 								icon={GlobeIcon}
 								weight="duotone"
 								className="-rotate-30"
-							/>
-							Discover
-						</h1>
+							/>{t("Discover")}</h1>
 						<p className="text-kumo-subtle text-lg font-funky-mono tracking-tight">
 							{DISCOVER_PAGE.description}
 						</p>
@@ -125,7 +125,7 @@ export default function DiscoverPage() {
 							searchQuery={searchQuery}
 							onSearchChange={setSearchQuery}
 							onSearchSubmit={handleSearchSubmit}
-							searchPlaceholder="Search apps..."
+							searchPlaceholder={t("Search apps...")}
 							showSearchButton={true}
 							filterFramework={filterFramework}
 							period={period}
@@ -136,11 +136,11 @@ export default function DiscoverPage() {
 
 						<div className="flex gap-2">
 							<Select value={category ?? 'all'} onValueChange={(value) => setFilter('category', value)}>
-								<SelectTrigger aria-label="Category" className="w-44">
+								<SelectTrigger aria-label={t("Category")} className="w-44">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">All categories</SelectItem>
+									<SelectItem value="all">{t("All categories")}</SelectItem>
 									{TEMPLATE_CATEGORIES.map((value) => (
 										<SelectItem key={value} value={value}>
 											{TEMPLATE_CATEGORY_LABELS[value]}
@@ -149,13 +149,13 @@ export default function DiscoverPage() {
 								</SelectContent>
 							</Select>
 							<Select value={pricing} onValueChange={(value) => setFilter('pricing', value)}>
-								<SelectTrigger aria-label="Price" className="w-32">
+								<SelectTrigger aria-label={t("Price")} className="w-32">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="all">Any price</SelectItem>
-									<SelectItem value="free">Free</SelectItem>
-									<SelectItem value="paid">Paid</SelectItem>
+									<SelectItem value="all">{t("Any price")}</SelectItem>
+									<SelectItem value="free">{t("Free")}</SelectItem>
+									<SelectItem value="paid">{t("Paid")}</SelectItem>
 								</SelectContent>
 							</Select>
 						</div>

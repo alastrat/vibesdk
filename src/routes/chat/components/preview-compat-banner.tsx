@@ -3,6 +3,7 @@ import { ExternalLink, TriangleAlert, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { isAppleWebKitBrowser, isCrossSitePreview } from '@/lib/utils';
+import { t } from '@/lib/i18n';
 
 const DISMISS_KEY = 'preview-compat-dismissed';
 
@@ -50,8 +51,7 @@ export function PreviewCompatBanner({ previewUrl }: PreviewCompatBannerProps) {
 		<Alert className="rounded-none border-x-0 border-t-0 flex items-center gap-3">
 			<TriangleAlert className="text-amber-500" />
 			<AlertDescription className="flex-1">
-				Preview may not fully load in Safari due to preview being served from a
-				different domain.
+				{t('Preview may not fully load in Safari due to preview being served from a different domain.')}
 			</AlertDescription>
 			<Button
 				variant="outline"
@@ -61,11 +61,11 @@ export function PreviewCompatBanner({ previewUrl }: PreviewCompatBannerProps) {
 				}
 			>
 				<ExternalLink />
-				Open in new tab
+				{t('Open in new tab')}
 			</Button>
 			<button
 				type="button"
-				aria-label="Dismiss"
+				aria-label={t('Dismiss')}
 				onClick={dismiss}
 				className="p-1 rounded hover:bg-kumo-elevated transition-colors"
 			>

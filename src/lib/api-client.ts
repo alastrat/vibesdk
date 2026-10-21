@@ -4,6 +4,7 @@
  * Features 401 response interception to trigger authentication modals
  */
 
+import { getLocale } from '@/lib/i18n';
 import type{
 	ApiResponse,
 	AppsListData,
@@ -59,6 +60,8 @@ import type{
 	CapabilitiesData,
 	AdminFlagsData,
 	AnalyticsPreferenceData,
+	Locale,
+	LocalePreferenceData,
 	TelemetryConfigData,
 	VaultConfigResponse,
 	VaultStatusResponse,
@@ -111,6 +114,14 @@ import type{
 	ShopperEmailTemplateFields,
 	ShopperEmailTemplateView,
 	ShopperEmailTestResult,
+	StoreTranslationOverview,
+	StoreTranslationPage,
+	StoreTranslationRow,
+	StoreTranslationRun,
+	StoreTranslationSettings,
+	StoreTranslationSettingsPatch,
+	StoreTranslationStoreSummary,
+	TaskView,
 	StoreRefundRequest,
 	StoreRefundResponse,
 	LiveStoreView,
@@ -150,6 +161,8 @@ import {
 } from '@/api-types';
 import { filenameOfDisposition } from './download';
 import { announcePlanLimit } from './plan-limit-events';
+import { msg } from './i18n';
+import { oauthStartPath } from './oauth-start';
 import { toast } from 'sonner';
 
 /** An invoice's PDF, ready to save. */
@@ -267,7 +280,7 @@ class ApiClient {
 	 * Get authentication headers for API requests
 	 */
 	private async getAuthHeaders(): Promise<Record<string, string>> {
-		const headers: Record<string, string> = {};
+		const headers: Record<string, string> = { 'Accept-Language': getLocale() };
 
 		// Add session token for anonymous users if not authenticated
 		// This will be handled automatically by cookies/credentials for authenticated users
@@ -304,6 +317,7 @@ class ApiClient {
 		try {
 			const response = await fetch(`${this.baseUrl}/api/auth/csrf-token`, {
 				method: 'GET',
+				headers: { 'Accept-Language': getLocale() },
 				credentials: 'include',
 			});
 
@@ -374,17 +388,18 @@ class ApiClient {
 	}
 
 	/**
-	 * Get authentication context message based on endpoint
+	 * Get the message that says why sign-in was asked for, from the endpoint that answered 401. The sign-in window
+	 * translates it as it shows it.
 	 */
 	private getAuthContextForEndpoint(endpoint: string): string {
-		if (endpoint.includes('/api/agent')) return 'to create applications';
-		if (endpoint.includes('/favorite')) return 'to favorite this app';
-		if (endpoint.includes('/star')) return 'to star this app';
-		// if (endpoint.includes('/fork')) return 'to fork this app';
-		// if (endpoint.includes('/apps')) return 'to access your apps';
-		if (endpoint.includes('/profile')) return 'to access your profile';
-		if (endpoint.includes('/settings')) return 'to access settings';
-		return 'to continue';
+		if (endpoint.includes('/api/agent')) return msg('Sign in to create applications');
+		if (endpoint.includes('/favorite')) return msg('Sign in to favorite this app');
+		if (endpoint.includes('/star')) return msg('Sign in to star this app');
+		// if (endpoint.includes('/fork')) return msg('Sign in to fork this app');
+		// if (endpoint.includes('/apps')) return msg('Sign in to access your apps');
+		if (endpoint.includes('/profile')) return msg('Sign in to access your profile');
+		if (endpoint.includes('/settings')) return msg('Sign in to access settings');
+		return msg('Sign in to continue');
 	}
 
 	/**
@@ -563,6 +578,11 @@ class ApiClient {
 	/** Quiet: the settings card shows its own error. */
 	async setAnalyticsPreference(optedOut: boolean): Promise<ApiResponse<AnalyticsPreferenceData>> {
 		return this.request<AnalyticsPreferenceData>('/api/user/analytics', { method: 'PUT', body: { optedOut } }, true);
+	}
+
+	/** Quiet: the language card and the picker report their own errors. */
+	async setLocale(locale: Locale): Promise<ApiResponse<LocalePreferenceData>> {
+		return this.request<LocalePreferenceData>('/api/user/locale', { method: 'PUT', body: { locale } }, true);
 	}
 
 	/** Every flag's value for the signed-in admin; quiet because non-admins get 403. */
@@ -864,6 +884,58 @@ class ApiClient {
 	/** Sends a template, saved or not, filled in with a sample order, to the signed-in seller. */
 	async sendShopperEmailTest(appId: string, kind: ShopperEmailKind, fields: ShopperEmailTemplateFields): Promise<ApiResponse<ShopperEmailTestResult>> {
 		return this.request<ShopperEmailTestResult>(`/api/stores/${encodeURIComponent(appId)}/emails/${kind}/test`, { method: 'POST', body: fields });
+	}
+
+	/** The signed-in seller's stores that have been deployed, with where each language of each stands. */
+	async getTranslationStores(): Promise<ApiResponse<StoreTranslationStoreSummary[]>> {
+		return this.request<StoreTranslationStoreSummary[]>('/api/translations/stores');
+	}
+
+	/** A store's translation settings and languages. Its texts are read again first when a deploy or publish is newer. */
+	async getStoreTranslations(appId: string): Promise<ApiResponse<StoreTranslationOverview>> {
+		return this.request<StoreTranslationOverview>(`/api/stores/${encodeURIComponent(appId)}/translations`);
+	}
+
+	async saveStoreTranslationSettings(appId: string, patch: StoreTranslationSettingsPatch): Promise<ApiResponse<StoreTranslationSettings>> {
+		return this.request<StoreTranslationSettings>(`/api/stores/${encodeURIComponent(appId)}/translations/settings`, { method: 'PUT', body: patch });
+	}
+
+	/** Translates the store into a language, turning it on first. `created` is false when that language was already queued or running. */
+	async runStoreTranslation(appId: string, locale: Locale): Promise<ApiResponse<StoreTranslationRun>> {
+		return this.request<StoreTranslationRun>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/run`, { method: 'POST' });
+	}
+
+	/** A page of the store's texts with their translations into a language; `query` searches both. */
+	async getStoreTranslationTexts(appId: string, locale: Locale, options: { query?: string; cursor?: string } = {}): Promise<ApiResponse<StoreTranslationPage>> {
+		const params = new URLSearchParams();
+		if (options.query) params.set('query', options.query);
+		if (options.cursor) params.set('cursor', options.cursor);
+		const query = params.toString();
+		return this.request<StoreTranslationPage>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts${query ? `?${query}` : ''}`);
+	}
+
+	/** Saves the seller's own words for a text; no translation task overwrites them. */
+	async saveStoreTranslationText(appId: string, locale: Locale, hash: string, text: string): Promise<ApiResponse<StoreTranslationRow>> {
+		return this.request<StoreTranslationRow>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts/${encodeURIComponent(hash)}`, { method: 'PUT', body: { text } });
+	}
+
+	/** Gives a text back its machine translation. */
+	async revertStoreTranslationText(appId: string, locale: Locale, hash: string): Promise<ApiResponse<StoreTranslationRow>> {
+		return this.request<StoreTranslationRow>(`/api/stores/${encodeURIComponent(appId)}/translations/${locale}/texts/${encodeURIComponent(hash)}`, { method: 'DELETE' });
+	}
+
+	/** The seller's background tasks, newest first; `appId` narrows them to one store's. */
+	async getTasks(appId?: string): Promise<ApiResponse<TaskView[]>> {
+		return this.request<TaskView[]>(appId ? `/api/tasks?appId=${encodeURIComponent(appId)}` : '/api/tasks');
+	}
+
+	async cancelTask(taskId: string): Promise<ApiResponse<TaskView>> {
+		return this.request<TaskView>(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, { method: 'POST' });
+	}
+
+	/** Queues a paused or failed task again where it stopped. */
+	async resumeTask(taskId: string): Promise<ApiResponse<TaskView>> {
+		return this.request<TaskView>(`/api/tasks/${encodeURIComponent(taskId)}/resume`, { method: 'POST' });
 	}
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
@@ -1723,6 +1795,8 @@ class ApiClient {
 		password: string;
 		name?: string;
 		acceptedTermsVersion: string;
+		/** The language the visitor was using, saved on the new account. */
+		locale?: Locale;
 	}): Promise<ApiResponse<RegisterResponseData>> {
 		return this.request<RegisterResponseData>('/api/auth/register', {
 			method: 'POST',
@@ -1814,16 +1888,8 @@ class ApiClient {
 	 * Initiate OAuth flow (redirects to provider)
 	 */
 	initiateOAuth(provider: OAuthProvider, redirectUrl?: string): void {
-		const oauthUrl = new URL(
-			`/api/auth/oauth/${provider}`,
-			window.location.origin,
-		);
-		if (redirectUrl) {
-			oauthUrl.searchParams.set('redirect_url', redirectUrl);
-		}
-
 		// Redirect to OAuth provider
-		window.location.href = oauthUrl.toString();
+		window.location.href = oauthStartPath(provider, redirectUrl);
 	}
 
 	/**
