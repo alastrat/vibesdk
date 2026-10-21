@@ -3,18 +3,25 @@
  * step reads the store's texts; each later step asks the model for one batch, checks the answers, retries what failed
  * once, and saves what is good as it lands. A text that stays bad is skipped for the task, so it can't loop. Texts that
  * already have a translation, the seller's included, are never missing, so they are never sent or overwritten.
+ *
+ * A language is ready for shoppers when the store has texts and at least half of the task's texts were translated; a
+ * task that translated less than half fails, and a store with no texts is done without a language to serve.
  */
 
 import { isLocale, type Locale } from '../../../shared/i18n/locales';
 import { msg } from '../../../shared/i18n/translate';
 import { TRANSLATION_BATCH_MAX_CHARS, TRANSLATION_BATCH_MAX_TEXTS, type StoreText } from '../../../shared/types/store-translations';
+import { TASK_FAILED_MESSAGE, type TaskProgress } from '../../../shared/types/tasks';
 import { StoreTranslationService } from '../../database/services/StoreTranslationService';
+import { createLogger } from '../../logger';
 import type { ModelCall, TaskKindHandler, TaskStepContext, TaskStepResult } from '../tasks/kinds';
 import { createTaskModel, type TaskModel } from '../tasks/task-model';
 import { CHARS_PER_TOKEN } from './estimate';
 import { normalizeText } from './extract';
-import { buildTranslationPrompt, checkTranslation, translationSchema, type TranslationItem } from './prompt';
+import { buildTranslationPrompt, checkTranslation, translationSchema, type TranslationAnswer, type TranslationItem } from './prompt';
 import { refreshStoreTexts, type RefreshedStoreTexts } from './texts';
+
+const logger = createLogger('StoreTranslation');
 
 export interface TranslatePayload {
 	appId: string;
@@ -33,6 +40,13 @@ const ITEM_ENVELOPE_TOKENS = 12;
 const MIN_OUTPUT_TOKENS = 512;
 /** A text is tried this many times in a step: once, and once more with its problem named. */
 const ATTEMPTS = 2;
+/**
+ * The batch size after 0, 1, and 2 or more failed steps in a row. A text that makes the model fail is found by taking
+ * smaller batches, and set aside once it is alone.
+ */
+const BATCH_SIZES = [TRANSLATION_BATCH_MAX_TEXTS, 10, 1];
+
+const TRANSLATED_TOO_LITTLE = msg("Couldn't translate most of your store's text.");
 
 /** The store's deployments could not be read, so the task waits and tries again. */
 class StoreUnavailableError extends Error {
@@ -59,7 +73,10 @@ interface Pending {
 	item: TranslationItem;
 }
 
-const NOTHING_TO_TRANSLATE: TaskStepResult = { progress: { done: 0, total: 0, skipped: 0 }, finished: true, calls: [] };
+/** A task that ends with no language to serve: nothing was read, or the store's own language was asked for. */
+function nothingToTranslate(): TaskStepResult {
+	return { progress: { done: 0, total: 0, skipped: 0 }, finished: true, calls: [] };
+}
 
 /** The texts that fit a batch's character limit, always at least one. */
 function withinBatchChars(texts: readonly StoreText[]): StoreText[] {
@@ -81,7 +98,7 @@ function outputTokenBudget(items: readonly TranslationItem[]): number {
 
 async function ask(model: TaskModel, source: Locale, target: Locale, items: readonly TranslationItem[], calls: ModelCall[]): Promise<Map<string, string>> {
 	const { system, prompt } = buildTranslationPrompt(source, target, items);
-	let result;
+	let result: { object: TranslationAnswer; call: ModelCall };
 	try {
 		result = await model.generate({ system, prompt, schema: translationSchema, maxOutputTokens: outputTokenBudget(items) });
 	} catch (error) {
@@ -108,7 +125,8 @@ function judge(pending: readonly Pending[], answers: ReadonlyMap<string, string>
 
 /**
  * Translates one batch and saves what is good after each attempt, so a failing retry loses nothing. Returns how many
- * texts were saved and the ones still bad after the retry. A model failure throws.
+ * texts were saved and the ones still bad after the retry. A model failure throws, unless the batch is down to one text
+ * after failed steps, when that text is given up on.
  */
 async function translateBatch(
 	model: TaskModel,
@@ -116,51 +134,76 @@ async function translateBatch(
 	payload: TranslatePayload,
 	source: Locale,
 	batch: readonly StoreText[],
-	now: number,
+	options: { giveUpOnModelFailure: boolean; now: number },
 ): Promise<{ saved: number; failed: StoreText[]; calls: ModelCall[] }> {
 	const calls: ModelCall[] = [];
 	let pending: Pending[] = batch.map((text, index) => ({ text, item: { id: String(index + 1), text: text.text } }));
 	let saved = 0;
 	for (let attempt = 0; attempt < ATTEMPTS && pending.length > 0; attempt += 1) {
-		const answers = await ask(model, source, payload.locale, pending.map((entry) => entry.item), calls);
+		let answers: Map<string, string>;
+		try {
+			answers = await ask(model, source, payload.locale, pending.map((entry) => entry.item), calls);
+		} catch (error) {
+			if (!options.giveUpOnModelFailure || !(error instanceof TranslationModelError)) throw error;
+			logger.warn('The model failed on a single text; skipping it', { appId: payload.appId, locale: payload.locale, hash: pending[0]?.text.hash, error: error.cause });
+			break;
+		}
 		const { good, bad } = judge(pending, answers);
-		await store.upsertMachine(payload.appId, payload.locale, good.map(({ text, translation }) => ({ hash: text.hash, source: text.text, text: translation })), now);
+		await store.upsertMachine(payload.appId, payload.locale, good.map(({ text, translation }) => ({ hash: text.hash, source: text.text, text: translation })), options.now);
 		saved += good.length;
 		pending = bad;
 	}
 	return { saved, failed: pending.map((entry) => entry.text), calls };
 }
 
+/** Whether the store has any text, for a language with nothing missing: all of it is translated already. */
+async function storeHasTexts(store: StoreTranslationService, payload: TranslatePayload): Promise<boolean> {
+	return (await store.counts(payload.appId))[payload.locale].total > 0;
+}
+
 /** Reads the store's texts and says how many the language is missing. */
 async function startStep(deps: TranslateKindDeps, ctx: TaskStepContext, payload: TranslatePayload): Promise<TaskStepResult> {
 	const refreshed = await deps.refresh(ctx.env, payload.appId);
 	if (refreshed.error === 'unavailable') throw new StoreUnavailableError();
-	if (!refreshed.deployed || refreshed.count === 0) return NOTHING_TO_TRANSLATE;
+	if (!refreshed.deployed || refreshed.count === 0) return nothingToTranslate();
 	const store = new StoreTranslationService(ctx.env);
-	if ((await store.settingsOf(payload.appId)).sourceLocale === payload.locale) return NOTHING_TO_TRANSLATE;
+	if ((await store.settingsOf(payload.appId)).sourceLocale === payload.locale) return nothingToTranslate();
 	const total = await store.countMissing(payload.appId, payload.locale);
-	return { progress: { done: 0, total, skipped: 0 }, finished: total === 0, calls: [] };
+	const progress = { done: 0, total, skipped: 0 };
+	// The store has texts and every one is translated already, so the language is ready as it is.
+	return total === 0 ? { progress, finished: true, calls: [], ready: true } : { progress, finished: false, calls: [] };
+}
+
+/**
+ * Ends a task with nothing left to try. Half or more of its texts translated makes the language ready; less fails the
+ * task, forgetting what it gave up on so that a retry takes those texts again.
+ */
+async function finishedStep(store: StoreTranslationService, payload: TranslatePayload, progress: TaskProgress, calls: ModelCall[]): Promise<TaskStepResult> {
+	if (progress.total === 0) return { progress, finished: true, calls, ready: await storeHasTexts(store, payload) };
+	if (progress.done * 2 >= progress.total) return { progress, finished: true, calls, ready: true };
+	return { progress: { ...progress, skippedHashes: [] }, finished: true, calls, failed: TRANSLATED_TOO_LITTLE };
 }
 
 async function translateStep(deps: TranslateKindDeps, ctx: TaskStepContext, payload: TranslatePayload): Promise<TaskStepResult> {
 	const store = new StoreTranslationService(ctx.env);
 	const { sourceLocale } = await store.settingsOf(payload.appId);
-	if (sourceLocale === payload.locale) return NOTHING_TO_TRANSLATE;
+	if (sourceLocale === payload.locale) return nothingToTranslate();
 
 	const previous = ctx.task.progress;
 	const gaveUp = previous.skippedHashes ?? [];
-	const batch = withinBatchChars(await store.missingTexts(payload.appId, payload.locale, TRANSLATION_BATCH_MAX_TEXTS, gaveUp));
-	const { saved, failed, calls } = await translateBatch(deps.model(ctx.env), store, payload, sourceLocale, batch, ctx.now);
+	// After failed steps the batch shrinks, down to one text, whose failure is then its own.
+	const failures = ctx.task.attempts;
+	const batchSize = BATCH_SIZES[Math.min(failures, BATCH_SIZES.length - 1)];
+	const batch = withinBatchChars(await store.missingTexts(payload.appId, payload.locale, batchSize, gaveUp));
+	const { saved, failed, calls } = await translateBatch(deps.model(ctx.env), store, payload, sourceLocale, batch, { giveUpOnModelFailure: batchSize === 1, now: ctx.now });
 
 	const skippedHashes = [...gaveUp, ...failed.map((text) => text.hash)].slice(0, MAX_SKIPPED_HASHES);
 	const remaining = await store.countMissing(payload.appId, payload.locale, skippedHashes);
 	// A step run again after its save was lost has already translated a batch the counts don't know about.
 	const done = Math.max(previous.done + saved, previous.total - skippedHashes.length - remaining);
-	return {
-		progress: { done, total: done + skippedHashes.length + remaining, skipped: skippedHashes.length, skippedHashes },
-		finished: remaining === 0 || skippedHashes.length >= MAX_SKIPPED_HASHES,
-		calls,
-	};
+	const progress: TaskProgress = { done, total: done + skippedHashes.length + remaining, skipped: skippedHashes.length, skippedHashes };
+	if (remaining > 0 && skippedHashes.length < MAX_SKIPPED_HASHES) return { progress, finished: false, calls };
+	return finishedStep(store, payload, progress, calls);
 }
 
 export function createStoreTranslateKind(deps: TranslateKindDeps): TaskKindHandler<TranslatePayload> {
@@ -171,14 +214,13 @@ export function createStoreTranslateKind(deps: TranslateKindDeps): TaskKindHandl
 			const { appId, locale } = raw as Record<string, unknown>;
 			return typeof appId === 'string' && appId !== '' && isLocale(locale) ? { appId, locale } : null;
 		},
-		step(ctx, payload) {
+		async step(ctx, payload) {
+			// The queue's owner checks were made when the task was queued; a task that names another store is not run.
+			if (ctx.task.appId !== payload.appId) return { ...nothingToTranslate(), failed: TASK_FAILED_MESSAGE };
 			return ctx.task.steps === 0 ? startStep(deps, ctx, payload) : translateStep(deps, ctx, payload);
 		},
-		async onFinished(ctx, payload) {
-			const store = new StoreTranslationService(ctx.env);
-			// The store's own language is never translated into, so it is never made ready.
-			if ((await store.settingsOf(payload.appId)).sourceLocale === payload.locale) return;
-			await store.markReady(payload.appId, payload.locale, ctx.now);
+		async onFinished(ctx, payload, result) {
+			if (result.ready === true) await new StoreTranslationService(ctx.env).markReady(payload.appId, payload.locale, ctx.now);
 		},
 		describeError(error) {
 			if (error instanceof StoreUnavailableError) return msg("Couldn't read your store right now.");

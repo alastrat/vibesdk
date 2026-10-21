@@ -27,6 +27,9 @@ export interface TaskProgress {
 	skippedHashes?: string[];
 }
 
+/** What the seller sees of a task's progress: the counts, without what a kind keeps for itself. */
+export type TaskProgressView = Omit<TaskProgress, 'skippedHashes'>;
+
 /** A seller can have at most this many queued, running or paused tasks. */
 export const MAX_UNFINISHED_TASKS = 50;
 /** The wait after each failure in a row, first to last. */
@@ -55,7 +58,7 @@ interface TaskViewFields {
 	id: string;
 	appId: string | null;
 	status: TaskStatus;
-	progress: TaskProgress;
+	progress: TaskProgressView;
 	creditsUsed: number;
 	pauseReason: TaskPauseReason | null;
 	lastError: string | null;

@@ -5,7 +5,8 @@ import { z } from 'zod';
 import { THINK_MODELS } from '../../agents/think/model-config';
 import { TASK_MODEL_ID } from '../../../shared/types/store-translations';
 import { stepCredits } from '../billing/step-credits';
-import { createTaskModel } from './task-model';
+import { TASK_LEASE_MS } from '../../../shared/types/tasks';
+import { createTaskModel, MODEL_CALL_TIMEOUT_MS } from './task-model';
 
 const schema = z.object({ items: z.array(z.object({ id: z.string(), text: z.string() })) });
 const ANSWER = { items: [{ id: '0', text: 'Hola' }] };
@@ -42,6 +43,10 @@ const providerKey = { ...storedKeys, GOOGLE_AI_STUDIO_API_KEY: 'google-key-01234
 const input = { system: 'Translate.', prompt: '[{"id":"0","text":"Hello"}]', schema, maxOutputTokens: 800 };
 
 describe('the task model', () => {
+	it("ends a call early enough that a step's two calls, a batch and its retry, fit inside the task's lease", () => {
+		expect(2 * MODEL_CALL_TIMEOUT_MS).toBeLessThan(TASK_LEASE_MS);
+	});
+
 	it("is one of the agent's priced models, so every call is charged from its usage", () => {
 		expect(THINK_MODELS.map((model) => model.id)).toContain(TASK_MODEL_ID);
 	});

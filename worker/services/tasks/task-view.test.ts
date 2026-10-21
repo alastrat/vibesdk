@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { TaskProgressView, TaskView } from '../../../shared/types/tasks';
 import type { TaskRecord } from '../../database/services/TaskService';
 import { taskView } from './task-view';
 
@@ -44,9 +45,11 @@ describe('taskView', () => {
 		});
 	});
 
-	it('never shows the work a kind gave up on', () => {
+	it('never shows the work a kind gave up on, and the type of what is shown cannot hold it', () => {
 		const view = taskView({ ...record, progress: { done: 40, total: 120, skipped: 2, skippedHashes: ['hash-a', 'hash-b'] } });
 		expect(view?.progress).toEqual({ done: 40, total: 120, skipped: 2 });
+		expectTypeOf<TaskView['progress']>().toEqualTypeOf<TaskProgressView>();
+		expectTypeOf<TaskProgressView>().not.toHaveProperty('skippedHashes');
 	});
 
 	it('shows nothing for a task whose payload its kind cannot read', () => {

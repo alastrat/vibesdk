@@ -8,6 +8,7 @@ import { LOCALE_AI_NAMES, type Locale } from '../../../shared/i18n/locales';
 
 /** The model answers each text's id with its translation. */
 export const translationSchema = z.object({ items: z.array(z.object({ id: z.string(), text: z.string() })) });
+export type TranslationAnswer = z.infer<typeof translationSchema>;
 
 export interface TranslationItem {
 	id: string;
@@ -34,45 +35,67 @@ export function buildTranslationPrompt(source: Locale, target: Locale, items: re
 	return { system: lines.join('\n'), prompt: JSON.stringify(items) };
 }
 
-const PLACEHOLDER = /\{[A-Za-z_]\w*\}/g;
-const TAG = /<(\/?)([A-Za-z][\w:-]*)/g;
-const URL = /https?:\/\/[^\s<>"'`]+/gi;
-const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g;
-/** Punctuation that ends a sentence, not the url it follows. */
-const URL_TRAILING = /[.,;:!?)\]]+$/;
+/** `{name}` and numbered `{0}` placeholders alike. */
+const PLACEHOLDER = /\{\w+\}/g;
+const TAG = /<(\/?)([A-Za-z][A-Za-z0-9-]*)((?:\s[^<>]*)?)\/?>/g;
+/** An attribute with a value, which is what tells markup apart from words in angle brackets such as `<your name>`. */
+const TAG_ATTRIBUTE = /\s[^\s=<>"']+\s*=/;
+/** The elements a store's text uses; a tag with another name counts only when it carries attributes, like a custom element. */
+const KNOWN_TAGS = new Set(
+	(
+		'a abbr address article aside audio b bdi bdo blockquote body br button caption cite code col colgroup data dd del details dfn div dl dt em fieldset ' +
+		'figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr i iframe img input ins kbd label legend li main mark nav ol option p picture pre q s samp ' +
+		'section select small source span strong sub summary sup svg table tbody td textarea tfoot th thead time tr u ul var video wbr'
+	).split(' '),
+);
+/** A url or email ends at a closing quote or a dash of any language, which a sentence puts after it. */
+const URL = /https?:\/\/[^\s<>"'`«»“”‘’…—–]+/gi;
+const EMAIL = /[\p{L}\p{N}._%+-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+/** What ends a sentence, not the url or email before it: anything but a letter, a digit, an underscore or a slash. */
+const TRAILING = /[^\p{L}\p{N}_/]+$/u;
 
 const listOf = (items: readonly string[]): string => (items.length === 0 ? 'none' : items.join(' '));
-const sameItems = (a: readonly string[], b: readonly string[]): boolean => a.length === b.length && a.every((item, index) => item === b[index]);
 
-function placeholdersIn(text: string): string[] {
-	return (text.match(PLACEHOLDER) ?? []).sort();
+/** Whether both lists hold the same items the same number of times, in any order. */
+function sameItems(a: readonly string[], b: readonly string[]): boolean {
+	const sorted = (items: readonly string[]) => [...items].sort();
+	const left = sorted(a);
+	const right = sorted(b);
+	return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
-/** Each tag in order, a closing tag with its slash, so a dropped or reordered tag shows. */
+/** Each tag, a closing tag with its slash, so a dropped or added one shows. */
 function tagsIn(text: string): string[] {
-	return Array.from(text.matchAll(TAG), (match) => `<${match[1]}${match[2].toLowerCase()}>`);
+	const tags: string[] = [];
+	for (const [, closing, name, attributes] of text.matchAll(TAG)) {
+		const lowercase = name.toLowerCase();
+		if (KNOWN_TAGS.has(lowercase) || TAG_ATTRIBUTE.test(attributes)) tags.push(`<${closing}${lowercase}>`);
+	}
+	return tags;
 }
 
-function urlsIn(text: string): string[] {
-	return (text.match(URL) ?? []).map((url) => url.replace(URL_TRAILING, ''));
+/** The urls and emails of a text, without the punctuation that follows them. */
+function addressesIn(text: string): string[] {
+	return [...(text.match(URL) ?? []), ...(text.match(EMAIL) ?? [])].map((address) => address.replace(TRAILING, ''));
 }
 
 /** A problem with `translated` as the translation of `source`, worded for the model's retry; null when it is sound. */
 export function checkTranslation(source: string, translated: string): string | null {
 	if (source.trim() !== '' && translated.trim() === '') return 'The translation is empty.';
 
-	const placeholders = placeholdersIn(source);
-	const translatedPlaceholders = placeholdersIn(translated);
+	const placeholders = source.match(PLACEHOLDER) ?? [];
+	const translatedPlaceholders = translated.match(PLACEHOLDER) ?? [];
 	if (!sameItems(placeholders, translatedPlaceholders)) {
 		return `The placeholders must be kept as written, each as often as in the original. Expected ${listOf(placeholders)}; the translation has ${listOf(translatedPlaceholders)}.`;
 	}
 
+	// The tags may change places, since another language orders its words differently, but none may be lost or added.
 	const tags = tagsIn(source);
 	const translatedTags = tagsIn(translated);
 	if (!sameItems(tags, translatedTags)) {
-		return `The HTML tags must be kept, in the same order. Expected ${listOf(tags)}; the translation has ${listOf(translatedTags)}.`;
+		return `The HTML tags must be kept, each as often as in the original. Expected ${listOf(tags)}; the translation has ${listOf(translatedTags)}.`;
 	}
 
-	const lost = [...urlsIn(source), ...(source.match(EMAIL) ?? [])].find((kept) => !translated.includes(kept));
+	const lost = addressesIn(source).find((kept) => !translated.includes(kept));
 	return lost === undefined ? null : `${lost} must appear in the translation exactly as written.`;
 }

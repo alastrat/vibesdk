@@ -147,6 +147,7 @@ type Scripted = TaskStepResult | Error | ((ctx: TaskStepContext) => TaskStepResu
 function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepContext) => void; describeError?: (error: unknown) => string } = {}) {
 	const stepped: Array<{ taskId: string; now: number; payload: Payload }> = [];
 	const finished: string[] = [];
+	const finishedWith: Array<TaskStepResult | undefined> = [];
 	const handler: TaskKindHandler<Payload> = {
 		kind: 'store.translate',
 		parsePayload(raw) {
@@ -161,13 +162,14 @@ function fakeKind(script: Scripted[], options: { onFinished?: (ctx: TaskStepCont
 			if (next instanceof Error) throw next;
 			return typeof next === 'function' ? next(ctx) : next;
 		},
-		async onFinished(ctx) {
+		async onFinished(ctx, _payload, result) {
 			finished.push(ctx.task.id);
+			finishedWith.push(result);
 			options.onFinished?.(ctx);
 		},
 		describeError: options.describeError,
 	};
-	return { handler, stepped, finished };
+	return { handler, stepped, finished, finishedWith };
 }
 
 function fakeMeter(gates: MeterGate[] = [], options: { chargeFails?: boolean; gateFails?: boolean } = {}) {
@@ -234,6 +236,48 @@ describe('runTaskTick', () => {
 		await queue.tick(NOW + 1_000);
 		expect(queue.finished).toEqual(['a']);
 		expect(queue.stepped).toHaveLength(1);
+	});
+
+	it('gives onFinished the finishing step, whose progress and flags are newer than the task it was claimed with', async () => {
+		const finishing: TaskStepResult = { ...stepOf(100, 100, true), ready: true };
+		const queue = setup([task('a', { steps: 2, status: 'running', progress: progress(40, 100) })], [finishing]);
+
+		await queue.tick(NOW);
+
+		expect(queue.finishedWith).toEqual([finishing]);
+		expect(queue.task('a').status).toBe('done');
+	});
+
+	it('a step that says failed ends the task failed with that message, after saving and charging the step, and never calls onFinished', async () => {
+		const message = "Couldn't translate most of your store's text.";
+		const failing: TaskStepResult = { ...stepOf(30, 100, true), progress: progress(30, 100, 70), failed: message };
+		const queue = setup([task('a', { steps: 2, status: 'running', startedAt: NOW - 1_000 })], [failing]);
+
+		expect(await queue.tick(NOW)).toEqual({ nextAlarmAt: null });
+
+		expect(queue.task('a')).toMatchObject({ status: 'failed', lastError: message, finishedAt: NOW, progress: progress(30, 100, 70), steps: 3, creditsUsed: 7 });
+		expect(queue.charges).toEqual([{ userId: 'seller_1', taskId: 'a', step: 2, calls: [CALL] }]);
+		expect(queue.finished).toEqual([]);
+		// Told once, like any other ending, with the task as it was stored.
+		expect(queue.ended).toMatchObject([{ id: 'a', status: 'failed', lastError: message }]);
+		expect(queue.stepped).toHaveLength(1);
+	});
+
+	it('a failing step of a task the seller canceled meanwhile leaves the cancel standing', async () => {
+		const failing: TaskStepResult = { ...stepOf(30, 100, true), failed: "Couldn't translate most of your store's text." };
+		let queue: ReturnType<typeof setup> | undefined;
+		queue = setup([task('a', { steps: 2, status: 'running' })], [
+			(ctx) => {
+				queue?.cancel(ctx.task.id, NOW);
+				return failing;
+			},
+		]);
+
+		await queue.tick(NOW);
+
+		expect(queue.task('a')).toMatchObject({ status: 'canceled', steps: 3 });
+		expect(queue.ended).toEqual([]);
+		expect(queue.finished).toEqual([]);
 	});
 
 	it("charges the meter with the step's calls under task:<id>:<step>", async () => {

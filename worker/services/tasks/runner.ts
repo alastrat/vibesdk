@@ -78,9 +78,15 @@ async function runStep(deps: TaskRunnerDeps, task: TaskRecord, now: number): Pro
 		const credits = await deps.meter.charge({ userId: task.userId, taskId: task.id, step: task.steps, calls: result.calls });
 		const status = await deps.store.saveStep(task.id, { progress: result.progress, credits, steps: task.steps + 1, finished: result.finished }, now);
 		// Canceled during the step: the work it did is saved, and nothing more runs.
-		if (!result.finished || status !== 'running') return;
+		if (status !== 'running') return;
+		if (result.failed !== undefined) {
+			const failed = await deps.store.fail(task.id, result.failed, now);
+			if (failed) deps.ended(failed);
+			return;
+		}
+		if (!result.finished) return;
 
-		await fromKind(async () => handler.onFinished?.(ctx, payload));
+		await fromKind(async () => handler.onFinished?.(ctx, payload, result));
 		const finished = await deps.store.finish(task.id, now);
 		if (finished) deps.ended(finished);
 	} catch (error) {

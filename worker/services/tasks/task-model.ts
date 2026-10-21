@@ -13,8 +13,11 @@ import { TASK_MODEL_ID } from '../../../shared/types/store-translations';
 import { stepUsageFrom } from '../billing/step-credits';
 import type { ModelCall } from './kinds';
 
-/** One call must end well inside a task's lease (TASK_LEASE_MS), or another alarm could claim the task mid-call. */
-const MODEL_CALL_TIMEOUT_MS = 90_000;
+/**
+ * A step can make two calls, a batch and its retry, and both must end inside a task's lease (TASK_LEASE_MS), or another
+ * alarm could claim the task mid-step. Two of these fit in the lease's 120 s with time left to save the step.
+ */
+export const MODEL_CALL_TIMEOUT_MS = 45_000;
 
 export interface TaskModel {
 	generate<T>(input: { system: string; prompt: string; schema: ZodType<T>; maxOutputTokens: number }): Promise<{ object: T; call: ModelCall }>;

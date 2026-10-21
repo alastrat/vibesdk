@@ -15,6 +15,13 @@ export interface TaskStepResult {
 	progress: TaskProgress;
 	finished: boolean;
 	calls: ModelCall[];
+	/**
+	 * Ends the task as failed, after saving and charging this step, with this message for the seller: English marked with
+	 * `msg()`, naming no AI provider or supplier. `onFinished` doesn't run.
+	 */
+	failed?: string;
+	/** On a finishing step, whether what the task made is ready to use; `onFinished` reads it. */
+	ready?: boolean;
 }
 
 export interface TaskStepContext {
@@ -32,8 +39,11 @@ export interface TaskKindHandler<P> {
 	 * again under the same step number.
 	 */
 	step(ctx: TaskStepContext, payload: P): Promise<TaskStepResult>;
-	/** Runs once the last step says finished, before the task is marked done; a throw retries the task. */
-	onFinished?(ctx: TaskStepContext, payload: P): Promise<void>;
+	/**
+	 * Runs once the last step says finished, before the task is marked done; a throw retries the task. `result` is that
+	 * step's own, since `ctx.task` is the task as it was claimed, before the step's progress was saved.
+	 */
+	onFinished?(ctx: TaskStepContext, payload: P, result: TaskStepResult): Promise<void>;
 	/**
 	 * What the seller sees for an error `step` or `onFinished` threw: English marked with `msg()`, naming no AI provider or
 	 * supplier. Left out, or null for an error the kind doesn't know, the queue's generic message is shown. The raw error
