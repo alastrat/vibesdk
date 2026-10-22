@@ -1,7 +1,12 @@
-import { SolutionCopyPage } from '@/components/public-site/SolutionCopyPage';
+import { SolutionLandingPage } from '@/components/public-site/SolutionLandingPage';
+import { PageMeta } from '@/components/public-site/solution-page';
 import { SUBSCRIPTIONS_PAGE } from '@/content/public-pages';
-import { SUBSCRIPTIONS_COPY } from '@/content/solution-pages';
 
 export default function SubscriptionsPage() {
-	return <SolutionCopyPage head={SUBSCRIPTIONS_PAGE} copy={SUBSCRIPTIONS_COPY} />;
+	return (
+		<>
+			<PageMeta {...SUBSCRIPTIONS_PAGE} />
+			<SolutionLandingPage id="subscriptions" />
+		</>
+	);
 }

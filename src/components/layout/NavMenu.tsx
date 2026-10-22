@@ -211,7 +211,7 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 		return (
 			<>
 				<Column title="For creators" caption={CREATORS_CAPTION} links={CREATOR_LINKS} className={columnClassName} />
-				{links && <Column title={marketingCopy.navigation.getStarted} links={links} className={columnClassName} />}
+				{links && <Column title={marketingCopy.navigation.getStarted} links={links} className={cn(columnClassName, 'hidden')} />}
 			</>
 		);
 	}
@@ -219,7 +219,7 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 		<>
 			<Column title={marketingCopy.navigation.estoriFor} links={AUDIENCE_LINKS} className={columnClassName} />
 			<Column title={marketingCopy.common.industries} links={INDUSTRY_LINKS} className={columnClassName} />
-			<Column title={marketingCopy.navigation.platform} links={PLATFORM_LINKS} className={columnClassName} />
+			<Column title={marketingCopy.navigation.platform} links={PLATFORM_LINKS} className={cn(columnClassName, 'hidden')} />
 		</>
 	);
 }
@@ -264,8 +264,8 @@ function FooterItem({ link }: { link: FooterLink }) {
 const PANEL = 'absolute inset-x-4 top-full mx-auto mt-2 max-w-[1400px] overflow-hidden whitespace-normal rounded-2xl border border-public-line bg-white shadow-[0_24px_48px_rgba(0,0,0,0.12)] motion-safe:animate-public-menu-in';
 
 const PANEL_GRIDS: Readonly<Record<MenuId, string>> = {
-	solutions: 'lg:grid-cols-3 xl:grid-cols-[repeat(3,minmax(0,1fr))_22rem]',
-	creators: 'lg:grid-cols-2 xl:grid-cols-[repeat(2,minmax(0,1fr))_22rem]',
+	solutions: 'lg:grid-cols-2 xl:grid-cols-[repeat(2,minmax(0,1fr))_22rem]',
+	creators: 'lg:grid-cols-1 xl:grid-cols-[minmax(0,1fr)_22rem]',
 };
 
 /**

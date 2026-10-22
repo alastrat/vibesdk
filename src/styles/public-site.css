@@ -183,3 +183,89 @@
 	--color-kumo-focus: #006eff;
 	--color-kumo-brand: #0062e6;
 }
+
+
+/* Slow, sequential reveals keep completed instructions visible until the loop restarts. */
+.public-site .solution-step-fill {
+	transform: scaleX(0);
+}
+.public-site .solution-step-word {
+	opacity: 0;
+}
+.public-site .solution-step[data-state='active'] .solution-step-fill {
+	animation: solution-step-fill 3600ms linear both paused;
+}
+.public-site .solution-step[data-state='active'] .solution-step-word {
+	animation: solution-step-word 450ms ease-out both paused;
+	animation-delay: var(--word-delay);
+}
+.public-site [data-running='true'] .solution-step[data-state='active'] .solution-step-fill,
+.public-site [data-running='true'] .solution-step[data-state='active'] .solution-step-word {
+	animation-play-state: running;
+}
+.public-site .solution-step[data-state='complete'] .solution-step-fill {
+	transform: scaleX(1);
+}
+.public-site .solution-step[data-state='complete'] .solution-step-word {
+	opacity: 1;
+}
+@keyframes solution-step-fill {
+	from { transform: scaleX(0); }
+	to { transform: scaleX(1); }
+}
+@keyframes solution-step-word {
+	from { opacity: 0; transform: translateY(5px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+	.public-site .solution-step[data-state] .solution-step-fill { animation: none; transform: scaleX(1); }
+	.public-site .solution-step[data-state] .solution-step-word { animation: none; opacity: 1; transform: none; }
+}
+
+/* Global commerce: one synchronized story, with a still/manual version for reduced motion. */
+.global-commerce-section { padding: 72px 24px; background: #fff; scroll-margin-top: var(--public-header-h); }
+.global-commerce-panel { max-width: 1392px; margin: auto; overflow: hidden; border-radius: 28px; background: #13161b; color: #fff; }
+.global-commerce-grid { display: grid; grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); align-items: center; gap: 24px; max-width: 1320px; margin: auto; padding: 36px 40px 48px 0; }
+.global-commerce-copy { grid-column: 2; grid-row: 1; padding: 28px 0; }
+.global-commerce-eyebrow { color: #a7adb9; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; }
+.global-commerce-heading { margin-top: 24px; font-size: clamp(42px, 4.5vw, 66px); line-height: 1.06; font-weight: 300; letter-spacing: -.045em; }
+.global-commerce-words { display: grid; position: relative; overflow: hidden; margin-top: .05em; padding-bottom: .12em; color: #97baff; }
+.global-commerce-words > span { grid-area: 1 / 1; opacity: 0; transform: translateY(110%); transition: transform 800ms cubic-bezier(.22,1,.36,1), opacity 650ms; }
+.global-commerce-words > span[data-active='true'] { opacity: 1; transform: translateY(0); }
+.global-commerce-description { max-width: 29em; margin-top: 22px; color: #aeb4bf; font-size: 18px; line-height: 1.7; font-weight: 300; }
+.global-commerce-controls { margin-top: 42px; padding-top: 24px; border-top: 1px solid #ffffff12; }
+.public-site .global-commerce-market { width: 44px; min-width: 44px; height: 40px; padding: 0; border-radius: 9px; background: transparent; color: #b7becb; box-shadow: none; border: 0; font-size: 12px; font-weight: 400; }
+.public-site .global-commerce-market[aria-pressed='true'], .public-site .global-commerce-market:hover, .public-site .global-commerce-market:active { background: transparent; box-shadow: none; border: 0; }
+.public-site .global-commerce-pause { margin-left: 6px; color: #b7becb; background: transparent; box-shadow: none; }
+.public-site .global-commerce-market:focus-visible, .public-site .global-commerce-pause:focus-visible { outline: 2px solid #97baff; outline-offset: 4px; }
+.global-commerce-flag { display: block; width: 28px; height: 21px; border-radius: 3px; object-fit: cover; }
+.global-commerce-stage { grid-column: 1; grid-row: 1; position: relative; min-width: 0; padding-bottom: 40px; }
+.global-commerce-globe { position: relative; width: 100%; aspect-ratio: 1; }
+.global-commerce-sphere { position: absolute; inset: 13.24%; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #191e24, #0b0e12); }
+.global-commerce-example { position: absolute; bottom: 4px; right: 20px; width: min(340px, 80%); padding: 20px; border: 1px solid #ffffff1c; border-radius: 18px; background: #1c2028f5; box-shadow: 0 18px 50px #0005; }
+.global-commerce-example-content { animation: global-market-arrive 650ms cubic-bezier(.22,1,.36,1) both; }
+.global-commerce-status { display: block; width: 5px; height: 5px; border-radius: 50%; background: #f3a16e; box-shadow: 0 0 10px #f3a16e55; }
+.global-commerce-agent { display: flex; gap: 9px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid #ffffff12; color: #c9cdd5; font-size: 12px; line-height: 1.5; min-height: 51px; }
+@keyframes global-market-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 950px) {
+	.global-commerce-grid { padding: 42px 28px; gap: 12px; grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+	.global-commerce-stage { padding-bottom: 120px; }
+	.global-commerce-example { width: calc(100% - 12px); right: 0; padding: 16px; }
+	.global-commerce-heading { font-size: clamp(38px, 5.4vw, 54px); }
+	.global-commerce-description { font-size: 16px; }
+}
+@media (max-width: 700px) {
+	.global-commerce-section { padding: 40px 12px; }
+	.global-commerce-grid { display: flex; flex-direction: column; gap: 0; padding: 32px 22px 28px; }
+	.global-commerce-copy { width: 100%; padding: 0; }
+	.global-commerce-heading { font-size: clamp(38px, 9.5vw, 60px); max-width: 10em; }
+	.global-commerce-controls { margin-top: 26px; }
+	.public-site .global-commerce-market { min-height: 44px; min-width: 44px; }
+	.global-commerce-stage { width: calc(100% + 32px); max-width: 510px; padding-bottom: 146px; margin-top: 8px; }
+	.global-commerce-example { width: calc(100% - 32px); max-width: 340px; right: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.global-commerce-words > span { transition: none; transform: none; }
+	.global-commerce-words { display: flex; flex-wrap: wrap; gap: 0 .2em; }
+	.global-commerce-example-content { animation: none; }
+}

@@ -26,7 +26,7 @@ export const HOME_PAGE: PublicPage = {
 export const BRANDS_PAGE: PublicPage = {
 	path: '/solutions/brands',
 	title: 'For brands',
-	description: "Build your brand's online store in minutes. Getting recommended by AI assistants, store assistants and personalized shopping are coming soon.",
+	description: "Build your brand's online store in minutes. Create product pages, refine your design by chatting and manage your orders in one place.",
 };
 
 export const RESELLERS_PAGE: PublicPage = {
@@ -38,19 +38,19 @@ export const RESELLERS_PAGE: PublicPage = {
 export const DIGITAL_PAGE: PublicPage = {
 	path: '/solutions/digital',
 	title: 'For digital businesses',
-	description: 'Sell e-books, images and videos and run a community from your Estori store. In early access.',
+	description: 'Sell e-books, images and videos from your own Estori store, with digital delivery and a community for your customers.',
 };
 
 export const SUBSCRIPTIONS_PAGE: PublicPage = {
 	path: '/solutions/subscriptions',
 	title: 'For subscription businesses',
-	description: 'Sell boxes, memberships and refills that renew on their own from your Estori store. Subscriptions are coming soon; build your store today.',
+	description: 'Sell boxes, memberships and refills that renew on their own from your Estori store, with clear plans and accounts your subscribers can manage.',
 };
 
 export const COMMUNITIES_PAGE: PublicPage = {
 	path: '/solutions/communities',
 	title: 'For communities',
-	description: 'Run a members-only community inside your Estori store, with posts, events and downloads. In early access.',
+	description: 'Bring your members together inside your Estori store, with conversations, events, shared resources and free or paid memberships.',
 };
 
 export const CATALOG_FULFILLMENT_PAGE: PublicPage = {

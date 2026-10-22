@@ -174,6 +174,88 @@
     "closing": {
       "title": "Your next store starts with a sentence.",
       "description": "Describe it, watch it build, and publish it when it's ready."
+    },
+    "globalCommerce": {
+      "eyebrow": "Global reach. Agentic growth.",
+      "title": "Run your business.",
+      "words": [
+        "Globally.",
+        "Agentically."
+      ],
+      "accessibleTitle": "Run your business globally, with AI agents.",
+      "description": "Your next customer could be anywhere. Let AI agents help you create, translate and grow your store—while you focus on what comes next.",
+      "link": "Explore agentic commerce",
+      "marketsLabel": "Explore a market",
+      "pauseLabel": "Pause market animation",
+      "playLabel": "Play market animation",
+      "exampleLabel": "Example storefront",
+      "agentLabel": "AI at work",
+      "globeLabel": "A dotted globe connecting the United States, Brazil, Colombia, Chile, Argentina, Mexico and Spain.",
+      "markets": {
+        "us": {
+          "name": "United States",
+          "shortName": "USA",
+          "language": "English",
+          "product": "The everyday bottle",
+          "category": "Everyday essentials",
+          "task": "Write a product story that sells.",
+          "imageAlt": "A reusable insulated bottle"
+        },
+        "br": {
+          "name": "Brazil",
+          "shortName": "Brazil",
+          "language": "Português",
+          "product": "Café de origem",
+          "category": "Specialty coffee",
+          "task": "Make your store feel local in every language.",
+          "imageAlt": "A bag of specialty coffee"
+        },
+        "co": {
+          "name": "Colombia",
+          "shortName": "Colombia",
+          "language": "Español",
+          "product": "Tu ritual de café",
+          "category": "Handmade ceramics",
+          "task": "Bring your products to new audiences.",
+          "imageAlt": "A ceramic coffee dripper"
+        },
+        "cl": {
+          "name": "Chile",
+          "shortName": "Chile",
+          "language": "Español",
+          "product": "Lista para explorar",
+          "category": "Outdoor essentials",
+          "task": "Turn a new collection into a fresh storefront.",
+          "imageAlt": "A backpack for hiking"
+        },
+        "ar": {
+          "name": "Argentina",
+          "shortName": "Argentina",
+          "language": "Español",
+          "product": "Abrigo para el camino",
+          "category": "Everyday essentials",
+          "task": "Write a product story that feels like your brand.",
+          "imageAlt": "A pair of wool socks"
+        },
+        "mx": {
+          "name": "Mexico",
+          "shortName": "Mexico",
+          "language": "Español",
+          "product": "Tu próxima aventura",
+          "category": "Travel accessories",
+          "task": "Create content for your next market.",
+          "imageAlt": "A brass compass"
+        },
+        "es": {
+          "name": "Spain",
+          "shortName": "Spain",
+          "language": "Español",
+          "product": "Café para cada mañana",
+          "category": "Specialty coffee",
+          "task": "Translate your storefront for your next audience.",
+          "imageAlt": "A bag of single-origin coffee"
+        }
+      }
     }
   },
   "common": {
@@ -742,6 +824,386 @@
       "payoutsBenefit": "Receive bank payouts weekly on Monday by default. Pro and Premium let you choose daily, weekly or monthly payouts. Your account costs {stripeFees}.",
       "stripeLimitNote": "Stripe documents a general USD technical maximum of $999,999.99 per payment. Card networks may impose lower limits. Estori’s order and weekly selling safeguards above also apply.",
       "stripeLimitSource": "Read Stripe’s payment amount limits"
+    }
+  },
+  "solutions": {
+    "brands": {
+      "eyebrow": "For brands & store owners",
+      "title": "Your brand deserves its own kind of store.",
+      "lead": "Tell Estori what you sell. Build a store that looks like you, then keep making it better by asking.",
+      "problemTitle": "Your next idea shouldn’t wait on your website.",
+      "problems": [
+        "Your products need more than a generic template.",
+        "Small changes shouldn’t mean another project.",
+        "Orders shouldn’t get lost between tools."
+      ],
+      "benefitsTitle": "From your first idea to your next order.",
+      "benefitsLead": "A storefront, product pages and checkout that work together. Built around what makes your brand yours.",
+      "features": [
+        {
+          "title": "Make your brand the first impression.",
+          "body": "Shape your colors, layouts and product story into a store that feels like you."
+        },
+        {
+          "title": "A new idea? Just ask.",
+          "body": "Add a collection, rewrite a product page or give your homepage a fresh look by chatting."
+        },
+        {
+          "title": "Keep every order in view.",
+          "body": "See what shoppers bought and keep track of payments and fulfillment across your stores."
+        },
+        {
+          "title": "Reach shoppers in their language.",
+          "body": "Use AI to translate your storefront, then review and refine the wording before publishing."
+        }
+      ],
+      "carouselTitle": "See what you could build.",
+      "examples": [
+        {
+          "title": "A collection with a story",
+          "body": "Give a new range its own space, with the details that make each product worth discovering.",
+          "prompt": "Build a store for my handmade ceramics, with a page for the new summer collection."
+        },
+        {
+          "title": "A small change, a fresh storefront",
+          "body": "Update the look of your store as your products and ideas change.",
+          "prompt": "Give my homepage a warmer look and put our new coffee collection first."
+        },
+        {
+          "title": "Room for your next brand",
+          "body": "Build a different storefront for a new idea without starting from a blank page.",
+          "prompt": "Create a minimal outdoor store for our trail essentials, with detailed product pages."
+        }
+      ],
+      "steps": [
+        "Describe your brand and what you sell.",
+        "Review your store and ask for changes.",
+        "Set up payments and publish when you’re ready."
+      ],
+      "closingTitle": "Build the store you’ve been imagining.",
+      "closingLead": "Start with your idea. Keep shaping it as your brand grows.",
+      "faq": [
+        {
+          "question": "Do I need to know how to code?",
+          "answer": "No. Describe your store and ask for changes in plain words. Estori builds the pages, and you review them in the live preview."
+        },
+        {
+          "question": "How do I update my store?",
+          "answer": "Ask Estori to change a layout, add a section or refresh your product copy. Preview the changes before publishing."
+        },
+        {
+          "question": "Can I sell products I make myself?",
+          "answer": "Yes. Add your own products with photos, descriptions and prices. You handle shipping for those products."
+        },
+        {
+          "question": "How do shoppers pay?",
+          "answer": "Set up payments and connect your Stripe account. Shoppers pay at your store’s checkout, and payouts go to your bank."
+        }
+      ]
+    },
+    "resellers": {
+      "eyebrow": "For dropshippers & resellers",
+      "title": "Find your niche. Build your store. Let suppliers ship.",
+      "lead": "Choose products from the supplier catalog, set your prices and bring your own point of view. Available on every plan.",
+      "problemTitle": "Build a business around products, not boxes.",
+      "problems": [
+        "Finding products can take longer than building a store.",
+        "Supplier details still need a story of their own.",
+        "Orders need a clear path from checkout to delivery."
+      ],
+      "benefitsTitle": "Your storefront. Connected fulfillment.",
+      "benefitsLead": "Keep your attention on the collection and the customer experience. Estori connects catalog products to supplier fulfillment.",
+      "features": [
+        {
+          "title": "Find products that fit your idea.",
+          "body": "Explore the catalog and review available products before adding them to your store."
+        },
+        {
+          "title": "Make the collection your own.",
+          "body": "Ask Estori to write product pages in your store’s voice and organize them around your niche."
+        },
+        {
+          "title": "Let paid orders move forward.",
+          "body": "Catalog orders go to suppliers for fulfillment, with shipment progress and tracking in Estori."
+        },
+        {
+          "title": "Mix in products you make.",
+          "body": "Sell your own products alongside supplier products. You handle shipping for the items you supply."
+        }
+      ],
+      "carouselTitle": "One catalog. Different store ideas.",
+      "examples": [
+        {
+          "title": "Everyday essentials, thoughtfully chosen",
+          "body": "Bring useful products together around a specific kind of shopper.",
+          "prompt": "Build a store of outdoor essentials from the supplier catalog, organized by activity."
+        },
+        {
+          "title": "A focused collection",
+          "body": "Make it easy to shop a small range instead of an endless product list.",
+          "prompt": "Create a home essentials store with a small catalog and clear product comparisons."
+        },
+        {
+          "title": "Your products and supplier products",
+          "body": "Combine what you make with products that complement it.",
+          "prompt": "Build a coffee store with our own beans and catalog accessories in separate collections."
+        }
+      ],
+      "steps": [
+        "Choose products and set your retail prices.",
+        "Ask Estori to build their pages and your storefront.",
+        "Connect payments, publish and follow paid orders."
+      ],
+      "closingTitle": "Give your next store idea a place to grow.",
+      "closingLead": "Start free. Add the products that make sense for your store.",
+      "faq": [
+        {
+          "question": "Do I need to buy stock upfront?",
+          "answer": "No. Choose catalog products for your store, and suppliers ship them when customers order."
+        },
+        {
+          "question": "How do I choose which products to sell?",
+          "answer": "Browse the supplier catalog and review product costs and shipping details. Add the products that fit your store and set your retail prices."
+        },
+        {
+          "question": "Who handles shipping?",
+          "answer": "The supplier ships catalog products directly to your customer. Shipment updates and tracking return to your store."
+        },
+        {
+          "question": "Can I sell my own products alongside catalog products?",
+          "answer": "Yes. Build a collection with both. Suppliers ship catalog items, and you ship the products you make yourself."
+        }
+      ]
+    },
+    "digital": {
+      "eyebrow": "For digital businesses",
+      "title": "Make something once. Give it a home of its own.",
+      "lead": "Sell your guides, downloads and creative work from a store that feels like you. Give customers one place to discover, buy and enjoy what you create.",
+      "problemTitle": "Your work shouldn’t be scattered across links.",
+      "problems": [
+        "Your best content needs a place to be discovered.",
+        "Buyers need a clear way to find what they purchased.",
+        "Your next release deserves more than another shared link."
+      ],
+      "benefitsTitle": "A home for the things you create.",
+      "benefitsLead": "Bring your product pages, digital delivery and customer experience together in one store.",
+      "features": [
+        {
+          "title": "Put your work in the spotlight.",
+          "body": "Create product pages for guides, images, videos and other downloads, with room to show their value."
+        },
+        {
+          "title": "Deliver files after purchase.",
+          "body": "Give customers access to their files after payment, without sending each purchase by hand."
+        },
+        {
+          "title": "Build around your expertise.",
+          "body": "Bring your guides, lessons and resources together in one recognizable place."
+        },
+        {
+          "title": "Give customers a reason to stay.",
+          "body": "Connect your digital work with a community where customers can keep learning and sharing."
+        }
+      ],
+      "carouselTitle": "A few ways to share what you know.",
+      "examples": [
+        {
+          "title": "A library of practical guides",
+          "body": "Give readers a focused place to discover your downloadable work.",
+          "prompt": "Build a storefront for my illustrated gardening guides, with previews of each guide."
+        },
+        {
+          "title": "A creative resource shop",
+          "body": "Organize useful files around the people who will use them.",
+          "prompt": "Create a store for my photography presets and editing guides, with clear product pages."
+        },
+        {
+          "title": "A storefront for your expertise",
+          "body": "Bring your templates and learning resources together in a store built around your expertise.",
+          "prompt": "Build a store for my design templates and learning resources, with an about page."
+        }
+      ],
+      "steps": [
+        "Add your digital products and tell their story.",
+        "Build your storefront and organize your work.",
+        "Publish your store and deliver files after purchase."
+      ],
+      "closingTitle": "Your next release can start with a storefront.",
+      "closingLead": "Turn your creative work into products customers can discover, buy and come back for.",
+      "faq": [
+        {
+          "question": "What kinds of digital products can I sell?",
+          "answer": "Sell e-books, guides, templates, design assets, videos and courses. Give each release its own product page in your store."
+        },
+        {
+          "question": "How do customers receive their purchases?",
+          "answer": "Customers get access to their files after payment, so they can start using what they bought without waiting for you to send it."
+        },
+        {
+          "question": "Can I customize my product pages?",
+          "answer": "Yes. Ask Estori to shape your pages around your work, with your own style, product details and previews."
+        },
+        {
+          "question": "Can I offer digital products to community members?",
+          "answer": "Yes. Include downloads, lessons and other resources in your membership to give people more reasons to join and stay."
+        }
+      ]
+    },
+    "subscriptions": {
+      "eyebrow": "For subscription businesses",
+      "title": "Give customers a reason to come back.",
+      "lead": "Sell boxes, refills or memberships from your own storefront. Make repeat purchases simple with recurring plans customers can manage themselves.",
+      "problemTitle": "Repeat business deserves a simpler routine.",
+      "problems": [
+        "Recurring offers need more than a product page.",
+        "Customers want to know what arrives and when.",
+        "Plan changes shouldn’t get buried in email."
+      ],
+      "benefitsTitle": "Build for the next delivery. And the one after.",
+      "benefitsLead": "Bring recurring payments, clear plan pages and subscriber accounts together in one store.",
+      "features": [
+        {
+          "title": "Make your recurring offer clear.",
+          "body": "Show customers what’s included, how often it arrives and who it is for."
+        },
+        {
+          "title": "Give plans their own space.",
+          "body": "Show the differences between your boxes, refills or memberships on a clear plan page."
+        },
+        {
+          "title": "Put subscribers in control.",
+          "body": "Let customers pause, skip, swap or cancel their plan from their account."
+        },
+        {
+          "title": "Keep the whole experience together.",
+          "body": "Bring your subscription story, products and customer pages into one storefront."
+        }
+      ],
+      "carouselTitle": "What could your next delivery look like?",
+      "examples": [
+        {
+          "title": "A box worth looking forward to",
+          "body": "Introduce a recurring collection and the people behind it.",
+          "prompt": "Build a storefront for our monthly coffee box, with a page explaining each roast."
+        },
+        {
+          "title": "Refills with a purpose",
+          "body": "Help customers choose their refills and find a delivery rhythm that works for them.",
+          "prompt": "Create a store for our household refills, with clear sizes and product details."
+        },
+        {
+          "title": "A membership built around value",
+          "body": "Show members what they get and give them reasons to stay.",
+          "prompt": "Build a site for our makers membership, with a page comparing the benefits."
+        }
+      ],
+      "steps": [
+        "Build a storefront around your recurring offer.",
+        "Set your plans, prices and renewal schedules.",
+        "Welcome subscribers and manage recurring orders."
+      ],
+      "closingTitle": "Start building what customers will come back for.",
+      "closingLead": "Create an offer worth repeating, with a store that makes it easy to subscribe.",
+      "faq": [
+        {
+          "question": "What can I offer as a subscription?",
+          "answer": "Create recurring boxes, product refills or memberships. Show customers what each plan includes and how often it renews."
+        },
+        {
+          "question": "How do subscription renewals work?",
+          "answer": "Customers choose a plan at checkout. Their payments repeat on the plan’s schedule, so they do not need to place a new order each time."
+        },
+        {
+          "question": "How do customers manage their subscriptions?",
+          "answer": "Subscribers can skip, pause, swap or cancel from their account in your store, without needing to email you."
+        },
+        {
+          "question": "Can I customize how my plans are presented?",
+          "answer": "Yes. Ask Estori to build plan pages that explain your options, compare what is included and help customers choose."
+        }
+      ]
+    },
+    "communities": {
+      "eyebrow": "For communities",
+      "title": "A place to gather around what you do.",
+      "lead": "Bring conversations, events and shared resources into a members-only space connected to your store.",
+      "problemTitle": "Your community needs more than a comment thread.",
+      "problems": [
+        "Useful conversations disappear in busy feeds.",
+        "Resources end up spread across different tools.",
+        "Members need a clear place to return to."
+      ],
+      "benefitsTitle": "Bring the conversation closer to your store.",
+      "benefitsLead": "Give your members one place to connect, find resources and stay involved with your brand.",
+      "features": [
+        {
+          "title": "Make room for conversations.",
+          "body": "Create a dedicated space where members can ask questions and share what they are working on."
+        },
+        {
+          "title": "Keep resources within reach.",
+          "body": "Organize guides, recordings and downloads so members can find them again."
+        },
+        {
+          "title": "Bring people together.",
+          "body": "Share events and live sessions, with a place to keep the conversation going afterward."
+        },
+        {
+          "title": "Connect your work and your community.",
+          "body": "Give your products and member experience one home, with a shared identity."
+        }
+      ],
+      "carouselTitle": "Every community starts with something shared.",
+      "examples": [
+        {
+          "title": "A space for people who make",
+          "body": "Connect a storefront with the ideas and projects around it.",
+          "prompt": "Build a store for my pottery studio, with a space for our makers community."
+        },
+        {
+          "title": "Learning beyond the first purchase",
+          "body": "Keep customers learning with shared resources and conversations that continue after a purchase.",
+          "prompt": "Create a storefront for my gardening resources with a members area for lessons and discussions."
+        },
+        {
+          "title": "A home for your next gathering",
+          "body": "Bring people together around events, shared interests and useful resources.",
+          "prompt": "Build a site for our local creative group, with events and resources for members."
+        }
+      ],
+      "steps": [
+        "Create your community and choose what to share.",
+        "Build your storefront and introduce your idea.",
+        "Invite members and start the conversation."
+      ],
+      "closingTitle": "Build a home for your people.",
+      "closingLead": "Bring your products, conversations and shared experiences together under your brand.",
+      "faq": [
+        {
+          "question": "What can I share with my community?",
+          "answer": "Share posts, lessons, events, recordings and downloads. Give members a place to ask questions and talk with each other."
+        },
+        {
+          "question": "Can I offer free and paid memberships?",
+          "answer": "Yes. Create a free space to welcome your audience and a paid space with extra content, resources or perks."
+        },
+        {
+          "question": "How does my community connect to my store?",
+          "answer": "Your community lives alongside your products and shares the same customer list. Keep shopping and membership together under your brand."
+        },
+        {
+          "question": "Can I include downloads for members?",
+          "answer": "Yes. Offer e-books, templates, videos and other resources as part of joining your community."
+        }
+      ],
+      "subscriptionPreview": {
+        "title": "Thanks for subscribing!",
+        "description": "Keep exploring. Here are a few creators you might enjoy.",
+        "creatorTitle": "The creative practice",
+        "creatorDescription": "Fresh ideas and conversations for curious minds.",
+        "recommendationTitle": "Find your next favorite",
+        "recommendationDescription": "Discover more creators who share your interests."
+      }
     }
   }
 }

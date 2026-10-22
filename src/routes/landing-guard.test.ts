@@ -157,7 +157,7 @@ describe('landing page', () => {
 		const order = [
 			'<Hero stores={stores} />',
 			'<StoreShowcase',
-			'<AgenticCommerceSection />',
+			'<GlobalCommerceSection />',
 			'<AssistantsPanel />',
 			'<PersonalizationSection />',
 			'<Features',

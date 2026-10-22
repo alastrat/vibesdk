@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { SOLUTION_LANDINGS } from '@/content/solution-landings';
 
 const sources = import.meta.glob<string>(
-	['/src/routes/solutions/*.tsx', '/src/routes/platform/*.tsx', '/src/components/public-site/SolutionCopyPage.tsx', '/src/routes/agentic-commerce.tsx', '/src/routes/creators/*.tsx', '/src/routes.tsx'],
+	[
+		'/src/routes/solutions/*.tsx',
+		'/src/routes/platform/*.tsx',
+		'/src/components/public-site/SolutionCopyPage.tsx',
+		'/src/components/public-site/SolutionLandingPage.tsx',
+		'/src/routes/agentic-commerce.tsx',
+		'/src/routes/creators/*.tsx',
+		'/src/routes.tsx',
+	],
 	{ query: '?raw', import: 'default', eager: true },
 );
 
@@ -47,10 +56,8 @@ describe('solution pages', () => {
 		}
 	});
 
-	it('build the subscription, community and platform pages from their copy, with one template', () => {
+	it('keeps platform pages on their existing template while solution pages use the audience layout', () => {
 		const pages: Readonly<Record<string, string>> = {
-			'/src/routes/solutions/subscriptions.tsx': '<SolutionCopyPage head={SUBSCRIPTIONS_PAGE} copy={SUBSCRIPTIONS_COPY} />',
-			'/src/routes/solutions/communities.tsx': '<SolutionCopyPage head={COMMUNITIES_PAGE} copy={COMMUNITIES_COPY} />',
 			'/src/routes/platform/catalog-fulfillment.tsx': '<SolutionCopyPage head={CATALOG_FULFILLMENT_PAGE} copy={CATALOG_FULFILLMENT_COPY} />',
 			'/src/routes/platform/email-marketing.tsx': '<SolutionCopyPage head={EMAIL_MARKETING_PAGE} copy={EMAIL_MARKETING_COPY} />',
 			'/src/routes/platform/web-analytics.tsx': '<SolutionCopyPage head={WEB_ANALYTICS_PAGE} copy={WEB_ANALYTICS_COPY} />',
@@ -77,25 +84,22 @@ describe('solution pages', () => {
 	});
 
 	it('takes early-access requests on the community page, through the shared digital products list', () => {
-		const template = source('/src/components/public-site/SolutionCopyPage.tsx');
+		const template = source('/src/components/public-site/SolutionLandingPage.tsx');
 		expect(template).toContain('useEarlyAccessFromUrl();');
-		expect(template).toContain('isEarlyAccessCapability(copy.capability)');
-		expect(template).toContain('<EarlyAccessButton capability={copy.capability}');
+		expect(template).toContain('isEarlyAccessCapability(capability)');
+		expect(template).toContain('capability={capability}');
+		expect(SOLUTION_LANDINGS.communities.capability).toBe('digital-products');
 	});
 
-	it('give the menu links their anchors', () => {
-		const brands = source('/src/routes/solutions/brands.tsx');
-		expect(brands).toMatch(/<AssistantsPanel\s+id="operations"/);
-		expect(brands).toContain('<PersonalizationSection id="personalization" />');
-		expect(source('/src/routes/solutions/resellers.tsx')).toContain('id="catalog"');
-		// The resellers page's catalog section leads to the page about catalog and fulfillment.
-		expect(source('/src/routes/solutions/resellers.tsx')).toContain('to="/platform/catalog-fulfillment"');
+	it('retains menu anchors through shared audience configuration', () => {
+		expect(SOLUTION_LANDINGS.brands.future.map((item) => item.id)).toEqual(['agentic-commerce', 'operations', 'personalization']);
+		expect(SOLUTION_LANDINGS.resellers.sectionId).toBe('catalog');
+		expect(SOLUTION_LANDINGS.resellers.more?.to).toBe('/platform/catalog-fulfillment');
 	});
 
-	it('takes early-access requests for digital products, including after a sign-in that reloads the page', () => {
-		const digital = source('/src/routes/solutions/digital.tsx');
-		expect(digital).toContain('<EarlyAccessButton capability="digital-products"');
-		expect(digital).toContain('useEarlyAccessFromUrl();');
+	it('routes all five audiences through the shared layout and preserves digital early access', () => {
+		for (const id of Object.keys(SOLUTION_LANDINGS)) expect(source(`/src/routes/solutions/${id}.tsx`)).toContain(`<SolutionLandingPage id="${id}"`);
+		expect(SOLUTION_LANDINGS.digital.capability).toBe('digital-products');
 	});
 });
 

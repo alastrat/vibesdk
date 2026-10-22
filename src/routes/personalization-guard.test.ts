@@ -1,3 +1,4 @@
+import { PERSONALIZATION_CARDS } from '@/content/positioning';
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(
@@ -70,15 +71,12 @@ describe('personalized shopping cards', () => {
 	});
 
 	it('has the approved copy, with bundles folded into the cart card', () => {
-		const copy = source('/src/content/positioning.ts');
-		for (const text of [
-			"title: 'Products picked for each shopper',\n\t\tbody: 'Machine learning scores every product for every shopper",
-			"id: 'cart', title: 'A cart that suggests what goes with it'",
-			"id: 'offer', title: 'An offer right after checkout'",
-			"id: 'search', title: 'Search that understands shoppers'",
-		]) {
-			expect(copy).toContain(text);
-		}
+		expect(PERSONALIZATION_CARDS.map(({ id, title }) => ({ id, title }))).toEqual([
+			{ id: 'picks', title: 'Products picked for each shopper' },
+			{ id: 'cart', title: 'A cart that suggests what goes with it' },
+			{ id: 'offer', title: 'An offer right after checkout' },
+			{ id: 'search', title: 'Search that understands shoppers' },
+		]);
 	});
 
 	it('tells each card its own story', () => {

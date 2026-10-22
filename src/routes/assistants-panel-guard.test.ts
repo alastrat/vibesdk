@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STORE_ASSISTANTS } from '@/content/positioning';
 
 const sources = import.meta.glob<string>(
 	[
@@ -48,17 +49,17 @@ describe('store assistants panel', () => {
 		const panel = source(PANEL);
 		expect(panel).toContain('STORE_ASSISTANTS.map');
 		expect(panel).toContain('<CapabilityTag id="operations-agents" tone="dark" />');
-		const copy = source('/src/content/positioning.ts');
-		for (const name of ['Inventory assistant', 'Customer service assistant', 'Marketing assistant']) expect(copy).toContain(name);
+		expect(STORE_ASSISTANTS.map(assistant => assistant.name)).toEqual(['Inventory assistant', 'Customer service assistant', 'Marketing assistant']);
 		// Each card's picture is a small product view drawn in code, decorative to screen readers.
 		expect(source('/src/components/public-site/assistant-mocks.tsx')).toContain('export function AssistantMock(');
 		expect(panel).toMatch(/aria-hidden[^>]*delay-\[1500ms\]|delay-\[1500ms\][^>]*aria-hidden/);
 	});
 
-	it('replaces the old operations section on the landing and brands pages', () => {
+	it('keeps the full assistants panel on the landing page while brands uses the compact audience layout', () => {
 		expect(source('/src/routes/landing/LandingPage.tsx')).toContain('<AssistantsPanel />');
 		const brands = source('/src/routes/solutions/brands.tsx');
-		expect(brands).toMatch(/<AssistantsPanel\s+id="operations"/);
+		expect(brands).toContain('<SolutionLandingPage id="brands"');
+		expect(brands).not.toContain('<AssistantsPanel');
 		for (const page of [source('/src/routes/landing/LandingPage.tsx'), brands]) expect(page).not.toContain('OperationsSection');
 	});
 

@@ -105,6 +105,7 @@ export function PublicTopBar() {
 							{MENUS.map((menu) => (
 								<div
 									key={menu.id}
+									className={cn(menu.id === 'creators' && 'hidden')}
 									// Keyboard focus leaving the trigger and its panel closes it; clicks elsewhere are the document listener's.
 									onBlur={(event) => {
 										if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) {
@@ -203,7 +204,7 @@ export function PublicTopBar() {
 							) : (
 								<ul>
 									{MENUS.map((menu, index) => (
-										<li key={menu.id} className="motion-safe:animate-public-menu-item" style={{ animationDelay: `${index * ROW_STAGGER_MS}ms` }}>
+										<li key={menu.id} className={cn('motion-safe:animate-public-menu-item', menu.id === 'creators' && 'hidden')} style={{ animationDelay: `${index * ROW_STAGGER_MS}ms` }}>
 											<button type="button" onClick={() => setMobileSection(menu.id)} className={SHEET_ROW}>
 												{menu.label}
 												<CaretRightIcon className="size-6" aria-hidden />

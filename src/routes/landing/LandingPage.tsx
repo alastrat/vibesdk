@@ -1,5 +1,6 @@
+import { GlobalCommerceSection } from '@/components/public-site/GlobalCommerceSection';
 import { AssistantsPanel } from '@/components/public-site/AssistantsPanel';
-import { AgenticCommerceSection, PersonalizationSection } from '@/components/public-site/capability-sections';
+import { PersonalizationSection } from '@/components/public-site/capability-sections';
 import { PageMeta } from '@/components/public-site/solution-page';
 import { HOME_PAGE } from '@/content/public-pages';
 import { useShowcaseStores } from '@/hooks/use-showcase-stores';
@@ -19,7 +20,7 @@ export function LandingPage() {
 				<Hero stores={stores} />
 				<StoreShowcase stores={stores} />
 			</div>
-			<AgenticCommerceSection />
+			<GlobalCommerceSection />
 			<AssistantsPanel />
 			<PersonalizationSection />
 			<Features />

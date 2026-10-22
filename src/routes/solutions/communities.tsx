@@ -1,7 +1,12 @@
-import { SolutionCopyPage } from '@/components/public-site/SolutionCopyPage';
+import { SolutionLandingPage } from '@/components/public-site/SolutionLandingPage';
+import { PageMeta } from '@/components/public-site/solution-page';
 import { COMMUNITIES_PAGE } from '@/content/public-pages';
-import { COMMUNITIES_COPY } from '@/content/solution-pages';
 
 export default function CommunitiesPage() {
-	return <SolutionCopyPage head={COMMUNITIES_PAGE} copy={COMMUNITIES_COPY} />;
+	return (
+		<>
+			<PageMeta {...COMMUNITIES_PAGE} />
+			<SolutionLandingPage id="communities" />
+		</>
+	);
 }
