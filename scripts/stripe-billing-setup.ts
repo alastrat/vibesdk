@@ -1,10 +1,10 @@
 /**
- * Creates Estori's billing products in Stripe: Pro and Premium with a monthly price each, and AI credits with a
+ * Creates Estori's billing products in Stripe: Pro and Premium with monthly and yearly prices each, and AI credits with a
  * one-time price per 1,000. Rerunning reuses what exists. Prints the STRIPE_PRICE_IDS value for the environment.
  * Usage: STRIPE_SECRET_KEY=sk_test_... bun scripts/stripe-billing-setup.ts --mode test
  */
 
-import { EXTRA_CREDITS, PLAN_PRICES_CENTS } from '../shared/types/plans';
+import { EXTRA_CREDITS, PLAN_PRICES_CENTS, PLAN_YEARLY_PRICES_CENTS } from '../shared/types/plans';
 import type { StripePriceIds } from '../worker/services/billing/prices';
 import { StripeApiError, type FormValue } from '../worker/services/payments/stripe-client';
 import { modeOfKey, stripeCaller, type StripeMode } from './stripe-api';
@@ -19,6 +19,8 @@ export const BILLING_LOOKUP_KEYS: Record<keyof StripePriceIds, string> = {
 	pro: 'estori_pro_monthly',
 	premium: 'estori_premium_monthly',
 	credits: 'estori_credits_1000',
+	proYearly: 'estori_pro_yearly',
+	premiumYearly: 'estori_premium_yearly',
 };
 
 interface PriceSpec {
@@ -32,6 +34,8 @@ interface PriceSpec {
 const PRICE_SPECS: readonly PriceSpec[] = [
 	{ plan: 'pro', product: 'estori_pro', unitAmount: PLAN_PRICES_CENTS.pro, details: { recurring: { interval: 'month' }, metadata: { estori_plan: 'pro' } } },
 	{ plan: 'premium', product: 'estori_premium', unitAmount: PLAN_PRICES_CENTS.premium, details: { recurring: { interval: 'month' }, metadata: { estori_plan: 'premium' } } },
+	{ plan: 'proYearly', product: 'estori_pro', unitAmount: PLAN_YEARLY_PRICES_CENTS.pro, details: { recurring: { interval: 'year' }, metadata: { estori_plan: 'pro', estori_billing_interval: 'year' } } },
+	{ plan: 'premiumYearly', product: 'estori_premium', unitAmount: PLAN_YEARLY_PRICES_CENTS.premium, details: { recurring: { interval: 'year' }, metadata: { estori_plan: 'premium', estori_billing_interval: 'year' } } },
 	{ plan: 'credits', product: 'estori_credits', unitAmount: EXTRA_CREDITS.unitPriceCents, details: { metadata: { estori_kind: 'credits' }, nickname: '1,000 AI credits' } },
 ];
 
@@ -40,6 +44,8 @@ interface ExistingPrice {
 	lookup_key: string | null;
 	unit_amount: number | null;
 	active: boolean;
+	currency: string;
+	recurring: { interval: string; interval_count: number } | null;
 }
 
 export async function setUpBilling(input: {
@@ -67,7 +73,8 @@ export async function setUpBilling(input: {
 	const priceIds: Partial<StripePriceIds> = {};
 	for (const spec of PRICE_SPECS) {
 		const lookupKey = BILLING_LOOKUP_KEYS[spec.plan];
-		const reusable = existing.find((price) => price.active && price.lookup_key === lookupKey && price.unit_amount === spec.unitAmount);
+		const expectedInterval = spec.plan === 'credits' ? null : spec.plan.endsWith('Yearly') ? 'year' : 'month';
+		const reusable = existing.find((price) => price.active && price.lookup_key === lookupKey && price.unit_amount === spec.unitAmount && price.currency === 'usd' && (price.recurring?.interval ?? null) === expectedInterval && (price.recurring?.interval_count ?? 1) === 1);
 		if (reusable) {
 			priceIds[spec.plan] = reusable.id;
 			continue;

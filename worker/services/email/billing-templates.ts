@@ -4,7 +4,7 @@ import { serverT } from '../i18n/server-t';
 /** Estori's own emails about plans, payments and AI credits. Stripe sends none of them. */
 
 import { LEGAL_CONTACT, LEGAL_ENTITY, legalAddressLine } from '../../../shared/types/legal';
-import { PLAN_LIMITS, PLAN_PRICES_CENTS, formatBillingDate, formatCredits, formatUsd, planName } from '../../../shared/types/plans';
+import { PLAN_LIMITS, PLAN_PRICES_CENTS, planPriceCents, formatBillingDate, formatCredits, formatUsd, planName } from '../../../shared/types/plans';
 import type { BillingEmail } from '../billing/notices';
 import { renderEmail } from './templates';
 import type { OutgoingEmail } from './types';
@@ -46,15 +46,15 @@ export function planStartedEmail(to: string, email: EmailOf<'plan_started'>, lin
 	const { t } = serverT(locale);
 	const plan = planName(email.plan);
 	const limits = PLAN_LIMITS[email.plan];
-	const more = email.plan === 'premium' ? t(' When you need more, you can buy extra credits.') : '';
+	const more = t(' When you need more, you can buy extra credits.');
 	return renderEmail({
 		locale,
 		to,
 		subject: t("Welcome to Estori {value1}", { value1: plan }),
 		heading: t("Welcome to {value1}", { value1: plan }),
-		body: t("Your account now has {value1} AI credits a month, up to {value2}, your own domains and the supplier catalog. {value3} renews on {value4} at {value5} a month until you cancel.{value6}", { value1: formatCredits(limits.aiCredits, locale), value2: stores(limits.liveStores, 'live store', locale), value3: plan, value4: formatBillingDate(email.renewsAt, locale), value5: formatUsd(PLAN_PRICES_CENTS[email.plan], locale), value6: more }),
+		body: email.billingInterval === 'year' ? t('Your account now has {credits} AI credits each month. {plan} renews on {date} at {amount} a year until you cancel.', { credits: formatCredits(email.monthlyCredits ?? limits.aiCredits, locale), plan, date: formatBillingDate(email.renewsAt, locale), amount: formatUsd(planPriceCents(email.plan, 'year', email.monthlyCredits), locale) }) : t("Your account now has {value1} AI credits a month, up to {value2}, your own domains and the supplier catalog. {value3} renews on {value4} at {value5} a month until you cancel.{value6}", { value1: formatCredits(email.monthlyCredits ?? limits.aiCredits, locale), value2: stores(limits.liveStores, 'live store', locale), value3: plan, value4: formatBillingDate(email.renewsAt, locale), value5: formatUsd(planPriceCents(email.plan, 'month', email.monthlyCredits), locale), value6: more }),
 		...action(t('Open billing'), links.billing),
-		footer: t("Cancel any time in Estori; {value1} then runs to the end of the month you paid for.", { value1: plan }),
+		footer: email.billingInterval === 'year' ? t('Cancel any time in Estori; your plan runs to the end of the year you paid for.') : t("Cancel any time in Estori; {value1} then runs to the end of the month you paid for.", { value1: plan }),
 	});
 }
 
@@ -86,7 +86,7 @@ export function planUpgradedEmail(to: string, email: EmailOf<'plan_upgraded'>, l
 		to,
 		subject: t("You're on {value1} now", { value1: plan }),
 		heading: t("You're on {value1}", { value1: plan }),
-		body: t("You now have {value1} AI credits a month, and the credits you've used this month count against them. We charged the difference for the rest of this month; your receipt follows.", { value1: formatCredits(PLAN_LIMITS[email.plan].aiCredits, locale) }),
+		body: email.billingInterval === 'year' ? t('You now have {credits} AI credits a month. This month’s usage counts against them. We charged the difference for the rest of your paid year; your receipt follows.', { credits: formatCredits(email.monthlyCredits ?? PLAN_LIMITS[email.plan].aiCredits, locale) }) : t("You now have {value1} AI credits a month, and the credits you've used this month count against them. We charged the difference for the rest of this month; your receipt follows.", { value1: formatCredits(email.monthlyCredits ?? PLAN_LIMITS[email.plan].aiCredits, locale) }),
 		...action(t('Open billing'), links.billing),
 		footer: t(STORES_STAY_LIVE),
 	});
@@ -101,7 +101,7 @@ export function downgradeScheduledEmail(to: string, email: EmailOf<'downgrade_sc
 		to,
 		subject: t("Your plan moves to {value1} at renewal", { value1: plan }),
 		heading: t("Your plan moves to {value1}", { value1: plan }),
-		body: t("On {value1} your plan moves to {value2}, with {value3} AI credits a month at {value4}. Until then you keep {value5}. Extra credits you bought stay yours.", { value1: formatBillingDate(email.at, locale), value2: plan, value3: formatCredits(PLAN_LIMITS[email.plan].aiCredits, locale), value4: formatUsd(PLAN_PRICES_CENTS[email.plan], locale), value5: planName('premium') }),
+		body: email.billingInterval === 'year' ? t('On {date} your plan moves to {plan}, at {amount} a year with {credits} AI credits each month. Your extra credits stay yours.', { date: formatBillingDate(email.at, locale), plan, amount: formatUsd(planPriceCents(email.plan, 'year', email.monthlyCredits), locale), credits: formatCredits(email.monthlyCredits ?? PLAN_LIMITS[email.plan].aiCredits, locale) }) : t("On {value1} your plan moves to {value2}, with {value3} AI credits a month at {value4}. Until then you keep {value5}. Extra credits you bought stay yours.", { value1: formatBillingDate(email.at, locale), value2: plan, value3: formatCredits(email.monthlyCredits ?? PLAN_LIMITS[email.plan].aiCredits, locale), value4: formatUsd(planPriceCents(email.plan, 'month', email.monthlyCredits), locale), value5: planName('premium') }),
 		...action(t('Open billing'), links.billing),
 		footer: t(STORES_STAY_LIVE),
 	});
@@ -238,7 +238,7 @@ export function enforcementNoticeEmail(to: string, email: EmailOf<'enforcement_n
 	const plans =
 		t("From {value1}, Basic includes {value2} AI credits a month, {value3} and {value4}, without the supplier catalog. ", { value1: date, value2: formatCredits(basic.aiCredits, locale), value3: stores(basic.storesLifetime, 'store', locale), value4: stores(basic.liveStores, 'live store', locale) }) +
 		t("Pro, at {value1} a month, adds {value2} credits, {value3}, your own domains and the catalog. ", { value1: formatUsd(PLAN_PRICES_CENTS.pro, locale), value2: formatCredits(pro.aiCredits, locale), value3: stores(pro.liveStores, 'live store', locale) }) +
-		t("Premium, at {value1} a month, adds {value2} credits, {value3} and extra credits.", { value1: formatUsd(PLAN_PRICES_CENTS.premium, locale), value2: formatCredits(premium.aiCredits, locale), value3: stores(premium.liveStores, 'live store', locale) });
+		t("Premium, at {value1} a month, adds {value2} credits and {value3}.", { value1: formatUsd(PLAN_PRICES_CENTS.premium, locale), value2: formatCredits(premium.aiCredits, locale), value3: stores(premium.liveStores, 'live store', locale) });
 	return renderEmail({
 		locale,
 		to,

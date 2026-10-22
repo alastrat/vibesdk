@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { SolutionCopyPage } from '@/components/public-site/SolutionCopyPage';
 import { CardSection } from '@/components/public-site/solution-page';
 import type { CardCopy } from '@/content/positioning';
@@ -17,12 +18,26 @@ export default function PaymentsPage() {
 	return (
 		<SolutionCopyPage head={PAYMENTS_PAGE} copy={PAYMENTS_COPY}>
 			<CardSection
-				eyebrow="Limits"
-				tag={PAYMENTS_COPY.capability}
-				title="Limits that grow with your store"
-				lead={`Every store starts with lower limits and a longer wait before payouts, which protects shoppers while a store builds its record. Your seller level sets them, not your plan. ${OWN_PRODUCTS_WEIGHTING}`}
-				cards={LEVEL_CARDS}
+				id="orders"
+				tag="order-management"
+				eyebrow={marketingCopy.platform.orders.eyebrow}
+				title={marketingCopy.platform.orders.title}
+				lead={marketingCopy.platform.orders.description}
+				cards={marketingCopy.platform.orders.cards}
 			/>
+			<CardSection
+				id="limits"
+				eyebrow="Estori selling safeguards"
+				tag={PAYMENTS_COPY.capability}
+				title="Selling limits that grow with your store"
+				lead={`Estori sets order limits, weekly sales limits and payout waits to manage selling risk while a store builds its record. These are Estori safeguards, separate from Stripe’s technical payment limits. Your seller level sets them, not your plan. ${OWN_PRODUCTS_WEIGHTING}`}
+				cards={LEVEL_CARDS}
+			>
+				<p className="max-w-3xl text-sm leading-relaxed text-public-muted">
+					{marketingCopy.platform.payments.stripeLimitNote}{' '}
+					<a href="https://docs.stripe.com/currencies#minimum-and-maximum-charge-amounts" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4 hover:text-public-blue">{marketingCopy.platform.payments.stripeLimitSource} →</a>
+				</p>
+			</CardSection>
 		</SolutionCopyPage>
 	);
 }

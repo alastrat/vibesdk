@@ -20,9 +20,9 @@ beforeAll(async () => {
 		await insertUser(db, id, { emailVerified: true });
 		await db.prepare(`UPDATE users SET ${column} WHERE id = ?`).bind(id).run();
 	}
-	for (const [id, userId] of [['app_s', 'u_small'], ['app_b1', 'u_big'], ['app_b2', 'u_big'], ['app_c', 'u_catalog']] as const) await insertApp(db, { id, userId });
+	for (const [id, userId] of [['app_s', 'u_small'], ['app_b1', 'u_big'], ['app_b2', 'u_big'], ['app_b3', 'u_big'], ['app_c', 'u_catalog']] as const) await insertApp(db, { id, userId });
 	const stores = new LiveStoreService(envWith(db));
-	for (const appId of ['app_s', 'app_b1', 'app_b2', 'app_c']) await stores.publish({ appId, slug: appId.replace('_', '-'), commit: 'c1', now: new Date(NOW) });
+	for (const appId of ['app_s', 'app_b1', 'app_b2', 'app_b3', 'app_c']) await stores.publish({ appId, slug: appId.replace('_', '-'), commit: 'c1', now: new Date(NOW) });
 	await new BillingService(envWith(db)).reserveStore('u_small', null, new Date(NOW));
 });
 
@@ -141,9 +141,9 @@ describe('who is over Basic', () => {
 	}
 
 	it.each([
-		{ account: { live: 1, started: 3 }, over: false },
+		{ account: { live: 2, started: 2 }, over: false },
 		{ account: { live: 0, started: 0 }, over: false },
-		{ account: { live: 2, started: 2 }, over: true },
+		{ account: { live: 3, started: 2 }, over: true },
 		{ account: { live: 1, started: 4 }, over: true },
 		{ account: { live: 1, started: 1, catalog: true }, over: true },
 	])('answers $over for $account', async ({ account, over }) => {

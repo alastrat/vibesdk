@@ -1,3 +1,5 @@
+import { loadAccount } from '../../../services/billing/account';
+import { assertWithinLimit } from '../../../services/i18n/plan-limits';
 import { msg } from '../../../../shared/i18n/translate';
 /** Seller onboarding with Stripe Connect Express: start or resume onboarding, read status, open the dashboard. */
 
@@ -189,6 +191,8 @@ export class StripeConnectController extends BaseController {
         context: RouteContext,
     ): Promise<ControllerResponse<ApiResponse<StripeConnectStatusData>>> {
         try {
+            const refusal = assertWithinLimit(await loadAccount(env, context.user!.id), 'flexiblePayouts');
+            if (refusal) return StripeConnectController.createPlanLimitResponse<StripeConnectStatusData>(refusal);
             const body = await StripeConnectController.parseJsonBody<unknown>(request);
             const choice = body.success ? parsePayoutRequest(body.data) : null;
             if (!choice) return StripeConnectController.createErrorResponse<StripeConnectStatusData>(msg('Choose daily, weekly on a weekday, or monthly on a day from 1 to 28'), 400);

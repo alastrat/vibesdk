@@ -1,3 +1,5 @@
+import { loadAccount } from '../../../services/billing/account';
+import { assertWithinLimit } from '../../../services/i18n/plan-limits';
 import { t } from '../../../services/i18n/request-locale';
 import { msg } from '../../../../shared/i18n/translate';
 /** A seller's shopper emails: each store's templates and reply-to setting, previews and test sends. Store routes are owner-only. */
@@ -25,7 +27,7 @@ import {
 import { createEmailSender } from '../../../services/email/sender';
 import { storeName } from '../../../services/shopper-emails/outbox';
 import { maskEmail, renderShopperEmail, sampleContent, TEMPLATE_TEST_NOTE } from '../../../services/shopper-emails/template';
-import { shopperEmailStoreFromEnv } from '../../../services/shopper-emails/wiring';
+import { shopperEmailFrom, shopperEmailStoreFromEnv } from '../../../services/shopper-emails/wiring';
 import { parseReplyTo, parseTemplateFields, parseTemplateRequest } from './template-request';
 
 const RECENT_EMAILS = 50;
@@ -71,13 +73,16 @@ export class ShopperEmailsController extends BaseController {
             const emails = new ShopperEmailService(env);
             const store = await shopperEmailStoreFromEnv(env)(appId);
             if (!store) return ShopperEmailsController.createErrorResponse(msg('Store not found'), 404);
-            const [saved, replyTo, recent] = await Promise.all([emails.templates(appId), emails.replyTo(appId), emails.recent(appId, RECENT_EMAILS)]);
+            const [saved, replyTo, recent, account] = await Promise.all([emails.templates(appId), emails.replyTo(appId), emails.recent(appId, RECENT_EMAILS), loadAccount(env, context.user!.id)]);
             return ShopperEmailsController.createSuccessResponse<ShopperEmailsData>({
-                templates: SHOPPER_EMAIL_KINDS.map((kind) => templateView(kind, saved.get(kind))),
+                templates: SHOPPER_EMAIL_KINDS.map((kind) => {
+                    const template = saved.get(kind);
+                    return !account.billing || account.limits.customShopperEmails ? templateView(kind, template) : { ...templateView(kind, undefined), enabled: template?.enabled ?? true };
+                }),
                 placeholders: SHOPPER_EMAIL_PLACEHOLDERS,
-                replyTo,
+                replyTo: !account.billing || account.limits.customShopperEmails ? replyTo : null,
                 sellerEmail: store.sellerEmail,
-                senderEmail: store.fromEmail,
+                senderEmail: !account.billing || account.limits.shopperEmails ? store.fromEmail : shopperEmailFrom(env),
                 recent: recent.map(recentView),
             });
         } catch (error) {
@@ -92,6 +97,8 @@ export class ShopperEmailsController extends BaseController {
         const parsed = body.success ? parseTemplateRequest(target.kind, body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the email as JSON', 400);
         try {
+            const refusal = assertWithinLimit(await loadAccount(env, context.user!.id), 'customShopperEmails');
+            if (refusal) return ShopperEmailsController.createPlanLimitResponse(refusal);
             await new ShopperEmailService(env).saveTemplate(target.appId, target.kind, parsed.value, new Date());
             return ShopperEmailsController.createSuccessResponse(templateView(target.kind, parsed.value));
         } catch (error) {
@@ -103,6 +110,8 @@ export class ShopperEmailsController extends BaseController {
         const target = ShopperEmailsController.target(context);
         if (!target) return ShopperEmailsController.createErrorResponse(msg('No such email'), 404);
         try {
+            const refusal = assertWithinLimit(await loadAccount(env, context.user!.id), 'customShopperEmails');
+            if (refusal) return ShopperEmailsController.createPlanLimitResponse(refusal);
             const kept = await new ShopperEmailService(env).resetTemplate(target.appId, target.kind, new Date());
             return ShopperEmailsController.createSuccessResponse(templateView(target.kind, kept ?? undefined));
         } catch (error) {
@@ -117,6 +126,8 @@ export class ShopperEmailsController extends BaseController {
         const parsed = body.success ? parseReplyTo(body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the setting as JSON', 400);
         try {
+            const refusal = assertWithinLimit(await loadAccount(env, context.user!.id), 'customShopperEmails');
+            if (refusal) return ShopperEmailsController.createPlanLimitResponse(refusal);
             await new ShopperEmailService(env).saveReplyTo(appId, parsed.value, new Date());
             return ShopperEmailsController.createSuccessResponse<ShopperEmailSettings>({ replyTo: parsed.value });
         } catch (error) {
@@ -132,6 +143,8 @@ export class ShopperEmailsController extends BaseController {
         const parsed = body.success ? parseTemplateFields(target.kind, body.data) : null;
         if (!parsed?.ok) return ShopperEmailsController.createErrorResponse(parsed?.message ?? 'Send the email as JSON', 400);
         try {
+            const refusal = assertWithinLimit(await loadAccount(env, context.user!.id), 'shopperEmails');
+            if (refusal) return ShopperEmailsController.createPlanLimitResponse(refusal);
             const store = await shopperEmailStoreFromEnv(env)(target.appId);
             if (!store) return ShopperEmailsController.createErrorResponse(msg('Store not found'), 404);
             return ShopperEmailsController.createSuccessResponse<ShopperEmailPreview>(renderShopperEmail(parsed.value, sampleContent(target.kind, storeName(store.title), store.storeUrl)));
@@ -151,6 +164,9 @@ export class ShopperEmailsController extends BaseController {
         if (!sender) return ShopperEmailsController.createErrorResponse(msg("Email sending isn't set up on this deployment"), 400);
         const user = context.user!;
         try {
+            const account = await loadAccount(env, user.id);
+            const refusal = assertWithinLimit(account, 'shopperEmails');
+            if (refusal) return ShopperEmailsController.createPlanLimitResponse(refusal);
             const [store, replyTo] = await Promise.all([shopperEmailStoreFromEnv(env)(target.appId), new ShopperEmailService(env).replyTo(target.appId)]);
             if (!store) return ShopperEmailsController.createErrorResponse(msg('Store not found'), 404);
             // Only to the store's seller at a confirmed address, so an account can't aim Estori's email at a stranger.
@@ -160,7 +176,7 @@ export class ShopperEmailsController extends BaseController {
             const sentThisHour = Number((await env.VibecoderStore.get(key)) ?? '0');
             if (sentThisHour >= TEST_SENDS_PER_HOUR) return ShopperEmailsController.createErrorResponse(t("You can send {value1} test emails an hour. Try again later.", { value1: TEST_SENDS_PER_HOUR }), 429);
             const content = { ...sampleContent(target.kind, storeName(store.title), store.storeUrl), testNote: TEMPLATE_TEST_NOTE };
-            const email = renderShopperEmail(parsed.value, content);
+            const email = renderShopperEmail(!account.billing || account.limits.customShopperEmails ? parsed.value : DEFAULT_SHOPPER_EMAIL_TEMPLATES[target.kind], content);
             // Counted before sending, so a failing send can't be retried without limit.
             await env.VibecoderStore.put(key, String(sentThisHour + 1), { expirationTtl: TWO_HOURS_SECONDS });
             await sender.send({
@@ -170,7 +186,7 @@ export class ShopperEmailsController extends BaseController {
                 text: email.text,
                 fromEmail: store.fromEmail,
                 fromName: content.storeName,
-                replyTo: replyTo ?? store.sellerEmail ?? undefined,
+                replyTo: (!account.billing || account.limits.customShopperEmails ? replyTo : null) ?? store.sellerEmail ?? undefined,
                 headers: { 'X-Estori-Store': target.appId, 'X-Estori-Email': target.kind },
             });
             return ShopperEmailsController.createSuccessResponse<ShopperEmailTestResult>({ sentTo: to });

@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { SparkleIcon } from '@phosphor-icons/react';
 import { ASSISTANTS_HEADING, ASSISTANTS_LEAD, STORE_ASSISTANTS, type StoreAssistant } from '@/content/positioning';
@@ -67,8 +68,7 @@ export function AssistantsPanel({ id, action }: { id?: string; action?: ReactNod
 					<div className="mt-10 flex justify-center">
 						{action ?? (
 							<PillLink to="/solutions/brands#operations" variant="white">
-								See how it will work
-							</PillLink>
+								{marketingCopy.home.assistants.link}</PillLink>
 						)}
 					</div>
 				</div>

@@ -1,27 +1,28 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { CaretDownIcon, CaretLeftIcon, CaretRightIcon, XIcon } from '@phosphor-icons/react';
 import { EstoriLogo, BRAND } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
-import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { PillLink, UNDERLINE_GROW } from '@/components/public-site/primitives';
 import { StartBuildingButton } from '@/components/public-site/StartBuildingButton';
 import { cn } from '@/lib/utils';
 import { AnnouncementBar } from './AnnouncementBar';
+import { PublicUtilityBar } from './PublicUtilityBar';
 import { MenuPanel, MobileMenuSection, type MenuId } from './NavMenu';
 
 const MENUS: ReadonlyArray<{ id: MenuId; label: string }> = [
-	{ id: 'solutions', label: 'Solutions' },
-	{ id: 'creators', label: 'For creators' },
+	{ id: 'solutions', label: marketingCopy.navigation.solutions },
+	{ id: 'creators', label: marketingCopy.common.forCreators },
 ];
 
 const PAGE_LINKS = [
-	{ to: '/discover', label: 'Discover' },
-	{ to: '/pricing', label: 'Pricing' },
+	{ to: '/discover', label: marketingCopy.common.discover },
+	{ to: '/pricing', label: marketingCopy.common.pricing },
 ] as const;
 
-/** Beside Pricing on wide screens; a button at the foot of the phone menu, as on 1Password. */
-const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;
+/** A main-bar action and a button at the foot of the phone menu. */
+const SALES_LINK = { to: '/contact', label: marketingCopy.common.talkToSales } as const;
 
 /** An underline that draws in from the left under a hovered link, and stays under the open menu's trigger. */
 const NAV_ITEM =
@@ -33,10 +34,9 @@ const BURGER_LINE = 'absolute left-0 h-0.5 w-6 rounded-full bg-current transitio
 /** Each row of the phone menu arrives a moment after the one above it. */
 const ROW_STAGGER_MS = 40;
 
-/** Top of every public page: the gold announcement, then a white bar with the brand, the menus, sign-in and the build action. */
+/** Top of every public page: the gold announcement, gray utility row, then the white navigation and build action. */
 export function PublicTopBar() {
 	const { isAuthenticated } = useAuth();
-	const { showAuthModal } = useAuthModal();
 	const { pathname, hash, key } = useLocation();
 	const [menuOpen, setMenuOpen] = useState(false);
 	// The phone menu's page: the top list, or one menu's columns.
@@ -94,13 +94,14 @@ export function PublicTopBar() {
 	return (
 		<header ref={headerRef} className="sticky top-0 z-40">
 			<AnnouncementBar />
+			<PublicUtilityBar />
 			<div className="relative border-b border-public-line bg-white">
 				<div className="mx-auto flex h-16 max-w-[1296px] items-center justify-between gap-4 px-4 sm:h-[72px] sm:px-6">
 					<div className="flex items-center gap-8">
 						<Link to="/" aria-label={`${BRAND.name} home`} className="flex items-center text-public-brand">
 							<EstoriLogo className="h-7 w-auto" />
 						</Link>
-						<nav aria-label="Main" className="hidden lg:flex items-center gap-6 whitespace-nowrap text-[15px] text-public-charcoal">
+						<nav aria-label={marketingCopy.navigation.accessibility.main} className="hidden lg:flex items-center gap-6 whitespace-nowrap text-[15px] text-public-charcoal">
 							{MENUS.map((menu) => (
 								<div
 									key={menu.id}
@@ -130,7 +131,7 @@ export function PublicTopBar() {
 									{openPanel === menu.id && <MenuPanel id={menu.id} />}
 								</div>
 							))}
-							{[...PAGE_LINKS, SALES_LINK].map((link) => (
+							{PAGE_LINKS.map((link) => (
 								<Link key={link.to} to={link.to} className={NAV_ITEM}>
 									{link.label}
 								</Link>
@@ -138,22 +139,16 @@ export function PublicTopBar() {
 						</nav>
 					</div>
 					<div className="flex items-center gap-4 whitespace-nowrap">
-						{isAuthenticated ? (
-							<Link to="/" className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>
-								Open app
-							</Link>
-						) : (
-							<button type="button" onClick={() => showAuthModal()} className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>
-								Sign in
-							</button>
-						)}
+						<Link to={SALES_LINK.to} className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>
+							{SALES_LINK.label}
+						</Link>
 						<StartBuildingButton className="hidden sm:inline-flex" />
 						<button
 							type="button"
 							className="rounded-full p-2 text-public-charcoal lg:hidden"
 							aria-expanded={menuOpen}
 							aria-controls="public-menu"
-							aria-label="Open menu"
+							aria-label={marketingCopy.navigation.accessibility.openMenu}
 							onClick={() => setMenuOpen(true)}
 						>
 							<span aria-hidden className="relative block h-4 w-6">
@@ -168,7 +163,7 @@ export function PublicTopBar() {
 				<dialog
 					ref={sheetRef}
 					id="public-menu"
-					aria-label="Menu"
+					aria-label={marketingCopy.navigation.accessibility.menu}
 					onClose={() => {
 						setMenuOpen(false);
 						setMobileSection(null);
@@ -180,7 +175,7 @@ export function PublicTopBar() {
 						<div className="grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-public-line px-4 sm:h-[72px] sm:px-6">
 							{mobileSection ? (
 								<>
-									<button type="button" aria-label="Back to menu" onClick={() => setMobileSection(null)} className={cn(SHEET_BUTTON, '-ml-2')}>
+									<button type="button" aria-label={marketingCopy.navigation.accessibility.back} onClick={() => setMobileSection(null)} className={cn(SHEET_BUTTON, '-ml-2')}>
 										<CaretLeftIcon className="size-6" aria-hidden />
 									</button>
 									<p className="text-xl">{MENUS.find((menu) => menu.id === mobileSection)?.label}</p>
@@ -192,7 +187,7 @@ export function PublicTopBar() {
 							)}
 							<button
 								type="button"
-								aria-label="Close menu"
+								aria-label={marketingCopy.navigation.accessibility.close}
 								onClick={() => setMenuOpen(false)}
 								className={cn(SHEET_BUTTON, '-mr-2 justify-self-end', !mobileSection && 'col-start-3')}
 							>
@@ -232,23 +227,11 @@ export function PublicTopBar() {
 
 						{!mobileSection && (
 							<div className="shrink-0 border-t border-public-line px-4 py-5 sm:px-6">
-								{isAuthenticated ? (
+								{isAuthenticated && (
 									<Link to="/" className="text-[17px] text-public-charcoal">
-										Open app
-									</Link>
-								) : (
-									<button
-										type="button"
-										onClick={() => {
-											setMenuOpen(false);
-											showAuthModal();
-										}}
-										className="text-[17px] text-public-charcoal"
-									>
-										Sign in
-									</button>
+										{marketingCopy.navigation.openApp}</Link>
 								)}
-								<div className="mt-4 grid grid-cols-2 gap-3">
+								<div className={cn('grid grid-cols-2 gap-3', isAuthenticated && 'mt-4')}>
 									<PillLink to={SALES_LINK.to} variant="outline-on-light" className="w-full px-3 text-[15px]">
 										{SALES_LINK.label}
 									</PillLink>

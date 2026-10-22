@@ -69,7 +69,11 @@ export class BillingController extends BaseController {
 	}
 
 	static async checkout(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<CheckoutClientStart>>> {
-		return this.act(request, env, context, 'start a plan checkout', async (deps, user) => startCheckout(deps, user, await this.bodyField(request, 'plan')));
+		return this.act(request, env, context, 'start a plan checkout', async (deps, user) => {
+			const body = await this.jsonBody(request);
+			const fields = typeof body === 'object' && body !== null ? body as Record<string, unknown> : {};
+			return startCheckout(deps, user, fields.plan, fields.billingInterval, fields.monthlyCredits);
+		});
 	}
 
 	static async credits(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<CheckoutClientStart>>> {
@@ -91,7 +95,11 @@ export class BillingController extends BaseController {
 	}
 
 	static async changePlan(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<BillingChangeRequested>>> {
-		return this.act(request, env, context, 'change the plan', async (deps, user) => changePlan(deps, user.id, await this.bodyField(request, 'plan')));
+		return this.act(request, env, context, 'change the plan', async (deps, user) => {
+			const body = await this.jsonBody(request);
+			const fields = typeof body === 'object' && body !== null ? body as Record<string, unknown> : {};
+			return changePlan(deps, user.id, fields.plan, fields.billingInterval, fields.monthlyCredits);
+		});
 	}
 
 	static async cancel(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<BillingChangeRequested>>> {

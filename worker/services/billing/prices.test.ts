@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planOfPrice, stripePriceIds } from './prices';
+import { intervalOfPrice, priceIdFor, planOfPrice, stripePriceIds } from './prices';
 
 const IDS_JSON = '{"pro":"price_p","premium":"price_m","credits":"price_c"}';
 
@@ -16,4 +16,15 @@ describe('Stripe prices', () => {
 		expect(planOfPrice({ id: 'price_c', metadata: null }, ids)).toBeNull();
 		expect(planOfPrice({ id: 'price_x', metadata: { estori_plan: 'gold' } }, ids)).toBeNull();
 	});
+});
+
+it('maps annual prices, retaining monthly-only configuration and rejecting unsupported recurring intervals', () => {
+ const old = stripePriceIds(IDS_JSON)!;
+ expect(priceIdFor(old, 'pro', 'year')).toBeNull();
+ const ids = stripePriceIds(JSON.stringify({ ...old, proYearly: 'price_py', premiumYearly: 'price_my' }))!;
+ expect(planOfPrice({ id: 'price_py' }, ids)).toBe('pro');
+ expect(intervalOfPrice({ id: 'price_py' }, ids)).toBe('year');
+ expect(intervalOfPrice({ id: 'price_retired', metadata: { estori_plan: 'pro' }, recurring: { interval: 'year', interval_count: 1 } }, ids)).toBe('year');
+ expect(intervalOfPrice({ id: 'price_retired', metadata: { estori_plan: 'pro' }, recurring: { interval: 'month', interval_count: 3 } }, ids)).toBeNull();
+ expect(stripePriceIds(JSON.stringify({ ...old, proYearly: 'prod_bad' }))).toBeNull();
 });

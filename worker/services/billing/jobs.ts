@@ -27,7 +27,13 @@ export async function runDailyBilling(env: Env, nowMs: number): Promise<void> {
 	const day = new Date(nowMs).toISOString().slice(0, 10);
 	for (const row of await new BillingService(env).subscriptionsToRepair(nowMs)) {
 		try {
-			await applySubscription(deps, { eventId: `repair:${row.stripeSubscriptionId}:${day}`, eventType: 'repair', subscriptionId: row.stripeSubscriptionId, expectedUserId: row.userId, invoice: null });
+			await applySubscription(deps, {
+				eventId: `repair:${row.stripeSubscriptionId}:${day}`,
+				eventType: 'repair',
+				subscriptionId: row.stripeSubscriptionId,
+				expectedUserId: row.userId,
+				invoice: null,
+			});
 		} catch (error) {
 			logger.error('Could not repair a subscription', { subscriptionId: row.stripeSubscriptionId, error });
 		}
@@ -79,13 +85,16 @@ export async function runHourlyBilling(env: Env, nowMs: number): Promise<void> {
 		userIds,
 		limit: RENEWALS_SCANNED_PER_RUN,
 	});
+	const annual = await new BillingService(env).annualAccountsRenewing({ nowMs, dayStartMs, days: renewalDaysOf(nowMs), userIds, limit: RENEWALS_SCANNED_PER_RUN });
+
 	const mail = claimingMailFromEnv(env);
 	let attempted = 0;
-	for (const userId of renewing) {
+	for (const userId of [...annual, ...renewing]) {
 		if (attempted >= RENEWALS_PER_RUN) break;
 		try {
 			const account = await loadAccount(env, userId, nowMs);
-			if (!account.billing || account.source === 'subscription' || account.period.startMs !== dayStartMs) continue;
+			const annualSubscription = account.source === 'subscription' && account.subscription?.billingInterval === 'year';
+			if (!account.billing || (account.source === 'subscription' && !annualSubscription) || account.period.startMs < dayStartMs || account.period.startMs > nowMs) continue;
 			attempted += 1;
 			await claimAndSendNotice(mail, userId, {
 				key: `credits_renewed:${account.period.key}`,

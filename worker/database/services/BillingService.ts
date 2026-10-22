@@ -18,6 +18,7 @@ export interface BillingEventInput {
     refund?: { purchaseId: string; refundedCents: number } | null;
     /** The pool the account's open period takes with this event, such as a paid renewal ending a grace hold's pool of 0. */
     pool?: { periodKey: string; pool: number } | null;
+    additionalPools?: ReadonlyArray<{ periodKey: string; pool: number; onlyIfZero?: boolean }>;
     notices?: ReadonlyArray<{ key: string; kind: BillingNoticeKind }>;
     now: Date;
 }
@@ -146,7 +147,7 @@ export class BillingService extends BaseService {
      */
     async recordEvent(input: BillingEventInput): Promise<void> {
         const { event, row, purchase, refund, pool, notices = [], now } = input;
-        if ((notices.length > 0 || pool) && event.userId === null) throw new Error(`Event ${event.id} has notices or a pool but no account`);
+        if ((notices.length > 0 || pool || input.additionalPools?.length) && event.userId === null) throw new Error(`Event ${event.id} has notices or a pool but no account`);
 
         const rest: BatchItem<'sqlite'>[] = [];
         if (row) {
@@ -160,6 +161,10 @@ export class BillingService extends BaseService {
                             stripeSubscriptionId: row.stripeSubscriptionId,
                             status: row.status,
                             plan: row.plan,
+                            billingInterval: row.billingInterval,
+                            monthlyCredits: row.monthlyCredits,
+                            pendingMonthlyCredits: row.pendingMonthlyCredits,
+                            pendingBillingInterval: row.pendingBillingInterval,
                             currentPeriodStart: row.currentPeriodStart,
                             currentPeriodEnd: row.currentPeriodEnd,
                             cancelAtPeriodEnd: row.cancelAtPeriodEnd,
@@ -187,14 +192,16 @@ export class BillingService extends BaseService {
                     .where(and(eq(purchases.id, refund.purchaseId), lt(purchases.refundedCents, refund.refundedCents))),
             );
         }
-        if (pool && event.userId) {
+        const changedPools: Array<{ periodKey: string; pool: number; onlyIfZero?: boolean }> = [...(pool ? [pool] : []), ...(input.additionalPools ?? [])];
+        for (const changedPool of changedPools) {
+            if (!event.userId) continue;
             // A period with no row yet needs nothing (its first step stores the pool); a closed one keeps its pool.
             const periods = schema.creditPeriods;
             rest.push(
                 this.database
                     .update(periods)
-                    .set({ pool: pool.pool })
-                    .where(and(eq(periods.userId, event.userId), eq(periods.periodKey, pool.periodKey), isNull(periods.closedAt))),
+                    .set({ pool: changedPool.pool })
+                    .where(and(eq(periods.userId, event.userId), eq(periods.periodKey, changedPool.periodKey), isNull(periods.closedAt), changedPool.onlyIfZero ? eq(periods.pool, 0) : undefined)),
             );
         }
         for (const notice of notices) {
@@ -241,6 +248,25 @@ export class BillingService extends BaseService {
                 ),
             )
             .limit(input.limit);
+        return rows.map((row) => row.id);
+    }
+
+    /** Annual subscribers renew credits monthly, independently of their annual invoice. */
+    async annualAccountsRenewing(input: { nowMs: number; dayStartMs: number; days: readonly number[]; userIds: readonly string[] | null; limit: number }): Promise<string[]> {
+        if (input.days.length === 0 || input.userIds?.length === 0) return [];
+        const subs = schema.subscriptions;
+        const users = schema.users;
+        const day = sql`CAST(strftime('%d', ${subs.currentPeriodStart}, 'unixepoch') AS INTEGER)`;
+        const rows = await this.database.select({ id: users.id }).from(subs).innerJoin(users, eq(subs.userId, users.id)).where(and(
+            eq(subs.billingInterval, 'year'), inArray(subs.status, ['active', 'trialing']),
+            eq(users.emailVerified, true), isNull(users.deletedAt), inArray(day, [...input.days]),
+            lt(subs.currentPeriodStart, new Date(input.dayStartMs)),
+            notExists(this.database.select({ userId: schema.billingNotices.userId }).from(schema.billingNotices).where(and(
+                eq(schema.billingNotices.userId, users.id), eq(schema.billingNotices.kind, 'credits_renewed'),
+                sql`${schema.billingNotices.sentAt} >= ${Math.floor(input.dayStartMs / 1000)}`,
+            ))),
+            input.userIds ? inArray(users.id, [...input.userIds]) : undefined,
+        )).limit(input.limit);
         return rows.map((row) => row.id);
     }
 

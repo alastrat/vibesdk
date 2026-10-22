@@ -5,7 +5,10 @@ import {
 	EXTRA_CREDITS,
 	PAID_PLAN_IDS,
 	PLAN_LIMITS,
-	PLAN_PRICES_CENTS,
+	planPriceCents,
+	creditsForPlanChange,
+	planChangeStartsNow,
+	type BillingInterval,
 	assertWithinLimit,
 	formatBillingDate,
 	formatCredits,
@@ -71,14 +74,16 @@ function choiceFor(view: BillingView, plan: PaidPlanId): PlanChoice {
 			? choice(plan, 'resume', t('Keep {plan}', { plan: name }), t('Ends on {date}', { date: billingDate(view.periodEnd) }))
 			: choice(plan, 'none', t('Keep {plan} first', { plan: name }));
 	}
-	if (view.pendingPlan !== null && view.pendingPlan !== current) {
+	if (view.pendingPlan !== null) {
 		const date = billingDate(view.pendingPlanAt ?? view.periodEnd);
 		return plan === current
 			? choice(plan, 'cancel-change', t('Keep {plan}', { plan: name }), t('Moves to {plan} on {date}', { plan: planName(view.pendingPlan), date }))
 			: choice(plan, 'none', t('Starts {date}', { date }));
 	}
 	if (plan === current) return choice(plan, 'current', t('Your plan'));
-	return plan === 'premium' ? choice(plan, 'upgrade', t('Move to {plan}', { plan: planName('premium') })) : choice(plan, 'downgrade', t('Move to {plan} at renewal', { plan: planName('pro') }));
+	return plan === 'premium'
+		? choice(plan, 'upgrade', t('Move to {plan}', { plan: planName('premium') }))
+		: choice(plan, 'downgrade', t('Move to {plan} at renewal', { plan: planName('pro') }));
 }
 
 /** Pro's and Premium's next step for the account, in that order. */
@@ -103,22 +108,38 @@ export function confirmationFor(view: BillingView, action: ConfirmedAction): Con
 		case 'upgrade':
 			return {
 				title: t('Move to {plan} now?', { plan: premium }),
-				body: t(
-					"You'll have {credits} AI credits a month right away, and the credits you've used this month count against them. We'll charge the difference for the rest of this month, then {plan} renews at {price} a month.",
-					{ credits: credits(PLAN_LIMITS.premium.aiCredits), plan: premium, price: usd(PLAN_PRICES_CENTS.premium) },
-				),
+				body:
+					view.billingInterval === 'year'
+						? t(
+								'You will have {credits} AI credits a month right away. This month’s usage counts against them. We will charge the difference for the rest of your paid year; Premium then renews at {price} a year.',
+								{ credits: credits(creditsForPlanChange('premium', view.monthlyCredits)), price: usd(planPriceCents('premium', 'year', creditsForPlanChange('premium', view.monthlyCredits))) },
+							)
+						: t(
+								"You'll have {credits} AI credits a month right away, and the credits you've used this month count against them. We'll charge the difference for the rest of this month, then {plan} renews at {price} a month.",
+								{ credits: credits(creditsForPlanChange('premium', view.monthlyCredits)), plan: premium, price: usd(planPriceCents('premium', 'month', creditsForPlanChange('premium', view.monthlyCredits))) },
+							),
 				confirm: t('Move to {plan}', { plan: premium }),
 			};
 		case 'downgrade':
 			return {
 				title: t('Move to {plan} at renewal?', { plan: pro }),
-				body: t("You keep {premium} until {date}. Then {pro} renews at {price} a month, with {credits} AI credits a month. There's no refund for the rest of this month.", {
-					premium,
-					date: renewal,
-					pro,
-					price: usd(PLAN_PRICES_CENTS.pro),
-					credits: credits(PLAN_LIMITS.pro.aiCredits),
-				}),
+				body:
+					view.billingInterval === 'year'
+						? t('You keep Premium until {date}. Then Pro renews at {price} a year, with {credits} AI credits each month. Your paid year is not refunded.', {
+								date: renewal,
+								price: usd(planPriceCents('pro', 'year', creditsForPlanChange('pro', view.monthlyCredits))),
+								credits: credits(creditsForPlanChange('pro', view.monthlyCredits)),
+							})
+						: t(
+								"You keep {premium} until {date}. Then {pro} renews at {price} a month, with {credits} AI credits a month. There's no refund for the rest of this month.",
+								{
+									premium,
+									date: renewal,
+									pro,
+									price: usd(planPriceCents('pro', 'month', creditsForPlanChange('pro', view.monthlyCredits))),
+									credits: credits(creditsForPlanChange('pro', view.monthlyCredits)),
+								},
+							),
 				confirm: t('Move to {plan}', { plan: pro }),
 			};
 		case 'cancel': {
@@ -133,7 +154,7 @@ export function confirmationFor(view: BillingView, action: ConfirmedAction): Con
 }
 
 /** A change the seller asked Stripe for on this page. */
-export type PlanAction = ConfirmedAction | 'resume' | 'cancel-change';
+export type PlanAction = ConfirmedAction | 'resume' | 'cancel-change' | 'interval-change';
 
 /** True once the view shows the change, so the page can stop asking for it. */
 export function showsChange(action: PlanAction, view: BillingView): boolean {
@@ -148,6 +169,8 @@ export function showsChange(action: PlanAction, view: BillingView): boolean {
 			return !view.cancelAtPeriodEnd;
 		case 'cancel-change':
 			return view.pendingPlan === null;
+		case 'interval-change':
+			return view.pendingBillingInterval !== null && view.pendingBillingInterval !== undefined;
 	}
 }
 
@@ -237,6 +260,11 @@ export function isRenewalPaid(view: BillingView): boolean {
 export function renewalLineFor(view: BillingView): string | null {
 	if (paymentAtStake(view)) return null;
 	if (view.cancelAtPeriodEnd) return t('Ends on {date}', { date: billingDate(view.periodEnd) });
+	if (view.pendingPlan === view.plan && view.pendingMonthlyCredits !== undefined && (view.pendingMonthlyCredits ?? PLAN_LIMITS[view.plan].aiCredits) !== (view.monthlyCredits ?? PLAN_LIMITS[view.plan].aiCredits)) return t('Changes to {credits} AI credits a month on {date}', { credits: credits(view.pendingMonthlyCredits ?? PLAN_LIMITS[view.plan].aiCredits), date: billingDate(view.pendingPlanAt ?? view.periodEnd) });
+	if (view.pendingPlan === view.plan && view.pendingBillingInterval)
+		return view.pendingBillingInterval === 'year'
+			? t('Changes to yearly billing on {date}', { date: billingDate(view.pendingPlanAt ?? view.periodEnd) })
+			: t('Changes to monthly billing on {date}', { date: billingDate(view.pendingPlanAt ?? view.periodEnd) });
 	if (view.pendingPlan !== null) return t('Moves to {plan} on {date}', { plan: planName(view.pendingPlan), date: billingDate(view.pendingPlanAt ?? view.periodEnd) });
 	if (view.source === 'subscription') return t('Renews on {date}', { date: billingDate(view.periodEnd) });
 	return t('AI credits renew on {date}', { date: billingDate(view.credits?.renewsAt ?? view.periodEnd) });
@@ -260,12 +288,18 @@ export function creditsSummaryFor(view: BillingView): CreditsSummary | null {
 	const usedOfMonthly = Math.min(period.used, monthly);
 	const overrun = period.used - usedOfMonthly;
 	// The purchases' own balances, before this month's overrun is taken from them, bound what they covered.
-	const covered = Math.min(overrun, view.purchases.reduce((sum, purchase) => sum + purchase.left, 0));
+	const covered = Math.min(
+		overrun,
+		view.purchases.reduce((sum, purchase) => sum + purchase.left, 0),
+	);
 	let overrunNote: string | null = null;
 	if (overrun > 0) {
 		if (covered === overrun) overrunNote = t('Your extra credits covered the other {credits}.', { credits: credits(overrun) });
 		else if (covered > 0) {
-			overrunNote = t('{credits} more were used to finish turns that were already running, {covered} of them from your extra credits.', { credits: credits(overrun), covered: credits(covered) });
+			overrunNote = t('{credits} more were used to finish turns that were already running, {covered} of them from your extra credits.', {
+				credits: credits(overrun),
+				covered: credits(covered),
+			});
 		} else overrunNote = t('{credits} more were used to finish turns that were already running.', { credits: credits(overrun) });
 	}
 	return {
@@ -387,4 +421,18 @@ export function describePaymentResult(result: SettledPayment): PaymentNotice {
 		case 'declined':
 			return { tone: 'error', message: t(result.message || PAYMENT_DECLINED_MESSAGE) };
 	}
+}
+
+export interface PlanConfiguration { plan: PaidPlanId; interval: BillingInterval; monthlyCredits: number }
+export function configurationConfirmation(view: BillingView, target: PlanConfiguration): Confirmation {
+ const amount = usd(planPriceCents(target.plan, target.interval, target.monthlyCredits));
+ const price = target.interval === 'year' ? t('{amount} a year', { amount }) : t('{amount} a month', { amount });
+ const now = (view.plan === 'pro' || view.plan === 'premium') && planChangeStartsNow(view.plan, target.plan, view.billingInterval ?? 'month', target.interval, view.monthlyCredits ?? PLAN_LIMITS[view.plan].aiCredits, target.monthlyCredits);
+ return { title: t('Change your plan and credits?'), confirm: t('Confirm change'), body: now
+  ? t('Move to {plan} with {credits} AI credits a month now. This month’s usage counts against them. We will charge the difference for the rest of your paid period. Your subscription then renews at {price}.', { plan: planName(target.plan), credits: credits(target.monthlyCredits), price })
+  : t('On {date}, your subscription changes to {plan} with {credits} AI credits each month, at {price}. Your current paid period stays unchanged.', { date: billingDate(view.periodEnd), plan: planName(target.plan), credits: credits(target.monthlyCredits), price }) };
+}
+export function configurationMatches(view: BillingView, target: PlanConfiguration): boolean {
+ if (view.plan === target.plan && (view.billingInterval ?? 'month') === target.interval && (view.monthlyCredits ?? PLAN_LIMITS[target.plan].aiCredits) === target.monthlyCredits) return true;
+ return view.pendingPlan === target.plan && (view.pendingBillingInterval ?? view.billingInterval ?? 'month') === target.interval && (view.pendingMonthlyCredits ?? PLAN_LIMITS[target.plan].aiCredits) === target.monthlyCredits;
 }

@@ -29,26 +29,30 @@ describe('setUpBilling', () => {
 			},
 		});
 		const result = await setUpBilling({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
-		expect(result).toEqual({ mode: 'test', priceIds: { pro: 'price_1', premium: 'price_2', credits: 'price_3' } });
+		expect(result).toEqual({ mode: 'test', priceIds: { pro: 'price_1', premium: 'price_2', proYearly: 'price_3', premiumYearly: 'price_4', credits: 'price_5' } });
 		expect(created).toEqual([
 			{ lookup: BILLING_LOOKUP_KEYS.pro, amount: '4900', interval: 'month', plan: 'pro', kind: null, product: 'estori_pro' },
 			{ lookup: BILLING_LOOKUP_KEYS.premium, amount: '19900', interval: 'month', plan: 'premium', kind: null, product: 'estori_premium' },
+			{ lookup: BILLING_LOOKUP_KEYS.proYearly, amount: '46800', interval: 'year', plan: 'pro', kind: null, product: 'estori_pro' },
+			{ lookup: BILLING_LOOKUP_KEYS.premiumYearly, amount: '190800', interval: 'year', plan: 'premium', kind: null, product: 'estori_premium' },
 			{ lookup: BILLING_LOOKUP_KEYS.credits, amount: '150', interval: null, plan: null, kind: 'credits', product: 'estori_credits' },
 		]);
 	});
 
 	it('reuses prices that already match, writes nothing, and never reads the Billing Portal', async () => {
 		const existing = [
-			{ id: 'price_old_pro', lookup_key: BILLING_LOOKUP_KEYS.pro, unit_amount: 4_900, active: true },
-			{ id: 'price_old_premium', lookup_key: BILLING_LOOKUP_KEYS.premium, unit_amount: 19_900, active: true },
-			{ id: 'price_old_credits', lookup_key: BILLING_LOOKUP_KEYS.credits, unit_amount: 150, active: true },
+			{ id: 'price_pro_year', lookup_key: BILLING_LOOKUP_KEYS.proYearly, unit_amount: 46800, active: true, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+			{ id: 'price_premium_year', lookup_key: BILLING_LOOKUP_KEYS.premiumYearly, unit_amount: 190800, active: true, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+			{ id: 'price_old_pro', lookup_key: BILLING_LOOKUP_KEYS.pro, unit_amount: 4_900, active: true, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+			{ id: 'price_old_premium', lookup_key: BILLING_LOOKUP_KEYS.premium, unit_amount: 19_900, active: true, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+			{ id: 'price_old_credits', lookup_key: BILLING_LOOKUP_KEYS.credits, unit_amount: 150, active: true, currency: 'usd', recurring: null },
 		];
 		const { fetchImpl, seen } = stripe({
 			'GET /v1/products/:id': () => Response.json({ id: 'estori_pro' }),
 			'GET /v1/prices': () => Response.json({ data: existing }),
 		});
 		const result = await setUpBilling({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
-		expect(result.priceIds).toEqual({ pro: 'price_old_pro', premium: 'price_old_premium', credits: 'price_old_credits' });
+		expect(result.priceIds).toEqual({ proYearly: 'price_pro_year', premiumYearly: 'price_premium_year', pro: 'price_old_pro', premium: 'price_old_premium', credits: 'price_old_credits' });
 		expect(seen.some((call) => call.startsWith('POST'))).toBe(false);
 		expect(seen.some((call) => call.includes('billing_portal'))).toBe(false);
 	});
@@ -60,9 +64,11 @@ describe('setUpBilling', () => {
 			'GET /v1/prices': () =>
 				Response.json({
 					data: [
-						{ id: 'price_old_pro', lookup_key: BILLING_LOOKUP_KEYS.pro, unit_amount: 3_900, active: true },
-						{ id: 'price_premium', lookup_key: BILLING_LOOKUP_KEYS.premium, unit_amount: 19_900, active: true },
-						{ id: 'price_credits', lookup_key: BILLING_LOOKUP_KEYS.credits, unit_amount: 150, active: true },
+						{ id: 'price_pro_year', lookup_key: BILLING_LOOKUP_KEYS.proYearly, unit_amount: 46800, active: true, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+						{ id: 'price_premium_year', lookup_key: BILLING_LOOKUP_KEYS.premiumYearly, unit_amount: 190800, active: true, currency: 'usd', recurring: { interval: 'year', interval_count: 1 } },
+						{ id: 'price_old_pro', lookup_key: BILLING_LOOKUP_KEYS.pro, unit_amount: 3_900, active: true, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+						{ id: 'price_premium', lookup_key: BILLING_LOOKUP_KEYS.premium, unit_amount: 19_900, active: true, currency: 'usd', recurring: { interval: 'month', interval_count: 1 } },
+						{ id: 'price_credits', lookup_key: BILLING_LOOKUP_KEYS.credits, unit_amount: 150, active: true, currency: 'usd', recurring: null },
 					],
 				}),
 			'POST /v1/prices': (body) => {
@@ -72,7 +78,7 @@ describe('setUpBilling', () => {
 		});
 		const result = await setUpBilling({ secretKey: 'sk_test_fake', mode: 'test', fetchImpl });
 		expect(created).toEqual([{ lookup: BILLING_LOOKUP_KEYS.pro, amount: '4900', transfer: 'true' }]);
-		expect(result.priceIds).toEqual({ pro: 'price_new_pro', premium: 'price_premium', credits: 'price_credits' });
+		expect(result.priceIds).toEqual({ proYearly: 'price_pro_year', premiumYearly: 'price_premium_year', pro: 'price_new_pro', premium: 'price_premium', credits: 'price_credits' });
 	});
 
 	it("refuses a key whose mode isn't the one asked for", async () => {

@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { Marquee } from '@/components/magicui/marquee';
@@ -27,16 +28,14 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 		<section id="discover" aria-labelledby="showcase-title" className="scroll-mt-36 bg-public-charcoal py-20 text-white sm:py-28">
 			<div className="mx-auto flex max-w-[1296px] flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
 				<div className="max-w-2xl">
-					<Eyebrow tone="dark">Discover</Eyebrow>
+					<Eyebrow tone="dark">{marketingCopy.common.discover}</Eyebrow>
 					<h2 id="showcase-title" className={cn(HEADING_SECTION, 'mt-4 text-balance')}>
-						See what people are building on Estori
-					</h2>
+						{marketingCopy.home.showcase.title}</h2>
 					<p className={cn(LEAD, 'mt-5 text-white/80')}>
-						Open any store to see it live on desktop and phone, then make it yours.
-					</p>
+						{marketingCopy.home.showcase.description}</p>
 				</div>
 				{filters.length > 0 && (
-					<div role="group" aria-label="Filter stores by category" className="flex flex-wrap gap-2">
+					<div role="group" aria-label={marketingCopy.home.showcase.filterLabel} className="flex flex-wrap gap-2">
 						{filters.map((option) => (
 							<button
 								key={option}
@@ -80,8 +79,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 			</div>
 			<div className="mx-auto mt-10 max-w-[1296px] px-4 sm:px-6">
 				<TextLink to="/discover" tone="dark">
-					Browse all stores in Discover
-				</TextLink>
+					{marketingCopy.home.showcase.link}</TextLink>
 			</div>
 		</section>
 	);

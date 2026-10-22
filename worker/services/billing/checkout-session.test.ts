@@ -89,9 +89,9 @@ describe('what a checkout session sells', () => {
 			kind: 'plan',
 			plan: 'pro',
 			priceCents: 4_900,
-			includes: ['20,000 AI credits a month', 'Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog'],
+			includes: ['20,000 AI credits a month', 'Up to 5 live stores', 'Your own domain on each live store', 'The supplier catalog'],
 		});
-		expect(planOrder('premium', ENGLISH)).toMatchObject({ priceCents: 19_900, includes: expect.arrayContaining(['100,000 AI credits a month', 'Buy extra credits any time']) });
+		expect(planOrder('premium', ENGLISH)).toMatchObject({ priceCents: 19_900, includes: expect.arrayContaining(['100,000 AI credits a month', 'Up to 20 live stores']) });
 	});
 
 	it("shows a credits purchase's amount at the table's price", () => {

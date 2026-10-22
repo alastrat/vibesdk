@@ -52,7 +52,7 @@ describe('legal documents', () => {
 
 	it('adds selling in your own store as section 10, in the version sellers agree to', () => {
 		const terms = LEGAL_DOCUMENTS.terms;
-		expect(terms.version).toBe('2026-10-19');
+		expect(terms.version).toBe(TERMS_VERSION);
 		// The selling terms change only when section 10 changes, never newer than the Terms that hold them.
 		expect(SELLER_TERMS_VERSION <= terms.version).toBe(true);
 		expect(terms.body).toContain('## 10. Selling in your own store');
@@ -111,7 +111,7 @@ describe('legal documents', () => {
 		const terms = LEGAL_DOCUMENTS.terms.body;
 		expect(terms).toContain('## 11. Plans, AI credits and extra credits');
 		for (const promise of [
-			'renew automatically every month until you cancel',
+			'renew automatically every month or year',
 			'Cancelling takes effect at the end of the period you paid for',
 			'no refunds for part of a period',
 			'Credits have no cash value',

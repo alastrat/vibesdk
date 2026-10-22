@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode, Ref } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
@@ -59,11 +60,10 @@ export function Features({ tone = 'light' }: { tone?: SectionTone }) {
 			<div className="mx-auto max-w-[1248px]">
 				<div className="flex flex-wrap items-end justify-between gap-8">
 					<div className="max-w-3xl">
-						<Eyebrow tone={tone}>Estori store builder</Eyebrow>
-						<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance', colors.heading)}>What your store comes with today</h2>
+						<Eyebrow tone={tone}>{marketingCopy.home.features.eyebrow}</Eyebrow>
+						<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance', colors.heading)}>{marketingCopy.home.features.title}</h2>
 						<p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty', colors.lead)}>
-							Start from scratch or from a store in Discover, then change anything by chatting.
-						</p>
+							{marketingCopy.home.features.description}</p>
 					</div>
 					<StartBuildingButton variant={colors.action} />
 				</div>

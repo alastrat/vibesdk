@@ -66,13 +66,13 @@ describe('the billing page', () => {
 		expect(source('/src/components/billing/PlanButton.tsx')).toContain('usePlanCheckout()');
 		// The checkout itself is a hook, so the billing page starts it the same way as the button.
 		const checkout = source('/src/hooks/use-billing.ts');
-		expect(checkout).toContain('setIntendedUrl(`${BILLING_PATH}?plan=${plan}`)');
+		expect(checkout).toContain('setIntendedUrl(planBillingPath(plan, interval, monthlyCredits))');
 		expect(checkout).toContain("navigate('/signup')");
 	});
 
 	it("takes a plan or an amount of extra credits to Estori's own checkout page, which opens the session itself", () => {
 		const hooks = source('/src/hooks/use-billing.ts');
-		expect(hooks).toContain('navigate(`${BILLING_CHECKOUT_PATH}?plan=${plan}`)');
+		expect(hooks).toContain('navigate(planCheckoutPath(plan, interval, monthlyCredits))');
 		expect(hooks).toContain('navigate(`${BILLING_CHECKOUT_PATH}?credits=${credits}`)');
 		expect(hooks).not.toContain('window.location');
 		expect(hooks).not.toContain('apiClient.startPlanCheckout');

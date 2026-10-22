@@ -19,7 +19,7 @@ import { subscriptionEventsFor, type BillingAnalyticsEvent } from '../posthog/bi
 import { heldPeriodKey, payableSubscription, type BillingAccount } from './account';
 import { invoiceSubscriptionId, setDefaultCard } from './invoices';
 import type { PlannedNotice } from './notices';
-import { addMonths } from './periods';
+import { addMonths, subscriptionPeriod } from './periods';
 import type { StripePriceIds } from './prices';
 import { noticesFor, subscriptionRowFrom } from './subscription-row';
 
@@ -28,7 +28,10 @@ const logger = createLogger('BillingEvents');
 export type BillingEventOutcome = 'applied' | 'duplicate' | 'ignored' | 'refused';
 
 export interface BillingEventDeps {
-	stripe: Pick<StripeClient, 'retrieveSubscription' | 'retrieveCheckoutSession' | 'setDefaultPaymentMethod' | 'updateSubscriptionMetadata' | 'retrieveInvoice' | 'retrievePaymentIntent'>;
+	stripe: Pick<
+		StripeClient,
+		'retrieveSubscription' | 'retrieveCheckoutSession' | 'setDefaultPaymentMethod' | 'updateSubscriptionMetadata' | 'retrieveInvoice' | 'retrievePaymentIntent'
+	>;
 	store: Pick<BillingService, 'eventSeen' | 'userOfCustomer' | 'subscriptionOf' | 'sentNoticeKeys' | 'recordEvent' | 'consentFor'>;
 	ledger: Pick<CreditLedgerService, 'purchaseBySession' | 'purchaseByPaymentIntent' | 'settle'>;
 	priceIds: StripePriceIds | null;
@@ -141,7 +144,11 @@ function rebuiltAt(previous: SubscriptionRecord | null, nowMs: number): Date {
  */
 function poolMayChange(previous: SubscriptionRecord | null, next: SubscriptionRecord, eventType: string): boolean {
 	if (eventType === 'invoice.paid') return true;
-	return previous?.stripeSubscriptionId === next.stripeSubscriptionId && previous.status === 'past_due' && (next.status === 'active' || next.status === 'trialing');
+	return (
+		previous?.stripeSubscriptionId === next.stripeSubscriptionId &&
+		(previous.status === 'past_due' || previous.status === 'unpaid') &&
+		(next.status === 'active' || next.status === 'trialing')
+	);
 }
 
 /**
@@ -232,14 +239,29 @@ export async function applySubscription(deps: BillingEventDeps, input: Subscript
 		}
 	}
 	const planned = replacing ? [] : noticesFor(previous, next, { eventType: input.eventType, invoice: input.invoice });
-	const alreadySent = await deps.store.sentNoticeKeys(userId, planned.map((notice) => notice.key));
+	const alreadySent = await deps.store.sentNoticeKeys(
+		userId,
+		planned.map((notice) => notice.key),
+	);
 	const notices = await wordedByPayment(
 		deps,
 		planned.filter((notice) => !alreadySent.has(notice.key)),
 		input,
 	);
 	const pool = poolMayChange(previous, next, input.eventType) ? await poolWith(deps, userId, next, now.getTime()) : null;
-	const recorded = await recordOnce(deps, { event: event(userId, 'applied'), row: next, pool, notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })), now });
+	const firstCreditPeriod = subscriptionPeriod(next);
+	const additionalPools =
+		next.billingInterval === 'year' && (next.status === 'active' || next.status === 'trialing') && pool && pool.periodKey !== firstCreditPeriod.key
+			? [{ periodKey: firstCreditPeriod.key, pool: pool.pool, onlyIfZero: true }]
+			: [];
+	const recorded = await recordOnce(deps, {
+		event: event(userId, 'applied'),
+		row: next,
+		pool,
+		...(additionalPools.length ? { additionalPools } : {}),
+		notices: notices.map((notice) => ({ key: notice.key, kind: notice.email.kind })),
+		now,
+	});
 	if (recorded === 'duplicate') return 'duplicate';
 	// Like its notices, a subscription that replaces another live one starts nothing new for the account.
 	await resumeTasksQuietly(deps, userId);
@@ -323,7 +345,11 @@ export async function applyCreditPurchase(deps: BillingEventDeps, input: { event
 	// Promotion codes are off for credits, so the amount paid is exactly the table's price.
 	const matches = metadata.kind === CHECKOUT_KIND_CREDITS && isExtraCreditsAmount(credits) && session.amount_total === extraCreditsPriceCents(credits);
 	if (!userId || !matches || !paymentIntentId) {
-		await deps.alert({ kind: 'billing-mismatch', subject: session.id, message: "An extra-credits payment doesn't match its account or its price, so no credits were added. Refund it in Stripe." });
+		await deps.alert({
+			kind: 'billing-mismatch',
+			subject: session.id,
+			message: "An extra-credits payment doesn't match its account or its price, so no credits were added. Refund it in Stripe.",
+		});
 		await deps.store.recordEvent({ event: event(userId, 'refused'), now });
 		return 'refused';
 	}
@@ -380,7 +406,10 @@ export async function applyCreditRefund(deps: BillingEventDeps, input: { eventId
 	if (recorded === 'duplicate') return 'duplicate';
 	const after = (await deps.ledger.purchaseByPaymentIntent(charge.payment_intent)) ?? before;
 	await notifyOrAlert(deps, before.userId, [
-		{ key, email: { kind: 'credits_refunded', credits: Math.max(0, after.removedCredits - before.removedCredits), amountCents: charge.amount_refunded - before.refundedCents } },
+		{
+			key,
+			email: { kind: 'credits_refunded', credits: Math.max(0, after.removedCredits - before.removedCredits), amountCents: charge.amount_refunded - before.refundedCents },
+		},
 	]);
 	return 'applied';
 }

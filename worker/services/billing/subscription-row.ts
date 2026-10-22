@@ -7,11 +7,11 @@ import type { StripeInvoice, StripePrice, StripeSubscription, StripeSubscription
 import { graceEndsAt } from './account';
 import type { PlannedNotice } from './notices';
 import { subscriptionPeriod } from './periods';
-import { planOfPrice, type StripePriceIds } from './prices';
+import { creditsOfPrice, intervalOfPrice, planOfPrice, type StripePriceIds } from './prices';
 
-type PendingChange = Pick<SubscriptionRecord, 'pendingPlan' | 'pendingPlanAt' | 'stripeScheduleId'>;
+type PendingChange = Pick<SubscriptionRecord, 'pendingPlan' | 'pendingPlanAt' | 'stripeScheduleId' | 'pendingBillingInterval' | 'pendingMonthlyCredits'>;
 
-const NO_PENDING_CHANGE: PendingChange = { pendingPlan: null, pendingPlanAt: null, stripeScheduleId: null };
+const NO_PENDING_CHANGE: PendingChange = { pendingPlan: null, pendingPlanAt: null, stripeScheduleId: null, pendingBillingInterval: null, pendingMonthlyCredits: null };
 
 const ENDED_STATUSES: readonly SubscriptionStatus[] = ['canceled', 'unpaid', 'incomplete_expired'];
 
@@ -19,12 +19,12 @@ const isLive = (status: SubscriptionStatus): boolean => LIVE_SUBSCRIPTION_STATUS
 const isPaying = (status: SubscriptionStatus): boolean => status === 'active' || status === 'trialing';
 const seconds = (at: Date): number => Math.floor(at.getTime() / 1000);
 
-function priceOf(price: string | StripePrice): Pick<StripePrice, 'id' | 'metadata'> {
+function priceOf(price: string | StripePrice): StripePrice {
 	return typeof price === 'string' ? { id: price, metadata: null } : price;
 }
 
 /** The plan a schedule moves to after its current phase; nothing for a schedule that no longer governs, or one only named by id. */
-function pendingChangeOf(schedule: string | StripeSubscriptionSchedule | null, plan: PaidPlanId, ids: StripePriceIds | null): PendingChange {
+function pendingChangeOf(schedule: string | StripeSubscriptionSchedule | null, plan: PaidPlanId, interval: 'month' | 'year', monthlyCredits: number | null, ids: StripePriceIds | null): PendingChange {
 	if (schedule === null || typeof schedule === 'string') return NO_PENDING_CHANGE;
 	if (schedule.status !== 'active' && schedule.status !== 'not_started') return NO_PENDING_CHANGE;
 	const currentStart = schedule.current_phase?.start_date ?? Number.NEGATIVE_INFINITY;
@@ -32,8 +32,11 @@ function pendingChangeOf(schedule: string | StripeSubscriptionSchedule | null, p
 	const item = next?.items[0];
 	if (!next || !item) return NO_PENDING_CHANGE;
 	const pendingPlan = planOfPrice(priceOf(item.price), ids);
-	if (pendingPlan === null || pendingPlan === plan) return NO_PENDING_CHANGE;
-	return { pendingPlan, pendingPlanAt: new Date(next.start_date * 1000), stripeScheduleId: schedule.id };
+	const pendingBillingInterval = intervalOfPrice(priceOf(item.price), ids);
+	if (pendingPlan === null || pendingBillingInterval === null) return NO_PENDING_CHANGE;
+	const pendingMonthlyCredits = creditsOfPrice(priceOf(item.price), pendingPlan, pendingBillingInterval);
+	if (pendingMonthlyCredits === 'invalid' || pendingPlan === plan && pendingBillingInterval === interval && pendingMonthlyCredits === monthlyCredits) return NO_PENDING_CHANGE;
+	return { pendingPlan, pendingBillingInterval, pendingMonthlyCredits, pendingPlanAt: new Date(next.start_date * 1000), stripeScheduleId: schedule.id };
 }
 
 /** The row for the subscription as Stripe returned it; null when its price is neither Pro nor Premium. */
@@ -41,16 +44,21 @@ export function subscriptionRowFrom(subscription: StripeSubscription, userId: st
 	const item = subscription.items.data[0];
 	if (!item) return null;
 	const plan = planOfPrice(item.price, ids);
-	if (plan === null) return null;
+	const billingInterval = intervalOfPrice(item.price, ids);
+	if (plan === null || billingInterval === null) return null;
+	const monthlyCredits = creditsOfPrice(item.price, plan, billingInterval);
+	if (monthlyCredits === 'invalid') return null;
 	return {
 		userId,
 		stripeSubscriptionId: subscription.id,
 		status: subscription.status,
 		plan,
+		billingInterval,
+		monthlyCredits,
 		currentPeriodStart: new Date(item.current_period_start * 1000),
 		currentPeriodEnd: new Date(item.current_period_end * 1000),
 		cancelAtPeriodEnd: subscription.cancel_at_period_end || subscription.cancel_at !== null,
-		...pendingChangeOf(subscription.schedule, plan, ids),
+		...pendingChangeOf(subscription.schedule, plan, billingInterval, monthlyCredits, ids),
 		stripeCreatedAt: new Date(subscription.created * 1000),
 		updatedAt: new Date(nowMs),
 	};
@@ -68,7 +76,7 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 	const notices: PlannedNotice[] = [];
 
 	if (isPaying(next.status) && (same === null || !isLive(same.status))) {
-		notices.push({ key: `plan_started:${subscriptionId}`, email: { kind: 'plan_started', plan: next.plan, renewsAt: periodEnd } });
+		notices.push({ key: `plan_started:${subscriptionId}`, email: { kind: 'plan_started', plan: next.plan, renewsAt: periodEnd, ...(next.monthlyCredits != null ? { monthlyCredits: next.monthlyCredits } : {}), ...(next.billingInterval === 'year' ? { billingInterval: next.billingInterval } : {}) } });
 	}
 	// Every payment gets its receipt, whatever the stored row was: a returning seller's first invoice can come before the new subscription's events.
 	const paid = eventType === 'invoice.paid' ? invoice : null;
@@ -79,17 +87,17 @@ export function noticesFor(previous: SubscriptionRecord | null, next: Subscripti
 		});
 	}
 	if (paid && paid.billing_reason === 'subscription_cycle') {
-		notices.push({ key: `credits_renewed:${subscriptionPeriod(next).key}`, email: { kind: 'credits_renewed', credits: PLAN_LIMITS[next.plan].aiCredits, renewsAt: periodEnd } });
+		notices.push({ key: `credits_renewed:${subscriptionPeriod(next).key}`, email: { kind: 'credits_renewed', credits: next.monthlyCredits ?? PLAN_LIMITS[next.plan].aiCredits, renewsAt: subscriptionPeriod(next).endMs } });
 	}
 	// The rest compare the subscription with its own earlier state.
 	if (previous !== null && same === null) return notices;
 
 	if (same && same.plan === 'pro' && next.plan === 'premium') {
-		notices.push({ key: `plan_upgraded:${subscriptionId}:${seconds(next.currentPeriodStart)}`, email: { kind: 'plan_upgraded', plan: next.plan } });
+		notices.push({ key: `plan_upgraded:${subscriptionId}:${seconds(next.currentPeriodStart)}`, email: { kind: 'plan_upgraded', plan: next.plan, ...(next.monthlyCredits != null ? { monthlyCredits: next.monthlyCredits } : {}), ...(next.billingInterval === 'year' ? { billingInterval: next.billingInterval } : {}) } });
 	}
 	// The move-down email names the plan the account moves to; Estori schedules no other kind of move.
 	if (next.pendingPlan && next.pendingPlanAt && next.stripeScheduleId && next.pendingPlan !== same?.pendingPlan && isMoveDown(next.plan, next.pendingPlan)) {
-		notices.push({ key: `downgrade_scheduled:${next.stripeScheduleId}`, email: { kind: 'downgrade_scheduled', plan: next.pendingPlan, at: next.pendingPlanAt.getTime() } });
+		notices.push({ key: `downgrade_scheduled:${next.stripeScheduleId}`, email: { kind: 'downgrade_scheduled', plan: next.pendingPlan, at: next.pendingPlanAt.getTime(), ...(next.pendingMonthlyCredits != null ? { monthlyCredits: next.pendingMonthlyCredits } : {}), ...(next.pendingBillingInterval === 'year' ? { billingInterval: next.pendingBillingInterval } : {}) } });
 	}
 	const graceEnd = graceEndsAt(next);
 	// Stripe sends payment_failed and payment_action_required for one failed invoice and they share this key. The event words

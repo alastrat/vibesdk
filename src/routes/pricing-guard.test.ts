@@ -20,7 +20,6 @@ function source(path: string): string {
 
 const CARDS = '/src/components/pricing/PlanCards.tsx';
 const COMPARE = '/src/components/pricing/ComparePlans.tsx';
-const CREDITS = '/src/components/pricing/CreditsExplainer.tsx';
 
 describe('pricing page', () => {
 	const page = source('/src/routes/pricing.tsx');
@@ -48,7 +47,7 @@ describe('pricing page', () => {
 	});
 
 	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
-		const order = ['<PlanCards />', '<ComparePlans billing={billing} />', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={pricingFaq(billing, rates)} />'];
+		const order = ['<PlanCards ', '<ComparePlans billing={billing}', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={pricingFaq(billing, rates)} />'];
 		const positions = order.map((tag) => page.indexOf(tag));
 		expect(positions.every((position) => position > -1)).toBe(true);
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -57,42 +56,43 @@ describe('pricing page', () => {
 	it('shows Basic, Pro and Premium side by side in one frame, with Enterprise on its own band', () => {
 		const cards = source(CARDS);
 		expect(cards).toContain('md:grid-cols-3');
-		for (const card of ['<BasicPlan billing={billing} />', '<PaidPlan plan="pro" billing={billing} />', '<PaidPlan plan="premium" billing={billing} />', '<EnterpriseBand />']) expect(cards).toContain(card);
+		for (const card of ['<BasicPlan />', '<EnterpriseBand />']) expect(cards).toContain(card);
+		for (const plan of ['pro', 'premium']) expect(cards).toMatch(new RegExp(`<PaidPlan[^>]*plan="${plan}"[^>]*billing=\\{billing\\}`));
 	});
 
 	it('states the free allowance from the live limits, never typed in', () => {
 		const cards = source(CARDS);
 		expect(cards).toContain('<PlanLimits');
 		expect(cards).not.toMatch(/200 (AI )?credits/);
-		expect(source('/src/components/marketing/PlanLimits.tsx')).toContain('fallback');
+		expect(source('/src/components/marketing/PlanLimits.tsx')).toContain('PLAN_LIMITS.basic.aiCredits');
 	});
 
-	it("states today's daily allowance, while billing is off, in the credits steps are priced in, as the calculator does", () => {
+	it('shows the configured monthly allowance consistently, independent of checkout availability', () => {
 		const limits = source('/src/components/marketing/PlanLimits.tsx');
-		expect(limits).toContain('${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} AI credits a day');
-		expect(limits).not.toContain('${plan.data.aiCreditsPerDay} AI credits a day');
+		expect(limits).toContain('PLAN_LIMITS.basic.aiCredits');
+		expect(limits).not.toContain('aiCreditsPerDay');
 		const compare = source(COMPARE);
-		expect(compare).toContain('${formatCredits(plan.data.aiCreditsPerDay * LEGACY_CREDIT_FACTOR)} a day');
-		expect(compare).not.toContain('formatCredits(plan.data.aiCreditsPerDay)');
+		expect(compare).not.toContain('LEGACY_CREDIT_FACTOR');
 	});
 
 	it('prices Pro and Premium from the plan table, never typed in', () => {
 		const cards = source(CARDS);
-		expect(cards).toContain('<Price cents={PLAN_PRICES_CENTS[plan]} />');
+		expect(cards).toContain("<Price cents={planPriceCents(plan, interval, monthlyCredits) / (interval === 'year' ? 12 : 1)} />");
 		expect(cards).not.toMatch(/\$(49|199)\b/);
 		// Credits and store counts come from the limits table too.
 		expect(cards).not.toMatch(/\b(5|20|100),000\b|Up to \d/);
 	});
 
-	it("sells Pro and Premium once billing is on, and until then marks them coming soon and leads to sales", () => {
+	it("offers online checkout when available, otherwise plan-specific contact links", () => {
 		const cards = source(CARDS);
 		expect(cards).toContain('billing ? <PlanButton plan={plan}');
 		// Each card asks sales about its own plan.
 		expect(cards).toContain('contactPath(plan)');
 		expect(cards).not.toContain("contactPath('premium')");
-		expect(cards).toContain('<ComingSoon />');
-		expect(cards).toContain('Paid plans are coming soon');
-		expect(cards).not.toMatch(/Buy now|Subscribe|checkout/i);
+		expect(cards).not.toContain('<ComingSoon');
+		expect(cards).toContain('marketingCopy.pricing.comparison.premiumContact');
+		expect(cards).not.toContain('Paid plans are coming soon');
+		expect(cards).not.toMatch(/Buy now|Subscribe/i);
 	});
 
 	it('sends Enterprise to sales, without a public price', () => {
@@ -103,18 +103,17 @@ describe('pricing page', () => {
 		expect(band).not.toMatch(/\$\d/);
 	});
 
-	it("adds the Pro column, the limit rows and the plan buttons only once billing is on, and keeps today's table until then", () => {
+	it("compares all three public plans while checkout buttons follow billing availability", () => {
 		const compare = source(COMPARE);
-		expect(compare).toContain('comparisonFor(billing)');
+		expect(compare).toContain('comparisonFor()');
 		const paid = compare.slice(compare.indexOf("case 'pro':"), compare.indexOf("case 'enterprise':"));
 		expect(paid).toContain("case 'premium':");
 		expect(paid).toContain('action: billing ? (');
 		expect(paid).toContain('<PlanButton plan={id}');
 		expect(paid).toContain('contactPath(id)');
 		expect(paid).not.toContain("contactPath('premium')");
-		// Until billing is on, the paid columns keep the coming-soon tag beside the plan's name.
-		expect(paid).toContain('comingSoon: !billing');
-		expect(compare).toContain('{header.comingSoon && <ComingSoon />}');
+		// Both paid plans are available; future-feature status tags remain independent.
+		expect(compare).not.toContain('<ComingSoon');
 		expect(compare).not.toContain('PREMIUM_TIERS');
 	});
 
@@ -144,16 +143,8 @@ describe('pricing page', () => {
 		expect(compare).not.toContain('min-w-[');
 		expect(compare).toContain('aria-expanded={!isFolded}');
 		expect(compare).toContain('<CapabilityTag id={section.capability} />');
-		expect(compare).toContain('<caption className="sr-only">What each plan includes</caption>');
+		expect(compare).toContain('<caption className="sr-only">{marketingCopy.pricing.comparison.caption}</caption>');
 		expect(compare).toContain('<span className="sr-only">, {note}</span>');
-	});
-
-	it('explains credits from the same table the calculator uses, and links to the calculator', () => {
-		const credits = source(CREDITS);
-		expect(credits).toContain('CREDIT_ACTIONS.map');
-		expect(credits).toContain('actionCreditsRange(');
-		expect(credits).toContain('to="/pricing/calculator"');
-		expect(credits).toContain('Calculate my credit needs');
 	});
 
 	it('keeps template selling, with the fee from the code', () => {
@@ -168,7 +159,7 @@ describe('pricing page', () => {
 	it('answers the credit questions', () => {
 		const copy = source('/src/content/positioning.ts');
 		expect(copy).toContain('export function pricingFaq(billing: boolean');
-		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I buy more credits?', 'Can I change or cancel my plan?', 'Are Pro and Premium available now?']) {
+		for (const question of ['What are AI credits?', 'What happens when I run out of credits?', 'Can I buy more credits?', 'Can I change or cancel my plan?', 'How do I activate a paid plan?']) {
 			expect(copy, question).toContain(question);
 		}
 	});

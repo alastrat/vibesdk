@@ -1,7 +1,7 @@
 /** Billing and subscriptions (spec 2026-10-19): the statuses, notice kinds and copy shared by the worker and the app. */
 
 import { msg, type Translator } from '../i18n/translate';
-import { PLAN_PRICES_CENTS, formatUsd, planName, type PaidPlanId, type PlanId, type PlanLimitOverrides, type PlanLimits } from './plans';
+import { planPriceCents, type BillingInterval, formatUsd, planName, type PaidPlanId, type PlanId, type PlanLimitOverrides, type PlanLimits } from './plans';
 
 /** Stripe's subscription statuses. */
 export const SUBSCRIPTION_STATUSES = ['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused'] as const;
@@ -80,7 +80,7 @@ export interface PromotionTerms {
 }
 
 /** What the promotion charges while it lasts, such as "$24.50 today" or "$24.50 a month for 3 months". */
-function discountedPhrase(promotion: PromotionTerms, i18n: Translator): string {
+function discountedPhrase(promotion: PromotionTerms, i18n: Translator, interval: BillingInterval = 'month'): string {
 	const amount = formatUsd(promotion.discountedCents, i18n.locale);
 	switch (promotion.duration) {
 		case 'once':
@@ -89,18 +89,21 @@ function discountedPhrase(promotion: PromotionTerms, i18n: Translator): string {
 			// Stripe always sends a month count for a repeating coupon; consent text must never guess it.
 			// i18n-ignore: a developer message, the seller sees the checkout's refusal
 			if (promotion.durationInMonths === null) throw new Error('A repeating promotion needs a month count.');
+			if (interval === 'year')
+				return i18n.tn('{amount} a year for {count} year', '{amount} a year for {count} years', Math.ceil(promotion.durationInMonths / 12), { amount });
 			return i18n.tn('{amount} a month for {count} month', '{amount} a month for {count} months', promotion.durationInMonths, { amount });
 		}
 		case 'forever':
-			return i18n.t('{amount} a month', { amount });
+			return interval === 'year' ? i18n.t('{amount} a year', { amount }) : i18n.t('{amount} a month', { amount });
 	}
 }
 
 /** What the seller pays and when, such as "$24.50 today, then $49 a month". */
-export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator): string {
-	const price = i18n.t('{amount} a month', { amount: formatUsd(PLAN_PRICES_CENTS[plan], i18n.locale) });
+export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator, interval: BillingInterval = 'month', monthlyCredits?: number): string {
+	const amount = formatUsd(planPriceCents(plan, interval, monthlyCredits), i18n.locale);
+	const price = interval === 'year' ? i18n.t('{amount} a year', { amount }) : i18n.t('{amount} a month', { amount });
 	if (!promotion) return price;
-	const discounted = discountedPhrase(promotion, i18n);
+	const discounted = discountedPhrase(promotion, i18n, interval);
 	return promotion.duration === 'forever' ? discounted : i18n.t('{discounted}, then {price}', { discounted, price });
 }
 
@@ -108,17 +111,20 @@ export function renewalTermsPhrase(plan: PaidPlanId, promotion: PromotionTerms |
  * Shown above the pay button of a subscription checkout, from the same promotion as the consent; the Terms say the same.
  * A forever code renews at the discounted price, and any other code states its price before the plain renewal.
  */
-export function renewalDisclosure(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator): string {
+export function renewalDisclosure(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator, interval: BillingInterval = 'month', monthlyCredits?: number): string {
 	const name = planName(plan);
 	const cancelNote = i18n.t('Cancel any time in Estori; it ends at the end of the period.');
-	const renews = (cents: number) => i18n.t('{plan} renews every month at {amount} until you cancel.', { plan: name, amount: formatUsd(cents, i18n.locale) });
-	if (!promotion) return `${renews(PLAN_PRICES_CENTS[plan])} ${cancelNote}`;
+	const renews = (cents: number) =>
+		interval === 'year'
+			? i18n.t('{plan} renews every year at {amount} until you cancel.', { plan: name, amount: formatUsd(cents, i18n.locale) })
+			: i18n.t('{plan} renews every month at {amount} until you cancel.', { plan: name, amount: formatUsd(cents, i18n.locale) });
+	if (!promotion) return `${renews(planPriceCents(plan, interval, monthlyCredits))} ${cancelNote}`;
 	if (promotion.duration === 'forever') return `${renews(promotion.discountedCents)} ${cancelNote}`;
-	const costs = i18n.t('{plan} costs {phrase}, then renews every month at {amount} until you cancel.', {
-		plan: name,
-		phrase: discountedPhrase(promotion, i18n),
-		amount: formatUsd(PLAN_PRICES_CENTS[plan], i18n.locale),
-	});
+	const values = { plan: name, phrase: discountedPhrase(promotion, i18n, interval), amount: formatUsd(planPriceCents(plan, interval, monthlyCredits), i18n.locale) };
+	const costs =
+		interval === 'year'
+			? i18n.t('{plan} costs {phrase}, then renews every year at {amount} until you cancel.', values)
+			: i18n.t('{plan} costs {phrase}, then renews every month at {amount} until you cancel.', values);
 	return `${costs} ${cancelNote}`;
 }
 
@@ -126,20 +132,20 @@ export function renewalDisclosure(plan: PaidPlanId, promotion: PromotionTerms | 
  * The sentence the seller agrees to beside the Subscribe button; the page links the word for "Terms" to /terms. Outside
  * English it says the Terms are in English, since they stay in English and binding.
  */
-export function subscriptionConsentText(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator): string {
-	const values = { plan: planName(plan), phrase: renewalTermsPhrase(plan, promotion, i18n) };
+export function subscriptionConsentText(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator, interval: BillingInterval = 'month', monthlyCredits?: number): string {
+	const values = { plan: planName(plan), phrase: renewalTermsPhrase(plan, promotion, i18n, interval, monthlyCredits) };
 	return promotion
 		? i18n.t('I agree to the Terms, and that Estori {plan} costs {phrase}, until I cancel.', values)
 		: i18n.t('I agree to the Terms, and that Estori {plan} renews at {phrase} until I cancel.', values);
 }
 
-export function subscribeButtonText(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator): string {
-	return i18n.t('Subscribe: {phrase}', { phrase: renewalTermsPhrase(plan, promotion, i18n) });
+export function subscribeButtonText(plan: PaidPlanId, promotion: PromotionTerms | null, i18n: Translator, interval: BillingInterval = 'month', monthlyCredits?: number): string {
+	return i18n.t('Subscribe: {phrase}', { phrase: renewalTermsPhrase(plan, promotion, i18n, interval, monthlyCredits) });
 }
 
 /** What a checkout page sells: a plan with what it includes, or extra credits. */
 export type CheckoutOrder =
-	| { kind: 'plan'; plan: PaidPlanId; priceCents: number; includes: string[] }
+	| { kind: 'plan'; plan: PaidPlanId; billingInterval?: BillingInterval; monthlyCredits?: number; priceCents: number; includes: string[] }
 	| { kind: 'credits'; credits: number; amountCents: number };
 
 /** The consent sentence, button and small print the subscription checkout shows, and what the first payment is. */
@@ -240,6 +246,10 @@ export interface BillingView {
 	plan: PlanId;
 	source: BillingSource;
 	status: SubscriptionStatus | null;
+	billingInterval?: BillingInterval;
+	pendingBillingInterval?: BillingInterval | null;
+	monthlyCredits?: number | null;
+	pendingMonthlyCredits?: number | null;
 	periodStart: number;
 	periodEnd: number;
 	cancelAtPeriodEnd: boolean;
@@ -264,6 +274,8 @@ export interface BillingChangeRequested {
 
 export interface PlanRequest {
 	plan: PaidPlanId;
+	monthlyCredits?: number;
+	billingInterval?: BillingInterval;
 }
 
 export interface CreditsRequest {

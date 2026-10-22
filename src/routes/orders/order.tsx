@@ -6,6 +6,8 @@ import { toast } from 'sonner';
 import { Badge, Button, Empty, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
 import { SELLER_CARRIER_NAMES, SELLER_CARRIERS, SELLER_ORDERS_PATH, type SellerCarrier, type SellerOrderDetail, type SellerOrderLine } from '@/api-types';
+import { useBilling } from '@/hooks/use-billing';
+import { PlanButton } from '@/components/billing/PlanButton';
 import { ConfirmButton } from '@/components/confirm-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -182,6 +184,8 @@ function Lines({ lines }: { lines: SellerOrderLine[] }) {
 /** Marks the order's own items shipped, with an optional carrier and tracking number; editing keeps the first shipped date. */
 function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 	useI18n();
+	const billing = useBilling();
+	const canTrack = billing.data?.enabled === false || billing.data?.limits.shipmentTracking === true;
 	const shipment = useSellerOrderShipment(order.id);
 	const shipped = order.fulfillmentStatus === 'fulfilled';
 	const [editing, setEditing] = useState(false);
@@ -192,7 +196,7 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
 		shipment.mutate(
-			{ shipped: true, carrier: carrier || null, ...(carrier === 'other' ? { carrierName } : {}), trackingNumber: trackingNumber.trim() || null },
+			{ shipped: true, carrier: canTrack ? carrier || null : null, ...(canTrack && carrier === 'other' ? { carrierName } : {}), trackingNumber: canTrack ? trackingNumber.trim() || null : null },
 			{
 				onSuccess: () => {
 					toast.success(shipped ? t("Shipment saved") : t("Marked shipped"));
@@ -211,7 +215,7 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 					{order.trackingNumber && t(", tracking {value1}", { value1: order.trackingNumber })}.
 				</p>
 				<div className="flex flex-wrap gap-2">
-					<Button variant="secondary" size="sm" onClick={() => setEditing(true)} disabled={shipment.isPending}>{t("Edit")}</Button>
+					{canTrack && <Button variant="secondary" size="sm" onClick={() => setEditing(true)} disabled={shipment.isPending}>{t("Edit")}</Button>}
 					<ConfirmButton
 						label={t("Mark as not shipped")}
 						title={t("Mark this order as not shipped?")}
@@ -227,6 +231,8 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 
 	return (
 		<form className="grid max-w-md gap-3 rounded-md border border-kumo-line p-3 text-sm" onSubmit={submit}>
+			{billing.data?.enabled && !canTrack && <PremiumOrderFeature text={t('Add shipment tracking with Premium. You can still mark orders as shipped.')} />}
+			{canTrack && <>
 			<label className="grid gap-1">
 				<span className="text-kumo-subtle">{t("Carrier")}</span>
 				<select className="rounded-md border border-kumo-line bg-kumo-base px-2 py-1.5 text-kumo-default" value={carrier} onChange={(event) => setCarrier(event.target.value as SellerCarrier | '')}>
@@ -248,6 +254,7 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 				<span className="text-kumo-subtle">{t("Tracking number (optional)")}</span>
 				<Input value={trackingNumber} maxLength={64} onChange={(event) => setTrackingNumber(event.target.value)} />
 			</label>
+			</>}
 			<div className="flex gap-2">
 				<Button type="submit" size="sm" disabled={shipment.isPending} loading={shipment.isPending}>
 					{shipped ? t("Save") : t("Mark shipped")}
@@ -263,6 +270,8 @@ function ShipmentPanel({ order }: { order: SellerOrderDetail }) {
 /** Refunds the lines the seller picks; the seller's Stripe balance pays, and the page says when it's short. */
 function RefundButton({ order }: { order: SellerOrderDetail }) {
 	useI18n();
+	const billing = useBilling();
+	const canRefund = billing.data?.enabled === false || billing.data?.limits.orderRefunds === true;
 	const refund = useRefundSellerOrder(order.id);
 	const [open, setOpen] = useState(false);
 	const [chosen, setChosen] = useState<number[]>([]);
@@ -276,6 +285,7 @@ function RefundButton({ order }: { order: SellerOrderDetail }) {
 		);
 	}
 	if (refundable.length === 0 || order.paymentStatus === 'refunded') return null;
+	if (!canRefund) return billing.data?.enabled ? <PremiumOrderFeature text={t('Issue refunds from Estori with Premium.')} /> : null;
 	const total = refundable.filter((item) => chosen.includes(item.lineNo)).reduce((sum, item) => sum + item.unitPriceCents * item.quantity, 0);
 	const toggle = (lineNo: number) => setChosen((current) => (current.includes(lineNo) ? current.filter((entry) => entry !== lineNo) : [...current, lineNo]));
 
@@ -325,4 +335,10 @@ function RefundButton({ order }: { order: SellerOrderDetail }) {
 			</Dialog>
 		</>
 	);
+}
+
+
+function PremiumOrderFeature({ text }: { text: string }) {
+ const i18n = useI18n();
+ return <div className="grid justify-items-start gap-2 rounded-md border border-kumo-line p-3 text-sm"><p className="text-kumo-subtle">{text}</p><PlanButton plan="premium" i18n={i18n} className="px-4 py-2 text-sm" /></div>;
 }

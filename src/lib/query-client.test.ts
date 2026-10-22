@@ -5,6 +5,10 @@ import { queryKeys } from './query-keys';
 const { shouldDehydrateQuery } = queryPersistOptions.dehydrateOptions;
 
 describe('query persistence', () => {
+	it('does not persist the public plan rollout, so upgrades follow the current configuration', () => {
+		expect(shouldDehydrateQuery({ queryKey: queryKeys.platform.plan(), state: { status: 'success' } })).toBe(false);
+	});
+
 	it('never persists product pages, which carry a signed preview URL and a per-viewer offer', () => {
 		expect(
 			shouldDehydrateQuery({ queryKey: queryKeys.apps.sitePage('app1', 'u1'), state: { status: 'success' } }),

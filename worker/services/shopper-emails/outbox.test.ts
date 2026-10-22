@@ -19,7 +19,7 @@ const ORDER: StoreOrderView = {
 };
 const CONFIRMATION: ShopperEmailEvent = { orderId: 'ord_1', kind: 'order_confirmation', eventKey: 'order', payload: {} };
 
-function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmailTemplate; replyTo?: string | null; sellerEmail?: string | null; sellerEmailConfirmed?: boolean; sentToday?: number; sendError?: unknown; attempts?: number; enqueueFails?: boolean; recordingSentFails?: boolean } = {}) {
+function world(input: { paidEmails?: boolean; customization?: boolean; order?: Partial<StoreOrderView>; template?: ShopperEmailTemplate; replyTo?: string | null; sellerEmail?: string | null; sellerEmailConfirmed?: boolean; sentToday?: number; sendError?: unknown; attempts?: number; enqueueFails?: boolean; recordingSentFails?: boolean } = {}) {
 	const rows = new Map<string, ShopperEmailRow>();
 	const sent: OutgoingEmail[] = [];
 	const alerts: string[] = [];
@@ -27,6 +27,7 @@ function world(input: { order?: Partial<StoreOrderView>; template?: ShopperEmail
 	let ids = 0;
 	let now = NOW;
 	const deps: ShopperEmailDeps = {
+		access: async () => ({ canSend: input.paidEmails ?? true, canCustomize: input.customization ?? true }),
 		emails: {
 			enqueue: async (row) => {
 				if (input.enqueueFails) throw new Error('D1_ERROR: database is locked');
@@ -86,6 +87,27 @@ describe('the shopper email outbox', () => {
 		expect(sent[0]).toMatchObject({ to: 'ana@example.test', fromEmail: 'northwind-tea@orders.estori.app', fromName: 'Northwind Tea', replyTo: 'help@northwind.test', headers: { 'X-Estori-Store': 'app_tea', 'X-Estori-Email': 'order_confirmation' } });
 		expect(sent[0].subject).toBe('Your Northwind Tea order #1042');
 		expect([...rows.values()][0]).toMatchObject({ status: 'sent', recipient: 'ana@example.test', messageId: 'msg_1', sentAt: NOW, test: false });
+	});
+
+	it.each(['order_confirmation', 'order_shipped', 'refund_issued'] as const)('records %s as disabled without sending when shopper emails are not included', async (kind) => {
+		const { deps, sent, rows } = world({ paidEmails: false });
+		await queueShopperEmail(deps, { ...CONFIRMATION, kind });
+		expect(sent).toHaveLength(0);
+		expect([...rows.values()][0]).toMatchObject({ status: 'disabled', error: 'Shopper emails are not included in the seller account.' });
+	});
+
+	it('checks the current entitlement again for queued retries after a downgrade', async () => {
+		const policy = { paidEmails: true, sendError: coded('E_RATE_LIMIT_EXCEEDED') };
+		const { deps, sent, rows, advance } = world(policy);
+		await queueShopperEmail(deps, CONFIRMATION);
+		expect([...rows.values()][0].status).toBe('queued');
+		policy.paidEmails = false;
+		advance(SEND_BACKOFF_MS[0]);
+		await sendDueShopperEmails(deps, 100);
+		expect(sent).toHaveLength(0);
+		expect([...rows.values()][0].status).toBe('disabled');
+		policy.paidEmails = true;
+		expect(await sendDueShopperEmails(deps, 100)).toBe(0);
 	});
 
 	it("has replies reach the seller's account email when the store set no reply-to", async () => {
@@ -180,4 +202,14 @@ describe('the shopper email outbox', () => {
 		expect(await sendDueShopperEmails(deferred.deps, 100)).toBe(1);
 		expect([...deferred.rows.values()][0].attempts).toBe(2);
 	});
+});
+
+
+it('uses default wording and the seller inbox after a customization downgrade, including retries', async () => {
+ const w=world({customization:false,template:{enabled:true,subject:'PREMIUM CUSTOM',heading:'VIP',body:'Premium wording'},replyTo:'premium@example.test'});
+ await queueShopperEmail(w.deps,CONFIRMATION);
+ expect(w.sent).toHaveLength(1);
+ expect(w.sent[0].subject).not.toContain('PREMIUM CUSTOM');
+ expect(w.sent[0].html).not.toContain('Premium wording');
+ expect(w.sent[0].replyTo).toBe('seller@example.test');
 });

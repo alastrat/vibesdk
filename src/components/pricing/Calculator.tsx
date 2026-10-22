@@ -2,16 +2,15 @@ import { useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowCounterClockwiseIcon, CheckCircleIcon, LightbulbIcon } from '@phosphor-icons/react';
 import { PlanButton } from '@/components/billing/PlanButton';
+import { marketingCopy } from '@/content/marketing-copy';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
 import { useBillingOn } from '@/hooks/use-billing';
 import { useModelRates } from '@/hooks/use-model-rates';
-import { usePublicPlan } from '@/hooks/use-public-plan';
-import { LEGACY_CREDIT_FACTOR, PLAN_LIMITS, PLAN_PRICES_CENTS, extraCreditsPriceCents } from '@/api-types';
+import { PLAN_LIMITS, PLAN_PRICES_CENTS, extraCreditsPriceCents } from '@/api-types';
 import { contactPath } from '@/lib/contact';
 import {
 	CREDIT_ACTIONS,
-	DAYS_PER_MONTH,
 	actionById,
 	actionCredits,
 	creditsFor,
@@ -113,10 +112,10 @@ function includedCredits(recommendation: Recommendation, basicCredits: number, n
 }
 
 /** "Premium, 100,000 credits a month, plus 50,000 extra credits ($75)": what the recommendation buys. */
-function planSummary(recommendation: Recommendation, billing: boolean): string {
+function planSummary(recommendation: Recommendation): string {
 	switch (recommendation.plan) {
 		case 'basic':
-			return `Basic, ${billing ? `${formatCredits(PLAN_LIMITS.basic.aiCredits)} credits a month` : 'the free daily allowance'}`;
+			return `Basic, ${formatCredits(PLAN_LIMITS.basic.aiCredits)} credits a month`;
 		case 'pro':
 			return `Pro, ${formatCredits(PLAN_LIMITS.pro.aiCredits)} credits a month`;
 		case 'premium': {
@@ -135,7 +134,6 @@ function planSummary(recommendation: Recommendation, billing: boolean): string {
  */
 export function Calculator() {
 	const { models, defaultModel } = useModelRates();
-	const plan = usePublicPlan();
 	const billing = useBillingOn();
 	const [modelId, setModelId] = useState<string | null>(null);
 	const [amounts, setAmounts] = useState<Amounts>(() => typicalAmounts(1));
@@ -143,17 +141,14 @@ export function Calculator() {
 
 	const model = models.find((entry) => entry.id === modelId) ?? defaultModel;
 	const usage: Usage = { ...amounts, creditsPerStep: model?.creditsPerStep ?? 0 };
-	// While billing is off, Basic is today's daily allowance, in the older unit where Sonnet takes 8 a step, so it is
-	// converted to the unit the steps are priced in. Once billing is on, Basic is its monthly credits.
-	const freeMonthly = !billing && plan.data?.aiCreditsPerDay != null ? plan.data.aiCreditsPerDay * DAYS_PER_MONTH * LEGACY_CREDIT_FACTOR : null;
-	const basicCredits = freeMonthly ?? PLAN_LIMITS.basic.aiCredits;
+	const basicCredits = PLAN_LIMITS.basic.aiCredits;
 	const needed = monthlyCredits(usage);
-	const recommendation = recommendPlan(needed, freeMonthly ?? undefined);
+	const recommendation = recommendPlan(needed);
 	const included = includedCredits(recommendation, basicCredits, needed);
 	const fill = included > 0 ? Math.min(1, needed / included) : 0;
 	const recommendedName = planById(recommendation.plan).name;
-	// Until the live rates and the free allowance arrive, any recommendation would be a guess.
-	const ready = models.length > 0 && !plan.isPending;
+	// Live model rates determine how much AI work uses; plan allowances are monthly.
+	const ready = models.length > 0;
 
 	const update = (change: Partial<Amounts>) => setAmounts((current) => ({ ...current, ...change }));
 	const toggle = (category: UsageCategory, on: boolean) => setAmounts((current) => ({ ...current, categories: { ...current.categories, [category]: on } }));
@@ -265,25 +260,10 @@ export function Calculator() {
 											/>
 										</>
 									)}
-									{action.id === 'personalization' && (
-										<>
-											<Stepper
-												label="Shopper visits per store each month"
-												noun="visits"
-												value={amounts.visitsPerStore}
-												onChange={(visitsPerStore) => update({ visitsPerStore })}
-												step={500}
-												max={1_000_000}
-											/>
-											<Formula
-												parts={[`${amounts.stores} stores`, `${formatCredits(amounts.visitsPerStore / 1_000)} thousand visits`, `${formatCredits(each('personalization'))} credits`]}
-												total={creditsFor('personalization', usage)}
-											/>
-										</>
-									)}
 								</CategoryCard>
 							))}
 						</div>
+						<p className="mt-4 text-sm leading-relaxed text-public-muted">{marketingCopy.pricing.credits.calculatorNote}</p>
 					</div>
 					{/* Phone summary: pinned to the bottom of the screen while the inputs scroll, then settles above the panel. */}
 					{ready && (
@@ -347,7 +327,7 @@ export function Calculator() {
 							</div>
 							<div className="grid gap-3 px-6 py-5 text-[15px]">
 								<div className="flex items-baseline justify-between gap-3">
-									<span className="text-public-ink">{planSummary(recommendation, billing)}</span>
+									<span className="text-public-ink">{planSummary(recommendation)}</span>
 									<span className="shrink-0 text-public-ink">{planPrice(recommendation)}</span>
 								</div>
 								<div className="flex items-baseline justify-between gap-3 border-t border-public-line pt-3">
@@ -367,15 +347,15 @@ export function Calculator() {
 											<>
 												<PlanButton plan={recommendation.plan} />
 												{recommendation.plan === 'premium' && recommendation.extraCredits > 0 && (
-													<p className="text-center text-xs text-public-muted">Buy the extra credits from your billing page once you're on Premium.</p>
+													<p className="text-center text-xs text-public-muted">Buy extra credits from your billing page. The same credit price applies to every plan.</p>
 												)}
 											</>
 										) : (
 											<>
-												<PillLink to={contactPath('premium', needed)} variant="charcoal">
+												<PillLink to={contactPath(recommendation.plan, needed)} variant="charcoal">
 													Get {recommendedName}
 												</PillLink>
-												<p className="text-center text-xs text-public-muted">{recommendedName} is coming soon. We'll set you up as it opens.</p>
+												<p className="text-center text-xs text-public-muted">Contact us to activate {recommendedName}.</p>
 											</>
 										))}
 									<PillLink to={contactPath('enterprise')} variant={recommendation.plan === 'enterprise' ? 'charcoal' : 'outline-on-light'}>
@@ -391,7 +371,7 @@ export function Calculator() {
 					)}
 					<p className="mt-4 text-xs leading-relaxed text-public-muted">
 						Prices are in US dollars and exclude any applicable taxes. This is a recommendation based on your inputs: actual credit use depends on
-						the model, the size of your stores and how you work with the AI.{!billing && ' Pricing and plan details may change before paid plans launch.'}
+						the model, the size of your stores and how you work with the AI.
 					</p>
 				</aside>
 			</div>

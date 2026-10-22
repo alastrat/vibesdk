@@ -18,32 +18,32 @@ it('words credit and live-store refusals with localized dates, numbers and plura
 	expect(assertWithinLimit(account, 'aiCredits', 5000, SPANISH)?.message).toBe(
 		'Ya usaste los créditos de IA gratis de este mes. Se renuevan el 19 de noviembre, o puedes obtener Pro con 20,000 al mes.',
 	);
-	expect(assertWithinLimit(account, 'liveStores', 1, PORTUGUESE)?.message).toBe(
-		'Basic inclui 1 loja no ar. Assine Pro para ter até 3, ou Premium para ter até 10.',
+	expect(assertWithinLimit(account, 'liveStores', 2, PORTUGUESE)?.message).toBe(
+		'Basic inclui 2 lojas no ar. Assine Pro para ter até 5, ou Premium para ter até 20.',
 	);
 });
 
 describe('what a plan includes, in the seller\'s language', () => {
 	it('is English unless a translator is passed, so the public pricing page keeps its English', () => {
-		expect(storeAllowance('pro')).toBe('Up to 3 live stores, 10 new stores a day');
-		expect(limitFeatures('pro')).toEqual(['Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog']);
-		expect(limitFeatures('premium', 'pro', ENGLISH)).toEqual(['Up to 10 live stores, 25 new stores a day', 'Buy extra credits any time']);
+		expect(storeAllowance('pro')).toBe('Up to 5 live stores');
+		expect(limitFeatures('pro')).toEqual(['Up to 5 live stores', 'Your own domain on each live store', 'The supplier catalog']);
+		expect(limitFeatures('premium', 'pro', ENGLISH)).toEqual(['Up to 20 live stores']);
 		expect(extraCreditsPriceLabel()).toBe('$1.50 per 1,000');
 	});
 
 	it('words the allowance and the features in Spanish', () => {
-		expect(storeAllowance('pro', SPANISH)).toBe('Hasta 3 tiendas publicadas, 10 tiendas nuevas al día');
-		expect(limitFeatures('pro', undefined, SPANISH)).toEqual(['Hasta 3 tiendas publicadas, 10 tiendas nuevas al día', 'Tu propio dominio en cada tienda publicada', 'El catálogo de proveedores']);
+		expect(storeAllowance('pro', SPANISH)).toBe('Hasta 5 tiendas publicadas');
+		expect(limitFeatures('pro', undefined, SPANISH)).toEqual(['Hasta 5 tiendas publicadas', 'Tu propio dominio en cada tienda publicada', 'El catálogo de proveedores']);
 		expect(plain(extraCreditsPriceLabel(SPANISH))).toBe('USD 1.50 por cada 1,000');
 	});
 
 	it('words them in Portuguese', () => {
-		expect(limitFeatures('pro', undefined, PORTUGUESE)).toEqual(['Até 3 lojas no ar, 10 lojas novas por dia', 'Seu próprio domínio em cada loja no ar', 'O catálogo de fornecedores']);
+		expect(limitFeatures('pro', undefined, PORTUGUESE)).toEqual(['Até 5 lojas no ar', 'Seu próprio domínio em cada loja no ar', 'O catálogo de fornecedores']);
 		expect(plain(extraCreditsPriceLabel(PORTUGUESE))).toBe('US$ 1,50 por 1.000');
 	});
 
 	it("leaves out, for a plan above another, what the lower one already has, in the same language", () => {
-		expect(limitFeatures('premium', 'pro', SPANISH)).toEqual(['Hasta 10 tiendas publicadas, 25 tiendas nuevas al día', 'Compra créditos adicionales cuando quieras']);
-		expect(limitFeatures('premium', 'pro', PORTUGUESE)).toEqual(['Até 10 lojas no ar, 25 lojas novas por dia', 'Compre créditos extras quando quiser']);
+		expect(limitFeatures('premium', 'pro', SPANISH)).toEqual(['Hasta 20 tiendas publicadas']);
+		expect(limitFeatures('premium', 'pro', PORTUGUESE)).toEqual(['Até 20 lojas no ar']);
 	});
 });

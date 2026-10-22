@@ -577,3 +577,22 @@ describe('when the card form does not load', () => {
 		expect(state.phase).toEqual({ name: 'refused', message: FORM_NOT_LOADED_MESSAGE, retryable: true });
 	});
 });
+
+it('keeps annual billing through URLs, storage, retries and expired sessions, rejecting unknown intervals', () => {
+ const request = { kind: 'plan' as const, plan: 'pro' as const, billingInterval: 'year' as const };
+ expect(checkoutRequestOf('?plan=pro&interval=year')).toEqual(request);
+ expect(readCheckoutRequest(JSON.stringify(request))).toEqual(request);
+ expect(returnTargetOf({ kind: 'plan', state: 'expired' }, request)).toBe('/settings/billing/checkout?plan=pro&interval=year&expired=1');
+ expect(checkoutRequestOf('?plan=pro&interval=week')).toBeNull();
+ expect(readCheckoutRequest(JSON.stringify({ ...request, billingInterval: 'week' }))).toBeNull();
+ expect(checkoutRequestOf('?credits=5000&interval=year')).toBeNull();
+});
+
+it('preserves recurring credit selections through checkout paths, storage and expiry and rejects tampered allowances', () => {
+ const request={kind:'plan' as const,plan:'pro' as const,billingInterval:'year' as const,monthlyCredits:30000};
+ expect(checkoutRequestOf('?plan=pro&interval=year&monthlyCredits=30000')).toEqual(request);
+ expect(readCheckoutRequest(JSON.stringify(request))).toEqual(request);
+ expect(checkoutPathOf(request,{expired:true})).toBe('/settings/billing/checkout?plan=pro&interval=year&monthlyCredits=30000&expired=1');
+ for(const amount of ['19999','20500','-1000','30000x','3e4']) expect(checkoutRequestOf('?plan=pro&monthlyCredits='+amount)).toBeNull();
+ expect(checkoutRequestOf('?credits=5000&monthlyCredits=30000')).toBeNull();
+});

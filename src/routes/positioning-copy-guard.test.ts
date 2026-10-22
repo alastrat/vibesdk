@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 import { BRAND } from '@/brand';
 import { AI_ASSISTANT_NAMES, COMPETITORS, SUPPLIER_NAMES } from './copy-rules';
@@ -16,6 +17,7 @@ const pages = import.meta.glob<string>(
 		'/src/components/layout/NavMenu.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/content/positioning.ts',
+		'/src/content/marketing/en.json',
 		'/src/content/public-pages.ts',
 		'/src/lib/site-nav.ts',
 		'/src/lib/capabilities.ts',
@@ -63,15 +65,17 @@ describe('positioning copy rules', () => {
 	it('explains AI recommendations in plain words, keeping the standards for the explainer page', () => {
 		const copy = pages['/src/content/positioning.ts'];
 		const summary = copy.slice(copy.indexOf('export const AGENTIC_COMMERCE_SUMMARY'), copy.indexOf(';', copy.indexOf('export const AGENTIC_COMMERCE_SUMMARY')));
-		expect(summary).toContain('ask AI assistants');
+		expect(summary).toContain('marketingCopy.home.recommendations.description');
+		expect(marketingCopy.home.recommendations.description).toContain('ask AI assistants');
 		expect(summary).not.toMatch(/UCP|ACP|agentic/);
 		expect(copy).toContain('open agentic commerce standards (UCP and ACP)');
 	});
 
 	it("names capabilities the way a store owner would say them", () => {
 		const capabilities = pages['/src/lib/capabilities.ts'];
-		expect(capabilities).toContain("name: 'Get found by AI assistants'");
-		expect(capabilities).toContain("name: 'Store assistants'");
+		expect(marketingCopy.navigation.capabilities['agentic-commerce'].name).toBe('Get found by AI assistants');
+		expect(capabilities).toContain('marketingCopy.navigation.capabilities');
+		expect(marketingCopy.navigation.capabilities['operations-agents'].name).toBe('Store assistants');
 		expect(capabilities).not.toMatch(/name: '(Agentic commerce|Operations agents)'/);
 	});
 });

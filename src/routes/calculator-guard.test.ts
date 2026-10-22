@@ -20,11 +20,13 @@ describe('credits calculator', () => {
 		for (const call of ['typicalUsage(', 'monthlyCredits(', 'creditsFor(', 'recommendPlan(', 'CREDIT_ACTIONS.map']) expect(calculator, call).toContain(call);
 	});
 
-	it("prices the AI's steps at the live model rates, and Basic at the live daily allowance", () => {
+	it("prices AI work at live model rates and Basic at its configured monthly allowance", () => {
 		const calculator = source(CALCULATOR);
 		expect(calculator).toContain('useModelRates()');
-		expect(calculator).toContain('usePublicPlan()');
-		expect(calculator).toContain('aiCreditsPerDay * DAYS_PER_MONTH * LEGACY_CREDIT_FACTOR');
+		expect(calculator).toContain('const basicCredits = PLAN_LIMITS.basic.aiCredits;');
+		expect(calculator).not.toContain('aiCreditsPerDay');
+		expect(calculator).not.toContain('visitsPerStore');
+		expect(calculator).toContain('marketingCopy.pricing.credits.calculatorNote');
 	});
 
 	it('starts from typical amounts for the number of stores, and can start over', () => {
@@ -42,9 +44,9 @@ describe('credits calculator', () => {
 	it('sends each recommendation to its next step: build, Premium with the pool, or sales', () => {
 		const calculator = source(CALCULATOR);
 		expect(calculator).toContain('<StartBuildingButton variant="blue" />');
-		expect(calculator).toContain("contactPath('premium', needed)");
+		expect(calculator).toContain("contactPath(recommendation.plan, needed)");
 		expect(calculator).toContain('<PlanButton plan={recommendation.plan}');
-		expect(calculator).toContain('recommendPlan(needed, freeMonthly ?? undefined)');
+		expect(calculator).toContain('recommendPlan(needed)');
 		expect(calculator).toContain("contactPath('enterprise')");
 		expect(calculator).toContain('to="/pricing#compare"');
 	});
@@ -65,9 +67,9 @@ describe('credits calculator', () => {
 		expect(calculator).toMatch(/<aside ref=\{recommendationRef\}/);
 	});
 
-	it('waits for the model rates and the free allowance before recommending anything', () => {
+	it('waits for model rates before recommending from the configured monthly allowances', () => {
 		const calculator = source(CALCULATOR);
-		expect(calculator).toContain('const ready = models.length > 0 && !plan.isPending;');
+		expect(calculator).toContain('const ready = models.length > 0;');
 		expect(calculator).toContain('Working out your plan');
 		// One source for plan names and actions.
 		expect(calculator).not.toContain('RECOMMENDED_NAMES');

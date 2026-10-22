@@ -1,3 +1,4 @@
+import { planBillingPath } from '@/lib/billing-links';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -46,7 +47,7 @@ export function recallCheckoutRequest(): CheckoutRequest | null {
 }
 
 function openSession(request: CheckoutRequest): Promise<CheckoutClientStart> {
-	const opened = request.kind === 'plan' ? apiClient.startPlanCheckout(request.plan) : apiClient.buyCredits(request.credits);
+	const opened = request.kind === 'plan' ? apiClient.startPlanCheckout(request.plan, request.billingInterval, request.monthlyCredits) : apiClient.buyCredits(request.credits);
 	return unwrap(opened, CHECKOUT_FAILED_MESSAGE);
 }
 
@@ -73,10 +74,12 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 
 	// The request as primitives, so a new address for the same request doesn't open another session.
 	const plan = request?.kind === 'plan' ? request.plan : null;
+	const interval = request?.kind === 'plan' ? request.billingInterval ?? null : null;
+	const monthlyCredits = request?.kind === 'plan' ? request.monthlyCredits ?? null : null;
 	const credits = request?.kind === 'credits' ? request.credits : null;
 
 	useEffect(() => {
-		const asked: CheckoutRequest | null = plan !== null ? { kind: 'plan', plan } : credits !== null ? { kind: 'credits', credits } : null;
+		const asked: CheckoutRequest | null = plan !== null ? { kind: 'plan', plan, ...(interval !== null ? { billingInterval: interval } : {}), ...(monthlyCredits !== null ? { monthlyCredits } : {}) } : credits !== null ? { kind: 'credits', credits } : null;
 		if (asked === null || stale) return;
 		let current = true;
 		let payment: StripePaymentElement | null = null;
@@ -94,7 +97,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 					return;
 				}
 				void queryClient.invalidateQueries({ queryKey: queryKeys.billing() });
-				navigate(asked.kind === 'plan' ? `${BILLING_PATH}?plan=${asked.plan}` : BILLING_PATH, { replace: true });
+				navigate(asked.kind === 'plan' ? planBillingPath(asked.plan, asked.billingInterval, asked.monthlyCredits) : BILLING_PATH, { replace: true });
 				return;
 			}
 			if (!current) return;
@@ -135,7 +138,7 @@ export function useBillingCheckout(request: CheckoutRequest | null, expiredOnArr
 			sdk.current = null;
 			actions.current = null;
 		};
-	}, [plan, credits, stale, attempt, navigate, queryClient, appearance]);
+	}, [plan, interval, monthlyCredits, credits, stale, attempt, navigate, queryClient, appearance]);
 
 	const refreshTerms = useCallback(async (sessionId: string) => {
 		try {

@@ -1,3 +1,6 @@
+import { checkoutRequestOf } from './checkout-state';
+import { requestedBillingInterval } from '@/lib/billing-links';
+import { BillingIntervalPicker } from '@/components/billing/BillingIntervalPicker';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
@@ -8,7 +11,9 @@ import {
 	EXTRA_CREDITS,
 	EXTRA_CREDITS_DISCLOSURE,
 	PLAN_LIMITS,
-	PLAN_PRICES_CENTS,
+	planPriceCents,
+	creditsForPlanChange,
+	type BillingInterval,
 	extraCreditsPriceCents,
 	formatBillingDate,
 	formatCredits,
@@ -28,6 +33,9 @@ import { extraCreditsPriceLabel, limitFeatures } from '@/lib/plans';
 import { getLocale, msg, t, useI18n } from '@/lib/i18n';
 import { cn } from '@/lib/utils';
 import {
+	configurationConfirmation,
+	configurationMatches,
+	type PlanConfiguration,
 	CONFIRM_POLL_MS,
 	CONFIRM_TIMEOUT_MS,
 	canCancel,
@@ -65,7 +73,7 @@ const usdText = (cents: number): string => formatUsd(cents, getLocale());
 const dateText = (ms: number): string => formatBillingDate(ms, getLocale());
 
 /** What the page polls for: a payment back from checkout, a failed renewal that was paid, or a change taken on this page. */
-type Waiting = { kind: 'payment'; paid: 'plan' | 'credits' } | { kind: 'renewal' } | { kind: 'change'; action: PlanAction };
+type Waiting = { kind: 'payment'; paid: 'plan' | 'credits' } | { kind: 'renewal' } | { kind: 'change'; action: PlanAction } | { kind: 'configuration'; target: PlanConfiguration };
 
 /** What each confirmed action asks Stripe for. */
 const CONFIRMED_CHANGES: Record<ConfirmedAction, PlanChange> = {
@@ -127,6 +135,7 @@ function CurrentPlan({
 	declined,
 	onCancel,
 	onPayNow,
+	onChangeInterval,
 }: {
 	view: BillingView;
 	paying: boolean;
@@ -134,6 +143,7 @@ function CurrentPlan({
 	declined: string | null;
 	onCancel: () => void;
 	onPayNow: () => void;
+	onChangeInterval: () => void;
 }) {
 	const paymentNote = paymentNoteFor(view);
 	const pastDue = pastDueActionsFor(view);
@@ -152,6 +162,11 @@ function CurrentPlan({
 							{renewal && <p className="text-sm text-kumo-subtle">{renewal}</p>}
 						</div>
 						<div className="flex flex-wrap gap-2">
+							{canCancel(view) && view.pendingPlan === null && !view.paymentFailing && (
+								<Button variant="secondary" disabled={disabled} onClick={onChangeInterval}>
+									{view.billingInterval === 'year' ? t('Switch to monthly') : t('Switch to yearly')}
+								</Button>
+							)}
 							{canCancel(view) && (
 								<Button variant="secondary-destructive" onClick={onCancel}>
 									{t('Cancel plan')}
@@ -194,19 +209,35 @@ function ChoiceControl({ choice, busy, disabled, onAct }: { choice: PlanChoice; 
 	}
 }
 
-function PlanOption({ choice, current, busy, disabled, onAct }: { choice: PlanChoice; current: boolean; busy: boolean; disabled: boolean; onAct: () => void }) {
+function PlanOption({
+	choice,
+	current,
+	busy,
+	disabled,
+	onAct,
+	interval,
+	monthlyCredits,
+}: {
+	interval: BillingInterval;
+	monthlyCredits: number;
+	choice: PlanChoice;
+	current: boolean;
+	busy: boolean;
+	disabled: boolean;
+	onAct: () => void;
+}) {
 	const i18n = useI18n();
 	return (
 		<div className={cn('flex flex-col gap-4 rounded-xl bg-kumo-base p-5 ring', current ? 'ring-2 ring-kumo-brand' : 'ring-kumo-line')}>
 			<div className="grid gap-1">
 				<h3 className="text-lg font-medium text-kumo-strong">{planName(choice.plan)}</h3>
 				<p className="text-2xl text-kumo-default">
-					{usdText(PLAN_PRICES_CENTS[choice.plan])}
-					<span className="text-sm text-kumo-subtle"> {t('a month')}</span>
+					{usdText(planPriceCents(choice.plan, interval, monthlyCredits))}
+					<span className="text-sm text-kumo-subtle"> {interval === 'year' ? t('a year') : t('a month')}</span>
 				</p>
 			</div>
 			<ul className="grid gap-1.5 text-sm text-kumo-subtle">
-				<li>{t('{credits} AI credits a month', { credits: creditsText(PLAN_LIMITS[choice.plan].aiCredits) })}</li>
+				<li>{t('{credits} AI credits a month', { credits: creditsText(monthlyCredits) })}</li>
 				{limitFeatures(choice.plan, undefined, i18n).map((line) => (
 					<li key={line}>{line}</li>
 				))}
@@ -262,7 +293,7 @@ function Credits({ view }: { view: BillingView }) {
 	);
 }
 
-function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingView; premium: PlanChoice | undefined; busy: boolean; disabled: boolean; onAct: (choice: PlanChoice) => void }) {
+function ExtraCredits({ view, disabled }: { view: BillingView; disabled: boolean }) {
 	const i18n = useI18n();
 	const [credits, setCredits] = useState<number>(EXTRA_CREDITS.minCredits);
 	const buyCredits = useBuyCredits();
@@ -278,7 +309,11 @@ function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingV
 				{view.canBuyCredits ? (
 					<div className="grid gap-4">
 						<p className="text-sm text-kumo-subtle">
-							{t('{price}, from {min} to {max} at a time.', { price: extraCreditsPriceLabel(i18n), min: creditsText(EXTRA_CREDITS.minCredits), max: creditsText(EXTRA_CREDITS.maxCredits) })}
+							{t('{price}, from {min} to {max} at a time.', {
+								price: extraCreditsPriceLabel(i18n),
+								min: creditsText(EXTRA_CREDITS.minCredits),
+								max: creditsText(EXTRA_CREDITS.maxCredits),
+							})}
 						</p>
 						<div className="flex flex-wrap items-center gap-4">
 							<CreditsStepper value={credits} onChange={setCredits} />
@@ -290,14 +325,7 @@ function ExtraCredits({ view, premium, busy, disabled, onAct }: { view: BillingV
 						<p className="text-xs text-kumo-subtle">{t(EXTRA_CREDITS_DISCLOSURE)}</p>
 					</div>
 				) : (
-					<div className="flex flex-wrap items-center justify-between gap-4">
-						<p className="text-sm text-kumo-default">{t('Extra credits come with Premium.')}</p>
-						{premium && (premium.action === 'checkout' || premium.action === 'upgrade') && (
-							<Button variant="primary" loading={busy} disabled={disabled && !busy} onClick={() => onAct(premium)}>
-								{premium.label}
-							</Button>
-						)}
-					</div>
+					<p className="text-sm text-kumo-default">{t('Credit purchases are unavailable. Contact us for help.')}</p>
 				)}
 			</LayerCard.Primary>
 		</LayerCard>
@@ -319,7 +347,19 @@ function NotOpen() {
 	);
 }
 
-function ConfirmDialog({ action, confirmation, pending, onClose, onConfirm }: { action: ConfirmedAction; confirmation: Confirmation; pending: boolean; onClose: () => void; onConfirm: () => void }) {
+function ConfirmDialog({
+	action,
+	confirmation,
+	pending,
+	onClose,
+	onConfirm,
+}: {
+	action: ConfirmedAction | 'interval-change';
+	confirmation: Confirmation;
+	pending: boolean;
+	onClose: () => void;
+	onConfirm: () => void;
+}) {
 	return (
 		<Dialog open onOpenChange={(open) => !open && !pending && onClose()}>
 			<DialogContent className="sm:max-w-md">
@@ -351,10 +391,13 @@ export default function BillingPage() {
 	const [waiting, setWaiting] = useState<Waiting | null>(null);
 	const [timedOut, setTimedOut] = useState(false);
 	const [cancelled, setCancelled] = useState(false);
-	const [requested, setRequested] = useState<PaidPlanId | null>(null);
+	const [requested, setRequested] = useState<{ plan: PaidPlanId; search: string } | null>(null);
+	const [newInterval, setNewInterval] = useState<BillingInterval>('month');
+	const [cadence, setCadence] = useState<PlanConfiguration | null>(null);
 	const confirming = waiting !== null;
 	const billing = useBilling({ refetchInterval: confirming ? CONFIRM_POLL_MS : false });
 	const view = billing.data;
+	const interval = view?.source === 'subscription' ? (view.billingInterval ?? 'month') : newInterval;
 	const checkout = usePlanCheckout();
 	const planChange = usePlanChange();
 	const payNow = usePayNow((result) => {
@@ -385,12 +428,13 @@ export default function BillingPage() {
 		}
 		setCancelled(returned === 'cancelled');
 		const plan = requestedPlanOf(location.search);
-		if (plan) setRequested(plan);
+		if (plan) setRequested({ plan, search: location.search });
 		navigate({ pathname: location.pathname, hash: location.hash }, { replace: true });
 	}, [location.pathname, location.search, location.hash, navigate]);
 
 	useEffect(() => {
 		if (!waiting || !view) return;
+		if (waiting.kind === 'configuration') { if (configurationMatches(view, waiting.target)) setWaiting(null); return; }
 		if (waiting.kind === 'change') {
 			if (showsChange(waiting.action, view)) setWaiting(null);
 			return;
@@ -410,7 +454,7 @@ export default function BillingPage() {
 		if (!waiting) return;
 		const timer = window.setTimeout(() => {
 			setWaiting(null);
-			if (waiting.kind === 'change') {
+			if (waiting.kind === 'change' || waiting.kind === 'configuration') {
 				toast(t(CHANGE_SLOW));
 				return;
 			}
@@ -429,8 +473,16 @@ export default function BillingPage() {
 		if (requested === null || !view || billing.isFetching) return;
 		setRequested(null);
 		if (!view.enabled) return;
-		const choice = planChoicesFor(view).find((entry) => entry.plan === requested);
-		if (choice?.action === 'checkout') checkout.start(choice.plan);
+		const selected = checkoutRequestOf(requested.search);
+		if (selected?.kind !== 'plan') return;
+		const desiredInterval = requestedBillingInterval(requested.search, view.billingInterval ?? 'month');
+		const amount = selected.monthlyCredits ?? creditsForPlanChange(requested.plan, view.monthlyCredits);
+		if (view.source === 'subscription' && (desiredInterval !== (view.billingInterval ?? 'month') || selected.monthlyCredits !== undefined && (requested.plan !== view.plan || amount !== (view.monthlyCredits ?? PLAN_LIMITS[requested.plan].aiCredits))) && !view.paymentFailing && !view.cancelAtPeriodEnd && view.pendingPlan === null) {
+			setCadence({ plan: requested.plan, interval: desiredInterval, monthlyCredits: amount });
+			return;
+		}
+		const choice = planChoicesFor(view).find((entry) => entry.plan === requested.plan);
+		if (choice?.action === 'checkout') checkout.start(choice.plan, desiredInterval, selected.monthlyCredits);
 		else if (choice?.action === 'upgrade' || choice?.action === 'downgrade') setConfirm(choice.action);
 	}, [requested, view, billing.isFetching, checkout]);
 
@@ -445,7 +497,8 @@ export default function BillingPage() {
 				onDone?.();
 				toast.success(t(CHANGE_REQUESTED));
 				setTimedOut(false);
-				setWaiting({ kind: 'change', action });
+				if (request.kind === 'change' && request.monthlyCredits !== undefined) setWaiting({ kind: 'configuration', target: { plan: request.plan, interval: request.billingInterval ?? view?.billingInterval ?? 'month', monthlyCredits: request.monthlyCredits } });
+				else setWaiting({ kind: 'change', action });
 			},
 			onError: (failure) => showBillingError(failure, CHANGE_FAILED_MESSAGE),
 		});
@@ -453,7 +506,7 @@ export default function BillingPage() {
 	const act = (choice: PlanChoice) => {
 		switch (choice.action) {
 			case 'checkout':
-				checkout.start(choice.plan);
+				checkout.start(choice.plan, interval);
 				return;
 			case 'upgrade':
 			case 'downgrade':
@@ -479,7 +532,6 @@ export default function BillingPage() {
 	// One request at a time, and nothing new while the last payment or change is still on its way.
 	const busy = confirming || planChange.isPending;
 	const choices = view ? planChoicesFor(view) : [];
-	const premium = choices.find((entry) => entry.plan === 'premium');
 
 	return (
 		<div className="size-full">
@@ -491,7 +543,11 @@ export default function BillingPage() {
 				</div>
 
 				{waiting !== null && waiting.kind !== 'change' && (
-					<Banner icon={<SpinnerGapIcon className="animate-spin motion-reduce:animate-none" />} title={t('Confirming your payment…')} description={t('This takes a few seconds.')} />
+					<Banner
+						icon={<SpinnerGapIcon className="animate-spin motion-reduce:animate-none" />}
+						title={t('Confirming your payment…')}
+						description={t('This takes a few seconds.')}
+					/>
 				)}
 				{timedOut && <Banner variant="alert" icon={<WarningCircleIcon />} description={t('Your payment is being confirmed. Refresh in a minute.')} />}
 				{cancelled && <Banner variant="secondary" icon={<InfoIcon />} description={t('Checkout cancelled. Nothing was charged.')} />}
@@ -506,15 +562,24 @@ export default function BillingPage() {
 								declined={declined}
 								onCancel={() => setConfirm('cancel')}
 								onPayNow={() => payNow.mutate()}
+								onChangeInterval={() => {
+									if (view.plan === 'pro' || view.plan === 'premium')
+										setCadence({ plan: view.plan, interval: view.billingInterval === 'year' ? 'month' : 'year', monthlyCredits: creditsForPlanChange(view.plan, view.monthlyCredits) });
+								}}
 							/>
 							<section aria-labelledby="plans-title" className="grid gap-3">
 								<h2 id="plans-title" className="text-lg font-semibold text-kumo-strong">
 									{t('Plans')}
 								</h2>
+								{view.source !== 'subscription' && (
+									<BillingIntervalPicker value={newInterval} onChange={setNewInterval} monthly={t('Monthly')} yearly={t('Yearly')} savings={t('Save 20%')} />
+								)}
 								<div className="grid gap-4 sm:grid-cols-2">
 									{choices.map((choice) => (
 										<PlanOption
 											key={choice.plan}
+											interval={interval}
+											monthlyCredits={creditsForPlanChange(choice.plan, view.monthlyCredits)}
 											choice={choice}
 											current={choice.plan === view.plan}
 											busy={busyFor(choice)}
@@ -525,7 +590,7 @@ export default function BillingPage() {
 								</div>
 							</section>
 							<Credits view={view} />
-							<ExtraCredits view={view} premium={premium} busy={premium ? busyFor(premium) : false} disabled={busy} onAct={act} />
+							<ExtraCredits view={view} disabled={busy} />
 							{view.canManageBilling && (
 								<>
 									<PaymentMethodCard card={view.card} />
@@ -544,6 +609,15 @@ export default function BillingPage() {
 					</div>
 				)}
 			</div>
+			{view && cadence && (
+				<ConfirmDialog
+					action="interval-change"
+					pending={planChange.isPending}
+					onClose={() => setCadence(null)}
+					confirmation={configurationConfirmation(view, cadence)}
+					onConfirm={() => change('interval-change', { kind: 'change', plan: cadence.plan, billingInterval: cadence.interval, monthlyCredits: cadence.monthlyCredits }, () => setCadence(null))}
+				/>
+			)}
 			{view && confirm && (
 				<ConfirmDialog
 					action={confirm}

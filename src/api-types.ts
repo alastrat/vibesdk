@@ -254,6 +254,16 @@ export {
 	PLAN_LIMIT_CODE,
 	PLAN_LIMITS,
 	PLAN_PRICES_CENTS,
+	PLAN_YEARLY_PRICES_CENTS,
+	YEARLY_DISCOUNT_PERCENT,
+	BILLING_INTERVALS,
+	isBillingInterval,
+	planPriceCents,
+	isPlanCreditAmount,
+	planCreditOptions,
+	creditsForPlanChange,
+	planChangeStartsNow,
+	type BillingInterval,
 	assertWithinLimit,
 	extraCreditsPriceCents,
 	extraCreditsPriceLabel,
@@ -334,7 +344,7 @@ export type {
 	ShopperEmailTemplateView,
 	ShopperEmailTestResult,
 } from '../shared/types/shopper-emails';
-export { SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_LABELS, SHOPPER_EMAIL_LIMITS, SHOPPER_EMAIL_STATUSES, SHOPPER_EMAILS_PATH } from '../shared/types/shopper-emails';
+export { DEFAULT_SHOPPER_EMAIL_TEMPLATES, SHOPPER_EMAIL_KINDS, SHOPPER_EMAIL_LABELS, SHOPPER_EMAIL_LIMITS, SHOPPER_EMAIL_STATUSES, SHOPPER_EMAILS_PATH } from '../shared/types/shopper-emails';
 export type { TaskKind, TaskPauseReason, TaskProgressView, TaskStatus, TaskView, TaskViewPayloads } from '../shared/types/tasks';
 export { TASK_FAILED_MESSAGE, TASK_KINDS, TASK_STATUSES, UNFINISHED_TASK_STATUSES, isUnfinishedStatus } from '../shared/types/tasks';
 export type {

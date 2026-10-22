@@ -13,8 +13,13 @@ export const UPGRADE_TITLES: Record<PlanLimitKey, string> = {
 	newStoresPerDay: msg("That's today's new stores"),
 	liveStores: msg("You've reached your live stores"),
 	ownDomainsPerLiveStore: msg('Own domains come with Pro and Premium'),
-	supplierCatalog: msg('Catalog products need Pro or Premium'),
-	extraCredits: msg('Extra credits come with Premium'),
+	supplierCatalog: msg('Catalog access is disabled'),
+	extraCredits: msg('Extra credits'),
+	shopperEmails: msg('Automatic shopper emails come with Pro and Premium.'),
+	customShopperEmails: msg('Customize shopper emails with Premium'),
+	shipmentTracking: msg('Add shipment tracking with Premium'),
+	orderRefunds: msg('Refund orders with Premium'),
+	flexiblePayouts: msg('Choose your payout schedule with Pro'),
 };
 
 /** Paid plans already include an own domain, so their refusal is for one more. */

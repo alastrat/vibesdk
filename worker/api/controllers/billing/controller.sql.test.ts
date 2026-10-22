@@ -72,7 +72,7 @@ function invoice(id: string, overrides: Record<string, unknown> = {}) {
 describe('the billing endpoints', () => {
 	it("shows a Basic account its month's credits", async () => {
 		const response = await BillingController.get(new Request('https://estori.app/api/billing'), env(), {} as ExecutionContext, context('u_basic'));
-		expect((await response.json()).data).toMatchObject({ enabled: true, plan: 'basic', source: 'free', status: null, credits: { pool: 5_000, used: 0, left: 5_000 }, alert: null, purchases: [], limits: { liveStores: 1 }, canManageBilling: false, canBuyCredits: false });
+		expect((await response.json()).data).toMatchObject({ enabled: true, plan: 'basic', source: 'free', status: null, credits: { pool: 5_000, used: 0, left: 5_000 }, alert: null, purchases: [], limits: { liveStores: 2 }, canManageBilling: false, canBuyCredits: true });
 	});
 
 	it('shows Premium its pool and purchases, and lets it buy more', async () => {
@@ -115,13 +115,22 @@ describe('the billing endpoints', () => {
 		expect(stripe).not.toHaveBeenCalled();
 	});
 
-	it('answers 402 plan_limit when Basic tries to buy credits, and 403 when billing is off for the account', async () => {
-		const refused = await BillingController.credits(post('/api/billing/credits', { credits: 5_000 }), env(), {} as ExecutionContext, context('u_basic'));
-		expect(refused.status).toBe(402);
-		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'extraCredits', upgradeTo: 'premium' });
-		const off = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else' }), {} as ExecutionContext, context('u_off'));
+	it('opens a Basic credit checkout at the common price, and keeps billing-off accounts closed', async () => {
+		vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+			const path = new URL(String(input)).pathname;
+			if (path === '/v1/customers') return Response.json({ id: 'cus_basic', email: null, metadata: null });
+			if (path === '/v1/checkout/sessions') return Response.json({ id: 'cs_credits', client_secret: 'cs_credits_secret_x', status: 'open', amount_total: 750, discounts: [] });
+			if (path === '/v1/checkout/sessions/cs_credits') return Response.json({ id: 'cs_credits', status: 'open', amount_total: 750, discounts: [] });
+			throw new Error(`unexpected ${path}`);
+		});
+		const response = await BillingController.credits(post('/api/billing/credits', { credits: 5_000 }), env(), {} as ExecutionContext, context('u_basic'));
+		expect(response.status).toBe(200);
+		expect((await response.json()).data).toMatchObject({ order: { kind: 'credits', credits: 5_000, amountCents: 750 }, terms: null });
+		const offEnv = env({ BILLING: undefined, BILLING_USER_IDS: 'someone-else' });
+		const off = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro' }), offEnv, {} as ExecutionContext, context('u_off'));
 		expect(off.status).toBe(403);
 		expect((await off.json()).error.message).toBe("Plans aren't open for your account yet.");
+		expect((await BillingController.credits(post('/api/billing/credits', { credits: 5_000 }), offEnv, {} as ExecutionContext, context('u_off'))).status).toBe(403);
 	});
 
 	it('takes the bodiless actions without a body, and answers 401 without a session', async () => {
@@ -370,4 +379,47 @@ describe("the checkout's wording follows the seller's language", () => {
 		expect(data.order.includes[0]).toBe('20,000 créditos de IA al mes');
 		expect(data.terms.buttonText.replace(/ /g, ' ')).toBe('Suscribirse: USD 49 al mes');
 	});
+});
+
+it('passes annual billing from the API through Stripe checkout and yearly consent', async () => {
+ await insertUser(db, 'u_annual_api');
+ const price = { id: 'price_pro_year', currency: 'usd', unit_amount: 46800, recurring: { interval: 'year', interval_count: 1 } };
+ const session = { id: 'cs_annual_api', client_secret: 'cs_secret', mode: 'subscription', status: 'open', payment_status: 'unpaid', currency: 'usd', amount_total: 46800, metadata: { plan: 'pro', estori_user_id: 'u_annual_api', billing_interval: 'year' }, line_items: { data: [{ quantity: 1, price }] } };
+ const created: URLSearchParams[] = [];
+ vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+  const path = new URL(String(input)).pathname;
+  if (path === '/v1/customers') return Response.json({ id: 'cus_annual_api' });
+  if (path === '/v1/checkout/sessions') { created.push(new URLSearchParams(String(init?.body))); return Response.json(session); }
+  if (path === '/v1/checkout/sessions/cs_annual_api') return Response.json(session);
+  throw new Error('Unexpected annual API request: ' + path);
+ });
+ const response = await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro', billingInterval: 'year' }), env({ STRIPE_PRICE_IDS: JSON.stringify({ ...JSON.parse(PRICES), proYearly: 'price_pro_year' }) }), ctx, context('u_annual_api'));
+ expect(response.status).toBe(200);
+ expect((await response.json()).data).toMatchObject({ order: { billingInterval: 'year', priceCents: 46800 }, terms: { consentText: expect.stringContaining('$468 a year'), dueTodayCents: 46800 } });
+ expect(created[0].get('line_items[0][price]')).toBe('price_pro_year');
+ expect(created[0].get('metadata[billing_interval]')).toBe('year');
+ expect((await BillingController.checkout(post('/api/billing/checkout', { plan: 'pro', billingInterval: 'week' }), env(), ctx, context('u_annual_api'))).status).toBe(400);
+});
+
+
+it('checks out an annual recurring allowance using server-computed prices and matching consent', async () => {
+ await insertUser(db, 'u_allowance_api');
+ const price = { id:'price_selected', product:'prod_pro', currency:'usd', unit_amount:61200, recurring:{interval:'year',interval_count:1}, metadata:{estori_plan:'pro',estori_monthly_credits:'30000',estori_billing_interval:'year'} };
+ const session = {id:'cs_allowance_api',client_secret:'cs_secret',mode:'subscription',status:'open',payment_status:'unpaid',currency:'usd',amount_total:61200,metadata:{plan:'pro',estori_user_id:'u_allowance_api',billing_interval:'year',monthly_credits:'30000'},line_items:{data:[{quantity:1,price}]}};
+ const created:URLSearchParams[]=[];
+ vi.spyOn(globalThis,'fetch').mockImplementation(async(input,init)=>{
+  const url=new URL(String(input));
+  if(url.pathname==='/v1/prices/price_pro_year')return Response.json({...price,id:'price_pro_year',unit_amount:46800,metadata:null});
+  if(url.pathname==='/v1/prices' && init?.method==='POST'){const body=new URLSearchParams(String(init.body));expect(body.get('unit_amount')).toBe('61200');expect(body.get('product')).toBe('prod_pro');expect(body.get('metadata[estori_monthly_credits]')).toBe('30000');return Response.json(price);}
+  if(url.pathname==='/v1/prices')return Response.json({data:[]});
+  if(url.pathname==='/v1/customers')return Response.json({id:'cus_allowance_api'});
+  if(url.pathname==='/v1/checkout/sessions'){created.push(new URLSearchParams(String(init?.body)));return Response.json(session);}
+  if(url.pathname==='/v1/checkout/sessions/cs_allowance_api')return Response.json(session);
+  throw new Error('Unexpected recurring allowance API request: '+url.pathname);
+ });
+ const response=await BillingController.checkout(post('/api/billing/checkout',{plan:'pro',billingInterval:'year',monthlyCredits:30000,priceCents:1}),env({STRIPE_PRICE_IDS:JSON.stringify({...JSON.parse(PRICES),proYearly:'price_pro_year'})}),ctx,context('u_allowance_api'));
+ expect(response.status).toBe(200);
+ expect((await response.json()).data).toMatchObject({order:{billingInterval:'year',monthlyCredits:30000,priceCents:61200},terms:{consentText:expect.stringContaining('$612 a year'),dueTodayCents:61200}});
+ expect(created[0].get('line_items[0][price]')).toBe('price_selected');
+ expect(created[0].get('metadata[monthly_credits]')).toBe('30000');
 });

@@ -31,6 +31,8 @@ export interface ShopperEmailStoreFacts {
 }
 
 export interface ShopperEmailDeps {
+	/** The seller's current entitlement, checked at send time, including scheduled retries. */
+	access(sellerUserId: string): Promise<{ canSend: boolean; canCustomize: boolean }>;
 	emails: Pick<ShopperEmailService, 'enqueue' | 'claim' | 'finish' | 'retry' | 'due' | 'templates' | 'replyTo' | 'sentSince'>;
 	order(orderId: string): Promise<StoreOrderView | null>;
 	store(appId: string): Promise<ShopperEmailStoreFacts | null>;
@@ -130,8 +132,15 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 		return 'failed';
 	}
 	const test = order.mode === 'test';
+	const access = await deps.access(order.sellerUserId);
+	if (!access.canSend) {
+		await deps.emails.finish(id, { status: 'disabled', recipient: test ? null : order.customerEmail, test, error: 'Shopper emails are not included in the seller account.' });
+		return 'disabled';
+	}
+
 	const [store, templates, replyTo] = await Promise.all([deps.store(order.appId), deps.emails.templates(order.appId), deps.emails.replyTo(order.appId)]);
-	const template = templates.get(row.kind) ?? { enabled: true, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES[row.kind] };
+	const saved = templates.get(row.kind);
+	const template = access.canCustomize && saved ? saved : { enabled: saved?.enabled ?? true, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES[row.kind] };
 	const recipient = test ? (store?.sellerEmailConfirmed ? store.sellerEmail : null) : order.customerEmail;
 	if (!template.enabled) {
 		await deps.emails.finish(id, { status: 'disabled', recipient, test });
@@ -162,7 +171,7 @@ export async function sendShopperEmail(deps: ShopperEmailDeps, id: string): Prom
 			text: email.text,
 			fromEmail: store?.fromEmail ?? deps.fromEmail,
 			fromName: content.storeName,
-			replyTo: replyTo ?? store?.sellerEmail ?? undefined,
+			replyTo: (access.canCustomize ? replyTo : null) ?? store?.sellerEmail ?? undefined,
 			headers: { 'X-Estori-Store': order.appId, 'X-Estori-Email': row.kind },
 		});
 	} catch (error) {

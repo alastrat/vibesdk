@@ -11,6 +11,8 @@ import {
 	checkoutReturnOf,
 	clampExtraCredits,
 	confirmationFor,
+	configurationConfirmation,
+	configurationMatches,
 	creditsSummaryFor,
 	describePaymentResult,
 	isConfirmed,
@@ -256,4 +258,34 @@ describe('a failed payment on the billing page', () => {
 		expect(isRenewalPaid(view('pro', FAILING))).toBe(false);
 		expect(isRenewalPaid(view('pro', { card: VISA }))).toBe(true);
 	});
+});
+
+it('uses the paid annual end for cancellation and states annual upgrade prices without changing monthly credits', () => {
+ const yearly = view('pro', { billingInterval: 'year', periodEnd: Date.parse('2027-10-05T10:00:00Z') });
+ expect(confirmationFor(yearly, 'upgrade').body).toContain('$1,908 a year');
+ expect(confirmationFor(yearly, 'upgrade').body).toContain('100,000 AI credits a month');
+ expect(confirmationFor(yearly, 'cancel').body).toContain('October 5');
+ const samePlanChange = { ...yearly, pendingPlan: 'pro' as const, pendingBillingInterval: 'month' as const, pendingPlanAt: yearly.periodEnd };
+ expect(planChoicesFor(samePlanChange)[0].action).toBe('cancel-change');
+ expect(renewalLineFor(samePlanChange)).toContain('monthly billing');
+});
+
+
+describe('confirming a selected recurring allowance', () => {
+ it('explains an immediate increase and shows the full yearly price for a cadence change', () => {
+  const current=view('pro',{billingInterval:'month',monthlyCredits:20000});
+  const increase=configurationConfirmation(current,{plan:'pro',interval:'month',monthlyCredits:30000});
+  expect(increase.body).toContain('30,000 AI credits a month now');
+  expect(increase.body).toContain('$64 a month');
+  const annual=configurationConfirmation(current,{plan:'pro',interval:'year',monthlyCredits:30000});
+  expect(annual.body).toContain('$612 a year');
+  expect(annual.body).toContain('current paid period stays unchanged');
+ });
+ it('waits for the exact current or scheduled credit amount rather than just the plan name', () => {
+  const target={plan:'pro' as const,interval:'month' as const,monthlyCredits:30000};
+  expect(configurationMatches(view('pro',{monthlyCredits:20000}),target)).toBe(false);
+  expect(configurationMatches(view('pro',{monthlyCredits:30000}),target)).toBe(true);
+  expect(configurationMatches(view('pro',{monthlyCredits:50000,pendingPlan:'pro',pendingBillingInterval:'month',pendingMonthlyCredits:30000}),target)).toBe(true);
+  expect(configurationMatches(view('pro',{monthlyCredits:50000,pendingPlan:'pro',pendingBillingInterval:'year',pendingMonthlyCredits:30000}),target)).toBe(false);
+ });
 });

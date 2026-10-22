@@ -2,7 +2,7 @@
 
 import { msg } from '../i18n/translate';
 
-export const TERMS_VERSION = '2026-10-19';
+export const TERMS_VERSION = '2026-10-21';
 
 export const TERMS_REQUIRED_MESSAGE = msg('Agree to the Terms of Service and Privacy Policy to create an account');
 export const TERMS_OUTDATED_MESSAGE = msg('The terms were updated; reload the page to agree to the latest version');

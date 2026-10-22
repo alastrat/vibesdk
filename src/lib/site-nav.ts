@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import type { CapabilityId } from './capabilities';
 
 /** The menu icon for an item, by name; the menu maps each to its drawing. */
@@ -14,16 +15,16 @@ export interface NavItem {
 
 /** The Solutions menu's "Estori for" column. */
 export const AUDIENCES: readonly NavItem[] = [
-	{ to: '/solutions/brands', label: 'Brands and store owners', description: 'Build your store in minutes, run it with AI help', icon: 'storefront' },
-	{ to: '/solutions/resellers', label: 'Dropshippers and resellers', description: 'Curated products, added in a few clicks', icon: 'package', capability: 'product-catalog' },
-	{ to: '/solutions/digital', label: 'Digital businesses', description: 'Sell e-books, images and videos, and run your community', icon: 'download', capability: 'digital-products' },
-	{ to: '/solutions/subscriptions', label: 'Subscriptions', description: 'Boxes, memberships and refills that renew on their own', icon: 'repeat', capability: 'subscriptions' },
-	{ to: '/solutions/communities', label: 'Communities', description: 'Members-only posts, events and downloads in your store', icon: 'users', capability: 'digital-products' },
+	{ to: '/solutions/brands', label: marketingCopy.navigation.audiences.brands.label, description: marketingCopy.navigation.audiences.brands.description, icon: 'storefront' },
+	{ to: '/solutions/resellers', label: marketingCopy.navigation.audiences.resellers.label, description: marketingCopy.navigation.audiences.resellers.description, icon: 'package', capability: 'product-catalog' },
+	{ to: '/solutions/digital', label: marketingCopy.navigation.audiences.digital.label, description: marketingCopy.navigation.audiences.digital.description, icon: 'download', capability: 'digital-products' },
+	{ to: '/solutions/subscriptions', label: marketingCopy.navigation.audiences.subscriptions.label, description: marketingCopy.navigation.audiences.subscriptions.description, icon: 'repeat', capability: 'subscriptions' },
+	{ to: '/solutions/communities', label: marketingCopy.navigation.audiences.communities.label, description: marketingCopy.navigation.audiences.communities.description, icon: 'users', capability: 'digital-products' },
 ];
 
-export const CREATORS_CAPTION = 'Take part in Estori without running a store.';
+export const CREATORS_CAPTION = marketingCopy.navigation.creatorsCaption;
 
 export const CREATOR_ITEMS: readonly NavItem[] = [
-	{ to: '/creators/developers', label: 'Developers', description: 'Build stores, sell them as templates in Discover', icon: 'code', capability: 'developer-templates' },
-	{ to: '/creators/content', label: 'Content creators', description: "Get paid promoting merchants' products with your link or store", icon: 'megaphone', capability: 'content-creators' },
+	{ to: '/creators/developers', label: marketingCopy.navigation.creators.developers.label, description: marketingCopy.navigation.creators.developers.description, icon: 'code', capability: 'developer-templates' },
+	{ to: '/creators/content', label: marketingCopy.navigation.creators.content.label, description: marketingCopy.navigation.creators.content.description, icon: 'megaphone', capability: 'content-creators' },
 ];

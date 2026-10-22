@@ -1,4 +1,5 @@
-import { assertWithinLimit } from '../i18n/plan-limits';
+import { recurringPriceId } from './plan-price';
+import { subscriptionRowFrom } from './subscription-row';
 import { msg } from '../../../shared/i18n/translate';
 /**
  * What a seller can do with their plan: start Pro or Premium, move between them, cancel, keep a plan set to end, buy
@@ -29,7 +30,7 @@ import {
 	type InvoiceView,
 } from '../../../shared/types/billing';
 import { isCurrentTermsVersion, TERMS_OUTDATED_MESSAGE, TERMS_VERSION } from '../../../shared/types/legal';
-import { formatBillingDate, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
+import { PLAN_LIMITS, creditsForPlanChange, planChangeStartsNow, isPlanCreditAmount, formatBillingDate, isBillingInterval, type BillingInterval, isExtraCreditsAmount, isPaidPlanId, planName, type PaidPlanId, type PlanLimitRefusal } from '../../../shared/types/plans';
 import { BILLING_CHECKOUT_PAUSED_MESSAGE } from '../../../shared/types/pauses';
 import type { Translator } from '../../../shared/i18n/translate';
 import { createLogger } from '../../logger';
@@ -38,10 +39,10 @@ import { stripeFromEnv } from '../payments/config';
 import { isFlagOn } from '../posthog/flags';
 import { BILLING_CHECKOUT_EXPAND, idempotencyBucket, StripeApiError, type StripeCheckoutSession, type StripeClient, type StripeInvoice } from '../payments/stripe-client';
 import { liveSubscription, payableSubscription, type BillingAccount } from './account';
-import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError } from './checkout-session';
+import { billingSessionOf, creditsOrder, planOrder, sessionStateOf, termsViewOf, UnreadablePromotionError, UnreadablePriceError } from './checkout-session';
 import { checkoutReturnRecorders, type CheckoutReturnRecorder } from './events';
 import { chargedPaymentMethod, historyOf, invoiceSubscriptionId, setDefaultCard } from './invoices';
-import { planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
+import { creditsOfPrice, matchesYearlyPrice, intervalOfPrice, priceIdFor, planOfPrice, stripePriceIds, type StripePriceIds } from './prices';
 import { cancelAtPeriodEndReleasingSchedule, pendingScheduleId, releaseSchedule } from './schedules';
 import { billingEventDepsFromEnv } from './wiring';
 
@@ -50,6 +51,11 @@ const logger = createLogger('BillingActions');
 export const BILLING_MESSAGES = {
 	notSetUp: msg("Plans aren't set up on this deployment yet."),
 	pickPlan: msg('Pick Pro or Premium.'),
+	pickInterval: msg('Choose monthly or yearly billing.'),
+	pickCredits: msg('Choose a valid monthly credit allowance.'),
+	planUpdating: msg('Your plan is updating. Refresh billing and try again.'),
+	creditsNotSetUp: msg('This monthly credit allowance is not available yet. Please try again later.'),
+	yearlyNotSetUp: msg('Yearly billing is not set up on this deployment yet.'),
 	alreadyPaying: msg('You already have a plan. Change it on the billing page.'),
 	noPlan: msg("You don't have Pro or Premium."),
 	paymentFailing: msg("Your last payment didn't go through. Pay it on the billing page first."),
@@ -81,6 +87,9 @@ export type BillingStripe = Pick<
 	| 'retrieveCustomer'
 	| 'createSubscriptionCheckoutSession'
 	| 'createCreditsCheckoutSession'
+	| 'findPlanPrice'
+	| 'createPlanPrice'
+	| 'retrievePrice'
 	| 'retrieveSubscription'
 	| 'changeSubscriptionPrice'
 	| 'scheduleSubscriptionPrice'
@@ -178,6 +187,10 @@ function termsOf(deps: BillingActionDeps, plan: PaidPlanId, session: StripeCheck
 	try {
 		return ok(termsViewOf(plan, session, deps.i18n));
 	} catch (error) {
+		if (error instanceof UnreadablePriceError) {
+			logger.warn('Annual checkout price does not match its terms', { sessionId: session.id });
+			return fail(503, BILLING_MESSAGES.yearlyNotSetUp);
+		}
 		if (!(error instanceof UnreadablePromotionError)) throw error;
 		logger.warn('A checkout was refused because its promotion can not be stated exactly', { sessionId: session.id, couponId: error.couponId, message: error.message });
 		return STRIPE_FAILED;
@@ -224,20 +237,29 @@ function endsOn(row: SubscriptionRecord): string {
  * Opens an embedded checkout for Pro or Premium. A repeat within the client's bucket gets the same session back, worded
  * with any promotion code applied to it since; `checkoutTerms` answers the same wording later.
  */
-export async function startCheckout(deps: BillingActionDeps, user: { id: string; email: string }, plan: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
+export async function startCheckout(deps: BillingActionDeps, user: { id: string; email: string }, plan: unknown, interval: unknown = 'month', requestedCredits?: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
 	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	const { publishableKey } = deps;
 	if (!publishableKey) return fail(503, PAYMENTS_NOT_SET_UP_MESSAGE);
 	if (!isPaidPlanId(plan)) return fail(400, BILLING_MESSAGES.pickPlan);
+	if (!isBillingInterval(interval)) return fail(400, BILLING_MESSAGES.pickInterval);
+	const monthlyCredits = requestedCredits === undefined ? PLAN_LIMITS[plan].aiCredits : requestedCredits;
+	if (!isPlanCreditAmount(plan, monthlyCredits)) return fail(400, BILLING_MESSAGES.pickCredits);
+	const basePriceId = priceIdFor(setup.priceIds, plan, interval);
+	if (!basePriceId) return fail(503, BILLING_MESSAGES.yearlyNotSetUp);
 	if (liveSubscription(await deps.store.subscriptionOf(user.id))) return fail(409, BILLING_MESSAGES.alreadyPaying);
 	return askStripe(async () => {
+		const priceId = await recurringPriceId(setup.stripe, setup.priceIds, plan, interval, monthlyCredits);
+		if (!priceId) return fail(503, BILLING_MESSAGES.creditsNotSetUp);
 		const customerId = await customerOf(deps, setup.stripe, user);
 		const session = await currentSession(setup.stripe, (replaces) =>
 			setup.stripe.createSubscriptionCheckoutSession({
 				customerId,
-				priceId: setup.priceIds[plan],
+				priceId,
+				...(monthlyCredits !== PLAN_LIMITS[plan].aiCredits ? { monthlyCredits } : {}),
+				...(interval === 'year' ? { billingInterval: interval } : {}),
 				userId: user.id,
 				plan,
 				returnUrl: checkoutReturnUrl(deps),
@@ -245,24 +267,32 @@ export async function startCheckout(deps: BillingActionDeps, user: { id: string;
 				replaces,
 			}),
 		);
+		if (interval === 'year' && billingSessionOf(session)?.kind !== 'plan' || interval === 'year' && session.metadata?.billing_interval !== 'year') return fail(503, BILLING_MESSAGES.yearlyNotSetUp);
+		if (monthlyCredits !== PLAN_LIMITS[plan].aiCredits && session.metadata?.monthly_credits !== String(monthlyCredits)) return fail(503, BILLING_MESSAGES.creditsNotSetUp);
 		const terms = termsOf(deps, plan, session);
-		return terms.ok ? clientStart(session, publishableKey, planOrder(plan, deps.i18n), terms.value) : terms;
+		return terms.ok ? clientStart(session, publishableKey, planOrder(plan, deps.i18n, interval, monthlyCredits), terms.value) : terms;
 	});
 }
 
 /** Premium starts now, prorated; Pro starts at the renewal. Choosing the current plan again drops a pending move. */
-export async function changePlan(deps: BillingActionDeps, userId: string, plan: unknown): Promise<BillingActionResult<BillingChangeRequested>> {
+export async function changePlan(deps: BillingActionDeps, userId: string, plan: unknown, requestedInterval?: unknown, requestedCredits?: unknown): Promise<BillingActionResult<BillingChangeRequested>> {
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	if (!isPaidPlanId(plan)) return fail(400, BILLING_MESSAGES.pickPlan);
+	if (requestedInterval !== undefined && !isBillingInterval(requestedInterval)) return fail(400, BILLING_MESSAGES.pickInterval);
 	const row = liveSubscription(await deps.store.subscriptionOf(userId));
 	if (!row) return fail(404, BILLING_MESSAGES.noPlan);
 	if (row.status === 'past_due') return fail(409, BILLING_MESSAGES.paymentFailing);
+	const interval: BillingInterval = isBillingInterval(requestedInterval) ? requestedInterval : row.billingInterval ?? 'month';
+	const currentInterval = row.billingInterval ?? 'month';
+	const currentCredits = row.monthlyCredits ?? PLAN_LIMITS[row.plan].aiCredits;
+	const monthlyCredits = requestedCredits === undefined ? creditsForPlanChange(plan, row.monthlyCredits) : requestedCredits;
+	if (!isPlanCreditAmount(plan, monthlyCredits)) return fail(400, BILLING_MESSAGES.pickCredits);
 	const current = planName(row.plan);
 	if (row.cancelAtPeriodEnd) return fail(409, `${current} ends on ${endsOn(row)}. Keep ${current} first.`);
 	const { stripe, priceIds } = setup;
 	if (row.pendingPlan !== null) {
-		if (plan !== row.plan) {
+		if (plan !== row.plan || interval !== currentInterval || monthlyCredits !== currentCredits) {
 			return fail(409, `You have a change scheduled for ${formatBillingDate((row.pendingPlanAt ?? row.currentPeriodEnd).getTime())}. Keep your current plan first.`);
 		}
 		return askStripe(async () => {
@@ -273,17 +303,27 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 	}
 	// After the pending-plan branch above, which only drops a scheduled move and charges nothing, so it stays open.
 	if (await deps.checkoutPaused(userId)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
-	if (plan === row.plan) return fail(400, `You're already on ${current}.`);
+	if (plan === row.plan && interval === currentInterval && monthlyCredits === currentCredits) return fail(400, `You're already on ${current}.`);
+	const configuredPriceId = priceIdFor(priceIds, plan, interval);
+	if (!configuredPriceId) return fail(503, BILLING_MESSAGES.yearlyNotSetUp);
 	return askStripe(async () => {
+		const priceId = await recurringPriceId(stripe, priceIds, plan, interval, monthlyCredits);
+		if (!priceId) return fail(503, BILLING_MESSAGES.creditsNotSetUp);
+		if (interval === 'year' && monthlyCredits === PLAN_LIMITS[plan].aiCredits && !matchesYearlyPrice(await stripe.retrievePrice(priceId), plan)) return fail(503, BILLING_MESSAGES.yearlyNotSetUp);
 		let subscription = await stripe.retrieveSubscription(row.stripeSubscriptionId);
-		if (plan === 'pro') {
-			const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, rowVersion(row)]);
-			await stripe.scheduleSubscriptionPrice({ subscription, priceId: priceIds.pro, idempotencyKey: idempotency });
+		const item = subscription.items.data[0];
+		const livePlan = item && planOfPrice(item.price, priceIds);
+		const liveInterval = item && intervalOfPrice(item.price, priceIds);
+		const liveCredits = item && livePlan && liveInterval ? creditsOfPrice(item.price, livePlan, liveInterval) : 'invalid';
+		if (subscriptionRowFrom(subscription, userId, priceIds, deps.nowMs)?.pendingPlan) return fail(409, BILLING_MESSAGES.planUpdating);
+		// A retry of a completed change is safe. A different live configuration needs fresh consent and a synced row.
+		if (item && item.price.id === priceId && livePlan === plan && liveInterval === interval && liveCredits !== 'invalid' && (liveCredits ?? PLAN_LIMITS[plan].aiCredits) === monthlyCredits) return ok(REQUESTED);
+		if (livePlan !== row.plan || liveInterval !== currentInterval || liveCredits === 'invalid' || (liveCredits ?? PLAN_LIMITS[row.plan].aiCredits) !== currentCredits || subscription.cancel_at_period_end || subscription.status !== row.status) return fail(409, BILLING_MESSAGES.planUpdating);
+		if (!planChangeStartsNow(livePlan, plan, liveInterval, interval, liveCredits ?? PLAN_LIMITS[livePlan].aiCredits, monthlyCredits)) {
+			const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, ...(interval === 'year' ? ['year'] : []), ...(monthlyCredits !== PLAN_LIMITS[plan].aiCredits ? ['credits', String(monthlyCredits)] : []), rowVersion(row)]);
+			await stripe.scheduleSubscriptionPrice({ subscription, priceId, billingInterval: interval, idempotencyKey: idempotency });
 			return ok(REQUESTED);
 		}
-		// The row lags the webhook; a subscription Stripe already moved needs nothing more.
-		const item = subscription.items.data[0];
-		if (item && planOfPrice(item.price, priceIds) === 'premium') return ok(REQUESTED);
 		const scheduleId = pendingScheduleId(subscription);
 		if (scheduleId) {
 			const released = await releaseSchedule(stripe, subscription.id, scheduleId);
@@ -292,8 +332,8 @@ export async function changePlan(deps: BillingActionDeps, userId: string, plan: 
 		}
 		// Keyed on the card too: a retry after a decline and a new card on the billing page must reach Stripe again, not replay the 402.
 		const card = (await chargedPaymentMethod(stripe, subscription.customer, subscription)) ?? 'none';
-		const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, card, rowVersion(row)]);
-		await stripe.changeSubscriptionPrice({ subscription, priceId: priceIds.premium, idempotencyKey: idempotency });
+		const idempotency = idempotencyKey(deps, 'change-plan', userId, [plan, ...(interval === 'year' ? ['year'] : []), ...(monthlyCredits !== PLAN_LIMITS[plan].aiCredits ? ['credits', String(monthlyCredits)] : []), card, rowVersion(row)]);
+		await stripe.changeSubscriptionPrice({ subscription, priceId, idempotencyKey: idempotency });
 		return ok(REQUESTED);
 	});
 }
@@ -327,15 +367,13 @@ export async function resumePlan(deps: BillingActionDeps, userId: string): Promi
 	});
 }
 
-/** A checkout for extra credits, at the price from the server's table; the plan and the amount are checked before Stripe is asked. */
-export async function buyCredits(deps: BillingActionDeps, user: { id: string; email: string }, account: BillingAccount, credits: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
+/** A checkout for extra credits, at the price from the server's table; the amount is checked before Stripe is asked, at the same price for every plan. */
+export async function buyCredits(deps: BillingActionDeps, user: { id: string; email: string }, _account: BillingAccount, credits: unknown): Promise<BillingActionResult<CheckoutClientStart>> {
 	if (await deps.checkoutPaused(user.id)) return { ok: false, status: 503, message: BILLING_CHECKOUT_PAUSED_MESSAGE };
 	const setup = configured(deps);
 	if (!setup) return fail(503, BILLING_MESSAGES.notSetUp);
 	const { publishableKey } = deps;
 	if (!publishableKey) return fail(503, PAYMENTS_NOT_SET_UP_MESSAGE);
-	const refusal = assertWithinLimit(account, 'extraCredits');
-	if (refusal) return { ok: false, status: 402, refusal };
 	if (!isExtraCreditsAmount(credits)) return fail(400, BILLING_MESSAGES.creditsAmount);
 	return askStripe(async () => {
 		// Keyed on the newest recorded purchase, so buying the same amount again after the first is paid opens a new checkout.

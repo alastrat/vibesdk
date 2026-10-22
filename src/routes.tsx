@@ -45,6 +45,7 @@ import SubscriptionsPage from './routes/solutions/subscriptions';
 import CommunitiesPage from './routes/solutions/communities';
 import CatalogFulfillmentPage from './routes/platform/catalog-fulfillment';
 import PaymentsPage from './routes/platform/payments';
+import StoreTranslationsPage from './routes/platform/store-translations';
 import EmailMarketingPage from './routes/platform/email-marketing';
 import WebAnalyticsPage from './routes/platform/web-analytics';
 import SearchOptimizationPage from './routes/platform/seo';
@@ -241,6 +242,10 @@ const routes = [
 					{
 						path: 'platform/payments',
 						Component: PaymentsPage,
+					},
+					{
+						path: 'platform/store-translations',
+						Component: StoreTranslationsPage,
 					},
 					{
 						path: 'platform/email-marketing',

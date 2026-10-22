@@ -77,12 +77,12 @@ export function overrideLimitsOf(override: PlanOverrideRecord): PlanLimitOverrid
 export function resolvePlan(input: { subscription: SubscriptionRecord | null; override: PlanOverrideRecord | null; signupMs: number | null; nowMs: number }): ResolvedPlan {
 	const { override, signupMs, nowMs } = input;
 	const paying = paysForItsPlan(input.subscription, nowMs) ? input.subscription : null;
-	const period = paying ? subscriptionPeriod(paying) : accountPeriod(signupMs, nowMs);
+	const period = paying ? subscriptionPeriod(paying, nowMs) : accountPeriod(signupMs, nowMs);
 	const graceEndsAtMs = paying ? graceEndsAt(paying) : null;
 	if (override?.plan && (override.until === null || override.until.getTime() > nowMs)) {
 		return { plan: override.plan, source: 'override', period, graceEndsAtMs, overrideLimits: overrideLimitsOf(override) };
 	}
-	if (paying) return { plan: paying.plan, source: 'subscription', period, graceEndsAtMs, overrideLimits: graceEndsAtMs === null ? null : UNPAID_RENEWAL_LIMITS };
+	if (paying) return { plan: paying.plan, source: 'subscription', period, graceEndsAtMs, overrideLimits: graceEndsAtMs === null ? (paying.monthlyCredits != null ? { aiCredits: paying.monthlyCredits } : null) : UNPAID_RENEWAL_LIMITS };
 	return { plan: 'basic', source: 'free', period, graceEndsAtMs: null, overrideLimits: null };
 }
 

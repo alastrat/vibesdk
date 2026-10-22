@@ -32,6 +32,10 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 		stripeSubscriptionId: 'sub_1',
 		status: 'active',
 		plan: 'pro',
+		monthlyCredits: null,
+		pendingMonthlyCredits: null,
+		billingInterval: 'month',
+		pendingBillingInterval: null,
 		currentPeriodStart: new Date(START * 1000),
 		currentPeriodEnd: new Date(END * 1000),
 		cancelAtPeriodEnd: false,
@@ -129,4 +133,22 @@ describe('noticesFor', () => {
 		expect(noticesFor(row(), row(), { eventType: 'invoice.payment_failed', invoice: invoice('subscription_update', 0) })).toEqual([]);
 		expect(noticesFor(row(), row(), { eventType: 'invoice.payment_action_required', invoice: invoice('subscription_update', 0) })).toEqual([]);
 	});
+});
+
+it('stores annual billing and an interval-only pending change instead of discarding it', () => {
+ const ids = { ...IDS, proYearly: 'price_pro_year' };
+ const yearly = stripeSub({ items: { data: [{ id: 'si_1', price: { id: 'price_pro_year', recurring: { interval: 'year', interval_count: 1 } }, current_period_start: START, current_period_end: END }] }, schedule: {
+  id: 'sched_interval', status: 'active', subscription: 'sub_1', current_phase: { start_date: START, end_date: END }, phases: [
+   { start_date: START, end_date: END, items: [{ price: 'price_pro_year' }] },
+   { start_date: END, end_date: null, items: [{ price: IDS.pro }] },
+  ]
+ } });
+ expect(subscriptionRowFrom(yearly, 'u1', ids, NOW)).toMatchObject({ billingInterval: 'year', pendingPlan: 'pro', pendingBillingInterval: 'month', stripeScheduleId: 'sched_interval' });
+});
+
+it('keeps a same-plan scheduled credit decrease and rejects malformed entitlement metadata', () => {
+ const customPrice={id:'price_custom',currency:'usd',unit_amount:6400,recurring:{interval:'month',interval_count:1},metadata:{estori_plan:'pro',estori_monthly_credits:'30000'}};
+ const sub=stripeSub({items:{data:[{id:'si_1',price:customPrice,current_period_start:START,current_period_end:END}]},schedule:{id:'sched_credits',status:'active',subscription:'sub_1',current_phase:{start_date:START,end_date:END},phases:[{start_date:START,end_date:END,items:[{price:customPrice}]},{start_date:END,end_date:null,items:[{price:IDS.pro}]}]}});
+ expect(subscriptionRowFrom(sub,'u1',IDS,NOW)).toMatchObject({monthlyCredits:30000,pendingPlan:'pro',pendingMonthlyCredits:null,pendingPlanAt:new Date(END*1000)});
+ expect(subscriptionRowFrom({...sub,items:{data:[{...sub.items.data[0],price:{...customPrice,metadata:{...customPrice.metadata,estori_monthly_credits:'1000000'}}}]}},'u1',IDS,NOW)).toBeNull();
 });

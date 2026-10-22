@@ -20,11 +20,10 @@ const DEFAULT_RATE = 136;
 const USAGE: Usage = {
 	creditsPerStep: DEFAULT_RATE,
 	stores: 2,
-	categories: { build: true, change: true, assistant: false, personalization: false },
+	categories: { build: true, change: true, assistant: false },
 	newStores: 3,
 	changesPerStore: 40,
 	assistantTasksPerStore: 100,
-	visitsPerStore: 5_000,
 };
 
 function action(id: string) {
@@ -35,7 +34,7 @@ function action(id: string) {
 
 describe('credits', () => {
 	it('prices building and changing by AI steps at the model rate, and the coming-soon actions at a fixed cost', () => {
-		expect(CREDIT_ACTIONS.map((entry) => entry.id)).toEqual(['build', 'change', 'assistant', 'personalization']);
+		expect(CREDIT_ACTIONS.map((entry) => entry.id)).toEqual(['build', 'change', 'assistant']);
 		expect(actionCredits(action('build'), DEFAULT_RATE)).toBe(action('build').steps! * DEFAULT_RATE);
 		expect(actionCredits(action('change'), 16)).toBe(action('change').steps! * 16);
 		expect(actionCredits(action('assistant'), DEFAULT_RATE)).toBe(actionCredits(action('assistant'), 445));
@@ -54,13 +53,11 @@ describe('credits', () => {
 		expect(creditsFor('build', USAGE)).toBe(3 * actionCredits(action('build'), DEFAULT_RATE));
 		expect(creditsFor('change', USAGE)).toBe(2 * 40 * actionCredits(action('change'), DEFAULT_RATE));
 		expect(creditsFor('assistant', USAGE)).toBe(2 * 100 * action('assistant').credits!);
-		// Personalization is priced per thousand shopper visits.
-		expect(creditsFor('personalization', USAGE)).toBe(2 * 5 * action('personalization').credits!);
 	});
 
 	it('adds up only the categories that are switched on', () => {
 		expect(monthlyCredits(USAGE)).toBe(creditsFor('build', USAGE) + creditsFor('change', USAGE));
-		expect(monthlyCredits({ ...USAGE, categories: { build: false, change: false, assistant: false, personalization: false } })).toBe(0);
+		expect(monthlyCredits({ ...USAGE, categories: { build: false, change: false, assistant: false } })).toBe(0);
 	});
 
 	it('costs less with a lighter model', () => {

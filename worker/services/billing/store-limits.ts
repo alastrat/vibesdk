@@ -1,5 +1,5 @@
 import { assertWithinLimit } from '../i18n/plan-limits';
-/** Starting a new store on a plan: Pro and Premium are limited per day, Basic over the account's lifetime. */
+/** Starting a new store on a plan: each standard plan caps the account's lifetime total; custom overrides may also cap starts per day. */
 
 import { BillingService } from '../../database/services/BillingService';
 import { RateLimitService } from '../rate-limit/rateLimits';

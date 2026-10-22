@@ -12,6 +12,21 @@ export type PaidPlanId = (typeof PAID_PLAN_IDS)[number];
 /** Monthly prices in US cents. */
 export const PLAN_PRICES_CENTS: Record<PaidPlanId, number> = { pro: 4_900, premium: 19_900 };
 
+export const BILLING_INTERVALS = ['month', 'year'] as const;
+export type BillingInterval = (typeof BILLING_INTERVALS)[number];
+export const isBillingInterval = (value: unknown): value is BillingInterval => value === 'month' || value === 'year';
+export const YEARLY_DISCOUNT_PERCENT = 20;
+/** Round the discounted monthly rate down to whole dollars, then bill twelve months together. */
+function yearlyPriceCents(monthlyCents: number): number {
+	const discountedMonthlyCents = monthlyCents * (100 - YEARLY_DISCOUNT_PERCENT) / 100;
+	return Math.floor(discountedMonthlyCents / 100) * 100 * 12;
+}
+
+/** Full yearly charge, with the same monthly credit allowance as monthly billing. */
+export const PLAN_YEARLY_PRICES_CENTS: Record<PaidPlanId, number> = {
+	pro: yearlyPriceCents(PLAN_PRICES_CENTS.pro),
+	premium: yearlyPriceCents(PLAN_PRICES_CENTS.premium),
+};
 /** A plan's allowances; null means no limit. */
 export interface PlanLimits {
 	/** Credits in each monthly period. */
@@ -23,6 +38,11 @@ export interface PlanLimits {
 	ownDomainsPerLiveStore: number;
 	supplierCatalog: boolean;
 	extraCredits: boolean;
+	shopperEmails: boolean;
+	customShopperEmails: boolean;
+	shipmentTracking: boolean;
+	orderRefunds: boolean;
+	flexiblePayouts: boolean;
 	draftsPerStore: number;
 }
 
@@ -33,34 +53,49 @@ export type PlanLimitOverrides = Partial<Omit<PlanLimits, 'draftsPerStore'>>;
 
 const PREMIUM_LIMITS: PlanLimits = {
 	aiCredits: 100_000,
-	storesLifetime: null,
-	newStoresPerDay: 25,
-	liveStores: 10,
+	storesLifetime: 20,
+	newStoresPerDay: null,
+	liveStores: 20,
 	ownDomainsPerLiveStore: 1,
 	supplierCatalog: true,
 	extraCredits: true,
+	shopperEmails: true,
+	customShopperEmails: true,
+	shipmentTracking: true,
+	orderRefunds: true,
+	flexiblePayouts: true,
 	draftsPerStore: DRAFT_LIMIT,
 };
 
 export const PLAN_LIMITS: Record<PlanId, PlanLimits> = {
 	basic: {
 		aiCredits: 5_000,
-		storesLifetime: 3,
+		storesLifetime: 2,
 		newStoresPerDay: null,
-		liveStores: 1,
+		liveStores: 2,
 		ownDomainsPerLiveStore: 0,
-		supplierCatalog: false,
-		extraCredits: false,
+		supplierCatalog: true,
+		extraCredits: true,
+		shopperEmails: false,
+		customShopperEmails: false,
+		shipmentTracking: false,
+		orderRefunds: false,
+		flexiblePayouts: false,
 		draftsPerStore: DRAFT_LIMIT,
 	},
 	pro: {
 		aiCredits: 20_000,
-		storesLifetime: null,
-		newStoresPerDay: 10,
-		liveStores: 3,
+		storesLifetime: 5,
+		newStoresPerDay: null,
+		liveStores: 5,
 		ownDomainsPerLiveStore: 1,
 		supplierCatalog: true,
-		extraCredits: false,
+		extraCredits: true,
+		shopperEmails: true,
+		customShopperEmails: false,
+		shipmentTracking: false,
+		orderRefunds: false,
+		flexiblePayouts: true,
 		draftsPerStore: DRAFT_LIMIT,
 	},
 	premium: PREMIUM_LIMITS,
@@ -74,6 +109,19 @@ export const EXTRA_CREDITS = {
 	maxCredits: 1_000_000,
 	monthsValid: 12,
 } as const;
+
+/** Recurring allowances have a plan minimum and a maximum of one million credits per month. */
+export function isPlanCreditAmount(plan: PaidPlanId, value: unknown): value is number {
+ return typeof value === 'number' && Number.isSafeInteger(value) && value >= PLAN_LIMITS[plan].aiCredits && value <= EXTRA_CREDITS.maxCredits && value % EXTRA_CREDITS.creditsPerUnit === 0;
+}
+export function planCreditOptions(plan: PaidPlanId): number[] {
+ return [...new Set([PLAN_LIMITS[plan].aiCredits, 30000, 50000, 100000, 200000, 500000, 1000000])].filter(value => isPlanCreditAmount(plan, value)).sort((a,b) => a-b);
+}
+export function planPriceCents(plan: PaidPlanId, interval: BillingInterval = 'month', monthlyCredits: number = PLAN_LIMITS[plan].aiCredits): number {
+ if (!isPlanCreditAmount(plan, monthlyCredits)) throw new RangeError('Invalid monthly credit allowance');
+ const monthly = PLAN_PRICES_CENTS[plan] + (monthlyCredits - PLAN_LIMITS[plan].aiCredits) / EXTRA_CREDITS.creditsPerUnit * EXTRA_CREDITS.unitPriceCents;
+ return interval === 'year' ? yearlyPriceCents(monthly) : monthly;
+}
 
 /** Older paths charged a flat cost per call; Sonnet's 8 matches its typical 136 credits a step, so one old credit is 17 new ones. */
 export const LEGACY_CREDIT_FACTOR = 17;
@@ -109,7 +157,7 @@ export interface PlanLimitRefusal {
 
 const PLAN_NAMES: Record<PlanId, string> = { basic: 'Basic', pro: 'Pro', premium: 'Premium', enterprise: 'Enterprise' };
 
-const LIMIT_KEYS: readonly PlanLimitKey[] = ['aiCredits', 'storesLifetime', 'newStoresPerDay', 'liveStores', 'ownDomainsPerLiveStore', 'supplierCatalog', 'extraCredits'];
+const LIMIT_KEYS: readonly PlanLimitKey[] = ['aiCredits', 'storesLifetime', 'newStoresPerDay', 'liveStores', 'ownDomainsPerLiveStore', 'supplierCatalog', 'extraCredits', 'shopperEmails', 'customShopperEmails', 'shipmentTracking', 'orderRefunds', 'flexiblePayouts'];
 
 const UPGRADE_TARGETS: readonly NonNullable<PlanLimitRefusal['upgradeTo']>[] = ['pro', 'premium', 'enterprise', 'credits'];
 
@@ -135,8 +183,8 @@ export function formatBillingDate(ms: number, locale: Locale = DEFAULT_LOCALE): 
 	return formatMonthDay(ms, locale);
 }
 
-/** "Up to 3 live stores, 10 new stores a day", from a paid plan's limits. English unless a translator is passed. */
-export function storeAllowance(plan: PaidPlanId, i18n: Translator = ENGLISH): string {
+/** A plan's store allowance from the shared limits. English unless a translator is passed. */
+export function storeAllowance(plan: PlanId, i18n: Translator = ENGLISH): string {
 	const { liveStores, newStoresPerDay } = PLAN_LIMITS[plan];
 	const parts: string[] = [];
 	if (liveStores !== null) parts.push(i18n.tn('Up to {count} live store', 'Up to {count} live stores', liveStores));
@@ -145,15 +193,14 @@ export function storeAllowance(plan: PaidPlanId, i18n: Translator = ENGLISH): st
 }
 
 /**
- * A paid plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. English
+ * A plan's limits as short feature lines; with `over`, only the lines that plan doesn't already have. English
  * unless a translator is passed, so the public pricing page keeps its English.
  */
-export function limitFeatures(plan: PaidPlanId, over?: PaidPlanId, i18n: Translator = ENGLISH): string[] {
+export function limitFeatures(plan: PlanId, over?: PlanId, i18n: Translator = ENGLISH): string[] {
 	const limits = PLAN_LIMITS[plan];
 	const lines = [storeAllowance(plan, i18n)];
 	if (limits.ownDomainsPerLiveStore > 0) lines.push(i18n.t('Your own domain on each live store'));
 	if (limits.supplierCatalog) lines.push(i18n.t('The supplier catalog'));
-	if (limits.extraCredits) lines.push(i18n.t('Buy extra credits any time'));
 	if (over === undefined) return lines;
 	const already = limitFeatures(over, undefined, i18n);
 	return lines.filter((line) => !already.includes(line));
@@ -196,6 +243,8 @@ function lifts(key: PlanLimitKey, candidate: PlanLimits, current: PlanLimits): b
 }
 
 function upgradeTargetFor(account: PlanAccount, key: PlanLimitKey): PlanLimitRefusal['upgradeTo'] {
+	// Every plan includes the catalog; an explicit account restriction cannot be lifted by an upgrade.
+	if (key === 'supplierCatalog') return null;
 	if (account.plan === 'enterprise') return null;
 	if (account.plan === 'premium') return key === 'aiCredits' ? 'credits' : 'enterprise';
 	const later = PLAN_IDS.slice(PLAN_IDS.indexOf(account.plan) + 1);
@@ -251,7 +300,8 @@ function liveStoresMessage(account: PlanAccount, i18n: Translator): string {
 
 function storesLifetimeMessage(account: PlanAccount, i18n: Translator): string {
 	const count = account.limits.storesLifetime ?? 0;
-	if (account.plan === 'basic') return i18n.tn("Basic includes {count} store, counting ones you've deleted. Get Pro to start up to {cap} a day.", "Basic includes {count} stores, counting ones you've deleted. Get Pro to start up to {cap} a day.", count, { cap: formatNumber(PLAN_LIMITS.pro.newStoresPerDay ?? 0, i18n.locale) });
+	const nextPlan = account.plan === 'basic' ? 'pro' : account.plan === 'pro' ? 'premium' : null;
+	if (nextPlan) return i18n.tn("{plan} includes {count} store, counting ones you've deleted. Upgrade to {nextPlan} for up to {cap}.", "{plan} includes {count} stores, counting ones you've deleted. Upgrade to {nextPlan} for up to {cap}.", count, { plan: planName(account.plan), nextPlan: planName(nextPlan), cap: formatNumber(PLAN_LIMITS[nextPlan].storesLifetime ?? 0, i18n.locale) });
 	return i18n.tn('Your plan includes {count} store. Talk to us to raise it.', 'Your plan includes {count} stores. Talk to us to raise it.', count);
 }
 
@@ -275,9 +325,19 @@ function messageFor(account: PlanAccount, key: PlanLimitKey, upgradeTo: PlanLimi
 		case 'ownDomainsPerLiveStore':
 			return ownDomainsMessage(account, i18n);
 		case 'supplierCatalog':
-			return i18n.t('Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.');
+			return i18n.t('Catalog access is disabled for your account. Products already live keep selling. Contact support for help.');
+		case 'shopperEmails':
+			return i18n.t('Automatic shopper emails come with Pro and Premium.');
+		case 'customShopperEmails':
+			return i18n.t('Customizing shopper emails and reply addresses comes with Premium.');
+		case 'shipmentTracking':
+			return i18n.t('Adding shipment tracking comes with Premium. You can still mark orders as shipped.');
+		case 'orderRefunds':
+			return i18n.t('Refunding orders in Estori comes with Premium.');
+		case 'flexiblePayouts':
+			return i18n.t('Choosing your payout schedule comes with Pro and Premium. Your current schedule stays in place.');
 		case 'extraCredits':
-			return account.plan === 'enterprise' ? i18n.t("Buying extra credits isn't on your plan. Talk to us to add it.") : i18n.t('Buying extra credits comes with Premium.');
+			return i18n.t('Credit purchases are unavailable. Contact us for help.');
 	}
 }
 
@@ -325,6 +385,11 @@ const OVERRIDE_CHECKS: Record<PlanLimitKey, (value: unknown) => boolean> = {
 	ownDomainsPerLiveStore: (value) => value === 0 || value === 1,
 	supplierCatalog: (value) => typeof value === 'boolean',
 	extraCredits: (value) => typeof value === 'boolean',
+	shopperEmails: (value) => typeof value === 'boolean',
+	customShopperEmails: (value) => typeof value === 'boolean',
+	shipmentTracking: (value) => typeof value === 'boolean',
+	orderRefunds: (value) => typeof value === 'boolean',
+	flexiblePayouts: (value) => typeof value === 'boolean',
 };
 
 function isOverrideKey(key: string): key is PlanLimitKey {
@@ -339,4 +404,12 @@ export function planLimitOverridesFrom(value: unknown): PlanLimitOverrides | nul
 	}
 	// Every key and value passed its check above.
 	return { ...value };
+}
+
+/** Preserve a chosen allowance on ordinary plan-change links, while respecting the next plan’s minimum. */
+export function creditsForPlanChange(plan: PaidPlanId, currentCustomCredits?: number | null): number {
+ return currentCustomCredits != null ? Math.max(currentCustomCredits, PLAN_LIMITS[plan].aiCredits) : PLAN_LIMITS[plan].aiCredits;
+}
+export function planChangeStartsNow(fromPlan: PaidPlanId, toPlan: PaidPlanId, fromInterval: BillingInterval, toInterval: BillingInterval, fromCredits: number, toCredits: number): boolean {
+ return fromInterval === toInterval && toCredits >= fromCredits && !(fromPlan === 'premium' && toPlan === 'pro');
 }

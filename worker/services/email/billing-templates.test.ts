@@ -13,9 +13,9 @@ describe('billing emails', () => {
 	it('welcomes a new plan with its credits, renewal date and price', () => {
 		const started = text({ kind: 'plan_started', plan: 'pro', renewsAt: NOV_5 });
 		expect(started.subject).toBe('Welcome to Estori Pro');
-		expect(started.text).toContain('Your account now has 20,000 AI credits a month, up to 3 live stores, your own domains and the supplier catalog. Pro renews on November 5 at $49 a month until you cancel.');
+		expect(started.text).toContain('Your account now has 20,000 AI credits a month, up to 5 live stores, your own domains and the supplier catalog. Pro renews on November 5 at $49 a month until you cancel.');
 		expect(started.text).toContain('Open billing: https://estori.app/settings/billing');
-		expect(started.text).not.toContain('buy extra credits');
+		expect(started.text).toContain('buy extra credits');
 		expect(text({ kind: 'plan_started', plan: 'premium', renewsAt: NOV_5 }).text).toContain('Premium renews on November 5 at $199 a month until you cancel. When you need more, you can buy extra credits.');
 	});
 
@@ -88,8 +88,8 @@ describe('billing emails', () => {
 	it('gives every seller a week of notice of the new plans, and tells those over them that their stores stay live', () => {
 		const notice = text({ kind: 'enforcement_notice', startsOn: Date.UTC(2026, 10, 1), overLimits: true });
 		expect(notice.subject).toBe('Plans and limits on Estori from November 1');
-		expect(notice.text).toContain('From November 1, Basic includes 5,000 AI credits a month, 3 stores and 1 live store, without the supplier catalog.');
-		expect(notice.text).toContain('Pro, at $49 a month, adds 20,000 credits, 3 live stores, your own domains and the catalog. Premium, at $199 a month, adds 100,000 credits, 10 live stores and extra credits.');
+		expect(notice.text).toContain('From November 1, Basic includes 5,000 AI credits a month, 2 stores and 2 live stores, without the supplier catalog.');
+		expect(notice.text).toContain('Pro, at $49 a month, adds 20,000 credits, 5 live stores, your own domains and the catalog. Premium, at $199 a month, adds 100,000 credits and 20 live stores.');
 		expect(notice.text).toContain('Your stores stay live; to publish more, get Pro or Premium.');
 		expect(notice.text).toContain('See plans: https://estori.app/pricing');
 		expect(text({ kind: 'enforcement_notice', startsOn: Date.UTC(2026, 10, 1), overLimits: false }).text).not.toContain('to publish more');

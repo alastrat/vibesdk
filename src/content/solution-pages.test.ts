@@ -43,10 +43,13 @@ describe('solution and platform pages', () => {
 		}
 	});
 
-	it("says plainly that none of them is here yet, since none is available", () => {
+	it("keeps future capabilities marked as not yet available, while catalog and payments are open", () => {
 		for (const [name, copy] of Object.entries(COPIES)) {
-			expect(CAPABILITIES[copy.capability].status, name).not.toBe('available');
-			expect(copy.faq.some((item) => item.answer.startsWith('Not yet')), name).toBe(true);
+			if (CAPABILITIES[copy.capability].status === 'available') {
+				expect(copy.faq.some((item) => item.answer.startsWith('Yes.')), name).toBe(true);
+			} else {
+				expect(copy.faq.some((item) => item.answer.startsWith('Not yet')), name).toBe(true);
+			}
 		}
 	});
 

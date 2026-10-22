@@ -24,7 +24,7 @@ describe('admin billing endpoints', () => {
 	it('puts an account on Enterprise with custom limits, recorded with the admin and the reason', async () => {
 		const response = await BillingAdminController.setPlan(request('PUT', { plan: 'enterprise', limits: { aiCredits: 500_000, liveStores: 40 }, reason: 'Signed Enterprise contract' }), env(), {} as ExecutionContext, context('u_seller'));
 		expect(response.status).toBe(200);
-		expect((await response.json()).data).toMatchObject({ plan: 'enterprise', source: 'override', limits: { aiCredits: 500_000, liveStores: 40, newStoresPerDay: 25 }, override: { plan: 'enterprise', reason: 'Signed Enterprise contract' } });
+		expect((await response.json()).data).toMatchObject({ plan: 'enterprise', source: 'override', limits: { aiCredits: 500_000, liveStores: 40, newStoresPerDay: null }, override: { plan: 'enterprise', reason: 'Signed Enterprise contract' } });
 		expect(await db.prepare("SELECT user_id, action FROM audit_logs WHERE entity_id = 'u_seller'").first()).toEqual({ user_id: 'u_admin', action: 'plan_override' });
 	});
 

@@ -1,3 +1,5 @@
+import { useBilling } from '@/hooks/use-billing';
+import { PlanButton } from '@/components/billing/PlanButton';
 import { t, msg, useI18n } from '@/lib/i18n';
 import { formatUsd } from '@/api-types';
 import { INTL_LOCALE } from 'shared/i18n/locales';
@@ -11,7 +13,10 @@ const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'] as con
 
 /** How often the seller is paid, each choice with what Stripe's account and payout fees would cost them a month. */
 export function PayoutFrequency({ status }: { status: StripeConnectStatusData }) {
-	const { locale } = useI18n();
+	const i18n = useI18n();
+	const { locale } = i18n;
+	const billing = useBilling();
+	const canChoose = billing.data?.enabled === false || billing.data?.limits.flexiblePayouts === true;
 	const setSchedule = useSetPayoutSchedule();
 	const choose = (interval: PayoutInterval, anchor: string) =>
 		setSchedule.mutate({ interval, anchor }, { onError: (error) => toast.error(error.message) });
@@ -21,7 +26,8 @@ export function PayoutFrequency({ status }: { status: StripeConnectStatusData })
 			: stripeFeesText(status.accountCosts, locale, t);
 
 	return (
-		<fieldset className="grid gap-2" disabled={setSchedule.isPending}>
+		<>
+		<fieldset className="grid gap-2" disabled={setSchedule.isPending || !canChoose}>
 			<legend className="text-sm font-medium text-kumo-default">{t("How often you're paid")}</legend>
 			{(['daily', 'weekly', 'monthly'] as const).map((interval) => (
 				<label key={interval} className="flex flex-wrap items-center gap-2 text-sm text-kumo-default">
@@ -55,5 +61,13 @@ export function PayoutFrequency({ status }: { status: StripeConnectStatusData })
 				</label>
 			))}
 		</fieldset>
+		{billing.data?.enabled && !canChoose && (
+			<div className="grid justify-items-start gap-2 text-sm">
+				<p className="text-kumo-subtle">{t('Choosing your payout schedule comes with Pro and Premium. Your current schedule stays in place.')}</p>
+				<PlanButton plan="pro" i18n={i18n} className="px-4 py-2 text-sm" />
+			</div>
+		)}
+		{billing.isError && <p className="text-sm text-kumo-subtle">{billing.error.message}</p>}
+		</>
 	);
 }

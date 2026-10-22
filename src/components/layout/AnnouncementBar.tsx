@@ -1,3 +1,4 @@
+import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
 import { Link } from 'react-router';
 import { PLATFORM_FEE_LABEL } from '@/api-types';
 import { UNDERLINE_FILL } from '@/components/public-site/primitives';
@@ -15,11 +16,10 @@ export function AnnouncementBar() {
 				{/* Balances Learn more, so the news sits in the middle of the strip. */}
 				<span aria-hidden className="hidden lg:block" />
 				<p className="flex min-w-0 lg:justify-center">
-					<span className="truncate">Estori Discover is open: sell the stores you design and keep the price minus {PLATFORM_FEE_LABEL}.</span>
+					<span className="truncate">{formatMarketingCopy(marketingCopy.navigation.announcement.text, { platformFee: PLATFORM_FEE_LABEL })}</span>
 				</p>
 				<Link to={blogPostPath(ANNOUNCEMENT_POST)} className={cn('shrink-0 justify-self-end', UNDERLINE_FILL)}>
-					Learn more →
-				</Link>
+					{marketingCopy.navigation.announcement.link}</Link>
 			</div>
 		</div>
 	);

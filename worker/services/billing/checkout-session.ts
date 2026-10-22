@@ -1,3 +1,4 @@
+import { matchesPlanPrice } from './prices';
 /** What billing reads from a Checkout session: its state, what it sells, and the renewal terms its promotion code sets. Pure. */
 
 import {
@@ -10,7 +11,18 @@ import {
 	type CheckoutTermsView,
 	type PromotionTerms,
 } from '../../../shared/types/billing';
-import { PLAN_LIMITS, PLAN_PRICES_CENTS, extraCreditsPriceCents, formatCredits, isPaidPlanId, limitFeatures, type PaidPlanId } from '../../../shared/types/plans';
+import {
+	PLAN_LIMITS,
+	isPlanCreditAmount,
+	planPriceCents,
+	isBillingInterval,
+	type BillingInterval,
+	extraCreditsPriceCents,
+	formatCredits,
+	isPaidPlanId,
+	limitFeatures,
+	type PaidPlanId,
+} from '../../../shared/types/plans';
 import type { Translator } from '../../../shared/i18n/translate';
 import type { StripeCheckoutSession, StripeCoupon } from '../payments/stripe-client';
 
@@ -22,6 +34,12 @@ export class UnreadablePromotionError extends Error {
 	) {
 		super(`The promotion on a checkout can't be read: ${reason}`);
 		this.name = 'UnreadablePromotionError';
+	}
+}
+
+export class UnreadablePriceError extends Error {
+	constructor() {
+		super('The yearly price does not match the advertised annual amount and billing interval.');
 	}
 }
 
@@ -60,16 +78,28 @@ export function sessionStateOf(session: StripeCheckoutSession): CheckoutSessionS
 }
 
 /** The plan a subscription session was made for, or that it sells extra credits; null for any other session. */
-export function billingSessionOf(session: StripeCheckoutSession): { kind: 'plan'; plan: PaidPlanId } | { kind: 'credits' } | null {
+export function billingSessionOf(session: StripeCheckoutSession): { kind: 'plan'; plan: PaidPlanId; billingInterval?: BillingInterval; monthlyCredits?: number } | { kind: 'credits' } | null {
 	if (session.metadata?.kind === CHECKOUT_KIND_CREDITS) return { kind: 'credits' };
 	const plan = session.metadata?.plan;
-	return session.mode === 'subscription' && isPaidPlanId(plan) ? { kind: 'plan', plan } : null;
+	const interval = session.metadata?.billing_interval;
+	const rawCredits = session.metadata?.monthly_credits;
+	const monthlyCredits = rawCredits === undefined ? undefined : Number(rawCredits);
+	if (rawCredits !== undefined && (!isPaidPlanId(plan) || !isPlanCreditAmount(plan, monthlyCredits) || String(monthlyCredits) !== rawCredits)) return null;
+	if (interval !== undefined && !isBillingInterval(interval)) return null;
+	return session.mode === 'subscription' && isPaidPlanId(plan) ? { kind: 'plan', plan, ...(interval === 'year' ? { billingInterval: interval } : {}), ...(monthlyCredits !== undefined ? { monthlyCredits } : {}) } : null;
 }
 
 /** What a plan sells, its lines worded in the seller's language. */
-export function planOrder(plan: PaidPlanId, i18n: Translator): CheckoutOrder {
-	const credits = i18n.t('{credits} AI credits a month', { credits: formatCredits(PLAN_LIMITS[plan].aiCredits, i18n.locale) });
-	return { kind: 'plan', plan, priceCents: PLAN_PRICES_CENTS[plan], includes: [credits, ...limitFeatures(plan, undefined, i18n)] };
+export function planOrder(plan: PaidPlanId, i18n: Translator, interval: BillingInterval = 'month', monthlyCredits: number = PLAN_LIMITS[plan].aiCredits): CheckoutOrder {
+	const credits = i18n.t('{credits} AI credits a month', { credits: formatCredits(monthlyCredits, i18n.locale) });
+	return {
+		kind: 'plan',
+		plan,
+		...(interval === 'year' ? { billingInterval: interval } : {}),
+		...(monthlyCredits !== PLAN_LIMITS[plan].aiCredits ? { monthlyCredits } : {}),
+		priceCents: planPriceCents(plan, interval, monthlyCredits),
+		includes: [credits, ...limitFeatures(plan, undefined, i18n)],
+	};
 }
 
 export function creditsOrder(credits: number): CheckoutOrder {
@@ -79,10 +109,20 @@ export function creditsOrder(credits: number): CheckoutOrder {
 /** The consent sentence, button, small print and first payment for a plan session, following its promotion code, worded in the seller's language. Throws as `promotionTermsOf` does. */
 export function termsViewOf(plan: PaidPlanId, session: StripeCheckoutSession, i18n: Translator): CheckoutTermsView {
 	const promotion = promotionTermsOf(session);
+	const interval = billingSessionOf(session);
+	const billingInterval = interval?.kind === 'plan' ? (interval.billingInterval ?? 'month') : 'month';
+	const monthlyCredits = interval?.kind === 'plan' ? interval.monthlyCredits : undefined;
+	if (billingInterval === 'year' || monthlyCredits !== undefined) {
+		const lines = session.line_items?.data;
+		const line = lines?.[0];
+		const price = line?.price;
+		if (lines?.length !== 1 || line?.quantity !== 1 || !matchesPlanPrice(price, plan, billingInterval, monthlyCredits)) throw new UnreadablePriceError();
+	}
+
 	return {
-		consentText: subscriptionConsentText(plan, promotion, i18n),
-		buttonText: subscribeButtonText(plan, promotion, i18n),
-		dueTodayCents: promotion ? promotion.discountedCents : (session.amount_total ?? PLAN_PRICES_CENTS[plan]),
-		disclosure: renewalDisclosure(plan, promotion, i18n),
+		consentText: subscriptionConsentText(plan, promotion, i18n, billingInterval, monthlyCredits),
+		buttonText: subscribeButtonText(plan, promotion, i18n, billingInterval, monthlyCredits),
+		dueTodayCents: promotion ? promotion.discountedCents : (session.amount_total ?? planPriceCents(plan, billingInterval, monthlyCredits)),
+		disclosure: renewalDisclosure(plan, promotion, i18n, billingInterval, monthlyCredits),
 	};
 }

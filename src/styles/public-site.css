@@ -148,13 +148,13 @@
 	background-color: #ffffff;
 	color: var(--color-public-ink);
 	-webkit-font-smoothing: antialiased;
-	/* The sticky top bar without its phone menu: the announcement (44px), the bar (64px, 72px from sm) and its 1px border. */
-	--public-header-h: 109px;
+	/* The sticky top bar without its phone menu: the announcement (44px), utility row (40px), the bar (64px, 72px from sm) and its 1px border. */
+	--public-header-h: 149px;
 }
 
 @media (width >= 40rem) {
 	.public-site {
-		--public-header-h: 117px;
+		--public-header-h: 157px;
 	}
 }
 
@@ -166,4 +166,20 @@
 /* Film grain for dark panels: an inline SVG noise tile, so nothing is downloaded. */
 .public-grain {
 	background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+
+/* Pricing stays light even when the app follows a dark browser/system preference.
+   Keep Select's portal inside this scope so its menu inherits the same readable palette. */
+.public-plan-controls {
+	color-scheme: light;
+	--text-color-kumo-default: #1e2a3b;
+	--text-color-kumo-subtle: #5b6576;
+	--color-kumo-base: #ffffff;
+	--color-kumo-recessed: #f5f6f8;
+	--color-kumo-hairline: #e3e8f0;
+	--color-kumo-tint: #eef4ff;
+	--color-kumo-line: #d3dae5;
+	--color-kumo-focus: #006eff;
+	--color-kumo-brand: #0062e6;
 }

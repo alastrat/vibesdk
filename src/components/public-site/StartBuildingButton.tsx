@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { PillLink, type PillVariant } from './primitives';
@@ -6,7 +7,7 @@ import { PillLink, type PillVariant } from './primitives';
 export function StartBuildingButton({
 	variant = 'blue',
 	className,
-	children = 'Start building free',
+	children = marketingCopy.common.startBuildingFree,
 }: {
 	variant?: PillVariant;
 	className?: string;

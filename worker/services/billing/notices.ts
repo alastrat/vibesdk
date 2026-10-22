@@ -1,3 +1,4 @@
+import type { BillingInterval } from '../../../shared/types/plans';
 /** Sends billing's emails, once each: a notice is claimed under its key in `billing_notices` before it goes out. */
 
 import { BillingService, UserService } from '../../database';
@@ -30,10 +31,10 @@ const PRICING_PATH = '/pricing';
 
 /** One email per kind of notice, with what its copy needs. */
 export type BillingEmail =
-	| { kind: 'plan_started'; plan: PaidPlanId; renewsAt: number }
+	| { kind: 'plan_started'; billingInterval?: BillingInterval; monthlyCredits?: number; plan: PaidPlanId; renewsAt: number }
 	| { kind: 'receipt'; plan: PaidPlanId; amountCents: number; currency: string; periodStart: number; periodEnd: number; invoiceNumber: string | null }
-	| { kind: 'plan_upgraded'; plan: PaidPlanId }
-	| { kind: 'downgrade_scheduled'; plan: PaidPlanId; at: number }
+	| { kind: 'plan_upgraded'; billingInterval?: BillingInterval; monthlyCredits?: number; plan: PaidPlanId }
+	| { kind: 'downgrade_scheduled'; billingInterval?: BillingInterval; monthlyCredits?: number; plan: PaidPlanId; at: number }
 	/** `needsConfirmation`: the bank asked the seller to confirm the payment, so billing's Pay now can finish it; otherwise the card was declined. */
 	| { kind: 'payment_failed'; plan: PaidPlanId; graceEndsAt: number; needsConfirmation: boolean }
 	| { kind: 'plan_ending'; plan: PaidPlanId; endsAt: number }

@@ -1,0 +1,747 @@
+{
+  "home": {
+    "meta": {
+      "description": "Describe your store and Estori builds it in minutes, with your products, cart and checkout. AI assistants that help you sell and run it are coming soon."
+    },
+    "hero": {
+      "storePhrases": [
+        "a specialty coffee store",
+        "a handmade ceramics shop",
+        "a streetwear store",
+        "a plant shop with local delivery",
+        "a vintage camera store"
+      ],
+      "demo": {
+        "prompt": "Build a specialty coffee store with weekly roasts and subscriptions",
+        "steps": [
+          "Catalog with 12 roasts",
+          "Product pages and filters",
+          "Cart and checkout flow",
+          "Order records",
+          "Deployed to a live preview"
+        ],
+        "accessibleDescription": "Estori building a coffee store from one sentence: the chat on the left, the live store on the right",
+        "previewLabel": "Live preview"
+      },
+      "eyebrow": "AI-powered online stores",
+      "title": "Describe your store. Estori builds it in minutes.",
+      "description": "Tell Estori what you sell, and it builds a complete online store with your products, cart and checkout. Next: assistants that help you sell more and handle the daily work.",
+      "buildPlaceholder": "Build ",
+      "note": "Free to build. No credit card.",
+      "discoverLink": "Browse stores in Discover"
+    },
+    "showcase": {
+      "logosTitle": "Stores built on Estori",
+      "title": "See what people are building on Estori",
+      "description": "Open any store to see it live on desktop and phone, then make it yours.",
+      "filterLabel": "Filter stores by category",
+      "link": "Browse all stores in Discover"
+    },
+    "recommendations": {
+      "eyebrow": "AI recommendations",
+      "title": "Get recommended when shoppers ask AI what to buy",
+      "link": "How it works",
+      "diagram": {
+        "store": "Your store",
+        "assistant": "An AI assistant",
+        "customer": "A new customer"
+      },
+      "description": "More and more people ask AI assistants for product recommendations. Your store will share its products in a way those assistants can read, so they can recommend you and send buyers to your store."
+    },
+    "assistants": {
+      "link": "See how it will work",
+      "title": "Hand off the daily work of running your store",
+      "description": "Estori's assistants keep an eye on your stock, your customers and your sales, and take care of the routine work, following rules you set.",
+      "cards": {
+        "inventory": {
+          "name": "Inventory assistant",
+          "title": "Never run out of best-sellers",
+          "body": "Warns you before a product sells out and suggests how much to reorder."
+        },
+        "support": {
+          "name": "Customer service assistant",
+          "title": "Questions answered, day and night",
+          "body": "Replies to questions about orders, sizes and returns using your store's own information."
+        },
+        "marketing": {
+          "name": "Marketing assistant",
+          "title": "Bring shoppers back",
+          "body": "Reminds shoppers who left items in their cart and sends offers to your repeat customers."
+        }
+      }
+    },
+    "personalization": {
+      "eyebrow": "Personalized shopping",
+      "title": "Show every shopper the right products",
+      "description": "Built into your store, with no extra apps to install.",
+      "cards": {
+        "picks": {
+          "title": "Products picked for each shopper",
+          "body": "Machine learning scores every product for every shopper, so each one sees their best matches."
+        },
+        "cart": {
+          "title": "A cart that suggests what goes with it",
+          "body": "Add-ons and bundles that go with what's already in the cart."
+        },
+        "offer": {
+          "title": "An offer right after checkout",
+          "body": "A relevant offer right after checkout, while the shopper is still with you."
+        },
+        "search": {
+          "title": "Search that understands shoppers",
+          "body": "Shoppers describe what they want and find it, even without the exact words."
+        }
+      }
+    },
+    "features": {
+      "eyebrow": "Estori store builder",
+      "title": "What your store comes with today",
+      "description": "Start from scratch or from a store in Discover, then change anything by chatting.",
+      "cards": {
+        "catalog": {
+          "tag": "Catalog",
+          "title": "Catalog and product pages",
+          "body": "Products, variants, filters and detailed product pages, generated from your description.",
+          "link": {
+            "label": "See stores in Discover"
+          }
+        },
+        "checkout": {
+          "tag": "Checkout",
+          "title": "Cart and checkout flow",
+          "body": "A cart, a checkout form and order confirmations your customers already know how to use.",
+          "link": {
+            "label": "Start building"
+          }
+        },
+        "orders": {
+          "tag": "Orders",
+          "title": "Order records",
+          "body": "Your store keeps its orders in its own database, ready for you to review.",
+          "link": {
+            "label": "Start building"
+          }
+        },
+        "chat": {
+          "tag": "AI editing",
+          "title": "Edit by chatting",
+          "body": "Ask for a new section, a different style or more products, and the AI updates the live store.",
+          "link": {
+            "label": "Try it"
+          }
+        },
+        "preview": {
+          "tag": "Live preview",
+          "title": "Desktop and phone preview",
+          "body": "Every store works on both, and you watch every change live on each before you share it."
+        },
+        "discover": {
+          "tag": "Templates",
+          "title": "Start with a Template",
+          "body": "Pick a store someone built, get your own copy and make it yours by chatting.",
+          "link": {
+            "label": "Browse Discover"
+          }
+        }
+      }
+    },
+    "sellers": {
+      "words": [
+        "seller",
+        "entrepreneur",
+        "merchant",
+        "developer",
+        "creator"
+      ],
+      "eyebrow": "Sell more, better, faster.",
+      "titlePrefix": "Estori for every kind of ",
+      "accessibleWord": "seller",
+      "cards": {
+        "resellers": {
+          "story": "Choose products from the supplier catalog, review costs and shipping, and add them to your store. Paid catalog orders are sent for fulfillment and tracked as they ship."
+        },
+        "digital": {
+          "story": "Sell e-books, images and videos with instant delivery, and keep your buyers close in a community that lives inside your store."
+        },
+        "developers": {
+          "story": "Build a store once and sell it as a template in Discover. Every buyer gets their own copy to make theirs, and you keep the price minus {platformFee}."
+        },
+        "creators": {
+          "story": "Share products you love with your own link or store, and get paid for every sale you bring to a merchant."
+        }
+      }
+    },
+    "closing": {
+      "title": "Your next store starts with a sentence.",
+      "description": "Describe it, watch it build, and publish it when it's ready."
+    }
+  },
+  "common": {
+    "forCreators": "For creators",
+    "learnMore": "Learn more",
+    "viewPricing": "View pricing",
+    "discover": "Discover",
+    "status": {
+      "comingSoon": "Coming soon",
+      "earlyAccess": "Early access"
+    },
+    "startBuildingFree": "Start building free",
+    "pricing": "Pricing",
+    "talkToSales": "Talk to sales",
+    "industries": "Industries"
+  },
+  "navigation": {
+    "audiences": {
+      "brands": {
+        "label": "Brands and store owners",
+        "description": "Build your store in minutes, run it with AI help"
+      },
+      "resellers": {
+        "label": "Dropshippers and resellers",
+        "description": "Curated products, added in a few clicks"
+      },
+      "digital": {
+        "label": "Digital businesses",
+        "description": "Sell e-books, images and videos, and run your community"
+      },
+      "subscriptions": {
+        "label": "Subscriptions",
+        "description": "Boxes, memberships and refills that renew on their own"
+      },
+      "communities": {
+        "label": "Communities",
+        "description": "Members-only posts, events and downloads in your store"
+      }
+    },
+    "creators": {
+      "developers": {
+        "label": "Developers",
+        "description": "Build stores, sell them as templates in Discover"
+      },
+      "content": {
+        "label": "Content creators",
+        "description": "Get paid promoting merchants' products with your link or store"
+      }
+    },
+    "creatorsCaption": "Take part in Estori without running a store.",
+    "capabilities": {
+      "store-builder": {
+        "name": "AI store builder",
+        "description": "A complete store from a description, changed just by asking"
+      },
+      "agentic-commerce": {
+        "name": "Get found by AI assistants",
+        "description": "Be recommended when shoppers ask AI"
+      },
+      "operations-agents": {
+        "name": "Store assistants",
+        "description": "Help with stock, customers and marketing"
+      },
+      "personalized-shopping": {
+        "name": "Personalized shopping",
+        "description": "Recommendations, a smart cart and AI search"
+      },
+      "product-catalog": {
+        "name": "Catalog & fulfillment",
+        "description": "Catalog products, supplier fulfillment and tracking"
+      },
+      "payments": {
+        "name": "Payments",
+        "description": "Checkout on your store, and payouts to your bank"
+      },
+      "digital-products": {
+        "name": "Community Building",
+        "description": "Sell downloads and run your community"
+      },
+      "developer-templates": {
+        "name": "Templates in Discover",
+        "description": "Build stores and sell them as templates"
+      },
+      "content-creators": {
+        "name": "Content creator program",
+        "description": "Get paid promoting merchants' products"
+      },
+      "subscriptions": {
+        "name": "Subscriptions",
+        "description": "Boxes, memberships and refills that renew on their own"
+      },
+      "email-marketing": {
+        "name": "Email marketing",
+        "description": "Newsletters and automatic emails, written by asking"
+      },
+      "web-analytics": {
+        "name": "Web analytics",
+        "description": "Visitors, sources and sales, built into your store"
+      },
+      "search-optimization": {
+        "name": "SEO, GEO & AEO optimization",
+        "description": "Show up in search results and in AI answers"
+      },
+      "order-management": {
+        "name": "Order management",
+        "description": "Manage orders, payments, shipments and refunds in one place"
+      },
+      "store-translations": {
+        "name": "Store translations",
+        "description": "English, Spanish and Portuguese storefronts, with AI translation and your own edits"
+      }
+    },
+    "solutions": "Solutions",
+    "accessibility": {
+      "main": "Main",
+      "openMenu": "Open menu",
+      "menu": "Menu",
+      "back": "Back to menu",
+      "close": "Close menu",
+      "utility": "Utility"
+    },
+    "openApp": "Open app",
+    "signIn": "Sign in",
+    "contactUs": "Contact us",
+    "support": "Support",
+    "menus": {
+      "solutions": {
+        "feature": {
+          "title": "From first idea to first order.",
+          "link": {
+            "label": "Start building free"
+          }
+        }
+      },
+      "creators": {
+        "feature": {
+          "title": "Sell the stores you design.",
+          "link": {
+            "label": "See how it works"
+          }
+        },
+        "links": {
+          "discover": "Templates in Discover",
+          "fees": "Fees for template sales"
+        }
+      }
+    },
+    "menuFooter": {
+      "start": {
+        "label": "Compare plans"
+      },
+      "end": {
+        "support": "Email support",
+        "sales": "Talk to sales"
+      }
+    },
+    "getStarted": "Get started",
+    "estoriFor": "Estori for",
+    "platform": "Platform",
+    "announcement": {
+      "text": "Estori Discover is open: sell the stores you design and keep the price minus {platformFee}.",
+      "link": "Learn more →"
+    }
+  },
+  "footer": {
+    "solutions": {
+      "title": "Solutions",
+      "links": {
+        "brands": "Brands",
+        "resellers": "Resellers",
+        "digital": "Digital businesses",
+        "industries": "Industries",
+        "agentic-commerce": "AI recommendations",
+        "pricing": "Pricing",
+        "contact": "Contact sales",
+        "blog": "Blog"
+      }
+    },
+    "creators": {
+      "title": "For creators",
+      "links": {
+        "developers": "Developers",
+        "content": "Content creators",
+        "discover": "Discover"
+      }
+    },
+    "legal": "Legal",
+    "contact": "Contact"
+  },
+  "pricing": {
+    "builder": {
+      "drafts": "Drafts per store, including Main",
+      "publishDraft": "Publish the draft you choose",
+      "languages": "Use the Estori app in English, Spanish or Portuguese"
+    },
+    "orders": {
+      "allStores": "Orders across all your stores",
+      "tracking": "Shipping updates and tracking",
+      "refunds": "Full and partial refunds"
+    },
+    "translations": {
+      "languages": "Store languages",
+      "languageList": "English, Spanish, Portuguese",
+      "automatic": "Automatic translation",
+      "credits": "Uses AI credits",
+      "review": "Review and edit translations",
+      "publish": "Translate new text when you publish",
+      "switcher": "Shopper language switcher"
+    },
+    "cards": {
+      "build": "Build and change stores just by asking",
+      "preview": "Live preview on desktop and phone",
+      "templates": "Start from any template in Discover",
+      "publish": "Publish your stores and sell them as templates",
+      "drafts": "{count} drafts per store, including Main",
+      "translations": "Store translations in three languages using AI credits",
+      "languages": "Estori app in English, Spanish and Portuguese",
+      "customEmails": "Send automatic order, shipping and refund emails",
+      "flexiblePayouts": "Choose when you receive bank payouts",
+      "stores": "Up to {count} stores, all can go live",
+      "basicSelling": "Sell online, track orders and receive bank payouts"
+    },
+    "credits": {
+      "title": "Create more with AI credits",
+      "description": "Credits power the AI that builds your store, writes your content and translates your storefront. Top up any time to keep creating.",
+      "calculatorLink": "Estimate my credit needs",
+      "usageNote": "Credit use depends on your AI model and the size of your request.",
+      "cards": {
+        "build": {
+          "title": "Build your store",
+          "description": "Turn your idea into a storefront with products, a cart and checkout."
+        },
+        "change": {
+          "title": "Make changes by chatting",
+          "description": "Ask for a new section, a fresh look or a quick fix."
+        },
+        "translation": {
+          "title": "Translate your store",
+          "description": "Reach more shoppers with AI translations you can review and refine."
+        },
+        "assistant": {
+          "title": "Get help with daily tasks",
+          "description": "Let AI help with stock, customer questions and everyday store tasks."
+        },
+        "content": {
+          "title": "Write product copy and blog posts",
+          "description": "Draft product descriptions, page copy and blog posts in your brand’s voice."
+        },
+        "images": {
+          "title": "Create product images",
+          "description": "Generate product visuals and lifestyle scenes for your store."
+        },
+        "research": {
+          "title": "Research products and trends",
+          "description": "Find product opportunities and emerging trends, with sources to explore."
+        },
+        "optimization": {
+          "title": "Improve your store with data",
+          "description": "Get practical suggestions based on shopper activity and where sales drop off."
+        }
+      },
+      "calculatorNote": "Copy and blog drafts are part of AI change requests. Credit estimates for product images, research and store reviews will be added when those tools become available."
+    },
+    "comparison": {
+      "title": "Compare plans",
+      "caption": "Find the right plan for your next stage",
+      "featureHelp": "About {feature}",
+      "premiumContact": "Contact us to activate Premium.",
+      "proContact": "Contact us to get started with Pro.",
+      "paymentDetails": "See payment fees, limits and payout timing",
+      "features": {
+        "aiCredits": {
+          "label": "AI credits",
+          "description": "Credits pay for building, editing and translating with AI. Bigger changes use more credits."
+        },
+        "build": {
+          "label": "Build and edit with AI",
+          "description": "Describe what you want. Estori creates your store, and you can ask it to make changes without writing code."
+        },
+        "preview": {
+          "label": "Preview on desktop and mobile",
+          "description": "Check how your store looks on a computer or phone before you share it."
+        },
+        "publish": {
+          "label": "Go live when you’re ready",
+          "description": "Choose the draft you want shoppers to see and publish it as your live store."
+        },
+        "appLanguages": {
+          "label": "Work in your preferred language",
+          "description": "Use the Estori app in your preferred language. This changes the app menus and messages."
+        },
+        "stores": {
+          "label": "Create and launch stores",
+          "description": "Create stores for different brands or ideas and put every one online for shoppers. This is your total creation allowance, including stores you delete."
+        },
+        "domain": {
+          "label": "Your brand, your own domain",
+          "description": "Connect one web address you own, such as yourbrand.com, to each live store. You buy the domain separately."
+        },
+        "templates": {
+          "label": "Start with ready-made designs",
+          "description": "Start with a design from Discover and adapt your own copy. Some designs are free and others have a one-time price."
+        },
+        "sellTemplates": {
+          "label": "Earn from your store designs",
+          "description": "List a store design for sale in Discover. After review, buyers can pay for their own copy. A fee applies to each sale."
+        },
+        "receipts": {
+          "label": "Automatic receipts for template buyers",
+          "description": "When someone buys your store design, Estori emails them a receipt."
+        },
+        "ownProducts": {
+          "label": "Sell your own products",
+          "description": "Add your own products, set prices and offer different sizes or colors. You handle shipping to your customers."
+        },
+        "catalog": {
+          "label": "Sell without holding stock",
+          "description": "Choose supplier products to sell in your store. See the product cost before you add them."
+        },
+        "fulfillment": {
+          "label": "Supplier shipping and tracking",
+          "description": "For catalog products, suppliers receive the order and ship it to your shopper. You can follow fulfillment and tracking in Estori."
+        },
+        "orders": {
+          "label": "All your orders, one place",
+          "description": "See orders from all your stores together, including what was bought, payment status and delivery progress."
+        },
+        "tracking": {
+          "label": "Shipment tracking",
+          "description": "Add a carrier and tracking number to orders you ship yourself."
+        },
+        "refunds": {
+          "label": "Flexible refunds",
+          "description": "Refund selected items or a whole order from Estori. Your Stripe balance must cover the refund."
+        },
+        "sellerEmails": {
+          "label": "New order email alerts",
+          "description": "Get an email when a shopper places an order so you can take the next step."
+        },
+        "shopperEmails": {
+          "label": "Automatic customer emails",
+          "description": "Have Estori send shoppers an order confirmation, a shipping update and an email when you refund them."
+        },
+        "editEmails": {
+          "label": "Emails in your brand’s voice",
+          "description": "Edit your store’s shopper email wording, preview it or turn an email off."
+        },
+        "brandedEmails": {
+          "label": "Emails from your store address",
+          "description": "Shopper emails use the store email address Estori provides for your store."
+        },
+        "aiTranslation": {
+          "label": "Translate your store with AI",
+          "description": "Translate your storefront into other languages with AI. See a credit estimate before you start, then review and edit the results."
+        },
+        "editTranslations": {
+          "label": "Fine-tune every translation",
+          "description": "Review translations and change individual phrases. Your saved edits are kept when AI translations run again."
+        },
+        "publishTranslations": {
+          "label": "Update translations when you publish",
+          "description": "Turn on automatic translation for new text when you publish a store update. This uses AI credits."
+        },
+        "languageSwitcher": {
+          "label": "Let shoppers choose their language",
+          "description": "Shoppers can switch between the store languages you enable. A matching browser language can be used automatically."
+        },
+        "translationControl": {
+          "label": "Pause and resume translations",
+          "description": "Stop an AI translation job and resume later. Work also pauses if your AI credits run out."
+        },
+        "checkout": {
+          "label": "Card payments on your store",
+          "description": "Shoppers pay by card through Stripe on your store’s checkout page, with your store’s logo and style. Complete payment setup before accepting live payments."
+        },
+        "payouts": {
+          "label": "Flexible payout schedules",
+          "description": "Choose daily, weekly or monthly bank payouts after the wait for your seller level. Stripe payout fees apply."
+        },
+        "aiDiscovery": {
+          "label": "Get discovered through AI assistants",
+          "description": "Help shoppers find your store when they ask an AI assistant for product recommendations."
+        },
+        "operations": {
+          "label": "AI help with stock and marketing",
+          "description": "Assistants to help with inventory and marketing tasks."
+        },
+        "customerService": {
+          "label": "AI help for your customers",
+          "description": "An assistant to help answer customer questions."
+        },
+        "personalization": {
+          "label": "Product picks for each shopper",
+          "description": "Product suggestions and a smarter cart based on the shopper’s visit."
+        },
+        "bundles": {
+          "label": "Bundles, offers and smarter search",
+          "description": "Product bundles, offers after checkout and smarter store search."
+        },
+        "digital": {
+          "label": "Sell content and build a community",
+          "description": "Sell downloads and bring customers together in a community."
+        },
+        "support": {
+          "label": "Help when you need it",
+          "description": "Email the Estori team when you need help with your store."
+        },
+        "prioritySupport": {
+          "label": "Priority email support",
+          "description": "Your email questions receive priority attention from the support team."
+        },
+        "bankPayouts": {
+          "label": "Receive sales in your bank account",
+          "description": "Receive payouts through Stripe after the waiting period for your seller level. New accounts start with weekly payouts on Monday."
+        },
+        "orderStatus": {
+          "label": "Track payments and fulfillment",
+          "description": "See whether an order is paid, refunded or shipped without checking separate tools."
+        },
+        "previewEmails": {
+          "label": "Preview and test your emails",
+          "description": "See how an email will look, then send yourself a sample before it reaches shoppers."
+        },
+        "replyToEmails": {
+          "label": "Replies straight to your inbox",
+          "description": "Choose where shopper replies go, so you can answer from your own email inbox."
+        },
+        "accountManager": {
+          "label": "Direct access to an account manager",
+          "description": "Contact an account manager directly for help with your stores and account."
+        }
+      },
+      "emailNotifications": "Email & notifications"
+    },
+    "premiumAvailabilityAnswer": "Yes. Contact us to activate Premium. If online plan changes are available in your account, you can get Premium from your billing page.",
+    "metaDescription": "Start free with Basic, grow with Pro or get more AI credits with Premium. Compare store limits, translations, payments and tools for selling online.",
+    "plans": {
+      "basic": {
+        "description": "Bring your first store idea to life, free.",
+        "benefit": "Create your first storefront and try AI edits.",
+        "headerNote": "Create your first storefront"
+      },
+      "pro": {
+        "description": "Launch your brand and grow a small collection of stores.",
+        "benefit": "Launch up to {liveStores} live stores and keep improving them with AI.",
+        "headerNote": "Launch and grow your brand"
+      },
+      "premium": {
+        "description": "Create for more brands and keep every store evolving.",
+        "benefit": "Grow up to {liveStores} live stores with more AI for ongoing updates.",
+        "headerNote": "For agencies and brand studios"
+      }
+    },
+    "paidActivationAnswer": "Choose Pro or Premium to get started. Activate it from your billing page when online checkout is available, or contact us for help.",
+    "creditsNote": "AI use varies with the model you choose and the size of your changes.",
+    "billing": {
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "savings": "Save 20%",
+      "monthlyNote": "Billed monthly. Cancel any time.",
+      "yearlyNote": "{amount} billed yearly. Cancel any time."
+    }
+  },
+  "platform": {
+    "orders": {
+      "eyebrow": "Order management",
+      "title": "Orders, shipping and shopper emails",
+      "description": "Manage orders from all your stores in one place, including test orders while you prepare to sell.",
+      "cards": [
+        {
+          "title": "Fulfill your own products",
+          "body": "Mark items as shipped and add tracking. Catalog fulfillment updates are recorded alongside the products you ship yourself."
+        },
+        {
+          "title": "Manage refunds",
+          "body": "Issue full or partial refunds and see the order history. Refunds follow the selling terms and your available Stripe balance."
+        },
+        {
+          "title": "Keep shoppers informed",
+          "body": "On Pro and Premium, send confirmation, shipping and refund emails from your store’s address, and customize their wording."
+        }
+      ]
+    },
+    "storeTranslations": {
+      "meta": {
+        "title": "Store translations",
+        "description": "Show your storefront in English, Spanish and Brazilian Portuguese. Translate with AI credits, review every phrase and keep control of your edits."
+      },
+      "eyebrow": "Store translations",
+      "title": "Let shoppers browse your store in their language",
+      "lead": "On Pro and Premium, show your storefront in English, Spanish and Brazilian Portuguese. Automatic translations use AI credits, and you can review and edit every phrase.",
+      "sections": [
+        {
+          "eyebrow": "Languages",
+          "title": "Choose the languages your shoppers see",
+          "cards": [
+            {
+              "title": "Confirm your store language",
+              "body": "Choose the language your store is written in before turning on translations."
+            },
+            {
+              "title": "Translate with AI credits",
+              "body": "Translate missing text into the other supported languages. Work pauses when credits run out and can resume when credits are available."
+            },
+            {
+              "title": "A shopper language switcher",
+              "body": "Let shoppers choose a language or show a supported translation that matches their browser."
+            }
+          ]
+        },
+        {
+          "eyebrow": "Stay in control",
+          "title": "Your wording stays yours",
+          "cards": [
+            {
+              "title": "Review every translation",
+              "body": "Search the original text and correct individual translations. Automatic translation keeps the edits you save."
+            },
+            {
+              "title": "Translate new text on publish",
+              "body": "Choose to translate new text when you publish, without retranslating everything."
+            },
+            {
+              "title": "Store and checkout wording",
+              "body": "Available translations follow shoppers through your storefront and Estori checkout messages."
+            }
+          ]
+        }
+      ],
+      "steps": [
+        "Confirm the language your store is written in.",
+        "Choose another supported language and start a translation using AI credits.",
+        "Review the results and enable the languages you want shoppers to see."
+      ],
+      "faq": [
+        {
+          "question": "Which plans include store translations?",
+          "answer": "Store translations are included with Pro and Premium. Automatic translation uses AI credits from your account."
+        },
+        {
+          "question": "Which languages are supported?",
+          "answer": "English, Spanish and Brazilian Portuguese."
+        },
+        {
+          "question": "Are automatic translations free?",
+          "answer": "Automatic translation uses AI credits from your account. Reviewing and saving your own edits does not run the translation AI."
+        },
+        {
+          "question": "Does this rewrite my store files?",
+          "answer": "No. Translations are stored separately and applied when shoppers view your store."
+        }
+      ]
+    },
+    "catalog": {
+      "availabilityAnswer": "Yes. Every plan can browse catalog products and add them to a store. Products, prices and shipping options depend on the current catalog.",
+      "pickProducts": "Choose products from the supplier catalog.",
+      "resellerAvailability": "Every plan can browse and add products from the current catalog.",
+      "resellerLead": "Choose products from the supplier catalog, review their costs and shipping, and add them to your store on any plan.",
+      "storeLead": "Build and preview your store with Estori, then add catalog products alongside the products you sell yourself.",
+      "metaDescription": "Choose supplier catalog products on any plan, build your store with Estori, and track order fulfillment."
+    },
+    "payments": {
+      "availabilityAnswer": "Yes. Live stores can accept card payments through Stripe after you complete payment setup and publish your store. Preview checkouts stay in test mode.",
+      "metaDescription": "Accept card payments on your live Estori store, receive payouts to your bank and manage orders and refunds through Stripe.",
+      "communitiesAnswer": "Paid communities are in early access. Request access to discuss your setup.",
+      "payoutsBenefit": "Receive bank payouts weekly on Monday by default. Pro and Premium let you choose daily, weekly or monthly payouts. Your account costs {stripeFees}.",
+      "stripeLimitNote": "Stripe documents a general USD technical maximum of $999,999.99 per payment. Card networks may impose lower limits. Estori’s order and weekly selling safeguards above also apply.",
+      "stripeLimitSource": "Read Stripe’s payment amount limits"
+    }
+  }
+}

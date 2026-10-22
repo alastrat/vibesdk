@@ -1,3 +1,4 @@
+import type { BillingInterval } from '@/api-types';
 /**
  * Unified API Client - Premium quality abstraction for all worker API calls
  * Provides type-safe methods for all endpoints with proper error handling
@@ -752,12 +753,12 @@ class ApiClient {
 	}
 
 	/** Opens an embedded checkout for Pro or Premium; the answer carries what Stripe.js starts the form with. */
-	async startPlanCheckout(plan: PaidPlanId): Promise<ApiResponse<CheckoutClientStart>> {
-		const body: PlanRequest = { plan };
+	async startPlanCheckout(plan: PaidPlanId, billingInterval: BillingInterval = 'month', monthlyCredits?: number): Promise<ApiResponse<CheckoutClientStart>> {
+		const body: PlanRequest = { plan, ...(monthlyCredits !== undefined ? { monthlyCredits } : {}), ...(billingInterval !== undefined ? { billingInterval } : {}) };
 		return this.request<CheckoutClientStart>('/api/billing/checkout', { method: 'POST', body });
 	}
 
-	/** Opens an embedded checkout for extra credits, Premium only. */
+	/** Opens an embedded checkout for extra credits on any plan. */
 	async buyCredits(credits: number): Promise<ApiResponse<CheckoutClientStart>> {
 		const body: CreditsRequest = { credits };
 		return this.request<CheckoutClientStart>('/api/billing/credits', { method: 'POST', body });
@@ -779,8 +780,8 @@ class ApiClient {
 	}
 
 	/** Premium now, Pro at the renewal, or the current plan again to drop a pending move. */
-	async changePlan(plan: PaidPlanId): Promise<ApiResponse<BillingChangeRequested>> {
-		const body: PlanRequest = { plan };
+	async changePlan(plan: PaidPlanId, billingInterval?: BillingInterval, monthlyCredits?: number): Promise<ApiResponse<BillingChangeRequested>> {
+		const body: PlanRequest = { plan, ...(monthlyCredits !== undefined ? { monthlyCredits } : {}), ...(billingInterval !== undefined ? { billingInterval } : {}) };
 		return this.request<BillingChangeRequested>('/api/billing/change-plan', { method: 'POST', body });
 	}
 

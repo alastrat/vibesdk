@@ -158,7 +158,7 @@ describe('industries', () => {
 				expect(item.answer.trim(), item.question).not.toBe('');
 			}
 			const payments = faq.find((item) => item.question === `Can my ${industry.store} take payments?`);
-			expect(payments?.answer, industry.slug).toMatch(/^Not yet\..*coming soon\.$/);
+			expect(payments?.answer, industry.slug).toMatch(/^Yes\..*Stripe.*Preview checkouts stay in test mode\.$/);
 			// Plan-neutral, so it holds whether paid plans are on sale or not.
 			const cost = faq.find((item) => item.question.startsWith('How much does it cost'))?.answer;
 			expect(cost, industry.slug).toContain('free on Basic, within its limits. See the pricing page for what each plan includes.');

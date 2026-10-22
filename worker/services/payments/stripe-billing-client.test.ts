@@ -203,7 +203,7 @@ describe('Stripe billing calls', () => {
 	it('reads a subscription with its schedule', async () => {
 		const { calls, client } = recordingFetch(SUBSCRIPTION);
 		await client.retrieveSubscription('sub_1');
-		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscriptions/sub_1?expand%5B0%5D=schedule', method: 'GET' });
+		expect(calls[0]).toMatchObject({ url: 'https://api.stripe.com/v1/subscriptions/sub_1?expand%5B0%5D=schedule&expand%5B1%5D=schedule.phases.items.price', method: 'GET' });
 	});
 
 	it('moves to Premium now, prorated and charged, and refuses rather than leave an unpaid change', async () => {
@@ -296,7 +296,7 @@ describe('Stripe billing calls', () => {
 		});
 		const session = await expanded.client.retrieveCheckoutSession('cs_1', BILLING_CHECKOUT_EXPAND);
 		expect(expanded.calls[0].url).toBe(
-			'https://api.stripe.com/v1/checkout/sessions/cs_1?expand%5B0%5D=discounts.coupon&expand%5B1%5D=discounts.promotion_code.promotion.coupon&expand%5B2%5D=setup_intent',
+			'https://api.stripe.com/v1/checkout/sessions/cs_1?expand%5B0%5D=discounts.coupon&expand%5B1%5D=discounts.promotion_code.promotion.coupon&expand%5B2%5D=setup_intent&expand%5B3%5D=line_items.data.price',
 		);
 		expect(session.discounts?.[0]?.promotion_code).toMatchObject({ promotion: { coupon: { duration: 'repeating', duration_in_months: 3 } } });
 	});
@@ -402,4 +402,31 @@ describe('Stripe billing calls', () => {
 		}
 		expect(seen).toHaveLength(1);
 	});
+});
+
+it('separates monthly and yearly checkout keys and records annual renewal on the session', async () => {
+ const f = recordingFetch({ id: 'cs_year' });
+ const base = { customerId: 'cus_1', priceId: 'price_pro_year', userId: 'u1', plan: 'pro' as const, returnUrl: 'https://estori.app/return', nowMs: NOW };
+ await f.client.createSubscriptionCheckoutSession(base);
+ await f.client.createSubscriptionCheckoutSession({ ...base, billingInterval: 'year' });
+ expect(f.calls[0].key).not.toBe(f.calls[1].key);
+ expect(f.calls[1].params).toContain('metadata[billing_interval]=year');
+});
+it('uses a full yearly target phase for a scheduled annual subscription change', async () => {
+ const f = recordingFetch(SCHEDULE);
+ await f.client.scheduleSubscriptionPrice({ subscription: SUBSCRIPTION, priceId: 'price_pro_year', billingInterval: 'year', idempotencyKey: 'annual' });
+ expect(f.calls[1].params).toContain('phases[1][duration][interval]=year');
+ expect(f.calls[1].params).toContain('phases[0][end_date]=200');
+});
+
+it('creates server-priced recurring credit allowances with metadata and a stable idempotency key', async () => {
+ const f=recordingFetch({id:'price_allowance'});
+ await f.client.createPlanPrice({productId:'prod_pro',plan:'pro',interval:'year',monthlyCredits:30000,priceCents:61200,lookupKey:'estori_pro_year_30000_61200'});
+ expect(f.calls[0].params).toEqual(expect.arrayContaining(['unit_amount=61200','recurring[interval]=year','metadata[estori_monthly_credits]=30000','metadata[estori_plan]=pro']));
+ expect(f.calls[0].key).toBe('billing-price-estori_pro_year_30000_61200');
+ const input={customerId:'cus_1',priceId:'price_allowance',userId:'u1',plan:'pro' as const,billingInterval:'year' as const,returnUrl:'https://estori.app/return',nowMs:NOW};
+ await f.client.createSubscriptionCheckoutSession({...input,monthlyCredits:30000});
+ await f.client.createSubscriptionCheckoutSession({...input,monthlyCredits:50000});
+ expect(f.calls[1].key).not.toBe(f.calls[2].key);
+ expect(f.calls[1].params).toContain('metadata[monthly_credits]=30000');
 });

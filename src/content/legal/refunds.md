@@ -4,7 +4,7 @@ version: 2026-10-19
 updated: October 19, 2026
 ---
 
-This policy covers purchases of paid sites, and payments for Pro, Premium and extra credits, on Estori, sold by {{entity.name}} ("Globalink", "we") as merchant of record. Building on the free plan costs nothing, so there's nothing to refund for it. Purchases from a store built on Estori are sold by that store's owner, and follow that store's own refund policy.
+This policy covers purchases of paid sites, and payments for Pro, Premium and extra credits, on Estori, sold by {{entity.name}} ("Globalink", "we") as merchant of record. There is no charge for the Basic plan itself. Purchases of extra credits follow the policy below. Purchases from a store built on Estori are sold by that store's owner, and follow that store's own refund policy.
 
 ## When you can get a refund
 

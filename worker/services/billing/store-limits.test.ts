@@ -32,20 +32,15 @@ function counters(started: number, today: number) {
 }
 
 describe('checkStoreStart', () => {
-	it("starts Basic's stores up to its third, counting deleted ones, and refuses after", async () => {
-		const { deps, calls } = counters(2, 0);
-		expect(await checkStoreStart(deps, account('basic'))).toBeNull();
-		expect(await checkStoreStart(deps, account('basic'))).toMatchObject({ limit: 'storesLifetime', upgradeTo: 'pro', message: "Basic includes 3 stores, counting ones you've deleted. Get Pro to start up to 10 a day." });
-		expect(calls).toEqual(['reserve:3', 'reserve:3']);
-	});
-
-	it('limits Pro and Premium per day, and still counts their stores in case they move to Basic', async () => {
-		const pro = counters(40, 9);
-		expect(await checkStoreStart(pro.deps, account('pro'))).toBeNull();
-		expect(await checkStoreStart(pro.deps, account('pro'))).toMatchObject({ limit: 'newStoresPerDay', upgradeTo: 'premium' });
-		expect(pro.calls).toEqual(['daily:10', 'reserve:null', 'daily:10']);
-		const premium = counters(0, 25);
-		expect(await checkStoreStart(premium.deps, account('premium'))).toMatchObject({ limit: 'newStoresPerDay', upgradeTo: 'enterprise' });
+	it.each([
+		{ plan: 'basic', cap: 2, upgradeTo: 'pro' },
+		{ plan: 'pro', cap: 5, upgradeTo: 'premium' },
+		{ plan: 'premium', cap: 20, upgradeTo: 'enterprise' },
+	] as const)('allows $cap total stores on $plan, then refuses another without a daily reset', async ({ plan, cap, upgradeTo }) => {
+		const { deps, calls } = counters(cap - 1, 999);
+		expect(await checkStoreStart(deps, account(plan))).toBeNull();
+		expect(await checkStoreStart(deps, account(plan))).toMatchObject({ limit: 'storesLifetime', upgradeTo });
+		expect(calls).toEqual([`reserve:${cap}`, `reserve:${cap}`]);
 	});
 
 	it("refuses nothing while billing is off, but still counts the store; today's daily limit stays with the controller", async () => {

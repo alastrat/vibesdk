@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { Link } from 'react-router';
 import {
 	ArmchairIcon,
@@ -28,6 +29,7 @@ import {
 	ShoppingCartIcon,
 	StorefrontIcon,
 	TruckIcon,
+	TranslateIcon,
 	UsersThreeIcon,
 	type Icon,
 } from '@phosphor-icons/react';
@@ -69,6 +71,8 @@ const CAPABILITY_ICONS: Readonly<Record<CapabilityId, Icon>> = {
 	'personalized-shopping': ShoppingCartIcon,
 	'product-catalog': TruckIcon,
 	payments: CreditCardIcon,
+	'order-management': PackageIcon,
+	'store-translations': TranslateIcon,
 	'digital-products': UsersThreeIcon,
 	'developer-templates': CodeIcon,
 	'content-creators': MegaphoneIcon,
@@ -113,30 +117,30 @@ const MENU_EXTRAS: Readonly<Record<MenuId, { links?: readonly MenuLink[]; featur
 		feature: {
 			image: '/marketing/auth-signup.webp',
 			position: 'object-center',
-			title: 'From first idea to first order.',
-			link: { to: '/signup', label: 'Start building free' },
+			title: marketingCopy.navigation.menus.solutions.feature.title,
+			link: { to: '/signup', label: marketingCopy.navigation.menus.solutions.feature.link.label },
 		},
 	},
 	creators: {
 		links: [
-			{ to: '/discover', label: 'Templates in Discover', icon: CompassIcon },
-			{ to: '/pricing#developers', label: 'Fees for template sales', icon: PercentIcon },
+			{ to: '/discover', label: marketingCopy.navigation.menus.creators.links.discover, icon: CompassIcon },
+			{ to: '/pricing#developers', label: marketingCopy.navigation.menus.creators.links.fees, icon: PercentIcon },
 		],
 		feature: {
 			image: '/marketing/auth-signin.webp',
 			position: 'object-[82%_center]',
-			title: 'Sell the stores you design.',
-			link: { to: '/creators/developers', label: 'See how it works' },
+			title: marketingCopy.navigation.menus.creators.feature.title,
+			link: { to: '/creators/developers', label: marketingCopy.navigation.menus.creators.feature.link.label },
 		},
 	},
 };
 
 /** The bar along the bottom of every panel, as on 1Password: plans on the left, help on the right. */
 const FOOTER_LINKS: { start: FooterLink; end: readonly FooterLink[] } = {
-	start: { href: '/pricing#compare', label: 'Compare plans', icon: MagnifyingGlassIcon },
+	start: { href: '/pricing#compare', label: marketingCopy.navigation.menuFooter.start.label, icon: MagnifyingGlassIcon },
 	end: [
-		{ href: `mailto:${LEGAL_CONTACT.support}`, label: 'Email support', icon: EnvelopeSimpleIcon },
-		{ href: '/contact', label: 'Talk to sales', icon: ChatCircleTextIcon },
+		{ href: `mailto:${LEGAL_CONTACT.support}`, label: marketingCopy.navigation.menuFooter.end.support, icon: EnvelopeSimpleIcon },
+		{ href: '/contact', label: marketingCopy.navigation.menuFooter.end.sales, icon: ChatCircleTextIcon },
 	],
 };
 
@@ -207,15 +211,15 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 		return (
 			<>
 				<Column title="For creators" caption={CREATORS_CAPTION} links={CREATOR_LINKS} className={columnClassName} />
-				{links && <Column title="Get started" links={links} className={columnClassName} />}
+				{links && <Column title={marketingCopy.navigation.getStarted} links={links} className={columnClassName} />}
 			</>
 		);
 	}
 	return (
 		<>
-			<Column title="Estori for" links={AUDIENCE_LINKS} className={columnClassName} />
-			<Column title="Industries" links={INDUSTRY_LINKS} className={columnClassName} />
-			<Column title="Platform" links={PLATFORM_LINKS} className={columnClassName} />
+			<Column title={marketingCopy.navigation.estoriFor} links={AUDIENCE_LINKS} className={columnClassName} />
+			<Column title={marketingCopy.common.industries} links={INDUSTRY_LINKS} className={columnClassName} />
+			<Column title={marketingCopy.navigation.platform} links={PLATFORM_LINKS} className={columnClassName} />
 		</>
 	);
 }

@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import { UNDERLINE_FILL } from '@/components/public-site/primitives';
@@ -15,7 +16,7 @@ export default function ResellersPage() {
 			<SolutionHero
 				eyebrow="For dropshippers and resellers"
 				title="Find products. Add them in a few clicks. Let suppliers ship."
-				lead="Estori is building a curated catalog of vetted suppliers. Apply, choose products and they appear in your store, ready to sell."
+				lead={marketingCopy.platform.catalog.resellerLead}
 				tag="product-catalog"
 			/>
 			<CardSection id="catalog" eyebrow="Catalog & fulfillment" tag="product-catalog" title="A curated product catalog" cards={CATALOG_CARDS}>
@@ -28,7 +29,7 @@ export default function ResellersPage() {
 			<CardSection
 				eyebrow="Available today"
 				title="Build the store first"
-				lead="While the catalog is on its way, build the store itself with Estori, ready for the products you'll add."
+				lead={marketingCopy.platform.catalog.storeLead}
 				cards={TODAY_CARDS}
 			/>
 			<PublicFaq items={RESELLER_FAQ} />

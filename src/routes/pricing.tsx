@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CheckIcon } from '@phosphor-icons/react';
-import { PLATFORM_FEE_LABEL, formatTemplatePrice } from '@/api-types';
+import { type BillingInterval, type PaidPlanId, PLAN_LIMITS, PLATFORM_FEE_LABEL, formatTemplatePrice } from '@/api-types';
 import { ComparePlans } from '@/components/pricing/ComparePlans';
 import { CreditsExplainer } from '@/components/pricing/CreditsExplainer';
 import { PlanCards } from '@/components/pricing/PlanCards';
@@ -30,6 +30,9 @@ const CARD_LABEL = 'text-xs uppercase tracking-[0.02em]';
 /** 1Password's business pricing with Apollo's comparison and credits explainer, then template selling and questions. */
 export default function PricingPage() {
 	const billing = useBillingOn();
+	const [interval, setInterval] = useState<BillingInterval>('month');
+	const [credits, setCredits] = useState({ pro: PLAN_LIMITS.pro.aiCredits, premium: PLAN_LIMITS.premium.aiCredits });
+	const chooseCredits = (plan: PaidPlanId, amount: number) => setCredits(current => ({ ...current, [plan]: amount }));
 	const { rates } = useModelRates();
 	return (
 		<div>
@@ -41,8 +44,8 @@ export default function PricingPage() {
 					Start free on Basic. Move to Pro or Premium when you need more AI credits, or talk to us about Enterprise.
 				</p>
 			</section>
-			<PlanCards />
-			<ComparePlans billing={billing} />
+			<PlanCards interval={interval} onIntervalChange={setInterval} credits={credits} onCreditsChange={chooseCredits} />
+			<ComparePlans billing={billing} interval={interval} credits={credits} />
 			<CreditsExplainer />
 			<section id="developers" className="scroll-mt-36 border-t border-public-line bg-white px-4 py-16 sm:px-6 sm:py-20">
 				<div className="mx-auto max-w-[1248px]">

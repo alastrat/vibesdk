@@ -1,4 +1,3 @@
-import { assertWithinLimit } from '../i18n/plan-limits';
 /** The billing page's view of an account: its plan and subscription, this period's credits, its purchases, its card, and what it may do. */
 
 import type { CreditPurchaseRecord } from '../../database/schema';
@@ -65,8 +64,12 @@ export function billingView(account: BillingAccount, credits: CreditBalance | nu
 		plan: account.plan,
 		source: account.source,
 		status: row?.status ?? null,
-		periodStart: account.period.startMs,
-		periodEnd: account.period.endMs,
+		billingInterval: row?.billingInterval ?? 'month',
+		monthlyCredits: row?.monthlyCredits ?? null,
+		pendingMonthlyCredits: live?.pendingMonthlyCredits ?? null,
+		pendingBillingInterval: live?.pendingBillingInterval ?? null,
+		periodStart: live?.currentPeriodStart.getTime() ?? account.period.startMs,
+		periodEnd: live?.currentPeriodEnd.getTime() ?? account.period.endMs,
 		cancelAtPeriodEnd: live?.cancelAtPeriodEnd ?? false,
 		pendingPlan,
 		pendingPlanAt: pendingPlan ? (live?.pendingPlanAt?.getTime() ?? null) : null,
@@ -86,7 +89,7 @@ export function billingView(account: BillingAccount, credits: CreditBalance | nu
 		purchases: account.billing ? purchases.map(purchaseView).filter((purchase) => purchase.left > 0) : [],
 		limits: account.limits,
 		canManageBilling: account.billing && hasCustomer,
-		canBuyCredits: account.billing && assertWithinLimit(account, 'extraCredits') === null,
+		canBuyCredits: account.billing,
 		card: account.billing ? card : null,
 	};
 }

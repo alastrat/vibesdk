@@ -1,8 +1,9 @@
+import { planBillingPath, planCheckoutPath } from '@/lib/billing-links';
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { BILLING_CHECKOUT_PATH, BILLING_PATH, type PaidPlanId } from '@/api-types';
+import { BILLING_CHECKOUT_PATH, type BillingInterval, type PaidPlanId } from '@/api-types';
 import { useAuth } from '@/contexts/auth-context';
 import { ApiError, apiClient } from '@/lib/api-client';
 import { singleFlight } from '@/lib/async';
@@ -56,24 +57,24 @@ export function usePlanCheckout() {
 	const { isAuthenticated, setIntendedUrl } = useAuth();
 	const navigate = useNavigate();
 
-	const start = (plan: PaidPlanId) => {
+	const start = (plan: PaidPlanId, interval?: BillingInterval, monthlyCredits?: number) => {
 		if (!isAuthenticated) {
-			setIntendedUrl(`${BILLING_PATH}?plan=${plan}`);
+			setIntendedUrl(planBillingPath(plan, interval, monthlyCredits));
 			navigate('/signup');
 			return;
 		}
-		navigate(`${BILLING_CHECKOUT_PATH}?plan=${plan}`);
+		navigate(planCheckoutPath(plan, interval, monthlyCredits));
 	};
 
 	return { start };
 }
 
-export type PlanChange = { kind: 'change'; plan: PaidPlanId } | { kind: 'cancel' } | { kind: 'resume' };
+export type PlanChange = { kind: 'change'; plan: PaidPlanId; billingInterval?: BillingInterval; monthlyCredits?: number } | { kind: 'cancel' } | { kind: 'resume' };
 
 function requestPlanChange(change: PlanChange) {
 	switch (change.kind) {
 		case 'change':
-			return apiClient.changePlan(change.plan);
+			return apiClient.changePlan(change.plan, change.billingInterval, change.monthlyCredits);
 		case 'cancel':
 			return apiClient.cancelPlan();
 		case 'resume':

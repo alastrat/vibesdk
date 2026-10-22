@@ -1,3 +1,4 @@
+import { STATUS_LABELS } from '@/lib/capabilities';
 import { describe, expect, it } from 'vitest';
 import capabilities from '../lib/capabilities.ts?raw';
 import publicCss from './public-site.css?raw';
@@ -10,6 +11,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/marketing/ComingSoon.tsx',
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/AnnouncementBar.tsx',
+		'/src/components/layout/PublicUtilityBar.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/routes/landing/Hero.tsx',
 		'/src/routes/landing/StoreShowcase.tsx',
@@ -68,7 +70,8 @@ describe('public site styles', () => {
 		const badge = source('/src/components/marketing/ComingSoon.tsx');
 		expect(badge).not.toContain('kumo-');
 		expect(badge).toContain('STATUS_LABELS[status]');
-		expect(capabilities).toContain("'coming-soon': 'Coming soon'");
+		expect(STATUS_LABELS['coming-soon']).toBe('Coming soon');
+		expect(capabilities).toContain('marketingCopy.common.status.comingSoon');
 	});
 
 	it('lets app components embedded in a public page keep the app theme', () => {
@@ -78,14 +81,16 @@ describe('public site styles', () => {
 	});
 
 	it("publishes the top bar's height, so content can pin right under it", () => {
-		// The announcement (h-11, 44px), the bar (h-16 or sm:h-[72px]) and the bar's 1px bottom border; the phone menu doesn't count.
+		// The announcement (44px), utility row (40px), the bar (h-16 or sm:h-[72px]) and the bar's 1px bottom border; the phone menu doesn't count.
 		expect(source('/src/components/layout/AnnouncementBar.tsx')).toMatch(/className="mx-auto grid h-11 /);
+		expect(source('/src/components/layout/PublicUtilityBar.tsx')).toMatch(/className="mx-auto flex h-\[39px\] /);
+		expect(source('/src/components/layout/PublicUtilityBar.tsx')).toContain('border-b border-[#d5d8de]');
 		const bar = source('/src/components/layout/PublicTopBar.tsx');
 		expect(bar).toContain('<div className="relative border-b border-public-line bg-white">');
 		expect(bar).toContain('flex h-16 max-w-[1296px] items-center justify-between gap-4 px-4 sm:h-[72px]');
 		const start = publicCss.indexOf('.public-site {');
-		expect(publicCss.slice(start, publicCss.indexOf('}', start))).toContain('--public-header-h: 109px;');
-		expect(publicCss).toMatch(/@media \(width >= 40rem\) \{\s*\.public-site \{\s*--public-header-h: 117px;\s*\}\s*\}/);
+		expect(publicCss.slice(start, publicCss.indexOf('}', start))).toContain('--public-header-h: 149px;');
+		expect(publicCss).toMatch(/@media \(width >= 40rem\) \{\s*\.public-site \{\s*--public-header-h: 157px;\s*\}\s*\}/);
 	});
 
 	it("lines the top bar, hero, showcase and footer up with the sections' 1248px content, padding inside a 1296px box", () => {

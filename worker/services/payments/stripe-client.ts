@@ -1,3 +1,4 @@
+import type { BillingInterval } from '../../../shared/types/plans';
 /**
  * Minimal Stripe REST client for Workers: form-encoded requests over fetch,
  * no SDK. Covers Connect Express onboarding, Checkout for paid sites, and Stripe Billing for plans, extra credits, cards and invoices.
@@ -97,9 +98,10 @@ export interface StripePromotionCode {
 }
 
 /** What a billing session is read with: the discounts down to their coupons, and a card setup's SetupIntent. */
-export const BILLING_CHECKOUT_EXPAND = ['discounts.coupon', 'discounts.promotion_code.promotion.coupon', 'setup_intent'] as const;
+export const BILLING_CHECKOUT_EXPAND = ['discounts.coupon', 'discounts.promotion_code.promotion.coupon', 'setup_intent', 'line_items.data.price'] as const;
 
 export interface StripeCheckoutSession {
+	line_items?: { data: Array<{ quantity: number | null; price: StripePrice | null }> };
 	id: string;
 	/** Billing sessions: a subscription checkout, an extra-credits payment. */
 	mode?: 'payment' | 'subscription' | 'setup';
@@ -178,10 +180,13 @@ export interface StripeCustomer {
 }
 
 export interface StripePrice {
+	product?: string | { id: string };
 	id: string;
 	metadata?: Record<string, string> | null;
 	unit_amount?: number | null;
+	currency?: string;
 	lookup_key?: string | null;
+	recurring?: { interval: string; interval_count?: number } | null;
 }
 
 export interface StripeSubscriptionItem {
@@ -279,6 +284,8 @@ interface Replacing {
 }
 
 export interface SubscriptionCheckoutInput extends Replacing {
+	monthlyCredits?: number;
+	billingInterval?: BillingInterval;
 	customerId: string;
 	priceId: string;
 	userId: string;
@@ -317,6 +324,7 @@ export interface CardSetupInput extends Replacing {
 }
 
 export interface SubscriptionPriceChange {
+	billingInterval?: BillingInterval;
 	subscription: StripeSubscription;
 	priceId: string;
 	idempotencyKey: string;
@@ -418,6 +426,9 @@ export interface StripeClient {
 	fetchInvoicePdf(url: string): Promise<Response>;
 	/** The subscription with its schedule expanded. */
 	retrieveSubscription(subscriptionId: string): Promise<StripeSubscription>;
+	retrievePrice(priceId: string): Promise<StripePrice>;
+ findPlanPrice(lookupKey: string): Promise<StripePrice | null>;
+ createPlanPrice(input: { productId: string; plan: PaidPlanId; interval: BillingInterval; monthlyCredits: number; priceCents: number; lookupKey: string }): Promise<StripePrice>;
 	/** Moves to the price now, prorated and invoiced; Stripe refuses the change when the invoice can't be paid. */
 	changeSubscriptionPrice(input: SubscriptionPriceChange): Promise<StripeSubscription>;
 	/** Moves to the price at the renewal, keeping the subscription's discounts and charging no proration. */
@@ -709,13 +720,13 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 					...USD_CARD_CHECKOUT,
 					allow_promotion_codes: true,
 					subscription_data: { metadata: { estori_user_id: input.userId } },
-					metadata: { estori_user_id: input.userId, plan: input.plan },
+					metadata: { estori_user_id: input.userId, plan: input.plan, ...(input.billingInterval === 'year' ? { billing_interval: 'year' } : {}), ...(input.monthlyCredits !== undefined ? { monthly_credits: String(input.monthlyCredits) } : {}) },
 					// Paid on Estori's own checkout page; Estori records the seller's agreement to the renewal terms itself.
 					ui_mode: 'elements',
 					return_url: input.returnUrl,
 					expires_at: billingCheckoutExpiresAt(input.nowMs),
 				},
-				replacementKey(`billing-checkout-${input.userId}-${input.plan}-${idempotencyBucket(input.nowMs)}`, input.replaces),
+				replacementKey(`billing-checkout-${input.userId}-${input.plan}${input.billingInterval === 'year' ? '-year' : ''}${input.monthlyCredits !== undefined ? '-credits-' + input.monthlyCredits : ''}-${idempotencyBucket(input.nowMs)}`, input.replaces),
 			),
 		createCreditsCheckoutSession: (input) => {
 			const metadata = { kind: CHECKOUT_KIND_CREDITS, estori_user_id: input.userId, credits: String(input.credits) };
@@ -794,8 +805,18 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 			if (!isStripeUrl(url)) throw new Error('The invoice PDF is not on a Stripe address');
 			return fetchImpl(url);
 		},
+  findPlanPrice: async (lookupKey) => {
+   const found = await request<{ data: StripePrice[] }>('GET', `/prices?${encodeForm({ lookup_keys: [lookupKey], active: true, limit: 1 })}`);
+   return found.data[0] ?? null;
+  },
+  createPlanPrice: (input) => request<StripePrice>('POST', '/prices', {
+   product: input.productId, currency: 'usd', unit_amount: input.priceCents,
+   recurring: { interval: input.interval }, lookup_key: input.lookupKey,
+   metadata: { estori_plan: input.plan, estori_billing_interval: input.interval, estori_monthly_credits: String(input.monthlyCredits) },
+  }, `billing-price-${input.lookupKey}`),
+		retrievePrice: (priceId) => request<StripePrice>('GET', `/prices/${encodeURIComponent(priceId)}`),
 		retrieveSubscription: (subscriptionId) =>
-			request<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}?${encodeForm({ expand: ['schedule'] })}`),
+			request<StripeSubscription>('GET', `/subscriptions/${encodeURIComponent(subscriptionId)}?${encodeForm({ expand: ['schedule', 'schedule.phases.items.price'] })}`),
 		changeSubscriptionPrice: async ({ subscription, priceId, idempotencyKey }) => {
 			const item = subscription.items.data[0];
 			if (!item) throw new Error(`Subscription ${subscription.id} has no items`);
@@ -811,7 +832,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 				idempotencyKey,
 			);
 		},
-		scheduleSubscriptionPrice: async ({ subscription, priceId, idempotencyKey }) => {
+		scheduleSubscriptionPrice: async ({ subscription, priceId, idempotencyKey, billingInterval = 'month' }) => {
 			const schedule = await scheduleFor(subscription, idempotencyKey);
 			const currentPhase = schedule.current_phase;
 			const current = currentPhase && schedule.phases.find((phase) => phase.start_date === currentPhase.start_date);
@@ -833,7 +854,7 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 						},
 						{
 							items: [{ price: priceId, quantity: 1 }],
-							duration: { interval: 'month', interval_count: 1 },
+							duration: { interval: billingInterval, interval_count: 1 },
 							proration_behavior: 'none',
 							discounts,
 						},

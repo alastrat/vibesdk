@@ -1,8 +1,10 @@
-import type { ReactNode } from 'react';
+import { Select } from '@cloudflare/kumo';
+import { BillingIntervalPicker } from '@/components/billing/BillingIntervalPicker';
+import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import { BuildingsIcon, CheckIcon, CoinsIcon, CrownIcon, RocketLaunchIcon, StorefrontIcon, type Icon } from '@phosphor-icons/react';
-import { PLAN_LIMITS, PLAN_PRICES_CENTS, type PaidPlanId } from '@/api-types';
+import { PLAN_LIMITS, planCreditOptions, isPlanCreditAmount, planPriceCents, type BillingInterval, type PaidPlanId } from '@/api-types';
 import { PlanButton } from '@/components/billing/PlanButton';
-import { ComingSoon } from '@/components/marketing/ComingSoon';
 import { PlanLimits } from '@/components/marketing/PlanLimits';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { PillLink } from '@/components/public-site/primitives';
@@ -42,9 +44,9 @@ function PlanHeading({ id, icon: Glyph, children }: { id: PlanId; icon: Icon; ch
 
 function Price({ cents }: { cents: number }) {
 	return (
-		<p className="mt-8 text-5xl font-light tracking-[-0.02em] text-public-ink">
+		<p aria-live="polite" aria-atomic="true" className="mt-8 text-4xl font-light tracking-[-0.02em] lg:text-5xl text-public-ink">
 			{formatUsd(cents)}
-			<span className="text-base font-normal tracking-normal text-public-muted"> / month</span>
+			<span className="whitespace-nowrap text-base font-normal tracking-normal text-public-muted"> / month</span>
 		</p>
 	);
 }
@@ -52,34 +54,40 @@ function Price({ cents }: { cents: number }) {
 /** The plan's credits, in the shaded line under the price. */
 function Allowance({ children }: { children: ReactNode }) {
 	return (
-		<div className="mt-6 flex min-h-12 items-center gap-3 rounded-xl bg-[#f5f6f8] px-4 py-3 text-sm text-public-ink">
+		<div className="mt-6 flex min-h-16 items-center gap-3 rounded-xl bg-[#f5f6f8] px-4 py-3 text-sm text-public-ink">
 			<CoinsIcon className="size-5 shrink-0 text-public-blue" aria-hidden />
 			{children}
 		</div>
 	);
 }
 
-const CARD = 'flex flex-col p-8 sm:p-10 md:p-7 lg:p-10';
+// Share the heading, copy, price, allowance and action rows across desktop cards.
+const CARD = 'flex flex-col p-8 sm:p-10 md:row-span-7 md:grid md:grid-rows-subgrid md:p-7 lg:p-10';
 
-function BasicPlan({ billing }: { billing: boolean }) {
-	const { liveStores, storesLifetime } = PLAN_LIMITS.basic;
+function BasicPlan() {
+	const { storesLifetime } = PLAN_LIMITS.basic;
 	return (
 		<article className={CARD}>
 			<PlanHeading id="basic" icon={StorefrontIcon} />
 			<Price cents={0} />
-			<p className="mt-1 text-sm text-public-muted">Free forever. No credit card.</p>
+			<p className="mt-1 min-h-10 text-sm text-public-muted">Free forever. No credit card.</p>
 			<Allowance>
-				<PlanLimits className="text-sm" fallback="A daily allowance of AI credits" />
+				<PlanLimits className="text-sm text-public-ink" />
 			</Allowance>
-			<StartBuildingButton variant="blue" className="mt-6" />
-			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8">
-				<Feature>Build and change stores just by asking</Feature>
-				<Feature>Live preview on desktop and phone</Feature>
-				<Feature>Start from any template in Discover</Feature>
-				<Feature>Publish your stores and sell them as templates</Feature>
-				{billing && liveStores !== null && storesLifetime !== null && (
+			<div className="mt-6"><StartBuildingButton variant="blue" className="w-full" /></div>
+			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8 md:self-start">
+				<Feature>{marketingCopy.pricing.cards.build}</Feature>
+				<Feature>{marketingCopy.pricing.cards.preview}</Feature>
+				<Feature>{formatMarketingCopy(marketingCopy.pricing.cards.drafts, { count: PLAN_LIMITS.basic.draftsPerStore })}</Feature>
+				<Feature>{marketingCopy.pricing.cards.languages}</Feature>
+				<Feature>{marketingCopy.pricing.cards.templates}</Feature>
+				<Feature>{marketingCopy.pricing.cards.publish}</Feature>
+				<Feature>{marketingCopy.pricing.cards.basicSelling}</Feature>
+				<Feature>{marketingCopy.pricing.comparison.features.catalog.label}</Feature>
+				<Feature>{marketingCopy.pricing.comparison.features.fulfillment.label}</Feature>
+				{storesLifetime !== null && (
 					<Feature>
-						{liveStores} live {liveStores === 1 ? 'store' : 'stores'}, {storesLifetime} stores in all
+						{formatMarketingCopy(marketingCopy.pricing.cards.stores, { count: storesLifetime })}
 					</Feature>
 				)}
 			</ul>
@@ -93,9 +101,13 @@ function PaidFeatures({ plan }: { plan: PaidPlanId }) {
 		return (
 			<>
 				<Feature>Everything in Basic</Feature>
-				{limitFeatures('pro').map((line) => (
+				<Feature>{marketingCopy.pricing.cards.customEmails}</Feature>
+				<Feature>{marketingCopy.pricing.cards.flexiblePayouts}</Feature>
+				<Feature>{marketingCopy.pricing.cards.translations}</Feature>
+				{limitFeatures('pro', 'basic').map((line) => (
 					<Feature key={line}>{line}</Feature>
 				))}
+				<Feature>{marketingCopy.pricing.comparison.features.prioritySupport.label}</Feature>
 			</>
 		);
 	}
@@ -105,35 +117,49 @@ function PaidFeatures({ plan }: { plan: PaidPlanId }) {
 			{limitFeatures('premium', 'pro').map((line) => (
 				<Feature key={line}>{line}</Feature>
 			))}
+			<Feature>{marketingCopy.pricing.comparison.features.editEmails.label}</Feature>
+			<Feature>{marketingCopy.pricing.comparison.features.replyToEmails.label}</Feature>
+			<Feature>{marketingCopy.pricing.comparison.features.tracking.label}</Feature>
+			<Feature>{marketingCopy.pricing.comparison.features.refunds.label}</Feature>
+			<Feature>{marketingCopy.pricing.comparison.features.accountManager.label}</Feature>
 			<Feature capability="agentic-commerce">Get recommended by AI assistants</Feature>
 			<Feature capability="operations-agents">Store assistants</Feature>
 			<Feature capability="personalized-shopping">Personalized shopping</Feature>
-			<Feature>Priority email support</Feature>
 		</>
 	);
 }
 
 const PAID_ICONS: Record<PaidPlanId, Icon> = { pro: RocketLaunchIcon, premium: CrownIcon };
 
-/** Pro or Premium: sold here once billing is on, and until then marked coming soon, leading to sales. */
-function PaidPlan({ plan, billing }: { plan: PaidPlanId; billing: boolean }) {
+/** Online checkout is used when available; otherwise the plan can be activated through sales. */
+function PaidPlan({ plan, billing, interval, monthlyCredits, onCreditsChange, portalContainer }: { plan: PaidPlanId; billing: boolean; interval: BillingInterval; monthlyCredits: number; onCreditsChange: (credits: number) => void; portalContainer: RefObject<HTMLElement | null> }) {
 	return (
 		<article className={CARD}>
-			<PlanHeading id={plan} icon={PAID_ICONS[plan]}>
-				{!billing && <ComingSoon />}
-			</PlanHeading>
-			<Price cents={PLAN_PRICES_CENTS[plan]} />
-			<p className="mt-1 text-sm text-public-muted">Billed monthly. Cancel any time.</p>
-			<Allowance>{formatCredits(PLAN_LIMITS[plan].aiCredits)} AI credits a month</Allowance>
-			{billing ? <PlanButton plan={plan} className="mt-6" /> : (
-				<>
-					<PillLink to={contactPath(plan)} variant="charcoal" className="mt-6">
-						Get {planById(plan).name}
-					</PillLink>
-					<p className="mt-3 text-center text-xs text-public-muted">Paid plans are coming soon. Tell us what you need and we'll set you up as they open.</p>
-				</>
-			)}
-			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8">
+			<PlanHeading id={plan} icon={PAID_ICONS[plan]} />
+			<Price cents={planPriceCents(plan, interval, monthlyCredits) / (interval === 'year' ? 12 : 1)} />
+			<p className="mt-1 min-h-10 text-sm text-public-muted">{interval === 'year' ? formatMarketingCopy(marketingCopy.pricing.billing.yearlyNote, { amount: formatUsd(planPriceCents(plan, interval, monthlyCredits)) }) : marketingCopy.pricing.billing.monthlyNote}</p>
+			<div className="mt-6 min-w-0 [&>div]:min-w-0 [&>div]:w-full">
+				<Select<number>
+					container={portalContainer}
+					aria-label={`${planById(plan).name} monthly AI credits`}
+					value={monthlyCredits}
+					onValueChange={(value) => { if (isPlanCreditAmount(plan, value)) onCreditsChange(value); }}
+					className="h-auto min-h-16 w-full bg-[#f5f6f8] px-4 py-3 text-sm"
+					renderValue={(value) => <span className="whitespace-normal text-left">{formatCredits(value)} AI credits a month</span>}
+					items={planCreditOptions(plan).map(value => ({ value, label: `${formatCredits(value)} AI credits a month` }))}
+				/>
+			</div>
+			<div className="mt-6">
+				{billing ? <PlanButton plan={plan} billingInterval={interval} monthlyCredits={monthlyCredits} className="w-full" /> : (
+					<>
+						<PillLink to={contactPath(plan)} variant="charcoal" className="w-full">
+							Get {planById(plan).name}
+						</PillLink>
+						<p className="mt-3 text-center text-xs text-public-muted">{plan === 'premium' ? marketingCopy.pricing.comparison.premiumContact : marketingCopy.pricing.comparison.proContact}</p>
+					</>
+				)}
+			</div>
+			<ul className="mt-8 grid gap-3 border-t border-dashed border-public-line pt-8 md:self-start">
 				<PaidFeatures plan={plan} />
 			</ul>
 		</article>
@@ -141,20 +167,25 @@ function PaidPlan({ plan, billing }: { plan: PaidPlanId; billing: boolean }) {
 }
 
 /** 1Password's business pricing: Basic, Pro and Premium side by side in one frame, Enterprise on its own band below. */
-export function PlanCards() {
+export function PlanCards({ interval = 'month', onIntervalChange = () => undefined, credits, onCreditsChange }: { interval?: BillingInterval; onIntervalChange?: (interval: BillingInterval) => void; credits?: Record<PaidPlanId, number>; onCreditsChange?: (plan: PaidPlanId, credits: number) => void }) {
+ const portalContainer = useRef<HTMLElement>(null);
+ const [localCredits, setLocalCredits] = useState({ pro: PLAN_LIMITS.pro.aiCredits, premium: PLAN_LIMITS.premium.aiCredits });
+ const selected = credits ?? localCredits;
+ const chooseCredits = onCreditsChange ?? ((plan: PaidPlanId, amount: number) => setLocalCredits(current => ({ ...current, [plan]: amount })));
 	const billing = useBillingOn();
 	return (
-		<section aria-labelledby="plans-title" className="bg-white px-4 pt-16 pb-6 sm:px-6 sm:pt-20">
+		<section ref={portalContainer} aria-labelledby="plans-title" className="public-plan-controls bg-white px-4 pt-16 pb-6 sm:px-6 sm:pt-20">
 			<h2 id="plans-title" className="sr-only">
 				Plans
 			</h2>
-			<div className="mx-auto grid max-w-[1248px] overflow-hidden rounded-[25px] ring-1 ring-[#c9dbff] md:grid-cols-3 md:divide-x md:divide-[#c9dbff] max-md:divide-y max-md:divide-[#c9dbff]">
-				<BasicPlan billing={billing} />
-				<PaidPlan plan="pro" billing={billing} />
-				<PaidPlan plan="premium" billing={billing} />
+			<div className="mb-8"><BillingIntervalPicker value={interval} onChange={onIntervalChange} monthly={marketingCopy.pricing.billing.monthly} yearly={marketingCopy.pricing.billing.yearly} savings={marketingCopy.pricing.billing.savings} /></div>
+			<div className="mx-auto grid max-w-[1248px] overflow-hidden rounded-[25px] ring-1 ring-[#c9dbff] md:grid-cols-3 md:grid-rows-[repeat(6,auto)_1fr] md:divide-x md:divide-[#c9dbff] max-md:divide-y max-md:divide-[#c9dbff]">
+				<BasicPlan />
+				<PaidPlan portalContainer={portalContainer} plan="pro" billing={billing} interval={interval} monthlyCredits={selected.pro} onCreditsChange={value => chooseCredits('pro', value)} />
+				<PaidPlan portalContainer={portalContainer} plan="premium" billing={billing} interval={interval} monthlyCredits={selected.premium} onCreditsChange={value => chooseCredits('premium', value)} />
 			</div>
 			<EnterpriseBand />
-			<p className="mx-auto mt-6 max-w-[1248px] text-center text-xs text-public-muted">Prices are in US dollars and exclude any applicable taxes.</p>
+			<p className="mx-auto mt-6 max-w-[1248px] text-center text-xs text-public-muted">Prices are in US dollars and exclude any applicable taxes. {marketingCopy.pricing.creditsNote}</p>
 		</section>
 	);
 }

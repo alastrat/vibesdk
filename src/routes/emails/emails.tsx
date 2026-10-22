@@ -1,3 +1,6 @@
+import { useBilling } from '@/hooks/use-billing';
+import { DEFAULT_SHOPPER_EMAIL_TEMPLATES } from '@/api-types';
+import { PlanButton } from '@/components/billing/PlanButton';
 import { INTL_LOCALE } from 'shared/i18n/locales';
 import { getLocale, t, useI18n } from '@/lib/i18n';
 import { useState, type FormEvent } from 'react';
@@ -25,7 +28,7 @@ export default function ShopperEmailsPage() {
 			<div className="container max-w-5xl mx-auto px-4 py-8 grid gap-6">
 				<div className="grid gap-1">
 					<h1 className="text-3xl font-semibold text-kumo-strong">{t("Emails")}</h1>
-					<p className="text-kumo-subtle">{t("Estori emails your shoppers when they order, when you ship and when they're refunded. Edit what each email says, or turn it off.")}</p>
+					<p className="text-kumo-subtle">{t("Manage order confirmations, shipping updates and refund emails.")}</p>
 				</div>
 
 				{stores.data ? (
@@ -69,10 +72,14 @@ export default function ShopperEmailsPage() {
 }
 
 function StoreEmails({ appId, data }: { appId: string; data: ShopperEmailsData }) {
-	useI18n();
+	const i18n = useI18n();
+	const billing = useBilling();
+	const canSend = billing.data?.enabled === false || billing.data?.limits.shopperEmails === true;
+	const canCustomize = canSend && (billing.data?.enabled === false || billing.data?.limits.customShopperEmails === true);
 	const [editing, setEditing] = useState<ShopperEmailKind | null>(null);
 	const save = useSaveShopperEmail(appId);
-	const template = data.templates.find((candidate) => candidate.kind === editing);
+	const templates = canCustomize ? data.templates : data.templates.map(template => ({ ...template, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES[template.kind], edited: false }));
+	const template = templates.find((candidate) => candidate.kind === editing);
 
 	const toggle = (current: ShopperEmailTemplateView, enabled: boolean) => {
 		const { kind, edited: _edited, ...fields } = current;
@@ -87,15 +94,22 @@ function StoreEmails({ appId, data }: { appId: string; data: ShopperEmailsData }
 
 	return (
 		<>
+			{billing.data?.enabled && !canCustomize && (
+				<div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-kumo-fill p-4 text-sm">
+					<p>{!canSend ? t('Automatic shopper emails and store sender addresses come with Pro and Premium.') : t('Custom email wording and reply addresses come with Premium.')}</p>
+					<PlanButton plan={canSend ? "premium" : "pro"} i18n={i18n} className="px-4 py-2 text-sm" />
+				</div>
+			)}
+			{billing.isError && <p className="text-sm text-kumo-subtle">{billing.error.message}</p>}
 			<ul className="grid gap-3 sm:grid-cols-3">
-				{data.templates.map((template) => (
+				{templates.map((template) => (
 					<li key={template.kind} className="grid content-between gap-3 rounded-lg border border-kumo-line p-4 text-sm">
 						<div className="grid gap-1">
 							<div className="flex items-center justify-between gap-2">
 								<span className="font-medium text-kumo-default">{t(SHOPPER_EMAIL_LABELS[template.kind].name)}</span>
 								<Switch
-									checked={template.enabled}
-									disabled={save.isPending}
+									checked={canSend && template.enabled}
+									disabled={save.isPending || !canCustomize}
 									onCheckedChange={(enabled) => toggle(template, enabled)}
 									aria-label={t("Send the {value1} email", { value1: t(SHOPPER_EMAIL_LABELS[template.kind].name).toLowerCase() })}
 								/>
@@ -104,15 +118,15 @@ function StoreEmails({ appId, data }: { appId: string; data: ShopperEmailsData }
 						</div>
 						<div className="flex items-center justify-between gap-2">
 							<Badge variant={template.edited ? 'outline' : 'secondary'}>{templateOrigin(template)}</Badge>
-							<Button size="sm" variant="secondary" onClick={() => setEditing(template.kind)}>{t("Edit")}</Button>
+							<Button size="sm" variant="secondary" disabled={!canSend} onClick={() => setEditing(template.kind)}>{canCustomize ? t("Edit") : t("Preview and test")}</Button>
 						</div>
 					</li>
 				))}
 			</ul>
 
-			<p className="text-sm text-kumo-subtle">{t("Shoppers get these emails from {sender}, under your store's name.", { sender: data.senderEmail })}</p>
+			{canSend && <p className="text-sm text-kumo-subtle">{t("Shoppers get these emails from {sender}, under your store's name.", { sender: data.senderEmail })}</p>}
 
-			<ReplyToForm appId={appId} replyTo={data.replyTo} sellerEmail={data.sellerEmail} />
+			<ReplyToForm key={`${appId}:${canCustomize}:${canCustomize ? data.replyTo : ""}`} appId={appId} replyTo={canCustomize ? data.replyTo : null} sellerEmail={data.sellerEmail} disabled={!canCustomize} />
 
 			<section className="grid gap-3">
 				<h2 className="text-lg font-semibold text-kumo-strong">{t("Recent emails")}</h2>
@@ -126,12 +140,12 @@ function StoreEmails({ appId, data }: { appId: string; data: ShopperEmailsData }
 				)}
 			</section>
 
-			{template && <TemplateEditor appId={appId} template={template} placeholders={data.placeholders[template.kind]} onClose={() => setEditing(null)} />}
+			{canSend && template && <TemplateEditor key={`${template.kind}:${canCustomize}`} readOnly={!canCustomize} appId={appId} template={template} placeholders={data.placeholders[template.kind]} onClose={() => setEditing(null)} />}
 		</>
 	);
 }
 
-function ReplyToForm({ appId, replyTo, sellerEmail }: { appId: string; replyTo: string | null; sellerEmail: string | null }) {
+function ReplyToForm({ appId, replyTo, sellerEmail, disabled }: { appId: string; replyTo: string | null; sellerEmail: string | null; disabled: boolean }) {
 	useI18n();
 	const [value, setValue] = useState(replyTo ?? '');
 	const settings = useSaveShopperEmailSettings(appId);
@@ -144,10 +158,10 @@ function ReplyToForm({ appId, replyTo, sellerEmail }: { appId: string; replyTo: 
 		<form className="grid max-w-md gap-2 text-sm" onSubmit={submit}>
 			<label className="grid gap-1">
 				<span className="font-medium text-kumo-default">{t("Replies go to")}</span>
-				<Input type="email" value={value} maxLength={254} placeholder={sellerEmail ?? t("you@yourstore.com")} onChange={(event) => setValue(event.target.value)} />
+				<Input type="email" disabled={disabled} value={value} maxLength={254} placeholder={sellerEmail ?? t("you@yourstore.com")} onChange={(event) => setValue(event.target.value)} />
 			</label>
 			<span className="text-kumo-subtle">{t('When a shopper replies to an email, it reaches this address. Leave it empty to use your account email{email}.', { email: sellerEmail ? ` (${sellerEmail})` : '' })}</span>
-			<Button type="submit" size="sm" variant="secondary" className="w-fit" disabled={settings.isPending} loading={settings.isPending}>{t("Save")}</Button>
+			<Button type="submit" size="sm" variant="secondary" className="w-fit" disabled={disabled || settings.isPending} loading={settings.isPending}>{t("Save")}</Button>
 		</form>
 	);
 }

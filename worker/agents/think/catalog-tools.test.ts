@@ -62,8 +62,8 @@ describe('the catalog tools', () => {
 		for (const phrase of ['estori-store.json', 'catalogVariantId', 'minimumRetailPriceCents']) expect(description).toContain(phrase);
 	});
 
-	it("tell the AI, in the seller's words, that catalog products need Pro or Premium", async () => {
-		const refusal = { code: 'plan_limit' as const, limit: 'supplierCatalog' as const, plan: 'basic' as const, upgradeTo: 'pro' as const, message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' };
+	it("tell the AI when catalog access is explicitly restricted on an account", async () => {
+		const refusal = { code: 'plan_limit' as const, limit: 'supplierCatalog' as const, plan: 'basic' as const, upgradeTo: null, message: 'Catalog access is disabled for your account. Products already live keep selling. Contact support for help.' };
 		const basic = createCatalogTools({ search: async () => [PRODUCT], get: async () => PRODUCT, catalogRefusal: async () => refusal, paused: async () => false });
 		for (const output of [await run(basic.search_catalog, {}), await run(basic.get_catalog_product, { productId: 'cp_1' })]) {
 			expect(JSON.parse(output).notice).toBe(`${refusal.message} Tell the seller this before adding a catalog product to their store.`);

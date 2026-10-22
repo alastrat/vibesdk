@@ -1,7 +1,7 @@
 ---
 title: Terms of Service
-version: 2026-10-19
-updated: October 19, 2026
+version: 2026-10-21
+updated: October 21, 2026
 ---
 
 These Terms of Service ("Terms") are an agreement between you and {{entity.name}}, {{entity.kind}} ("Globalink", "we", "us"), which operates Estori at estori.app (the "Service"). By creating an account or using the Service, you agree to these Terms and to our [Privacy Policy](/privacy). If you don't agree, don't use the Service.
@@ -92,11 +92,11 @@ This section applies when a store you build on Estori takes payments from shoppe
 
 ## 11. Plans, AI credits and extra credits
 
-Estori has a free plan, Basic, and paid plans, Pro and Premium, at the prices on our pricing page when you subscribe. Paid plans are billed in US dollars to your card through Stripe, and renew automatically every month until you cancel. You can cancel any time from your billing page in Estori. Cancelling takes effect at the end of the period you paid for; until then you keep your plan. Moving from Pro to Premium takes effect at once, and we charge the difference for the rest of the period. Moving from Premium to Pro takes effect at the next renewal. There are no refunds for part of a period or for a move to Pro. If a renewal payment fails, your plan's features continue for 7 days while we retry the payment; that period's AI credits start once the payment goes through, and your account moves to Basic if it still isn't paid.
+Estori has a free plan, Basic, and paid plans, Pro and Premium, at the prices on our pricing page when you subscribe. Paid plans are billed in US dollars to your card through Stripe, and renew automatically every month or year, according to the billing frequency you choose at checkout, until you cancel. Yearly billing applies a 20% discount to the monthly rate, rounds that rate down to whole US dollars, and charges twelve months in full at the start of each year. Your included AI credits still renew every month. You can cancel any time from your billing page in Estori. Cancelling takes effect at the end of the period you paid for; until then you keep your plan. Moving from Pro to Premium at the same billing frequency takes effect at once, and we charge the difference for the rest of the paid period. Moving from Premium to Pro, or changing billing frequency, takes effect at the next renewal. There are no refunds for part of a period or for a move to Pro. If a renewal payment fails, your plan's features continue for 7 days while we retry the payment; that period's AI credits start once the payment goes through, and your account moves to Basic if it still isn't paid.
 
-Each plan includes AI credits for each period. Credits pay for the AI's work: each step the AI takes is charged from the AI's real usage, at the price of the model you choose. Monthly credits don't carry over to the next period. Credits have no cash value and can't be transferred or exchanged for money.
+Each plan includes AI credits for each period. On Pro and Premium, the monthly credit allowance you select is included in your recurring subscription price. Increasing that allowance at the same billing frequency takes effect immediately, with the difference charged for the rest of your paid period. Decreasing it takes effect at your next renewal. Credits pay for the AI's work: each step the AI takes is charged from the AI's real usage, at the price of the model you choose. Monthly credits don't carry over to the next period. Credits have no cash value and can't be transferred or exchanged for money.
 
-On Premium you can buy extra credits. Extra credits are used after your monthly credits and expire 12 months after purchase. They stay yours if you change plans. Extra credits are non-refundable, except when you were charged twice or your account could not use them; refunded extra credits that are still unused are removed from your account.
+You can buy extra credits on any plan. The price per credit is the same across plans. Extra credits are used after your monthly credits and expire 12 months after purchase. They stay yours if you change plans. Extra credits are non-refundable, except when you were charged twice or your account could not use them; refunded extra credits that are still unused are removed from your account.
 
 A turn the AI has started always finishes. If it uses more credits than you had left, the difference is taken from your extra credits; if you have none, we don't charge you for it.
 

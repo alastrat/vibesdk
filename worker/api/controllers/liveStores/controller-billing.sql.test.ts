@@ -51,38 +51,50 @@ async function call(method: 'publish' | 'addDomain', appId: string, userId: stri
 }
 
 describe('plan limits at Go live', () => {
-	it("republishes Basic's live store, and refuses a second live store before anything is published", async () => {
-		await new LiveStoreService(envWith(db)).publish({ appId: 'app_live', slug: 'app-live', commit: 'c0ffee0', now: new Date() });
-		const { namespace, published } = spaces();
-		expect((await call('publish', 'app_live', 'u_basic', namespace)).status).toBe(200);
-		const refused = await call('publish', 'app_next', 'u_basic', namespace);
-		expect(refused.status).toBe(402);
-		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'liveStores', plan: 'basic', upgradeTo: 'pro' });
-		expect(published.map((entry) => entry.appId)).toEqual(['app_live']);
-	});
-
-	it("frees a live store's place when it goes offline, and counts only the account's own stores", async () => {
+	it.each([
+		{ plan: 'basic', cap: 2 },
+		{ plan: 'pro', cap: 5 },
+		{ plan: 'premium', cap: 20 },
+	] as const)('publishes all $cap stores on $plan, permits republishing, and refuses another', async ({ plan, cap }) => {
+		const userId = `u_publish_${plan}`;
+		await insertUser(db, userId);
+		if (plan !== 'basic') await insertSubscription(db, { userId, stripeSubscriptionId: `sub_publish_${plan}`, status: 'active', plan, currentPeriodStart: new Date(Date.now() - DAY), currentPeriodEnd: new Date(Date.now() + 29 * DAY) });
 		const stores = new LiveStoreService(envWith(db));
-		await stores.publish({ appId: 'app_live', slug: 'app-live', commit: 'c0ffee0', now: new Date() });
-		await stores.publish({ appId: 'app_pro_2', slug: 'app-pro-2', commit: 'c0ffee0', now: new Date() });
-		expect(await stores.liveCountOf('u_basic')).toBe(1);
-		await stores.setOffline('app_live', new Date());
-		expect(await stores.liveCountOf('u_basic')).toBe(0);
 		const { namespace, published } = spaces();
-		expect((await call('publish', 'app_next', 'u_basic', namespace)).status).toBe(200);
-		expect((await call('publish', 'app_live', 'u_basic', namespace)).status).toBe(402);
-		expect(published.map((entry) => entry.appId)).toEqual(['app_next']);
+		for (let i = 0; i <= cap; i++) {
+			const appId = `publish_${plan}_${i}`;
+			await insertApp(db, { id: appId, userId });
+			const response = await call('publish', appId, userId, namespace);
+			if (i < cap) expect(response.status).toBe(200);
+			else {
+				expect(response.status).toBe(402);
+				expect((await response.json()).error.planLimit).toMatchObject({ limit: 'liveStores', plan });
+			}
+		}
+		expect(await stores.liveCountOf(userId)).toBe(cap);
+		expect(published).toHaveLength(cap);
+		expect((await call('publish', `publish_${plan}_0`, userId, namespace)).status).toBe(200);
+		await stores.setOffline(`publish_${plan}_0`, new Date());
+		expect((await call('publish', `publish_${plan}_${cap}`, userId, namespace)).status).toBe(200);
+		expect(await stores.liveCountOf(userId)).toBe(cap);
 	});
 
-	it('asks SpaceDO to refuse new catalog products without the catalog, and answers with the plan limit', async () => {
-		await new LiveStoreService(envWith(db)).publish({ appId: 'app_live', slug: 'app-live', commit: 'c0ffee0', now: new Date() });
-		const basic = spaces(true);
-		const refused = await call('publish', 'app_live', 'u_basic', basic.namespace);
+	it('publishes new catalog products on Basic and Pro', async () => {
+		for (const [userId, appId] of [['u_basic', 'app_live'], ['u_pro', 'app_pro_1']] as const) {
+			const store = spaces(true);
+			expect((await call('publish', appId, userId, store.namespace)).status).toBe(200);
+			expect(store.published).toEqual([{ appId, refuseNewCatalogProducts: false }]);
+		}
+	});
+
+	it('preserves an explicit account restriction on catalog publishing', async () => {
+		await insertUser(db, 'u_catalog_restricted');
+		await insertApp(db, { id: 'app_catalog_restricted', userId: 'u_catalog_restricted' });
+		await db.prepare("INSERT INTO plan_overrides (id, user_id, plan, limits, until, admin_user_id, reason, created_at) VALUES ('po_catalog', 'u_catalog_restricted', 'basic', ?, NULL, 'u_basic', 'Catalog restriction', ?)").bind(JSON.stringify({ supplierCatalog: false }), Math.floor(Date.now() / 1000)).run();
+		const store = spaces(true);
+		const refused = await call('publish', 'app_catalog_restricted', 'u_catalog_restricted', store.namespace);
 		expect(refused.status).toBe(402);
-		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'supplierCatalog', message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' });
-		const pro = spaces(true);
-		expect((await call('publish', 'app_pro_1', 'u_pro', pro.namespace)).status).toBe(200);
-		expect(pro.published).toEqual([{ appId: 'app_pro_1', refuseNewCatalogProducts: false }]);
+		expect((await refused.json()).error.planLimit).toMatchObject({ limit: 'supplierCatalog', upgradeTo: null, message: 'Catalog access is disabled for your account. Products already live keep selling. Contact support for help.' });
 	});
 
 	it('refuses an own domain on Basic, and changes nothing while billing is off', async () => {

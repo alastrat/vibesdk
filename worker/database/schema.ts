@@ -1,3 +1,4 @@
+import { BILLING_INTERVALS } from '../../shared/types/plans';
 import { sql } from 'drizzle-orm';
 import { sqliteTable, text, integer, real, index, uniqueIndex, primaryKey } from 'drizzle-orm/sqlite-core';
 // Relative on purpose: drizzle-kit loads this file without the `shared` alias.
@@ -1273,6 +1274,10 @@ export const subscriptions = sqliteTable('subscriptions', {
     stripeSubscriptionId: text('stripe_subscription_id').notNull(),
     status: text('status', { enum: SUBSCRIPTION_STATUSES }).notNull(),
     plan: text('plan', { enum: PAID_PLAN_IDS }).notNull(),
+    monthlyCredits: integer('monthly_credits'),
+    pendingMonthlyCredits: integer('pending_monthly_credits'),
+    billingInterval: text('billing_interval', { enum: BILLING_INTERVALS }).notNull().default('month'),
+    pendingBillingInterval: text('pending_billing_interval', { enum: BILLING_INTERVALS }),
     currentPeriodStart: integer('current_period_start', { mode: 'timestamp' }).notNull(),
     currentPeriodEnd: integer('current_period_end', { mode: 'timestamp' }).notNull(),
     cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).notNull().default(false),

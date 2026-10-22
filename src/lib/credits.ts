@@ -7,7 +7,7 @@ import type { CapabilityId } from './capabilities';
  * changing a store are typical steps times that. The coming-soon actions have a fixed estimate. All are estimates:
  * bigger stores and longer requests take more steps.
  */
-export type UsageCategory = 'build' | 'change' | 'assistant' | 'personalization';
+export type UsageCategory = 'build' | 'change' | 'assistant';
 
 export interface CreditAction {
 	id: UsageCategory;
@@ -32,14 +32,6 @@ export const CREDIT_ACTIONS: readonly CreditAction[] = [
 		unit: 'task',
 		credits: 3,
 		capability: 'operations-agents',
-	},
-	{
-		id: 'personalization',
-		name: 'Personalized shopping',
-		description: 'Product picks, cart suggestions and smart search for each shopper.',
-		unit: '1,000 shopper visits',
-		credits: 3,
-		capability: 'personalized-shopping',
 	},
 ];
 
@@ -67,7 +59,6 @@ export interface Usage {
 	newStores: number;
 	changesPerStore: number;
 	assistantTasksPerStore: number;
-	visitsPerStore: number;
 }
 
 export function actionById(category: UsageCategory): CreditAction {
@@ -86,8 +77,6 @@ export function creditsFor(category: UsageCategory, usage: Usage): number {
 			return usage.stores * usage.changesPerStore * each;
 		case 'assistant':
 			return usage.stores * usage.assistantTasksPerStore * each;
-		case 'personalization':
-			return Math.round(usage.stores * (usage.visitsPerStore / 1_000) * each);
 	}
 }
 
@@ -102,11 +91,10 @@ export function typicalUsage(stores: number, creditsPerStep: number): Usage {
 	return {
 		creditsPerStep,
 		stores: count,
-		categories: { build: true, change: true, assistant: false, personalization: false },
+		categories: { build: true, change: true, assistant: false },
 		newStores: count,
 		changesPerStore: 30,
 		assistantTasksPerStore: 150,
-		visitsPerStore: 5_000,
 	};
 }
 

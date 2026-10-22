@@ -8,6 +8,8 @@ export function usePublicPlan() {
 		queryKey: queryKeys.platform.plan(),
 		queryFn: () => unwrap(apiClient.getPublicPlan(), "Couldn't load the plan limits"),
 		retry: false,
-		staleTime: 10 * 60 * 1000,
+		// Recheck rollout availability when pricing or billing mounts, even after a restored cache.
+		staleTime: 60_000,
+		refetchOnMount: 'always',
 	});
 }

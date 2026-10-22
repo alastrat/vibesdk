@@ -18,7 +18,7 @@ describe('the Upgrade dialog', () => {
 	});
 
 	it('has a title for every limit', () => {
-		expect(Object.keys(UPGRADE_TITLES).sort()).toEqual(['aiCredits', 'extraCredits', 'liveStores', 'newStoresPerDay', 'ownDomainsPerLiveStore', 'storesLifetime', 'supplierCatalog']);
+		expect(Object.keys(UPGRADE_TITLES).sort()).toEqual(['aiCredits', 'customShopperEmails', 'extraCredits', 'flexiblePayouts', 'liveStores', 'newStoresPerDay', 'orderRefunds', 'ownDomainsPerLiveStore', 'shipmentTracking', 'shopperEmails', 'storesLifetime', 'supplierCatalog']);
 	});
 
 	it('titles own domains by whether the plan has them', () => {

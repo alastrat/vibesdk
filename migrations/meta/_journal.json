@@ -246,6 +246,20 @@
       "when": 1792563138296,
       "tag": "0034_store_extraction_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1792623415761,
+      "tag": "0035_yearly_subscriptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1792634802513,
+      "tag": "0036_recurring_credit_allowances",
+      "breakpoints": true
     }
   ]
 }

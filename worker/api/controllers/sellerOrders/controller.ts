@@ -1,3 +1,5 @@
+import { loadAccount } from '../../../services/billing/account';
+import { assertWithinLimit } from '../../../services/i18n/plan-limits';
 import { msg } from '../../../../shared/i18n/translate';
 /** The signed-in seller's orders across their stores: the list, one order, and marking it shipped. */
 
@@ -53,6 +55,12 @@ export class SellerOrdersController extends BaseController {
         if (!orderId || !shipment) return SellerOrdersController.createErrorResponse(msg('Send shipped, and a known carrier and tracking number'), 400);
         try {
             const sellerUserId = context.user!.id;
+            if (shipment.shipped && (shipment.carrier || shipment.trackingNumber)) {
+                const order = await new StoreOrderService(env).getOrder(orderId);
+                if (!order || order.sellerUserId !== sellerUserId) return SellerOrdersController.createErrorResponse(msg('Order not found'), 404);
+                const refusal = assertWithinLimit(await loadAccount(env, sellerUserId), 'shipmentTracking');
+                if (refusal) return SellerOrdersController.createPlanLimitResponse(refusal);
+            }
             const result = await new SellerOrderService(env).setShipment({
                 sellerUserId,
                 orderId,
@@ -87,6 +95,7 @@ export class SellerOrdersController extends BaseController {
             const order = await new StoreOrderService(env).getOrder(orderId);
             if (!order || order.sellerUserId !== context.user!.id) return SellerOrdersController.createErrorResponse(msg('Order not found'), 404);
             const outcome = await refundOrderLines(env, order, refundRequest, (sending) => ctx.waitUntil(sending));
+            if (!outcome.ok && outcome.status === 402) return SellerOrdersController.createPlanLimitResponse(outcome.refusal);
             return outcome.ok ? SellerOrdersController.createSuccessResponse({ refundedCents: outcome.refundedCents }) : SellerOrdersController.createErrorResponse(outcome.message, outcome.status);
         } catch (error) {
             return SellerOrdersController.handleError(error, 'refund an order') as ControllerResponse<ApiResponse<StoreRefundResponse>>;

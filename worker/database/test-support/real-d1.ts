@@ -91,12 +91,12 @@ export async function insertCheckout(db: D1Database, checkout: { id: string; sel
 /** A subscription row with only the columns billing reads; Stripe created it when its current period began. */
 export async function insertSubscription(
 	db: D1Database,
-	subscription: { userId: string; stripeSubscriptionId: string; status: string; plan?: 'pro' | 'premium'; currentPeriodStart: Date; currentPeriodEnd: Date; cancelAtPeriodEnd?: boolean },
+	subscription: { userId: string; stripeSubscriptionId: string; status: string; plan?: 'pro' | 'premium'; currentPeriodStart: Date; currentPeriodEnd: Date; cancelAtPeriodEnd?: boolean; billingInterval?: 'month' | 'year'; monthlyCredits?: number },
 ): Promise<void> {
 	await db
 		.prepare(
-			`INSERT INTO subscriptions (user_id, stripe_subscription_id, status, plan, current_period_start, current_period_end, cancel_at_period_end, stripe_created_at, updated_at)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			`INSERT INTO subscriptions (user_id, stripe_subscription_id, status, plan, current_period_start, current_period_end, cancel_at_period_end, stripe_created_at, updated_at, billing_interval, monthly_credits)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		)
 		.bind(
 			subscription.userId,
@@ -108,6 +108,8 @@ export async function insertSubscription(
 			subscription.cancelAtPeriodEnd ? 1 : 0,
 			seconds(subscription.currentPeriodStart),
 			seconds(subscription.currentPeriodStart),
+			subscription.billingInterval ?? 'month',
+			subscription.monthlyCredits ?? null,
 		)
 		.run();
 }

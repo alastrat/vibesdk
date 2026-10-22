@@ -81,7 +81,7 @@ function PlanOrder({ order, state, onApply, onRemove }: { order: Extract<Checkou
 				<h2 className="text-2xl font-semibold text-kumo-strong">{t('Estori {plan}', { plan: planName(order.plan) })}</h2>
 				<p className="text-lg text-kumo-default">
 					{formatUsd(order.priceCents, getLocale())}
-					<span className="text-sm text-kumo-subtle"> {t('a month')}</span>
+					<span className="text-sm text-kumo-subtle"> {order.billingInterval === 'year' ? t('a year') : t('a month')}</span>
 				</p>
 			</div>
 			<ul className="grid gap-1.5 text-sm text-kumo-subtle">

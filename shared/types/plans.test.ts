@@ -24,18 +24,35 @@ function account(overrides: Partial<PlanAccountInput> = {}): PlanAccount {
 	return { billing: input.billing, plan: input.plan, limits: limitsFor(input), creditsResetAt: RESET };
 }
 
-const PREMIUM_ROW = { aiCredits: 100_000, storesLifetime: null, newStoresPerDay: 25, liveStores: 10, ownDomainsPerLiveStore: 1, supplierCatalog: true, extraCredits: true, draftsPerStore: 5 };
+const PREMIUM_ROW = { aiCredits: 100_000, storesLifetime: 20, newStoresPerDay: null, liveStores: 20, ownDomainsPerLiveStore: 1, supplierCatalog: true, extraCredits: true, shopperEmails: true, customShopperEmails: true, shipmentTracking: true, orderRefunds: true, flexiblePayouts: true, draftsPerStore: 5 };
 
 describe('the plan table', () => {
 	it("holds the owner's plans, prices and limits", () => {
 		expect(PLAN_PRICES_CENTS).toEqual({ pro: 4_900, premium: 19_900 });
 		expect(PLAN_LIMITS).toEqual({
-			basic: { aiCredits: 5_000, storesLifetime: 3, newStoresPerDay: null, liveStores: 1, ownDomainsPerLiveStore: 0, supplierCatalog: false, extraCredits: false, draftsPerStore: 5 },
-			pro: { aiCredits: 20_000, storesLifetime: null, newStoresPerDay: 10, liveStores: 3, ownDomainsPerLiveStore: 1, supplierCatalog: true, extraCredits: false, draftsPerStore: 5 },
+			basic: { aiCredits: 5_000, storesLifetime: 2, newStoresPerDay: null, liveStores: 2, ownDomainsPerLiveStore: 0, supplierCatalog: true, extraCredits: true, shopperEmails: false, customShopperEmails: false, shipmentTracking: false, orderRefunds: false, flexiblePayouts: false, draftsPerStore: 5 },
+			pro: { aiCredits: 20_000, storesLifetime: 5, newStoresPerDay: null, liveStores: 5, ownDomainsPerLiveStore: 1, supplierCatalog: true, extraCredits: true, shopperEmails: true, customShopperEmails: false, shipmentTracking: false, orderRefunds: false, flexiblePayouts: true, draftsPerStore: 5 },
 			premium: PREMIUM_ROW,
 			enterprise: PREMIUM_ROW,
 		});
 		expect(DRAFT_LIMIT).toBe(5);
+	});
+
+	it('reserves shopper emails, customization and payout schedule changes for Pro and above', () => {
+		for (const key of ['shopperEmails', 'flexiblePayouts'] as const) {
+			expect(PLAN_LIMITS.basic[key]).toBe(false);
+			for (const plan of ['pro', 'premium', 'enterprise'] as const) expect(PLAN_LIMITS[plan][key]).toBe(true);
+			expect(assertWithinLimit(account(), key)).toMatchObject({ limit: key, plan: 'basic', upgradeTo: 'pro' });
+			expect(assertWithinLimit(account({ plan: 'pro' }), key)).toBeNull();
+			expect(assertWithinLimit(account({ billing: false }), key)).toBeNull();
+		}
+	});
+
+	it('includes the supplier catalog on every plan while preserving explicit account restrictions', () => {
+		for (const plan of ['basic', 'pro', 'premium', 'enterprise'] as const) {
+			expect(assertWithinLimit(account({ plan }), 'supplierCatalog')).toBeNull();
+			expect(assertWithinLimit(account({ plan, adminLimits: { supplierCatalog: false } }), 'supplierCatalog')).toMatchObject({ limit: 'supplierCatalog', upgradeTo: null, message: 'Catalog access is disabled for your account. Products already live keep selling. Contact support for help.' });
+		}
 	});
 
 	it('sells extra credits from 5,000 to 1,000,000 in steps of 1,000, at $1.50 per 1,000', () => {
@@ -50,7 +67,7 @@ describe('the plan table', () => {
 describe('limitsFor', () => {
 	it("gives each plan its row, and an admin override wins", () => {
 		expect(limitsFor({ billing: true, plan: 'pro', adminLimits: null })).toEqual(PLAN_LIMITS.pro);
-		expect(limitsFor({ billing: true, plan: 'enterprise', adminLimits: { aiCredits: 1_000_000, liveStores: 50 } })).toMatchObject({ aiCredits: 1_000_000, liveStores: 50, newStoresPerDay: 25 });
+		expect(limitsFor({ billing: true, plan: 'enterprise', adminLimits: { aiCredits: 1_000_000, liveStores: 50 } })).toMatchObject({ aiCredits: 1_000_000, liveStores: 50, newStoresPerDay: null });
 		expect(limitsFor({ billing: true, plan: 'basic', adminLimits: { storesLifetime: null } }).storesLifetime).toBeNull();
 	});
 
@@ -70,27 +87,29 @@ describe('assertWithinLimit', () => {
 			upgradeTo: 'pro',
 			message: "You've used this month's free AI credits. They refill on November 19, or get Pro for 20,000 a month.",
 		});
-		expect(assertWithinLimit(basic, 'storesLifetime', 2)).toBeNull();
-		expect(assertWithinLimit(basic, 'storesLifetime', 3)).toMatchObject({ upgradeTo: 'pro', message: "Basic includes 3 stores, counting ones you've deleted. Get Pro to start up to 10 a day." });
+		expect(assertWithinLimit(basic, 'storesLifetime', 1)).toBeNull();
+		expect(assertWithinLimit(basic, 'storesLifetime', 2)).toMatchObject({ upgradeTo: 'pro', message: "Basic includes 2 stores, counting ones you've deleted. Upgrade to Pro for up to 5." });
 		expect(assertWithinLimit(basic, 'newStoresPerDay', 99)).toBeNull();
-		expect(assertWithinLimit(basic, 'liveStores', 1)).toMatchObject({ upgradeTo: 'pro', message: 'Basic includes 1 live store. Get Pro for up to 3, or Premium for up to 10.' });
+		expect(assertWithinLimit(basic, 'liveStores', 2)).toMatchObject({ upgradeTo: 'pro', message: 'Basic includes 2 live stores. Get Pro for up to 5, or Premium for up to 20.' });
 		expect(assertWithinLimit(basic, 'ownDomainsPerLiveStore', 0)).toMatchObject({ upgradeTo: 'pro', message: 'Own domains come with Pro and Premium.' });
-		expect(assertWithinLimit(basic, 'supplierCatalog')).toMatchObject({ upgradeTo: 'pro', message: 'Adding catalog products to your store comes with Pro and Premium. Products already live keep selling.' });
-		expect(assertWithinLimit(basic, 'extraCredits')).toMatchObject({ upgradeTo: 'premium', message: 'Buying extra credits comes with Premium.' });
+		expect(assertWithinLimit(basic, 'supplierCatalog')).toBeNull();
+		expect(assertWithinLimit(basic, 'extraCredits')).toBeNull();
 	});
 
 	it('points Pro at Premium, Premium at extra credits or Enterprise, and Enterprise nowhere', () => {
 		const pro = account({ plan: 'pro' });
 		expect(assertWithinLimit(pro, 'aiCredits', 20_000)).toMatchObject({ upgradeTo: 'premium', message: "You've used this month's AI credits. They refill on November 19, or move to Premium for 100,000 a month." });
-		expect(assertWithinLimit(pro, 'newStoresPerDay', 10)).toMatchObject({ upgradeTo: 'premium', message: "You've started 10 new stores today. Start more tomorrow, or move to Premium for up to 25 a day." });
-		expect(assertWithinLimit(pro, 'liveStores', 3)).toMatchObject({ upgradeTo: 'premium', message: 'Pro includes 3 live stores. Move to Premium for up to 10.' });
+		expect(assertWithinLimit(pro, 'newStoresPerDay', 999)).toBeNull();
+		expect(assertWithinLimit(pro, 'storesLifetime', 5)).toMatchObject({ upgradeTo: 'premium', message: "Pro includes 5 stores, counting ones you've deleted. Upgrade to Premium for up to 20." });
+		expect(assertWithinLimit(pro, 'liveStores', 5)).toMatchObject({ upgradeTo: 'premium', message: 'Pro includes 5 live stores. Move to Premium for up to 20.' });
 		expect(assertWithinLimit(pro, 'supplierCatalog')).toBeNull();
 		expect(assertWithinLimit(pro, 'ownDomainsPerLiveStore', 0)).toBeNull();
 		expect(assertWithinLimit(pro, 'ownDomainsPerLiveStore', 1)).toMatchObject({ message: 'Your plan includes 1 own domain per live store. Talk to us to add more.' });
 		const premium = account({ plan: 'premium' });
 		expect(assertWithinLimit(premium, 'aiCredits', 100_000)).toMatchObject({ upgradeTo: 'credits', message: "You've used this month's AI credits. Buy more credits now, or wait until November 19." });
-		expect(assertWithinLimit(premium, 'newStoresPerDay', 25)).toMatchObject({ upgradeTo: 'enterprise', message: "You've started 25 new stores today. Start more tomorrow, or talk to us about Enterprise." });
-		expect(assertWithinLimit(premium, 'liveStores', 10)).toMatchObject({ upgradeTo: 'enterprise', message: 'Premium includes 10 live stores. Talk to us about Enterprise for more.' });
+		expect(assertWithinLimit(premium, 'newStoresPerDay', 999)).toBeNull();
+		expect(assertWithinLimit(premium, 'storesLifetime', 20)).toMatchObject({ upgradeTo: 'enterprise' });
+		expect(assertWithinLimit(premium, 'liveStores', 20)).toMatchObject({ upgradeTo: 'enterprise', message: 'Premium includes 20 live stores. Talk to us about Enterprise for more.' });
 		expect(assertWithinLimit(premium, 'extraCredits')).toBeNull();
 		expect(assertWithinLimit(premium, 'ownDomainsPerLiveStore', 1)).toMatchObject({ upgradeTo: 'enterprise', message: 'Your plan includes 1 own domain per live store. Talk to us to add more.' });
 		expect(assertWithinLimit(account({ plan: 'enterprise', adminLimits: { liveStores: 3 } }), 'liveStores', 3)).toMatchObject({ upgradeTo: null, message: 'Enterprise includes 3 live stores. Talk to us to raise it.' });
@@ -100,7 +119,7 @@ describe('assertWithinLimit', () => {
 	it('refuses nothing while billing is off, and recognizes a refusal that crossed the network', () => {
 		const off = account({ billing: false });
 		for (const key of ['aiCredits', 'storesLifetime', 'liveStores', 'supplierCatalog', 'extraCredits'] as const) expect(assertWithinLimit(off, key, 1_000_000)).toBeNull();
-		expect(isPlanLimitRefusal(JSON.parse(JSON.stringify(assertWithinLimit(account(), 'supplierCatalog'))))).toBe(true);
+		expect(isPlanLimitRefusal(JSON.parse(JSON.stringify(assertWithinLimit(account({ adminLimits: { supplierCatalog: false } }), 'supplierCatalog'))))).toBe(true);
 		expect(isPlanLimitRefusal({ code: 'plan_limit', limit: 'aiCredits', plan: 'pro', upgradeTo: null, paymentFailed: true, message: 'x' })).toBe(true);
 		for (const value of [
 			null,
@@ -180,4 +199,14 @@ describe('formatCredits', () => {
 		expect(formatCredits(100_000, 'pt-BR')).toBe('100.000');
 		expect(formatCredits(1_500, 'pt-BR')).toBe('1.500');
 	});
+});
+
+
+it('reserves custom email wording, reply-to, tracking and refunds for Premium, with valid overrides', () => {
+ for (const key of ['customShopperEmails','shipmentTracking','orderRefunds'] as const) {
+  for (const plan of ['basic','pro'] as const) expect(assertWithinLimit(account({plan}),key)).toMatchObject({limit:key,upgradeTo:'premium'});
+  expect(assertWithinLimit(account({plan:'premium'}),key)).toBeNull();
+  expect(assertWithinLimit(account({billing:false}),key)).toBeNull();
+  expect(planLimitOverridesFrom({[key]:true})).toEqual({[key]:true});
+ }
 });

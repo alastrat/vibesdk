@@ -1,9 +1,11 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 import publicCss from '../../styles/public-site.css?raw';
 
 const sources = import.meta.glob<string>(
 	[
 		'/src/components/layout/AnnouncementBar.tsx',
+		'/src/components/layout/PublicUtilityBar.tsx',
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/components/layout/PublicLayout.tsx',
@@ -27,19 +29,17 @@ function source(path: string): string {
 }
 
 describe('public chrome', () => {
-	it('announces Discover with the fee from the code, and links to its blog post on the right', () => {
-		const bar = source(ANNOUNCE);
-		expect(bar).toContain('PLATFORM_FEE_LABEL');
-		expect(bar).not.toMatch(/7% \+ \$0\.60/);
-		expect(bar).toContain('bg-public-gold');
-		expect(bar).toMatch(/<span className="truncate">Estori Discover is open/);
-		// Learn more takes the right-hand spot; signing in lives in the top bar.
-		expect(bar).not.toContain('Sign in');
-		expect(bar).toContain('to={blogPostPath(ANNOUNCEMENT_POST)}');
-		expect(bar).toMatch(/className=\{cn\('shrink-0 justify-self-end', UNDERLINE_FILL\)\}/);
-		// Centred on wide screens, with an empty column balancing Learn more; left-aligned where it truncates.
-		expect(bar).toContain('lg:grid-cols-[1fr_minmax(0,auto)_1fr]');
-		expect(bar).toContain('lg:justify-center');
+	it('keeps the gold announcement above the utility and main navigation rows', () => {
+		const announcement = source(ANNOUNCE);
+		expect(announcement).toContain('bg-public-gold');
+		expect(announcement).toContain('PLATFORM_FEE_LABEL');
+		expect(announcement).toContain('to={blogPostPath(ANNOUNCEMENT_POST)}');
+		const utility = source('/src/components/layout/PublicUtilityBar.tsx');
+		expect(utility).toContain('<PublicLanguageMenu />');
+		expect(utility).toContain('aria-label={marketingCopy.navigation.accessibility.utility}');
+		const top = source(TOP);
+		expect(top.indexOf('<AnnouncementBar />')).toBeLessThan(top.indexOf('<PublicUtilityBar />'));
+		expect(top.indexOf('<PublicUtilityBar />')).toBeLessThan(top.indexOf('<nav aria-label={marketingCopy.navigation.accessibility.main}'));
 	});
 
 	it('animates the phone menu: the burger turns into a cross, the sheet fades in and out, and its rows arrive in turn', () => {
@@ -63,7 +63,7 @@ describe('public chrome', () => {
 		expect(publicCss).toContain(".public-site [class*='animate-public-']");
 	});
 
-	it('shows the announcement above a white top bar with the blue build action and a phone menu', () => {
+	it('shows the utility row above a white top bar with the blue build action and a phone menu', () => {
 		const top = source(TOP);
 		expect(top).toContain('<AnnouncementBar />');
 		expect(top).toContain('hidden lg:flex');
@@ -74,20 +74,27 @@ describe('public chrome', () => {
 		expect(top).toContain('}, [pathname, hash, key]);');
 	});
 
-	it('offers Sign in in the bar on every screen, Talk to sales beside Pricing, and sign-up from Start building free', () => {
+	it('offers Sign in in the utility bar, Talk to sales beside the build action, and sign-up from Start building free', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<button type="button" onClick=\{\(\) => showAuthModal\(\)\} className=\{cn\('text-\[15px\] text-public-charcoal', UNDERLINE_GROW\)\}>\s*Sign in/);
-		expect(top).toContain("const PAGE_LINKS = [\n\t{ to: '/discover', label: 'Discover' },\n\t{ to: '/pricing', label: 'Pricing' },\n] as const;");
-		expect(top).toContain("const SALES_LINK = { to: '/contact', label: 'Talk to sales' } as const;");
-		// Once in the bar, once at the foot of the phone menu, as on 1Password.
-		expect(top.match(/>\s*Sign in\s*</g)).toHaveLength(2);
+		const utility = source('/src/components/layout/PublicUtilityBar.tsx');
+		expect(utility).toContain('onClick={() => showAuthModal()}');
+		expect(utility).toContain('{marketingCopy.navigation.signIn}');
+		expect(utility).not.toContain('marketingCopy.navigation.contactUs');
+		expect(utility).not.toContain('marketingCopy.navigation.support');
+		expect(top).toContain("<Link to={SALES_LINK.to} className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>");
+		expect(top).toContain('{PAGE_LINKS.map((link) => (');
+		expect(top).not.toContain('[...PAGE_LINKS, SALES_LINK]');
+		expect(top).toContain("const PAGE_LINKS = [\n\t{ to: '/discover', label: marketingCopy.common.discover },\n\t{ to: '/pricing', label: marketingCopy.common.pricing },\n] as const;");
+		expect(top).toContain("const SALES_LINK = { to: '/contact', label: marketingCopy.common.talkToSales } as const;");
+		// Sign in lives in the utility row; neither the main bar nor phone footer duplicates it.
+		expect(top).not.toContain('marketingCopy.navigation.signIn');
 		expect(top.match(/<StartBuildingButton /g)).toHaveLength(2);
 		expect(top).not.toContain('startBuilding');
 	});
 
 	it('keeps the bar on one line: the menus and links move to the menu below lg, and nothing in the bar wraps', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<nav aria-label="Main" className="hidden lg:flex [^"]*whitespace-nowrap/);
+		expect(top).toMatch(/<nav aria-label=\{marketingCopy\.navigation\.accessibility\.main\} className="hidden lg:flex [^"]*whitespace-nowrap/);
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
 		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
 		expect(top).toMatch(/<dialog[\s\S]*?id="public-menu"[\s\S]*?className="[^"]*lg:hidden[^"]*"/);
@@ -117,7 +124,8 @@ describe('public chrome', () => {
 		expect(nav).toContain('const NAV_ICONS: Readonly<Record<NavIcon, Icon>> = {');
 		expect(nav).toContain('group-hover:text-public-blue');
 		expect(nav).toContain('function FeatureCard(');
-		expect(nav).toContain("label: 'Compare plans'");
+		expect(nav).toContain('label: marketingCopy.navigation.menuFooter.start.label');
+		expect(marketingCopy.navigation.menuFooter.start.label).toBe('Compare plans');
 		expect(nav).toContain('divide-x divide-public-line');
 		expect(nav).toContain('motion-safe:animate-public-menu-in');
 	});
@@ -146,8 +154,8 @@ describe('public chrome', () => {
 		const top = source(TOP);
 		expect(top).toContain('<dialog');
 		expect(top).toContain('dialog.showModal()');
-		expect(top).toContain('aria-label="Back to menu"');
-		expect(top).toContain('aria-label="Close menu"');
+		expect(top).toContain('aria-label={marketingCopy.navigation.accessibility.back}');
+		expect(top).toContain('aria-label={marketingCopy.navigation.accessibility.close}');
 		expect(top).toContain('setMobileSection(menu.id)');
 		// A modal sheet left open while the window widens would keep the page inert, so it closes past lg.
 		expect(top).toContain("window.matchMedia('(min-width: 1024px)')");

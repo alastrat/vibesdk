@@ -1,7 +1,7 @@
 ---
 title: Privacy Policy
-version: 2026-10-19
-updated: October 20, 2026
+version: 2026-10-21
+updated: October 21, 2026
 ---
 
 This Privacy Policy explains how {{entity.name}} ("Globalink", "we", "us") collects, uses and shares personal data when you use Estori at estori.app (the "Service"). Globalink is the controller of the personal data described here.

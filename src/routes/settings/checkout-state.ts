@@ -7,6 +7,9 @@ import {
 	formatUsd,
 	isExtraCreditsAmount,
 	isPaidPlanId,
+	isPlanCreditAmount,
+	isBillingInterval,
+	type BillingInterval,
 	type CheckoutClientStart,
 	type CheckoutOrder,
 	type CheckoutStatusView,
@@ -21,14 +24,20 @@ export const FORM_NOT_LOADED_MESSAGE = msg("The payment form didn't load. Check 
 export const PAYMENT_FAILED_MESSAGE = msg("The payment didn't go through. Check your details and try again.");
 export const CODE_FAILED_MESSAGE = msg("Couldn't check that code. Try again.");
 
-export type CheckoutRequest = { kind: 'plan'; plan: PaidPlanId } | { kind: 'credits'; credits: number };
+export type CheckoutRequest = { kind: 'plan'; plan: PaidPlanId; billingInterval?: BillingInterval; monthlyCredits?: number } | { kind: 'credits'; credits: number };
 
 /** What the address asks for: one paid plan, or one valid amount of extra credits, written as it would be by `checkoutPathOf`. */
 export function checkoutRequestOf(search: string): CheckoutRequest | null {
 	const params = new URLSearchParams(search);
 	const plan = params.get('plan');
 	const credits = params.get('credits');
-	if (plan !== null) return credits === null && isPaidPlanId(plan) ? { kind: 'plan', plan } : null;
+	const rawMonthlyCredits = params.get('monthlyCredits');
+	const monthlyCredits = rawMonthlyCredits === null ? undefined : Number(rawMonthlyCredits);
+	if (rawMonthlyCredits !== null && (!isPaidPlanId(plan) || !isPlanCreditAmount(plan, monthlyCredits) || String(monthlyCredits) !== rawMonthlyCredits)) return null;
+	const interval = params.get('interval');
+	if (interval !== null && !isBillingInterval(interval)) return null;
+	if (plan !== null) return credits === null && isPaidPlanId(plan) ? { kind: 'plan', plan, ...(interval !== null ? { billingInterval: interval } : {}), ...(monthlyCredits !== undefined ? { monthlyCredits } : {}) } : null;
+	if (interval !== null) return null;
 	if (credits === null) return null;
 	const amount = Number(credits);
 	return isExtraCreditsAmount(amount) && String(amount) === credits ? { kind: 'credits', credits: amount } : null;
@@ -42,7 +51,11 @@ export function checkoutExpiredOf(search: string): boolean {
 /** The checkout page's address for a request, which `checkoutRequestOf` reads back. */
 export function checkoutPathOf(request: CheckoutRequest | null, options: { expired?: boolean } = {}): string {
 	const params = new URLSearchParams();
-	if (request?.kind === 'plan') params.set('plan', request.plan);
+	if (request?.kind === 'plan') {
+		params.set('plan', request.plan);
+		if (request.billingInterval) params.set('interval', request.billingInterval);
+		if (request.monthlyCredits !== undefined) params.set('monthlyCredits', String(request.monthlyCredits));
+	}
 	if (request?.kind === 'credits') params.set('credits', String(request.credits));
 	if (options.expired) params.set('expired', '1');
 	const query = params.toString();
@@ -59,7 +72,11 @@ export function readCheckoutRequest(text: string | null): CheckoutRequest | null
 	try {
 		const value: unknown = JSON.parse(text);
 		if (!isRecord(value)) return null;
-		if (value.kind === 'plan' && isPaidPlanId(value.plan)) return { kind: 'plan', plan: value.plan };
+		if (value.kind === 'plan' && isPaidPlanId(value.plan)) {
+			if (value.billingInterval !== undefined && !isBillingInterval(value.billingInterval)) return null;
+			if (value.monthlyCredits !== undefined && !isPlanCreditAmount(value.plan, value.monthlyCredits)) return null;
+			return { kind: 'plan', plan: value.plan, ...(isBillingInterval(value.billingInterval) ? { billingInterval: value.billingInterval } : {}), ...(typeof value.monthlyCredits === 'number' ? { monthlyCredits: value.monthlyCredits } : {}) };
+		}
 		if (value.kind === 'credits' && isExtraCreditsAmount(value.credits)) return { kind: 'credits', credits: value.credits };
 		return null;
 	} catch {

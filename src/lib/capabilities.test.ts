@@ -6,11 +6,13 @@ describe('capability registry', () => {
 	it('gives each capability the status the spec approved', () => {
 		const statuses: Record<CapabilityId, CapabilityStatus> = {
 			'store-builder': 'available',
+			'order-management': 'available',
+			'store-translations': 'available',
 			'agentic-commerce': 'coming-soon',
 			'operations-agents': 'coming-soon',
 			'personalized-shopping': 'coming-soon',
-			'product-catalog': 'coming-soon',
-			payments: 'coming-soon',
+			'product-catalog': 'available',
+			payments: 'available',
 			'digital-products': 'early-access',
 			'developer-templates': 'available',
 			'content-creators': 'early-access',
@@ -43,14 +45,18 @@ describe('capability registry', () => {
 		expect(CAPABILITIES.subscriptions.path).toBe('/solutions/subscriptions');
 		// The catalog now promises fulfillment too, right below the store builder.
 		expect(CAPABILITIES['product-catalog']).toMatchObject({ name: 'Catalog & fulfillment', path: '/platform/catalog-fulfillment' });
-		// Store payments run in test mode on previews; live stores aren't open yet.
-		expect(CAPABILITIES.payments).toMatchObject({ name: 'Payments', path: '/platform/payments', status: 'coming-soon' });
+		expect(CAPABILITIES['order-management']).toMatchObject({ name: 'Order management', path: '/platform/payments#orders', status: 'available' });
+		expect(CAPABILITIES['store-translations']).toMatchObject({ name: 'Store translations', path: '/platform/store-translations', status: 'available' });
+		// Live payment availability still follows the launch decision.
+		expect(CAPABILITIES.payments).toMatchObject({ name: 'Payments', path: '/platform/payments', status: 'available' });
 	});
 
 	it('lists the Platform menu in the approved order', () => {
 		expect(PLATFORM_CAPABILITIES).toEqual([
 			'store-builder',
 			'product-catalog',
+			'order-management',
+			'store-translations',
 			'payments',
 			'operations-agents',
 			'personalized-shopping',

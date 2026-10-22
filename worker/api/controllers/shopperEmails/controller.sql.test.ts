@@ -1,8 +1,10 @@
 /** The shopper emails API on real SQL: a seller's stores, and a store's templates, reply-to, previews and test sends. */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { envWith, insertApp, insertUser, migratedD1 } from '../../../database/test-support/real-d1';
+import { envWith, insertApp, insertUser, insertSubscription, migratedD1 } from '../../../database/test-support/real-d1';
 import { DEFAULT_SHOPPER_EMAIL_TEMPLATES, SHOPPER_EMAIL_PLACEHOLDERS } from '../../../../shared/types/shopper-emails';
+import { shopperEmailDepsFromEnv } from '../../../services/shopper-emails/wiring';
+import { queueShopperEmail } from '../../../services/shopper-emails/outbox';
 import { ShopperEmailsController } from './controller';
 import type { RouteContext } from '../../types/route-context';
 
@@ -47,6 +49,65 @@ describe('the shopper emails API', () => {
 		expect(data.recent).toEqual([{ id: 'em_1', kind: 'order_confirmation', orderNumber: 1, recipient: 'a***@example.test', status: 'sent', test: false, createdAt: new Date(100_000).toISOString(), sentAt: new Date(100_000).toISOString() }]);
 		const missing = await ShopperEmailsController.read(new Request('https://estori.app/api/stores/app_gone/emails'), envWith(db), {} as ExecutionContext, as({ id: 'app_gone' }));
 		expect(missing.status).toBe(404);
+	});
+
+	it('keeps email history readable but refuses Basic customization before any write', async () => {
+		const env = envWith(db, { BILLING: 'on' });
+		const context = as({ id: 'app_tea', kind: 'order_shipped' });
+		for (const response of [
+			await ShopperEmailsController.saveTemplate(send('PUT', SHIPPED), env, {} as ExecutionContext, context),
+			await ShopperEmailsController.resetTemplate(send('DELETE', {}), env, {} as ExecutionContext, context),
+			await ShopperEmailsController.saveSettings(send('PUT', { replyTo: 'replies@example.test' }), env, {} as ExecutionContext, context),
+		]) {
+			expect(response.status).toBe(402);
+			expect(await response.json()).toMatchObject({ error: { planLimit: { limit: 'customShopperEmails', upgradeTo: 'premium' } } });
+		}
+		expect((await ShopperEmailsController.read(new Request('https://estori.app/api/stores/app_tea/emails'), env, {} as ExecutionContext, context)).status).toBe(200);
+	});
+
+	it('skips every shopper email on Basic using the real billing account and outbox', async () => {
+		const sent: unknown[] = [];
+		const env = envWith(db, { BILLING: 'on', ENVIRONMENT: 'dev', SHOPPER_EMAIL_FROM: 'no-reply@orders.estori.app', EMAIL: { send: async (email: unknown) => { sent.push(email); return { messageId: 'unexpected' }; } } });
+		const deps = shopperEmailDepsFromEnv(env);
+		expect((await deps.access('seller_1')).canSend).toBe(false);
+		expect((await shopperEmailDepsFromEnv(envWith(db)).access('seller_1')).canSend).toBe(true);
+		await db.prepare("INSERT INTO store_orders (id, mode, app_id, order_number, checkout_id, seller_user_id, subtotal_cents, shipping_cents, total_cents, application_fee_cents, created_at, updated_at) VALUES ('ord_basic_gate', 'live', 'app_tea', 2, 'chk_basic_gate', 'seller_1', 2000, 0, 2000, 200, 0, 0)").run();
+		for (const kind of ['order_confirmation', 'order_shipped', 'refund_issued'] as const) await queueShopperEmail(deps, { orderId: 'ord_basic_gate', kind, eventKey: 'plan-gate', payload: {} });
+		expect(sent).toEqual([]);
+		const rows = await db.prepare("SELECT kind, status FROM shopper_emails WHERE order_id = 'ord_basic_gate' ORDER BY kind").all();
+		expect(rows.results).toEqual([{ kind: 'order_confirmation', status: 'disabled' }, { kind: 'order_shipped', status: 'disabled' }, { kind: 'refund_issued', status: 'disabled' }]);
+		const read = await json(await ShopperEmailsController.read(new Request('https://estori.app/api/stores/app_tea/emails'), env, {} as ExecutionContext, as({ id: 'app_tea' })));
+		expect(read.body.data?.senderEmail).toBe('no-reply@orders.estori.app');
+		const test = await ShopperEmailsController.test(send('POST', SHIPPED), env, {} as ExecutionContext, as({ id: 'app_tea', kind: 'order_shipped' }));
+		expect(test.status).toBe(402);
+		expect(await test.json()).toMatchObject({ error: { planLimit: { limit: 'shopperEmails', upgradeTo: 'pro' } } });
+		expect(sent).toEqual([]);
+	});
+
+	it('lets Premium customize emails while preserving saved settings after a downgrade', async () => {
+		await insertUser(db, 'seller_custom_pro');
+		await insertApp(db, { id: 'app_custom_pro', userId: 'seller_custom_pro', title: 'Pro Store' });
+		const now = Date.now();
+		await insertSubscription(db, { userId: 'seller_custom_pro', stripeSubscriptionId: 'sub_custom_pro', plan: 'premium', status: 'active', currentPeriodStart: new Date(now), currentPeriodEnd: new Date(now + 30 * 86_400_000) });
+		const context = { ...as({ id: 'app_custom_pro', kind: 'order_shipped' }), user: { ...as().user!, id: 'seller_custom_pro' } };
+		const delivered: Array<{ from: { email: string }; to: string }> = [];
+		const env = envWith(db, { BILLING: 'on', SHOPPER_EMAIL_FROM: 'no-reply@orders.estori.app', EMAIL: { send: async (email: { from: { email: string }; to: string }) => { delivered.push(email); return { messageId: 'pro_email' }; } } });
+		expect((await shopperEmailDepsFromEnv(env).access('seller_custom_pro')).canSend).toBe(true);
+		expect((await ShopperEmailsController.saveTemplate(send('PUT', SHIPPED), env, {} as ExecutionContext, context)).status).toBe(200);
+		await db.prepare("INSERT INTO live_stores (app_id, slug, status, published_commit, published_at, created_at, updated_at) VALUES ('app_custom_pro', 'pro-store', 'live', 'c1', 0, 0, 0)").run();
+		await db.prepare("INSERT INTO store_orders (id, mode, app_id, order_number, checkout_id, seller_user_id, customer_email, subtotal_cents, shipping_cents, total_cents, application_fee_cents, created_at, updated_at) VALUES ('ord_pro_gate', 'live', 'app_custom_pro', 1, 'chk_pro_gate', 'seller_custom_pro', 'buyer@example.test', 2000, 0, 2000, 200, 0, 0)").run();
+		await queueShopperEmail(shopperEmailDepsFromEnv(env), { orderId: 'ord_pro_gate', kind: 'order_confirmation', eventKey: 'plan-gate', payload: {} });
+		expect(delivered).toHaveLength(1);
+		expect(delivered[0]).toMatchObject({ from: { email: 'pro-store@orders.estori.app' }, to: 'buyer@example.test' });
+		await db.prepare("UPDATE subscriptions SET status = 'canceled' WHERE user_id = 'seller_custom_pro'").run();
+		expect((await shopperEmailDepsFromEnv(env).access('seller_custom_pro')).canSend).toBe(false);
+		await queueShopperEmail(shopperEmailDepsFromEnv(env), { orderId: 'ord_pro_gate', kind: 'refund_issued', eventKey: 'plan-gate', payload: { amountCents: 2000 } });
+		expect(delivered).toHaveLength(1);
+		expect((await ShopperEmailsController.saveTemplate(send('PUT', { ...SHIPPED, subject: 'Another subject' }), env, {} as ExecutionContext, context)).status).toBe(402);
+		const read = await json(await ShopperEmailsController.read(new Request('https://estori.app/api/stores/app_custom_pro/emails'), env, {} as ExecutionContext, context));
+		expect(read.status).toBe(200);
+		expect(read.body.data?.templates).toEqual(expect.arrayContaining([expect.objectContaining({ kind: 'order_shipped', enabled: false, edited: false, ...DEFAULT_SHOPPER_EMAIL_TEMPLATES.order_shipped })]));
+		expect((await shopperEmailDepsFromEnv(env).emails.templates('app_custom_pro')).get('order_shipped')).toMatchObject(SHIPPED);
 	});
 
 	it("saves a template and resets it to Estori's default, naming a placeholder the email can't use", async () => {

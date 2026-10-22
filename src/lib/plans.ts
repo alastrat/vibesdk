@@ -1,5 +1,6 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { msg } from '../../shared/i18n/translate';
-import { DEFAULT_SELLER_LIMITS, PLAN_LIMITS, PLATFORM_FEE_LABEL, extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
+import { DEFAULT_SELLER_LIMITS, PLAN_LIMITS, extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance, type PlanId } from '@/api-types';
 import { CAPABILITIES, type CapabilityId } from './capabilities';
 
 export { extraCreditsPriceLabel, formatCredits, formatUsd, limitFeatures, storeAllowance };
@@ -12,9 +13,9 @@ export interface Plan {
 }
 
 export const PLANS: readonly Plan[] = [
-	{ id: 'basic', name: 'Basic', tagline: 'Build and preview your stores with AI, free.' },
-	{ id: 'pro', name: 'Pro', tagline: 'More credits and live stores for sellers growing a few stores.' },
-	{ id: 'premium', name: 'Premium', tagline: 'A monthly pool of credits for brands building and running their stores.' },
+	{ id: 'basic', name: 'Basic', tagline: marketingCopy.pricing.plans.basic.description },
+	{ id: 'pro', name: 'Pro', tagline: marketingCopy.pricing.plans.pro.description },
+	{ id: 'premium', name: 'Premium', tagline: marketingCopy.pricing.plans.premium.description },
 	{ id: 'enterprise', name: 'Enterprise', tagline: 'Custom credits, terms and support for larger teams.' },
 ];
 
@@ -31,10 +32,10 @@ export const EXTRA_CREDITS_PRICE = extraCreditsPriceLabel();
 export type PlanCell = boolean | string;
 
 export interface ComparisonRow {
+	id: string;
 	label: string;
+	description: string;
 	cells: Readonly<Record<PlanId, PlanCell>>;
-	/** A row about the limits billing introduces; the table leaves it out while billing is off. */
-	billingOnly?: boolean;
 }
 
 export interface ComparisonSection {
@@ -44,12 +45,18 @@ export interface ComparisonSection {
 	rows: readonly ComparisonRow[];
 	/** Comes to every plan, Basic included, when it launches; until then its status tag says it isn't here yet. */
 	everyPlan?: boolean;
+	details?: { label: string; href: string };
 }
 
 const ALL: Record<PlanId, PlanCell> = { basic: true, pro: true, premium: true, enterprise: true };
 const PAID: Record<PlanId, PlanCell> = { basic: false, pro: true, premium: true, enterprise: true };
-const ENTERPRISE: Record<PlanId, PlanCell> = { basic: false, pro: false, premium: false, enterprise: true };
-/** The plans with the supplier catalog, from the shared limits; its fee row follows them. */
+/** Commerce controls use the same entitlements as the API. */
+const SHOPPER_EMAIL_PLANS = Object.fromEntries(Object.entries(PLAN_LIMITS).map(([plan, limits]) => [plan, limits.shopperEmails])) as Record<PlanId, PlanCell>;
+const CUSTOM_EMAIL_PLANS = Object.fromEntries(Object.entries(PLAN_LIMITS).map(([plan, limits]) => [plan, limits.customShopperEmails])) as Record<PlanId, PlanCell>;
+const TRACKING_PLANS = Object.fromEntries(Object.entries(PLAN_LIMITS).map(([plan, limits]) => [plan, limits.shipmentTracking])) as Record<PlanId, PlanCell>;
+const REFUND_PLANS = Object.fromEntries(Object.entries(PLAN_LIMITS).map(([plan, limits]) => [plan, limits.orderRefunds])) as Record<PlanId, PlanCell>;
+const FLEXIBLE_PAYOUT_PLANS = Object.fromEntries(Object.entries(PLAN_LIMITS).map(([plan, limits]) => [plan, limits.flexiblePayouts])) as Record<PlanId, PlanCell>;
+/** Catalog access and automatic fulfillment share the account catalog permission. */
 const CATALOG_PLANS: Record<PlanId, PlanCell> = {
 	basic: PLAN_LIMITS.basic.supplierCatalog,
 	pro: PLAN_LIMITS.pro.supplierCatalog,
@@ -80,105 +87,93 @@ export const SELLER_LEVEL_LIMITS: readonly SellerLevelLimitsCopy[] = [
 /** How checkout weighs a cart toward the weekly limit: Estori can't prove the delivery of the seller's own products. */
 export const OWN_PRODUCTS_WEIGHTING = msg('Your own products count twice toward the weekly limit; catalog products and shipping count once.');
 
-/** The same value on every plan: seller levels set the payment limits, not plans. */
-function onEveryPlan(value: PlanCell): Record<PlanId, PlanCell> {
-	return { basic: value, pro: value, premium: value, enterprise: value };
-}
-
-/** A value on the plans that have the catalog, and a dash on the others. */
-function onCatalogPlans(value: PlanCell): Record<PlanId, PlanCell> {
-	return {
-		basic: CATALOG_PLANS.basic && value,
-		pro: CATALOG_PLANS.pro && value,
-		premium: CATALOG_PLANS.premium && value,
-		enterprise: CATALOG_PLANS.enterprise && value,
-	};
-}
-
 /** A section titled with the capability's registry name, so renaming a capability reaches pricing. */
-function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRow[], options: { everyPlan?: boolean } = {}): ComparisonSection {
+function capabilitySection(capability: CapabilityId, rows: readonly ComparisonRow[], options: { everyPlan?: boolean; details?: ComparisonSection['details'] } = {}): ComparisonSection {
 	return { title: CAPABILITIES[capability].name, capability, rows, ...options };
 }
 
-/** What each plan includes, by capability. The pricing page adds the credits row from the live allowance and PLAN_LIMITS. */
+/** Stable keys keep the English labels editable without changing plan eligibility. */
+function feature(id: keyof typeof marketingCopy.pricing.comparison.features, cells: Readonly<Record<PlanId, PlanCell>>): ComparisonRow {
+	const copy = marketingCopy.pricing.comparison.features[id];
+	return {
+		id,
+		...copy,
+		cells,
+	};
+}
+
+/** Plan benefits and allowances, with prices and limits sourced from the product rules. */
 export const PLAN_COMPARISON: readonly ComparisonSection[] = [
 	capabilitySection('store-builder', [
-		{ label: 'Build and change stores just by asking', cells: ALL },
-		{ label: 'Live preview on desktop and phone', cells: ALL },
-		{
-			label: 'Stores',
-			cells: {
-				basic: `${PLAN_LIMITS.basic.storesLifetime}`,
-				pro: `${PLAN_LIMITS.pro.newStoresPerDay} new a day`,
-				premium: `${PLAN_LIMITS.premium.newStoresPerDay} new a day`,
-				enterprise: 'Custom',
-			},
-			billingOnly: true,
-		},
-		{
-			label: 'Live stores at once',
-			cells: {
-				basic: String(PLAN_LIMITS.basic.liveStores),
-				pro: String(PLAN_LIMITS.pro.liveStores),
-				premium: String(PLAN_LIMITS.premium.liveStores),
-				enterprise: 'Custom',
-			},
-			billingOnly: true,
-		},
-		{ label: 'Your own domain', cells: { basic: false, pro: 'One per live store', premium: 'One per live store', enterprise: 'One per live store' }, billingOnly: true },
-		{ label: 'Extra AI credits', cells: { basic: false, pro: false, premium: EXTRA_CREDITS_PRICE, enterprise: true }, billingOnly: true },
-		{ label: 'Start from templates in Discover', cells: ALL },
-		{ label: 'Sell your stores as templates', cells: ALL },
-		{ label: 'Fee on template sales', cells: onEveryPlan(PLATFORM_FEE_LABEL) },
-		{ label: 'Email receipts for your template buyers', cells: ALL },
+		feature('stores', {
+			basic: String(PLAN_LIMITS.basic.storesLifetime),
+			pro: String(PLAN_LIMITS.pro.storesLifetime),
+			premium: String(PLAN_LIMITS.premium.storesLifetime),
+			enterprise: 'Custom',
+		}),
+		feature('aiCredits', {
+			basic: `${formatCredits(PLAN_LIMITS.basic.aiCredits)}/mo`,
+			pro: `${formatCredits(PLAN_LIMITS.pro.aiCredits)}/mo`,
+			premium: `${formatCredits(PLAN_LIMITS.premium.aiCredits)}/mo`,
+			enterprise: 'Custom',
+		}),
+		feature('build', ALL),
+		feature('preview', ALL),
+		feature('publish', ALL),
+		feature('appLanguages', ALL),
+
+		feature('templates', ALL),
+		feature('sellTemplates', ALL),
+		feature('receipts', ALL),
+		feature('domain', { basic: PLAN_LIMITS.basic.ownDomainsPerLiveStore > 0, pro: PLAN_LIMITS.pro.ownDomainsPerLiveStore > 0, premium: PLAN_LIMITS.premium.ownDomainsPerLiveStore > 0, enterprise: PLAN_LIMITS.enterprise.ownDomainsPerLiveStore > 0 }),
 	]),
-	capabilitySection('agentic-commerce', [{ label: 'Get recommended by AI assistants', cells: PAID }]),
-	capabilitySection('operations-agents', [
-		{ label: 'Inventory and marketing assistants', cells: PAID },
-		{ label: 'Customer service assistant', cells: PAID },
+	capabilitySection('product-catalog', [feature('ownProducts', ALL), feature('catalog', CATALOG_PLANS), feature('fulfillment', CATALOG_PLANS)]),
+	capabilitySection('order-management', [
+		feature('orders', ALL),
+		feature('orderStatus', ALL),
+		feature('tracking', TRACKING_PLANS),
+		feature('refunds', REFUND_PLANS),
 	]),
-	capabilitySection('personalized-shopping', [
-		{ label: 'Product picks and a smart cart', cells: PAID },
-		{ label: 'Bundles, after-checkout offers and smart search', cells: PAID },
-	]),
-	capabilitySection('product-catalog', [{ label: 'Curated supplier catalog', cells: CATALOG_PLANS }]),
-	capabilitySection('payments', [
-		{ label: "Checkout on your store's own address", cells: ALL },
-		{ label: "Estori's fee on your own products", cells: onEveryPlan('Card processing') },
-		{ label: "Estori's fee on catalog products", cells: onCatalogPlans('Card processing and the catalog price') },
-		{ label: 'Payouts', cells: onEveryPlan('Daily, weekly or monthly') },
-		{ label: 'Largest order, by seller level', cells: onEveryPlan(`${formatUsd(NEW_SELLER.largestOrderCents)} new, ${formatUsd(ESTABLISHED_SELLER.largestOrderCents)} established`) },
-		{ label: 'Weekly sales, by seller level', cells: onEveryPlan(`${formatUsd(NEW_SELLER.weeklySalesCents)} new, ${formatUsd(ESTABLISHED_SELLER.weeklySalesCents)} established`) },
-		{ label: 'Own products in weekly sales', cells: onEveryPlan('Count twice') },
-		{ label: 'Payout wait, by seller level', cells: onEveryPlan(`${NEW_SELLER.payoutDelayDays} business days new, ${ESTABLISHED_SELLER.payoutDelayDays} established`) },
-		{ label: 'Refunds and disputes', cells: onEveryPlan('Paid by the seller') },
-		// The emails Estori sends with each store order, the same on every plan.
-		{ label: 'An email to you for every new order', cells: ALL },
-		{ label: 'Order emails to your shoppers', cells: onEveryPlan('Confirmation, shipped and refund') },
-		{ label: 'Edit each shopper email, or turn it off', cells: ALL },
-		{ label: "Shopper emails from your store's own address", cells: ALL },
-		// Checking the delivery of orders sellers ship themselves is a Premium feature.
-		{ label: 'Delivery checks on orders you ship', cells: PAID },
-	], { everyPlan: true }),
-	capabilitySection('digital-products', [{ label: 'Sell digital products and run a community', cells: PAID }]),
 	{
-		title: 'Support and billing',
+		title: marketingCopy.pricing.comparison.emailNotifications,
 		capability: null,
 		rows: [
-			{ label: 'Support', cells: { basic: 'Email', pro: 'Email', premium: 'Priority email', enterprise: 'A named contact' } },
-			{ label: 'Custom credit volume', cells: ENTERPRISE },
-			{ label: 'Invoiced billing', cells: ENTERPRISE },
+			feature('sellerEmails', ALL),
+			feature('shopperEmails', SHOPPER_EMAIL_PLANS),
+			feature('brandedEmails', SHOPPER_EMAIL_PLANS),
+			feature('previewEmails', SHOPPER_EMAIL_PLANS),
+			feature('editEmails', CUSTOM_EMAIL_PLANS),
+			feature('replyToEmails', CUSTOM_EMAIL_PLANS),
+		],
+	},
+	capabilitySection('store-translations', [
+		feature('aiTranslation', PAID),
+		feature('editTranslations', PAID),
+		feature('publishTranslations', PAID),
+		feature('languageSwitcher', PAID),
+		feature('translationControl', PAID),
+	]),
+	capabilitySection('payments', [
+		feature('checkout', ALL),
+		feature('bankPayouts', ALL),
+		feature('payouts', FLEXIBLE_PAYOUT_PLANS),
+	], { everyPlan: true, details: { label: marketingCopy.pricing.comparison.paymentDetails, href: '/platform/payments#limits' } }),
+	capabilitySection('digital-products', [feature('digital', PAID)]),
+	capabilitySection('agentic-commerce', [feature('aiDiscovery', PAID)]),
+	capabilitySection('operations-agents', [feature('operations', PAID), feature('customerService', PAID)]),
+	capabilitySection('personalized-shopping', [feature('personalization', PAID), feature('bundles', PAID)]),
+	{
+		title: 'Support',
+		capability: null,
+		rows: [
+			feature('support', ALL),
+			feature('prioritySupport', PAID),
+			feature('accountManager', { basic: false, pro: false, premium: true, enterprise: true }),
 		],
 	},
 ];
 
-const PLANS_WITHOUT_BILLING = PLANS.filter((plan) => plan.id !== 'pro');
-const COMPARISON_WITHOUT_BILLING: readonly ComparisonSection[] = PLAN_COMPARISON.map((section) => ({
-	...section,
-	rows: section.rows.filter((row) => !row.billingOnly),
-}));
-
-/** The columns and sections the comparison shows. With billing off it is today's table: no Pro column and none of the limit rows. */
-export function comparisonFor(billing: boolean): { plans: readonly Plan[]; sections: readonly ComparisonSection[] } {
-	return billing ? { plans: PLANS, sections: PLAN_COMPARISON } : { plans: PLANS_WITHOUT_BILLING, sections: COMPARISON_WITHOUT_BILLING };
+/** The public comparison always covers the three self-service plans. Checkout availability only changes the action buttons. */
+export function comparisonFor(): { plans: readonly Plan[]; sections: readonly ComparisonSection[] } {
+	return { plans: PLANS.filter((plan) => plan.id !== 'enterprise'), sections: PLAN_COMPARISON };
 }

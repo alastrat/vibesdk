@@ -1,4 +1,4 @@
-import { PLATFORM_FEE_LABEL } from '@/api-types';
+import { marketingCopy } from '@/content/marketing-copy';
 import type { PageHead } from '@/lib/page-head';
 import type { JsonLdNode } from '@/lib/seo';
 import { BLOG_POSTS, blogPostPath, type BlogPost } from './blog';
@@ -20,7 +20,7 @@ export interface PublicPage extends PageHead {
 export const HOME_PAGE: PublicPage = {
 	path: '/',
 	description:
-		'Describe your store and Estori builds it in minutes, with your products, cart and checkout. AI assistants that help you sell and run it are coming soon.',
+		marketingCopy.home.meta.description,
 };
 
 export const BRANDS_PAGE: PublicPage = {
@@ -32,7 +32,7 @@ export const BRANDS_PAGE: PublicPage = {
 export const RESELLERS_PAGE: PublicPage = {
 	path: '/solutions/resellers',
 	title: 'For dropshippers and resellers',
-	description: 'A curated catalog of vetted suppliers is coming soon to Estori. Build the store for it today.',
+	description: marketingCopy.platform.catalog.metaDescription,
 };
 
 export const DIGITAL_PAGE: PublicPage = {
@@ -56,13 +56,18 @@ export const COMMUNITIES_PAGE: PublicPage = {
 export const CATALOG_FULFILLMENT_PAGE: PublicPage = {
 	path: '/platform/catalog-fulfillment',
 	title: 'Catalog & fulfillment',
-	description: 'Add products from a curated catalog of vetted suppliers to your Estori store, and let suppliers ship each order. Coming soon.',
+	description: 'Add supplier catalog products to your Estori store and track fulfillment, shipments and delivery on every plan.',
 };
 
 export const PAYMENTS_PAGE: PublicPage = {
 	path: '/platform/payments',
 	title: 'Payments',
-	description: "Take payments on your Estori store's own checkout page, get paid out to your bank, and see what each sale costs. Coming soon.",
+	description: marketingCopy.platform.payments.metaDescription,
+};
+
+export const STORE_TRANSLATIONS_PAGE: PublicPage = {
+	path: '/platform/store-translations',
+	...marketingCopy.platform.storeTranslations.meta,
 };
 
 export const EMAIL_MARKETING_PAGE: PublicPage = {
@@ -117,7 +122,7 @@ export const DISCOVER_PAGE: PublicPage = {
 export const PRICING_PAGE: PublicPage = {
 	path: '/pricing',
 	title: 'Pricing',
-	description: `Build with Estori for free on Basic. Premium, with a monthly pool of AI credits, is coming soon, and Enterprise is tailored with our team. Template sellers pay ${PLATFORM_FEE_LABEL} per sale.`,
+	description: marketingCopy.pricing.metaDescription,
 };
 
 export const PRICING_CALCULATOR_PAGE: PublicPage = {
@@ -170,6 +175,7 @@ export const PUBLIC_PAGES: readonly PublicPage[] = [
 	AGENTIC_COMMERCE_PAGE,
 	CATALOG_FULFILLMENT_PAGE,
 	PAYMENTS_PAGE,
+	STORE_TRANSLATIONS_PAGE,
 	EMAIL_MARKETING_PAGE,
 	WEB_ANALYTICS_PAGE,
 	SEARCH_OPTIMIZATION_PAGE,

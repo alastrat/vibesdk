@@ -1,9 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
+import { DEFAULT_SELLER_LIMITS } from '@/api-types';
 import { CAPABILITIES } from './capabilities';
 import { PLANS, PLAN_COMPARISON, SELLER_LEVEL_LIMITS, comparisonFor, formatCredits, formatUsd, limitFeatures, planById, storeAllowance } from './plans';
 
 describe('plans', () => {
+	it('compares Basic, Pro and Premium independently of checkout activation', () => {
+		const comparison = comparisonFor();
+		expect(comparison.plans.map((plan) => plan.id)).toEqual(['basic', 'pro', 'premium']);
+		expect(comparison.sections.flatMap((section) => section.rows).map((row) => row.label)).not.toContain('Fee on template sales');
+		expect(comparison.sections.flatMap((section) => section.rows).map((row) => row.label)).not.toContain('Drafts per store, including Main');
+	});
+
+	it('places digital products before the coming-soon sections', () => {
+		const capabilities = PLAN_COMPARISON.map((section) => section.capability);
+		const digital = capabilities.indexOf('digital-products');
+		expect(digital).toBeGreaterThan(-1);
+		for (const [index, section] of PLAN_COMPARISON.entries()) {
+			if (section.capability && CAPABILITIES[section.capability].status === 'coming-soon') expect(digital).toBeLessThan(index);
+		}
+	});
+
+	it('keeps unavailable rows below included benefits for every plan in each section', () => {
+		for (const section of PLAN_COMPARISON) {
+			for (const plan of ['basic', 'pro', 'premium'] as const) {
+				let reachedUnavailable = false;
+				for (const row of section.rows) {
+					if (row.cells[plan] === false) reachedUnavailable = true;
+					else expect(reachedUnavailable, `${section.title}: ${row.id} on ${plan}`).toBe(false);
+				}
+			}
+		}
+	});
+
 	it('looks a plan up by id', () => {
 		expect(planById('premium')).toBe(PLANS[2]);
 		expect(planById('enterprise').name).toBe('Enterprise');
@@ -14,11 +42,11 @@ describe('plans', () => {
 	});
 
 	it("states each paid plan's store allowance from the limits table", () => {
-		expect(storeAllowance('pro')).toBe('Up to 3 live stores, 10 new stores a day');
-		expect(storeAllowance('premium')).toBe('Up to 10 live stores, 25 new stores a day');
-		expect(limitFeatures('pro')).toEqual(['Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog']);
+		expect(storeAllowance('pro')).toBe('Up to 5 live stores');
+		expect(storeAllowance('premium')).toBe('Up to 20 live stores');
+		expect(limitFeatures('pro')).toEqual(['Up to 5 live stores', 'Your own domain on each live store', 'The supplier catalog']);
 		// Premium's card starts from "Everything in Pro", so it lists only what Pro doesn't have.
-		expect(limitFeatures('premium', 'pro')).toEqual(['Up to 10 live stores, 25 new stores a day', 'Buy extra credits any time']);
+		expect(limitFeatures('premium', 'pro')).toEqual(['Up to 20 live stores']);
 	});
 
 	it('formats prices and credits for the cards', () => {
@@ -50,90 +78,78 @@ describe('plans', () => {
 		expect(PLAN_COMPARISON.filter((section) => section.everyPlan).map((section) => section.capability)).toEqual(['payments']);
 	});
 
-	it("lists the payment rules, with each seller level's limits from the same settings checkout uses", () => {
+	it('compares payment benefits and links to fees, limits and timing separately', () => {
 		const payments = PLAN_COMPARISON.find((section) => section.capability === 'payments');
-		const cells = (label: string) => payments?.rows.find((row) => row.label === label)?.cells;
-		const { new: fresh, established } = DEFAULT_SELLER_LIMITS.levels;
-		expect(cells('Largest order, by seller level')?.premium).toBe(`${formatUsd(fresh.largestOrderCents)} new, ${formatUsd(established.largestOrderCents)} established`);
-		expect(cells('Weekly sales, by seller level')?.premium).toBe(`${formatUsd(fresh.weeklySalesCents)} new, ${formatUsd(established.weeklySalesCents)} established`);
-		expect(cells('Payout wait, by seller level')?.premium).toBe(`${fresh.payoutDelayDays} business days new, ${established.payoutDelayDays} established`);
-		expect(cells("Estori's fee on your own products")?.premium).toBe('Card processing');
-		expect(cells("Estori's fee on catalog products")?.premium).toBe('Card processing and the catalog price');
-		expect(cells('Refunds and disputes')?.premium).toBe('Paid by the seller');
-		expect(cells('Delivery checks on orders you ship')).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
-		// Checkout weighs own products twice toward the weekly cap, so the table says so beside the cap.
-		expect(cells('Own products in weekly sales')).toEqual({ basic: 'Count twice', pro: 'Count twice', premium: 'Count twice', enterprise: 'Count twice' });
-		expect(SELLER_LEVEL_LIMITS.map((level) => level.largestOrder)).toEqual([formatUsd(fresh.largestOrderCents), formatUsd(established.largestOrderCents)]);
+		expect(payments?.rows.map((row) => row.id)).toEqual(['checkout', 'bankPayouts', 'payouts']);
+		for (const id of ['checkout', 'bankPayouts']) expect(payments?.rows.find((row) => row.id === id)?.cells).toEqual({ basic: true, pro: true, premium: true, enterprise: true });
+		expect(payments?.rows.find((row) => row.id === 'payouts')?.cells).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
+		expect(payments?.details?.href).toBe('/platform/payments#limits');
 	});
 
-	it("sets the payment rules and limits by seller level, so they're the same on every plan, Basic included", () => {
-		const payments = PLAN_COMPARISON.find((section) => section.capability === 'payments');
-		expect(payments?.rows.length).toBeGreaterThan(5);
-		for (const row of payments?.rows ?? []) {
-			// Checking the delivery of orders sellers ship themselves is a Premium feature, and the catalog has its own plans.
-			if (row.label === 'Delivery checks on orders you ship' || row.label === "Estori's fee on catalog products") continue;
-			expect(row.cells.basic, row.label).not.toBe(false);
-			expect(row.cells.basic, row.label).toEqual(row.cells.premium);
-			expect(row.cells.pro, row.label).toEqual(row.cells.premium);
-			expect(row.cells.enterprise, row.label).toEqual(row.cells.premium);
+	it('keeps the seller-level disclosures aligned with the settings checkout enforces', () => {
+		const { new: fresh, established } = DEFAULT_SELLER_LIMITS.levels;
+		expect(SELLER_LEVEL_LIMITS.map((level) => level.largestOrder)).toEqual([formatUsd(fresh.largestOrderCents), formatUsd(established.largestOrderCents)]);
+		expect(SELLER_LEVEL_LIMITS.map((level) => level.weeklySales)).toEqual([formatUsd(fresh.weeklySalesCents), formatUsd(established.weeklySalesCents)]);
+	});
+
+	it('keeps template fees and draft counts out of the benefit comparison', () => {
+		const labels = PLAN_COMPARISON.flatMap((section) => section.rows.map((row) => row.label));
+		expect(labels).not.toContain('Fee on template sales');
+		expect(labels).not.toContain('Drafts per store, including Main');
+	});
+
+	it('keeps seller alerts and template receipts on every plan, with shopper emails and sender addresses on paid plans', () => {
+		const every = { basic: true, pro: true, premium: true, enterprise: true };
+		const row = (capability: string, label: string) => PLAN_COMPARISON.find((section) => section.capability === capability || section.title === capability)?.rows.find((entry) => entry.id === label)?.cells;
+		expect(row('Email & notifications', 'sellerEmails')).toEqual(every);
+		expect(row('Email & notifications', 'shopperEmails')).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
+		expect(row('Email & notifications', 'editEmails')).toEqual({ basic: false, pro: false, premium: true, enterprise: true });
+		expect(row('Email & notifications', 'brandedEmails')).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
+		expect(row('store-builder', 'receipts')).toEqual(every);
+		expect(row('order-management', 'filterOrders')).toBeUndefined();
+		for (const id of ['tracking', 'refunds']) expect(row('order-management', id)).toEqual({ basic: false, pro: false, premium: true, enterprise: true });
+		expect(row('Email & notifications', 'replyToEmails')).toEqual({ basic: false, pro: false, premium: true, enterprise: true });
+		for (const id of ['orderStatus']) expect(row('order-management', id)).toEqual(every);
+		for (const id of ['previewEmails']) expect(row('Email & notifications', id)).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
+	});
+
+	it('takes store and catalog allowances from the shared limits without separate live-store or top-up rows', () => {
+		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
+		const cells = (label: string) => builder?.rows.find((row) => row.id === label)?.cells;
+		expect(cells('stores')).toEqual({ basic: '2', pro: '5', premium: '20', enterprise: 'Custom' });
+		expect(cells('liveStores')).toBeUndefined();
+		expect(cells('extraCredits')).toBeUndefined();
+		const catalog = PLAN_COMPARISON.find((section) => section.capability === 'product-catalog');
+		expect(catalog?.rows.map(row => row.id)).toEqual(['ownProducts', 'catalog', 'fulfillment']);
+		for (const row of catalog!.rows) expect(row.cells).toEqual({ basic: true, pro: true, premium: true, enterprise: true });
+		expect(limitFeatures('pro', 'basic')).toEqual(['Up to 5 live stores', 'Your own domain on each live store']);
+	});
+
+	it('includes launch and domain benefits in the public comparison', () => {
+		const comparison = comparisonFor();
+		expect(comparison.plans.map((plan) => plan.id)).toEqual(['basic', 'pro', 'premium']);
+		const builder = comparison.sections.find((section) => section.capability === 'store-builder');
+		for (const id of ['stores', 'domain', 'publish']) {
+			expect(builder?.rows.some((row) => row.id === id), id).toBe(true);
 		}
 	});
 
-	it("states the catalog fee only on the plans that have the catalog", () => {
-		const catalog = PLAN_COMPARISON.find((section) => section.capability === 'product-catalog')?.rows[0]?.cells;
-		const fee = PLAN_COMPARISON.find((section) => section.capability === 'payments')?.rows.find((row) => row.label === "Estori's fee on catalog products")?.cells;
-		for (const plan of ['basic', 'pro', 'premium', 'enterprise'] as const) expect(fee?.[plan], plan).toBe(catalog?.[plan] ? 'Card processing and the catalog price' : false);
-	});
-
-	it('charges the template fee on every plan, since selling templates works today', () => {
-		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
-		expect(builder?.rows.find((row) => row.label === 'Fee on template sales')?.cells).toEqual({ basic: PLATFORM_FEE_LABEL, pro: PLATFORM_FEE_LABEL, premium: PLATFORM_FEE_LABEL, enterprise: PLATFORM_FEE_LABEL });
-	});
-
-	it('lists the emails Estori sends today: the new-order email, the shopper order emails and template receipts, on every plan', () => {
-		const every = { basic: true, pro: true, premium: true, enterprise: true };
-		const row = (capability: string, label: string) => PLAN_COMPARISON.find((section) => section.capability === capability)?.rows.find((entry) => entry.label === label)?.cells;
-		expect(row('payments', 'An email to you for every new order')).toEqual(every);
-		expect(row('payments', 'Order emails to your shoppers')).toEqual({
-			basic: 'Confirmation, shipped and refund',
-			pro: 'Confirmation, shipped and refund',
-			premium: 'Confirmation, shipped and refund',
-			enterprise: 'Confirmation, shipped and refund',
-		});
-		expect(row('payments', 'Edit each shopper email, or turn it off')).toEqual(every);
-		expect(row('payments', "Shopper emails from your store's own address")).toEqual(every);
-		expect(row('store-builder', 'Email receipts for your template buyers')).toEqual(every);
-	});
-
-	it('takes the store, live-store, domain, catalog and extra-credit cells from the shared limits table', () => {
-		const builder = PLAN_COMPARISON.find((section) => section.capability === 'store-builder');
-		const cells = (label: string) => builder?.rows.find((row) => row.label === label)?.cells;
-		expect(cells('Stores')).toEqual({ basic: '3', pro: '10 new a day', premium: '25 new a day', enterprise: 'Custom' });
-		expect(cells('Live stores at once')).toEqual({ basic: '1', pro: '3', premium: '10', enterprise: 'Custom' });
-		expect(cells('Extra AI credits')).toEqual({ basic: false, pro: false, premium: '$1.50 per 1,000', enterprise: true });
-		expect(PLAN_COMPARISON.find((section) => section.capability === 'product-catalog')?.rows[0]?.cells).toEqual({ basic: false, pro: true, premium: true, enterprise: true });
-	});
-
-	it("shows today's table while billing is off: no Pro column and none of the limit rows", () => {
-		const off = comparisonFor(false);
-		expect(off.plans.map((plan) => plan.id)).toEqual(['basic', 'premium', 'enterprise']);
-		const builder = off.sections.find((section) => section.capability === 'store-builder');
-		expect(builder?.rows.map((row) => row.label)).toEqual([
-			'Build and change stores just by asking',
-			'Live preview on desktop and phone',
-			'Start from templates in Discover',
-			'Sell your stores as templates',
-			'Fee on template sales',
-			'Email receipts for your template buyers',
-		]);
-		expect(off.sections.flatMap((section) => section.rows).some((row) => row.billingOnly)).toBe(false);
-	});
-
-	it('adds the Pro column and the limit rows once billing is on', () => {
-		const on = comparisonFor(true);
-		expect(on.plans).toBe(PLANS);
-		expect(on.sections).toBe(PLAN_COMPARISON);
-		const labels = on.sections.flatMap((section) => section.rows).filter((row) => row.billingOnly).map((row) => row.label);
-		expect(labels).toEqual(['Stores', 'Live stores at once', 'Your own domain', 'Extra AI credits']);
+	it('explains every feature and keeps translations credit-metered', () => {
+		const ids = PLAN_COMPARISON.flatMap((section) => section.rows.map((row) => row.id));
+		expect(new Set(ids).size).toBe(ids.length);
+		for (const section of PLAN_COMPARISON) {
+			for (const row of section.rows) {
+				expect(row.description.trim().length, row.id).toBeGreaterThan(20);
+			}
+		}
+		const translations = PLAN_COMPARISON.find((section) => section.capability === 'store-translations');
+		expect(translations?.rows.find((row) => row.id === 'aiTranslation')?.cells).toEqual({basic: false, pro: true, premium: true, enterprise: true});
+		expect(translations?.rows.some((row) => row.id === 'storeLanguages')).toBe(false);
+		for (const row of translations?.rows ?? []) {
+			expect(row.cells.basic, row.id).toBe(false);
+			expect(row.cells.pro, row.id).not.toBe(false);
+			expect(row.cells.premium, row.id).not.toBe(false);
+		}
+		expect(translations?.rows.some((row) => row.id === 'translationControl')).toBe(true);
 	});
 });

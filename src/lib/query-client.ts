@@ -51,6 +51,8 @@ const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
 	queryKeys.account.all,
 	queryKeys.apps.sitePageAll(),
 	queryKeys.apps.showcase(),
+	// Rollout settings decide which upgrade action is available and must be refreshed.
+	queryKeys.platform.plan(),
 ];
 
 function hasKeyPrefix(

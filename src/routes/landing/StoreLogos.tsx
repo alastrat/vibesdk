@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { Link } from 'react-router';
 import { Marquee } from '@/components/magicui/marquee';
 import { EdgeFades } from '@/components/public-site/primitives';
@@ -18,8 +19,7 @@ export function StoreLogos({ stores }: { stores: readonly ShowcaseStore[] }) {
 	return (
 		<section aria-labelledby="store-logos-title" className="pt-14 sm:pt-16">
 			<h2 id="store-logos-title" className="text-center text-xs uppercase tracking-[0.04em] text-white/60">
-				Stores built on Estori
-			</h2>
+				{marketingCopy.home.showcase.logosTitle}</h2>
 			<div className="group/edges relative mt-8">
 				<Marquee pauseOnHover className="px-0 py-1 [--duration:60s] [--gap:4rem]">
 					{stores.map((store, index) => (

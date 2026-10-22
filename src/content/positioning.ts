@@ -1,3 +1,4 @@
+import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { EXTRA_CREDITS, PLATFORM_FEE_LABEL, formatCredits } from '@/api-types';
 import { EXTRA_CREDITS_PRICE } from '@/lib/plans';
@@ -18,7 +19,7 @@ export interface TextFaqItem extends FaqItem {
 }
 
 export const AGENTIC_COMMERCE_SUMMARY =
-	'More and more people ask AI assistants for product recommendations. Your store will share its products in a way those assistants can read, so they can recommend you and send buyers to your store.';
+	marketingCopy.home.recommendations.description;
 
 export const TODAY_CARDS: readonly CardCopy[] = [
 	{ title: 'A complete store from a sentence', body: 'Catalog, product pages, cart, checkout flow and order records, built and deployed from your description.' },
@@ -26,10 +27,10 @@ export const TODAY_CARDS: readonly CardCopy[] = [
 	{ title: 'Desktop and phone', body: 'Every store works on both, and you preview it live on each.' },
 ];
 
-export const ASSISTANTS_HEADING = 'Hand off the daily work of running your store';
+export const ASSISTANTS_HEADING = marketingCopy.home.assistants.title;
 
 export const ASSISTANTS_LEAD =
-	"Estori's assistants keep an eye on your stock, your customers and your sales, and take care of the routine work, following rules you set.";
+	marketingCopy.home.assistants.description;
 
 export type AssistantId = 'inventory' | 'support' | 'marketing';
 
@@ -41,14 +42,14 @@ export interface StoreAssistant {
 }
 
 export const STORE_ASSISTANTS: readonly StoreAssistant[] = [
-	{ id: 'inventory', name: 'Inventory assistant', title: 'Never run out of best-sellers', body: 'Warns you before a product sells out and suggests how much to reorder.' },
+	{ id: 'inventory', name: marketingCopy.home.assistants.cards.inventory.name, title: marketingCopy.home.assistants.cards.inventory.title, body: marketingCopy.home.assistants.cards.inventory.body },
 	{
 		id: 'support',
-		name: 'Customer service assistant',
-		title: 'Questions answered, day and night',
-		body: "Replies to questions about orders, sizes and returns using your store's own information.",
+		name: marketingCopy.home.assistants.cards.support.name,
+		title: marketingCopy.home.assistants.cards.support.title,
+		body: marketingCopy.home.assistants.cards.support.body,
 	},
-	{ id: 'marketing', name: 'Marketing assistant', title: 'Bring shoppers back', body: 'Reminds shoppers who left items in their cart and sends offers to your repeat customers.' },
+	{ id: 'marketing', name: marketingCopy.home.assistants.cards.marketing.name, title: marketingCopy.home.assistants.cards.marketing.title, body: marketingCopy.home.assistants.cards.marketing.body },
 ];
 
 export type ShopperCardId = 'picks' | 'cart' | 'offer' | 'search';
@@ -60,12 +61,12 @@ export interface ShopperCard extends CardCopy {
 export const PERSONALIZATION_CARDS: readonly ShopperCard[] = [
 	{
 		id: 'picks',
-		title: 'Products picked for each shopper',
-		body: 'Machine learning scores every product for every shopper, so each one sees their best matches.',
+		title: marketingCopy.home.personalization.cards.picks.title,
+		body: marketingCopy.home.personalization.cards.picks.body,
 	},
-	{ id: 'cart', title: 'A cart that suggests what goes with it', body: "Add-ons and bundles that go with what's already in the cart." },
-	{ id: 'offer', title: 'An offer right after checkout', body: 'A relevant offer right after checkout, while the shopper is still with you.' },
-	{ id: 'search', title: 'Search that understands shoppers', body: 'Shoppers describe what they want and find it, even without the exact words.' },
+	{ id: 'cart', title: marketingCopy.home.personalization.cards.cart.title, body: marketingCopy.home.personalization.cards.cart.body },
+	{ id: 'offer', title: marketingCopy.home.personalization.cards.offer.title, body: marketingCopy.home.personalization.cards.offer.body },
+	{ id: 'search', title: marketingCopy.home.personalization.cards.search.title, body: marketingCopy.home.personalization.cards.search.body },
 ];
 
 export const AGENTIC_BASICS_CARDS: readonly CardCopy[] = [
@@ -116,7 +117,7 @@ export const BRAND_STEPS = [
 	'Preview it on desktop and phone, and share it when it is ready.',
 ] as const;
 
-export const RESELLER_STEPS = ['Apply to the catalog.', 'Choose products and set your prices.', 'Sell, and the supplier ships each order.'] as const;
+export const RESELLER_STEPS = [marketingCopy.platform.catalog.pickProducts, 'Choose products and set your prices.', 'Sell, and the supplier ships each order.'] as const;
 
 export const DIGITAL_STEPS = [
 	'Request early access.',
@@ -137,7 +138,7 @@ export const COMING_SOON_ANSWER = "A capability we're building. It isn't part of
 /** Plan-neutral: true whether paid plans are on sale or not. */
 export const FREE_PLAN_ANSWER = 'Building and editing stores is free on Basic, within its limits. See the pricing page for what each plan includes.';
 
-export const PAYMENTS_ANSWER = 'Not yet. Stores include a catalog, cart, checkout flow and order records, and built-in payments are coming soon.';
+export const PAYMENTS_ANSWER = marketingCopy.platform.payments.availabilityAnswer;
 
 export const BRAND_FAQ: readonly FaqItem[] = [
 	{ question: 'Do I need to code?', answer: 'No. You describe your store and ask for changes in plain words.' },
@@ -147,7 +148,7 @@ export const BRAND_FAQ: readonly FaqItem[] = [
 ];
 
 export const RESELLER_FAQ: readonly FaqItem[] = [
-	{ question: 'When does the catalog open?', answer: "It's coming soon. You can build your store now and add products when it opens." },
+	{ question: 'When does the catalog open?', answer: "Every plan can browse and add products from the current catalog." },
 	{ question: 'Who handles shipping?', answer: 'The supplier ships each order directly to your customer.' },
 	{ question: 'Can I set my own prices?', answer: 'Yes. You choose your price, and the margin over the supplier is yours.' },
 	{ question: 'Can my store take payments?', answer: PAYMENTS_ANSWER },
@@ -193,22 +194,22 @@ export const SELLER_STORIES: readonly SellerStory[] = [
 	{
 		id: 'resellers',
 		to: '/solutions/resellers',
-		story: 'Skip the supplier hunt. The catalog will list vetted products with clear costs and shipping times. Add what fits in a few clicks, and Estori writes the product pages.',
+		story: marketingCopy.home.sellers.cards.resellers.story,
 	},
 	{
 		id: 'digital',
 		to: '/solutions/digital',
-		story: 'Sell e-books, images and videos with instant delivery, and keep your buyers close in a community that lives inside your store.',
+		story: marketingCopy.home.sellers.cards.digital.story,
 	},
 	{
 		id: 'developers',
 		to: '/creators/developers',
-		story: `Build a store once and sell it as a template in Discover. Every buyer gets their own copy to make theirs, and you keep the price minus ${PLATFORM_FEE_LABEL}.`,
+		story: formatMarketingCopy(marketingCopy.home.sellers.cards.developers.story, { platformFee: PLATFORM_FEE_LABEL }),
 	},
 	{
 		id: 'creators',
 		to: '/creators/content',
-		story: 'Share products you love with your own link or store, and get paid for every sale you bring to a merchant.',
+		story: marketingCopy.home.sellers.cards.creators.story,
 	},
 ];
 
@@ -225,44 +226,44 @@ export interface StoreFeature extends CardCopy {
 export const STORE_FEATURES: readonly StoreFeature[] = [
 	{
 		id: 'catalog',
-		tag: 'Catalog',
-		title: 'Catalog and product pages',
-		body: 'Products, variants, filters and detailed product pages, generated from your description.',
-		link: { to: '/discover', label: 'See stores in Discover' },
+		tag: marketingCopy.home.features.cards.catalog.tag,
+		title: marketingCopy.home.features.cards.catalog.title,
+		body: marketingCopy.home.features.cards.catalog.body,
+		link: { to: '/discover', label: marketingCopy.home.features.cards.catalog.link.label },
 	},
 	{
 		id: 'checkout',
-		tag: 'Checkout',
-		title: 'Cart and checkout flow',
-		body: 'A cart, a checkout form and order confirmations your customers already know how to use.',
-		link: { to: '/#build', label: 'Start building' },
+		tag: marketingCopy.home.features.cards.checkout.tag,
+		title: marketingCopy.home.features.cards.checkout.title,
+		body: marketingCopy.home.features.cards.checkout.body,
+		link: { to: '/#build', label: marketingCopy.home.features.cards.checkout.link.label },
 	},
 	{
 		id: 'orders',
-		tag: 'Orders',
-		title: 'Order records',
-		body: 'Your store keeps its orders in its own database, ready for you to review.',
-		link: { to: '/#build', label: 'Start building' },
+		tag: marketingCopy.home.features.cards.orders.tag,
+		title: marketingCopy.home.features.cards.orders.title,
+		body: marketingCopy.home.features.cards.orders.body,
+		link: { to: '/#build', label: marketingCopy.home.features.cards.orders.link.label },
 	},
 	{
 		id: 'chat',
-		tag: 'AI editing',
-		title: 'Edit by chatting',
-		body: 'Ask for a new section, a different style or more products, and the AI updates the live store.',
-		link: { to: '/#build', label: 'Try it' },
+		tag: marketingCopy.home.features.cards.chat.tag,
+		title: marketingCopy.home.features.cards.chat.title,
+		body: marketingCopy.home.features.cards.chat.body,
+		link: { to: '/#build', label: marketingCopy.home.features.cards.chat.link.label },
 	},
 	{
 		id: 'preview',
-		tag: 'Live preview',
-		title: 'Desktop and phone preview',
-		body: 'Every store works on both, and you watch every change live on each before you share it.',
+		tag: marketingCopy.home.features.cards.preview.tag,
+		title: marketingCopy.home.features.cards.preview.title,
+		body: marketingCopy.home.features.cards.preview.body,
 	},
 	{
 		id: 'discover',
-		tag: 'Templates',
-		title: 'Start with a Template',
-		body: 'Pick a store someone built, get your own copy and make it yours by chatting.',
-		link: { to: '/discover', label: 'Browse Discover' },
+		tag: marketingCopy.home.features.cards.discover.tag,
+		title: marketingCopy.home.features.cards.discover.title,
+		body: marketingCopy.home.features.cards.discover.body,
+		link: { to: '/discover', label: marketingCopy.home.features.cards.discover.link.label },
 	},
 ];
 
@@ -276,26 +277,9 @@ function typicalStep(rates: readonly number[]): string {
 
 /**
  * The pricing page's questions, shown before the launch questions: the plans and extra credits once billing is on, and
- * today's free allowance with Pro and Premium coming soon until then. `rates` are the models' typical credits per step.
+ * monthly plan allowances and contact-based activation when online checkout is unavailable. `rates` are the models' typical credits per step.
  */
 export function pricingFaq(billing: boolean, rates: readonly number[]): readonly FaqItem[] {
-	if (!billing) {
-		return [
-			{
-				question: 'What are AI credits?',
-				answer: "Credits pay for the AI's work. Each step it takes while building or changing your store uses credits at the rate of the model you pick, so lighter models go further.",
-			},
-			{
-				question: 'What happens when I run out of credits?',
-				answer: 'On Basic, building and chatting pause until your allowance refills at midnight UTC. Your stores and their previews keep working.',
-			},
-			{
-				question: 'Are Pro and Premium available now?',
-				answer: "Not yet, they're coming soon. Tell us what you need and we'll set you up as they open.",
-			},
-			{ question: 'Do unused credits roll over?', answer: "No. Basic's allowance refills every day." },
-		];
-	}
 	return [
 		{
 			question: 'What are AI credits?',
@@ -303,16 +287,17 @@ export function pricingFaq(billing: boolean, rates: readonly number[]): readonly
 		},
 		{
 			question: 'What happens when I run out of credits?',
-			answer: 'Building and chatting pause until your credits renew, and your stores keep working. On Premium you can buy extra credits at once.',
+			answer: 'Building and chatting pause when your credits run out, and your stores keep working. Buy more credits on any plan to keep creating, or wait for your monthly credits to renew.',
 		},
 		{
 			question: 'Can I buy more credits?',
-			answer: `On Premium, yes: ${EXTRA_CREDITS_PRICE}, from ${formatCredits(EXTRA_CREDITS.minCredits)} at a time. They're used after your monthly credits and last ${EXTRA_CREDITS.monthsValid} months.`,
+			answer: `Yes, on every plan at the same price: ${EXTRA_CREDITS_PRICE}, from ${formatCredits(EXTRA_CREDITS.minCredits)} at a time. They're used after your monthly credits and last ${EXTRA_CREDITS.monthsValid} months.`,
 		},
 		{
 			question: 'Can I change or cancel my plan?',
-			answer: 'Any time, from your billing page. Moving to Premium happens at once; moving to Pro or cancelling happens at the end of the month you paid for.',
+			answer: 'Any time, from your billing page. Upgrading to Premium at the same billing frequency happens at once. Downgrading, changing billing frequency or cancelling takes effect at the end of your paid period.',
 		},
 		{ question: 'Do unused credits roll over?', answer: `Monthly credits don't; extra credits you buy do, for ${EXTRA_CREDITS.monthsValid} months.` },
+		...(!billing ? [{ question: 'How do I activate a paid plan?', answer: marketingCopy.pricing.paidActivationAnswer }] : []),
 	];
 }

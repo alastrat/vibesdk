@@ -261,3 +261,33 @@ describe('the hourly billing run', () => {
 		expect(sent).toContain('u_renewal@example.test');
 	});
 });
+
+it('sends annual subscribers one monthly credits notice after their anniversary time, even when canceled at year end', async () => {
+ await insertUser(db, 'u_year_notice', { emailVerified: true });
+ await insertSubscription(db, { userId: 'u_year_notice', stripeSubscriptionId: 'sub_year_notice', status: 'active', billingInterval: 'year', cancelAtPeriodEnd: true, currentPeriodStart: new Date('2026-01-31T15:30:00Z'), currentPeriodEnd: new Date('2027-01-31T15:30:00Z') });
+ const before = Date.parse('2026-02-28T14:30:00Z');
+ const after = Date.parse('2026-02-28T16:30:00Z');
+ const config = env({ BILLING_USER_IDS: 'u_year_notice' });
+ await runHourlyBilling(config, before);
+ expect(sent).toEqual([]);
+ await runHourlyBilling(config, after);
+ await runHourlyBilling(config, after + 3600000);
+ expect(sent).toHaveLength(1);
+});
+
+it('restores the first held credit month after a late annual payment from unpaid without granting a yearly credit pool', async () => {
+ const start = Date.parse('2026-01-31T15:30:00Z');
+ const now = Date.parse('2026-03-31T16:30:00Z');
+ const end = Date.parse('2027-01-31T15:30:00Z');
+ await insertUser(db, 'u_year_late');
+ await insertBillingCustomer(db, 'u_year_late', 'cus_year_late');
+ await insertSubscription(db, { userId: 'u_year_late', stripeSubscriptionId: 'sub_year_late', status: 'unpaid', billingInterval: 'year', currentPeriodStart: new Date(start), currentPeriodEnd: new Date(end) });
+ const config = env({ STRIPE_PRICE_IDS: JSON.stringify({ pro: 'price_pro', premium: 'price_premium', credits: 'price_credits', proYearly: 'price_year_pro' }) });
+ const ledger = new CreditLedgerService(config);
+ await ledger.recordUse({ userId: 'u_year_late', period: { key: `sub:sub_year_late:${start / 1000}`, startMs: start, endMs: Date.parse('2026-02-28T15:30:00Z') }, pool: 0, useKey: 'annual-held', credits: 30, source: 'think', model: 'm', usage: null, now: new Date(start + 1000) });
+ vi.spyOn(globalThis, 'fetch').mockImplementation(async () => Response.json({ id: 'sub_year_late', customer: 'cus_year_late', status: 'active', created: start / 1000, cancel_at_period_end: false, cancel_at: null, metadata: { estori_user_id: 'u_year_late' }, schedule: null,
+  items: { data: [{ id: 'si_annual', price: { id: 'price_year_pro', recurring: { interval: 'year', interval_count: 1 } }, current_period_start: start / 1000, current_period_end: end / 1000 }] } }));
+ await handleBillingEvent({ ...billingEventDepsFromEnv(config), nowMs: () => now }, { id: 'evt_year_unpaid_paid', type: 'customer.subscription.updated', data: { object: { id: 'sub_year_late' } } });
+ const held = await db.prepare("SELECT pool, used FROM credit_periods WHERE user_id = 'u_year_late'").first();
+ expect(held).toMatchObject({ pool: 20000, used: 30 });
+});

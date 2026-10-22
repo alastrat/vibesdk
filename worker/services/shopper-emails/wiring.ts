@@ -1,5 +1,6 @@
 /** Shopper emails with their production dependencies, and their scheduled work. */
 
+import { loadAccount } from '../billing/account';
 import { ShopperEmailService, StoreOrderService } from '../../database';
 import { createLogger } from '../../logger';
 import { generateId } from '../../utils/idGenerator';
@@ -46,6 +47,10 @@ export function shopperEmailFrom(env: Env): string {
 export function shopperEmailDepsFromEnv(env: Env): ShopperEmailDeps {
 	const orders = new StoreOrderService(env);
 	return {
+		access: async (userId) => {
+			const account = await loadAccount(env, userId);
+			return { canSend: !account.billing || account.limits.shopperEmails, canCustomize: !account.billing || account.limits.customShopperEmails };
+		},
 		emails: new ShopperEmailService(env),
 		order: (orderId) => orders.getOrder(orderId),
 		store: shopperEmailStoreFromEnv(env),

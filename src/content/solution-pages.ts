@@ -1,3 +1,4 @@
+import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
 import { COMPLETED_ORDER_MIN_AGE_DAYS, DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
 import { stripeFeesText } from '@/components/payments/payout-costs';
 import { OWN_PRODUCTS_WEIGHTING } from '@/lib/plans';
@@ -52,19 +53,18 @@ export const CATALOG_FULFILLMENT_COPY: SolutionCopy = {
 		},
 	],
 	steps: [
-		'Apply to the catalog when it opens.',
+		marketingCopy.platform.catalog.pickProducts,
 		'Add products and set your prices, and Estori writes the product pages.',
 		'Customers order, and suppliers ship to them in plain packaging.',
 	],
 	faq: [
-		{ question: 'Is the catalog available now?', answer: "Not yet, it's coming soon. You can build your store now and add products when the catalog opens." },
+		{ question: 'Is the catalog available now?', answer: "Yes. Every plan can browse catalog products and add them to a store. Products, prices and shipping options depend on the current catalog." },
 		{
 			question: 'Who ships the orders?',
 			answer: 'For catalog products, the supplier ships each order directly to your customer. For products you make, you ship them yourself.',
 		},
 		{ question: 'Can I set my own prices?', answer: "Yes. You choose your price, and the margin over the supplier's cost is yours." },
 		{ question: 'Can my store take payments?', answer: PAYMENTS_ANSWER },
-		COMING_SOON_QUESTION,
 	],
 	more: { to: '/solutions/resellers', label: 'Estori for dropshippers and resellers' },
 };
@@ -100,7 +100,7 @@ export const PAYMENTS_COPY: SolutionCopy = {
 					title: 'What Estori keeps',
 					body: "From each sale, Estori keeps the card processing cost, plus the catalog price of any catalog products. When a card costs more to process, such as a card from another country, Estori keeps the difference from that sale.",
 				},
-				{ title: 'Payouts on your schedule', body: `Choose daily, weekly or monthly payouts to your bank. Your account costs ${stripeFeesText(DEFAULT_SELLER_LIMITS.costs)}.` },
+				{ title: 'Payouts on your schedule', body: formatMarketingCopy(marketingCopy.platform.payments.payoutsBenefit, { stripeFees: stripeFeesText(DEFAULT_SELLER_LIMITS.costs) }) },
 				{ title: 'Templates you sell', body: `Selling a store as a template in Discover costs ${PLATFORM_FEE_LABEL} a sale, and you receive the rest through Stripe.` },
 			],
 		},
@@ -111,7 +111,7 @@ export const PAYMENTS_COPY: SolutionCopy = {
 		"Your sales are paid out to your bank after your level's wait, on the schedule you choose.",
 	],
 	faq: [
-		{ question: 'Can my store take payments today?', answer: 'Not yet. Payments run in test mode on store previews, so you can try a checkout, and live stores open soon.' },
+		{ question: 'Can my store take payments today?', answer: PAYMENTS_ANSWER },
 		{
 			question: 'Who pays for refunds?',
 			answer: "You do. You pay the whole refund, including the catalog price and card processing of what you refund. A refund goes through when your Stripe balance can cover it.",
@@ -133,7 +133,6 @@ export const PAYMENTS_COPY: SolutionCopy = {
 			question: 'Why would an order be held?',
 			answer: "When Estori's payment checks flag an order as risky, it's held before Estori buys its catalog products. If it can't be cleared within 24 hours, the shopper is refunded for those products.",
 		},
-		COMING_SOON_QUESTION,
 	],
 	more: { to: '/pricing#compare-title', label: 'Payments in each plan' },
 };
@@ -204,7 +203,7 @@ export const COMMUNITIES_COPY: SolutionCopy = {
 			question: 'Is this the same early access as digital products?',
 			answer: 'Yes. Communities and digital products launch together, so one request covers both.',
 		},
-		{ question: 'Can members pay to join?', answer: 'Paid spaces need built-in payments, which are coming soon.' },
+		{ question: 'Can members pay to join?', answer: marketingCopy.platform.payments.communitiesAnswer },
 		{ question: 'Can I build my store now?', answer: 'Yes. Store building works today, and your store will be ready for your community when it launches.' },
 	],
 };

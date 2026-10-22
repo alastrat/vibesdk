@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { EstoriLogo } from '@/brand';
@@ -6,24 +7,24 @@ import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 
 const LINK_COLUMNS = [
 	{
-		title: 'Solutions',
+		title: marketingCopy.footer.solutions.title,
 		links: [
-			{ to: '/solutions/brands', label: 'Brands' },
-			{ to: '/solutions/resellers', label: 'Resellers' },
-			{ to: '/solutions/digital', label: 'Digital businesses' },
-			{ to: '/industries', label: 'Industries' },
-			{ to: '/agentic-commerce', label: 'AI recommendations' },
-			{ to: '/pricing', label: 'Pricing' },
-			{ to: '/contact', label: 'Contact sales' },
-			{ to: '/blog', label: 'Blog' },
+			{ to: '/solutions/brands', label: marketingCopy.footer.solutions.links.brands },
+			{ to: '/solutions/resellers', label: marketingCopy.footer.solutions.links.resellers },
+			{ to: '/solutions/digital', label: marketingCopy.footer.solutions.links.digital },
+			{ to: '/industries', label: marketingCopy.footer.solutions.links.industries },
+			{ to: '/agentic-commerce', label: marketingCopy.footer.solutions.links['agentic-commerce'] },
+			{ to: '/pricing', label: marketingCopy.footer.solutions.links.pricing },
+			{ to: '/contact', label: marketingCopy.footer.solutions.links.contact },
+			{ to: '/blog', label: marketingCopy.footer.solutions.links.blog },
 		],
 	},
 	{
-		title: 'For creators',
+		title: marketingCopy.footer.creators.title,
 		links: [
-			{ to: '/creators/developers', label: 'Developers' },
-			{ to: '/creators/content', label: 'Content creators' },
-			{ to: '/discover', label: 'Discover' },
+			{ to: '/creators/developers', label: marketingCopy.footer.creators.links.developers },
+			{ to: '/creators/content', label: marketingCopy.footer.creators.links.content },
+			{ to: '/discover', label: marketingCopy.footer.creators.links.discover },
 		],
 	},
 ] as const;
@@ -52,14 +53,14 @@ export function SiteFooter() {
 							))}
 						</FooterColumn>
 					))}
-					<FooterColumn title="Legal">
+					<FooterColumn title={marketingCopy.footer.legal}>
 						{LEGAL_LINKS.map((link) => (
 							<li key={link.slug}>
 								<Link to={link.path} className="hover:text-white">{link.label}</Link>
 							</li>
 						))}
 					</FooterColumn>
-					<FooterColumn title="Contact">
+					<FooterColumn title={marketingCopy.footer.contact}>
 						{Object.values(LEGAL_CONTACT).map((address) => (
 							<li key={address}>
 								<a href={`mailto:${address}`} className="[overflow-wrap:anywhere] hover:text-white">{address}</a>
@@ -69,7 +70,7 @@ export function SiteFooter() {
 				</div>
 				<EstoriLogo className="mt-16 h-14 w-auto text-white sm:h-[76px]" />
 				<div className="mt-6 flex flex-col gap-4 border-t border-white/15 pt-6 text-[13px] text-white/70 md:flex-row md:items-center md:justify-between">
-					<nav aria-label="Legal" className="flex flex-wrap gap-x-5 gap-y-2">
+					<nav aria-label={marketingCopy.footer.legal} className="flex flex-wrap gap-x-5 gap-y-2">
 						{LEGAL_LINKS.map((link) => (
 							<Link key={link.slug} to={link.path} className="hover:text-white">{link.label}</Link>
 						))}

@@ -15,7 +15,7 @@ type Field = 'subject' | 'heading' | 'body';
 const PREVIEW_DELAY_MS = 400;
 
 /** Edits one email's subject, heading and message, with a live preview filled in with a sample order. */
-export function TemplateEditor({ appId, template, placeholders, onClose }: { appId: string; template: ShopperEmailTemplateView; placeholders: readonly string[]; onClose: () => void }) {
+export function TemplateEditor({ appId, template, placeholders, onClose, readOnly = false }: { readOnly?: boolean; appId: string; template: ShopperEmailTemplateView; placeholders: readonly string[]; onClose: () => void }) {
 	useI18n();
 	const label = SHOPPER_EMAIL_LABELS[template.kind];
 	const [values, setValues] = useState<Record<Field, string>>({ subject: template.subject, heading: template.heading, body: template.body });
@@ -40,6 +40,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 	};
 	const submit = (event: FormEvent) => {
 		event.preventDefault();
+		if (readOnly) return;
 		save.mutate(
 			{ kind: template.kind, template: { enabled: template.enabled, ...fields } },
 			{
@@ -56,10 +57,11 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 			<DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
 				<DialogHeader>
 					<DialogTitle>{t('{name} email', { name: t(label.name) })}</DialogTitle>
-					<DialogDescription>{t(label.when)}</DialogDescription>
+					<DialogDescription>{t(label.when)} {readOnly && t("Preview and test these emails. Customize their wording with Premium.")}</DialogDescription>
 				</DialogHeader>
 				<div className="grid gap-6 md:grid-cols-2">
 					<form className="grid content-start gap-3 text-sm" onSubmit={submit}>
+						<fieldset disabled={readOnly} className="contents">
 						<label className="grid gap-1">
 							<span className="text-kumo-subtle">{t("Subject")}</span>
 							<Input
@@ -104,13 +106,14 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 								))}
 							</div>
 						</div>
+						</fieldset>
 						{save.error && (
 							<p role="alert" className="text-kumo-danger">
 								{save.error.message}
 							</p>
 						)}
 						<div className="flex flex-wrap gap-2">
-							<Button type="submit" size="sm" disabled={save.isPending} loading={save.isPending}>{t("Save")}</Button>
+							{!readOnly && <Button type="submit" size="sm" disabled={save.isPending} loading={save.isPending}>{t("Save")}</Button>}
 							<Button
 								type="button"
 								size="sm"
@@ -121,7 +124,7 @@ export function TemplateEditor({ appId, template, placeholders, onClose }: { app
 									test.mutate({ kind: template.kind, fields }, { onSuccess: (result) => toast.success(t("Test sent to {value1}", { value1: result.sentTo })), onError: (error) => toast.error(error.message) })
 								}
 							>{t("Send me a test")}</Button>
-							{template.edited && (
+							{!readOnly && template.edited && (
 								<ConfirmButton
 									label={t("Reset to default")}
 									title={t("Go back to Estori's default?")}

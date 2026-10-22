@@ -13,8 +13,9 @@ const sources = import.meta.glob<string>(
 		'/src/contexts/auth-context.tsx',
 		'/src/routes/settings/index.tsx',
 		'/src/components/settings/LanguageCard.tsx',
-		'/src/components/auth/LanguagePicker.tsx',
+		'/src/components/layout/PublicLanguageMenu.tsx',
 		'/src/components/auth/AuthPageLayout.tsx',
+		'/src/components/layout/PublicUtilityBar.tsx',
 		'/src/components/auth/login-modal.tsx',
 	],
 	{ query: '?raw', import: 'default', eager: true },
@@ -43,19 +44,20 @@ describe('the settings page', () => {
 	});
 });
 
-describe('the sign-in and sign-up screens', () => {
-	it('have a language picker on the pages and in the sign-in window', () => {
-		expect(source('/src/components/auth/AuthPageLayout.tsx')).toContain('<LanguagePicker />');
-		expect(source('/src/components/auth/login-modal.tsx')).toContain('<LanguagePicker />');
+describe('the public language menu', () => {
+	it('lives in the public header instead of the authentication forms', () => {
+		expect(source('/src/components/layout/PublicUtilityBar.tsx')).toContain('<PublicLanguageMenu />');
+		expect(source('/src/components/auth/AuthPageLayout.tsx')).not.toContain('<LanguagePicker />');
+		expect(source('/src/components/auth/login-modal.tsx')).not.toContain('<LanguagePicker />');
 	});
 
 	it('switch the language through chooseLocale, which says when that did not work', () => {
-		expect(source('/src/components/auth/LanguagePicker.tsx')).toContain('chooseLocale(value)');
+		expect(source('/src/components/layout/PublicLanguageMenu.tsx')).toContain('chooseLocale(value)');
 		expect(source('/src/components/settings/LanguageCard.tsx')).toContain('await chooseLocale(value)');
 	});
 
 	it('offer each language by its own name, never translated', () => {
-		const picker = source('/src/components/auth/LanguagePicker.tsx');
+		const picker = source('/src/components/layout/PublicLanguageMenu.tsx');
 		expect(picker).toContain('LOCALE_NAMES[code]');
 		expect(picker).toContain('LOCALES.map');
 		expect(picker).toContain('lang={code}');

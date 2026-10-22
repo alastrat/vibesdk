@@ -25,9 +25,23 @@ export function accountPeriod(signupMs: number | null, nowMs: number): LedgerPer
 }
 
 /** The ledger period of a Stripe billing period; the subscription id keeps it apart from an account month starting the same second. */
-export function subscriptionPeriod(subscription: Pick<SubscriptionRecord, 'stripeSubscriptionId' | 'currentPeriodStart' | 'currentPeriodEnd'>): LedgerPeriod {
-	const startMs = subscription.currentPeriodStart.getTime();
-	return { key: `sub:${subscription.stripeSubscriptionId}:${startMs / 1000}`, startMs, endMs: subscription.currentPeriodEnd.getTime() };
+export function subscriptionPeriod(
+	subscription: Pick<SubscriptionRecord, 'stripeSubscriptionId' | 'currentPeriodStart' | 'currentPeriodEnd'> & { billingInterval?: 'month' | 'year' },
+	nowMs?: number,
+): LedgerPeriod {
+	const anchor = subscription.currentPeriodStart.getTime();
+	let startMs = anchor;
+	let endMs = subscription.currentPeriodEnd.getTime();
+	if (subscription.billingInterval === 'year') {
+		const at = Math.max(anchor, Math.min(nowMs ?? anchor, endMs - 1));
+		const date = new Date(at);
+		const from = new Date(anchor);
+		let months = (date.getUTCFullYear() - from.getUTCFullYear()) * 12 + date.getUTCMonth() - from.getUTCMonth();
+		if (addMonths(anchor, months) > at) months -= 1;
+		startMs = addMonths(anchor, Math.max(0, months));
+		endMs = Math.min(endMs, addMonths(anchor, Math.max(0, months) + 1));
+	}
+	return { key: `sub:${subscription.stripeSubscriptionId}:${startMs / 1000}`, startMs, endMs };
 }
 
 /** The same UTC day and time `months` later, the day clamped to that month's last day. */

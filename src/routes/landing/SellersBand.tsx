@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { useEffect, useRef, useState } from 'react';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
 import { Eyebrow, HEADING_CARD, HEADING_SECTION, LEAD, TextLink } from '@/components/public-site/primitives';
@@ -14,7 +15,7 @@ interface Seller extends SellerStory {
 }
 
 /** The heading's kinds of seller, in turn; the first is the one screen readers hear. */
-const SELLER_WORDS = ['seller', 'entrepreneur', 'merchant', 'developer', 'creator'] as const;
+const SELLER_WORDS = marketingCopy.home.sellers.words;
 
 const SELLERS: readonly Seller[] = SELLER_STORIES.flatMap((story) => {
 	const creator = CREATOR_ITEMS.find((item) => item.to === story.to);
@@ -64,9 +65,9 @@ export function SellersBand() {
 		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
 			<div className="mx-auto grid max-w-[1248px] grid-cols-1 gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-20">
 				<div className="lg:sticky lg:top-[calc(var(--public-header-h)+3rem)] lg:self-start">
-					<Eyebrow>Sell more, better, faster.</Eyebrow>
+					<Eyebrow>{marketingCopy.home.sellers.eyebrow}</Eyebrow>
 					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>
-						Estori for every kind of <span className="sr-only">seller</span>
+						{marketingCopy.home.sellers.titlePrefix}<span className="sr-only">{marketingCopy.home.sellers.accessibleWord}</span>
 						<RotatingWord words={SELLER_WORDS} className="grid" />
 					</h2>
 					{/* Marks the card in view; the cards carry the same names, so screen readers skip it. */}
@@ -76,7 +77,7 @@ export function SellersBand() {
 								<IndexEntry key={seller.id} seller={seller} active={seller === current} />
 							))}
 						</ol>
-						<Eyebrow className="mt-6">For creators</Eyebrow>
+						<Eyebrow className="mt-6">{marketingCopy.common.forCreators}</Eyebrow>
 						<p className="mt-1 text-[13px] font-light text-public-muted">{CREATORS_CAPTION}</p>
 						<ol className="mt-3 grid border-l border-public-line">
 							{SELLERS.filter((seller) => seller.forCreators).map((seller) => (
@@ -93,7 +94,7 @@ export function SellersBand() {
 							className={cn('transition-opacity duration-500 motion-reduce:transition-none', index === active ? 'opacity-100' : 'lg:opacity-40')}
 						>
 							<SellerArt id={seller.id} />
-							{seller.forCreators && <Eyebrow className="mt-7">For creators</Eyebrow>}
+							{seller.forCreators && <Eyebrow className="mt-7">{marketingCopy.common.forCreators}</Eyebrow>}
 							<div className={cn('flex flex-wrap items-center gap-2', seller.forCreators ? 'mt-2' : 'mt-7')}>
 								<h3 className={cn(HEADING_CARD, 'text-public-ink')}>{seller.item.label}</h3>
 								{seller.item.capability && <CapabilityTag id={seller.item.capability} />}
@@ -102,8 +103,7 @@ export function SellersBand() {
 							{/* On phones nothing is pinned beside the card, so it tells its own story. */}
 							<p className={cn(LEAD, 'mt-4 text-pretty text-public-muted lg:hidden')}>{seller.story}</p>
 							<TextLink to={seller.item.to} className="mt-5">
-								Learn more
-							</TextLink>
+								{marketingCopy.common.learnMore}</TextLink>
 						</article>
 					))}
 				</div>

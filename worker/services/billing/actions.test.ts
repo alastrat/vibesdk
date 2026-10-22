@@ -1,5 +1,6 @@
+import { planPriceCents } from '../../../shared/types/plans';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BILLING_CHECKOUT_EXPAND, StripeApiError, type StripeCheckoutSession, type StripeCoupon, type StripeInvoice, type StripeSubscription } from '../payments/stripe-client';
+import { BILLING_CHECKOUT_EXPAND, StripeApiError, type StripeCheckoutSession, type StripeCoupon, type StripeInvoice, type StripeSubscription, type StripePrice } from '../payments/stripe-client';
 import {
 	BILLING_MESSAGES,
 	billingHistory,
@@ -45,6 +46,10 @@ function row(overrides: Partial<SubscriptionRecord> = {}): SubscriptionRecord {
 		stripeSubscriptionId: 'sub_1',
 		status: 'active',
 		plan: 'pro',
+		monthlyCredits: null,
+		pendingMonthlyCredits: null,
+		billingInterval: 'month',
+		pendingBillingInterval: null,
 		currentPeriodStart: new Date('2026-10-05T10:00:00Z'),
 		currentPeriodEnd: new Date('2026-11-05T10:00:00Z'),
 		cancelAtPeriodEnd: false,
@@ -154,8 +159,15 @@ function fake(
 		return answer;
 	};
 	const replacing = (replaces: string | null | undefined): string => (replaces ? `:replacing-${replaces}` : '');
+	const priceCache = new Map<string, StripePrice>();
 	const deps: BillingActionDeps = {
 		stripe: {
+			retrievePrice: async (id) => [...priceCache.values()].find(price => price.id === id) ?? ({ id, product: 'prod_plan', currency: 'usd', unit_amount: id.includes('year') ? (id.includes('premium') ? 190800 : 46800) : (id.includes('premium') ? 19900 : 4900), recurring: { interval: id.includes('year') ? 'year' : 'month', interval_count: 1 } }),
+   findPlanPrice: async (key) => priceCache.get(key) ?? null,
+   createPlanPrice: async (input) => {
+    const price = { id: `price_custom_${input.monthlyCredits}_${input.interval}`, product: input.productId, currency: 'usd', unit_amount: input.priceCents, recurring: { interval: input.interval, interval_count: 1 }, metadata: { estori_plan: input.plan, estori_monthly_credits: String(input.monthlyCredits), estori_billing_interval: input.interval } };
+    priceCache.set(input.lookupKey, price); return price;
+   },
 			createCustomer: async ({ userId }) => {
 				calls.push(`customer:${userId}`);
 				return { id: 'cus_new', email: null, metadata: null };
@@ -166,9 +178,10 @@ function fake(
 			},
 			createSubscriptionCheckoutSession: async (input) => {
 				calls.push(`checkout:${input.customerId}:${input.priceId}${replacing(input.replaces)}`);
-				return made(SESSION, input.replaces);
-			},
-			createCreditsCheckoutSession: async (input) => {
+				return made(input.monthlyCredits === undefined ? SESSION : { ...PLAN_SESSION, id: SESSION.id, client_secret: SESSION.client_secret, amount_total: (await deps.stripe!.retrievePrice(input.priceId)).unit_amount ?? null,
+     metadata: { estori_user_id: 'u1', plan: input.plan, billing_interval: input.billingInterval ?? 'month', monthly_credits: String(input.monthlyCredits) }, line_items: { data: [{ quantity: 1, price: await deps.stripe!.retrievePrice(input.priceId) }] } }, input.replaces);
+   },
+   createCreditsCheckoutSession: async (input) => {
 				calls.push(`credits:${input.customerId}:${input.credits}${replacing(input.replaces)}`);
 				keys.push(input.idempotencyKey);
 				return made(SESSION, input.replaces);
@@ -176,9 +189,13 @@ function fake(
 			retrieveSubscription: async (id) => {
 				calls.push(`read:${id}`);
 				const schedule = state.schedule ? { id: state.schedule, status: 'active', subscription: id, current_phase: null, phases: [] } : null;
-				const item = { ...SUBSCRIPTION.items.data[0], price: { id: state.price ?? 'price_pro' } };
+				const plan = state.row?.plan ?? 'pro';
+				const interval = state.row?.billingInterval ?? 'month';
+				const credits = state.row?.monthlyCredits;
+				const price = state.price ? { id: state.price } : credits ? { id: `price_current_${credits}`, currency:'usd', unit_amount:planPriceCents(plan, interval, credits), recurring:{interval,interval_count:1}, metadata:{estori_plan:plan,estori_monthly_credits:String(credits)} } : { id: `price_${plan}${interval === 'year' ? '_year' : ''}` };
+				const item = { ...SUBSCRIPTION.items.data[0], price };
 				const card = state.card === undefined ? 'pm_1' : state.card;
-				return { ...SUBSCRIPTION, schedule, items: { data: [item] }, default_payment_method: card };
+				return { ...SUBSCRIPTION, cancel_at_period_end: state.row?.cancelAtPeriodEnd ?? false, status: state.row?.status ?? SUBSCRIPTION.status, schedule, items: { data: [item] }, default_payment_method: card };
 			},
 			changeSubscriptionPrice: async ({ priceId, idempotencyKey }) => {
 				keys.push(idempotencyKey);
@@ -402,12 +419,15 @@ describe('cancelling, keeping the plan and extra credits', () => {
 		expect(ending.calls).toEqual(['read:sub_1', 'resume:sub_1']);
 	});
 
-	it('sells extra credits to Premium only, in amounts from 5,000 in thousands', async () => {
-		const premium = fake({ customer: 'cus_1' });
-		expect(await buyCredits(premium.deps, USER, account('premium'), 12_000)).toMatchObject({ ok: true, value: { sessionId: 'cs_1' } });
-		expect(premium.calls).toEqual(['credits:cus_1:12000', 'session:cs_1']);
-		expect(await buyCredits(fake().deps, USER, account('pro'), 12_000)).toMatchObject({ ok: false, status: 402, refusal: { limit: 'extraCredits', upgradeTo: 'premium' } });
-		for (const credits of [4_000, 5_500, 2_000_000, '5000']) expect(await buyCredits(fake().deps, USER, account('premium'), credits)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.creditsAmount });
+	it.each(['basic', 'pro', 'premium', 'enterprise'] as const)('sells the same credit amount at the same price on %s', async (plan) => {
+		const { deps } = fake({ customer: 'cus_1' });
+		expect(await buyCredits(deps, USER, account(plan), 12_000)).toMatchObject({ ok: true, value: { sessionId: 'cs_1', order: { kind: 'credits', credits: 12_000, amountCents: 1_800 }, terms: null } });
+	});
+
+	it('validates credit amounts equally on every plan', async () => {
+		for (const plan of ['basic', 'pro', 'premium', 'enterprise'] as const) {
+			for (const credits of [4_000, 5_500, 2_000_000, '5000']) expect(await buyCredits(fake().deps, USER, account(plan), credits)).toEqual({ ok: false, status: 400, message: BILLING_MESSAGES.creditsAmount });
+		}
 	});
 
 	it('opens a new checkout for the same amount once the first purchase is recorded, and one for a double click', async () => {
@@ -421,10 +441,9 @@ describe('cancelling, keeping the plan and extra credits', () => {
 		expect(keys[2]).toMatch(/^billing-credits-u1-12000-cp_1-\d+$/);
 	});
 
-	it('calls Stripe for no refused amount or plan', async () => {
+	it('calls Stripe for no refused amount', async () => {
 		const { deps, calls } = fake();
 		for (const credits of [0, 4_000, 5_500, 2_000_000, '5000', null]) await buyCredits(deps, USER, account('premium'), credits);
-		await buyCredits(deps, USER, account('basic'), 5_000);
 		expect(calls).toEqual([]);
 	});
 });
@@ -480,7 +499,7 @@ describe('opening an embedded checkout', () => {
 					kind: 'plan',
 					plan: 'pro',
 					priceCents: 4_900,
-					includes: ['20,000 AI credits a month', 'Up to 3 live stores, 10 new stores a day', 'Your own domain on each live store', 'The supplier catalog'],
+					includes: ['20,000 AI credits a month', 'Up to 5 live stores', 'Your own domain on each live store', 'The supplier catalog'],
 				},
 				terms: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', dueTodayCents: 4_900, disclosure: NO_CODE_DISCLOSURE },
 			},
@@ -1316,7 +1335,7 @@ describe("the checkout's wording in the seller's language", () => {
 			dueTodayCents: 4_900,
 			disclosure: withNoBreakSpaces('Pro se renueva cada mes por USD 49 hasta que canceles. Cancela cuando quieras en Estori; termina al final del período.'),
 		});
-		expect(started.value.order).toMatchObject({ kind: 'plan', includes: ['20,000 créditos de IA al mes', 'Hasta 3 tiendas publicadas, 10 tiendas nuevas al día', 'Tu propio dominio en cada tienda publicada', 'El catálogo de proveedores'] });
+		expect(started.value.order).toMatchObject({ kind: 'plan', includes: ['20,000 créditos de IA al mes', 'Hasta 5 tiendas publicadas', 'Tu propio dominio en cada tienda publicada', 'El catálogo de proveedores'] });
 
 		const portuguese = fake({ customer: 'cus_1', sessions: [PLAN_SESSION] });
 		portuguese.deps.i18n = serverT('pt-BR');
@@ -1324,7 +1343,7 @@ describe("the checkout's wording in the seller's language", () => {
 		if (!answered.ok) throw new Error('the checkout starts');
 		expect(plain(answered.value.terms?.consentText ?? '')).toBe(PORTUGUESE_CONSENT);
 		expect(plain(answered.value.terms?.buttonText ?? '')).toBe('Assinar: US$ 49 por mês');
-		expect(answered.value.order).toMatchObject({ includes: expect.arrayContaining(['20.000 créditos de IA por mês', 'Até 3 lojas no ar, 10 lojas novas por dia']) });
+		expect(answered.value.order).toMatchObject({ includes: expect.arrayContaining(['20.000 créditos de IA por mês', 'Até 5 lojas no ar']) });
 	});
 
 	it('words a promotion code in each language, with its month count', async () => {
@@ -1371,4 +1390,74 @@ describe("the checkout's wording in the seller's language", () => {
 		english.deps.i18n = serverT('en');
 		expect(await startCheckout(english.deps, USER, 'pro')).toMatchObject({ ok: true, value: { terms: { consentText: NO_CODE_CONSENT, buttonText: 'Subscribe: $49 a month', disclosure: NO_CODE_DISCLOSURE } } });
 	});
+});
+
+
+describe('annual billing actions', () => {
+ it('refuses unavailable or invalid intervals without opening a monthly checkout', async () => {
+  const f = fake();
+  expect(await startCheckout(f.deps, USER, 'pro', 'year')).toMatchObject({ ok: false, status: 503 });
+  expect(await startCheckout(f.deps, USER, 'pro', 'week')).toMatchObject({ ok: false, status: 400 });
+  expect(f.calls).toEqual([]);
+ });
+ it('uses the annual price and full annual consent, including on a repeated terms read', async () => {
+  const session = { ...PLAN_SESSION, id: 'cs_1', metadata: { ...PLAN_SESSION.metadata, billing_interval: 'year' }, amount_total: 46800, line_items: { data: [{ quantity: 1, price: { id: 'price_pro_year', currency: 'usd', unit_amount: 46800, recurring: { interval: 'year', interval_count: 1 } } }] } };
+  const f = fake({ sessions: [session] });
+  f.deps.priceIds = { ...f.deps.priceIds!, proYearly: 'price_pro_year', premiumYearly: 'price_premium_year' };
+  expect(await startCheckout(f.deps, USER, 'pro', 'year')).toMatchObject({ ok: true, value: { order: { billingInterval: 'year', priceCents: 46800 }, terms: { consentText: expect.stringContaining('$468 a year') } } });
+  expect(f.calls).toContain('checkout:cus_new:price_pro_year');
+  expect(await checkoutTerms(f.deps, USER.id, 'cs_1')).toMatchObject({ ok: true, value: { disclosure: expect.stringContaining('every year') } });
+ });
+ it('keeps yearly billing on upgrades and downgrades and schedules cadence changes at renewal', async () => {
+  const up = fake({ row: row({ billingInterval: 'year' }), price: 'price_pro_year' });
+  up.deps.priceIds = { ...up.deps.priceIds!, proYearly: 'price_pro_year', premiumYearly: 'price_premium_year' };
+  expect(await changePlan(up.deps, USER.id, 'premium')).toMatchObject({ ok: true });
+  expect(up.calls).toContain('now:price_premium_year');
+  const down = fake({ row: row({ plan: 'premium', billingInterval: 'year' }), price: 'price_premium_year' });
+  down.deps.priceIds = up.deps.priceIds;
+  expect(await changePlan(down.deps, USER.id, 'pro')).toMatchObject({ ok: true });
+  expect(down.calls).toContain('renewal:price_pro_year');
+  const cadence = fake({ row: row() }); cadence.deps.priceIds = up.deps.priceIds;
+  expect(await changePlan(cadence.deps, USER.id, 'pro', 'year')).toMatchObject({ ok: true });
+  expect(cadence.calls).toContain('renewal:price_pro_year');
+ });
+});
+
+it('refuses an annual plan change if its configured annual ID actually names a monthly price', async () => {
+ const f = fake({ row: row({ billingInterval: 'year' }) });
+ f.deps.priceIds = { ...f.deps.priceIds!, proYearly: 'price_pro_year', premiumYearly: 'price_premium' };
+ f.deps.stripe!.retrievePrice = async () => ({ id: 'price_premium', currency: 'usd', unit_amount: 19900, recurring: { interval: 'month', interval_count: 1 } });
+ expect(await changePlan(f.deps, USER.id, 'premium')).toMatchObject({ ok: false, status: 503 });
+ expect(f.calls.some((call) => call.startsWith('now:') || call.startsWith('renewal:'))).toBe(false);
+});
+
+it('checks out the selected recurring allowance at the server-computed price and rejects tampered amounts', async () => {
+ const f = fake();
+ expect(await startCheckout(f.deps, USER, 'pro', 'month', 30000)).toMatchObject({ ok: true, value: { order: { monthlyCredits:30000, priceCents:6400 }, terms: { dueTodayCents:6400, consentText:expect.stringContaining('$64 a month') } } });
+ expect(f.calls).toContain('checkout:cus_new:price_custom_30000_month');
+ expect(await startCheckout(fake().deps, USER, 'pro', 'month', 20500)).toMatchObject({ ok:false, status:400 });
+});
+it('prorates same-plan increases and schedules recurring-credit reductions at renewal', async () => {
+ const up = fake({ row: row() });
+ expect(await changePlan(up.deps, USER.id, 'pro', 'month', 30000)).toMatchObject({ ok:true });
+ expect(up.calls).toContain('now:price_custom_30000_month');
+ const down = fake({ row: row({ monthlyCredits:50000 }) });
+ expect(await changePlan(down.deps, USER.id, 'pro', 'month', 30000)).toMatchObject({ ok:true });
+ expect(down.calls).toContain('renewal:price_custom_30000_month');
+});
+
+it('refuses a second allowance change while Stripe has already raised credits and the stored row is stale', async () => {
+ const f=fake({row:row()});
+ f.deps.stripe!.retrieveSubscription=async()=>({...SUBSCRIPTION,items:{data:[{...SUBSCRIPTION.items.data[0],price:{id:'price_live_100k',product:'prod_plan',currency:'usd',unit_amount:16900,recurring:{interval:'month',interval_count:1},metadata:{estori_plan:'pro',estori_monthly_credits:'100000'}}}]}});
+ expect(await changePlan(f.deps,USER.id,'pro','month',30000)).toMatchObject({ok:false,status:409});
+ expect(f.calls.some(call=>call.startsWith('now:')||call.startsWith('renewal:'))).toBe(false);
+});
+
+
+it('refuses to overwrite a pending credit change before its webhook reaches billing', async () => {
+ const f=fake({row:row({monthlyCredits:100000})});
+ const read=f.deps.stripe!.retrieveSubscription;
+ f.deps.stripe!.retrieveSubscription=async(id)=>({...await read(id),schedule:{id:'sched_new',status:'active',subscription:id,current_phase:{start_date:1,end_date:2},phases:[{start_date:1,end_date:2,items:[{price:'price_current_100000',quantity:1}]},{start_date:2,end_date:3,items:[{price:'price_pro',quantity:1}]}]}});
+ expect(await changePlan(f.deps,USER.id,'pro','month',200000)).toMatchObject({ok:false,status:409});
+ expect(f.calls.some(call=>call.startsWith('now:')||call.startsWith('renewal:')||call.startsWith('release:'))).toBe(false);
 });

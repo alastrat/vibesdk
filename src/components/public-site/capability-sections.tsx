@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { useRef, type Ref } from 'react';
 import { AnimatedBeam } from '@/components/magicui/animated-beam';
 import { AGENTIC_COMMERCE_SUMMARY, PERSONALIZATION_CARDS } from '@/content/positioning';
@@ -27,19 +28,18 @@ export function AgenticCommerceSection({ id }: { id?: string }) {
 			<div className="mx-auto grid max-w-[1248px] gap-12 lg:grid-cols-2 lg:items-center">
 				<div>
 					<div className="flex flex-wrap items-center gap-3">
-						<Eyebrow>AI recommendations</Eyebrow>
+						<Eyebrow>{marketingCopy.home.recommendations.eyebrow}</Eyebrow>
 						<CapabilityTag id="agentic-commerce" />
 					</div>
-					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>Get recommended when shoppers ask AI what to buy</h2>
+					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>{marketingCopy.home.recommendations.title}</h2>
 					<p className={cn(LEAD, 'mt-5 text-pretty text-public-muted')}>{AGENTIC_COMMERCE_SUMMARY}</p>
 					<TextLink to="/agentic-commerce" className="mt-6">
-						How it works
-					</TextLink>
+						{marketingCopy.home.recommendations.link}</TextLink>
 				</div>
 				<div ref={containerRef} aria-hidden className="relative grid gap-6 sm:grid-cols-3 sm:gap-10">
-					<DiagramNode ref={storeRef} label="Your store" />
-					<DiagramNode ref={assistantRef} label="An AI assistant" />
-					<DiagramNode ref={customerRef} label="A new customer" />
+					<DiagramNode ref={storeRef} label={marketingCopy.home.recommendations.diagram.store} />
+					<DiagramNode ref={assistantRef} label={marketingCopy.home.recommendations.diagram.assistant} />
+					<DiagramNode ref={customerRef} label={marketingCopy.home.recommendations.diagram.customer} />
 					<AnimatedBeam {...beam} fromRef={storeRef} toRef={assistantRef} />
 					<AnimatedBeam {...beam} fromRef={assistantRef} toRef={customerRef} delay={0.6} />
 				</div>
@@ -55,13 +55,12 @@ export function PersonalizationSection({ id }: { id?: string }) {
 			<div className="mx-auto max-w-[1392px] rounded-[25px] bg-[#f2f2f3] px-3 pt-16 pb-3 sm:px-6 sm:pt-24 sm:pb-6">
 				<div className="mx-auto max-w-[1248px] px-3 sm:px-0">
 					<div className="flex flex-wrap items-center gap-3">
-						<Eyebrow>Personalized shopping</Eyebrow>
+						<Eyebrow>{marketingCopy.home.personalization.eyebrow}</Eyebrow>
 						<CapabilityTag id="personalized-shopping" />
 					</div>
 					<h2 id="personalization-title" className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance text-public-ink')}>
-						Show every shopper the right products
-					</h2>
-					<p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty text-public-muted')}>Built into your store, with no extra apps to install.</p>
+						{marketingCopy.home.personalization.title}</h2>
+					<p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty text-public-muted')}>{marketingCopy.home.personalization.description}</p>
 				</div>
 				<div className="mx-auto mt-12 grid max-w-[1248px] gap-3 sm:mt-16 md:grid-cols-2 md:gap-8">
 					{PERSONALIZATION_CARDS.map((card) => (

@@ -1,7 +1,8 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 import { COMPETITORS } from './copy-rules';
 
-const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src/components/public-site/*.tsx'], {
+const pageSources = import.meta.glob<string>(['/src/routes/landing/*.tsx', '/src/components/public-site/*.tsx', '/src/content/marketing/en.json'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -57,7 +58,8 @@ describe('landing page', () => {
 	it('shows the builder demo on a bundled store image under a neutral address, with motion from Magic UI', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
 		expect(hero).toContain("HERO_STORE_IMAGE = '/marketing/hero-store.jpg'");
-		expect(hero).toContain('url="Live preview"');
+		expect(hero).toContain('url={marketingCopy.home.hero.demo.previewLabel}');
+		expect(marketingCopy.home.hero.demo.previewLabel).toBe('Live preview');
 		expect(hero).toContain('<AnimatedList');
 		expect(hero).toContain('<BorderBeam');
 		expect(hero).toContain('id="build"');
@@ -67,11 +69,14 @@ describe('landing page', () => {
 
 	it('speaks to brands first, in plain words, and marks what is still to come', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
-		expect(hero).toContain('AI-powered online stores');
-		expect(hero).toContain('Describe your store. Estori builds it in minutes.');
-		expect(hero).toContain('Next: assistants that help you sell more and handle the daily work.');
+		expect(marketingCopy.home.hero.eyebrow).toBe('AI-powered online stores');
+		expect(hero).toContain('marketingCopy.home.hero.eyebrow');
+		expect(marketingCopy.home.hero.title).toBe('Describe your store. Estori builds it in minutes.');
+		expect(hero).toContain('marketingCopy.home.hero.title');
+		expect(marketingCopy.home.hero.description).toContain('Next: assistants that help you sell more and handle the daily work.');
 		expect(hero).not.toMatch(/agentic|wherever shoppers ask AI/i);
-		expect(source('/src/routes/landing/Features.tsx')).toContain('What your store comes with today');
+		expect(marketingCopy.home.features.title).toBe('What your store comes with today');
+		expect(source('/src/routes/landing/Features.tsx')).toContain('marketingCopy.home.features.title');
 		const band = source('/src/routes/landing/SellersBand.tsx');
 		expect(band).toContain('SELLER_STORIES');
 		expect(band).toContain('<SellerArt id={seller.id} />');
@@ -79,8 +84,8 @@ describe('landing page', () => {
 
 	it('always underlines the Discover link under the build box', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
-		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*Browse stores in Discover/);
-		expect(hero).not.toMatch(/hover:underline">\s*Browse stores in Discover/);
+		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*\{marketingCopy\.home\.hero\.discoverLink\}/);
+		expect(hero).not.toMatch(/hover:underline">\s*\{marketingCopy\.home\.hero\.discoverLink\}/);
 	});
 
 	it('grows the builder demo to fill the window as the page scrolls', () => {
@@ -124,7 +129,8 @@ describe('landing page', () => {
 		expect(showcase).toContain('aria-pressed={activeFilter === option}');
 		expect(showcase).toContain('to={`/discover/${store.id}`}');
 		expect(showcase).toContain('id="discover"');
-		expect(showcase).toContain('See what people are building on Estori');
+		expect(marketingCopy.home.showcase.title).toBe('See what people are building on Estori');
+		expect(showcase).toContain('marketingCopy.home.showcase.title');
 		expect(showcase).not.toMatch(/creators are building/);
 	});
 
@@ -175,7 +181,8 @@ describe('landing page', () => {
 		const closing = sections.slice(sections.indexOf('export function ClosingPanel'));
 		expect(closing).toContain('rounded-[25px] bg-[#dce9fc]');
 		expect(closing).toContain('<CloudLaptop />');
-		expect(closing).toContain('Your next store starts with a sentence.');
+		expect(marketingCopy.home.closing.title).toBe('Your next store starts with a sentence.');
+		expect(closing).toContain('marketingCopy.home.closing.title');
 		expect(closing).toContain('<StartBuildingButton variant="blue" />');
 		expect(source('/src/components/public-site/CloudLaptop.tsx')).toMatch(/^\s*<svg aria-hidden /m);
 	});
