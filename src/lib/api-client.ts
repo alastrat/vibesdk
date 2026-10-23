@@ -1,3 +1,4 @@
+import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
 /**
  * Unified API Client - Premium quality abstraction for all worker API calls
@@ -704,6 +705,27 @@ class ApiClient {
 	}
 
 	/** A Discover site's product page; quiet because the page shows its own unavailable state. */
+	async getDiscoverCategories() {
+		return this.request<DiscoverCategory[]>('/api/discover/catalog/categories', {}, true);
+	}
+	async getDiscoverCatalog(filters: DiscoverCatalogFilters) {
+		const params = new URLSearchParams();
+		for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== '') params.set(key, String(value));
+		return this.request<DiscoverCatalogPage>(`/api/discover/catalog?${params}`, {}, true);
+	}
+	async getDiscoverEntry(slug: string) {
+		return this.request<DiscoverEntryDetail>(`/api/discover/catalog/${encodeURIComponent(slug)}`, {}, true);
+	}
+	async getDiscoverAccess(slug: string) {
+		return this.request<DiscoverAccess>(`/api/discover/catalog/${encodeURIComponent(slug)}/access`, {}, true);
+	}
+	async createDiscoverCheckout(slug: string) {
+		return this.request<DiscoverCheckout>(`/api/discover/catalog/${encodeURIComponent(slug)}/checkout`, { method: 'POST' }, true);
+	}
+	async confirmDiscoverCheckout(sessionId: string) {
+		return this.request<DiscoverAccess>('/api/discover/catalog/checkout/confirm', { method: 'POST', body: { sessionId } }, true);
+	}
+
 	async getSitePage(appId: string): Promise<ApiResponse<SitePageData>> {
 		return this.request<SitePageData>(`/api/discover/${appId}`, {}, true);
 	}

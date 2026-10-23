@@ -1,3 +1,4 @@
+import { setupDiscoverCatalogRoutes } from './discoverCatalogRoutes';
 import { setupAuthRoutes } from './authRoutes';
 import { setupAppRoutes } from './appRoutes';
 import { setupPublishingRoutes } from './publishingRoutes';
@@ -69,6 +70,9 @@ export function setupRoutes(app: Hono<AppEnv>): void {
     
     // Publishing, paid listings and review (before app routes so the visibility route is matched here)
     setupPublishingRoutes(app);
+
+    // Curated catalog must precede the existing /discover/:appId marketplace route.
+    setupDiscoverCatalogRoutes(app);
 
     // Discover product pages
     setupSitePageRoutes(app);

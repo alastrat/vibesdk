@@ -36,7 +36,12 @@ export function createApp(env: Env): Hono<AppEnv> {
             return next();
         }
         // Apply secure headers
-        return secureHeaders(getSecureHeadersConfig(env))(c, next);
+        const headers = getSecureHeadersConfig(env);
+        // Discover media sets its own restrictive sandbox CSP; the site's script policy must not overwrite it.
+        if (/^\/api\/discover\/catalog\/[^/]+\/media\/[^/]+$/.test(pathname)) {
+            return secureHeaders({ ...headers, contentSecurityPolicy: undefined, xFrameOptions: false })(c, next);
+        }
+        return secureHeaders(headers)(c, next);
     });
     
     // CORS configuration

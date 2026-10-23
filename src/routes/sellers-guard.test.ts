@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 import { SELLER_STORIES } from '@/content/positioning';
 import { AUDIENCES, CREATOR_ITEMS } from '@/lib/site-nav';
@@ -56,11 +57,15 @@ describe('every kind of seller', () => {
 
 	it('leads with the promise, and rotates the kind of seller in the heading', () => {
 		const band = source(BAND);
-		expect(band).toContain('<Eyebrow>Sell more, better, faster.</Eyebrow>');
+		expect(band).toContain('<Eyebrow>{marketingCopy.home.sellers.eyebrow}</Eyebrow>');
+		expect(marketingCopy.home.sellers.eyebrow).toBe('Sell more, better, faster.');
 		expect(band).not.toContain('<Eyebrow>Solutions</Eyebrow>');
-		expect(band).toContain("const SELLER_WORDS = ['seller', 'entrepreneur', 'merchant', 'developer', 'creator'] as const;");
+		expect(band).toContain('const SELLER_WORDS = marketingCopy.home.sellers.words;');
+		expect(marketingCopy.home.sellers.words).toEqual(['seller', 'entrepreneur', 'merchant', 'developer', 'creator']);
+		expect(marketingCopy.home.sellers.titlePrefix).toBe('Estori for every kind of ');
+		expect(marketingCopy.home.sellers.accessibleWord).toBe('seller');
 		// Screen readers hear the sentence once; the rotating word is visual.
-		expect(band).toMatch(/Estori for every kind of <span className="sr-only">seller<\/span>\s*<RotatingWord words=\{SELLER_WORDS\}/);
+		expect(band).toMatch(/\{marketingCopy\.home\.sellers\.titlePrefix\}<span className="sr-only">\{marketingCopy\.home\.sellers\.accessibleWord\}<\/span>\s*<RotatingWord words=\{SELLER_WORDS\}/);
 	});
 
 	it('rotates the word in place: the longest word holds the space, and reduced motion keeps the first word', () => {

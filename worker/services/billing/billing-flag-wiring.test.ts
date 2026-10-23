@@ -40,6 +40,8 @@ describe("billing's flag checks", () => {
 	it("send renewal emails by each account's billing flag, using the switches' list only while it is the whole flag", () => {
 		const jobs = worker['/worker/services/billing/jobs.ts'] ?? '';
 		expect(jobs).toContain('if (posthogConfig(env) || flagOverridesOf(env).billing) return null;');
-		expect(jobs).toContain("if (!account.billing || account.source === 'subscription' || account.period.startMs !== dayStartMs) continue;");
+		// Annual subscriptions renew their credit pool monthly; monthly subscriptions use their paid-invoice notice.
+		expect(jobs).toContain("const annualSubscription = account.source === 'subscription' && account.subscription?.billingInterval === 'year';");
+		expect(jobs).toContain("if (!account.billing || (account.source === 'subscription' && !annualSubscription) || account.period.startMs < dayStartMs || account.period.startMs > nowMs) continue;");
 	});
 });

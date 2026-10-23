@@ -1,5 +1,6 @@
 import { Tabs } from '@cloudflare/kumo';
 import { isBillingInterval, type BillingInterval } from '@/api-types';
+import { msg } from '@/lib/i18n';
 
 /** Shared cadence selector; public copy remains English, account screens can supply translated labels. */
 export function BillingIntervalPicker({
@@ -7,7 +8,7 @@ export function BillingIntervalPicker({
 	onChange,
 	monthly = 'Monthly',
 	yearly = 'Yearly',
-	savings = 'Save 20%',
+	savings = msg('Save 20%'),
 }: {
 	value: BillingInterval;
 	onChange: (interval: BillingInterval) => void;

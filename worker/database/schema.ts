@@ -1493,3 +1493,44 @@ export const storeTexts = sqliteTable('store_texts', {
     pk: primaryKey({ columns: [table.appId, table.sourceHash] }),
     seenIdx: index('store_texts_app_seen_idx').on(table.appId, table.seenAt),
 }));
+
+// First-party curated Discover content; independent of published app listings.
+export const discoverCategories = sqliteTable('discover_categories', {
+    id: text('id').primaryKey(), slug: text('slug').notNull().unique(), title: text('title').notNull(),
+    description: text('description').notNull(), color: text('color').notNull(), sortOrder: integer('sort_order').notNull(),
+});
+export const discoverEntries = sqliteTable('discover_entries', {
+    id: text('id').primaryKey(), slug: text('slug').notNull().unique(), title: text('title').notNull(),
+    summary: text('summary').notNull(), description: text('description').notNull(),
+    categoryId: text('category_id').notNull().references(() => discoverCategories.id),
+    kind: text('kind', { enum: ['store', 'component'] }).notNull(), tier: text('tier', { enum: ['free', 'premium'] }).notNull(),
+    priceCents: integer('price_cents').notNull(), currency: text('currency').notNull().default('usd'),
+    version: text('version').notNull(), tags: text('tags').notNull(), features: text('features').notNull(), palette: text('palette').notNull(),
+    animationKey: text('animation_key').notNull(), featured: integer('featured').notNull().default(0),
+    published: integer('published').notNull().default(0), sortOrder: integer('sort_order').notNull(), updatedAt: integer('updated_at').notNull(),
+}, (table) => [index('discover_entries_category_published_idx').on(table.categoryId, table.published)]);
+export const discoverVersions = sqliteTable('discover_versions', {
+    id: text('id').primaryKey(), entryId: text('entry_id').notNull().references(() => discoverEntries.id),
+    version: text('version').notNull(), priceCents: integer('price_cents').notNull(), currency: text('currency').notNull(),
+    sourceKey: text('source_key').notNull(), downloadKey: text('download_key').notNull(), sourceSha256: text('source_sha256').notNull(),
+    createdAt: integer('created_at').notNull(),
+}, (table) => [uniqueIndex('discover_versions_entry_version_unique').on(table.entryId, table.version)]);
+export const discoverAssets = sqliteTable('discover_assets', {
+    id: text('id').primaryKey(), entryId: text('entry_id').notNull().references(() => discoverEntries.id), version: text('version').notNull(),
+    role: text('role', { enum: ['cover', 'preview', 'source', 'download', 'manifest'] }).notNull(),
+    objectKey: text('object_key').notNull(), mime: text('mime').notNull(), byteSize: integer('byte_size').notNull(), sha256: text('sha256').notNull(),
+}, (table) => [uniqueIndex('discover_assets_entry_version_role_unique').on(table.entryId, table.version, table.role)]);
+export const discoverCheckoutOrders = sqliteTable('discover_checkout_orders', {
+    entryId: text('entry_id').notNull().references(() => discoverEntries.id),
+    productName: text('product_name').notNull(), buyerEmail: text('buyer_email').notNull(), returnUrl: text('return_url').notNull(),
+    id: text('id').primaryKey(), userId: text('user_id').notNull().references(() => users.id),
+    versionId: text('version_id').notNull().references(() => discoverVersions.id), priceCents: integer('price_cents').notNull(), currency: text('currency').notNull(),
+    sessionId: text('session_id').unique(), paymentIntentId: text('payment_intent_id').unique(),
+    status: text('status', { enum: ['pending', 'paid', 'refunded', 'expired', 'duplicate'] }).notNull().default('pending'), createdAt: integer('created_at').notNull(),
+}, (table) => [uniqueIndex('discover_checkout_active_buyer_entry').on(table.userId, table.entryId).where(sql`${table.status} = 'pending'`)]);
+export const discoverPurchases = sqliteTable('discover_purchases', {
+    entryId: text('entry_id').notNull().references(() => discoverEntries.id),
+    id: text('id').primaryKey(), userId: text('user_id').notNull().references(() => users.id),
+    versionId: text('version_id').notNull().references(() => discoverVersions.id), orderId: text('order_id').notNull().unique().references(() => discoverCheckoutOrders.id),
+    revoked: integer('revoked').notNull().default(0), createdAt: integer('created_at').notNull(),
+}, (table) => [index('discover_purchases_user_version_idx').on(table.userId, table.versionId), uniqueIndex('discover_purchase_active_buyer_entry').on(table.userId, table.entryId).where(sql`${table.revoked} = 0`)]);

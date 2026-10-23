@@ -14,7 +14,7 @@ import BillingCardReturnPage from './routes/settings/billing-card-return';
 import AppsPage from './routes/apps';
 import CatalogPage from './routes/catalog';
 import AppView from './routes/app';
-import DiscoverPage from './routes/discover';
+import DiscoverPage from './routes/discover/route';
 import SitePage from './routes/discover/site';
 import AdminReviewsPage from './routes/admin/reviews';
 import AdminEarlyAccessPage from './routes/admin/early-access';

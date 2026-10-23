@@ -260,6 +260,13 @@
       "when": 1792634802513,
       "tag": "0036_recurring_credit_allowances",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1792709663007,
+      "tag": "0037_green_arachne",
+      "breakpoints": true
     }
   ]
 }

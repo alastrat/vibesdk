@@ -22,7 +22,7 @@ function useRootView(): RootView {
 export function AppShell() {
 	const { pathname } = useLocation();
 	const view = useRootView();
-	if (pathname !== '/' || view === 'home') return <AppLayout />;
+	if ((pathname !== '/' && pathname !== '/discover') || view === 'home') return <AppLayout />;
 	// The loader fills the screen by itself until the visitor is known.
 	return view === 'loading' ? <Outlet /> : <PublicLayout />;
 }
