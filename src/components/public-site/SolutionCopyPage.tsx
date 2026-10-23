@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
@@ -26,9 +27,9 @@ export function SolutionCopyPage({ head, copy, children }: { head: PageHead; cop
 		<div>
 			<PageMeta {...head} />
 			<SolutionHero
-				eyebrow={copy.eyebrow}
-				title={copy.title}
-				lead={copy.lead}
+				eyebrow={t(copy.eyebrow)}
+				title={t(copy.title)}
+				lead={t(copy.lead)}
 				tag={copy.capability}
 				actions={
 					<>
@@ -36,18 +37,16 @@ export function SolutionCopyPage({ head, copy, children }: { head: PageHead; cop
 						{isEarlyAccessCapability(copy.capability) ? (
 							<EarlyAccessButton capability={copy.capability} variant="outline-on-dark" listedClassName="text-white" />
 						) : (
-							<PillLink to="/contact" variant="outline-on-dark">
-								Talk to sales
-							</PillLink>
+							<PillLink to="/contact" variant="outline-on-dark">{t("Talk to sales")}</PillLink>
 						)}
 					</>
 				}
 			/>
 			{copy.sections.map((section, index) => (
-				<CardSection key={section.title} eyebrow={section.eyebrow} tag={copy.capability} title={section.title} cards={section.cards}>
+				<CardSection key={section.title} eyebrow={t(section.eyebrow)} tag={copy.capability} title={t(section.title)} cards={section.cards}>
 					{index === lastSection && copy.more && (
 						<Link to={copy.more.to} className={cn('inline-flex items-center gap-2 text-[17px] text-public-ink', UNDERLINE_FILL)}>
-							{copy.more.label}
+							{t(copy.more.label)}
 							<ArrowRightIcon className="size-4" aria-hidden />
 						</Link>
 					)}

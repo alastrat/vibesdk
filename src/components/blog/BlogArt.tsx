@@ -1,3 +1,5 @@
+import { t } from '@/lib/i18n';
+import { formatUsd } from '@/lib/i18n/public-pricing';
 import type { ReactElement } from 'react';
 import type { BlogArtId } from '@/content/blog';
 import { cn } from '@/lib/utils';
@@ -16,11 +18,11 @@ function DiscoverArt() {
 				<img src="/marketing/hero-store.jpg" alt="" className="block w-full" />
 			</div>
 			<div className="absolute right-[6%] bottom-[12%] w-[30%] rounded-[2cqw] bg-white p-[2.2cqw] shadow-[0_2.4cqw_5cqw_rgba(5,18,60,0.4)]">
-				<p className="text-[1.5cqw] tracking-[0.08em] text-public-muted uppercase">In Discover</p>
+				<p className="text-[1.5cqw] tracking-[0.08em] text-public-muted uppercase">{t('In Discover')}</p>
 				<p className="mt-[0.8cqw] text-[2.4cqw] leading-tight text-public-ink">North Ridge Coffee</p>
 				<div className="mt-[1.6cqw] flex items-center justify-between gap-[1cqw]">
-					<span className="text-[2.6cqw] font-light text-public-ink">$29</span>
-					<span className="rounded-full bg-public-blue px-[1.6cqw] py-[0.8cqw] text-[1.5cqw] text-white">Use this store</span>
+					<span className="text-[2.6cqw] font-light text-public-ink">{formatUsd(2900)}</span>
+					<span className="rounded-full bg-public-blue px-[1.6cqw] py-[0.8cqw] text-[1.5cqw] text-white">{t('Use this store')}</span>
 				</div>
 			</div>
 		</>

@@ -1,6 +1,8 @@
+import { t, tn, msg, getLocale, T } from '@/lib/i18n';
+import { formatUsd } from '@/lib/plans';
+import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { ReactNode, Ref } from 'react';
 import { CheckIcon, DesktopIcon, DeviceMobileIcon, ShoppingBagIcon, SparkleIcon } from '@phosphor-icons/react';
-import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { StoreFeatureId } from '@/content/positioning';
 import { useStory } from '@/hooks/use-story';
 import { useTypedText } from '@/hooks/use-typed-text';
@@ -40,13 +42,11 @@ function CatalogArt() {
 	return (
 		<StoryFrame storyRef={ref} className="relative mx-auto w-[300px] pt-[52px]">
 			<div className={cn(MINI, 'absolute top-2 -left-6 w-[220px] px-4 pt-2.5 pb-6 opacity-60')}>
-				<p className="text-[12px] font-semibold">Describe your products</p>
-				<p className={cn(MONO, 'mt-1 truncate')}>wool socks, 3 sizes...</p>
+				<p className="text-[12px] font-semibold">{t("Describe your products")}</p>
+				<p className={cn(MONO, 'mt-1 truncate')}>{t("wool socks, 3 sizes...")}</p>
 			</div>
 			<div className={cn(MINI, 'relative px-4 pt-4 pb-3')}>
-				<p className="flex items-center justify-between text-[13px] font-semibold">
-					Catalog
-					<span className={MONO}>12 products</span>
+				<p className="flex items-center justify-between text-[13px] font-semibold">{t("Catalog")}<span className={MONO}>{tn('{count} product', '{count} products', 12)}</span>
 				</p>
 				<div className="mt-3 grid grid-cols-4 gap-2">
 					{CATALOG.map((product, index) => (
@@ -59,7 +59,7 @@ function CatalogArt() {
 						</span>
 					))}
 				</div>
-				<div className="mt-3 h-6">{ready && <Done className="animate-public-rise">Filters: size, color</Done>}</div>
+				<div className="mt-3 h-6">{ready && <Done className="animate-public-rise">{t("Filters: size, color")}</Done>}</div>
 			</div>
 		</StoryFrame>
 	);
@@ -76,13 +76,11 @@ function CheckoutArt() {
 			<div className="h-[290px] rounded-[34px] border-[7px] border-[#1d2433] bg-white px-4 pt-7 shadow-[0_10px_30px_rgba(17,24,39,0.12)]">
 				<span className="absolute top-[22px] left-1/2 h-[18px] w-[64px] -translate-x-1/2 rounded-full bg-[#1d2433]" />
 				<p className="flex items-center gap-1.5 text-[13px] font-semibold">
-					<ShoppingBagIcon weight="fill" className="size-4 text-public-blue" />
-					Checkout
-				</p>
+					<ShoppingBagIcon weight="fill" className="size-4 text-public-blue" />{t("Checkout")}</p>
 				<div className="mt-3 flex items-center gap-2.5">
 					<Photo src={PHOTOS.houseBlend} className="size-9 rounded-[8px]" />
 					<span className="min-w-0 flex-1 truncate text-[12px] font-medium">House blend, 1 kg</span>
-					<span className="text-[12px]">$38</span>
+					<span className="text-[12px]">{formatUsd(3800, getLocale())}</span>
 				</div>
 				<div className="mt-3 grid gap-1.5">
 					<span className={cn(MONO, 'rounded-md border border-[#ececec] px-2 py-1')}>Maya Lin</span>
@@ -93,23 +91,19 @@ function CheckoutArt() {
 						'mt-3 block rounded-full py-1.5 text-center text-[12px] font-medium text-white transition-transform duration-150',
 						beat === 1 ? 'scale-95 bg-public-blue-hover' : 'bg-public-blue',
 					)}
-				>
-					Place order
-				</span>
+				>{t("Place order")}</span>
 			</div>
 			{confirmed && (
-				<p className="absolute top-[150px] -left-10 w-[200px] animate-public-rise rounded-[12px] bg-public-blue px-3.5 py-2.5 text-[13px] leading-snug text-white shadow-[0_10px_24px_rgba(20,95,228,0.3)]">
-					Order #1042 confirmed. A receipt is on its way.
-				</p>
+				<p className="absolute top-[150px] -left-10 w-[200px] animate-public-rise rounded-[12px] bg-public-blue px-3.5 py-2.5 text-[13px] leading-snug text-white shadow-[0_10px_24px_rgba(20,95,228,0.3)]">{t('Order {order} confirmed. A receipt is on its way.', { order: '#1042' })}</p>
 			)}
 		</StoryFrame>
 	);
 }
 
 const ORDERS = [
-	{ id: '#1044', who: 'Maya L.', items: 2, total: '$56.00' },
-	{ id: '#1043', who: 'Leo P.', items: 1, total: '$24.00' },
-	{ id: '#1042', who: 'Ana R.', items: 3, total: '$71.00' },
+	{ id: '#1044', who: 'Maya L.', items: 2, totalCents: 5600 },
+	{ id: '#1043', who: 'Leo P.', items: 1, totalCents: 2400 },
+	{ id: '#1042', who: 'Ana R.', items: 3, totalCents: 7100 },
 ] as const;
 /** A new order lands on top of the day's list. */
 const ORDERS_BEATS = [1400, 4000] as const;
@@ -121,9 +115,8 @@ function OrdersArt() {
 	return (
 		<StoryFrame storyRef={ref} className="mx-auto w-[260px] text-center">
 			<p className="text-[16px] font-bold">
-				<NumberTicker key={landed ? 'landed' : 'waiting'} startValue={11} value={landed ? 12 : 11} /> orders today
-			</p>
-			<p className={cn(MONO, 'mt-0.5')}>Saved in your store</p>
+				<T text="<count></count> orders today" components={{ count: () => <NumberTicker key={landed ? 'landed' : 'waiting'} startValue={11} value={landed ? 12 : 11} /> }} /></p>
+			<p className={cn(MONO, 'mt-0.5')}>{t("Saved in your store")}</p>
 			<div className="mt-4 grid gap-2 text-left">
 				{shown.map((order, index) => (
 					<div
@@ -134,7 +127,7 @@ function OrdersArt() {
 							{order.id} · {order.who}
 						</p>
 						<p className={cn(MONO, 'mt-0.5')}>
-							{order.items} {order.items === 1 ? 'item' : 'items'} • {order.total}
+							{tn('{count} item', '{count} items', order.items)} • {formatUsd(order.totalCents, getLocale())}
 						</p>
 					</div>
 				))}
@@ -143,13 +136,14 @@ function OrdersArt() {
 	);
 }
 
-const REQUEST = 'Make the hero warmer';
+const REQUEST = msg('Make the hero warmer');
 /** The request is typed, then the store answers and its hero warms up. */
 const CHAT_BEATS = [700, 1500, 4200] as const;
 
 function ChatArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(CHAT_BEATS);
-	const typed = useTypedText(REQUEST, beat === 1);
+	const request = t(REQUEST);
+	const typed = useTypedText(request, beat === 1);
 	const done = beat === 2;
 	return (
 		<StoryFrame storyRef={ref} className="mx-auto w-[300px]">
@@ -168,12 +162,12 @@ function ChatArt() {
 				</div>
 			</div>
 			<p className="mt-3 ml-auto w-fit max-w-[230px] rounded-[12px] rounded-br-[4px] bg-public-blue px-3.5 py-2 text-[13px] text-white">
-				{beat === 0 ? ' ' : done ? REQUEST : typed}
+				{beat === 0 ? ' ' : done ? request : typed}
 			</p>
 			{done && (
 				<div className={cn(MINI, 'mt-2 flex w-fit animate-public-rise items-center gap-2 px-3 py-2')}>
 					<SparkleIcon weight="fill" className="size-4 text-public-blue" />
-					<span className="text-[13px]">Done. The live store is updated.</span>
+					<span className="text-[13px]">{t("Done. The live store is updated.")}</span>
 				</div>
 			)}
 		</StoryFrame>
@@ -194,8 +188,8 @@ export function DeviceSwitch({ phone }: { phone: boolean }) {
 	return (
 		<span aria-hidden className="flex items-center gap-0.5 rounded-full bg-white p-0.5 text-[12px] ring-1 ring-[#ececec]">
 			{[
-				{ label: 'Desktop', icon: DesktopIcon, on: !phone },
-				{ label: 'Phone', icon: DeviceMobileIcon, on: phone },
+				{ label: msg('Desktop'), icon: DesktopIcon, on: !phone },
+				{ label: msg('Phone'), icon: DeviceMobileIcon, on: phone },
 			].map((option) => (
 				<span
 					key={option.label}
@@ -205,7 +199,7 @@ export function DeviceSwitch({ phone }: { phone: boolean }) {
 					)}
 				>
 					<option.icon className="size-3.5" />
-					{option.label}
+					{t(option.label)}
 				</span>
 			))}
 		</span>
@@ -220,7 +214,7 @@ export function PreviewArt({ phone }: { phone: boolean }) {
 				<div className={cn(MINI, 'overflow-hidden transition-[box-shadow] duration-300', !phone && 'ring-2 ring-public-blue')}>
 					<div className="flex items-center gap-1.5 border-b border-[#f0f0f0] px-3 py-1.5">
 						<span className="size-1.5 rounded-full bg-[#16a34a]" />
-						<span className={cn(MONO, 'text-[11px]')}>Live preview</span>
+						<span className={cn(MONO, 'text-[11px]')}>{t("Live preview")}</span>
 					</div>
 					<Photo src={PREVIEW_SHOTS.desktop} className="h-[230px] w-full object-top" />
 				</div>
@@ -250,23 +244,21 @@ function DiscoverArt() {
 				<div className="flex items-center justify-between gap-3 px-4 py-3">
 					<span className="min-w-0">
 						<span className="block truncate text-[14px] font-semibold">Seed Sun Sprout</span>
-						<span className={cn(MONO, 'block')}>Free · Garden</span>
+						<span className={cn(MONO, 'block')}>{t("Free · Garden")}</span>
 					</span>
 					<span
 						className={cn(
 							'shrink-0 rounded-full px-3 py-1 text-[12px] font-medium text-white transition-transform duration-150',
 							beat === 1 ? 'scale-90 bg-public-blue-hover' : 'bg-public-blue',
 						)}
-					>
-						Use this store
-					</span>
+					>{t("Use this store")}</span>
 				</div>
 			</div>
 			<div className="mt-2 h-10">
 				{copied && (
 					<div className={cn(MINI, 'flex animate-public-rise items-center justify-between px-4 py-2.5')}>
-						<Done>Your copy is ready</Done>
-						<span className={MONO}>Open in builder</span>
+						<Done>{t("Your copy is ready")}</Done>
+						<span className={MONO}>{t("Open in builder")}</span>
 					</div>
 				)}
 			</div>

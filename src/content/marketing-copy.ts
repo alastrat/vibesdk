@@ -1,5 +1,5 @@
 import english from './marketing/en.json';
 
-/** English marketing copy, kept separate while its wording is being refined. */
+/** Canonical English marketing copy. Translate its display values at render time with t(). */
 export const marketingCopy = english;
 export { interpolate as formatMarketingCopy } from '../../shared/i18n/translate';

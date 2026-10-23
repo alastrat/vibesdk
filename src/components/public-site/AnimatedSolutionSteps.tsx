@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { prefersReducedMotion } from '@/lib/motion';
 
@@ -5,7 +6,8 @@ const STEP_DURATION_MS = 4000;
 const READING_PAUSE_MS = 2500;
 
 function AnimatedStep({ text, index, phase }: { text: string; index: number; phase: number }) {
-	const words = text.split(/\s+/);
+	const translated = t(text);
+	const words = translated.split(/\s+/);
 	const state = index < phase ? 'complete' : index === phase ? 'active' : 'pending';
 	return (
 		<li data-state={state} className="solution-step">
@@ -16,7 +18,7 @@ function AnimatedStep({ text, index, phase }: { text: string; index: number; pha
 				{String(index + 1).padStart(2, '0')}
 			</span>
 			<h3 className="mt-4 max-w-xs text-2xl font-light leading-snug text-public-ink">
-				<span className="sr-only">{text}</span>
+				<span className="sr-only">{translated}</span>
 				<span aria-hidden="true">
 					{words.map((word, wordIndex) => (
 						<span
@@ -81,9 +83,7 @@ export function AnimatedSolutionSteps({ steps }: { steps: readonly string[] }) {
 			className="scroll-mt-[calc(var(--public-header-h)+1rem)] border-t border-public-line bg-white px-4 py-14 sm:px-6 sm:py-20"
 		>
 			<div className="mx-auto max-w-[1248px]">
-				<h2 id={`${id}-title`} className="text-xs uppercase tracking-[0.18em] text-public-muted">
-					From idea to storefront
-				</h2>
+				<h2 id={`${id}-title`} className="text-xs uppercase tracking-[0.18em] text-public-muted">{t("From idea to storefront")}</h2>
 				<ol className="mt-8 grid gap-8 md:grid-cols-3">
 					{steps.map((text, index) => (
 						<AnimatedStep key={text} text={text} index={index} phase={phase} />

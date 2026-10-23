@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import { Cloud, CloudLaptop } from '@/components/public-site/CloudLaptop';
 import { HEADING_SECTION, LEAD, PillLink } from '@/components/public-site/primitives';
@@ -12,12 +13,12 @@ export function ClosingPanel() {
 				<Cloud className="pointer-events-none absolute -bottom-16 -left-20 w-[320px] sm:-bottom-20 sm:w-[440px]" />
 				<Cloud className="pointer-events-none absolute top-6 -right-12 w-[180px] [animation-delay:-8s] sm:w-[260px]" />
 				<div className="relative z-10">
-					<h2 className={cn(HEADING_SECTION, 'max-w-xl text-balance text-public-ink')}>{marketingCopy.home.closing.title}</h2>
-					<p className={cn(LEAD, 'mt-5 max-w-md text-public-ink/75')}>{marketingCopy.home.closing.description}</p>
+					<h2 className={cn(HEADING_SECTION, 'max-w-xl text-balance text-public-ink')}>{t(marketingCopy.home.closing.title)}</h2>
+					<p className={cn(LEAD, 'mt-5 max-w-md text-public-ink/75')}>{t(marketingCopy.home.closing.description)}</p>
 					<div className="mt-10 flex flex-wrap gap-3">
 						<StartBuildingButton variant="blue" />
 						<PillLink to="/pricing" variant="outline-on-light">
-							{marketingCopy.common.viewPricing}</PillLink>
+							{t(marketingCopy.common.viewPricing)}</PillLink>
 					</div>
 				</div>
 				<CloudLaptop />

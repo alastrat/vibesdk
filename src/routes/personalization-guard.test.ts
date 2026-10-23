@@ -88,7 +88,7 @@ describe('personalized shopping cards', () => {
 			'Very good',
 			'goes well with',
 			'Save 10% on both',
-			'Thanks for your order, Maya',
+			"t('Thanks for your order, {name}', { name: 'Maya' })",
 			'This offer is only for this order',
 			'Ethiopia Guji',
 			'Smart search',

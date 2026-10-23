@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { EarlyAccessButton } from '@/components/public-site/EarlyAccessButton';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { CardSection, HowItWorks, PageMeta, SolutionHero } from '@/components/public-site/solution-page';
@@ -13,10 +14,10 @@ export default function ContentCreatorsPage() {
 		<div>
 			<PageMeta {...CONTENT_CREATORS_PAGE} />
 			<SolutionHero
-				eyebrow="For content creators"
+				eyebrow={t("For content creators")}
 				tag="content-creators"
-				title="Get paid for the products you recommend"
-				lead="Promote merchants' products with your own link or your own Estori store, and earn a commission on every sale you bring."
+				title={t("Get paid for the products you recommend")}
+				lead={t("Promote merchants' products with your own link or your own Estori store, and earn a commission on every sale you bring.")}
 				actions={
 					<>
 						<StartBuildingButton variant="white" />
@@ -24,7 +25,7 @@ export default function ContentCreatorsPage() {
 					</>
 				}
 			/>
-			<CardSection eyebrow="How you earn" tag="content-creators" title="Your audience, your recommendations" cards={CONTENT_CREATOR_CARDS}>
+			<CardSection eyebrow={t("How you earn")} tag="content-creators" title={t("Your audience, your recommendations")} cards={CONTENT_CREATOR_CARDS}>
 				<EarlyAccessButton capability="content-creators" listedClassName="text-public-ink" />
 			</CardSection>
 			<HowItWorks steps={CONTENT_STEPS} />

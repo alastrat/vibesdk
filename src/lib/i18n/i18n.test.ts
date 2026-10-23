@@ -74,7 +74,11 @@ describe('the active language', () => {
 		expect(tn('{count} credit', '{count} credits', 1)).toBe('1 credit');
 		expect(tn('{count} credit', '{count} credits', 1500)).toBe('1,500 credits');
 		await setLocale('pt-BR');
-		expect(tn('{count} credit', '{count} credits', 1500)).toBe('1.500 credits');
+		expect(tn('{count} credit', '{count} credits', 1)).toBe('1 crédito');
+		expect(tn('{count} credit', '{count} credits', 1500)).toBe('1.500 créditos');
+		// An unknown noun still uses English forms, with the active locale's number formatting.
+		expect(tn('{count} untranslated widget', '{count} untranslated widgets', 1)).toBe('1 untranslated widget');
+		expect(tn('{count} untranslated widget', '{count} untranslated widgets', 1500)).toBe('1.500 untranslated widgets');
 	});
 
 	it('sets <html lang> to the language', async () => {

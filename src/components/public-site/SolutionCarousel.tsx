@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@cloudflare/kumo';
 import { ArrowLeftIcon, ArrowRightIcon } from '@phosphor-icons/react';
@@ -49,17 +50,17 @@ export function SolutionCarousel({
 		<section
 			id="examples"
 			aria-labelledby={`${id}-title`}
-			aria-roledescription="carousel"
+			aria-roledescription={t("carousel")}
 			className="scroll-mt-[var(--public-header-h)] overflow-hidden bg-[#f3f5f0] px-4 py-16 sm:px-6 sm:py-24"
 		>
 			<div className="mx-auto max-w-[1248px]">
 				<div className="flex flex-wrap items-end justify-between gap-6">
 					<div>
-						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">A little inspiration</p>
+						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">{t("A little inspiration")}</p>
 						<h2 id={`${id}-title`} className="mt-4 max-w-2xl text-4xl leading-[1.1] font-light tracking-tight text-public-ink sm:text-5xl">
-							{title}
+							{t(title)}
 						</h2>
-						<p className="mt-4 text-sm text-public-muted">Example store ideas and things you could ask Estori.</p>
+						<p className="mt-4 text-sm text-public-muted">{t("Example store ideas and things you could ask Estori.")}</p>
 					</div>
 					<div className="public-plan-controls flex items-center gap-3">
 						<span aria-live="polite" aria-atomic="true" className="mr-2 text-sm tabular-nums text-public-muted">
@@ -69,7 +70,7 @@ export function SolutionCarousel({
 							type="button"
 							variant="outline"
 							shape="circle"
-							aria-label="Previous example"
+							aria-label={t("Previous example")}
 							aria-controls={`${id}-track`}
 							disabled={active === 0}
 							onClick={() => show(active - 1)}
@@ -80,7 +81,7 @@ export function SolutionCarousel({
 							type="button"
 							variant="outline"
 							shape="circle"
-							aria-label="Next example"
+							aria-label={t("Next example")}
 							aria-controls={`${id}-track`}
 							disabled={active === examples.length - 1}
 							onClick={() => show(active + 1)}
@@ -93,7 +94,7 @@ export function SolutionCarousel({
 					ref={track}
 					id={`${id}-track`}
 					role="group"
-					aria-label="Store examples. Use left and right arrow keys to browse."
+					aria-label={t("Store examples. Use left and right arrow keys to browse.")}
 					tabIndex={0}
 					onKeyDown={onKeyDown}
 					onScroll={() => {
@@ -123,8 +124,8 @@ export function SolutionCarousel({
 							<article
 								key={example.title}
 								role="group"
-								aria-roledescription="slide"
-								aria-label={`${index + 1} of ${examples.length}: ${example.title}`}
+								aria-roledescription={t("slide")}
+								aria-label={t("{current} of {total}: {title}", { current: index + 1, total: examples.length, title: t(example.title) })}
 								className="w-[92%] shrink-0 snap-start overflow-hidden rounded-2xl border border-black/10 bg-white sm:w-[78%] lg:w-[68%]"
 							>
 								<div className="grid h-full md:grid-cols-[1fr_1.1fr]">
@@ -133,7 +134,7 @@ export function SolutionCarousel({
 											<>
 												<img
 													src={image.src}
-													alt={image.alt}
+													alt={t(image.alt)}
 													loading="lazy"
 													width={visual?.image?.width ?? 1200}
 													height={visual?.image?.height ?? 800}
@@ -148,9 +149,7 @@ export function SolutionCarousel({
 														target="_blank"
 														rel="noopener noreferrer"
 														className="absolute bottom-3 left-3 rounded bg-black/60 px-2 py-1 text-[9px] text-white"
-													>
-														Photo: {photo.photographer} / Unsplash
-													</a>
+													>{t("Photo: {name} / Unsplash", { name: photo.photographer })}</a>
 												)}
 											</>
 										) : (
@@ -159,13 +158,13 @@ export function SolutionCarousel({
 									</div>
 									<div className="flex flex-col justify-between p-6 sm:p-8 lg:p-10">
 										<div>
-											<span className="text-[11px] uppercase tracking-[0.15em] text-public-muted">Example use case</span>
-											<h3 className="mt-4 text-3xl leading-tight font-light text-public-ink">{example.title}</h3>
-											<p className="mt-3 text-[15px] leading-relaxed text-public-muted">{example.body}</p>
+											<span className="text-[11px] uppercase tracking-[0.15em] text-public-muted">{t("Example use case")}</span>
+											<h3 className="mt-4 text-3xl leading-tight font-light text-public-ink">{t(example.title)}</h3>
+											<p className="mt-3 text-[15px] leading-relaxed text-public-muted">{t(example.body)}</p>
 										</div>
 										<div className="mt-8 rounded-xl bg-[#f5f6f3] p-4">
-											<span className="text-[10px] uppercase tracking-widest text-public-muted">Try asking</span>
-											<p className="mt-2 text-sm leading-relaxed text-public-ink">“{example.prompt}”</p>
+											<span className="text-[10px] uppercase tracking-widest text-public-muted">{t("Try asking")}</span>
+											<p className="mt-2 text-sm leading-relaxed text-public-ink">“{t(example.prompt)}”</p>
 										</div>
 									</div>
 								</div>

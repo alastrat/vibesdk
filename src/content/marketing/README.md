@@ -1,9 +1,11 @@
-# English marketing copy
+# Public marketing copy
 
-Edit `en.json` to refine the landing page and the shared public navigation, footer, capability labels and section copy. Components read it through `src/content/marketing-copy.ts`. The landing page metadata uses the same source on the frontend and in the Worker.
+`en.json` is the canonical English copy shared by public pages and Worker metadata. `es.json` and `pt-BR.json` mirror its exact structure in neutral Latin American Spanish and Brazilian Portuguese. Keep stable keys, placeholders, tags, and value types aligned when editing all three files.
 
-The keys describe where the text belongs, for example `home.hero.title`, `home.features.cards.catalog.body` and `navigation.signIn`. Keep the keys stable when changing the wording. Keep the JSON structure and value types intact; the TypeScript imports check the fields used by the components.
+Components use the existing `t`/`useI18n` API at render time. `catalog.ts` matches content paths to English keys; `catalog-loader.ts` lazily merges the selected marketing catalog and its `.extra.json` dictionary with the app catalog. Extra dictionaries hold public-page and curated Discover copy outside the central content tree. Do not call translation functions at module scope or cache translated text without a locale dependency.
 
-`{platformFee}` is filled from the platform's fee constant. Preserve that placeholder when editing its sentences; the price belongs in code. Destinations, feature IDs, capability availability, legal documents, sample illustration data and sellers' own store content keep their existing sources.
+The header language selector updates the public pages immediately and remembers the choice. Routes remain unchanged; no locale URL prefixes are introduced. Prices stay in USD and use locale formatting. Worker metadata keeps canonical English until the browser renders the selected language.
 
-This is an English content source while the wording is being refined. It deliberately serves English for every selected app language. Spanish and Portuguese marketing catalogs and localized URLs are deferred. The existing app translation catalogs in `shared/i18n/catalogs/` are separate and unchanged.
+Follow `shared/i18n/glossary.md`: direct, friendly sentences; Spanish tú and Portuguese você; infinitive buttons. Keep brand and plan names, user content, identifiers, URLs, and original template names unchanged. Legal bodies and downloadable template demos retain their original language; localized legal links identify English documents.
+
+Run the marketing catalog and public locale rendering tests, `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build` after changes.

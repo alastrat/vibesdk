@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { useAuth } from '@/contexts/auth-context';
@@ -16,7 +17,7 @@ export function StartBuildingButton({
 	const { isAuthenticated } = useAuth();
 	return (
 		<PillLink to={isAuthenticated ? '/' : '/signup'} variant={variant} className={className}>
-			{children}
+			{typeof children === 'string' ? t(children) : children}
 		</PillLink>
 	);
 }

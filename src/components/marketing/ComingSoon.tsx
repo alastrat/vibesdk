@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { STATUS_LABELS } from '@/lib/capabilities';
 import { cn } from '@/lib/utils';
 
@@ -18,7 +19,7 @@ const STYLES = {
 
 /** A status badge for the public pages, in fixed colors since those pages ignore the app theme. */
 export function StatusBadge({ status, tone = 'light' }: { status: keyof typeof STYLES; tone?: Tone }) {
-	return <span className={cn(BASE, STYLES[status][tone])}>{STATUS_LABELS[status]}</span>;
+	return <span className={cn(BASE, STYLES[status][tone])}>{t(STATUS_LABELS[status])}</span>;
 }
 
 export function ComingSoon({ tone = 'light' }: { tone?: Tone }) {

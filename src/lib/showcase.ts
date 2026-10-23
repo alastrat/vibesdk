@@ -21,6 +21,8 @@ export interface ShowcaseStore {
 	categoryLabel: string | null;
 	priceLabel: string;
 	isFree: boolean;
+	priceCents?: number;
+	userName?: string | null;
 	byline: string | null;
 	imageUrl: string | null;
 	/** The tall showcase capture; false when falling back to the desktop thumbnail. */
@@ -49,6 +51,8 @@ export function toShowcaseStore(app: ShowcaseSource): ShowcaseStore {
 		categoryLabel: category ? TEMPLATE_CATEGORY_LABELS[category] : null,
 		priceLabel: formatTemplatePrice(priceCents),
 		isFree: priceCents <= 0,
+		priceCents,
+		userName: app.userName ?? null,
 		byline: app.userName ? `by ${app.userName}` : null,
 		imageUrl: app.showcaseScreenshotUrl ?? app.screenshotUrl ?? null,
 		tallImage: Boolean(app.showcaseScreenshotUrl),

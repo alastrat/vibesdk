@@ -1,0 +1,1209 @@
+{
+  "home": {
+    "meta": {
+      "description": "Describe tu tienda y Estori la crea en minutos, con tus productos, carrito y proceso para finalizar la compra. Pronto llegarán asistentes de IA que te ayudarán a vender y administrar tu tienda."
+    },
+    "hero": {
+      "storePhrases": [
+        "una tienda de café de especialidad",
+        "una tienda de cerámica artesanal",
+        "una tienda de moda urbana",
+        "una tienda de plantas con entrega local",
+        "una tienda de cámaras vintage"
+      ],
+      "demo": {
+        "prompt": "Crea una tienda de café de especialidad con tostados semanales y suscripciones",
+        "steps": [
+          "Catálogo con 12 tostados",
+          "Páginas de productos y filtros",
+          "Carrito y proceso para finalizar la compra",
+          "Registro de pedidos",
+          "Desplegada en una vista previa interactiva"
+        ],
+        "accessibleDescription": "Estori crea una tienda de café a partir de una frase: el chat a la izquierda y la tienda publicada a la derecha",
+        "previewLabel": "Vista previa interactiva"
+      },
+      "eyebrow": "Tiendas en línea creadas con IA",
+      "title": "Describe tu tienda. Estori la crea en minutos.",
+      "description": "Cuéntale a Estori qué vendes y creará una tienda en línea completa con tus productos, carrito y proceso para finalizar la compra. Lo que sigue: asistentes que te ayudarán a vender más y encargarse del trabajo diario.",
+      "buildPlaceholder": "Crea ",
+      "note": "Crear es gratis. Sin tarjeta de crédito.",
+      "discoverLink": "Explorar tiendas en Descubrir"
+    },
+    "showcase": {
+      "logosTitle": "Tiendas creadas en Estori",
+      "title": "Mira lo que la gente está creando en Estori",
+      "description": "Abre cualquier tienda para verla en funcionamiento en computadora y celular, y luego adáptala a tu estilo.",
+      "filterLabel": "Filtrar tiendas por categoría",
+      "link": "Explorar todas las tiendas en Descubrir"
+    },
+    "recommendations": {
+      "eyebrow": "Recomendaciones de IA",
+      "title": "Haz que la IA te recomiende cuando los compradores pregunten qué comprar",
+      "link": "Cómo funciona",
+      "diagram": {
+        "store": "Tu tienda",
+        "assistant": "Un asistente de IA",
+        "customer": "Un nuevo comprador"
+      },
+      "description": "Cada vez más personas les piden recomendaciones de productos a los asistentes de IA. Tu tienda compartirá sus productos de una forma que esos asistentes puedan leer, para que te recomienden y lleven compradores a tu tienda."
+    },
+    "assistants": {
+      "link": "Ver cómo funcionará",
+      "title": "Delega el trabajo diario de tu tienda",
+      "description": "Los asistentes de Estori están pendientes de tu inventario, tus compradores y tus ventas, y se encargan del trabajo rutinario según las reglas que tú definas.",
+      "cards": {
+        "inventory": {
+          "name": "Asistente de inventario",
+          "title": "Que nunca te falten tus productos más vendidos",
+          "body": "Te avisa antes de que un producto se agote y te sugiere cuánto volver a pedir."
+        },
+        "support": {
+          "name": "Asistente de atención al comprador",
+          "title": "Respuestas de día y de noche",
+          "body": "Responde preguntas sobre pedidos, tallas y devoluciones con la información de tu propia tienda."
+        },
+        "marketing": {
+          "name": "Asistente de marketing",
+          "title": "Haz que los compradores vuelvan",
+          "body": "Envía recordatorios a quienes dejaron productos en el carrito y ofertas a tus compradores habituales."
+        }
+      }
+    },
+    "personalization": {
+      "eyebrow": "Compras personalizadas",
+      "title": "Muéstrale a cada comprador los productos adecuados",
+      "description": "Integrado en tu tienda, sin instalar apps adicionales.",
+      "cards": {
+        "picks": {
+          "title": "Productos elegidos para cada comprador",
+          "body": "El aprendizaje automático evalúa cada producto para cada comprador, para que cada persona vea las opciones que mejor le van."
+        },
+        "cart": {
+          "title": "Un carrito que sugiere cómo complementar la compra",
+          "body": "Complementos y paquetes que combinan con lo que ya está en el carrito."
+        },
+        "offer": {
+          "title": "Una oferta justo después de finalizar la compra",
+          "body": "Una oferta relevante justo después de finalizar la compra, mientras el comprador sigue en tu tienda."
+        },
+        "search": {
+          "title": "Una búsqueda que entiende a los compradores",
+          "body": "Los compradores describen lo que quieren y lo encuentran, incluso sin usar las palabras exactas."
+        }
+      }
+    },
+    "features": {
+      "eyebrow": "Creador de tiendas de Estori",
+      "title": "Lo que tu tienda incluye hoy",
+      "description": "Empieza desde cero o con una tienda de Descubrir y luego cambia lo que quieras por chat.",
+      "cards": {
+        "catalog": {
+          "tag": "Catálogo",
+          "title": "Catálogo y páginas de productos",
+          "body": "Productos, variantes, filtros y páginas de productos detalladas, generados a partir de tu descripción.",
+          "link": {
+            "label": "Ver tiendas en Descubrir"
+          }
+        },
+        "checkout": {
+          "tag": "Finalizar compra",
+          "title": "Carrito y proceso para finalizar la compra",
+          "body": "Un carrito, un formulario para finalizar la compra y confirmaciones de pedido que tus compradores ya saben usar.",
+          "link": {
+            "label": "Empezar a crear"
+          }
+        },
+        "orders": {
+          "tag": "Pedidos",
+          "title": "Registro de pedidos",
+          "body": "Tu tienda guarda los pedidos en su propia base de datos, listos para que los revises.",
+          "link": {
+            "label": "Empezar a crear"
+          }
+        },
+        "chat": {
+          "tag": "Edición con IA",
+          "title": "Edita por chat",
+          "body": "Pide una nueva sección, un estilo diferente o más productos, y la IA actualiza la tienda publicada.",
+          "link": {
+            "label": "Probar"
+          }
+        },
+        "preview": {
+          "tag": "Vista previa interactiva",
+          "title": "Vista previa en computadora y celular",
+          "body": "Todas las tiendas funcionan en ambos dispositivos y puedes ver cada cambio al momento en cada uno antes de compartirlo."
+        },
+        "discover": {
+          "tag": "Plantillas",
+          "title": "Empieza con una plantilla",
+          "body": "Elige una tienda creada por otra persona, obtén tu propia copia y adáptala a tu estilo por chat.",
+          "link": {
+            "label": "Explorar Descubrir"
+          }
+        }
+      }
+    },
+    "sellers": {
+      "words": [
+        "vendedor",
+        "emprendedor",
+        "comerciante",
+        "desarrollador",
+        "creador"
+      ],
+      "eyebrow": "Vende más, mejor y más rápido.",
+      "titlePrefix": "Estori para todo tipo de ",
+      "accessibleWord": "vendedor",
+      "cards": {
+        "resellers": {
+          "story": "Elige productos del catálogo de proveedores, revisa los costos y el envío, y agrégalos a tu tienda. Los pedidos pagados del catálogo se envían para su preparación y puedes seguirlos durante el envío."
+        },
+        "digital": {
+          "story": "Vende libros electrónicos, imágenes y videos con entrega instantánea, y mantén cerca a tus compradores con una comunidad dentro de tu tienda."
+        },
+        "developers": {
+          "story": "Crea una tienda una vez y véndela como plantilla en Descubrir. Cada comprador recibe su propia copia para adaptarla a su estilo, y tú recibes el precio menos {platformFee}."
+        },
+        "creators": {
+          "story": "Comparte productos que te gustan con tu propio enlace o tienda y recibe dinero por cada venta que generes para un comerciante."
+        }
+      }
+    },
+    "closing": {
+      "title": "Tu próxima tienda empieza con una frase.",
+      "description": "Descríbela, mira cómo se crea y publícala cuando esté lista."
+    },
+    "globalCommerce": {
+      "eyebrow": "Alcance global. Crecimiento con agentes de IA.",
+      "title": "Administra tu negocio.",
+      "words": [
+        "En todo el mundo.",
+        "Con agentes de IA."
+      ],
+      "accessibleTitle": "Administra tu negocio en todo el mundo con agentes de IA.",
+      "description": "Tu próximo comprador podría estar en cualquier lugar. Deja que los agentes de IA te ayuden a crear, traducir y hacer crecer tu tienda mientras te enfocas en lo que sigue.",
+      "link": "Explorar el comercio con agentes de IA",
+      "marketsLabel": "Explorar un mercado",
+      "pauseLabel": "Pausar la animación de mercados",
+      "playLabel": "Reproducir la animación de mercados",
+      "exampleLabel": "Tienda de ejemplo",
+      "agentLabel": "La IA trabajando",
+      "globeLabel": "Un globo de puntos que conecta Estados Unidos, Brasil, Colombia, Chile, Argentina, México y España.",
+      "markets": {
+        "us": {
+          "name": "Estados Unidos",
+          "shortName": "EE. UU.",
+          "language": "Inglés",
+          "product": "The everyday bottle",
+          "category": "Esenciales para el día a día",
+          "task": "Escribe una historia de producto que venda.",
+          "imageAlt": "Una botella térmica reutilizable"
+        },
+        "br": {
+          "name": "Brasil",
+          "shortName": "Brasil",
+          "language": "Portugués",
+          "product": "Café de origem",
+          "category": "Café de especialidad",
+          "task": "Haz que tu tienda se sienta local en cada idioma.",
+          "imageAlt": "Una bolsa de café de especialidad"
+        },
+        "co": {
+          "name": "Colombia",
+          "shortName": "Colombia",
+          "language": "Español",
+          "product": "Tu ritual de café",
+          "category": "Cerámica artesanal",
+          "task": "Lleva tus productos a nuevos públicos.",
+          "imageAlt": "Un filtro de cerámica para preparar café"
+        },
+        "cl": {
+          "name": "Chile",
+          "shortName": "Chile",
+          "language": "Español",
+          "product": "Lista para explorar",
+          "category": "Esenciales para actividades al aire libre",
+          "task": "Dale un nuevo aire a tu tienda con una nueva colección.",
+          "imageAlt": "Una mochila para senderismo"
+        },
+        "ar": {
+          "name": "Argentina",
+          "shortName": "Argentina",
+          "language": "Español",
+          "product": "Abrigo para el camino",
+          "category": "Esenciales para el día a día",
+          "task": "Escribe una historia de producto que refleje tu marca.",
+          "imageAlt": "Un par de calcetines de lana"
+        },
+        "mx": {
+          "name": "México",
+          "shortName": "México",
+          "language": "Español",
+          "product": "Tu próxima aventura",
+          "category": "Accesorios de viaje",
+          "task": "Crea contenido para tu próximo mercado.",
+          "imageAlt": "Una brújula de latón"
+        },
+        "es": {
+          "name": "España",
+          "shortName": "España",
+          "language": "Español",
+          "product": "Café para cada mañana",
+          "category": "Café de especialidad",
+          "task": "Traduce tu tienda para tu próximo público.",
+          "imageAlt": "Una bolsa de café de origen único"
+        }
+      }
+    }
+  },
+  "common": {
+    "forCreators": "Para creadores",
+    "learnMore": "Más información",
+    "viewPricing": "Ver precios",
+    "discover": "Descubrir",
+    "status": {
+      "comingSoon": "Próximamente",
+      "earlyAccess": "Acceso anticipado"
+    },
+    "startBuildingFree": "Empezar a crear gratis",
+    "pricing": "Precios",
+    "talkToSales": "Hablar con ventas",
+    "industries": "Sectores"
+  },
+  "navigation": {
+    "audiences": {
+      "brands": {
+        "label": "Marcas y dueños de tiendas",
+        "description": "Crea tu tienda en minutos y adminístrala con ayuda de la IA"
+      },
+      "resellers": {
+        "label": "Dropshippers y revendedores",
+        "description": "Productos seleccionados que agregas en unos clics"
+      },
+      "digital": {
+        "label": "Negocios digitales",
+        "description": "Vende libros electrónicos, imágenes y videos, y administra tu comunidad"
+      },
+      "subscriptions": {
+        "label": "Suscripciones",
+        "description": "Cajas, membresías y recargas que se renuevan solas"
+      },
+      "communities": {
+        "label": "Comunidades",
+        "description": "Publicaciones, eventos y descargas exclusivos para miembros en tu tienda"
+      }
+    },
+    "creators": {
+      "developers": {
+        "label": "Desarrolladores",
+        "description": "Crea tiendas y véndelas como plantillas en Descubrir"
+      },
+      "content": {
+        "label": "Creadores de contenido",
+        "description": "Gana dinero promocionando productos de comerciantes con tu enlace o tienda"
+      }
+    },
+    "creatorsCaption": "Participa en Estori sin tener que administrar una tienda.",
+    "capabilities": {
+      "store-builder": {
+        "name": "Creador de tiendas con IA",
+        "description": "Una tienda completa a partir de una descripción, que modificas con solo pedirlo"
+      },
+      "agentic-commerce": {
+        "name": "Haz que los asistentes de IA te encuentren",
+        "description": "Haz que te recomienden cuando los compradores le pregunten a la IA"
+      },
+      "operations-agents": {
+        "name": "Asistentes para tu tienda",
+        "description": "Ayuda con inventario, compradores y marketing"
+      },
+      "personalized-shopping": {
+        "name": "Compras personalizadas",
+        "description": "Recomendaciones, un carrito inteligente y búsqueda con IA"
+      },
+      "product-catalog": {
+        "name": "Catálogo y preparación de pedidos",
+        "description": "Productos del catálogo, preparación por proveedores y seguimiento"
+      },
+      "payments": {
+        "name": "Pagos",
+        "description": "Compras que se finalizan en tu tienda y transferencias a tu banco"
+      },
+      "digital-products": {
+        "name": "Creación de comunidades",
+        "description": "Vende descargas y administra tu comunidad"
+      },
+      "developer-templates": {
+        "name": "Plantillas en Descubrir",
+        "description": "Crea tiendas y véndelas como plantillas"
+      },
+      "content-creators": {
+        "name": "Programa para creadores de contenido",
+        "description": "Gana dinero promocionando productos de comerciantes"
+      },
+      "subscriptions": {
+        "name": "Suscripciones",
+        "description": "Cajas, membresías y recargas que se renuevan solas"
+      },
+      "email-marketing": {
+        "name": "Marketing por correo electrónico",
+        "description": "Boletines y correos electrónicos automáticos que se escriben con solo pedirlo"
+      },
+      "web-analytics": {
+        "name": "Analíticas web",
+        "description": "Visitas, fuentes y ventas, integradas en tu tienda"
+      },
+      "search-optimization": {
+        "name": "Optimización SEO, GEO y AEO",
+        "description": "Aparece en los resultados de búsqueda y en las respuestas de la IA"
+      },
+      "order-management": {
+        "name": "Gestión de pedidos",
+        "description": "Gestiona pedidos, pagos, envíos y reembolsos en un solo lugar"
+      },
+      "store-translations": {
+        "name": "Traducciones de la tienda",
+        "description": "Tiendas en inglés, español y portugués, con traducción de IA y tus propias ediciones"
+      }
+    },
+    "solutions": "Soluciones",
+    "accessibility": {
+      "main": "Principal",
+      "openMenu": "Abrir menú",
+      "menu": "Menú",
+      "back": "Volver al menú",
+      "close": "Cerrar menú",
+      "utility": "Utilidades"
+    },
+    "openApp": "Abrir app",
+    "signIn": "Iniciar sesión",
+    "contactUs": "Contactarnos",
+    "support": "Soporte",
+    "menus": {
+      "solutions": {
+        "feature": {
+          "title": "De tu primera idea a tu primer pedido.",
+          "link": {
+            "label": "Empezar a crear gratis"
+          }
+        }
+      },
+      "creators": {
+        "feature": {
+          "title": "Vende las tiendas que diseñas.",
+          "link": {
+            "label": "Ver cómo funciona"
+          }
+        },
+        "links": {
+          "discover": "Plantillas en Descubrir",
+          "fees": "Comisiones por venta de plantillas"
+        }
+      }
+    },
+    "menuFooter": {
+      "start": {
+        "label": "Comparar planes"
+      },
+      "end": {
+        "support": "Soporte por correo electrónico",
+        "sales": "Hablar con ventas"
+      }
+    },
+    "getStarted": "Empezar",
+    "estoriFor": "Estori para",
+    "platform": "Plataforma",
+    "announcement": {
+      "text": "Estori Descubrir ya está disponible: vende las tiendas que diseñas y recibe el precio menos {platformFee}.",
+      "link": "Más información →"
+    }
+  },
+  "footer": {
+    "solutions": {
+      "title": "Soluciones",
+      "links": {
+        "brands": "Marcas",
+        "resellers": "Revendedores",
+        "digital": "Negocios digitales",
+        "industries": "Sectores",
+        "agentic-commerce": "Recomendaciones de IA",
+        "pricing": "Precios",
+        "contact": "Contactar a ventas",
+        "blog": "Blog"
+      }
+    },
+    "creators": {
+      "title": "Para creadores",
+      "links": {
+        "developers": "Desarrolladores",
+        "content": "Creadores de contenido",
+        "discover": "Descubrir"
+      }
+    },
+    "legal": "Legal",
+    "contact": "Contacto"
+  },
+  "pricing": {
+    "builder": {
+      "drafts": "Borradores por tienda, incluido Main",
+      "publishDraft": "Publica el borrador que elijas",
+      "languages": "Usa la app de Estori en inglés, español o portugués"
+    },
+    "orders": {
+      "allStores": "Pedidos de todas tus tiendas",
+      "tracking": "Actualizaciones y seguimiento de envíos",
+      "refunds": "Reembolsos totales y parciales"
+    },
+    "translations": {
+      "languages": "Idiomas de la tienda",
+      "languageList": "Inglés, español, portugués",
+      "automatic": "Traducción automática",
+      "credits": "Usa créditos de IA",
+      "review": "Revisa y edita traducciones",
+      "publish": "Traduce el texto nuevo al publicar",
+      "switcher": "Selector de idioma para compradores"
+    },
+    "cards": {
+      "build": "Crea y modifica tiendas con solo pedirlo",
+      "preview": "Vista previa interactiva en computadora y celular",
+      "templates": "Empieza con cualquier plantilla de Descubrir",
+      "publish": "Publica tus tiendas y véndelas como plantillas",
+      "drafts": "{count} borradores por tienda, incluido Main",
+      "translations": "Traducciones de la tienda en tres idiomas con créditos de IA",
+      "languages": "App de Estori en inglés, español y portugués",
+      "customEmails": "Envía correos electrónicos automáticos sobre pedidos, envíos y reembolsos",
+      "flexiblePayouts": "Elige cuándo recibir transferencias bancarias",
+      "stores": "Hasta {count} tiendas, todas se pueden publicar",
+      "basicSelling": "Vende en línea, sigue tus pedidos y recibe transferencias bancarias"
+    },
+    "credits": {
+      "title": "Crea más con créditos de IA",
+      "description": "Los créditos permiten usar la IA que crea tu tienda, escribe tu contenido y traduce tu tienda. Agrega más cuando quieras para seguir creando.",
+      "calculatorLink": "Estimar cuántos créditos necesito",
+      "usageNote": "El uso de créditos depende del modelo de IA y del tamaño de tu solicitud.",
+      "cards": {
+        "build": {
+          "title": "Crea tu tienda",
+          "description": "Convierte tu idea en una tienda con productos, carrito y proceso para finalizar la compra."
+        },
+        "change": {
+          "title": "Haz cambios por chat",
+          "description": "Pide una nueva sección, un nuevo estilo o una corrección rápida."
+        },
+        "translation": {
+          "title": "Traduce tu tienda",
+          "description": "Llega a más compradores con traducciones de IA que puedes revisar y ajustar."
+        },
+        "assistant": {
+          "title": "Recibe ayuda con las tareas diarias",
+          "description": "Deja que la IA te ayude con el inventario, las preguntas de los compradores y las tareas diarias de la tienda."
+        },
+        "content": {
+          "title": "Escribe textos de productos y artículos de blog",
+          "description": "Prepara descripciones de productos, textos de páginas y artículos de blog con la voz de tu marca."
+        },
+        "images": {
+          "title": "Crea imágenes de productos",
+          "description": "Genera imágenes de productos y escenas de uso cotidiano para tu tienda."
+        },
+        "research": {
+          "title": "Investiga productos y tendencias",
+          "description": "Encuentra oportunidades de productos y tendencias emergentes, con fuentes para explorar."
+        },
+        "optimization": {
+          "title": "Mejora tu tienda con datos",
+          "description": "Recibe sugerencias prácticas según la actividad de los compradores y los puntos donde se pierden ventas."
+        }
+      },
+      "calculatorNote": "Los borradores de textos y artículos de blog forman parte de las solicitudes de cambios con IA. Las estimaciones de créditos para imágenes de productos, investigación y revisiones de tiendas se agregarán cuando esas herramientas estén disponibles."
+    },
+    "comparison": {
+      "title": "Comparar planes",
+      "caption": "Encuentra el plan adecuado para tu próxima etapa",
+      "featureHelp": "Acerca de {feature}",
+      "premiumContact": "Contáctanos para activar Premium.",
+      "proContact": "Contáctanos para empezar con Pro.",
+      "paymentDetails": "Ver comisiones de pago, límites y plazos de transferencia",
+      "features": {
+        "aiCredits": {
+          "label": "Créditos de IA",
+          "description": "Los créditos cubren la creación, edición y traducción con IA. Los cambios más grandes usan más créditos."
+        },
+        "build": {
+          "label": "Crear y editar con IA",
+          "description": "Describe lo que quieres. Estori crea tu tienda y puedes pedirle cambios sin escribir código."
+        },
+        "preview": {
+          "label": "Vista previa en computadora y celular",
+          "description": "Revisa cómo se ve tu tienda en una computadora o celular antes de compartirla."
+        },
+        "publish": {
+          "label": "Publicar cuando estés listo",
+          "description": "Elige el borrador que quieres mostrarles a los compradores y publícalo como tu tienda."
+        },
+        "appLanguages": {
+          "label": "Trabajar en tu idioma preferido",
+          "description": "Usa la app de Estori en tu idioma preferido. Esto cambia los menús y mensajes de la app."
+        },
+        "stores": {
+          "label": "Crear y publicar tiendas",
+          "description": "Crea tiendas para distintas marcas o ideas y publícalas para los compradores. Este es el total de tiendas que puedes crear, incluidas las que elimines."
+        },
+        "domain": {
+          "label": "Tu marca, tu propio dominio",
+          "description": "Conecta una dirección web que te pertenezca, como yourbrand.com, a cada tienda publicada. El dominio se compra por separado."
+        },
+        "templates": {
+          "label": "Empezar con diseños listos para usar",
+          "description": "Empieza con un diseño de Descubrir y adapta tu propia copia. Algunos diseños son gratis y otros tienen un precio de pago único."
+        },
+        "sellTemplates": {
+          "label": "Ganar dinero con tus diseños de tiendas",
+          "description": "Pon un diseño de tienda a la venta en Descubrir. Tras la revisión, los compradores pueden pagar por su propia copia. Se aplica una comisión a cada venta."
+        },
+        "receipts": {
+          "label": "Recibos automáticos para compradores de plantillas",
+          "description": "Cuando alguien compra tu diseño de tienda, Estori le envía un recibo por correo electrónico."
+        },
+        "ownProducts": {
+          "label": "Vender tus propios productos",
+          "description": "Agrega tus propios productos, define los precios y ofrece distintas tallas o colores. Tú te encargas de enviarlos a tus compradores."
+        },
+        "catalog": {
+          "label": "Vender sin mantener inventario",
+          "description": "Elige productos de proveedores para vender en tu tienda. Consulta su costo antes de agregarlos."
+        },
+        "fulfillment": {
+          "label": "Envíos de proveedores y seguimiento",
+          "description": "En los productos del catálogo, los proveedores reciben el pedido y lo envían a tu comprador. Puedes seguir la preparación y el envío en Estori."
+        },
+        "orders": {
+          "label": "Todos tus pedidos en un solo lugar",
+          "description": "Consulta juntos los pedidos de todas tus tiendas, incluidos los productos comprados, el estado del pago y el avance de la entrega."
+        },
+        "tracking": {
+          "label": "Seguimiento de envíos",
+          "description": "Agrega un transportista y un número de seguimiento a los pedidos que envíes tú."
+        },
+        "refunds": {
+          "label": "Reembolsos flexibles",
+          "description": "Reembolsa productos seleccionados o un pedido completo desde Estori. Tu saldo de Stripe debe cubrir el reembolso."
+        },
+        "sellerEmails": {
+          "label": "Avisos de nuevos pedidos por correo electrónico",
+          "description": "Recibe un correo electrónico cuando un comprador haga un pedido para que puedas dar el siguiente paso."
+        },
+        "shopperEmails": {
+          "label": "Correos electrónicos automáticos para compradores",
+          "description": "Haz que Estori les envíe a los compradores una confirmación de pedido, una actualización de envío y un correo electrónico cuando reciban un reembolso."
+        },
+        "editEmails": {
+          "label": "Correos electrónicos con la voz de tu marca",
+          "description": "Edita los textos de los correos electrónicos de tu tienda para compradores, revisa su vista previa o desactiva un correo electrónico."
+        },
+        "brandedEmails": {
+          "label": "Correos electrónicos desde la dirección de tu tienda",
+          "description": "Los correos electrónicos para compradores usan la dirección de correo electrónico que Estori le proporciona a tu tienda."
+        },
+        "aiTranslation": {
+          "label": "Traducir tu tienda con IA",
+          "description": "Traduce tu tienda a otros idiomas con IA. Consulta una estimación de créditos antes de empezar y luego revisa y edita los resultados."
+        },
+        "editTranslations": {
+          "label": "Ajustar cada traducción",
+          "description": "Revisa las traducciones y cambia frases individuales. Tus ediciones guardadas se conservan cuando vuelven a ejecutarse las traducciones de IA."
+        },
+        "publishTranslations": {
+          "label": "Actualizar las traducciones al publicar",
+          "description": "Activa la traducción automática del texto nuevo al publicar una actualización de tu tienda. Esto usa créditos de IA."
+        },
+        "languageSwitcher": {
+          "label": "Dejar que los compradores elijan su idioma",
+          "description": "Los compradores pueden cambiar entre los idiomas que habilites en la tienda. Si el idioma del navegador coincide, puede usarse automáticamente."
+        },
+        "translationControl": {
+          "label": "Pausar y reanudar traducciones",
+          "description": "Detén una tarea de traducción con IA y reanúdala más tarde. El trabajo también se pausa si se agotan tus créditos de IA."
+        },
+        "checkout": {
+          "label": "Pagos con tarjeta en tu tienda",
+          "description": "Los compradores pagan con tarjeta a través de Stripe en la página para finalizar la compra de tu tienda, con tu logotipo y estilo. Completa la configuración de pagos antes de aceptar pagos reales."
+        },
+        "payouts": {
+          "label": "Frecuencia flexible de transferencias",
+          "description": "Elige transferencias bancarias diarias, semanales o mensuales tras el plazo de espera de tu nivel de vendedor. Se aplican las comisiones de transferencia de Stripe."
+        },
+        "aiDiscovery": {
+          "label": "Ser descubierto a través de asistentes de IA",
+          "description": "Ayuda a que los compradores encuentren tu tienda cuando le pidan recomendaciones de productos a un asistente de IA."
+        },
+        "operations": {
+          "label": "Ayuda de IA con inventario y marketing",
+          "description": "Asistentes que te ayudan con tareas de inventario y marketing."
+        },
+        "customerService": {
+          "label": "Ayuda de IA para tus compradores",
+          "description": "Un asistente que ayuda a responder las preguntas de los compradores."
+        },
+        "personalization": {
+          "label": "Productos elegidos para cada comprador",
+          "description": "Sugerencias de productos y un carrito más inteligente según la visita del comprador."
+        },
+        "bundles": {
+          "label": "Paquetes, ofertas y búsqueda más inteligente",
+          "description": "Paquetes de productos, ofertas después de finalizar la compra y búsqueda más inteligente en la tienda."
+        },
+        "digital": {
+          "label": "Vender contenido y crear una comunidad",
+          "description": "Vende descargas y reúne a tus compradores en una comunidad."
+        },
+        "support": {
+          "label": "Ayuda cuando la necesites",
+          "description": "Escríbele por correo electrónico al equipo de Estori cuando necesites ayuda con tu tienda."
+        },
+        "prioritySupport": {
+          "label": "Soporte prioritario por correo electrónico",
+          "description": "Tus preguntas por correo electrónico reciben atención prioritaria del equipo de soporte."
+        },
+        "bankPayouts": {
+          "label": "Recibir tus ventas en tu cuenta bancaria",
+          "description": "Recibe transferencias a través de Stripe tras el plazo de espera de tu nivel de vendedor. Las cuentas nuevas empiezan con transferencias semanales los lunes."
+        },
+        "orderStatus": {
+          "label": "Seguir los pagos y la preparación de pedidos",
+          "description": "Consulta si un pedido está pagado, reembolsado o enviado sin revisar herramientas por separado."
+        },
+        "previewEmails": {
+          "label": "Ver y probar tus correos electrónicos",
+          "description": "Revisa cómo se verá un correo electrónico y luego envíate una muestra antes de que llegue a los compradores."
+        },
+        "replyToEmails": {
+          "label": "Respuestas directamente en tu bandeja de entrada",
+          "description": "Elige a dónde llegan las respuestas de los compradores para contestar desde tu propia bandeja de entrada de correo electrónico."
+        },
+        "accountManager": {
+          "label": "Acceso directo a un gestor de cuenta",
+          "description": "Contacta directamente a un gestor de cuenta para recibir ayuda con tus tiendas y tu cuenta."
+        }
+      },
+      "emailNotifications": "Correo electrónico y notificaciones"
+    },
+    "premiumAvailabilityAnswer": "Sí. Contáctanos para activar Premium. Si tu cuenta permite cambiar de plan en línea, puedes obtener Premium desde la página de facturación.",
+    "metaDescription": "Empieza gratis con Basic, crece con Pro u obtén más créditos de IA con Premium. Compara límites de tiendas, traducciones, pagos y herramientas para vender en línea.",
+    "plans": {
+      "basic": {
+        "description": "Haz realidad tu primera idea de tienda, gratis.",
+        "benefit": "Crea tu primera tienda y prueba las ediciones con IA.",
+        "headerNote": "Crea tu primera tienda"
+      },
+      "pro": {
+        "description": "Lanza tu marca y haz crecer un pequeño conjunto de tiendas.",
+        "benefit": "Publica hasta {liveStores} tiendas y sigue mejorándolas con IA.",
+        "headerNote": "Lanza y haz crecer tu marca"
+      },
+      "premium": {
+        "description": "Crea para más marcas y mantén cada tienda en evolución.",
+        "benefit": "Haz crecer hasta {liveStores} tiendas publicadas con más IA para actualizaciones continuas.",
+        "headerNote": "Para agencias y estudios de marca"
+      }
+    },
+    "paidActivationAnswer": "Elige Pro o Premium para empezar. Actívalo desde la página de facturación cuando esté disponible la opción de finalizar la compra en línea, o contáctanos para recibir ayuda.",
+    "creditsNote": "El uso de IA varía según el modelo que elijas y el tamaño de tus cambios.",
+    "billing": {
+      "monthly": "Mensual",
+      "yearly": "Anual",
+      "savings": "Ahorrar 20%",
+      "monthlyNote": "Facturación mensual. Cancela cuando quieras.",
+      "yearlyNote": "{amount} con facturación anual. Cancela cuando quieras."
+    }
+  },
+  "platform": {
+    "orders": {
+      "eyebrow": "Gestión de pedidos",
+      "title": "Pedidos, envíos y correos electrónicos para compradores",
+      "description": "Gestiona los pedidos de todas tus tiendas en un solo lugar, incluidos los pedidos de prueba mientras te preparas para vender.",
+      "cards": [
+        {
+          "title": "Prepara los pedidos de tus propios productos",
+          "body": "Marca productos como enviados y agrega el seguimiento. Las actualizaciones de preparación de pedidos del catálogo se registran junto a los productos que envías tú."
+        },
+        {
+          "title": "Gestiona los reembolsos",
+          "body": "Emite reembolsos totales o parciales y consulta el historial del pedido. Los reembolsos están sujetos a las condiciones de venta y a tu saldo disponible en Stripe."
+        },
+        {
+          "title": "Mantén informados a los compradores",
+          "body": "Con Pro y Premium, envía correos electrónicos de confirmación, envío y reembolso desde la dirección de tu tienda y personaliza sus textos."
+        }
+      ]
+    },
+    "storeTranslations": {
+      "meta": {
+        "title": "Traducciones de la tienda",
+        "description": "Muestra tu tienda en inglés, español y portugués de Brasil. Traduce con créditos de IA, revisa cada frase y mantén el control de tus ediciones."
+      },
+      "eyebrow": "Traducciones de la tienda",
+      "title": "Deja que los compradores exploren tu tienda en su idioma",
+      "lead": "Con Pro y Premium, muestra tu tienda en inglés, español y portugués de Brasil. Las traducciones automáticas usan créditos de IA y puedes revisar y editar cada frase.",
+      "sections": [
+        {
+          "eyebrow": "Idiomas",
+          "title": "Elige los idiomas que ven tus compradores",
+          "cards": [
+            {
+              "title": "Confirma el idioma de tu tienda",
+              "body": "Elige el idioma en el que está escrita tu tienda antes de activar las traducciones."
+            },
+            {
+              "title": "Traduce con créditos de IA",
+              "body": "Traduce el texto que falta a los otros idiomas disponibles. El trabajo se pausa cuando los créditos se agotan y puede reanudarse cuando haya créditos disponibles."
+            },
+            {
+              "title": "Un selector de idioma para compradores",
+              "body": "Deja que los compradores elijan un idioma o muestra una traducción disponible que coincida con el idioma de su navegador."
+            }
+          ]
+        },
+        {
+          "eyebrow": "Mantén el control",
+          "title": "Tus textos siguen siendo tuyos",
+          "cards": [
+            {
+              "title": "Revisa cada traducción",
+              "body": "Busca el texto original y corrige traducciones individuales. La traducción automática conserva las ediciones que guardes."
+            },
+            {
+              "title": "Traduce el texto nuevo al publicar",
+              "body": "Elige traducir el texto nuevo al publicar, sin volver a traducirlo todo."
+            },
+            {
+              "title": "Textos de la tienda y del proceso para finalizar la compra",
+              "body": "Las traducciones disponibles acompañan a los compradores en tu tienda y en los mensajes de Estori al finalizar la compra."
+            }
+          ]
+        }
+      ],
+      "steps": [
+        "Confirma el idioma en el que está escrita tu tienda.",
+        "Elige otro idioma disponible e inicia una traducción con créditos de IA.",
+        "Revisa los resultados y habilita los idiomas que quieres mostrarles a los compradores."
+      ],
+      "faq": [
+        {
+          "question": "¿Qué planes incluyen traducciones de la tienda?",
+          "answer": "Las traducciones de la tienda están incluidas en Pro y Premium. La traducción automática usa créditos de IA de tu cuenta."
+        },
+        {
+          "question": "¿Qué idiomas están disponibles?",
+          "answer": "Inglés, español y portugués de Brasil."
+        },
+        {
+          "question": "¿Las traducciones automáticas son gratis?",
+          "answer": "La traducción automática usa créditos de IA de tu cuenta. Revisar y guardar tus propias ediciones no ejecuta la IA de traducción."
+        },
+        {
+          "question": "¿Esto reescribe los archivos de mi tienda?",
+          "answer": "No. Las traducciones se guardan por separado y se aplican cuando los compradores ven tu tienda."
+        }
+      ]
+    },
+    "catalog": {
+      "availabilityAnswer": "Sí. Todos los planes permiten explorar productos del catálogo y agregarlos a una tienda. Los productos, precios y opciones de envío dependen del catálogo actual.",
+      "pickProducts": "Elige productos del catálogo de proveedores.",
+      "resellerAvailability": "Todos los planes permiten explorar y agregar productos del catálogo actual.",
+      "resellerLead": "Elige productos del catálogo de proveedores, revisa sus costos y envío, y agrégalos a tu tienda con cualquier plan.",
+      "storeLead": "Crea tu tienda y revisa la vista previa con Estori. Luego agrega productos del catálogo junto a los productos que vendes por tu cuenta.",
+      "metaDescription": "Elige productos del catálogo de proveedores con cualquier plan, crea tu tienda con Estori y sigue la preparación de los pedidos."
+    },
+    "payments": {
+      "availabilityAnswer": "Sí. Las tiendas publicadas pueden aceptar pagos con tarjeta a través de Stripe después de que completes la configuración de pagos y publiques tu tienda. Las compras en la vista previa permanecen en modo de prueba.",
+      "metaDescription": "Acepta pagos con tarjeta en tu tienda publicada de Estori, recibe transferencias a tu banco y gestiona pedidos y reembolsos a través de Stripe.",
+      "communitiesAnswer": "Las comunidades de pago están en acceso anticipado. Solicita acceso para hablar sobre tu configuración.",
+      "payoutsBenefit": "De forma predeterminada, recibes transferencias bancarias semanales los lunes. Pro y Premium te permiten elegir transferencias diarias, semanales o mensuales. Tu cuenta tiene un costo de {stripeFees}.",
+      "stripeLimitNote": "Stripe documenta un máximo técnico general de USD 999,999.99 por pago. Las redes de tarjetas pueden imponer límites inferiores. También se aplican las medidas de protección de Estori para pedidos y ventas semanales indicadas arriba.",
+      "stripeLimitSource": "Consultar los límites de importe de pago de Stripe"
+    }
+  },
+  "solutions": {
+    "brands": {
+      "eyebrow": "Para marcas y dueños de tiendas",
+      "title": "Tu marca merece una tienda a su manera.",
+      "lead": "Cuéntale a Estori qué vendes. Crea una tienda que te represente y sigue mejorándola con solo pedirlo.",
+      "problemTitle": "Tu próxima idea no debería esperar por tu sitio web.",
+      "problems": [
+        "Tus productos necesitan más que una plantilla genérica.",
+        "Los pequeños cambios no deberían convertirse en otro proyecto.",
+        "Los pedidos no deberían perderse entre herramientas."
+      ],
+      "benefitsTitle": "De tu primera idea a tu próximo pedido.",
+      "benefitsLead": "Una tienda, páginas de productos y un proceso para finalizar la compra que funcionan juntos. Creados a partir de lo que hace única a tu marca.",
+      "features": [
+        {
+          "title": "Haz que tu marca sea la primera impresión.",
+          "body": "Dale forma a tus colores, diseños e historias de productos en una tienda que te represente."
+        },
+        {
+          "title": "¿Una nueva idea? Solo pídela.",
+          "body": "Agrega una colección, reescribe una página de producto o renueva el estilo de tu página de inicio por chat."
+        },
+        {
+          "title": "Ten cada pedido a la vista.",
+          "body": "Mira qué compraron tus compradores y sigue los pagos y la preparación de pedidos de todas tus tiendas."
+        },
+        {
+          "title": "Llega a los compradores en su idioma.",
+          "body": "Usa IA para traducir tu tienda y luego revisa y ajusta los textos antes de publicar."
+        }
+      ],
+      "carouselTitle": "Mira lo que podrías crear.",
+      "examples": [
+        {
+          "title": "Una colección con historia",
+          "body": "Dale a una nueva línea su propio espacio, con los detalles que hacen que valga la pena descubrir cada producto.",
+          "prompt": "Crea una tienda para mi cerámica artesanal, con una página para la nueva colección de verano."
+        },
+        {
+          "title": "Un pequeño cambio, una tienda renovada",
+          "body": "Actualiza el estilo de tu tienda a medida que cambian tus productos e ideas.",
+          "prompt": "Dale un estilo más cálido a mi página de inicio y destaca nuestra nueva colección de café."
+        },
+        {
+          "title": "Espacio para tu próxima marca",
+          "body": "Crea una tienda diferente para una nueva idea sin empezar con una página en blanco.",
+          "prompt": "Crea una tienda minimalista de productos para actividades al aire libre con nuestros esenciales de senderismo y páginas de productos detalladas."
+        }
+      ],
+      "steps": [
+        "Describe tu marca y lo que vendes.",
+        "Revisa tu tienda y pide cambios.",
+        "Configura los pagos y publica cuando estés listo."
+      ],
+      "closingTitle": "Crea la tienda que has estado imaginando.",
+      "closingLead": "Empieza con tu idea. Sigue dándole forma a medida que crece tu marca.",
+      "faq": [
+        {
+          "question": "¿Necesito saber programar?",
+          "answer": "No. Describe tu tienda y pide cambios con palabras sencillas. Estori crea las páginas y tú las revisas en la vista previa interactiva."
+        },
+        {
+          "question": "¿Cómo actualizo mi tienda?",
+          "answer": "Pídele a Estori que cambie un diseño, agregue una sección o renueve los textos de tus productos. Revisa los cambios en la vista previa antes de publicar."
+        },
+        {
+          "question": "¿Puedo vender productos que hago yo?",
+          "answer": "Sí. Agrega tus propios productos con fotos, descripciones y precios. Tú te encargas del envío de esos productos."
+        },
+        {
+          "question": "¿Cómo pagan los compradores?",
+          "answer": "Configura los pagos y conecta tu cuenta de Stripe. Los compradores pagan al finalizar la compra en tu tienda y las transferencias llegan a tu banco."
+        }
+      ]
+    },
+    "resellers": {
+      "eyebrow": "Para dropshippers y revendedores",
+      "title": "Encuentra tu nicho. Crea tu tienda. Deja que los proveedores hagan los envíos.",
+      "lead": "Elige productos del catálogo de proveedores, define tus precios y aporta tu propia visión. Disponible en todos los planes.",
+      "problemTitle": "Crea un negocio en torno a productos, no a cajas.",
+      "problems": [
+        "Encontrar productos puede tomar más tiempo que crear una tienda.",
+        "La información del proveedor también necesita una historia propia.",
+        "Los pedidos necesitan un camino claro desde que se finaliza la compra hasta la entrega."
+      ],
+      "benefitsTitle": "Tu tienda. Preparación de pedidos conectada.",
+      "benefitsLead": "Concéntrate en la colección y la experiencia del comprador. Estori conecta los productos del catálogo con la preparación de pedidos de los proveedores.",
+      "features": [
+        {
+          "title": "Encuentra productos que encajen con tu idea.",
+          "body": "Explora el catálogo y revisa los productos disponibles antes de agregarlos a tu tienda."
+        },
+        {
+          "title": "Dale tu estilo a la colección.",
+          "body": "Pídele a Estori que escriba las páginas de productos con la voz de tu tienda y las organice según tu nicho."
+        },
+        {
+          "title": "Deja que los pedidos pagados sigan su curso.",
+          "body": "Los pedidos del catálogo llegan a los proveedores para su preparación, con el avance del envío y su seguimiento en Estori."
+        },
+        {
+          "title": "Incluye productos que haces tú.",
+          "body": "Vende tus propios productos junto a los de proveedores. Tú te encargas del envío de los productos que proporcionas."
+        }
+      ],
+      "carouselTitle": "Un catálogo. Distintas ideas de tiendas.",
+      "examples": [
+        {
+          "title": "Esenciales cotidianos elegidos con cuidado",
+          "body": "Reúne productos útiles para un tipo específico de comprador.",
+          "prompt": "Crea una tienda de productos esenciales para actividades al aire libre del catálogo de proveedores, organizada por actividad."
+        },
+        {
+          "title": "Una colección bien definida",
+          "body": "Facilita la compra con una selección pequeña en lugar de una lista interminable de productos.",
+          "prompt": "Crea una tienda de artículos esenciales para el hogar con un catálogo pequeño y comparaciones claras de productos."
+        },
+        {
+          "title": "Tus productos y los de proveedores",
+          "body": "Combina lo que haces con productos que lo complementen.",
+          "prompt": "Crea una tienda de café con nuestros propios granos y accesorios del catálogo en colecciones separadas."
+        }
+      ],
+      "steps": [
+        "Elige productos y define tus precios de venta.",
+        "Pídele a Estori que cree sus páginas y tu tienda.",
+        "Conecta los pagos, publica y sigue los pedidos pagados."
+      ],
+      "closingTitle": "Dale a tu próxima idea de tienda un lugar para crecer.",
+      "closingLead": "Empieza gratis. Agrega los productos que encajen con tu tienda.",
+      "faq": [
+        {
+          "question": "¿Necesito comprar inventario por adelantado?",
+          "answer": "No. Elige productos del catálogo para tu tienda y los proveedores los enviarán cuando los compradores hagan un pedido."
+        },
+        {
+          "question": "¿Cómo elijo qué productos vender?",
+          "answer": "Explora el catálogo de proveedores y revisa los costos de los productos y los detalles de envío. Agrega los productos que encajen con tu tienda y define tus precios de venta."
+        },
+        {
+          "question": "¿Quién se encarga del envío?",
+          "answer": "El proveedor envía los productos del catálogo directamente a tu comprador. Las actualizaciones de envío y el seguimiento llegan a tu tienda."
+        },
+        {
+          "question": "¿Puedo vender mis propios productos junto a los del catálogo?",
+          "answer": "Sí. Crea una colección con ambos. Los proveedores envían los productos del catálogo y tú envías los que haces."
+        }
+      ]
+    },
+    "digital": {
+      "eyebrow": "Para negocios digitales",
+      "title": "Crea algo una vez. Dale su propio espacio.",
+      "lead": "Vende tus guías, descargas y trabajo creativo desde una tienda que te represente. Dale a tus compradores un solo lugar para descubrir, comprar y disfrutar lo que creas.",
+      "problemTitle": "Tu trabajo no debería estar disperso entre enlaces.",
+      "problems": [
+        "Tu mejor contenido necesita un lugar donde lo descubran.",
+        "Los compradores necesitan una forma clara de encontrar lo que compraron.",
+        "Tu próximo lanzamiento merece más que otro enlace compartido."
+      ],
+      "benefitsTitle": "Un lugar para lo que creas.",
+      "benefitsLead": "Reúne tus páginas de productos, la entrega digital y la experiencia del comprador en una sola tienda.",
+      "features": [
+        {
+          "title": "Pon tu trabajo en primer plano.",
+          "body": "Crea páginas de productos para guías, imágenes, videos y otras descargas, con espacio para mostrar su valor."
+        },
+        {
+          "title": "Entrega los archivos después de la compra.",
+          "body": "Dales a los compradores acceso a sus archivos después del pago, sin enviar cada compra manualmente."
+        },
+        {
+          "title": "Crea a partir de lo que sabes.",
+          "body": "Reúne tus guías, lecciones y recursos en un solo lugar fácil de reconocer."
+        },
+        {
+          "title": "Dales a los compradores una razón para quedarse.",
+          "body": "Conecta tu trabajo digital con una comunidad donde los compradores puedan seguir aprendiendo y compartiendo."
+        }
+      ],
+      "carouselTitle": "Algunas formas de compartir lo que sabes.",
+      "examples": [
+        {
+          "title": "Una biblioteca de guías prácticas",
+          "body": "Dales a los lectores un lugar dedicado a descubrir tu trabajo descargable.",
+          "prompt": "Crea una tienda para mis guías ilustradas de jardinería, con vistas previas de cada guía."
+        },
+        {
+          "title": "Una tienda de recursos creativos",
+          "body": "Organiza archivos útiles pensando en quienes los usarán.",
+          "prompt": "Crea una tienda para mis ajustes preestablecidos de fotografía y guías de edición, con páginas de productos claras."
+        },
+        {
+          "title": "Una tienda para compartir lo que sabes",
+          "body": "Reúne tus plantillas y recursos de aprendizaje en una tienda creada en torno a tu experiencia.",
+          "prompt": "Crea una tienda para mis plantillas de diseño y recursos de aprendizaje, con una página sobre mí."
+        }
+      ],
+      "steps": [
+        "Agrega tus productos digitales y cuenta su historia.",
+        "Crea tu tienda y organiza tu trabajo.",
+        "Publica tu tienda y entrega los archivos después de la compra."
+      ],
+      "closingTitle": "Tu próximo lanzamiento puede empezar con una tienda.",
+      "closingLead": "Convierte tu trabajo creativo en productos que los compradores puedan descubrir, comprar y volver a buscar.",
+      "faq": [
+        {
+          "question": "¿Qué tipos de productos digitales puedo vender?",
+          "answer": "Vende libros electrónicos, guías, plantillas, recursos de diseño, videos y cursos. Dale a cada lanzamiento su propia página de producto en tu tienda."
+        },
+        {
+          "question": "¿Cómo reciben los compradores sus compras?",
+          "answer": "Los compradores obtienen acceso a sus archivos después del pago, para empezar a usar lo que compraron sin esperar a que se lo envíes."
+        },
+        {
+          "question": "¿Puedo personalizar mis páginas de productos?",
+          "answer": "Sí. Pídele a Estori que diseñe tus páginas en torno a tu trabajo, con tu propio estilo, detalles de los productos y vistas previas."
+        },
+        {
+          "question": "¿Puedo ofrecer productos digitales a los miembros de mi comunidad?",
+          "answer": "Sí. Incluye descargas, lecciones y otros recursos en tu membresía para darles más razones para unirse y quedarse."
+        }
+      ]
+    },
+    "subscriptions": {
+      "eyebrow": "Para negocios de suscripción",
+      "title": "Dales a los compradores una razón para volver.",
+      "lead": "Vende cajas, recargas o membresías desde tu propia tienda. Facilita las compras recurrentes con planes que los compradores pueden gestionar por su cuenta.",
+      "problemTitle": "Las compras recurrentes merecen una rutina más sencilla.",
+      "problems": [
+        "Las ofertas recurrentes necesitan más que una página de producto.",
+        "Los compradores quieren saber qué recibirán y cuándo.",
+        "Los cambios de plan no deberían perderse entre correos electrónicos."
+      ],
+      "benefitsTitle": "Crea pensando en la próxima entrega. Y en la siguiente.",
+      "benefitsLead": "Reúne pagos recurrentes, páginas de planes claras y cuentas de suscriptores en una sola tienda.",
+      "features": [
+        {
+          "title": "Explica claramente tu oferta recurrente.",
+          "body": "Muéstrales a los compradores qué incluye, con qué frecuencia llega y para quién es."
+        },
+        {
+          "title": "Dale a cada plan su propio espacio.",
+          "body": "Muestra las diferencias entre tus cajas, recargas o membresías en una página de planes clara."
+        },
+        {
+          "title": "Dales el control a los suscriptores.",
+          "body": "Deja que los compradores pausen, omitan, cambien o cancelen su plan desde su cuenta."
+        },
+        {
+          "title": "Mantén toda la experiencia en un solo lugar.",
+          "body": "Reúne la historia de tu suscripción, los productos y las páginas de los compradores en una sola tienda."
+        }
+      ],
+      "carouselTitle": "¿Cómo podría ser tu próxima entrega?",
+      "examples": [
+        {
+          "title": "Una caja que vale la pena esperar",
+          "body": "Presenta una colección recurrente y a las personas que la hacen posible.",
+          "prompt": "Crea una tienda para nuestra caja mensual de café, con una página que explique cada tostado."
+        },
+        {
+          "title": "Recargas con un propósito",
+          "body": "Ayuda a los compradores a elegir sus recargas y encontrar una frecuencia de entrega que les funcione.",
+          "prompt": "Crea una tienda para nuestras recargas de productos del hogar, con tamaños y detalles de productos claros."
+        },
+        {
+          "title": "Una membresía centrada en el valor",
+          "body": "Muéstrales a los miembros lo que obtienen y dales razones para quedarse.",
+          "prompt": "Crea un sitio para nuestra membresía de creadores, con una página que compare los beneficios."
+        }
+      ],
+      "steps": [
+        "Crea una tienda en torno a tu oferta recurrente.",
+        "Define tus planes, precios y calendarios de renovación.",
+        "Dales la bienvenida a los suscriptores y gestiona los pedidos recurrentes."
+      ],
+      "closingTitle": "Empieza a crear aquello que hará volver a tus compradores.",
+      "closingLead": "Crea una oferta que valga la pena repetir, con una tienda donde sea fácil suscribirse.",
+      "faq": [
+        {
+          "question": "¿Qué puedo ofrecer como suscripción?",
+          "answer": "Crea cajas recurrentes, recargas de productos o membresías. Muéstrales a los compradores qué incluye cada plan y con qué frecuencia se renueva."
+        },
+        {
+          "question": "¿Cómo funcionan las renovaciones de suscripción?",
+          "answer": "Los compradores eligen un plan al finalizar la compra. Sus pagos se repiten según el calendario del plan, así que no necesitan hacer un nuevo pedido cada vez."
+        },
+        {
+          "question": "¿Cómo gestionan los compradores sus suscripciones?",
+          "answer": "Los suscriptores pueden omitir, pausar, cambiar o cancelar desde su cuenta en tu tienda, sin tener que escribirte por correo electrónico."
+        },
+        {
+          "question": "¿Puedo personalizar cómo se presentan mis planes?",
+          "answer": "Sí. Pídele a Estori que cree páginas de planes que expliquen tus opciones, comparen lo que incluyen y ayuden a los compradores a elegir."
+        }
+      ]
+    },
+    "communities": {
+      "eyebrow": "Para comunidades",
+      "title": "Un lugar para reunirse en torno a lo que haces.",
+      "lead": "Reúne conversaciones, eventos y recursos compartidos en un espacio exclusivo para miembros conectado a tu tienda.",
+      "problemTitle": "Tu comunidad necesita más que un hilo de comentarios.",
+      "problems": [
+        "Las conversaciones útiles se pierden entre tantas publicaciones.",
+        "Los recursos terminan repartidos entre distintas herramientas.",
+        "Los miembros necesitan un lugar claro al cual volver."
+      ],
+      "benefitsTitle": "Acerca la conversación a tu tienda.",
+      "benefitsLead": "Dales a tus miembros un lugar para conectar, encontrar recursos y seguir participando con tu marca.",
+      "features": [
+        {
+          "title": "Haz espacio para las conversaciones.",
+          "body": "Crea un espacio dedicado donde los miembros puedan hacer preguntas y compartir en qué están trabajando."
+        },
+        {
+          "title": "Mantén los recursos al alcance.",
+          "body": "Organiza guías, grabaciones y descargas para que los miembros puedan volver a encontrarlas."
+        },
+        {
+          "title": "Reúne a las personas.",
+          "body": "Comparte eventos y sesiones en vivo, con un lugar para seguir conversando después."
+        },
+        {
+          "title": "Conecta tu trabajo con tu comunidad.",
+          "body": "Dales a tus productos y a la experiencia de los miembros un solo espacio, con una identidad compartida."
+        }
+      ],
+      "carouselTitle": "Toda comunidad empieza con algo en común.",
+      "examples": [
+        {
+          "title": "Un espacio para quienes crean",
+          "body": "Conecta una tienda con las ideas y los proyectos que la rodean.",
+          "prompt": "Crea una tienda para mi taller de cerámica, con un espacio para nuestra comunidad de creadores."
+        },
+        {
+          "title": "Aprender más allá de la primera compra",
+          "body": "Haz que los compradores sigan aprendiendo con recursos compartidos y conversaciones que continúan después de una compra.",
+          "prompt": "Crea una tienda para mis recursos de jardinería con un área de miembros para lecciones y conversaciones."
+        },
+        {
+          "title": "Un lugar para tu próxima reunión",
+          "body": "Reúne a las personas en torno a eventos, intereses compartidos y recursos útiles.",
+          "prompt": "Crea un sitio para nuestro grupo creativo local, con eventos y recursos para miembros."
+        }
+      ],
+      "steps": [
+        "Crea tu comunidad y elige qué compartir.",
+        "Crea tu tienda y presenta tu idea.",
+        "Invita a los miembros y empieza la conversación."
+      ],
+      "closingTitle": "Crea un espacio para tu gente.",
+      "closingLead": "Reúne tus productos, conversaciones y experiencias compartidas bajo tu marca.",
+      "faq": [
+        {
+          "question": "¿Qué puedo compartir con mi comunidad?",
+          "answer": "Comparte publicaciones, lecciones, eventos, grabaciones y descargas. Dales a los miembros un lugar para hacer preguntas y conversar entre ellos."
+        },
+        {
+          "question": "¿Puedo ofrecer membresías gratis y de pago?",
+          "answer": "Sí. Crea un espacio gratis para darle la bienvenida a tu público y uno de pago con contenido, recursos o beneficios adicionales."
+        },
+        {
+          "question": "¿Cómo se conecta mi comunidad con mi tienda?",
+          "answer": "Tu comunidad está junto a tus productos y comparte la misma lista de compradores. Mantén las compras y la membresía juntas bajo tu marca."
+        },
+        {
+          "question": "¿Puedo incluir descargas para los miembros?",
+          "answer": "Sí. Ofrece libros electrónicos, plantillas, videos y otros recursos como parte de unirse a tu comunidad."
+        }
+      ],
+      "subscriptionPreview": {
+        "title": "¡Gracias por suscribirte!",
+        "description": "Sigue explorando. Estos creadores podrían gustarte.",
+        "creatorTitle": "The creative practice",
+        "creatorDescription": "Ideas nuevas y conversaciones para mentes curiosas.",
+        "recommendationTitle": "Encuentra tu próximo favorito",
+        "recommendationDescription": "Descubre más creadores que comparten tus intereses."
+      }
+    }
+  }
+}

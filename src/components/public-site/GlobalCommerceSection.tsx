@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@cloudflare/kumo';
 import { ArrowRightIcon, PauseIcon, PlayIcon, SparkleIcon } from '@phosphor-icons/react';
@@ -47,31 +48,31 @@ export function GlobalCommerceSection() {
 			<div className="global-commerce-panel">
 				<div className="global-commerce-grid">
 					<div className="global-commerce-copy">
-						<p className="global-commerce-eyebrow">{copy.eyebrow}</p>
+						<p className="global-commerce-eyebrow">{t(copy.eyebrow)}</p>
 						<h2 id="global-commerce-title" className="global-commerce-heading">
-							<span className="sr-only">{copy.accessibleTitle}</span>
+							<span className="sr-only">{t(copy.accessibleTitle)}</span>
 							<span aria-hidden="true">
-								{copy.title}
+								{t(copy.title)}
 								<span className="global-commerce-words">
 									{copy.words.map((word, index) => (
 										<span key={word} data-active={reduced || story.active % 2 === index}>
-											{word}
+											{t(word)}
 										</span>
 									))}
 								</span>
 							</span>
 						</h2>
-						<p className="global-commerce-description">{copy.description}</p>
+						<p className="global-commerce-description">{t(copy.description)}</p>
 						<div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-4">
 							<StartBuildingButton variant="white" />
 							<TextLink to="/agentic-commerce" tone="dark" className="inline-flex items-center gap-2">
-								{copy.link}
+								{t(copy.link)}
 								<ArrowRightIcon aria-hidden="true" size={16} />
 							</TextLink>
 						</div>
 						<div className="global-commerce-controls">
 							<div className="mb-3 flex items-center justify-between">
-								<p className="text-xs text-white/50">{copy.marketsLabel}</p>
+								<p className="text-xs text-white/50">{t(copy.marketsLabel)}</p>
 								{!reduced && (
 									<Button
 										type="button"
@@ -79,14 +80,14 @@ export function GlobalCommerceSection() {
 										size="sm"
 										shape="circle"
 										className="global-commerce-pause"
-										aria-label={story.paused ? copy.playLabel : copy.pauseLabel}
+										aria-label={t(story.paused ? copy.playLabel : copy.pauseLabel)}
 										onClick={story.toggle}
 									>
 										{story.paused ? <PlayIcon aria-hidden="true" size={16} /> : <PauseIcon aria-hidden="true" size={16} />}
 									</Button>
 								)}
 							</div>
-							<div role="group" aria-label={copy.marketsLabel} className="flex flex-wrap items-center gap-2">
+							<div role="group" aria-label={t(copy.marketsLabel)} className="flex flex-wrap items-center gap-2">
 								{GLOBAL_MARKETS.map((item, index) => (
 									<Button
 										key={item.id}
@@ -94,8 +95,8 @@ export function GlobalCommerceSection() {
 										variant="ghost"
 										size="sm"
 										className="global-commerce-market"
-										aria-label={item.name}
-										title={item.name}
+										aria-label={t(item.name)}
+										title={t(item.name)}
 										aria-pressed={story.active === index}
 										aria-controls="global-commerce-example"
 										onClick={() => story.select(index)}
@@ -116,34 +117,34 @@ export function GlobalCommerceSection() {
 						>
 							<div key={market.id} className="global-commerce-example-content">
 								<div className="mb-4 flex items-center justify-between gap-3 text-xs">
-									<span className="text-white/50">{copy.exampleLabel}</span>
+									<span className="text-white/50">{t(copy.exampleLabel)}</span>
 									<span className="flex items-center gap-2 text-white/85">
 										<span className="global-commerce-status" />
-										{market.shortName}
+										{t(market.shortName)}
 									</span>
 								</div>
 								<div className="flex items-center gap-4">
 									<img
 										src={market.image}
-										alt={market.imageAlt}
+										alt={t(market.imageAlt)}
 										width={80}
 										height={80}
 										loading="lazy"
 										className="size-[72px] shrink-0 rounded-xl object-cover"
 									/>
 									<div className="min-w-0">
-										<p className="mb-1 text-xs text-white/50">{market.category}</p>
+										<p className="mb-1 text-xs text-white/50">{t(market.category)}</p>
 										<p className="text-lg leading-tight font-medium text-white" lang={market.lang} dir="auto">
 											{market.product}
 										</p>
-										<p className="mt-2 text-xs text-white/60">{market.language}</p>
+										<p className="mt-2 text-xs text-white/60">{t(market.language)}</p>
 									</div>
 								</div>
 								<div className="global-commerce-agent">
 									<SparkleIcon aria-hidden="true" size={18} className="shrink-0 text-[#f3a16e]" />
 									<p>
-										<span className="sr-only">{copy.agentLabel}: </span>
-										{market.task}
+										<span className="sr-only">{t(copy.agentLabel)}: </span>
+										{t(market.task)}
 									</p>
 								</div>
 							</div>

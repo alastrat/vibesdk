@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import { Link } from 'react-router';
 import {
@@ -178,10 +179,10 @@ function MenuItem({ link }: { link: MenuLink }) {
 			<Glyph className={cn('mt-0.5', ICON)} aria-hidden />
 			<span className="min-w-0">
 				<span className="flex flex-wrap items-center gap-2">
-					<span className={cn('text-[16px] text-public-ink', HOVER_TEXT)}>{link.label}</span>
+					<span className={cn('text-[16px] text-public-ink', HOVER_TEXT)}>{t(link.label)}</span>
 					{link.tag && <CapabilityTag id={link.tag} />}
 				</span>
-				{link.description && <span className="mt-1 block text-sm font-light text-public-muted">{link.description}</span>}
+				{link.description && <span className="mt-1 block text-sm font-light text-public-muted">{t(link.description)}</span>}
 			</span>
 		</Link>
 	);
@@ -190,8 +191,8 @@ function MenuItem({ link }: { link: MenuLink }) {
 function Column({ title, caption, links, className }: { title: string; caption?: string; links: readonly MenuLink[]; className?: string }) {
 	return (
 		<div className={className}>
-			<p className={COLUMN_TITLE}>{title}</p>
-			{caption && <p className="mt-2 text-sm font-light text-public-muted">{caption}</p>}
+			<p className={COLUMN_TITLE}>{t(title)}</p>
+			{caption && <p className="mt-2 text-sm font-light text-public-muted">{t(caption)}</p>}
 			<ul className="mt-4 grid gap-1">
 				{links.map((link) => (
 					<li key={link.to}>
@@ -210,16 +211,16 @@ function MenuColumns({ id, columnClassName }: { id: MenuId; columnClassName?: st
 	if (id === 'creators') {
 		return (
 			<>
-				<Column title="For creators" caption={CREATORS_CAPTION} links={CREATOR_LINKS} className={columnClassName} />
-				{links && <Column title={marketingCopy.navigation.getStarted} links={links} className={cn(columnClassName, 'hidden')} />}
+				<Column title={t("For creators")} caption={CREATORS_CAPTION} links={CREATOR_LINKS} className={columnClassName} />
+				{links && <Column title={t(marketingCopy.navigation.getStarted)} links={links} className={cn(columnClassName, 'hidden')} />}
 			</>
 		);
 	}
 	return (
 		<>
-			<Column title={marketingCopy.navigation.estoriFor} links={AUDIENCE_LINKS} className={columnClassName} />
-			<Column title={marketingCopy.common.industries} links={INDUSTRY_LINKS} className={columnClassName} />
-			<Column title={marketingCopy.navigation.platform} links={PLATFORM_LINKS} className={cn(columnClassName, 'hidden')} />
+			<Column title={t(marketingCopy.navigation.estoriFor)} links={AUDIENCE_LINKS} className={columnClassName} />
+			<Column title={t(marketingCopy.common.industries)} links={INDUSTRY_LINKS} className={columnClassName} />
+			<Column title={t(marketingCopy.navigation.platform)} links={PLATFORM_LINKS} className={cn(columnClassName, 'hidden')} />
 		</>
 	);
 }
@@ -235,8 +236,8 @@ function FeatureCard({ feature }: { feature: MenuFeature }) {
 			/>
 			<span className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-transparent" />
 			<span className="absolute inset-x-0 bottom-0 p-6 text-white">
-				<span className="block text-xl leading-snug text-balance">{feature.title}</span>
-				<span className={cn('mt-4 inline-block text-[15px]', GROUP_UNDERLINE_FILL)}>{feature.link.label}</span>
+				<span className="block text-xl leading-snug text-balance">{t(feature.title)}</span>
+				<span className={cn('mt-4 inline-block text-[15px]', GROUP_UNDERLINE_FILL)}>{t(feature.link.label)}</span>
 			</span>
 		</Link>
 	);
@@ -246,7 +247,7 @@ function FooterItem({ link }: { link: FooterLink }) {
 	const content = (
 		<>
 			<link.icon className={ICON} aria-hidden />
-			<span className={cn('text-[16px] text-public-ink', HOVER_TEXT)}>{link.label}</span>
+			<span className={cn('text-[16px] text-public-ink', HOVER_TEXT)}>{t(link.label)}</span>
 		</>
 	);
 	const className = cn('group inline-flex items-center gap-3', FOCUS);

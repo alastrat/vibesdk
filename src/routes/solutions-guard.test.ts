@@ -66,8 +66,15 @@ describe('solution pages', () => {
 		for (const [path, render] of Object.entries(pages)) expect(source(path), path).toContain(render);
 		// The payments page adds the seller levels, from the limits pricing and checkout use, after its cards.
 		const payments = source('/src/routes/platform/payments.tsx');
-		expect(payments).toContain('<SolutionCopyPage head={PAYMENTS_PAGE} copy={PAYMENTS_COPY}>');
-		expect(payments).toContain('SELLER_LEVEL_LIMITS.map');
+		expect(payments).toContain('const copy = paymentsCopy(publicTranslator());');
+		expect(payments).toContain('<SolutionCopyPage head={PAYMENTS_PAGE} copy={copy}>');
+		expect(payments).toContain("(['new', 'established'] as const).map((id) =>");
+		expect(payments).toContain('const level = DEFAULT_SELLER_LIMITS.levels[id];');
+		for (const amount of ['formatUsd(level.largestOrderCents)', 'formatUsd(level.weeklySalesCents)', 'level.payoutDelayDays']) {
+			expect(payments).toContain(amount);
+		}
+		expect(payments).toContain('levelUpRule(publicTranslator())');
+		expect(payments).toContain('cards={levelCards}');
 		expect(payments).toContain('OWN_PRODUCTS_WEIGHTING');
 		const template = source('/src/components/public-site/SolutionCopyPage.tsx');
 		expect(template).toContain('{children}');

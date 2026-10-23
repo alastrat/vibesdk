@@ -1,4 +1,5 @@
-import { PLATFORM_FEE_LABEL } from '@/api-types';
+import type { Locale } from '../../shared/i18n/locales';
+import { msg } from '../../shared/i18n/translate';
 
 export type BlogCategoryId = 'news' | 'creators';
 
@@ -53,7 +54,7 @@ export const BLOG_POSTS: readonly BlogPost[] = [
 				items: [
 					'Build a store with Estori.',
 					'Publish it to Discover and set a price. An Estori admin reviews it before it is listed.',
-					`When someone starts from it, they pay through Stripe, and you receive the price minus ${PLATFORM_FEE_LABEL}.`,
+					msg('When someone starts from it, they pay through Stripe, and you receive the price minus {fee}.'),
 				],
 			},
 			{ type: 'paragraph', text: 'To sell, you need a Stripe account to receive your payouts, and you must be 18 or older.' },
@@ -92,6 +93,6 @@ export function postsInCategory(category: BlogCategoryId | null): readonly BlogP
 }
 
 /** "October 13, 2026", read as a calendar date so no time zone moves it. */
-export function formatBlogDate(date: string): string {
-	return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+export function formatBlogDate(date: string, locale: Locale = 'en'): string {
+	return new Date(`${date}T00:00:00Z`).toLocaleDateString(locale === 'en' ? 'en-US' : locale === 'es' ? 'es-419' : 'pt-BR', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }

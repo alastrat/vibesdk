@@ -1,3 +1,4 @@
+import { PLATFORM_FEE_LABEL } from '@/api-types';
 import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 import { SELLER_STORIES } from '@/content/positioning';
@@ -35,7 +36,9 @@ describe('every kind of seller', () => {
 
 	it("states the developers' fee from the code", () => {
 		const copy = source('/src/content/positioning.ts');
-		expect(copy).toContain('${PLATFORM_FEE_LABEL}');
+		expect(copy).toContain('formatMarketingCopy(marketingCopy.home.sellers.cards.developers.story, { platformFee: PLATFORM_FEE_LABEL })');
+		expect(SELLER_STORIES.find((seller) => seller.id === 'developers')?.story).toContain(PLATFORM_FEE_LABEL);
+		expect(source(BAND)).toContain('t(marketingCopy.home.sellers.cards.developers.story, { platformFee: PLATFORM_FEE_LABEL })');
 		expect(copy).not.toMatch(/7% \+ \$0\.60/);
 	});
 
@@ -57,7 +60,7 @@ describe('every kind of seller', () => {
 
 	it('leads with the promise, and rotates the kind of seller in the heading', () => {
 		const band = source(BAND);
-		expect(band).toContain('<Eyebrow>{marketingCopy.home.sellers.eyebrow}</Eyebrow>');
+		expect(band).toContain('<Eyebrow>{t(marketingCopy.home.sellers.eyebrow)}</Eyebrow>');
 		expect(marketingCopy.home.sellers.eyebrow).toBe('Sell more, better, faster.');
 		expect(band).not.toContain('<Eyebrow>Solutions</Eyebrow>');
 		expect(band).toContain('const SELLER_WORDS = marketingCopy.home.sellers.words;');
@@ -65,7 +68,7 @@ describe('every kind of seller', () => {
 		expect(marketingCopy.home.sellers.titlePrefix).toBe('Estori for every kind of ');
 		expect(marketingCopy.home.sellers.accessibleWord).toBe('seller');
 		// Screen readers hear the sentence once; the rotating word is visual.
-		expect(band).toMatch(/\{marketingCopy\.home\.sellers\.titlePrefix\}<span className="sr-only">\{marketingCopy\.home\.sellers\.accessibleWord\}<\/span>\s*<RotatingWord words=\{SELLER_WORDS\}/);
+		expect(band).toMatch(/\{t\(marketingCopy\.home\.sellers\.titlePrefix\)\}<span className="sr-only">\{t\(marketingCopy\.home\.sellers\.accessibleWord\)\}<\/span>\s*<RotatingWord words=\{SELLER_WORDS\}/);
 	});
 
 	it('rotates the word in place: the longest word holds the space, and reduced motion keeps the first word', () => {

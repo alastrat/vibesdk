@@ -45,7 +45,7 @@ describe('credits calculator', () => {
 		const calculator = source(CALCULATOR);
 		expect(calculator).toContain('<StartBuildingButton variant="blue" />');
 		expect(calculator).toContain("contactPath(recommendation.plan, needed)");
-		expect(calculator).toContain('<PlanButton plan={recommendation.plan}');
+		expect(calculator).toContain('<PlanButton i18n={publicTranslator()} plan={recommendation.plan} />');
 		expect(calculator).toContain('recommendPlan(needed)');
 		expect(calculator).toContain("contactPath('enterprise')");
 		expect(calculator).toContain('to="/pricing#compare"');
@@ -85,8 +85,8 @@ describe('credits calculator', () => {
 
 	it('uses labelled steppers that keep values in range', () => {
 		const stepper = source('/src/components/pricing/Stepper.tsx');
-		expect(stepper).toContain('aria-label={`Fewer ${noun}`}');
-		expect(stepper).toContain('aria-label={`More ${noun}`}');
+		expect(stepper).toContain("aria-label={t('Fewer {items}', { items: noun })}");
+		expect(stepper).toContain("aria-label={t('More {items}', { items: noun })}");
 		expect(stepper).toContain('Math.min(max, Math.max(min');
 		expect(stepper).toContain('<label htmlFor={id}');
 	});

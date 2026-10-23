@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import { ChatCircleTextIcon, ImageIcon, MagnifyingGlassIcon, PencilLineIcon, RobotIcon, SparkleIcon, StorefrontIcon, TranslateIcon, type Icon } from '@phosphor-icons/react';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
@@ -38,11 +39,11 @@ function CreditCard({ card, first, last }: { card: CreditUseCard; first: boolean
 				<Glyph className="mt-0.5 size-6 shrink-0 text-public-ink" aria-hidden />
 				<div className="min-w-0">
 					<p className="flex flex-wrap items-center gap-2">
-						<span className="text-lg text-public-ink">{copy.title}</span>
+						<span className="text-lg text-public-ink">{t(copy.title)}</span>
 						{card.capability && <CapabilityTag id={card.capability} />}
 						{card.comingSoon && <ComingSoon />}
 					</p>
-					<p className="mt-1.5 text-[15px] font-light text-public-muted">{copy.description}</p>
+					<p className="mt-1.5 text-[15px] font-light text-public-muted">{t(copy.description)}</p>
 				</div>
 			</div>
 		</li>
@@ -57,11 +58,11 @@ export function CreditsExplainer() {
 			<div className="mx-auto grid max-w-[1248px] items-center gap-12 lg:grid-cols-[minmax(0,5fr)_minmax(0,2fr)_minmax(0,7fr)] lg:gap-0">
 				<div className="lg:pr-10">
 					<h2 id="credits-title" className={cn(HEADING_SECTION, 'text-balance text-public-ink')}>
-						{copy.title}
+						{t(copy.title)}
 					</h2>
-					<p className={cn(LEAD, 'mt-5 text-pretty text-public-muted')}>{copy.description}</p>
-					<PillLink to="/pricing/calculator" variant="charcoal" className="mt-8">{copy.calculatorLink}</PillLink>
-					<p className="mt-4 max-w-sm text-xs leading-relaxed text-public-muted">{copy.usageNote}</p>
+					<p className={cn(LEAD, 'mt-5 text-pretty text-public-muted')}>{t(copy.description)}</p>
+					<PillLink to="/pricing/calculator" variant="charcoal" className="mt-8">{t(copy.calculatorLink)}</PillLink>
+					<p className="mt-4 max-w-sm text-xs leading-relaxed text-public-muted">{t(copy.usageNote)}</p>
 				</div>
 				<div className="relative hidden lg:block">
 					<Coin className="mx-auto w-[150px]" />

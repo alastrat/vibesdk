@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
@@ -53,9 +54,9 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 		>
 			<div className="mx-auto max-w-[1248px]">
 				<h2 id={`${id}-title`} className="text-center text-3xl leading-[1.15] font-light tracking-[-0.015em] text-balance text-public-ink sm:text-[40px]">
-					{title}
+					{t(title)}
 				</h2>
-				<div role="tablist" aria-label={title} onKeyDown={onTabKeyDown} className="mt-10 flex flex-wrap justify-center gap-2 sm:gap-3">
+				<div role="tablist" aria-label={t(title)} onKeyDown={onTabKeyDown} className="mt-10 flex flex-wrap justify-center gap-2 sm:gap-3">
 					{features.map((feature, index) => {
 						const selected = index === active;
 						return (
@@ -88,7 +89,7 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 										)}
 									/>
 								)}
-								<span className="relative">{feature.title}</span>
+								<span className="relative">{t(feature.title)}</span>
 							</button>
 						);
 					})}
@@ -122,7 +123,7 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 									width={1200}
 									height={800}
 									loading="lazy"
-									alt={feature.photo.alt}
+									alt={t(feature.photo.alt)}
 									className="absolute inset-0 size-full object-cover"
 								/>
 								<div className="absolute inset-x-5 bottom-5 sm:inset-x-8 sm:bottom-8">
@@ -132,24 +133,20 @@ export function FeatureCarousel({ title, features }: { title: string; features: 
 							<div className="relative flex flex-col justify-center p-8 text-white sm:p-12 lg:p-14" style={{ backgroundColor: feature.accent }}>
 								<span aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(255,255,255,0.2),transparent_60%)]" />
 								<div className="relative">
-									<h3 className="text-4xl leading-[1.08] font-light tracking-[-0.02em] text-balance sm:text-5xl">{feature.title}</h3>
-									<p className="mt-4 max-w-md text-[17px] leading-relaxed font-light text-white/80">{feature.body}</p>
-									<blockquote className="mt-8 max-w-lg text-xl leading-snug sm:text-2xl">&ldquo;{feature.request}&rdquo;</blockquote>
+									<h3 className="text-4xl leading-[1.08] font-light tracking-[-0.02em] text-balance sm:text-5xl">{t(feature.title)}</h3>
+									<p className="mt-4 max-w-md text-[17px] leading-relaxed font-light text-white/80">{t(feature.body)}</p>
+									<blockquote className="mt-8 max-w-lg text-xl leading-snug sm:text-2xl">&ldquo;{t(feature.request)}&rdquo;</blockquote>
 									<p className="mt-4 text-[15px]">
-										<span className="block font-medium">Ask Estori</span>
-										<span className="text-white/75">An example request</span>
+										<span className="block font-medium">{t("Ask Estori")}</span>
+										<span className="text-white/75">{t("An example request")}</span>
 									</p>
 									<div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
 										<StartBuildingButton variant="outline-on-dark" />
-										<Link to="/discover" className={cn('inline-flex items-center gap-2 text-[16px] text-white', UNDERLINE_FILL)}>
-											Browse templates
-											<ArrowRightIcon className="size-4" aria-hidden />
+										<Link to="/discover" className={cn('inline-flex items-center gap-2 text-[16px] text-white', UNDERLINE_FILL)}>{t("Browse templates")}<ArrowRightIcon className="size-4" aria-hidden />
 										</Link>
 									</div>
 									<p className="mt-10 text-[12px] text-white/65">
-										<a href={feature.photo.url} target="_blank" rel="noopener noreferrer" className="hover:text-white">
-											Photo by {feature.photo.photographer} on Unsplash
-										</a>
+										<a href={feature.photo.url} target="_blank" rel="noopener noreferrer" className="hover:text-white">{t("Photo by")} {feature.photo.photographer} {t("on Unsplash")}</a>
 									</p>
 								</div>
 							</div>

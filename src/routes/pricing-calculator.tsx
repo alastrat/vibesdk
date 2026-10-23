@@ -1,3 +1,4 @@
+import { publicTranslator } from '@/lib/i18n/public-pricing';
 import { Calculator } from '@/components/pricing/Calculator';
 import { PublicFaq } from '@/components/public-site/PublicFaq';
 import { PageMeta } from '@/components/public-site/solution-page';
@@ -13,7 +14,7 @@ export default function PricingCalculatorPage() {
 		<div>
 			<PageMeta {...PRICING_CALCULATOR_PAGE} />
 			<Calculator />
-			<PublicFaq items={pricingFaq(billing, rates)} />
+			<PublicFaq items={pricingFaq(billing, rates, publicTranslator())} />
 		</div>
 	);
 }

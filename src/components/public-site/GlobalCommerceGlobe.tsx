@@ -1,3 +1,4 @@
+import { useI18n } from '@/lib/i18n';
 import { useEffect, useRef } from 'react';
 import { GLOBAL_MARKETS } from './globe/markets';
 import { marketingCopy } from '@/content/marketing-copy';
@@ -10,6 +11,7 @@ export function GlobalCommerceGlobe({ active, playing, visible, reducedMotion }:
 	visible: boolean;
 	reducedMotion: boolean;
 }) {
+	const { t } = useI18n();
 	const canvas = useRef<HTMLCanvasElement>(null);
 	const pose = useRef({ longitude: GLOBAL_MARKETS[0].longitude + 18, latitude: GLOBAL_MARKETS[0].latitude + 6 });
 	const elapsed = useRef(0);
@@ -27,7 +29,7 @@ export function GlobalCommerceGlobe({ active, playing, visible, reducedMotion }:
 		void Promise.all([import('./globe/land-points.json'), import('./globe/country-points.json')])
 			.then(([{ default: points }, { default: countries }]) => {
 				if (cancelled) return;
-				const draw = createGlobeRenderer(element, points, GLOBAL_MARKETS, countries);
+				const draw = createGlobeRenderer(element, points, GLOBAL_MARKETS.map((market) => ({ ...market, label: t(market.label) })), countries);
 				if (!draw) return;
 				const target = { longitude: GLOBAL_MARKETS[active].longitude + 18, latitude: GLOBAL_MARKETS[active].latitude + 6 };
 				const changed = previousMarket.current !== active;
@@ -77,9 +79,9 @@ export function GlobalCommerceGlobe({ active, playing, visible, reducedMotion }:
 			cancelAnimationFrame(frame);
 			resize?.disconnect();
 		};
-	}, [active, playing, visible, reducedMotion]);
+	}, [active, playing, visible, reducedMotion, t]);
 	return (
-		<div role="img" aria-label={marketingCopy.home.globalCommerce.globeLabel} className="global-commerce-globe">
+		<div role="img" aria-label={t(marketingCopy.home.globalCommerce.globeLabel)} className="global-commerce-globe">
 			<div className="global-commerce-sphere" aria-hidden="true" />
 			<canvas ref={canvas} aria-hidden="true" className="relative block aspect-square w-full" />
 		</div>

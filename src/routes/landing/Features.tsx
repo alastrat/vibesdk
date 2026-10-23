@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode, Ref } from 'react';
 import { Link } from 'react-router';
@@ -17,19 +18,19 @@ function FeatureCard({ feature, art, aside, storyRef }: { feature: StoreFeature;
 				aria-hidden
 				className="absolute inset-x-0 top-0 h-24 -translate-y-[40%] rounded-t-[16px] bg-[#dbe8fb] px-7 pt-2 font-mono text-[13px] text-public-blue opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 motion-reduce:transition-none"
 			>
-				{feature.tag}
+				{t(feature.tag)}
 			</span>
 			<div className="relative flex h-full flex-col overflow-hidden rounded-[16px] border border-public-line bg-[#fafafa]">
 				<div className="flex flex-col items-start gap-3 p-7">
-					<h3 className="text-[19px] leading-snug font-medium text-public-ink">{feature.title}</h3>
-					<p className="text-[15px] leading-relaxed font-light text-public-muted">{feature.body}</p>
+					<h3 className="text-[19px] leading-snug font-medium text-public-ink">{t(feature.title)}</h3>
+					<p className="text-[15px] leading-relaxed font-light text-public-muted">{t(feature.body)}</p>
 					<div className="mt-3 flex min-h-6 w-full items-center justify-between gap-3">
 						{feature.link && (
 							<Link
 								to={feature.link.to}
 								className="inline-flex items-center gap-2 text-[15px] font-medium text-public-ink after:absolute after:inset-0 after:rounded-[16px] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-public-blue"
 							>
-								{feature.link.label}
+								{t(feature.link.label)}
 								<span className="grid size-6 place-items-center rounded-[5px] transition-colors duration-300 group-hover:bg-public-blue group-hover:text-white motion-reduce:transition-none">
 									<ArrowRightIcon weight="bold" className="size-3.5" />
 								</span>
@@ -60,10 +61,10 @@ export function Features({ tone = 'light' }: { tone?: SectionTone }) {
 			<div className="mx-auto max-w-[1248px]">
 				<div className="flex flex-wrap items-end justify-between gap-8">
 					<div className="max-w-3xl">
-						<Eyebrow tone={tone}>{marketingCopy.home.features.eyebrow}</Eyebrow>
-						<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance', colors.heading)}>{marketingCopy.home.features.title}</h2>
+						<Eyebrow tone={tone}>{t(marketingCopy.home.features.eyebrow)}</Eyebrow>
+						<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance', colors.heading)}>{t(marketingCopy.home.features.title)}</h2>
 						<p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty', colors.lead)}>
-							{marketingCopy.home.features.description}</p>
+							{t(marketingCopy.home.features.description)}</p>
 					</div>
 					<StartBuildingButton variant={colors.action} />
 				</div>

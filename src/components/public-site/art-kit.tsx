@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import type { CSSProperties, ReactNode, Ref } from 'react';
 import { useFitZoom } from '@/hooks/use-fit-zoom';
 import { cn } from '@/lib/utils';
@@ -35,7 +36,7 @@ export function Photo({ src, className, style }: { src: string; className?: stri
 export function Field({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="px-5 py-3">
-			<p className="text-[14px] text-public-blue">{label}</p>
+			<p className="text-[14px] text-public-blue">{t(label)}</p>
 			<div className="mt-0.5 text-[17px]">{children}</div>
 		</div>
 	);
