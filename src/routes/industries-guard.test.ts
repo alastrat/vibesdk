@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 import publicCss from '../styles/public-site.css?raw';
 
@@ -148,9 +149,15 @@ describe('industry pages', () => {
 
 	it('lists the industries second in the Solutions menu, in place of Get started', () => {
 		const nav = source(NAV);
-		const solutions = nav.slice(nav.indexOf('<Column title="Estori for"'));
-		expect(solutions.indexOf('<Column title="Industries"')).toBeGreaterThan(0);
-		expect(solutions.indexOf('<Column title="Industries"')).toBeLessThan(solutions.indexOf('<Column title="Platform"'));
+		const audiences = nav.indexOf('<Column title={marketingCopy.navigation.estoriFor} links={AUDIENCE_LINKS}');
+		const industries = nav.indexOf('<Column title={marketingCopy.common.industries} links={INDUSTRY_LINKS}');
+		const platform = nav.indexOf('<Column title={marketingCopy.navigation.platform} links={PLATFORM_LINKS}');
+		expect(audiences).toBeGreaterThanOrEqual(0);
+		expect(industries).toBeGreaterThan(audiences);
+		expect(platform).toBeGreaterThan(industries);
+		expect(marketingCopy.navigation.estoriFor).toBe('Estori for');
+		expect(marketingCopy.common.industries).toBe('Industries');
+		expect(marketingCopy.navigation.platform).toBe('Platform');
 		expect(nav).toContain('INDUSTRIES.map');
 		expect(nav).not.toMatch(/solutions: \{\s*links:/);
 	});
@@ -161,8 +168,10 @@ describe('industry pages', () => {
 		expect(nav).toContain('const CAPABILITY_ICONS: Readonly<Record<CapabilityId, Icon>> = {');
 		expect(nav).toContain('icon: INDUSTRY_ICONS[industry.slug]');
 		expect(nav).toContain('icon: CAPABILITY_ICONS[capabilityId]');
-		expect(nav).toMatch(/\{ to: '\/discover', label: 'Templates in Discover', icon: \w+Icon \}/);
-		expect(nav).toMatch(/\{ to: '\/pricing#developers', label: 'Fees for template sales', icon: \w+Icon \}/);
+		expect(nav).toMatch(/\{ to: '\/discover', label: marketingCopy\.navigation\.menus\.creators\.links\.discover, icon: \w+Icon \}/);
+		expect(nav).toMatch(/\{ to: '\/pricing#developers', label: marketingCopy\.navigation\.menus\.creators\.links\.fees, icon: \w+Icon \}/);
+		expect(marketingCopy.navigation.menus.creators.links.discover).toBe('Templates in Discover');
+		expect(marketingCopy.navigation.menus.creators.links.fees).toBe('Fees for template sales');
 		// One item component for every column, so each draws its icon the same way.
 		expect(nav).toContain('function MenuItem(');
 		expect(nav).not.toContain('function TextItem(');

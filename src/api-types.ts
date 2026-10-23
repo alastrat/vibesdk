@@ -617,3 +617,5 @@ export type {
 export { GPC_ANALYTICS_MESSAGE } from '../shared/types/telemetry.js';
 export type { Locale } from '../shared/i18n/locales.js';
 export { DEFAULT_LOCALE, LOCALES, LOCALE_NAMES, isLocale, negotiateLocale } from '../shared/i18n/locales.js';
+
+export type { DiscoverKind, DiscoverTier, DiscoverCategory, DiscoverEntry, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '../shared/types/discover-catalog';

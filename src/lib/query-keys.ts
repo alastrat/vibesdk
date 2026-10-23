@@ -1,3 +1,4 @@
+import type { DiscoverCatalogFilters } from '@/api-types';
 export type PaginatedAppsListFilters = {
 	sort: string;
 	period: string;
@@ -10,6 +11,13 @@ export type PaginatedAppsListFilters = {
 };
 
 export const queryKeys = {
+	discoverCatalog: {
+		all: ['discover-catalog'] as const,
+		categories: () => ['discover-catalog', 'categories'] as const,
+		list: (filters: DiscoverCatalogFilters) => ['discover-catalog', 'list', filters] as const,
+		detail: (slug: string) => ['discover-catalog', 'detail', slug] as const,
+		access: (slug: string, userId: string) => ['account', 'discover-catalog', userId, slug] as const,
+	},
 	/** A store's live address, published version and own domain, for its owner. */
 	liveStore: (appId: string) => ['live-store', appId] as const,
 	/** A store's drafts and which one is being edited, for its owner. */

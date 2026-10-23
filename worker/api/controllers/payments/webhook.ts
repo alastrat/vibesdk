@@ -20,6 +20,8 @@ import { getGlobalConfigurableSettings } from '../../../config';
 import { handleBillingEvent } from '../../../services/billing/events';
 import { billingEventDepsFromEnv } from '../../../services/billing/wiring';
 
+import { handleDiscoverPaymentEvent } from '../../../services/discover/payments';
+
 const logger = createLogger('StripeWebhook');
 
 export async function handleStripeWebhook(request: Request, env: Env): Promise<Response> {
@@ -56,6 +58,7 @@ async function dispatchStripeEvent(env: Env, event: StripeEvent): Promise<void> 
         logger.info('Connect event ignored', { id: event.id, type: event.type });
         return;
     }
+    if (await handleDiscoverPaymentEvent(env, event)) return;
     const billing = await handleBillingEvent(billingEventDepsFromEnv(env), event);
     if (billing !== null) {
         logger.info('Billing event handled', { id: event.id, type: event.type, result: billing });

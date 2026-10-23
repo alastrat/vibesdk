@@ -1,3 +1,4 @@
+import { marketingCopy } from '@/content/marketing-copy';
 import { describe, expect, it } from 'vitest';
 
 const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/routes/blog/*.tsx', '/src/components/layout/SiteFooter.tsx'], {
@@ -39,6 +40,7 @@ describe('blog pages', () => {
 	});
 
 	it('is linked from the footer', () => {
-		expect(source('/src/components/layout/SiteFooter.tsx')).toContain("{ to: '/blog', label: 'Blog' }");
+		expect(source('/src/components/layout/SiteFooter.tsx')).toContain("{ to: '/blog', label: marketingCopy.footer.solutions.links.blog }");
+		expect(marketingCopy.footer.solutions.links.blog).toBe('Blog');
 	});
 });

@@ -19,9 +19,14 @@ export function PublicLayout({ children }: { children?: ReactNode }) {
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const mainRef = useRef<HTMLElement>(null);
 	const { pathname, hash, key } = useLocation();
+	const previousLocation = useRef<{ pathname: string; hash: string } | null>(null);
 
 	// This container stays mounted across public routes: go to the anchor a link names (again on a repeat click), else to the top.
 	useEffect(() => {
+		const previous = previousLocation.current;
+		previousLocation.current = { pathname, hash };
+		// Discover filters and dialogs live in the query string; keep the visitor at their card.
+		if (pathname === '/discover' && previous?.pathname === pathname && !hash && !previous.hash) return;
 		const target = hash ? document.getElementById(hash.slice(1)) : null;
 		if (!target) {
 			scrollRef.current?.scrollTo({ top: 0 });

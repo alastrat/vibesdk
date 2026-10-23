@@ -343,6 +343,11 @@ export interface CheckoutSessionInput {
 	nowMs: number;
 }
 
+export interface CatalogCheckoutSessionInput {
+    orderId: string; productName: string; priceCents: number; buyerUserId: string; buyerEmail?: string;
+    versionId: string; successUrl: string; cancelUrl: string; nowMs: number;
+}
+
 export interface StoreCheckoutSessionInput {
 	checkoutId: string;
 	lines: readonly { name: string; quantity: number; unitPriceCents: number }[];
@@ -388,6 +393,7 @@ export interface StripeClient {
 	createAccountLink(input: { accountId: string; refreshUrl: string; returnUrl: string }): Promise<StripeAccountLink>;
 	createLoginLink(accountId: string): Promise<StripeLoginLink>;
 	createCheckoutSession(input: CheckoutSessionInput): Promise<StripeCheckoutSession>;
+	createCatalogCheckoutSession(input: CatalogCheckoutSessionInput): Promise<StripeCheckoutSession>;
 	createStoreCheckoutSession(input: StoreCheckoutSessionInput): Promise<StripeCheckoutSession>;
 	/** `expand` names the objects to return in full, such as `BILLING_CHECKOUT_EXPAND`. */
 	retrieveCheckoutSession(sessionId: string, expand?: readonly string[]): Promise<StripeCheckoutSession>;
@@ -504,7 +510,7 @@ function replacementKey(key: string, replaces: string | null | undefined): strin
 	return replaces ? `${key}-retry-${replaces}` : key;
 }
 
-function isStripeUrl(url: string): boolean {
+export function isStripeUrl(url: string): boolean {
 	try {
 		const { protocol, hostname } = new URL(url);
 		return protocol === 'https:' && (hostname === 'stripe.com' || hostname.endsWith('.stripe.com'));
@@ -592,6 +598,18 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 			}),
 		createLoginLink: (accountId) =>
 			request<StripeLoginLink>('POST', `/accounts/${encodeURIComponent(accountId)}/login_links`),
+        createCatalogCheckoutSession: (input) => {
+            const metadata = { purpose: 'discover_catalog', orderId: input.orderId, buyerUserId: input.buyerUserId, versionId: input.versionId };
+            return request<StripeCheckoutSession>('POST', '/checkout/sessions', {
+                mode: 'payment', ...USD_CARD_CHECKOUT,
+                line_items: [{ quantity: 1, price_data: { currency: 'usd', unit_amount: input.priceCents, product_data: { name: input.productName } } }],
+                client_reference_id: input.buyerUserId, customer_email: input.buyerEmail || undefined,
+                metadata, payment_intent_data: { metadata },
+                success_url: input.successUrl, cancel_url: input.cancelUrl,
+                // Stripe controls expiry. Omit a wall-clock-derived value so retries remain byte-identical even after a timeout.
+                // The D1 reservation is released only after retrieving this session as expired.
+            }, `discover-${input.orderId}`);
+        },
 		createCheckoutSession: (input) =>
 			request<StripeCheckoutSession>('POST', '/checkout/sessions', {
 				mode: 'payment',
