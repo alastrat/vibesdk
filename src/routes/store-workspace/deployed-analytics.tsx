@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Loader } from '@cloudflare/kumo';
 import { apiClient } from '@/lib/api-client';
@@ -28,6 +29,7 @@ export function DeployedStoreAnalytics({
 	productId?: string;
 }) {
 	useI18n();
+ const [params,setParams]=useSearchParams();
 	const query = useQuery({
 		queryKey: queryKeys.account.storeAnalytics(
 			userId,
@@ -74,6 +76,7 @@ export function DeployedStoreAnalytics({
 		<TrafficWidgets
 			key={`${appId}:${days}:${mode}:${throughDay}:${productId}`}
 			data={query.data}
+ onOpenLive={() => {const next=new URLSearchParams(params);next.set('view','live');setParams(next);}}
 			compare={compare}
 			paidCents={paidCents}
 			customerCount={customerCount}

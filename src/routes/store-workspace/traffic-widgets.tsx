@@ -13,6 +13,7 @@ import { VisitGlobe } from './visit-globe';
 import './traffic-widgets.css';
 
 export type TrafficWidgetsProps = {
+ onOpenLive?: () => void;
 	compare?: boolean;
 	data: StoreTrafficAnalytics;
 	paidCents: number;
@@ -237,6 +238,7 @@ function BreakdownDonut({
 }
 
 export function TrafficWidgets({
+ onOpenLive,
 	compare = true,
 	data,
 	paidCents,
@@ -394,6 +396,7 @@ export function TrafficWidgets({
 					</h2>
 				</div>
 				<VisitGlobe
+ onOpenLive={onOpenLive}
 					events={data.events}
 					countries={data.countries}
 					activeCountry={activeCountry}

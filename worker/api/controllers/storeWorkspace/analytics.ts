@@ -1,3 +1,5 @@
+import { getLiveStoreAnalytics } from '../../../services/store-analytics/live';
+import type { StoreLiveAnalytics } from '../../../../shared/types/store-analytics';
 import { isAnalyticsDay } from '../../../../shared/types/store-analytics';
 import { msg } from '../../../../shared/i18n/translate';
 import type { StoreTrafficAnalytics } from '../../../../shared/types/store-analytics';
@@ -10,6 +12,47 @@ import type { RouteContext } from '../../types/route-context';
 import type { ApiResponse, ControllerResponse } from '../types';
 
 export class StoreAnalyticsController extends BaseController {
+	static async live(
+		request: Request,
+		env: Env,
+		_ctx: ExecutionContext,
+		context: RouteContext,
+	): Promise<ControllerResponse<ApiResponse<StoreLiveAnalytics>>> {
+		if (!context.user || context.user.isAnonymous)
+			return this.createErrorResponse(
+				msg('Sign in to manage your store'),
+				401,
+			);
+		const appId = context.pathParams.id;
+		if (!appId)
+			return this.createErrorResponse(msg('Store not found'), 404);
+		const mode = new URL(request.url).searchParams.get('mode') ?? 'live';
+		if (mode !== 'live' && mode !== 'test')
+			return this.createErrorResponse(
+				msg('Invalid analytics period or mode'),
+				400,
+			);
+		try {
+			const response = this.createSuccessResponse(
+				await getLiveStoreAnalytics(
+					env.DB,
+					appId,
+					context.user.id,
+					mode,
+				),
+			);
+			response.headers.set('Cache-Control', 'private, no-store');
+			return response;
+		} catch (error) {
+			if (error instanceof StoreAnalyticsAccessError)
+				return this.createErrorResponse(msg('Store not found'), 404);
+			return this.createErrorResponse(
+				msg("Couldn't load store analytics. Try again in a moment."),
+				503,
+			);
+		}
+	}
+
 	static async analytics(
 		request: Request,
 		env: Env,

@@ -73,3 +73,37 @@ describe('private store analytics endpoint', () => {
 			expect((await call(query)).status).toBe(400);
 	});
 });
+
+describe('private live store endpoint', () => {
+	const live = (query = '', owner = 'owner') =>
+		StoreAnalyticsController.live(
+			new Request(
+				`https://estori.app/api/stores/store/analytics/live${query}`,
+			),
+			envWith(db),
+			{} as ExecutionContext,
+			context(owner),
+		);
+	it('serves fresh owner-only snapshots and validates data mode', async () => {
+		const response = await live('?mode=test');
+		expect(response.status).toBe(200);
+		expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+		const body = (await response.json()) as {
+			data: { events: { id: string }[]; refreshAfterMs: number };
+		};
+		expect(body.data.refreshAfterMs).toBe(5000);
+		expect(body.data.events.map((event) => event.id)).toContain('event');
+		expect((await live('?mode=all')).status).toBe(400);
+		expect((await live('', 'other')).status).toBe(404);
+		expect(
+			(
+				await StoreAnalyticsController.live(
+					new Request('https://estori.app'),
+					envWith(db),
+					{} as ExecutionContext,
+					{ ...context(), user: undefined },
+				)
+			).status,
+		).toBe(401);
+	});
+});

@@ -1,4 +1,4 @@
-import type { StoreTrafficAnalytics } from '@/api-types';
+import type { StoreLiveAnalytics, StoreTrafficAnalytics } from '@/api-types';
 import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
 import type { StorePublicationStatus, StoreWorkspaceProducts } from '@/api-types';
@@ -214,6 +214,7 @@ interface ApiClientConfig {
  * Request options for API calls
  */
 interface RequestOptions {
+ signal?: AbortSignal;
 	method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 	headers?: Record<string, string>;
 	body?: unknown;
@@ -464,6 +465,7 @@ class ApiClient {
 				...options.headers,
 			},
 			credentials: options.credentials || 'include',
+ signal: options.signal,
 		};
 
 		if (options.body) {
@@ -684,6 +686,10 @@ class ApiClient {
 	/**
 	 * Get detailed app information for viewing
 	 */
+ async getLiveStoreAnalytics(appId: string, mode: 'live' | 'test', signal?: AbortSignal): Promise<ApiResponse<StoreLiveAnalytics>> {
+  return this.request<StoreLiveAnalytics>(`/api/stores/${encodeURIComponent(appId)}/analytics/live?mode=${mode}`, { signal }, true);
+ }
+
 	async getStoreAnalytics(
 		appId: string,
 		options: { days: number; mode: 'live' | 'test'; throughDay?: string; productId?: string },

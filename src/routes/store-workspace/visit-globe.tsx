@@ -21,8 +21,10 @@ import {
 	type VisitCountry,
 } from './visit-globe-utils';
 import './visit-globe.css';
+import { rotateCamera } from './live-analytics-utils';
 
 export type VisitGlobeProps = {
+	onOpenLive?: () => void;
 	events: StoreTrafficEvent[];
 	countries: StoreTrafficBreakdown[];
 	activeCountry?: string | null;
@@ -126,15 +128,17 @@ type GlobeMapProps = {
 	countryName: (code: string) => string;
 	count: (value: number) => string;
 	paused?: boolean;
+	interactive?: boolean;
 };
 
-function GlobeMap({
+export function VisitorGlobeMap({
 	countries,
 	activeCountry,
 	onSelectCountry,
 	countryName,
 	count,
 	paused = false,
+	interactive = false,
 }: GlobeMapProps) {
 	const id = useId().replace(/:/g, '');
 	const ref = useRef<HTMLDivElement>(null);
@@ -142,6 +146,26 @@ function GlobeMap({
 	const animate = visibleMotion && !paused;
 	const [interacting, setInteracting] = useState(false);
 	const [cycle, setCycle] = useState(0);
+	const [denseLand, setDenseLand] = useState<typeof LAND | null>(null);
+	useEffect(() => {
+		if (!interactive) return;
+		let active = true;
+		void import('@/components/public-site/globe/live-land-points.json')
+			.then((module) => {
+				if (active)
+					setDenseLand(
+						module.default.map(([latitude, longitude]) =>
+							toVector(latitude, longitude),
+						),
+					);
+			})
+			.catch(() => {
+				/* Keep the lightweight mesh if the detail chunk is unavailable. */
+			});
+		return () => {
+			active = false;
+		};
+	}, [interactive]);
 	const mapped = useMemo(() => countries.filter(isMapped), [countries]);
 	const codes = mapped.map((country) => country.code).join(',');
 	useEffect(() => setCycle(0), [codes]);
@@ -156,12 +180,106 @@ function GlobeMap({
 	}, [animate, interacting, activeCountry, mapped.length, codes]);
 	const target = mapped.find((country) => country.code === activeCountry) ??
 		mapped[cycle % mapped.length] ?? { latitude: 12, longitude: -70 };
-	const camera = useCamera(target, animate);
+	const [manual, setManual] = useState<Camera | null>(null);
+	const drag = useRef<{
+		x: number;
+		y: number;
+		camera: Camera;
+		lastX: number;
+		velocity: number;
+		moved: boolean;
+	} | null>(null);
+	const inertia = useRef(0);
+	const [dragging, setDragging] = useState(false);
+	const animatedCamera = useCamera(target, animate && !manual);
+	const [autoRotation, setAutoRotation] = useState(0);
+	const camera = useMemo(
+		() =>
+			manual ??
+			(interactive && !mapped.length
+				? {
+						...animatedCamera,
+						longitude: animatedCamera.longitude + autoRotation,
+					}
+				: animatedCamera),
+		[manual, interactive, mapped.length, animatedCamera, autoRotation],
+	);
+	const cameraRef = useRef(camera);
+	cameraRef.current = camera;
+	useEffect(
+		() => () => {
+			if (typeof cancelAnimationFrame !== 'undefined')
+				cancelAnimationFrame(inertia.current);
+		},
+		[],
+	);
+	useEffect(() => {
+		if (!animate && typeof cancelAnimationFrame !== 'undefined')
+			cancelAnimationFrame(inertia.current);
+	}, [animate]);
+	useEffect(() => {
+		if (activeCountry) {
+			if (typeof cancelAnimationFrame !== 'undefined')
+				cancelAnimationFrame(inertia.current);
+			setManual(null);
+		}
+	}, [activeCountry]);
+	useEffect(() => {
+		if (
+			!interactive ||
+			!animate ||
+			manual ||
+			activeCountry ||
+			interacting ||
+			mapped.length
+		)
+			return;
+		let frame = 0,
+			previous = performance.now();
+		const spin = (now: number) => {
+			if (now - previous > 32) {
+				setAutoRotation((current) => current + 0.15);
+				previous = now;
+			}
+			frame = requestAnimationFrame(spin);
+		};
+		frame = requestAnimationFrame(spin);
+		return () => cancelAnimationFrame(frame);
+	}, [
+		interactive,
+		animate,
+		manual,
+		activeCountry,
+		interacting,
+		mapped.length,
+	]);
+	const stopDrag = (element: HTMLDivElement, pointerId: number) => {
+		const state = drag.current;
+		drag.current = null;
+		setDragging(false);
+		if (element.hasPointerCapture(pointerId))
+			element.releasePointerCapture(pointerId);
+		if (!state || !animate || !state.moved) return;
+		let velocity = state.velocity,
+			last = performance.now();
+		const coast = (now: number) => {
+			if (now - last >= 16) {
+				velocity *= 0.94;
+				setManual((current) =>
+					rotateCamera(current ?? cameraRef.current, velocity, 0),
+				);
+				last = now;
+			}
+			if (Math.abs(velocity) > 0.015)
+				inertia.current = requestAnimationFrame(coast);
+		};
+		inertia.current = requestAnimationFrame(coast);
+	};
 	const project = useMemo(() => projector(camera), [camera]);
 	const land = useMemo(() => {
 		const near: string[] = [],
 			edge: string[] = [];
-		for (const point of LAND) {
+		for (const point of interactive && denseLand ? denseLand : LAND) {
 			const p = project(point);
 			if (p.depth <= 0) continue;
 			(p.depth > 0.45 ? near : edge).push(
@@ -169,11 +287,97 @@ function GlobeMap({
 			);
 		}
 		return { near: near.join(''), edge: edge.join('') };
-	}, [project]);
+	}, [project, interactive, denseLand]);
 	return (
 		<div
 			ref={ref}
-			className="visit-globe-map"
+			className={`visit-globe-map${interactive ? ' visit-globe-map--interactive' : ''}`}
+			data-longitude={camera.longitude.toFixed(2)}
+			data-dragging={dragging}
+			tabIndex={interactive ? 0 : undefined}
+			role={interactive ? 'group' : undefined}
+			aria-label={
+				interactive
+					? t(
+							'Interactive visitor globe. Drag or use arrow keys to rotate.',
+						)
+					: undefined
+			}
+			onKeyDown={(event) => {
+				if (!interactive || event.target !== event.currentTarget)
+					return;
+				const directions: Record<string, [number, number]> = {
+					ArrowLeft: [-12, 0],
+					ArrowRight: [12, 0],
+					ArrowUp: [0, 12],
+					ArrowDown: [0, -12],
+				};
+				if (event.key === 'Home') {
+					event.preventDefault();
+					cancelAnimationFrame(inertia.current);
+					setManual(null);
+					return;
+				}
+				const delta = directions[event.key];
+				if (!delta) return;
+				event.preventDefault();
+				cancelAnimationFrame(inertia.current);
+				setManual(rotateCamera(camera, ...delta));
+			}}
+			onPointerDown={(event) => {
+				if (
+					!interactive ||
+					event.button !== 0 ||
+					(event.target as Element).closest('[data-country]')
+				)
+					return;
+				cancelAnimationFrame(inertia.current);
+				setDragging(true);
+				setManual(camera);
+				drag.current = {
+					x: event.clientX,
+					y: event.clientY,
+					lastX: event.clientX,
+					camera,
+					velocity: 0,
+					moved: false,
+				};
+				event.currentTarget.setPointerCapture(event.pointerId);
+			}}
+			onPointerMove={(event) => {
+				const state = drag.current;
+				if (!state) return;
+				const factor =
+					220 / Math.max(event.currentTarget.clientWidth, 1);
+				state.velocity = Math.max(
+					-3,
+					Math.min(3, (event.clientX - state.lastX) * factor),
+				);
+				state.lastX = event.clientX;
+				state.moved =
+					state.moved ||
+					Math.abs(event.clientX - state.x) +
+						Math.abs(event.clientY - state.y) >
+						4;
+				setManual(
+					rotateCamera(
+						state.camera,
+						-(event.clientX - state.x) * factor,
+						(event.clientY - state.y) * factor,
+					),
+				);
+				state.velocity = -state.velocity;
+			}}
+			onPointerUp={(event) =>
+				stopDrag(event.currentTarget, event.pointerId)
+			}
+			onPointerCancel={(event) => {
+				cancelAnimationFrame(inertia.current);
+				drag.current = null;
+				setDragging(false);
+				if (event.currentTarget.hasPointerCapture(event.pointerId))
+					event.currentTarget.releasePointerCapture(event.pointerId);
+			}}
 			data-animating={animate}
 			onMouseEnter={() => setInteracting(true)}
 			onMouseLeave={() => setInteracting(false)}
@@ -191,13 +395,25 @@ function GlobeMap({
 				<defs>
 					<radialGradient
 						id={`${id}-sphere`}
-						cx="32%"
-						cy="28%"
-						r="72%"
+						cx={interactive ? '46%' : '32%'}
+						cy={interactive ? '49%' : '28%'}
+						r={interactive ? '53%' : '72%'}
 					>
-						<stop offset="0" stopColor="#fafbfc" />
-						<stop offset="0.7" stopColor="#f0f1f3" />
-						<stop offset="1" stopColor="#e2e5e8" />
+						<stop
+							offset="0"
+							stopColor={interactive ? '#f7f7f7' : '#fafbfc'}
+						/>
+						<stop
+							offset="0.65"
+							stopColor={interactive ? '#e8e8e8' : '#f0f1f3'}
+						/>
+						{interactive && (
+							<stop offset="0.94" stopColor="#d2d2d2" />
+						)}
+						<stop
+							offset="1"
+							stopColor={interactive ? '#f1f1f1' : '#e2e5e8'}
+						/>
 					</radialGradient>
 				</defs>
 				<circle
@@ -205,21 +421,21 @@ function GlobeMap({
 					cy="180"
 					r="154"
 					fill={`url(#${id}-sphere)`}
-					stroke="#e2e5e8"
+					stroke={interactive ? '#f4f4f4' : '#e2e5e8'}
 					strokeWidth="0.6"
 				/>
 				<path
 					d={land.edge}
 					fill="none"
-					stroke="#9da7b0"
-					strokeWidth="2.4"
+					stroke={interactive ? '#b8b8b8' : '#9da7b0'}
+					strokeWidth={interactive ? 0.65 : 2.4}
 					strokeLinecap="round"
 				/>
 				<path
 					d={land.near}
 					fill="none"
-					stroke="#788792"
-					strokeWidth="2.4"
+					stroke={interactive ? '#999999' : '#788792'}
+					strokeWidth={interactive ? 0.65 : 2.4}
 					strokeLinecap="round"
 				/>
 				{mapped.map((country) => {
@@ -260,11 +476,25 @@ function GlobeMap({
 						>
 							<title>{label}</title>
 							<circle r="18" fill="transparent" />
-							<circle className="visit-globe-pulse" r="10" />
-							<circle className="visit-globe-marker-ring" r="7" />
+							<circle
+								className="visit-globe-pulse"
+								r={interactive ? 6 : 10}
+							/>
+							<circle
+								className="visit-globe-marker-ring"
+								r={interactive ? 4 : 7}
+							/>
 							<circle
 								className="visit-globe-marker-dot"
-								r={selected ? 5.6 : 4.5}
+								r={
+									interactive
+										? selected
+											? 3
+											: 2
+										: selected
+											? 5.6
+											: 4.5
+								}
 							/>
 						</g>
 					);
@@ -275,6 +505,7 @@ function GlobeMap({
 }
 
 export function VisitGlobe({
+	onOpenLive,
 	events,
 	countries,
 	activeCountry = null,
@@ -303,96 +534,110 @@ export function VisitGlobe({
 	};
 	return (
 		<div className="visit-globe">
-			<GlobeMap {...mapProps} paused={open} />
-			<Dialog.Root open={open} onOpenChange={setOpen}>
-				<Dialog.Trigger
-					render={(props) => (
-						<Button
-							{...props}
-							size="xs"
-							variant="ghost"
-							shape="square"
-							className="visit-globe-expand"
-							aria-label={t('Explore visitor locations')}
-							icon={
-								<span title={t('Explore visitor locations')}>
-									<ArrowsOutSimpleIcon size={14} />
-								</span>
-							}
-						/>
-					)}
+			<VisitorGlobeMap {...mapProps} paused={open} />
+			{onOpenLive && (
+				<Button
+					className="visit-globe-open-live"
+					variant="ghost"
+					aria-label={t('Open live view')}
+					onClick={onOpenLive}
 				/>
-				<Dialog size="lg" className="visit-globe-dialog">
-					<div className="visit-globe-dialog-heading">
-						<Dialog.Title>{t('Visitor locations')}</Dialog.Title>
-						<Dialog.Close
-							render={(props) => (
-								<Button
-									{...props}
-									size="sm"
-									variant="ghost"
-									shape="square"
-									aria-label={t('Close')}
-									icon={<XIcon size={16} />}
-								/>
-							)}
-						/>
-					</div>
-					<Dialog.Description className="visit-globe-description">
-						{t(
-							'Approximate country locations from recorded storefront requests.',
-						)}
-					</Dialog.Description>
-					<GlobeMap {...mapProps} />
-					<div
-						className="visit-globe-country-list"
-						role="group"
-						aria-label={t('Countries')}
-					>
-						<Button
-							size="sm"
-							variant={!selection ? 'secondary' : 'ghost'}
-							aria-pressed={!selection}
-							onClick={() => onSelectCountry(null)}
-						>
-							{t('All countries')}
-						</Button>
-						{observed.map((country) => (
+			)}
+			{!onOpenLive && (
+				<Dialog.Root open={open} onOpenChange={setOpen}>
+					<Dialog.Trigger
+						render={(props) => (
 							<Button
-								key={country.code}
+								{...props}
+								size="xs"
+								variant="ghost"
+								shape="square"
+								className="visit-globe-expand"
+								aria-label={t('Explore visitor locations')}
+								icon={
+									<span
+										title={t('Explore visitor locations')}
+									>
+										<ArrowsOutSimpleIcon size={14} />
+									</span>
+								}
+							/>
+						)}
+					/>
+					<Dialog size="lg" className="visit-globe-dialog">
+						<div className="visit-globe-dialog-heading">
+							<Dialog.Title>
+								{t('Visitor locations')}
+							</Dialog.Title>
+							<Dialog.Close
+								render={(props) => (
+									<Button
+										{...props}
+										size="sm"
+										variant="ghost"
+										shape="square"
+										aria-label={t('Close')}
+										icon={<XIcon size={16} />}
+									/>
+								)}
+							/>
+						</div>
+						<Dialog.Description className="visit-globe-description">
+							{t(
+								'Approximate country locations from recorded storefront requests.',
+							)}
+						</Dialog.Description>
+						<VisitorGlobeMap {...mapProps} />
+						<div
+							className="visit-globe-country-list"
+							role="group"
+							aria-label={t('Countries')}
+						>
+							<Button
 								size="sm"
-								variant={
-									selection === country.code
-										? 'secondary'
-										: 'ghost'
-								}
-								aria-pressed={selection === country.code}
-								onClick={() =>
-									onSelectCountry(
-										selection === country.code
-											? null
-											: country.code,
-									)
-								}
+								variant={!selection ? 'secondary' : 'ghost'}
+								aria-pressed={!selection}
+								onClick={() => onSelectCountry(null)}
 							>
-								<span>{countryName(country.code)}</span>
-								<span className="visit-globe-country-count">
-									{t('{count} page views', {
-										count: count(country.views),
-									})}
-									{!isMapped(country) &&
-										` · ${t('Map location unavailable')}`}
-								</span>
+								{t('All countries')}
 							</Button>
-						))}
-					</div>
-					{!observed.length && (
-						<p className="visit-globe-description">
-							{t('No traffic recorded in this period.')}
-						</p>
-					)}
-				</Dialog>
-			</Dialog.Root>
+							{observed.map((country) => (
+								<Button
+									key={country.code}
+									size="sm"
+									variant={
+										selection === country.code
+											? 'secondary'
+											: 'ghost'
+									}
+									aria-pressed={selection === country.code}
+									onClick={() =>
+										onSelectCountry(
+											selection === country.code
+												? null
+												: country.code,
+										)
+									}
+								>
+									<span>{countryName(country.code)}</span>
+									<span className="visit-globe-country-count">
+										{t('{count} page views', {
+											count: count(country.views),
+										})}
+										{!isMapped(country) &&
+											` · ${t('Map location unavailable')}`}
+									</span>
+								</Button>
+							))}
+						</div>
+						{!observed.length && (
+							<p className="visit-globe-description">
+								{t('No traffic recorded in this period.')}
+							</p>
+						)}
+					</Dialog>
+				</Dialog.Root>
+			)}
 			{selection && (
 				<Button
 					size="xs"

@@ -52,6 +52,7 @@ import {
 	type CustomerSummary,
 } from './report';
 import './store-workspace.css';
+import { LiveStoreAnalytics } from './live-analytics';
 import { AnalyticsPanel } from './analytics-panel';
 import { AnalyticsToolbar } from './analytics-toolbar';
 import {
@@ -119,7 +120,13 @@ function OwnedStore({ appId, userId }: { appId: string; userId: string }) {
 				<Link to="/apps">{t('All stores')}</Link>
 			</Message>
 		);
-	return <Workspace app={app} userId={userId} />;
+	return <StoreWorkspaceView app={app} userId={userId} />;
+}
+
+function StoreWorkspaceView({app,userId}:{app:AppDetailsData;userId:string}) {
+ const [params]=useSearchParams();
+ if(params.get('section')==='analytics' && params.get('view')==='live') return <LiveStoreAnalytics key={`${app.id}:${params.get('mode')}`} appId={app.id} userId={userId} mode={params.get('mode')==='test'?'test':'live'} />;
+ return <Workspace app={app} userId={userId} />;
 }
 
 function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {

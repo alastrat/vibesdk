@@ -150,3 +150,31 @@
 		text-align: right;
 	}
 }
+.visit-globe .visit-globe-open-live {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	border-radius: 50%;
+	background: transparent;
+	padding: 0;
+	cursor: pointer;
+}
+.visit-globe .visit-globe-open-live:hover {
+	background: #ffffff12;
+	box-shadow: 0 0 0 2px #1955e625;
+}
+.visit-globe-map--interactive {
+	touch-action: none;
+	cursor: grab;
+	outline: none;
+	user-select: none;
+}
+.visit-globe-map--interactive[data-dragging='true'] {
+	cursor: grabbing;
+}
+.visit-globe-map--interactive:focus-visible {
+	outline: 2px solid #1955e6;
+	outline-offset: -12px;
+	border-radius: 50%;
+}
