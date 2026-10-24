@@ -47,6 +47,7 @@ export interface NewStoreOrderItem {
 }
 
 export interface NewStoreOrder {
+	fulfillmentStatus?: StoreFulfillmentStatus;
 	id: string;
 	checkoutId: string;
 	mode: StoreMode;
@@ -71,6 +72,8 @@ export interface NewStoreOrder {
 }
 
 export interface StoreOrderView {
+	/** The immutable checkout snapshot used for digital entitlements. */
+	checkoutId?: string;
 	id: string;
 	orderNumber: number;
 	mode: StoreMode;

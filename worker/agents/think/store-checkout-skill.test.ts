@@ -79,6 +79,37 @@ describe('the store checkout skill', () => {
 		expect(testAndLive).toContain("You can't publish");
 	});
 
+	it('documents immutable private projections and cookie-protected receipt delivery', () => {
+  for (const requirement of ['type: "physical"', 'type: "digital"', 'Digital-only carts', 'Never invent or alter `accountProductId` or `downloadAssetIds`', 'receipt.downloads', '/__estori/orders/:orderId/downloads/:assetId', 'HttpOnly receipt cookie', '/api/my-products/assets/']) expect(SKILL).toContain(requirement);
+ });
+
+ it('renders real receipt downloads safely with the correct live or preview prefix', async () => {
+  const example = SKILL.match(/```js\n([\s\S]+?)\n```/)?.[1] ?? '';
+  const source = example.replace(/\n(?:main|showConfirmation)\(\);/g, '');
+  for (const prefix of ['', '/space/app-1/preview/main']) {
+   const order = {orderId: 'ord_abc', orderNumber: 7, downloads: [
+    {id: 'asset-1', name: '<img src=x onerror=alert(1)>', url: prefix + '/__estori/orders/ord_abc/downloads/asset-1'},
+    {id: 'asset-2', name: 'Unsafe origin', url: 'https://other.test/__estori/orders/ord_abc/downloads/asset-2'},
+    {id: 'asset-3', name: 'Owner asset', url: '/api/my-products/assets/asset-3'},
+   ]};
+   const links: Array<{href: string; textContent: string}> = [];
+   const downloads = {replaceChildren: () => {links.length = 0;}, appendChild: (link: {href: string; textContent: string}) => links.push(link)};
+   const number = {textContent: ''};
+   const document = {
+    querySelector: (selector: string) => selector === '#order-number' ? number : selector === '#order-downloads' ? downloads : {src: 'https://store.test' + prefix + '/__estori/store.js'},
+    createElement: () => ({href: '', textContent: ''}),
+   };
+   const location = {origin: 'https://store.test', href: 'https://store.test' + prefix + '/thanks?order=ord_abc', search: '?order=ord_abc'};
+   const render = new Function('Estori', 'document', 'location', source + '\nreturn showConfirmation();');
+   await render({order: async (id: string) => id === 'ord_abc' ? order : null}, document, location);
+   expect(number.textContent).toBe('Order #7');
+   expect(links).toEqual([{href: 'https://store.test' + prefix + '/__estori/orders/ord_abc/downloads/asset-1', textContent: '<img src=x onerror=alert(1)>'}]);
+   // A refunded/historical receipt removes stale links and offers no invented files.
+   await render({order: async () => ({...order, downloads: undefined})}, document, location);
+   expect(links).toEqual([]);
+  }
+ });
+
 	it('keeps payments on the platform', () => {
 		for (const rule of ['/__estori/store.js', 'Estori.checkout(', 'Estori.order(', 'card details', 'catalogVariantId']) expect(SKILL).toContain(rule);
 		expect(APP_FILE_STRUCTURE).toContain('store-checkout');

@@ -15,7 +15,11 @@ import type { CatalogProductView, CatalogVariantView } from '@/api-types';
 import { useCatalogProducts } from '@/hooks/use-catalog';
 import { useApps } from '@/hooks/use-apps';
 import { useAuth } from '@/contexts/auth-context';
-import { BuilderHandoff } from '../store-workspace/builder-handoff';
+import { MyProducts } from '@/components/products/my-products';
+import { useMutation } from '@tanstack/react-query';
+import { useRefreshProducts } from '@/hooks/use-private-products';
+import { apiClient } from '@/lib/api-client';
+import { unwrap } from '@/lib/unwrap-response';
 import './catalog.css';
 import { useFlag } from '@/hooks/use-flag';
 
@@ -64,6 +68,17 @@ function ProductCard({
 }) {
 	useI18n();
 	const navigate = useNavigate();
+	const refresh = useRefreshProducts();
+	const add = useMutation({
+		mutationFn: () =>
+			unwrap(
+				apiClient.addStoreProduct(storeId!, {
+					catalogProductId: product.productId,
+				}),
+				t("Couldn't add the product"),
+			),
+		onSuccess: refresh,
+	});
 	const sellable = product.variants.some((variant) => variant.available);
 	return (
 		<LayerCard>
@@ -142,17 +157,28 @@ function ProductCard({
 						</div>
 						<div className="flex flex-wrap items-center gap-3">
 							{storeId && sellable ? (
-								<BuilderHandoff
-									appId={storeId}
-									label={t('Add to this store')}
-									request={t(
-										'Add "{name}" from the Estori catalog (catalog product ID: {id}) to this store. Show me the available variants and suggested prices before making changes. Preserve the rest of my collection.',
-										{
-											name: product.title,
-											id: product.productId,
-										},
+								<div>
+									<Button
+										variant="primary"
+										size="sm"
+										disabled={
+											add.isPending || add.isSuccess
+										}
+										onClick={() => add.mutate()}
+									>
+										{add.isSuccess
+											? t('Added to store')
+											: t('Add to this store')}
+									</Button>
+									{add.error && (
+										<p
+											role="alert"
+											className="mt-2 text-sm text-red-600"
+										>
+											{add.error.message}
+										</p>
 									)}
-								/>
+								</div>
 							) : (
 								<Button
 									variant="primary"
@@ -179,7 +205,11 @@ function ProductCard({
 export default function CatalogPage() {
 	useI18n();
 	const [query, setQuery] = useState('');
+
 	const [params, setParams] = useSearchParams();
+	const [tab, setTab] = useState<'mine' | 'estori'>(() =>
+		params.get('tab') === 'estori' ? 'estori' : 'mine',
+	);
 	const { user } = useAuth();
 	const stores = useApps();
 	const requestedStore = params.get('store');
@@ -202,7 +232,7 @@ export default function CatalogPage() {
 					</h1>
 					<p className="text-kumo-subtle">
 						{t(
-							'Products you can sell without holding stock. We ship each order straight to your shopper in plain packaging, and take your cost from the sale.',
+							'Manage your private products and discover products from the Estori catalog.',
 						)}
 					</p>
 				</div>
@@ -249,7 +279,28 @@ export default function CatalogPage() {
 						</p>
 					)}
 				</div>
-				{catalogPaused ? (
+				<div className="flex gap-2 border-b border-kumo-line pb-3">
+					<Button
+						variant={tab === 'mine' ? 'secondary' : 'ghost'}
+						aria-pressed={tab === 'mine'}
+						onClick={() => setTab('mine')}
+					>
+						{t('My products')}
+					</Button>
+					<Button
+						variant={tab === 'estori' ? 'secondary' : 'ghost'}
+						aria-pressed={tab === 'estori'}
+						onClick={() => setTab('estori')}
+					>
+						{t('Estori catalog')}
+					</Button>
+				</div>
+				{tab === 'mine' ? (
+					<MyProducts
+						key={selectedStore?.id ?? 'account'}
+						storeId={selectedStore?.id}
+					/>
+				) : catalogPaused ? (
 					<Empty
 						title={t('The catalog is paused')}
 						description={t(
@@ -276,7 +327,7 @@ export default function CatalogPage() {
 								<div className="catalog-results grid gap-4">
 									{products.data.products.map((product) => (
 										<ProductCard
-											key={product.productId}
+											key={`${selectedStore?.id ?? 'account'}:${product.productId}`}
 											product={product}
 											storeId={selectedStore?.id ?? null}
 											storeUnavailable={storeUnavailable}

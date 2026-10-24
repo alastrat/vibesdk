@@ -30,7 +30,7 @@ describe('drafts routes', () => {
 
 	it('publishes a draft through SpaceDO, which deploys it first when stale', () => {
 		const live = source('/worker/api/controllers/liveStores/controller.ts');
-		expect(live).toContain('space.publishDraft(draftId, { refuseNewCatalogProducts })');
+		expect(live).toContain('space.publishDraft(draftId, { refuseNewCatalogProducts, storeProducts })');
 		expect(live).not.toContain('publishLive()');
 		expect(live).toContain('space?.getPublishContext()');
 	});

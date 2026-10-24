@@ -74,6 +74,15 @@ function fakeDeps(overrides: Partial<StartCheckoutDeps> = {}) {
 }
 
 describe('startStoreCheckout', () => {
+	it('saves immutable digital entitlements and disables Stripe shipping collection', async () => {
+  const manifest = {...MANIFEST, products: [{id: 'guide', name: 'Guide', type: 'digital', accountProductId: 'account-guide', downloadAssetIds: ['file-original'], variants: [{id: 'guide-pdf', name: 'PDF', priceCents: 2000}]}]};
+  const {deps, saved, sessions} = fakeDeps({loadManifest: async () => ({commitHash: 'digital-commit', text: JSON.stringify(manifest)})});
+  const response = await startStoreCheckout(deps, {...INPUT, body: {items: [{variantId: 'guide-pdf', quantity: 1}], shipTo: 'FR'}});
+  expect(response.ok && response.summary.requiresShipping).toBe(false);
+  expect(response.ok && response.summary.shippingCents).toBe(0);
+  expect(sessions[0].collectShipping).toBe(false);
+  expect(saved[0].pricedCart.lines[0]).toMatchObject({productType: 'digital', accountProductId: 'account-guide', downloadAssetIds: ['file-original']});
+ });
 	it("saves the priced checkout, then sends the shopper to Stripe with the seller's account and the fee", async () => {
 		const { deps, saved, sessions, attached } = fakeDeps();
 		expect(await startStoreCheckout(deps, INPUT)).toEqual({
@@ -81,6 +90,7 @@ describe('startStoreCheckout', () => {
 			checkoutId: 'chk_1',
 			clientSecret: 'cs_1_secret',
 			summary: {
+				requiresShipping: true,
 				currency: 'usd',
 				shipTo: 'US',
 				lines: [{ variantId: 'trail-mug-blue', productId: 'trail-mug', name: 'Trail Mug', variantName: 'Blue', quantity: 2, unitPriceCents: 2000, lineTotalCents: 4000 }],

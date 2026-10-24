@@ -47,6 +47,15 @@ Rules:
 - `shipping.countries` lists two-letter country codes; `flatRateCents` is per order; shipping is free at or above
   `freeOverCents` when it is set.
 - `image` is a path in the store (`/images/mug.jpg`) or an https address.
+- Products may have `type: "physical"` or `type: "digital"`; omitted means physical. Digital-only carts have no
+  shipping charge or shipping-address collection; mixed carts keep physical shipping. Keep the required shipping
+  configuration for physical carts, but never promise shipment for a digital purchase.
+- The owner's private account catalog is projected into this manifest when they publish. Preserve projected
+  `accountProductId`, `downloadAssetIds` and `/__estori/product-images/:productId/:assetId` image paths exactly.
+  Never invent or alter `accountProductId` or `downloadAssetIds`, copy private download files into the site, expose
+  owner asset API URLs or storage keys, or add `catalogVariantId` to digital products. Manage private files through
+  the account's Products UI; generated pages render the published projection. `downloadAssetIds` contains at most
+  10 opaque IDs and appears only on digital products.
 - No other fields: Estori refuses unknown fields.
 - **Catalog products** carry `catalogVariantId` on their variant, and `priceCents` is the seller's retail price. Never
   write a catalog price or a supplier name anywhere in the store.
@@ -83,6 +92,10 @@ It defines `window.Estori`:
   store's confirmation page; `cancelPath` is where "Continue shopping" goes back to. A `note` is saved to the cart, as
   `Estori.cart.setNote(note)` would.
 - `Estori.order(orderId)` resolves with the shopper's receipt, and empties the cart once the order is paid.
+  `receipt.downloads` is an optional array of `{ id, name, url }` for eligible paid digital files. Historical,
+  refunded or disputed orders may have no downloads. Render only those returned links; never construct download
+  entitlements from current product files. Access requires the signed receipt cookie set when Stripe returns to
+  this browser; knowing an order ID or asset ID alone grants nothing.
 
 ## 3. Cart, checkout and confirmation
 
@@ -111,11 +124,35 @@ async function showConfirmation() {
   const orderId = new URLSearchParams(location.search).get('order');
   if (!orderId) return;
   const receipt = await Estori.order(orderId);
-  if (receipt) document.querySelector('#order-number').textContent = `Order #${receipt.orderNumber}`;
+  if (!receipt) return;
+  document.querySelector('#order-number').textContent = `Order #${receipt.orderNumber}`;
+  const downloads = document.querySelector('#order-downloads');
+  if (!downloads) return;
+  downloads.replaceChildren();
+  // The script URL carries /space/<app>/preview/<branch> in previews, and no prefix on live stores.
+  const script = document.querySelector('script[src*="/__estori/store.js"]');
+  const platformRoot = new URL(script.src, location.href).pathname.replace(/\/store\.js$/i, '');
+  for (const file of receipt.downloads || []) {
+    // Receipt URLs already include the preview prefix. Never prepend it a second time.
+    const url = new URL(file.url, location.origin);
+    const expectedPath = platformRoot + '/orders/' + encodeURIComponent(receipt.orderId) + '/downloads/' + encodeURIComponent(file.id);
+    if (url.origin !== location.origin || url.pathname !== expectedPath) continue;
+    const link = document.createElement('a');
+    link.href = url.href;
+    link.textContent = file.name;
+    downloads.appendChild(link);
+  }
 }
 
 main();
+showConfirmation();
 ```
+
+The confirmation page provides `#order-number` and `#order-downloads`. Download links use the platform's
+`/__estori/orders/:orderId/downloads/:assetId` API on the same store origin; ordinary browser navigation sends the
+HttpOnly receipt cookie. Use the returned URL, not an owner `/api/my-products/assets/` URL or a public file copy.
+The platform streams an attachment only while the order is eligible. A digital receipt confirms payment and shows
+available downloads; it must not tell shoppers to wait for shipping or require email delivery to obtain their files.
 
 ## 4. What store code must never do
 

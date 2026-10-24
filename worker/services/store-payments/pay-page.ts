@@ -208,7 +208,7 @@ h1 { font-size: clamp(32px, 5vw, 48px); line-height: 1.1; margin: 0 0 24px; lett
   <div class="grid" id="checkout">
     <section class="panel" id="steps">
       <div class="step"><h2><span>1</span> ${escapeHtml(text.contact)}</h2><label class="field-label" for="email">${escapeHtml(text.email)}</label><input class="field" id="email" type="email" name="email" autocomplete="email" inputmode="email" maxlength="254" placeholder="${escapeHtml(text.emailPlaceholder)}"><p class="field-error" id="email-error" hidden></p></div>
-      <div class="step"><h2><span>2</span> ${escapeHtml(text.shippingAddress)}</h2><div id="shipping-element"></div></div>
+      <div class="step" id="shipping-step"><h2><span>2</span> ${escapeHtml(text.shippingAddress)}</h2><div id="shipping-element"></div></div>
       <div class="step"><h2><span>3</span> ${escapeHtml(text.payment)}</h2><div id="payment-element"></div></div>
       <button class="pay" id="pay" type="button" disabled>${escapeHtml(text.script.pay)}</button>
       <p class="fine">${escapeHtml(text.fine)}</p>
@@ -446,7 +446,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
     elements = [];
   }
 
-  function mount(clientSecret) {
+  function mount(clientSecret, requiresShipping) {
     var address = typedAddress;
     unmount();
     // Stripe.js can't confirm a second session started on the same instance, so each session gets its own.
@@ -457,7 +457,9 @@ export const PAY_PAGE_SCRIPT = `(function () {
     });
     // Stripe's address field shows only what it is given when created, so a typed address comes back as a saved one.
     var shipping = null;
-    if (address && address.address.country === shipTo()) {
+    $('shipping-step').hidden = !requiresShipping;
+    $('country-row').hidden = !requiresShipping || config.countries.length < 2;
+    if (requiresShipping && address && address.address.country === shipTo()) {
       var saved = {};
       Object.keys(address.address).forEach(function (key) {
         if (typeof address.address[key] === 'string' && address.address[key]) saved[key] = address.address[key];
@@ -468,14 +470,16 @@ export const PAY_PAGE_SCRIPT = `(function () {
         shipping = null;
       }
     }
-    if (!shipping) shipping = checkout.createShippingAddressElement();
-    shipping.on('change', function (event) {
-      typedAddress = event.complete && event.value && event.value.address ? event.value : null;
-    });
-    shipping.mount('#shipping-element');
+    if (requiresShipping) {
+      if (!shipping) shipping = checkout.createShippingAddressElement();
+      shipping.on('change', function (event) {
+        typedAddress = event.complete && event.value && event.value.address ? event.value : null;
+      });
+      shipping.mount('#shipping-element');
+    }
     var payment = checkout.createPaymentElement();
     payment.mount('#payment-element');
-    elements = [shipping, payment];
+    elements = shipping ? [shipping, payment] : [payment];
     return emailField.value.trim() ? sendEmail(false) : Promise.resolve(null);
   }
 
@@ -519,7 +523,7 @@ export const PAY_PAGE_SCRIPT = `(function () {
         checkoutId = answer.checkoutId;
         remember(checkoutId);
         renderLines(answer.summary);
-        return mount(answer.clientSecret);
+        return mount(answer.clientSecret, answer.summary.requiresShipping !== false);
       })
       .catch(function () {
         showNotice(text.checkoutFailed);

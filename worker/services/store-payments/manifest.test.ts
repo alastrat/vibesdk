@@ -110,3 +110,18 @@ describe('parseStoreManifest', () => {
 		});
 	});
 });
+
+
+describe('private product manifests', () => {
+ it('accepts an empty catalog and backward-compatible physical products', () => {
+  expect(parse({...VALID, products: []}).ok).toBe(true);
+  expect(parse(VALID)).toEqual({ok: true, manifest: VALID});
+ });
+ it('roundtrips digital snapshot identifiers and rejects unsafe combinations', () => {
+  const product = {...VALID.products[0], type: 'digital', accountProductId: 'product-1', downloadAssetIds: ['asset-1']};
+  expect(parse({...VALID, products: [product]})).toEqual({ok: true, manifest: {...VALID, products: [product]}});
+  for (const invalid of [{...product, type: 'physical'}, {...product, type: 'virtual'}, {...product, accountProductId: '../secret'}, {...product, downloadAssetIds: ['../secret']}, {...product, downloadAssetIds: Array.from({length: 11}, (_, i) => 'asset-' + i)}, {...product, variants: [{...product.variants[0], catalogVariantId: 'supplier-id'}]}]) {
+   expect(parse({...VALID, products: [invalid]}).ok).toBe(false);
+  }
+ });
+});

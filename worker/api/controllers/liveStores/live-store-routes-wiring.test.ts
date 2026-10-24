@@ -34,7 +34,7 @@ describe('live store routes', () => {
 		const controller = source('/worker/api/controllers/liveStores/controller.ts');
 		const cancel = controller.indexOf('.cancelLeftoverMerge()');
 		expect(cancel).toBeGreaterThan(-1);
-		expect(cancel).toBeLessThan(controller.indexOf('space.publishDraft(draftId, { refuseNewCatalogProducts })'));
+		expect(cancel).toBeLessThan(controller.indexOf('space.publishDraft(draftId,'));
 	});
 
 	it('checks the live-store limit before publishing, and the domain limit before adding one', () => {

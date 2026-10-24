@@ -1,6 +1,6 @@
 /** A seller's own store orders: the Orders page's list and order facts, and marking an order shipped. Every query is scoped to the seller. */
 
-import { and, asc, desc, eq, inArray, isNotNull, lt, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, lt, or, sql, type SQL } from 'drizzle-orm';
 import * as schema from '../schema';
 import { BaseService } from './BaseService';
 import { keysetCursorOf, parseKeysetCursor } from './keyset-cursor';
@@ -9,6 +9,7 @@ import type { SellerOrderModeFilter, SellerOrdersData, SellerOrderView } from '.
 export const SELLER_ORDERS_PAGE = 50;
 
 export interface SellerOrderFacts {
+    digitalLineNos?: number[];
     storeTitle: string | null;
     carrier: string | null;
     trackingNumber: string | null;
@@ -22,9 +23,14 @@ export interface SellerOrderFacts {
 
 export type ShipmentResult = 'updated' | 'not-found' | 'no-own-items' | 'nothing-to-ship' | 'refunded';
 
+/** Legacy snapshots without productType retain physical fulfillment. */
+function physicalLine(checkoutId: SQL, variantId: SQL): SQL {
+    return sql`NOT EXISTS (SELECT 1 FROM store_checkouts c, json_each(c.priced_cart, '$.lines') purchased WHERE c.id = ${checkoutId} AND json_extract(purchased.value, '$.variantId') = ${variantId} AND json_extract(purchased.value, '$.productType') = 'digital')`;
+}
+
 /** Units of this kind on the order with no refund made; a claim Stripe never completed still counts. */
 function unrefundedUnits(kind: 'own' | 'catalog') {
-    return sql<number>`(SELECT COALESCE(SUM(i.quantity), 0) FROM store_order_items i WHERE i.order_id = ${schema.storeOrders.id} AND i.kind = ${kind} AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no AND r.stripe_refund_id IS NOT NULL))`;
+    return sql<number>`(SELECT COALESCE(SUM(i.quantity), 0) FROM store_order_items i WHERE i.order_id = ${schema.storeOrders.id} AND i.kind = ${kind} AND ${kind === 'own' ? physicalLine(sql`${schema.storeOrders.checkoutId}`, sql`i.variant_id`) : sql`1 = 1`} AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no AND r.stripe_refund_id IS NOT NULL))`;
 }
 
 export class SellerOrderService extends BaseService {
@@ -33,7 +39,7 @@ export class SellerOrderService extends BaseService {
         const limit = input.limit ?? SELLER_ORDERS_PAGE;
         const after = input.cursor ? parseKeysetCursor(input.cursor) : null;
         if (input.cursor && !after) throw new Error('Invalid cursor');
-        const ownToShip = sql`EXISTS (SELECT 1 FROM store_order_items i WHERE i.order_id = ${orders.id} AND i.kind = 'own' AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no AND r.stripe_refund_id IS NOT NULL))`;
+        const ownToShip = sql`EXISTS (SELECT 1 FROM store_order_items i WHERE i.order_id = ${orders.id} AND i.kind = 'own' AND ${physicalLine(sql`${orders.checkoutId}`, sql`i.variant_id`)} AND NOT EXISTS (SELECT 1 FROM store_refunds r WHERE r.order_id = i.order_id AND r.line_no = i.line_no AND r.stripe_refund_id IS NOT NULL))`;
 
         const rows = await this.database
             .select({
@@ -111,7 +117,7 @@ export class SellerOrderService extends BaseService {
             .where(and(eq(orders.id, orderId), eq(orders.sellerUserId, sellerUserId)))
             .get();
         if (!row) return null;
-        const [refunds, dispute] = await Promise.all([
+        const [refunds, dispute, digitalLines] = await Promise.all([
             this.database
                 .select({ lineNo: schema.storeRefunds.lineNo, stripeRefundId: schema.storeRefunds.stripeRefundId })
                 .from(schema.storeRefunds)
@@ -125,9 +131,13 @@ export class SellerOrderService extends BaseService {
                 .orderBy(desc(schema.storeDisputes.createdAt))
                 .limit(1)
                 .get(),
+            this.database.select({lineNo: schema.storeOrderItems.lineNo})
+                .from(schema.storeOrderItems)
+                .where(and(eq(schema.storeOrderItems.orderId, orderId), sql`NOT ${physicalLine(sql`(SELECT checkout_id FROM store_orders WHERE id = ${orderId})`, sql`${schema.storeOrderItems.variantId}`)}`)).all(),
         ]);
         return {
             ...row,
+            ...(digitalLines.length ? {digitalLineNos: digitalLines.map(line => line.lineNo)} : {}),
             refundedLineNos: refunds.filter((refund) => refund.stripeRefundId !== null).map((refund) => refund.lineNo),
             pendingRefundLineNos: refunds.filter((refund) => refund.stripeRefundId === null).map((refund) => refund.lineNo),
             dispute: dispute ?? null,
@@ -138,7 +148,7 @@ export class SellerOrderService extends BaseService {
     async setShipment(input: { sellerUserId: string; orderId: string; shipment: { carrier: string | null; trackingNumber: string | null } | null; now: Date }): Promise<ShipmentResult> {
         const orders = schema.storeOrders;
         const order = await this.database
-            .select({ paymentStatus: orders.paymentStatus, shippedAt: orders.shippedAt })
+            .select({ paymentStatus: orders.paymentStatus, shippedAt: orders.shippedAt, checkoutId: orders.checkoutId })
             .from(orders)
             .where(and(eq(orders.id, input.orderId), eq(orders.sellerUserId, input.sellerUserId)))
             .get();
@@ -146,7 +156,7 @@ export class SellerOrderService extends BaseService {
         const ownLines = await this.database
             .select({ lineNo: schema.storeOrderItems.lineNo })
             .from(schema.storeOrderItems)
-            .where(and(eq(schema.storeOrderItems.orderId, input.orderId), eq(schema.storeOrderItems.kind, 'own')))
+            .where(and(eq(schema.storeOrderItems.orderId, input.orderId), eq(schema.storeOrderItems.kind, 'own'), physicalLine(sql`${order.checkoutId}`, sql`${schema.storeOrderItems.variantId}`)))
             .all();
         if (ownLines.length === 0) return 'no-own-items';
         const touch = { revision: sql`${orders.revision} + 1`, updatedAt: input.now };
@@ -170,7 +180,7 @@ export class SellerOrderService extends BaseService {
         return 'updated';
     }
 
-    async newOrderEmailFacts(orderId: string): Promise<{ storeTitle: string | null; sellerEmail: string | null } | null> {
+    async newOrderEmailFacts(orderId: string): Promise<{ storeTitle: string | null; sellerEmail: string | null; digitalLineNos?: number[] } | null> {
         const row = await this.database
             .select({ storeTitle: schema.apps.title, sellerEmail: schema.users.email })
             .from(schema.storeOrders)
@@ -178,6 +188,10 @@ export class SellerOrderService extends BaseService {
             .leftJoin(schema.users, eq(schema.users.id, schema.storeOrders.sellerUserId))
             .where(eq(schema.storeOrders.id, orderId))
             .get();
-        return row ?? null;
+        if (!row) return null;
+        const digitalLines = await this.database.select({lineNo: schema.storeOrderItems.lineNo})
+            .from(schema.storeOrderItems)
+            .where(and(eq(schema.storeOrderItems.orderId, orderId), sql`NOT ${physicalLine(sql`(SELECT checkout_id FROM store_orders WHERE id = ${orderId})`, sql`${schema.storeOrderItems.variantId}`)}`)).all();
+        return {...row, ...(digitalLines.length ? {digitalLineNos: digitalLines.map(line => line.lineNo)} : {})};
     }
 }

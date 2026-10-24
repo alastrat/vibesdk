@@ -270,6 +270,14 @@ describe('store checkout sessions', () => {
 		nowMs: 1_800_000_000_000,
 	};
 
+	it('omits physical shipping collection and rates for digital checkout', async () => {
+  const {calls, fakeFetch} = recordingFetch({id: 'cs_digital'});
+  await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession({...INPUT, shippingCents: 0, collectShipping: false});
+  const body = String(calls[0].init.body);
+  expect(body).not.toContain('shipping_address_collection');
+  expect(body).not.toContain('shipping_options');
+  expect(body).toContain('application_fee_amount');
+ });
 	it('charges the priced lines and shipping, with the fee and the seller as merchant', async () => {
 		const { calls, fakeFetch } = recordingFetch({ id: 'cs_1', url: 'https://checkout.stripe.com/c/pay/cs_1' });
 		await createStripeClient('sk_test_fake', fakeFetch).createStoreCheckoutSession(INPUT);

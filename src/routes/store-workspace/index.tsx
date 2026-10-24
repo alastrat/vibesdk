@@ -284,7 +284,7 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 							report={report}
 						/>
 					</>
-				) : (
+				) : section.id === 'products' ? null : (
 					<div className="es-page-heading">
 						<div>
 							<h1>

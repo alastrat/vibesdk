@@ -47,8 +47,9 @@ export default function SellerOrderPage() {
 
 function OrderDetail({ order }: { order: SellerOrderDetail }) {
 	useI18n();
-	const own = order.items.filter((item) => item.kind === 'own');
+	const own = order.items.filter((item) => item.kind === 'own' && item.productType !== 'digital');
 	const catalog = order.items.filter((item) => item.kind === 'catalog');
+	const digital = order.items.filter((item) => item.productType === 'digital');
 	const money = moneySplit(order);
 	const address = shipToLines(order.shipTo);
 
@@ -92,7 +93,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 					)}
 					{order.customerPhone && <p className="text-sm">{order.customerPhone}</p>}
 				</Section>
-				<Section title={t("Ship to")}>
+				{(own.length > 0 || catalog.length > 0) && <Section title={t("Ship to")}>
 					<address className="text-sm not-italic leading-6">
 						{address.map((line, index) => (
 							<span key={index} className="block">
@@ -103,7 +104,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 					{order.shipTo && (
 						<Button variant="secondary" size="sm" className="w-fit" onClick={copyAddress}>{t("Copy address")}</Button>
 					)}
-				</Section>
+				</Section>}
 			</div>
 
 			{order.note && (
@@ -111,6 +112,8 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 					<p className="text-sm whitespace-pre-wrap">{order.note}</p>
 				</Section>
 			)}
+
+			{digital.length > 0 && <Section title={t("Digital products")}><Lines lines={digital} /></Section>}
 
 			{own.length > 0 && (
 				<Section title={t("You ship")}>

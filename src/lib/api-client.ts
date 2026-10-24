@@ -1,3 +1,4 @@
+import type { AccountProduct, AccountProductList, SaveAccountProduct, ProductAsset, StoreProductCollection, StoreProductListing, AddStoreProduct, UpdateStoreProduct } from '@/api-types';
 import type { StoreLiveAnalytics, StoreTrafficAnalytics } from '@/api-types';
 import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
@@ -470,7 +471,7 @@ class ApiClient {
 
 		if (options.body) {
 			config.body =
-				typeof options.body === 'string'
+				options.body instanceof Blob || typeof options.body === 'string'
 					? options.body
 					: JSON.stringify(options.body);
 		}
@@ -982,6 +983,34 @@ class ApiClient {
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
 		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
+	}
+
+	async getMyProducts() {
+		return this.request<AccountProductList>('/api/my-products');
+	}
+	async createAccountProduct(body: SaveAccountProduct) {
+		return this.request<AccountProduct>('/api/my-products', { method: 'POST', body });
+	}
+	async updateAccountProduct(id: string, body: SaveAccountProduct) {
+		return this.request<AccountProduct>(`/api/my-products/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+	}
+	async uploadProductAsset(file: File, kind: 'image' | 'download') {
+		return this.request<ProductAsset>(`/api/my-products/assets?kind=${kind}`, {
+			method: 'POST', body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },
+		});
+	}
+	async getStoreCollection(appId: string, mode: 'test' | 'live' = 'live') {
+		return this.request<StoreProductCollection>(`/api/stores/${encodeURIComponent(appId)}/collection?mode=${mode}`);
+	}
+	async addStoreProduct(appId: string, body: AddStoreProduct) {
+		return this.request<StoreProductListing>(`/api/stores/${encodeURIComponent(appId)}/collection`, { method: 'POST', body });
+	}
+	async updateStoreProduct(appId: string, productId: string, body: UpdateStoreProduct) {
+		return this.request<StoreProductListing>(`/api/stores/${encodeURIComponent(appId)}/collection/${encodeURIComponent(productId)}`, { method: 'PATCH', body });
+	}
+	async removeStoreProduct(appId: string, productId: string) {
+		return this.request<{ removed: boolean }>(`/api/stores/${encodeURIComponent(appId)}/collection/${encodeURIComponent(productId)}`, { method: 'DELETE' });
 	}
 
 	async getStoreProducts(appId: string): Promise<ApiResponse<StoreWorkspaceProducts>> {

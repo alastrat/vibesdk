@@ -157,6 +157,7 @@ export async function startStoreCheckout(deps: StartCheckoutDeps, input: StartCh
 	let session: { id: string; clientSecret: string | null };
 	try {
 		session = await deps.createSession({
+			collectShipping: cart.lines.some((line) => line.productType !== 'digital'),
 			checkoutId,
 			lines: cart.lines.map((line) => ({ name: line.name, quantity: line.quantity, unitPriceCents: line.unitPriceCents })),
 			shippingCents: cart.shippingCents,
@@ -195,5 +196,5 @@ function summaryOf(manifest: StoreManifest, cart: PricedCart): StoreCheckoutSumm
 			lineTotalCents: line.unitPriceCents * line.quantity,
 		};
 	});
-	return { currency: 'usd', shipTo: cart.shipToCountry, lines, subtotalCents: cart.subtotalCents, shippingCents: cart.shippingCents, totalCents: cart.totalCents };
+	return { currency: 'usd', requiresShipping: cart.lines.some((line) => line.productType !== 'digital'), shipTo: cart.shipToCountry, lines, subtotalCents: cart.subtotalCents, shippingCents: cart.shippingCents, totalCents: cart.totalCents };
 }

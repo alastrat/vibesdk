@@ -2,8 +2,10 @@
 
 import { msg } from '../i18n/translate';
 import type { CatalogItemStatus, CatalogSupplier } from './catalog';
+import type { StoreManifestProduct, StoreShipping, StoreBrand } from '../../space/src/space/store-manifest-schema';
+export { STORE_MANIFEST_FILE, STORE_PRICE_MIN_CENTS, STORE_PRICE_MAX_CENTS, STORE_BRAND_CORNERS } from '../../space/src/space/store-manifest-schema';
+export type { StoreManifest, StoreManifestProduct, StoreManifestVariant, StoreShipping, StoreBrand, StoreBrandCorners } from '../../space/src/space/store-manifest-schema';
 
-export const STORE_MANIFEST_FILE = 'estori-store.json';
 /** Every path under it on a store's address belongs to the platform. */
 export const STORE_PLATFORM_PREFIX = '/__estori';
 /** `metadata.kind` of every store Checkout session. */
@@ -16,8 +18,6 @@ export const STORE_CART_MAX_LINES = 50;
 export const STORE_LINE_MAX_QUANTITY = 99;
 /** An order note, such as a gift message: kept with the cart, shown on the checkout page and stored on the order. */
 export const STORE_NOTE_MAX_LENGTH = 500;
-export const STORE_PRICE_MIN_CENTS = 50;
-export const STORE_PRICE_MAX_CENTS = 1_000_000;
 
 export const STORE_MODES = ['test', 'live'] as const;
 export type StoreMode = (typeof STORE_MODES)[number];
@@ -40,56 +40,6 @@ export type DisputeReversalState = (typeof DISPUTE_REVERSAL_STATES)[number];
 export const DISPUTE_CLOSED_STATUSES: readonly string[] = ['won', 'lost', 'warning_closed'];
 export const PAYOUT_INTERVALS = ['daily', 'weekly', 'monthly'] as const;
 export type PayoutInterval = (typeof PAYOUT_INTERVALS)[number];
-
-export interface StoreManifestVariant {
-	id: string;
-	name: string;
-	/** The seller's retail price for one unit. */
-	priceCents: number;
-	available?: boolean;
-	/** Set on catalog products: the catalog variant this sells. The catalog price never appears in the file. */
-	catalogVariantId?: string;
-}
-
-export interface StoreManifestProduct {
-	id: string;
-	name: string;
-	description?: string;
-	image?: string;
-	variants: StoreManifestVariant[];
-}
-
-export interface StoreShipping {
-	/** ISO 3166-1 alpha-2 codes. */
-	countries: string[];
-	/** Per order; 0 is free shipping. */
-	flatRateCents: number;
-	/** Shipping is free for subtotals at or above it. */
-	freeOverCents?: number;
-}
-
-export const STORE_BRAND_CORNERS = ['square', 'rounded', 'pill'] as const;
-export type StoreBrandCorners = (typeof STORE_BRAND_CORNERS)[number];
-
-/** How the store looks, for Estori's checkout page and Stripe's payment fields. Colors are #rrggbb. */
-export interface StoreBrand {
-	name: string;
-	/** A path on the store, or an absolute address. */
-	logo?: string;
-	colors: { background: string; surface: string; text: string; accent: string; accentText: string };
-	/** A Google Fonts family name. */
-	font?: string;
-	corners: StoreBrandCorners;
-}
-
-export interface StoreManifest {
-	version: 1;
-	currency: 'usd';
-	shipping: StoreShipping;
-	products: StoreManifestProduct[];
-	/** Optional: a store without it gets a neutral checkout page. */
-	brand?: StoreBrand;
-}
 
 export interface StoreCheckoutRequest {
 	items: { variantId: string; quantity: number }[];
@@ -128,6 +78,8 @@ export interface StoreCheckoutSummaryLine {
 }
 
 export interface StoreCheckoutSummary {
+	/** Absent on historical responses: shipping was collected. */
+	requiresShipping?: boolean;
 	currency: 'usd';
 	shipTo: string;
 	lines: StoreCheckoutSummaryLine[];
@@ -183,6 +135,9 @@ export const STORE_CHECKOUT_MESSAGES: Readonly<Record<StoreCheckoutRefusal, stri
 };
 
 interface PricedLineBase {
+	productType?: 'physical' | 'digital';
+	accountProductId?: string;
+	downloadAssetIds?: string[];
 	productId: string;
 	variantId: string;
 	/** "Product, Variant", as the shopper sees it in Checkout. */
@@ -232,6 +187,7 @@ export interface StoreInfo {
 
 /** `Estori.order(id)`: the shopper's receipt. Never the street address or phone. */
 export interface StoreReceipt {
+	downloads?: { id: string; name: string; url: string }[];
 	orderId: string;
 	orderNumber: number;
 	createdAt: string;
@@ -351,6 +307,7 @@ export interface SellerOrdersData {
 }
 
 export interface SellerOrderLine {
+	productType?: 'physical' | 'digital';
 	lineNo: number;
 	name: string;
 	kind: StoreLineKind;

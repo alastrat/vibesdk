@@ -12,6 +12,12 @@ export type PaginatedAppsListFilters = {
 };
 
 export const queryKeys = {
+	privateProducts: {
+		all: ['account', 'private-products'] as const,
+		list: (userId?: string) => ['account', 'private-products', userId ?? 'anonymous'] as const,
+		collection: (userId: string | undefined, appId: string, mode: 'live' | 'test' = 'live') =>
+			['account', 'private-products', userId ?? 'anonymous', 'store', appId, mode] as const,
+	},
 	discoverCatalog: {
 		all: ['discover-catalog'] as const,
 		categories: () => ['discover-catalog', 'categories'] as const,

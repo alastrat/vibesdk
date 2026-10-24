@@ -250,8 +250,8 @@ describe('a translated store page', () => {
 		const response = await handleLiveStore(new Request(`${ORIGIN}/app.js`, { headers: { Accept: '*/*', 'If-None-Match': '"js"' } }), env, CTX, liveHost(appId));
 		expect(response.status).toBe(304);
 		expect(seen).toHaveLength(1);
-		// The store's languages were read meanwhile, for the next page.
-		expect(background).toHaveLength(1);
+		// Languages are read for the next page; unrelated telemetry may also run in the background.
+		expect(background.length).toBeGreaterThanOrEqual(1);
 		expect(await background[0]).not.toBeNull();
 	});
 

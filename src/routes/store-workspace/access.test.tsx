@@ -60,13 +60,14 @@ describe('store workspace access', () => {
 			expect(html).not.toContain('/chat/tea');
 		},
 	);
-	it('gives the owner the published collection and existing builder and preview routes', () => {
+	it('gives the owner product management and the existing preview route', () => {
 		const html = render();
 		expect(html).toContain('Store navigation');
-		expect(html).toContain('href="/chat/tea"');
 		expect(html).toContain('href="/app/tea"');
-		expect(html).toContain('href="/catalog?store=tea"');
-		expect(html).toContain('Published collection');
+		expect(html).toContain('Add from catalog');
+		expect(html).toContain('Create product');
+		expect(html.match(/<h[12][^>]*>Products<\/h[12]>/g)).toHaveLength(1);
+		expect(html).not.toContain('Your published collection, in one place.');
 		expect(html).not.toContain('A product inventory is not available');
 		expect(html).toContain('section=emails');
 		expect(html).toContain('section=translations');

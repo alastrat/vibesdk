@@ -76,7 +76,7 @@ export class SellerOrdersController extends BaseController {
                     orderId,
                     kind: 'order_shipped',
                     eventKey: 'own',
-                    payload: { lineNos: detail.items.filter((item) => item.kind === 'own' && !item.refunded).map((item) => item.lineNo), carrier: detail.carrier, trackingNumber: detail.trackingNumber },
+                    payload: { lineNos: detail.items.filter((item) => item.kind === 'own' && item.productType !== 'digital' && !item.refunded).map((item) => item.lineNo), carrier: detail.carrier, trackingNumber: detail.trackingNumber },
                 });
             }
             return detail ? SellerOrdersController.createSuccessResponse(detail) : SellerOrdersController.createErrorResponse(msg('Order not found'), 404);

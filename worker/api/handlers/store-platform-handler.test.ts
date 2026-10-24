@@ -4,6 +4,8 @@ import { recordingD1 } from '../../database/test-support/recording-d1';
 import { PUBLIC_PREVIEW_SUBJECT } from '../../utils/spacePreviewToken';
 import { RateLimitService } from '../../services/rate-limit/rateLimits';
 import { RateLimitType } from '../../services/rate-limit/config';
+import { signReceipt } from '../../services/store-payments/receipts';
+import { ProductAssetService } from '../../services/account-products/assets';
 import { RateLimitExceededError } from '../../../shared/types/errors';
 
 const BASE = 'https://preview.test/space/app_1/preview/main';
@@ -42,6 +44,31 @@ describe('handleStorePlatform', () => {
 		vi.restoreAllMocks();
 	});
 
+	it('guards the real download route with a signed receipt cookie before reading assets', async () => {
+  const {env, statements} = testEnv();
+  const path = '/__estori/orders/ord_abc/downloads/asset-1';
+  const target = {...TARGET, platformPath: path};
+  const otherStore = await signReceipt(env, {appId: 'different-app', orderIds: ['ord_abc']});
+  for (const cookie of ['', '__estori_orders=forged', '__estori_orders=' + otherStore]) {
+   const response = await handleStorePlatform(new Request(BASE + path, {headers: {Cookie: cookie}}), env, target, CTX);
+   expect(response.status).toBe(404);
+  }
+  expect(statements).toEqual([]);
+ });
+ it('serves only a seller-owned image referenced by the published manifest', async () => {
+  const getObject = vi.fn(async () => ({body: new Response('PNG').body, size: 3}));
+  const asset = vi.spyOn(ProductAssetService.prototype, 'getOwned').mockResolvedValue({key: 'private-products/seller/image-1', asset: {id: 'image-1', kind: 'image', name: 'Image.png', contentType: 'image/png', size: 3, url: '/api/private'}});
+  const imagePath = '/__estori/product-images/product-1/image-1';
+  const env = testEnv({TEMPLATES_BUCKET: {get: getObject}, SPACE_DO: {idFromName: (id: string) => id, get: () => ({getStoreManifest: async () => ({commitHash: 'published', manifest: JSON.stringify({version: 1, currency: 'usd', shipping: {countries: ['US'], flatRateCents: 0}, products: [{id: 'product-1', name: 'Product', image: imagePath, variants: [{id: 'variant-1', name: 'Default', priceCents: 1000}]}]})})})}}).env;
+  const target = {...TARGET, platformPath: imagePath, viewer: {kind: 'live' as const, sellerUserId: 'seller_1'}};
+  const response = await handleStorePlatform(new Request(BASE + imagePath), env, target, CTX);
+  expect(response.status).toBe(200);
+  expect(await response.text()).toBe('PNG');
+  expect(asset).toHaveBeenCalledWith('seller_1', 'image-1');
+  expect((await handleStorePlatform(new Request(BASE + imagePath), env, {...target, platformPath: imagePath.replace('image-1', 'other-file')}, CTX)).status).toBe(404);
+  expect((await handleStorePlatform(new Request(BASE + imagePath), env, {...TARGET, platformPath: imagePath}, CTX)).status).toBe(404);
+  expect(getObject).toHaveBeenCalledTimes(1);
+ });
 	it('serves the store script', async () => {
 		const response = await handleStorePlatform(new Request(`${BASE}/__estori/store.js`), testEnv().env, { ...TARGET, platformPath: '/__estori/store.js' }, CTX);
 		expect(response.status).toBe(200);

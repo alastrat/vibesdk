@@ -1,3 +1,4 @@
+import { setupAccountProductRoutes } from './accountProductRoutes';
 import { setupDiscoverCatalogRoutes } from './discoverCatalogRoutes';
 import { setupAuthRoutes } from './authRoutes';
 import { setupAppRoutes } from './appRoutes';
@@ -92,6 +93,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Catalog images and catalog operations
     setupCatalogRoutes(app);
+    setupAccountProductRoutes(app);
 
     // Early-access requests for upcoming programs
     setupEarlyAccessRoutes(app);

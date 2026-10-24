@@ -45,6 +45,7 @@ export class StoreOrderService extends BaseService {
                         shippingAddress: order.shippingAddress ? JSON.stringify(order.shippingAddress) : null,
                         note: order.note,
                         needsAttention: order.needsAttention,
+                        fulfillmentStatus: order.fulfillmentStatus ?? 'unfulfilled',
                         createdAt: order.createdAt,
                         updatedAt: order.createdAt,
                     }),
@@ -176,6 +177,7 @@ export class StoreOrderService extends BaseService {
                 .map(({ orderId: _orderId, ...item }) => item);
             return {
                 id: order.id,
+                checkoutId: order.checkoutId,
                 orderNumber: order.orderNumber,
                 mode: order.mode,
                 appId: order.appId,
