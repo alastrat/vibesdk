@@ -34,6 +34,10 @@ describe('order detail inside a store workspace', () => {
 		expect(html).not.toContain('buyer@example.com');
 		expect(html).not.toContain('Order #42');
 	});
+	it('preserves test-order filters on returning to store payments', () => {
+		const html = render('/stores/tea/orders/order-1?mode=all&view=all&search=42', '/stores/:storeId/orders/:id');
+		expect(html).toContain('href="/stores/tea?mode=all&amp;view=all&amp;search=42&amp;section=payments"');
+	});
 	it('preserves direct global order links for receipts and bookmarks', () => {
 		const html = render('/orders/order-1', '/orders/:id');
 		expect(html).toContain('Order #42 at Tea shop');

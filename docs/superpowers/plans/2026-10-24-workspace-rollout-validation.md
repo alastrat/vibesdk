@@ -1,5 +1,19 @@
 # Authenticated workspace rollout validation
 
+## Correction after user review — October 24
+
+The original visual-completion claim below was premature: route coverage and shared CSS did not reproduce the approved preview's page composition. This correction supersedes that claim. The running server was using the correct worktree; this was an implementation gap, not stale hosting.
+
+The real authenticated root now has the grouped Kumo sidebar, breadcrumb/top-right account controls, rounded content canvas, and composed My stores toolbar/table/empty state. Profile, Settings, Catalog, Orders, builder/Discover headings, and six admin views now use deliberate page layouts. Store Home adds the editorial overview and collection/chart arrangement. Payments uses cursor-paginated all-time order browsing instead of the analytics date window. Product and catalog actions preserve the selected store and open a reviewed, unsent builder request. Public/private visibility remains separate from live/offline/draft status, with owner-scoped SQL filtering before pagination.
+
+Final correction validation: root typecheck and production build passed; lint has 0 errors and 6 existing Fast Refresh warnings; 463 frontend regressions across 46 files passed; a fresh standard Workers/D1 run passed all 6 publication filtering tests. Spanish and Portuguese coverage passed the merged catalog audit and a separate 71-test i18n/account batch. Independent mobile review found no remaining blocker after fixing the AI Gateway settings destination.
+
+Visual evidence includes the actual signed-in root, Profile, Settings, account modal, builder and admin reviews, plus labeled read-only production-component fixtures for populated store views. Verified old-order pagination, unsent product handoff, store switch/reset, EN/ES/PT, mobile and dark mode. No live financial action, email delivery, destructive action or account-profile mutation was performed. The full standard Workers suite still needs CI verification following the earlier local port exhaustion; targeted passes do not substitute for a full-suite pass.
+
+Product editing follows the existing published-manifest/builder architecture. Analytics reports actual order data; visitor/funnel telemetry is not invented. Recharts remains the chart engine, styled to the reference.
+
+## Earlier rollout record
+
 ## Scope and data
 
 The rollout is implemented on `codex/workspace-account-settings`, following the prior preview PR. It extends the real authenticated application, while retaining `/layout-preview` as a design reference. Production sections use existing services; the new product collection endpoint reads a validated, commit-matched published manifest after checking ownership. No migration or fabricated production records are needed.

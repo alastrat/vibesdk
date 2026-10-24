@@ -27,3 +27,10 @@ export interface StoreWorkspaceProducts {
 	currency: 'usd';
 	products: StoreWorkspaceProduct[];
 }
+
+/** Publication is independent of source visibility and generation status. */
+export type StorePublicationStatus = 'live' | 'offline' | 'draft';
+export interface StorePublicationSummary {
+	status: StorePublicationStatus;
+	publishedAt: string | null;
+}

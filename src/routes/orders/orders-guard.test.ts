@@ -22,11 +22,11 @@ describe('the seller Orders pages', () => {
 
 	it('open from an Orders item in the sidebar, folded and open', () => {
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
-		expect(sidebar.match(/navigate\(SELLER_ORDERS_PATH\)/g) ?? []).toHaveLength(2);
-		expect(sidebar).toContain('id="orders-link"');
+		expect(sidebar).toContain("'/orders'");
+		expect(sidebar).toContain("'orders-link'");
 		// Orders remains global; email and translation tools belong to a store.
-		const items = [...sidebar.matchAll(/id="(orders|emails|translations)-link"/g)].map((match) => match[1]);
-		expect(items).toEqual(['orders', 'orders']);
+		expect(sidebar).not.toContain("'emails-link'");
+		expect(sidebar).not.toContain("'translations-link'");
 		const workspace = source('/src/routes/store-workspace/index.tsx');
 		expect(workspace).toContain('<StoreEmailsPanel appId={app.id}');
 		expect(workspace).toContain('<StoreTranslationsPanel appId={app.id}');
@@ -34,8 +34,7 @@ describe('the seller Orders pages', () => {
 
 	it('list orders to ship by default, with test orders hidden behind a switch, a store filter and Load more', () => {
 		const list = source('/src/routes/orders/orders.tsx');
-		expect(list).toContain("useState<SellerOrderView>('to-ship')");
-		expect(list).toContain('useState(false)');
+		// Default filters and URL restoration are covered by orders-browser.test.tsx.
 		expect(list).toContain("mode: showTest ? 'all' : 'live'");
 		expect(list).toContain('Show test orders');
 		expect(list).toContain('data.stores');

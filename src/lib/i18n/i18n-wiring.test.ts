@@ -13,6 +13,7 @@ const sources = import.meta.glob<string>(
 		'/src/contexts/auth-context.tsx',
 		'/src/routes/settings/index.tsx',
 		'/src/components/settings/LanguageCard.tsx',
+		'/src/components/account-settings/preferences.tsx',
 		'/src/components/layout/PublicLanguageMenu.tsx',
 		'/src/components/auth/AuthPageLayout.tsx',
 		'/src/components/layout/PublicUtilityBar.tsx',
@@ -30,10 +31,14 @@ function source(path: string): string {
 }
 
 describe('the settings page', () => {
-	it('has a language card after the analytics card', () => {
+	it('shares the account dialog language and privacy controls', () => {
 		const settings = source('/src/routes/settings/index.tsx');
-		expect(settings).toContain('<LanguageCard />');
-		expect(settings.indexOf('<AnalyticsPreferenceCard />')).toBeLessThan(settings.indexOf('<LanguageCard />'));
+		expect(settings).toContain('<AppearanceSettings />');
+		expect(settings).toContain('<PrivacySettings />');
+		const preferences = source('/src/components/account-settings/preferences.tsx');
+		expect(preferences).toContain('LOCALES.map');
+		expect(preferences).toContain('LOCALE_NAMES[code]');
+		expect(preferences).toContain('await chooseLocale(value)');
 	});
 
 	it('offers each language by its own name, never translated', () => {

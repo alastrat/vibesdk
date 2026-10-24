@@ -65,7 +65,7 @@ describe('store workspace access', () => {
 		expect(html).toContain('Store navigation');
 		expect(html).toContain('href="/chat/tea"');
 		expect(html).toContain('href="/app/tea"');
-		expect(html).toContain('href="/catalog"');
+		expect(html).toContain('href="/catalog?store=tea"');
 		expect(html).toContain('Published collection');
 		expect(html).not.toContain('A product inventory is not available');
 		expect(html).toContain('section=emails');

@@ -1,13 +1,12 @@
 import React from 'react';
+import './account-pages.css';
 import { useAuth } from '@/contexts/auth-context';
 import {
 	Badge,
 	Button,
-	cn,
 	Empty,
 	Input,
 	InputArea,
-	LayerCard,
 	Loader,
 	Tabs,
 	Text,
@@ -16,10 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { PayoutsCard } from '@/components/payments/PayoutsCard';
 import { PaidListingsList } from '@/components/publishing/PaidListingsList';
 import {
-	CalendarBlank,
 	Code,
-	EnvelopeSimple,
-	Eye,
 	Gear,
 	Globe,
 	GithubLogo,
@@ -34,8 +30,12 @@ import {
 import { useNavigate, useSearchParams } from 'react-router';
 import { capitalizeFirstLetter, getInitials } from '@/lib/utils';
 import { formatNumber } from '@/utils/analytics';
-import { formatLongDate, formatShortDate, formatShortDateTime } from '@/lib/format-date';
-import { getLocale, msg, t, T } from '@/lib/i18n';
+import {
+	formatLongDate,
+	formatShortDate,
+	formatShortDateTime,
+} from '@/lib/format-date';
+import { getLocale, msg, t, T, useI18n } from '@/lib/i18n';
 import { visibilityLabel } from '@/lib/visibility-label';
 import { toast } from 'sonner';
 import { useUserStats, useUserActivity } from '@/hooks/use-stats';
@@ -47,26 +47,18 @@ const STATS = [
 	{
 		key: 'appCount' as const,
 		label: msg('Total apps'),
-		icon: Code,
-		iconClass: 'text-kumo-brand',
 	},
 	{
 		key: 'publicAppCount' as const,
 		label: msg('Public apps'),
-		icon: Globe,
-		iconClass: 'text-teal-500',
 	},
 	{
 		key: 'totalViewsReceived' as const,
 		label: msg('Total views'),
-		icon: Eye,
-		iconClass: 'text-purple-500',
 	},
 	{
 		key: 'totalLikesReceived' as const,
 		label: msg('Total likes'),
-		icon: Star,
-		iconClass: 'text-amber-500',
 	},
 ] as const;
 
@@ -85,16 +77,38 @@ const ACTIVITY_TITLE_CLASS = 'text-kumo-subtle';
 /** What the seller did and to what, such as "Created Lucia Candles"; each sentence is whole so the verb can change with the language. */
 function ActivityLine({ type, title }: { type: string; title: string }) {
 	const components = {
-		verb: (children: React.ReactNode) => <span className={ACTIVITY_VERB_CLASS}>{children}</span>,
-		title: (children: React.ReactNode) => <span className={ACTIVITY_TITLE_CLASS}>{children}</span>,
+		verb: (children: React.ReactNode) => (
+			<span className={ACTIVITY_VERB_CLASS}>{children}</span>
+		),
+		title: (children: React.ReactNode) => (
+			<span className={ACTIVITY_TITLE_CLASS}>{children}</span>
+		),
 	};
 	switch (type) {
 		case 'created':
-			return <T text="<verb>Created</verb> <title>{title}</title>" values={{ title }} components={components} />;
+			return (
+				<T
+					text="<verb>Created</verb> <title>{title}</title>"
+					values={{ title }}
+					components={components}
+				/>
+			);
 		case 'updated':
-			return <T text="<verb>Updated</verb> <title>{title}</title>" values={{ title }} components={components} />;
+			return (
+				<T
+					text="<verb>Updated</verb> <title>{title}</title>"
+					values={{ title }}
+					components={components}
+				/>
+			);
 		case 'favorited':
-			return <T text="<verb>Favorited</verb> <title>{title}</title>" values={{ title }} components={components} />;
+			return (
+				<T
+					text="<verb>Favorited</verb> <title>{title}</title>"
+					values={{ title }}
+					components={components}
+				/>
+			);
 		default:
 			return <span className={ACTIVITY_TITLE_CLASS}>{title}</span>;
 	}
@@ -106,6 +120,7 @@ function tabFromSearch(value: string | null): string {
 }
 
 export default function Profile() {
+	useI18n();
 	const { user } = useAuth();
 	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -114,9 +129,14 @@ export default function Profile() {
 		displayName: user?.displayName || '',
 		username: user?.username || '',
 		bio: user?.bio || '',
-		timezone: user?.timezone || 'UTC',
+		timezone: user?.timezone || t('UTC'),
 	});
-	const [activeTab, setActiveTab] = React.useState(() => tabFromSearch(searchParams.get('tab')));
+	const activeTab = tabFromSearch(searchParams.get('tab'));
+	const selectTab = (value: string) => {
+		const next = new URLSearchParams(searchParams);
+		next.set('tab', value);
+		setSearchParams(next);
+	};
 
 	// Back from Stripe onboarding: the payouts card fetches fresh status on mount, so drop the marker and keep the tab.
 	React.useEffect(() => {
@@ -149,7 +169,7 @@ export default function Profile() {
 	const achievements = stats?.achievements || [];
 
 	const handleEdit = () => {
-		setActiveTab('about');
+		selectTab('about');
 		setIsEditing(true);
 	};
 
@@ -160,10 +180,10 @@ export default function Profile() {
 			// The mutation invalidates the auth session, so `user` (and the
 			// header/sidebar) pick up the new values.
 			await saveProfile({
-				displayName: profileData.displayName,
-				username: profileData.username,
+				displayName: profileData.displayName.trim(),
+				username: profileData.username.trim(),
 				bio: profileData.bio,
-				timezone: profileData.timezone,
+				timezone: profileData.timezone.trim(),
 			});
 			toast.success(t('Profile updated successfully'));
 			setIsEditing(false);
@@ -178,13 +198,13 @@ export default function Profile() {
 			displayName: user?.displayName || '',
 			username: user?.username || '',
 			bio: user?.bio || '',
-			timezone: user?.timezone || 'UTC',
+			timezone: user?.timezone || t('UTC'),
 		});
 		setIsEditing(false);
 	};
 
 	const handleTabChange = (value: string) => {
-		setActiveTab(value);
+		selectTab(value);
 		if (value !== 'about' && isEditing) {
 			handleCancel();
 		}
@@ -193,25 +213,27 @@ export default function Profile() {
 	const initials = getInitials(user?.displayName, user?.email);
 
 	return (
-		<div className="min-h-screen">
+		<div className="account-page profile-page">
 			<title>
 				{pageTitle(
-					user?.displayName ? t('{name} - Profile', { name: user.displayName }) : t('Profile'),
+					user?.displayName
+						? t('{name} - Profile', { name: user.displayName })
+						: t('Profile'),
 				)}
 			</title>
-			<main className="container mx-auto max-w-4xl px-4 py-12 pb-24">
+			<div className="account-page-content">
 				{/* Header */}
-				<div className="mb-10 flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-					<Avatar className="size-20 ring-2 ring-kumo-line shadow-md sm:size-24">
+				<div className="profile-summary">
+					<Avatar className="profile-avatar">
 						<AvatarImage src={user?.avatarUrl} />
 						<AvatarFallback className="bg-kumo-base text-3xl font-semibold">
 							{initials}
 						</AvatarFallback>
 					</Avatar>
 
-					<div className="min-w-0 flex-1 text-center sm:text-left">
-						<div className="mb-1.5 flex flex-col items-center gap-2 sm:flex-row sm:flex-wrap">
-							<h1 className="font-funky-mono text-2xl font-semibold text-kumo-strong">
+					<div className="min-w-0 flex-1">
+						<div className="mb-1.5 flex flex-wrap items-center gap-2">
+							<h1 className="profile-name">
 								{user?.displayName || t('Your profile')}
 							</h1>
 							<div className="flex flex-wrap items-center justify-center gap-1.5">
@@ -249,7 +271,7 @@ export default function Profile() {
 						)}
 					</div>
 
-					<div className="flex shrink-0 gap-2">
+					<div className="profile-actions flex flex-wrap gap-2">
 						{isEditing ? (
 							<>
 								<Button
@@ -257,6 +279,11 @@ export default function Profile() {
 									size="sm"
 									onClick={handleSave}
 									loading={isSaving}
+									disabled={
+										isSaving ||
+										!profileData.displayName.trim() ||
+										!profileData.timezone.trim()
+									}
 								>
 									{t('Save changes')}
 								</Button>
@@ -264,6 +291,7 @@ export default function Profile() {
 									variant="outline"
 									size="sm"
 									onClick={handleCancel}
+									disabled={isSaving}
 									icon={<X className="size-4" />}
 								>
 									{t('Cancel')}
@@ -293,24 +321,17 @@ export default function Profile() {
 				</div>
 
 				{/* Stats */}
-				<div className="mb-10 grid grid-cols-2 gap-3 sm:grid-cols-4">
-					{STATS.map(({ key, label, icon: Icon, iconClass }) => (
-						<div
-							key={key}
-							className="relative overflow-hidden rounded-xl px-4 py-4 bg-kumo-base ring ring-kumo-line/70"
-						>
-							<Icon
-								className={cn(
-									'pointer-events-none absolute -top-2 -right-5 size-24 rotate-12 opacity-10',
-									iconClass,
-								)}
-								weight="duotone"
-							/>
+				<div className="profile-stats">
+					{STATS.map(({ key, label }) => (
+						<div key={key} className="profile-stat">
 							<div className="relative grid gap-1">
-								<p className="text-3xl font-semibold tabular-nums text-kumo-strong">
+								<p className="text-xl font-semibold tabular-nums text-kumo-strong">
 									{statsLoading
 										? '–'
-										: formatNumber(stats?.[key] ?? 0, getLocale())}
+										: formatNumber(
+												stats?.[key] ?? 0,
+												getLocale(),
+											)}
 								</p>
 								<p className="text-sm text-kumo-subtle">
 									{t(label)}
@@ -321,136 +342,184 @@ export default function Profile() {
 				</div>
 
 				{/* Tabs + content */}
-				<div className="flex flex-col gap-6">
+				<div className="profile-panels">
 					<Tabs
 						value={activeTab}
 						onValueChange={handleTabChange}
-						className="w-fit"
-						tabs={PROFILE_TABS.map((tab) => ({ value: tab.value, label: t(tab.label) }))}
+						variant="underline"
+						className="profile-tabs"
+						tabs={PROFILE_TABS.map((tab) => ({
+							value: tab.value,
+							label: t(tab.label),
+						}))}
 					/>
 
 					{activeTab === 'about' && (
-						<LayerCard>
-							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
+						<section
+							className="profile-information"
+							aria-labelledby="profile-information-heading"
+						>
+							<h2 id="profile-information-heading">
 								{t('Profile information')}
-							</LayerCard.Secondary>
-							<LayerCard.Primary>
-								<div className="grid gap-6">
-									<div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+							</h2>
+							<p className="mt-2 text-sm text-kumo-subtle">
+								{t('Manage how you appear across Estori.')}
+							</p>
+							<dl className="profile-fields">
+								<div>
+									<dt>
+										<label
+											htmlFor={
+												isEditing
+													? 'displayName'
+													: undefined
+											}
+										>
+											{t('Display name')}
+										</label>
+									</dt>
+									<dd>
 										{isEditing ? (
 											<Input
 												id="displayName"
-												label={t('Display name')}
 												value={profileData.displayName}
-												onChange={(e) =>
+												maxLength={100}
+												disabled={isSaving}
+												onChange={(event) =>
 													setProfileData({
 														...profileData,
 														displayName:
-															e.target.value,
+															event.target.value,
 													})
 												}
 											/>
 										) : (
-											<div className="grid gap-1">
-												<p className="text-sm text-kumo-subtle">
-													{t('Display name')}
-												</p>
-												<p className="text-sm text-kumo-default">
-													{user?.displayName || '—'}
-												</p>
-											</div>
+											user?.displayName || '—'
 										)}
-
+									</dd>
+								</div>
+								<div>
+									<dt>
+										<label
+											htmlFor={
+												isEditing
+													? 'username'
+													: undefined
+											}
+										>
+											{t('Username')}
+										</label>
+									</dt>
+									<dd>
 										{isEditing ? (
 											<Input
 												id="username"
-												label={t('Username')}
 												value={profileData.username}
-												onChange={(e) =>
+												maxLength={50}
+												disabled={isSaving}
+												onChange={(event) =>
 													setProfileData({
 														...profileData,
 														username:
-															e.target.value,
+															event.target.value,
 													})
 												}
-												// i18n-ignore: a username as typed
-												placeholder="@username"
 											/>
 										) : (
-											<div className="grid gap-1">
-												<p className="text-sm text-kumo-subtle">
-													{t('Username')}
-												</p>
-												<p className="text-sm text-kumo-default">
-													{user?.username ||
-														t('Not set')}
-												</p>
-											</div>
+											user?.username || t('Not set')
 										)}
-
-										<div className="grid gap-1">
-											<p className="text-sm text-kumo-subtle">
-												{t('Email')}
-											</p>
-											<p className="flex items-center gap-2 text-sm text-kumo-default">
-												<span className="h-lh flex items-center text-kumo-subtle">
-													<EnvelopeSimple className="size-4" />
-												</span>
-												{user?.email}
-											</p>
-										</div>
-
-										<div className="grid gap-1">
-											<p className="text-sm text-kumo-subtle">
-												{t('Member since')}
-											</p>
-											<p className="flex items-center gap-2 text-sm text-kumo-default">
-												<span className="h-lh flex items-center text-kumo-subtle">
-													<CalendarBlank className="size-4" />
-												</span>
-												{user?.createdAt
-													? formatLongDate(new Date(user.createdAt), getLocale())
-													: t('Unknown')}
-											</p>
-										</div>
-									</div>
-
-									{isEditing ? (
-										<InputArea
-											id="bio"
-											label={t('Bio')}
-											value={profileData.bio}
-											onChange={(e) =>
-												setProfileData({
-													...profileData,
-													bio: e.target.value,
-												})
-											}
-											placeholder={t('Tell us about yourself...')}
-											rows={4}
-										/>
-									) : (
-										<div className="grid gap-1">
-											<p className="text-sm text-kumo-subtle">
-												{t('Bio')}
-											</p>
-											<p className="text-sm text-kumo-default">
-												{user?.bio ||
-													t('No bio yet — hit edit to add one!')}
-											</p>
-										</div>
-									)}
+									</dd>
 								</div>
-							</LayerCard.Primary>
-						</LayerCard>
+								<div>
+									<dt>{t('Email')}</dt>
+									<dd>{user?.email}</dd>
+								</div>
+								<div>
+									<dt>{t('Member since')}</dt>
+									<dd>
+										{user?.createdAt
+											? formatLongDate(
+													new Date(user.createdAt),
+													getLocale(),
+												)
+											: t('Unknown')}
+									</dd>
+								</div>
+								<div>
+									<dt>
+										<label
+											htmlFor={
+												isEditing ? 'bio' : undefined
+											}
+										>
+											{t('Bio')}
+										</label>
+									</dt>
+									<dd>
+										{isEditing ? (
+											<InputArea
+												id="bio"
+												value={profileData.bio}
+												maxLength={500}
+												rows={3}
+												disabled={isSaving}
+												onChange={(event) =>
+													setProfileData({
+														...profileData,
+														bio: event.target.value,
+													})
+												}
+											/>
+										) : (
+											user?.bio ||
+											t(
+												'No bio yet — hit edit to add one!',
+											)
+										)}
+									</dd>
+								</div>
+								<div>
+									<dt>
+										<label
+											htmlFor={
+												isEditing
+													? 'timezone'
+													: undefined
+											}
+										>
+											{t('Time zone')}
+										</label>
+									</dt>
+									<dd>
+										{isEditing ? (
+											<Input
+												id="timezone"
+												value={profileData.timezone}
+												description={t(
+													'Use an IANA time zone, such as America/Bogota or Europe/London.',
+												)}
+												disabled={isSaving}
+												onChange={(event) =>
+													setProfileData({
+														...profileData,
+														timezone:
+															event.target.value,
+													})
+												}
+											/>
+										) : (
+											user?.timezone || t('UTC')
+										)}
+									</dd>
+								</div>
+							</dl>
+						</section>
 					)}
 
 					{activeTab === 'apps' && (
-						<LayerCard>
-							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								{t('Recent apps')}
-							</LayerCard.Secondary>
-							<LayerCard.Primary>
+						<section className="profile-information">
+							<h2>{t('Recent apps')}</h2>
+							<div className="mt-5">
 								{appsLoading ? (
 									<div className="flex justify-center py-10">
 										<Loader />
@@ -487,8 +556,15 @@ export default function Profile() {
 															)}
 															<span className="text-xs text-kumo-subtle">
 																{app.createdAt
-																	? formatShortDate(new Date(app.createdAt), getLocale())
-																	: t('Recently')}
+																	? formatShortDate(
+																			new Date(
+																				app.createdAt,
+																			),
+																			getLocale(),
+																		)
+																	: t(
+																			'Recently',
+																		)}
 															</span>
 														</div>
 													</div>
@@ -501,7 +577,9 @@ export default function Profile() {
 															: 'secondary'
 													}
 												>
-													{visibilityLabel(app.visibility)}
+													{visibilityLabel(
+														app.visibility,
+													)}
 												</Badge>
 											</button>
 										))}
@@ -517,7 +595,9 @@ export default function Profile() {
 											/>
 										}
 										title={t('No apps yet')}
-										description={t('Build something fun — your first app is one prompt away.')}
+										description={t(
+											'Build something fun — your first app is one prompt away.',
+										)}
 										contents={
 											<Button
 												variant="primary"
@@ -531,30 +611,26 @@ export default function Profile() {
 										}
 									/>
 								)}
-							</LayerCard.Primary>
-						</LayerCard>
+							</div>
+						</section>
 					)}
 
 					{activeTab === 'paid' && (
-						<LayerCard>
-							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								{t('Paid listings')}
-							</LayerCard.Secondary>
-							<LayerCard.Primary>
+						<section className="profile-information">
+							<h2>{t('Paid listings')}</h2>
+							<div className="mt-5">
 								<div className="grid gap-4">
 									<PayoutsCard />
 									<PaidListingsList />
 								</div>
-							</LayerCard.Primary>
-						</LayerCard>
+							</div>
+						</section>
 					)}
 
 					{activeTab === 'achievements' && (
-						<LayerCard>
-							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								{t('Achievements')}
-							</LayerCard.Secondary>
-							<LayerCard.Primary>
+						<section className="profile-information">
+							<h2>{t('Achievements')}</h2>
+							<div className="mt-5">
 								{statsLoading ? (
 									<div className="flex justify-center py-10">
 										<Loader />
@@ -578,7 +654,9 @@ export default function Profile() {
 															{achievement}
 														</p>
 														<p className="text-sm text-kumo-subtle">
-															{t('Unlocked — nice work!')}
+															{t(
+																'Unlocked — nice work!',
+															)}
 														</p>
 													</div>
 												</div>
@@ -596,19 +674,19 @@ export default function Profile() {
 											/>
 										}
 										title={t('No achievements yet')}
-										description={t('Create apps and share them to unlock badges.')}
+										description={t(
+											'Create apps and share them to unlock badges.',
+										)}
 									/>
 								)}
-							</LayerCard.Primary>
-						</LayerCard>
+							</div>
+						</section>
 					)}
 
 					{activeTab === 'activity' && (
-						<LayerCard>
-							<LayerCard.Secondary className="font-funky-mono tracking-tighter">
-								{t('Activity')}
-							</LayerCard.Secondary>
-							<LayerCard.Primary>
+						<section className="profile-information">
+							<h2>{t('Activity')}</h2>
+							<div className="mt-5">
 								{activityLoading ? (
 									<div className="flex justify-center py-10">
 										<Loader />
@@ -636,11 +714,21 @@ export default function Profile() {
 												</span>
 												<div className="min-w-0 flex-1 grid gap-0.5">
 													<p className="text-sm text-kumo-default">
-														<ActivityLine type={activity.type} title={activity.title} />
+														<ActivityLine
+															type={activity.type}
+															title={
+																activity.title
+															}
+														/>
 													</p>
 													<p className="text-xs text-kumo-subtle">
 														{activity.timestamp
-															? formatShortDateTime(new Date(activity.timestamp), getLocale())
+															? formatShortDateTime(
+																	new Date(
+																		activity.timestamp,
+																	),
+																	getLocale(),
+																)
 															: t('Recently')}
 													</p>
 												</div>
@@ -658,14 +746,16 @@ export default function Profile() {
 											/>
 										}
 										title={t('No recent activity')}
-										description={t('Your creations and updates will show up here.')}
+										description={t(
+											'Your creations and updates will show up here.',
+										)}
 									/>
 								)}
-							</LayerCard.Primary>
-						</LayerCard>
+							</div>
+						</section>
 					)}
 				</div>
-			</main>
+			</div>
 		</div>
 	);
 }

@@ -1,5 +1,6 @@
 import type { DiscoverCatalogFilters } from '@/api-types';
 export type PaginatedAppsListFilters = {
+	publication?: string;
 	sort: string;
 	period: string;
 	framework: string;

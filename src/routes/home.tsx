@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router';
 import { usePaginatedApps } from '@/hooks/use-paginated-apps';
 import { AnimatePresence, LayoutGroup, motion } from 'framer-motion';
 import { AppCard } from '@/components/shared/AppCard';
-import { LinkButton, cn } from '@cloudflare/kumo';
+import { LinkButton } from '@cloudflare/kumo';
 import { BuildBox } from '@/components/build-box';
 import { DiscoverStrip } from '@/components/publishing/DiscoverStrip';
 import { PaymentsSetupPrompt } from '@/components/payments/PaymentsSetupPrompt';
@@ -31,11 +31,9 @@ export default function Home() {
 	const discoverLinkRef = useRef<HTMLDivElement>(null);
 
 	return (
-		<div className="relative flex flex-col items-center w-full min-h-full">
+		<div className="workspace-builder-start relative flex flex-col items-center w-full min-h-full">
 			<title>{pageTitle()}</title>
-			<div className="home-atmosphere" aria-hidden>
-				<div className="home-atmosphere__spotlight" />
-			</div>
+			<header className="workspace-builder-heading"><h1>{t('Estori agent')}</h1><p>{t('Describe what you have in mind. Estori helps you bring it to life.')}</p></header>
 			<LayoutGroup>
 				<div className="w-full max-w-3xl px-5 sm:px-6">
 					<motion.div
@@ -43,20 +41,15 @@ export default function Home() {
 						transition={{
 							layout: { duration: 0.5, ease: [0.22, 1, 0.36, 1] },
 						}}
-						className={cn(
-							'flex flex-col items-stretch z-10 w-full',
-							discoverReady
-								? 'mt-28 sm:mt-36'
-								: 'mt-[18vh] sm:mt-[22vh] md:mt-[26vh]',
-						)}
+						className="flex flex-col items-stretch z-10 w-full mt-8 sm:mt-12"
 					>
 						<div className="mb-6 sm:mb-7 grid gap-2">
-							<h1 className="w-full text-center text-[clamp(1.75rem,4.5vw,2.5rem)] font-semibold leading-[1.12] text-kumo-strong z-20">
+							<h2 className="w-full text-center text-[clamp(1.5rem,3vw,2rem)] font-semibold leading-[1.12] text-kumo-strong z-20">
 								<T
 									text="What should we <em>build</em> today?"
 									components={{ em: (children) => <span className="text-brand-emphasis">{children}</span> }}
 								/>
-							</h1>
+							</h2>
 						</div>
 						<BuildBox />
 						<PaymentsSetupPrompt />

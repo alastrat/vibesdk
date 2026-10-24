@@ -1,80 +1,136 @@
-import { Link } from 'react-router';
-import { Empty, LayerCard, Loader } from '@cloudflare/kumo';
-import { pageTitle } from '@/brand';
-import { EARLY_ACCESS_CAPABILITIES, type EarlyAccessAdminData } from '@/api-types';
+import { Empty, Loader } from '@cloudflare/kumo';
+import { t, useI18n } from '@/lib/i18n';
+import { AdminPage, AdminTablePanel, Table } from './admin-layout';
+import {
+	EARLY_ACCESS_CAPABILITIES,
+	type EarlyAccessAdminData,
+} from '@/api-types';
 import { useAdminEarlyAccess } from '@/hooks/use-early-access';
 import { CAPABILITIES } from '@/lib/capabilities';
 import { isForbiddenError } from '@/lib/security-error';
 
 export default function AdminEarlyAccessPage() {
+	useI18n();
 	const requests = useAdminEarlyAccess();
 
 	return (
-		<div className="size-full">
-			<title>{pageTitle('Early access')}</title>
-			<div className="container max-w-5xl mx-auto px-4 py-8 grid gap-6">
-				<div className="grid gap-1">
-					<Link to="/admin/reviews" className="w-fit text-sm text-kumo-default underline underline-offset-2">
-						Reviews
-					</Link>
-					<h1 className="text-3xl font-semibold text-kumo-strong">Early access</h1>
-					<p className="text-kumo-subtle">Who asked to join each upcoming program, newest first.</p>
+		<AdminPage
+			section="early-access"
+			title={t('Early access')}
+			description={t(
+				'Who asked to join each upcoming program, newest first.',
+			)}
+			refreshing={requests.isFetching}
+			onRefresh={() => void requests.refetch()}
+		>
+			{requests.data ? (
+				<EarlyAccessRequests data={requests.data} />
+			) : requests.isLoading ? (
+				<div className="flex justify-center py-16">
+					<Loader />
 				</div>
-				{requests.data ? (
-					<EarlyAccessRequests data={requests.data} />
-				) : requests.isLoading ? (
-					<div className="flex justify-center py-16">
-						<Loader />
-					</div>
-				) : isForbiddenError(requests.error) ? (
-					<Empty title="Admins only" description={requests.error?.message} />
-				) : (
-					<Empty title="Couldn't load early access requests" description={requests.error?.message} />
-				)}
-			</div>
-		</div>
+			) : isForbiddenError(requests.error) ? (
+				<Empty
+					title={t('Admins only')}
+					description={requests.error?.message}
+				/>
+			) : (
+				<Empty
+					title={t("Couldn't load early access requests")}
+					description={requests.error?.message}
+				/>
+			)}
+		</AdminPage>
 	);
 }
 
 function EarlyAccessRequests({ data }: { data: EarlyAccessAdminData }) {
 	return (
 		<>
-			<div className="grid gap-4 sm:grid-cols-2">
+			<div className="admin-metric-grid">
 				{EARLY_ACCESS_CAPABILITIES.map((id) => (
-					<LayerCard key={id}>
-						<LayerCard.Primary>
-							<p className="text-sm text-kumo-subtle">{CAPABILITIES[id].name}</p>
-							<p className="mt-1 text-3xl font-semibold text-kumo-strong">{data.counts[id]}</p>
-						</LayerCard.Primary>
-					</LayerCard>
+					<div className="admin-metric" key={id}>
+						<p className="text-sm text-kumo-subtle">
+							{t(CAPABILITIES[id].name)}
+						</p>
+						<p className="mt-1 text-3xl font-semibold text-kumo-strong">
+							{data.counts[id]}
+						</p>
+					</div>
 				))}
 			</div>
 			{data.requests.length === 0 ? (
-				<Empty title="No requests yet" description="Requests from the Digital businesses and Content creators pages show up here." />
+				<Empty
+					title={t('No requests yet')}
+					description={t(
+						'Requests from the Digital businesses and Content creators pages show up here.',
+					)}
+				/>
 			) : (
-				<div className="overflow-x-auto">
-					<table className="w-full text-left text-sm">
-						<caption className="sr-only">Early access requests, newest first</caption>
-						<thead className="text-kumo-subtle">
-							<tr>
-								<th scope="col" className="py-2 pr-4 font-normal">Program</th>
-								<th scope="col" className="py-2 pr-4 font-normal">Name</th>
-								<th scope="col" className="py-2 pr-4 font-normal">Email</th>
-								<th scope="col" className="py-2 font-normal">Requested</th>
-							</tr>
-						</thead>
-						<tbody>
+				<AdminTablePanel
+					title={t('Requests')}
+					count={data.requests.length}
+				>
+					<Table className="w-full text-left text-sm">
+						<caption className="sr-only">
+							{t('Early access requests, newest first')}
+						</caption>
+						<Table.Header className="text-kumo-subtle">
+							<Table.Row>
+								<th
+									scope="col"
+									className="py-2 pr-4 font-normal"
+								>
+									{t('Program')}
+								</th>
+								<th
+									scope="col"
+									className="py-2 pr-4 font-normal"
+								>
+									{t('Name')}
+								</th>
+								<th
+									scope="col"
+									className="py-2 pr-4 font-normal"
+								>
+									{t('Email')}
+								</th>
+								<th
+									scope="col"
+									className="py-2 font-normal"
+								>
+									{t('Requested')}
+								</th>
+							</Table.Row>
+						</Table.Header>
+						<Table.Body>
 							{data.requests.map((request) => (
-								<tr key={`${request.capability}:${request.email}`} className="border-t border-kumo-line text-kumo-default">
-									<td className="py-2.5 pr-4">{CAPABILITIES[request.capability].name}</td>
-									<td className="py-2.5 pr-4">{request.displayName}</td>
-									<td className="py-2.5 pr-4">{request.email}</td>
-									<td className="py-2.5">{new Date(request.requestedAt).toLocaleDateString()}</td>
-								</tr>
+								<Table.Row
+									key={`${request.capability}:${request.email}`}
+									className="border-t border-kumo-line text-kumo-default"
+								>
+									<Table.Cell className="py-2.5 pr-4">
+										{t(
+											CAPABILITIES[request.capability]
+												.name,
+										)}
+									</Table.Cell>
+									<Table.Cell className="py-2.5 pr-4">
+										{request.displayName}
+									</Table.Cell>
+									<Table.Cell className="py-2.5 pr-4">
+										{request.email}
+									</Table.Cell>
+									<Table.Cell className="py-2.5">
+										{new Date(
+											request.requestedAt,
+										).toLocaleDateString()}
+									</Table.Cell>
+								</Table.Row>
 							))}
-						</tbody>
-					</table>
-				</div>
+						</Table.Body>
+					</Table>
+				</AdminTablePanel>
 			)}
 		</>
 	);

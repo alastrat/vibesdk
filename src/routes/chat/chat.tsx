@@ -89,6 +89,7 @@ import {
 import { mergeFiles } from '@/utils/file-helpers';
 import { ChatModals } from './components/chat-modals';
 import { MainContentPanel } from './components/main-content-panel';
+import { readBuilderDraft } from './utils/builder-draft';
 import { ChatInput } from './components/chat-input';
 import { ClarifyingQuestionsPopup } from './components/clarifying-questions-popup';
 import { useLimitsContext } from '@/contexts/limits-context';
@@ -624,7 +625,16 @@ function ChatSession() {
 	const previewRef = useRef<HTMLIFrameElement>(null);
 	const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-	const [newMessage, setNewMessage] = useState('');
+	const [newMessage, setNewMessage] = useState(() => readBuilderDraft(location.state, urlChatId));
+	const consumedBuilderDraft = useRef(false);
+	useEffect(() => {
+		if (consumedBuilderDraft.current) return;
+		consumedBuilderDraft.current = true;
+		if (!readBuilderDraft(location.state, urlChatId)) return;
+		const nextState = { ...(location.state as Record<string, unknown>) };
+		delete nextState.builderDraft;
+		navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: nextState });
+	}, [location, navigate, urlChatId]);
 	const [showTooltip, setShowTooltip] = useState(false);
 
 	const { images, addImages, removeImage, clearImages, isProcessing } =

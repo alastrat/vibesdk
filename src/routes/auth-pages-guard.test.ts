@@ -181,7 +181,7 @@ describe('account email pages', () => {
 	it('shows the confirmation status and the resend button only when the server can send email', () => {
 		const settings = source('/src/routes/settings/index.tsx');
 		// Without email sending, "not confirmed" can't be fixed, so the status stays hidden.
-		const gate = settings.indexOf('{emailSending && (');
+		const gate = settings.search(/\{emailSending\s*&&\s*\(/);
 		expect(gate).toBeGreaterThan(-1);
 		expect(occurrences(settings, 'Email confirmed')).toBe(1);
 		expect(occurrences(settings, 'Email not confirmed')).toBe(1);

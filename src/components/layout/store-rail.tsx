@@ -20,7 +20,7 @@ export function StoreRail({ appId, section }: { appId: string; section: StoreWor
 	const showCloudflare = Boolean(user) && !limits.billing && !limits.hidden && !limits.loading && (!limits.hasUserToken || limits.needsConfiguration);
 	const cloudflareLabel = limits.needsConfiguration ? t('Configure AI Gateway') : t('Connect Cloudflare');
 	const connect = () => {
-		if (limits.needsConfiguration) navigate('/settings');
+		if (limits.needsConfiguration) navigate('/settings?section=connections');
 		else void startCloudflareConnect(window.location.pathname + window.location.search);
 	};
 	return (

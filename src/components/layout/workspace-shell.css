@@ -327,3 +327,53 @@
 	.workspace-content[data-page-kind='standard'] :where(h1) { font-size: 24px; }
 	.workspace-content[data-page-kind='standard'] :where(.container) { padding-top: 22px; padding-inline: 16px; }
 }
+
+/* Approved preview composition: full-height grouped sidebar beside page header and canvas. */
+.estori-workspace { padding: 0 16px 14px 0; background: #f7f8f9; }
+[data-mode='dark'] .estori-workspace { background: var(--color-kumo-recessed); }
+.workspace-body { height: 100%; }
+.workspace-body .workspace-canvas { height: auto; }
+.workspace-topbar { height: 70px; padding: 0 16px 0 24px; }
+.workspace-page-identity { display: flex; align-items: center; min-width: 0; gap: 12px; }
+.workspace-breadcrumb { display: flex; align-items: center; gap: 12px; min-width: 0; font-size: 13px; }
+.workspace-breadcrumb a, .workspace-breadcrumb > span[aria-hidden] { color: var(--text-color-kumo-subtle); }
+.workspace-breadcrumb > span[aria-current] { font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.workspace-navigation { border: 0; }
+.workspace-navigation [data-sidebar='sidebar'] { border: 0; }
+.workspace-nav-identity { min-height: 86px; padding: 23px 24px 16px; }
+.workspace-nav-brand { display: grid; gap: 7px; width: fit-content; color: var(--text-color-kumo-strong); }
+.workspace-nav-brand > span { color: var(--text-color-kumo-subtle); font-size: 11px; letter-spacing: 0; }
+.workspace-navigation [data-sidebar='content'] { padding: 0 12px; gap: 4px; }
+.workspace-navigation [data-sidebar='group'] { padding: 3px 0 10px; }
+.workspace-navigation [data-sidebar='group-label'] { height: 30px; padding: 0 11px; font-size: 11px; color: var(--text-color-kumo-subtle); font-weight: 500; }
+.workspace-navigation [data-sidebar='menu-button'] { min-height: 39px; border: 1px solid transparent; border-radius: 7px; padding: 8px 11px; gap: 11px; font-size: 13px; font-weight: 400; color: var(--text-color-kumo-default); }
+.workspace-navigation [data-sidebar='menu-button'] > svg { color: var(--text-color-kumo-subtle); }
+.workspace-navigation [data-sidebar='menu-button'][data-active='true'] { background: var(--color-kumo-base); border-color: var(--color-kumo-line); box-shadow: 0 1px 2px #00000003; font-weight: 600; }
+.workspace-navigation [data-sidebar='menu-button'][data-active='true'] > svg { color: var(--color-kumo-brand); }
+.workspace-nav-count { margin-left: auto; font-size: 11px; color: var(--text-color-kumo-subtle); }
+.workspace-nav-footer { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 20px; }
+.workspace-nav-footer > button:first-child:not(.workspace-collapse-control) { width: 100%; margin-bottom: 8px; }
+.workspace-collapse-label { font-size: 11px; color: var(--text-color-kumo-subtle); }
+.workspace-navigation[data-state='collapsed'] .workspace-nav-identity { padding: 20px 12px; min-height: 70px; }
+.workspace-navigation[data-state='collapsed'] .workspace-nav-footer { padding: 12px; }
+.workspace-store-shell .workspace-store-rail { padding-top: 20px; }
+.workspace-search-trigger { width: 300px; height: 34px; border-radius: 8px; background: var(--color-kumo-base); box-shadow: 0 1px 2px #00000003; }
+@media (max-width: 1100px) { .workspace-search-trigger { width: 220px; } }
+@media (max-width: 767px) {
+	.estori-workspace { padding: 0; }
+	.workspace-topbar { height: 58px; padding: 0 12px; gap: 8px; }
+	.workspace-breadcrumb { gap: 7px; font-size: 12px; }
+	.workspace-breadcrumb a, .workspace-breadcrumb > span[aria-hidden] { display: none; }
+	.workspace-topbar-actions { gap: 2px; }
+	.workspace-search-trigger { width: 34px; }
+	.workspace-nav-identity { min-height: 72px; }
+}
+
+.workspace-builder-heading { width: 100%; padding: 30px 36px 22px; border-bottom: 1px solid var(--color-kumo-line); }
+.workspace-builder-heading h1 { font-size: 26px; font-weight: 600; letter-spacing: -.035em; }
+.workspace-builder-heading p { margin-top: 6px; font-size: 14px; color: var(--text-color-kumo-subtle); }
+@media (max-width: 767px) { .workspace-builder-heading { padding: 24px 18px; } }
+
+.workspace-stores-empty-panel { padding: 28px 20px; }
+.workspace-stores-empty-panel > div { border: 0; min-height: 220px; padding: 20px; gap: 12px; box-shadow: none; }
+.workspace-discover-heading { border-bottom: 1px solid var(--color-kumo-line); padding-bottom: 24px; }

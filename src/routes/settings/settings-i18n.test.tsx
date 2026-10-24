@@ -26,6 +26,7 @@ vi.mock('@/contexts/auth-context', () => ({
 	}),
 }));
 vi.mock('@/hooks/use-billing', () => ({ useBilling: () => ({ data: { enabled: true, plan: 'pro' } }) }));
+vi.mock('@/contexts/theme-context', () => ({ useTheme: () => ({ theme: 'system', setTheme: () => undefined }) }));
 vi.mock('@/contexts/limits-context', () => ({ useLimitsContext: () => ({ data: null, refetch: async () => undefined }) }));
 vi.mock('@/hooks/use-telemetry', () => ({
 	useAnalyticsPreference: () => ({ data: { optedOut: false, source: null, gpc: true } }),
@@ -233,7 +234,8 @@ describe('the API key label and the dialog noun that share one message', () => {
 	});
 
 	it('shows the capitalized one above the key field, and the noun as it is in the dialog', () => {
-		expect(source).toContain("{capitalizeFirstLetter(t('API key'))}");
-		expect(source).toContain("resourceType={t('API key')}");
+		const compact = source.replace(/\s+/g, '').replace(/,\)/g, ')');
+		expect(compact).toContain("{capitalizeFirstLetter(t('APIkey'))}");
+		expect(compact).toContain("resourceType={t('APIkey')}");
 	});
 });

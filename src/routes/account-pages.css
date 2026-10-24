@@ -1,0 +1,282 @@
+/* Profile and account settings share the workspace's type, colors, and spacing. */
+.account-page {
+	min-width: 0;
+	font-family: var(--font-public);
+}
+.account-page-content {
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 32px 36px 64px;
+}
+.account-page-heading {
+	margin-bottom: 28px;
+}
+.account-page-heading h1 {
+	font-size: 28px;
+	font-weight: 600;
+	letter-spacing: -0.04em;
+}
+.account-page-heading p {
+	margin-top: 7px;
+	font-size: 14px;
+	color: var(--text-color-kumo-subtle);
+}
+.profile-summary {
+	display: flex;
+	overflow-wrap: anywhere;
+	align-items: center;
+	gap: 20px;
+	padding: 4px 0 28px;
+}
+.profile-summary .profile-avatar {
+	width: 72px;
+	height: 72px;
+	flex-shrink: 0;
+	border: 4px solid var(--color-kumo-recessed);
+}
+.profile-summary .profile-name {
+	font-size: 24px;
+	font-weight: 600;
+	letter-spacing: -0.035em;
+	overflow-wrap: anywhere;
+}
+.profile-summary p {
+	overflow-wrap: anywhere;
+}
+.profile-actions {
+	margin-left: auto;
+	flex-shrink: 0;
+}
+.profile-stats {
+	display: grid;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	margin-bottom: 24px;
+	border-block: 1px solid var(--color-kumo-line);
+}
+.profile-stat {
+	padding: 18px 20px;
+}
+.profile-stat:first-child {
+	padding-left: 0;
+}
+.profile-stat + .profile-stat {
+	border-left: 1px solid var(--color-kumo-line);
+}
+.profile-tabs {
+	max-width: 100%;
+	overflow-x: auto;
+	border-bottom: 1px solid var(--color-kumo-line);
+}
+.profile-tabs [role='tablist'] {
+	width: max-content;
+	min-width: 100%;
+	gap: 20px;
+}
+.profile-tabs [role='tab'] {
+	white-space: nowrap;
+	font-size: 14px;
+	min-height: 44px;
+}
+.profile-information {
+	padding: 28px 0;
+}
+.profile-information h2 {
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: -0.025em;
+}
+.profile-fields {
+	margin-top: 20px;
+	max-width: 820px;
+}
+.profile-fields > div {
+	display: grid;
+	grid-template-columns: 180px minmax(0, 1fr);
+	gap: 24px;
+	align-items: start;
+	padding: 18px 0;
+	border-bottom: 1px solid var(--color-kumo-line);
+	font-size: 14px;
+}
+.profile-fields dt {
+	color: var(--text-color-kumo-subtle);
+	padding-top: 4px;
+}
+.profile-fields dd {
+	min-width: 0;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+	color: var(--text-color-kumo-default);
+}
+.profile-fields input,
+.profile-fields textarea {
+	width: 100%;
+}
+.account-settings-layout {
+	display: grid;
+	grid-template-columns: 220px minmax(0, 1fr);
+	gap: 36px;
+	align-items: start;
+}
+.account-section-nav {
+	display: grid;
+	gap: 4px;
+	position: sticky;
+	top: 16px;
+}
+.account-section-nav a {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 11px 12px;
+	border-radius: 9px;
+	color: var(--text-color-kumo-subtle);
+	font-size: 14px;
+	line-height: 1.4;
+}
+.account-section-nav a svg {
+	flex-shrink: 0;
+}
+.account-section-nav a:hover {
+	background: var(--color-kumo-tint);
+	color: var(--text-color-kumo-default);
+}
+.account-section-nav a[aria-current='page'] {
+	background: var(--color-kumo-recessed);
+	color: var(--text-color-kumo-default);
+	font-weight: 600;
+}
+.account-section-nav a:focus-visible {
+	outline: 2px solid var(--color-kumo-focus);
+	outline-offset: 2px;
+}
+.account-settings-content {
+	min-width: 0;
+}
+.account-profile-editor { margin-bottom: 28px; }
+/* The full page uses the compact identity treatment; the dialog keeps its cover. */
+.account-profile-editor > .relative { padding: 20px; align-items: center; border-radius: 12px; }
+.account-profile-editor > .relative::before { display: none; }
+.account-profile-editor > .relative > .relative { padding-top: 0; }
+.account-settings-content [id] {
+	scroll-margin-top: 24px;
+}
+.account-panel {
+	margin-bottom: 28px;
+	border: 1px solid var(--color-kumo-line);
+	border-radius: 12px;
+	background: var(--color-kumo-base);
+	min-width: 0;
+}
+.account-panel-heading {
+	padding: 16px 20px;
+	border-bottom: 1px solid var(--color-kumo-line);
+	font-size: 15px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}
+.account-panel-body {
+	padding: 20px;
+}
+.account-panel-footer {
+	display: flex;
+	justify-content: flex-end;
+	padding: 0 20px 20px;
+}
+.account-connections {
+	padding: 20px;
+}
+.account-integration {
+	margin-top: 24px;
+}
+.account-settings-content #danger-zone {
+	margin-top: 28px;
+}
+.account-settings-content #danger-zone .account-panel-body > div {
+	flex-wrap: wrap;
+}
+.account-settings-content h4 {
+	line-height: 1.5;
+}
+.account-settings-content .font-funky-mono {
+	font-family: var(--font-public);
+	letter-spacing: -0.02em;
+}
+@media (max-width: 900px) {
+	.account-settings-layout {
+		grid-template-columns: 180px minmax(0, 1fr);
+		gap: 24px;
+	}
+	.profile-summary {
+		flex-wrap: wrap;
+	}
+	.profile-actions {
+		flex-basis: 100%;
+		margin-left: 92px;
+	}
+}
+@media (max-width: 640px) {
+	.account-page-content {
+		padding: 22px 16px 40px;
+	}
+	.profile-summary {
+		gap: 14px;
+	}
+	.profile-summary .profile-avatar {
+		width: 58px;
+		height: 58px;
+	}
+	.profile-summary .profile-name {
+		font-size: 22px;
+	}
+	.profile-actions {
+		margin-left: 0;
+	}
+	.profile-stats {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+	.profile-stat {
+		padding: 14px 12px;
+	}
+	.profile-stat:nth-child(odd) {
+		padding-left: 0;
+		border-left: 0;
+	}
+	.profile-stat:nth-child(n + 3) {
+		border-top: 1px solid var(--color-kumo-line);
+	}
+	.profile-fields > div {
+		grid-template-columns: 1fr;
+		gap: 8px;
+		padding: 16px 0;
+	}
+	.profile-tabs [role='tablist'] {
+		gap: 14px;
+	}
+	.account-settings-layout {
+		grid-template-columns: 1fr;
+		gap: 24px;
+	}
+	.account-section-nav {
+		display: flex;
+		gap: 4px;
+		overflow-x: auto;
+		position: static;
+		padding-bottom: 8px;
+		border-bottom: 1px solid var(--color-kumo-line);
+	}
+	.account-section-nav a {
+		white-space: nowrap;
+		padding: 10px;
+	}
+	.account-panel-heading {
+		padding: 14px 16px;
+	}
+	.account-panel-body,
+	.account-connections {
+		padding: 16px;
+	}
+	.account-panel-body > .grid > .flex {
+		flex-wrap: wrap;
+	}
+}

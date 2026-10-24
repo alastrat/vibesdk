@@ -1,6 +1,6 @@
 import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
-import type { StoreWorkspaceProducts } from '@/api-types';
+import type { StorePublicationStatus, StoreWorkspaceProducts } from '@/api-types';
 /**
  * Unified API Client - Premium quality abstraction for all worker API calls
  * Provides type-safe methods for all endpoints with proper error handling
@@ -234,6 +234,7 @@ interface PaginationParams {
  * User apps parameters with filtering and sorting
  */
 interface UserAppsParams extends PaginationParams {
+	publication?: StorePublicationStatus;
 	period?: 'today' | 'week' | 'month' | 'all';
 	framework?: string;
 	search?: string;
@@ -1201,6 +1202,7 @@ class ApiClient {
 		if (params?.visibility)
 			queryParams.set('visibility', params.visibility);
 		if (params?.status) queryParams.set('status', params.status);
+		if (params?.publication) queryParams.set('publication', params.publication);
 		if (params?.teamId) queryParams.set('teamId', params.teamId);
 
 		const endpoint = `/api/user/apps${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;

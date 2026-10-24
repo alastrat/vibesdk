@@ -71,9 +71,9 @@ function WorkspaceFrame({ children }: AppLayoutProps) {
 	return (
 		<div className="estori-workspace flex h-svh flex-col">
 			<a href="#workspace-content" className="workspace-skip-link">{t('Skip to workspace content')}</a>
-			<EstoriTopBar storeWorkspace={Boolean(store)} />
 			<SidebarProvider
 				defaultOpen={defaultOpen}
+				defaultWidth={236}
 				collapsible="icon"
 				resizable={false}
 				mobileBreakpoint={768}
@@ -85,13 +85,16 @@ function WorkspaceFrame({ children }: AppLayoutProps) {
 				<HeaderProvider>
 					<SidebarKeyboardShortcut enabled={!store} />
 					{store ? <StoreRail appId={store.appId} section={store.section} /> : <AppSidebar />}
+					<div className="workspace-body flex min-w-0 min-h-0 flex-1 flex-col">
+						<EstoriTopBar storeWorkspace={Boolean(store)} />
 					<main id="workspace-content" tabIndex={-1} className="workspace-canvas bg-kumo-canvas flex flex-col h-full relative flex-1 min-w-0 overflow-hidden">
-						<GlobalHeader showSidebarTrigger={!store} />
+						<GlobalHeader showSidebarTrigger={false} />
 						<BillingBanner />
 						<div data-page-kind={pageKind} className="workspace-content flex-1 min-h-0 overflow-auto bg-kumo-canvas">
 							{children || <Outlet />}
 						</div>
 					</main>
+					</div>
 				</HeaderProvider>
 			</SidebarProvider>
 		</div>

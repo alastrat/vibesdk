@@ -20,6 +20,7 @@ import type {
     PaginationParams
 } from '../types';
 import { ScreenshotSecurity } from 'worker/utils/screenshot-security';
+import type { StorePublicationStatus, StorePublicationSummary } from '../../../shared/types/store-workspace';
 import type { TemplateCategory } from '../../../shared/types/templates';
 import type { DiscoverFilters } from '../../services/templates/reuse';
 import { discoverConditions, paidInReviewSubquery, paidPriceSubquery } from '../discover-conditions';
@@ -62,7 +63,24 @@ export interface ViewerIdentity {
     userAgent?: string;
 }
 
+/** Correlated primary-key lookup keeps publication filtering before LIMIT and COUNT. */
+function publicationCondition(status?: StorePublicationStatus) {
+    if (!status) return undefined;
+    if (status === 'draft') return sql`NOT EXISTS (SELECT 1 FROM ${schema.liveStores} WHERE ${schema.liveStores.appId} = ${schema.apps.id})`;
+    return sql`EXISTS (SELECT 1 FROM ${schema.liveStores} WHERE ${schema.liveStores.appId} = ${schema.apps.id} AND ${schema.liveStores.status} = ${status})`;
+}
+
 export class AppService extends BaseService {
+    /** One owner-scoped batch for the current page; no manifest, domain or commit data. */
+    async getPublicationSummaries(userId: string, appIds: string[]): Promise<Map<string, StorePublicationSummary>> {
+        if (!appIds.length) return new Map();
+        const rows = await this.database.select({ id: schema.apps.id, status: schema.liveStores.status, publishedAt: schema.liveStores.publishedAt })
+            .from(schema.apps)
+            .leftJoin(schema.liveStores, eq(schema.liveStores.appId, schema.apps.id))
+            .where(and(eq(schema.apps.userId, userId), sql`${schema.apps.id} IN (SELECT value FROM json_each(${JSON.stringify(appIds)}))`));
+        return new Map(rows.map((row) => [row.id, { status: row.status ?? 'draft', publishedAt: row.publishedAt?.toISOString() ?? null }]));
+    }
+
     private readonly RANKING_WEIGHTS = {
         VIEWS: 1,
         STARS: 3,
@@ -976,6 +994,7 @@ export class AppService extends BaseService {
 
         const whereConditions: WhereCondition[] = [
             eq(schema.apps.userId, userId),
+            publicationCondition(options.publication),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),
@@ -1053,6 +1072,7 @@ export class AppService extends BaseService {
 
         const whereConditions: WhereCondition[] = [
             eq(schema.apps.userId, userId),
+            publicationCondition(options.publication),
             status ? eq(schema.apps.status, status) : undefined,
             visibility ? eq(schema.apps.visibility, visibility) : undefined,
             ...this.buildCommonAppFilters(framework, search),

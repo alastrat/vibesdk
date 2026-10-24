@@ -28,6 +28,7 @@ describe('store products panel', () => {
 		expect(html).toContain('$14.00');
 		expect(html).toContain('href="/chat/tea"');
 		expect(html).toContain('Published collection');
+		expect(html).toContain('href="/catalog?store=tea"');
 		expect(html).not.toContain('in stock');
 	});
 	it('offers the builder for an unpublished store without showing fabricated products', () => {

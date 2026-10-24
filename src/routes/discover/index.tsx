@@ -13,13 +13,7 @@ import {
 	type DiscoverPricing,
 	type TemplateCategory,
 } from '@/api-types';
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from '@/components/ui/select';
+import { Select } from '@cloudflare/kumo';
 import { GlobeIcon } from '@phosphor-icons/react';
 import { BrandEmphasisIcon } from '@/components/shared/BrandEmphasisIcon';
 import { PageMeta } from '@/components/public-site/solution-page';
@@ -98,7 +92,7 @@ export default function DiscoverPage() {
 	});
 
 	return (
-		<div className="size-full">
+		<div className="workspace-discover size-full">
 			<PageMeta {...DISCOVER_PAGE} />
 			<div className="container max-w-6xl mx-auto px-4 py-8">
 				<motion.div
@@ -107,15 +101,15 @@ export default function DiscoverPage() {
 					transition={{ duration: 0.5 }}
 				>
 					{/* Header */}
-					<div className="mb-8 mt-6">
-						<h1 className="flex items-center gap-2 text-[28px] font-semibold tracking-tight mb-3 text-brand-emphasis">
+					<div className="workspace-discover-heading mb-7">
+						<h1 className="flex items-center gap-2 text-[28px] font-semibold tracking-tight mb-3 text-kumo-strong">
 							<BrandEmphasisIcon
 								icon={GlobeIcon}
 								weight="duotone"
 								className="-rotate-30"
 							/>{t("Discover")}</h1>
 						<p className="text-kumo-subtle text-sm leading-6">
-							{DISCOVER_PAGE.description}
+							{t(DISCOVER_PAGE.description)}
 						</p>
 					</div>
 
@@ -134,31 +128,10 @@ export default function DiscoverPage() {
 							sortBy={sortBy}
 						/>
 
-						<div className="flex gap-2">
-							<Select value={category ?? 'all'} onValueChange={(value) => setFilter('category', value)}>
-								<SelectTrigger aria-label={t("Category")} className="w-44">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t("All categories")}</SelectItem>
-									{TEMPLATE_CATEGORIES.map((value) => (
-										<SelectItem key={value} value={value}>
-											{TEMPLATE_CATEGORY_LABELS[value]}
-										</SelectItem>
-									))}
-								</SelectContent>
-							</Select>
-							<Select value={pricing} onValueChange={(value) => setFilter('pricing', value)}>
-								<SelectTrigger aria-label={t("Price")} className="w-32">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">{t("Any price")}</SelectItem>
-									<SelectItem value="free">{t("Free")}</SelectItem>
-									<SelectItem value="paid">{t("Paid")}</SelectItem>
-								</SelectContent>
-							</Select>
-						</div>
+						<div className="flex flex-wrap gap-2">
+                            <Select aria-label={t('Category')} value={category ?? 'all'} items={{ all: t('All categories'), ...Object.fromEntries(TEMPLATE_CATEGORIES.map(value => [value, t(TEMPLATE_CATEGORY_LABELS[value])])) }} onValueChange={value => { if (value) setFilter('category', value); }} />
+                            <Select aria-label={t('Price')} value={pricing} items={{ all: t('Any price'), free: t('Free'), paid: t('Paid') }} onValueChange={value => { if (value) setFilter('pricing', value); }} />
+                        </div>
 
 						{/* Sort Tabs */}
 						<AppSortTabs

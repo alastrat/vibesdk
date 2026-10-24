@@ -1,11 +1,11 @@
-import { Link, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { QuestionIcon, SignInIcon } from '@phosphor-icons/react';
-import { Button } from '@cloudflare/kumo';
+import { Button, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { AuthButton } from '@/components/auth/auth-button';
 import { OrangeButton } from '@/components/shared/OrangeButton';
-import { BRAND, EstoriLogo } from '@/brand';
+import { workspacePageLabel } from './workspace-page';
 import { useI18n } from '@/lib/i18n';
 import { WorkspaceSearch } from './workspace-search';
 
@@ -13,19 +13,19 @@ import { WorkspaceSearch } from './workspace-search';
 export function EstoriTopBar({ storeWorkspace = false }: { storeWorkspace?: boolean }) {
 	const { t } = useI18n();
 	const navigate = useNavigate();
+	const { pathname } = useLocation();
+	const { isMobile } = useSidebar();
 	const { user, isLoading: authLoading } = useAuth();
 	const { showAuthModal } = useAuthModal();
 
 	return (
 		<header className="workspace-topbar flex shrink-0 items-center justify-between px-5">
-			<Link
-				to={user ? '/apps' : '/'}
-				aria-label={t('{brand} home', { brand: BRAND.name })}
-				className="flex items-center"
-			>
-				<EstoriLogo className="h-7 w-auto" />
-				<span className="workspace-label">{storeWorkspace ? t('Store workspace') : t('Workspace')}</span>
-			</Link>
+			<div className="workspace-page-identity">
+				{isMobile && !storeWorkspace && <SidebarTrigger aria-label={t('Toggle sidebar')} />}
+				<nav aria-label={t('Breadcrumb')} className="workspace-breadcrumb">
+					<Link to="/apps">{t('Workspace')}</Link><span aria-hidden="true">/</span><span aria-current="page">{t(workspacePageLabel(pathname))}</span>
+				</nav>
+			</div>
 			<div className="workspace-topbar-actions flex items-center gap-2">
 				{user && <WorkspaceSearch key={user.id} />}
 				{user && (

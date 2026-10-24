@@ -3,6 +3,7 @@
  */
 
 import * as schema from './schema';
+import type { StorePublicationStatus, StorePublicationSummary } from '../../shared/types/store-workspace';
 import type { ModelConfig } from '../agents/inferutils/config.types';
 import type { DiscoverFilters } from '../services/templates/reuse';
 import type { InternalAppField } from './app-fields';
@@ -27,6 +28,8 @@ export interface PaginationInfo {
  * Enhanced app data with user and social statistics
  */
 export interface EnhancedAppData extends schema.App {
+    /** Included only by the authenticated owner list; never in the public projection. */
+    publication?: StorePublicationSummary;
     userName: string | null;
     userAvatar: string | null;
     starCount: number;
@@ -167,6 +170,7 @@ export interface BaseAppQueryOptions extends PaginationParams {
  * User app query options with user-specific filters
  */
 export interface AppQueryOptions extends BaseAppQueryOptions {
+    publication?: StorePublicationStatus;
     status?: 'generating' | 'completed';
     visibility?: Visibility;
 }
