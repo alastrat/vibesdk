@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Link, useSearchParams } from 'react-router';
 import { FeaturedPost, PostCard, PostListItem } from '@/components/blog/BlogCards';
 import { UNDERLINE_FILL } from '@/components/public-site/primitives';
@@ -22,8 +23,8 @@ export default function BlogPage() {
 		<div className="bg-white px-4 pt-16 pb-24 sm:px-6 sm:pt-24">
 			<PageMeta {...BLOG_PAGE} />
 			<div className="mx-auto max-w-[1248px]">
-				<h1 className="text-center text-5xl leading-[1.05] font-normal tracking-[-0.02em] text-public-ink sm:text-[72px]">Estori Blog</h1>
-				<nav aria-label="Blog categories" className="mt-8">
+				<h1 className="text-center text-5xl leading-[1.05] font-normal tracking-[-0.02em] text-public-ink sm:text-[72px]">{t("Estori Blog")}</h1>
+				<nav aria-label={t("Blog categories")} className="mt-8">
 					<ul className="flex flex-wrap justify-center gap-x-6 gap-y-3 text-[17px] text-public-ink">
 						{[{ id: null, label: 'All' }, ...BLOG_CATEGORIES].map((entry) => (
 							<li key={entry.label}>
@@ -32,7 +33,7 @@ export default function BlogPage() {
 									aria-current={entry.id === category ? 'page' : undefined}
 									className={cn(UNDERLINE_FILL, entry.id === category && 'font-medium')}
 								>
-									{entry.label}
+									{t(entry.label)}
 								</Link>
 							</li>
 						))}
@@ -51,16 +52,14 @@ export default function BlogPage() {
 						)}
 					</div>
 				) : (
-					<p className="mt-16 text-center text-[17px] text-public-muted">No posts here yet.</p>
+					<p className="mt-16 text-center text-[17px] text-public-muted">{t("No posts here yet.")}</p>
 				)}
 
 				{latest.length > 0 && (
 					<section aria-labelledby="latest-title" className="mt-24">
 						<div className="flex flex-wrap items-baseline justify-between gap-4">
-							<h2 id="latest-title" className="text-4xl font-light tracking-[-0.01em] text-public-ink">
-								Latest articles
-							</h2>
-							<p className="text-[17px] text-public-muted">{latest.length} more</p>
+							<h2 id="latest-title" className="text-4xl font-light tracking-[-0.01em] text-public-ink">{t("Latest articles")}</h2>
+							<p className="text-[17px] text-public-muted">{t("{count} more", { count: latest.length })}</p>
 						</div>
 						<div className="mt-10 grid gap-x-8 gap-y-14 sm:grid-cols-2 lg:grid-cols-3">
 							{latest.map((post) => (

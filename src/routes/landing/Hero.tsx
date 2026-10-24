@@ -1,4 +1,6 @@
+import { t, useI18n } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
+import { useMemo } from 'react';
 import { Link } from 'react-router';
 import { ArrowRightIcon, CheckCircleIcon } from '@phosphor-icons/react';
 import { BuildBox } from '@/components/build-box';
@@ -20,26 +22,28 @@ const BUILD_STEPS = marketingCopy.home.hero.demo.steps;
 export const HERO_STORE_IMAGE = '/marketing/hero-store.jpg';
 
 export function Hero({ stores }: { stores: readonly ShowcaseStore[] }) {
+	const { t } = useI18n();
+	const phrases = useMemo(() => STORE_PHRASES.map((phrase) => t(phrase)), [t]);
 	return (
 		<section className="overflow-x-clip bg-public-charcoal text-white">
 			{/* The border beam's light overhangs the box at its corners; the section clips it sideways so phones never scroll. */}
 			<div className="mx-auto max-w-[1296px] px-4 pt-20 text-center sm:px-6 sm:pt-28">
-				<Eyebrow tone="dark">{marketingCopy.home.hero.eyebrow}</Eyebrow>
-				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>{marketingCopy.home.hero.title}</h1>
+				<Eyebrow tone="dark">{t(marketingCopy.home.hero.eyebrow)}</Eyebrow>
+				<h1 className={cn(HEADING_HERO, 'mx-auto mt-4 max-w-5xl text-balance')}>{t(marketingCopy.home.hero.title)}</h1>
 				<p className={cn(LEAD, 'mx-auto mt-6 max-w-2xl text-pretty text-white/80')}>
-					{marketingCopy.home.hero.description}</p>
+					{t(marketingCopy.home.hero.description)}</p>
 				{/* The frame resets the band's white text so the box's own controls stay readable. */}
 				<div
 					id="build"
 					className="app-theme-scope relative mx-auto mt-10 max-w-2xl scroll-mt-36 rounded-[24px] bg-white/10 p-1.5 text-left text-kumo-default shadow-2xl shadow-black/40 ring ring-white/15"
 				>
-					<BuildBox placeholder={marketingCopy.home.hero.buildPlaceholder} placeholderPhrases={STORE_PHRASES} />
+					<BuildBox placeholder={t(marketingCopy.home.hero.buildPlaceholder)} placeholderPhrases={phrases} />
 					<BorderBeam size={140} duration={8} colorFrom="#6ea8ff" colorTo="#ffffff" borderWidth={2} />
 				</div>
 				<div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-white/75">
-					<span>{marketingCopy.home.hero.note}</span>
+					<span>{t(marketingCopy.home.hero.note)}</span>
 					<Link to="/discover" className="inline-flex items-center gap-1 text-white underline underline-offset-[5px]">
-						{marketingCopy.home.hero.discoverLink}<ArrowRightIcon className="size-4" aria-hidden />
+						{t(marketingCopy.home.hero.discoverLink)}<ArrowRightIcon className="size-4" aria-hidden />
 					</Link>
 				</div>
 			</div>
@@ -72,23 +76,23 @@ function BuilderDemo() {
 					<div
 						ref={refs.frame}
 						role="img"
-						aria-label={marketingCopy.home.hero.demo.accessibleDescription}
+						aria-label={t(marketingCopy.home.hero.demo.accessibleDescription)}
 						className="grid origin-bottom overflow-hidden rounded-t-[14px] bg-white text-left text-[#1e2a3b] shadow-[0_-10px_40px_rgba(0,0,0,0.25)] md:grid-cols-[280px_1fr]"
 					>
 						<div className="grid content-start gap-3 border-b border-public-line p-5 text-sm md:border-r md:border-b-0">
-							<p className="rounded-xl bg-[#eef4ff] px-3 py-2.5">{DEMO_PROMPT}</p>
+							<p className="rounded-xl bg-[#eef4ff] px-3 py-2.5">{t(DEMO_PROMPT)}</p>
 							{/* Reserves the finished list's height so the demo doesn't grow on phones while steps arrive. */}
 							<AnimatedList delay={900} newestFirst={false} className="min-h-28 items-stretch gap-2">
 								{BUILD_STEPS.map((step) => (
 									<p key={step} className="flex items-center gap-2">
 										<CheckCircleIcon weight="fill" className="size-4 shrink-0 text-[#16a34a]" aria-hidden />
-										{step}
+										{t(step)}
 									</p>
 								))}
 							</AnimatedList>
 						</div>
 						<div className="bg-[#f7f8fa] p-3 sm:p-4">
-							<Safari url={marketingCopy.home.hero.demo.previewLabel} imageSrc={HERO_STORE_IMAGE} className="w-full" />
+							<Safari url={t(marketingCopy.home.hero.demo.previewLabel)} imageSrc={HERO_STORE_IMAGE} className="w-full" />
 						</div>
 					</div>
 				</div>

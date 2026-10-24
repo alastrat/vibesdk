@@ -1,21 +1,28 @@
-/** The public pricing page stays in English whatever language the app is in; only the in-app plan button follows it. */
+/** Public prices and wording follow the visitor language while keeping USD and monthly allowances. */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router';
 import { PlanButton } from '@/components/billing/PlanButton';
-import { applyAccountLocale, useI18n } from '@/lib/i18n';
+import { applyAccountLocale, useI18n, t } from '@/lib/i18n';
 import { PlanCards } from './PlanCards';
 import { ComparePlans } from './ComparePlans';
 import { CreditsExplainer } from './CreditsExplainer';
 import { useBillingOn } from '@/hooks/use-billing';
 import { PLAN_COMPARISON } from '@/lib/plans';
 import { marketingCopy } from '@/content/marketing-copy';
+import { PublicFaq } from '@/components/public-site/PublicFaq';
+import { pricingFaq } from '@/content/positioning';
+import { formatUsd, formatCredits, publicTranslator } from '@/lib/i18n/public-pricing';
 
 vi.mock('@/hooks/use-billing', () => ({
 	useBillingOn: vi.fn(() => true),
 	usePlanCheckout: () => ({ start: () => undefined }),
 }));
+vi.mock('@/hooks/use-model-rates', () => {
+ const model = { id: 'test-model', label: 'Example Model', creditsPerStep: 1 };
+ return { useModelRates: () => ({ models: [model], rates: [1], defaultModel: model }) };
+});
 vi.mock('@/hooks/use-public-plan', () => ({ usePublicPlan: () => ({ data: null }) }));
 vi.mock('@/components/public-site/StartBuildingButton', () => ({ StartBuildingButton: () => null }));
 
@@ -78,13 +85,13 @@ describe('the pricing page', () => {
 		expect(premium.slice(0, premium.indexOf('</h3>') + 200)).not.toMatch(/Coming soon/i);
 	});
 
-	it('sells Pro and Premium with English buttons while the app is in Spanish and in Portuguese', async () => {
+	it('sells Pro and Premium in Spanish and Portuguese when those languages are selected', async () => {
 		for (const locale of ['es', 'pt-BR'] as const) {
 			await applyAccountLocale(locale);
 			const html = markup(createElement(PlanCards));
-			expect(html).toContain('Get Pro');
-			expect(html).toContain('Get Premium');
-			expect(html).not.toMatch(/Obtener|Assinar/);
+			expect(html).toContain(locale === 'es' ? 'Obtener Pro' : 'Assinar Pro');
+			expect(html).toContain(locale === 'es' ? 'Obtener Premium' : 'Assinar Premium');
+			expect(html).not.toMatch(/Get Pro|Get Premium/);
 		}
 	});
 });
@@ -98,18 +105,18 @@ describe('the plan button in the app', () => {
 		expect(markup(createElement(InApp, { plan: 'premium' }))).toContain('Assinar Premium');
 	});
 
-	it('is English on a public page even while the app speaks another language', async () => {
+	it('retains English for an explicit caller that does not pass a translator', async () => {
 		await applyAccountLocale('es');
 		expect(markup(createElement(PlanButton, { plan: 'pro' }))).toContain('Get Pro');
 	});
 });
 
 describe('who hands the plan button a language', () => {
-	it('is the billing banner in the app, and none of the public pricing components', () => {
+	it('is both the billing banner and every public pricing checkout', () => {
 		expect(sources['/src/components/billing/BillingBanner.tsx']).toContain('<PlanButton plan={action.plan} variant="blue" className="px-3 py-1 text-xs" i18n={i18n} />');
 		for (const [path, source] of Object.entries(sources)) {
 			if (!path.startsWith('/src/components/pricing/') || path.endsWith('.test.tsx') || !source.includes('<PlanButton')) continue;
-			expect(source, path).not.toMatch(/<PlanButton[^>]*i18n=/);
+			expect(source, path).toMatch(/<PlanButton[^>]*i18n=/);
 		}
 	});
 });
@@ -150,3 +157,36 @@ it('includes supplier products and automatic fulfillment on Basic, inherited by 
  expect(basic).toContain(marketingCopy.pricing.comparison.features.fulfillment.label);
  expect(html).not.toContain('The supplier catalog');
 });
+
+
+for (const locale of ['es', 'pt-BR'] as const) {
+ it(`keeps annual charges and monthly allowances in USD in ${locale}`, async () => {
+  await applyAccountLocale(locale);
+  const html = markup(createElement(PlanCards, { interval: 'year', credits: { pro: 30000, premium: 200000 } }));
+  const annual = t(marketingCopy.pricing.billing.yearlyNote, { amount: formatUsd(61200) });
+  const allowance = t('{credits} AI credits a month', { credits: formatCredits(30000) });
+  expect(annual).not.toContain('billed yearly');
+  expect(allowance).not.toContain('AI credits a month');
+  expect(html).toContain(annual);
+  expect(html).toContain(allowance);
+  expect(html).toContain(formatUsd(5100));
+  expect(html).toContain(formatUsd(334800));
+  expect(html).toContain(locale === 'es' ? 'USD' : 'US$');
+  expect(html).not.toContain('R$');
+  const comparison = markup(createElement(ComparePlans, { billing: true, interval: 'year', credits: { pro: 30000, premium: 200000 } }));
+  expect(comparison).toContain(annual);
+  expect(comparison).toContain(t('{amount}/mo', { amount: formatCredits(30000) }));
+ });
+
+ it(`renders the FAQ and numeric credit explanations in ${locale}`, async () => {
+  await applyAccountLocale(locale);
+  const html = markup(createElement(PublicFaq, { leading: pricingFaq(true, [1, 2], publicTranslator()) }));
+  for (const english of ['What are AI credits?', 'Can I buy more credits?', 'Is Estori free?']) {
+   expect(t(english)).not.toBe(english);
+   expect(html).toContain(t(english));
+   expect(html).not.toContain(english);
+  }
+  expect(html).toContain(locale === 'es' ? 'USD' : 'US$');
+  expect(html).not.toContain('Yes, on every plan at the same price');
+ });
+}

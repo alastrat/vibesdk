@@ -1,3 +1,4 @@
+import { useLocale, t, getLocale } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -32,7 +33,7 @@ const LINK_COLUMNS = [
 function FooterColumn({ title, children }: { title: string; children: ReactNode }) {
 	return (
 		<div>
-			<h2 className="text-[15px] font-medium">{title}</h2>
+			<h2 className="text-[15px] font-medium">{t(title)}</h2>
 			<ul className="mt-4 grid gap-3 text-[15px] font-light text-white/75">{children}</ul>
 		</div>
 	);
@@ -40,27 +41,28 @@ function FooterColumn({ title, children }: { title: string; children: ReactNode 
 
 /** Dark footer of every public page, as on 1Password: link columns, contacts, a large wordmark and the legal line. */
 export function SiteFooter() {
+	useLocale();
 	return (
 		<footer className="bg-public-charcoal text-white">
 			<div className="mx-auto max-w-[1296px] px-4 pt-16 pb-8 sm:px-6">
 				<div className="grid grid-cols-2 gap-10 md:grid-cols-4">
 					{LINK_COLUMNS.map((column) => (
-						<FooterColumn key={column.title} title={column.title}>
+						<FooterColumn key={column.title} title={t(column.title)}>
 							{column.links.map((link) => (
 								<li key={link.label}>
-									<Link to={link.to} className="hover:text-white">{link.label}</Link>
+									<Link to={link.to} className="hover:text-white">{t(link.label)}</Link>
 								</li>
 							))}
 						</FooterColumn>
 					))}
-					<FooterColumn title={marketingCopy.footer.legal}>
+					<FooterColumn title={t(marketingCopy.footer.legal)}>
 						{LEGAL_LINKS.map((link) => (
 							<li key={link.slug}>
-								<Link to={link.path} className="hover:text-white">{link.label}</Link>
+								<Link to={link.path} className="hover:text-white">{getLocale() === 'en' ? link.label : t('{document} (in English)', { document: t(link.label) })}</Link>
 							</li>
 						))}
 					</FooterColumn>
-					<FooterColumn title={marketingCopy.footer.contact}>
+					<FooterColumn title={t(marketingCopy.footer.contact)}>
 						{Object.values(LEGAL_CONTACT).map((address) => (
 							<li key={address}>
 								<a href={`mailto:${address}`} className="[overflow-wrap:anywhere] hover:text-white">{address}</a>
@@ -70,9 +72,9 @@ export function SiteFooter() {
 				</div>
 				<EstoriLogo className="mt-16 h-14 w-auto text-white sm:h-[76px]" />
 				<div className="mt-6 flex flex-col gap-4 border-t border-white/15 pt-6 text-[13px] text-white/70 md:flex-row md:items-center md:justify-between">
-					<nav aria-label={marketingCopy.footer.legal} className="flex flex-wrap gap-x-5 gap-y-2">
+					<nav aria-label={t(marketingCopy.footer.legal)} className="flex flex-wrap gap-x-5 gap-y-2">
 						{LEGAL_LINKS.map((link) => (
-							<Link key={link.slug} to={link.path} className="hover:text-white">{link.label}</Link>
+							<Link key={link.slug} to={link.path} className="hover:text-white">{getLocale() === 'en' ? link.label : t('{document} (in English)', { document: t(link.label) })}</Link>
 						))}
 					</nav>
 					<p>

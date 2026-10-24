@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { useEffect, useState } from 'react';
 import { prefersReducedMotion } from '@/lib/motion';
 import { cn } from '@/lib/utils';
@@ -21,7 +22,7 @@ export function RotatingWord({ words, intervalMs = 2200, className }: { words: r
 		<span aria-hidden className={cn('inline-grid', className)}>
 			{words.map((word, index) => (
 				<span key={word} className={cn('col-start-1 row-start-1', index === shown ? 'animate-public-rise' : 'invisible')}>
-					{word}
+					{t(word)}
 				</span>
 			))}
 		</span>

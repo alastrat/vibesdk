@@ -35,6 +35,8 @@ describe('showcase stores', () => {
 			categoryLabel: 'Store',
 			priceLabel: '$29',
 			isFree: false,
+			priceCents: 2900,
+			userName: 'Estori Team',
 			byline: 'by Estori Team',
 			imageUrl: '/api/screenshots/north-ridge/showcase.jpg?token=a',
 			tallImage: true,

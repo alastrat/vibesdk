@@ -1,0 +1,1209 @@
+{
+  "home": {
+    "meta": {
+      "description": "Descreva sua loja e a Estori cria tudo em minutos, com seus produtos, carrinho e a etapa de finalizar compra. Assistentes de IA para ajudar você a vender e cuidar da loja chegam em breve."
+    },
+    "hero": {
+      "storePhrases": [
+        "uma loja de cafés especiais",
+        "uma loja de cerâmica artesanal",
+        "uma loja de moda urbana",
+        "uma loja de plantas com entrega local",
+        "uma loja de câmeras vintage"
+      ],
+      "demo": {
+        "prompt": "Crie uma loja de cafés especiais com torras semanais e assinaturas",
+        "steps": [
+          "Catálogo com 12 torras",
+          "Páginas de produtos e filtros",
+          "Carrinho e fluxo de finalizar compra",
+          "Registros de pedidos",
+          "Deploy em uma pré-visualização interativa"
+        ],
+        "accessibleDescription": "A Estori criando uma loja de café a partir de uma frase: o chat à esquerda, a loja no ar à direita",
+        "previewLabel": "Pré-visualização interativa"
+      },
+      "eyebrow": "Lojas online criadas com IA",
+      "title": "Descreva sua loja. A Estori cria tudo em minutos.",
+      "description": "Conte à Estori o que você vende e ela cria uma loja online completa com seus produtos, carrinho e a etapa de finalizar compra. Em breve: assistentes para ajudar você a vender mais e cuidar do trabalho diário.",
+      "buildPlaceholder": "Criar ",
+      "note": "Crie grátis. Sem cartão de crédito.",
+      "discoverLink": "Explorar lojas em Descobrir"
+    },
+    "showcase": {
+      "logosTitle": "Lojas criadas na Estori",
+      "title": "Veja o que as pessoas estão criando na Estori",
+      "description": "Abra qualquer loja para vê-la funcionando no computador e no celular. Depois, crie sua própria versão.",
+      "filterLabel": "Filtrar lojas por categoria",
+      "link": "Explorar todas as lojas em Descobrir"
+    },
+    "recommendations": {
+      "eyebrow": "Recomendações de IA",
+      "title": "Sua loja recomendada quando compradores perguntarem à IA o que comprar",
+      "link": "Como funciona",
+      "diagram": {
+        "store": "Sua loja",
+        "assistant": "Um assistente de IA",
+        "customer": "Um novo comprador"
+      },
+      "description": "Cada vez mais pessoas pedem recomendações de produtos a assistentes de IA. Sua loja vai compartilhar os produtos de um jeito que esses assistentes possam ler, para recomendar você e levar compradores até sua loja."
+    },
+    "assistants": {
+      "link": "Ver como vai funcionar",
+      "title": "Delegue o trabalho diário de cuidar da sua loja",
+      "description": "Os assistentes da Estori acompanham seu estoque, seus compradores e suas vendas, e cuidam da rotina seguindo as regras que você define.",
+      "cards": {
+        "inventory": {
+          "name": "Assistente de estoque",
+          "title": "Nunca fique sem os mais vendidos",
+          "body": "Avisa antes de um produto esgotar e sugere quanto repor."
+        },
+        "support": {
+          "name": "Assistente de atendimento",
+          "title": "Respostas às perguntas, dia e noite",
+          "body": "Responde a perguntas sobre pedidos, tamanhos e devoluções usando as informações da sua própria loja."
+        },
+        "marketing": {
+          "name": "Assistente de marketing",
+          "title": "Traga compradores de volta",
+          "body": "Lembra quem deixou itens no carrinho e envia ofertas aos compradores que voltam à sua loja."
+        }
+      }
+    },
+    "personalization": {
+      "eyebrow": "Compras personalizadas",
+      "title": "Mostre os produtos certos para cada comprador",
+      "description": "Já faz parte da sua loja, sem apps extras para instalar.",
+      "cards": {
+        "picks": {
+          "title": "Produtos escolhidos para cada comprador",
+          "body": "O aprendizado de máquina avalia cada produto para cada comprador, para que cada pessoa veja as opções mais relevantes."
+        },
+        "cart": {
+          "title": "Um carrinho que sugere o que combina",
+          "body": "Complementos e kits que combinam com o que já está no carrinho."
+        },
+        "offer": {
+          "title": "Uma oferta logo após finalizar a compra",
+          "body": "Uma oferta relevante logo após finalizar a compra, enquanto o comprador ainda está na sua loja."
+        },
+        "search": {
+          "title": "Uma busca que entende os compradores",
+          "body": "Os compradores descrevem o que querem e encontram, mesmo sem usar as palavras exatas."
+        }
+      }
+    },
+    "features": {
+      "eyebrow": "Criador de lojas Estori",
+      "title": "O que sua loja já inclui hoje",
+      "description": "Comece do zero ou com uma loja de Descobrir. Depois, altere o que quiser pelo chat.",
+      "cards": {
+        "catalog": {
+          "tag": "Catálogo",
+          "title": "Catálogo e páginas de produtos",
+          "body": "Produtos, variantes, filtros e páginas detalhadas, gerados a partir da sua descrição.",
+          "link": {
+            "label": "Ver lojas em Descobrir"
+          }
+        },
+        "checkout": {
+          "tag": "Finalizar compra",
+          "title": "Carrinho e fluxo de finalizar compra",
+          "body": "Um carrinho, um formulário para finalizar a compra e confirmações de pedidos que seus compradores já sabem usar.",
+          "link": {
+            "label": "Começar a criar"
+          }
+        },
+        "orders": {
+          "tag": "Pedidos",
+          "title": "Registros de pedidos",
+          "body": "Sua loja guarda os pedidos no próprio banco de dados, prontos para você consultar.",
+          "link": {
+            "label": "Começar a criar"
+          }
+        },
+        "chat": {
+          "tag": "Edição com IA",
+          "title": "Editar pelo chat",
+          "body": "Peça uma nova seção, um estilo diferente ou mais produtos, e a IA atualiza a loja no ar.",
+          "link": {
+            "label": "Experimentar"
+          }
+        },
+        "preview": {
+          "tag": "Pré-visualização interativa",
+          "title": "Pré-visualização no computador e no celular",
+          "body": "Toda loja funciona nos dois, e você acompanha cada alteração em tempo real em cada tela antes de compartilhar."
+        },
+        "discover": {
+          "tag": "Templates",
+          "title": "Começar com um template",
+          "body": "Escolha uma loja que alguém criou, receba sua própria cópia e personalize pelo chat.",
+          "link": {
+            "label": "Explorar Descobrir"
+          }
+        }
+      }
+    },
+    "sellers": {
+      "words": [
+        "vendedor",
+        "empreendedor",
+        "comerciante",
+        "desenvolvedor",
+        "criador"
+      ],
+      "eyebrow": "Venda mais, melhor e mais rápido.",
+      "titlePrefix": "Estori para todo tipo de ",
+      "accessibleWord": "vendedor",
+      "cards": {
+        "resellers": {
+          "story": "Escolha produtos do catálogo de fornecedores, confira os custos e o envio e adicione à sua loja. Os pedidos pagos do catálogo são encaminhados para processamento e acompanhados durante o envio."
+        },
+        "digital": {
+          "story": "Venda e-books, imagens e vídeos com entrega instantânea e mantenha seus compradores por perto em uma comunidade dentro da sua loja."
+        },
+        "developers": {
+          "story": "Crie uma loja uma vez e venda como template em Descobrir. Cada comprador recebe sua própria cópia para personalizar, e você fica com o valor menos {platformFee}."
+        },
+        "creators": {
+          "story": "Compartilhe produtos que você adora com seu próprio link ou loja e receba por cada venda que gerar para um comerciante."
+        }
+      }
+    },
+    "closing": {
+      "title": "Sua próxima loja começa com uma frase.",
+      "description": "Descreva, acompanhe a criação e publique quando estiver pronta."
+    },
+    "globalCommerce": {
+      "eyebrow": "Alcance global. Crescimento com agentes de IA.",
+      "title": "Cuide do seu negócio.",
+      "words": [
+        "No mundo todo.",
+        "Com agentes de IA."
+      ],
+      "accessibleTitle": "Cuide do seu negócio no mundo todo, com agentes de IA.",
+      "description": "Seu próximo comprador pode estar em qualquer lugar. Deixe os agentes de IA ajudarem você a criar, traduzir e expandir sua loja — enquanto você se concentra no que vem a seguir.",
+      "link": "Explorar o comércio com agentes de IA",
+      "marketsLabel": "Explorar um mercado",
+      "pauseLabel": "Pausar animação dos mercados",
+      "playLabel": "Reproduzir animação dos mercados",
+      "exampleLabel": "Exemplo de vitrine",
+      "agentLabel": "IA em ação",
+      "globeLabel": "Um globo pontilhado conectando Estados Unidos, Brasil, Colômbia, Chile, Argentina, México e Espanha.",
+      "markets": {
+        "us": {
+          "name": "Estados Unidos",
+          "shortName": "EUA",
+          "language": "Inglês",
+          "product": "The everyday bottle",
+          "category": "Essenciais do dia a dia",
+          "task": "Escreva uma história de produto que venda.",
+          "imageAlt": "Uma garrafa térmica reutilizável"
+        },
+        "br": {
+          "name": "Brasil",
+          "shortName": "Brasil",
+          "language": "Português",
+          "product": "Café de origem",
+          "category": "Cafés especiais",
+          "task": "Faça sua loja parecer local em qualquer idioma.",
+          "imageAlt": "Um pacote de café especial"
+        },
+        "co": {
+          "name": "Colômbia",
+          "shortName": "Colômbia",
+          "language": "Espanhol",
+          "product": "Tu ritual de café",
+          "category": "Cerâmica artesanal",
+          "task": "Leve seus produtos a novos públicos.",
+          "imageAlt": "Um coador de café de cerâmica"
+        },
+        "cl": {
+          "name": "Chile",
+          "shortName": "Chile",
+          "language": "Espanhol",
+          "product": "Lista para explorar",
+          "category": "Essenciais para atividades ao ar livre",
+          "task": "Transforme uma nova coleção em uma vitrine renovada.",
+          "imageAlt": "Uma mochila de trilha"
+        },
+        "ar": {
+          "name": "Argentina",
+          "shortName": "Argentina",
+          "language": "Espanhol",
+          "product": "Abrigo para el camino",
+          "category": "Essenciais do dia a dia",
+          "task": "Escreva uma história de produto com a cara da sua marca.",
+          "imageAlt": "Um par de meias de lã"
+        },
+        "mx": {
+          "name": "México",
+          "shortName": "México",
+          "language": "Espanhol",
+          "product": "Tu próxima aventura",
+          "category": "Acessórios de viagem",
+          "task": "Crie conteúdo para seu próximo mercado.",
+          "imageAlt": "Uma bússola de latão"
+        },
+        "es": {
+          "name": "Espanha",
+          "shortName": "Espanha",
+          "language": "Espanhol",
+          "product": "Café para cada mañana",
+          "category": "Cafés especiais",
+          "task": "Traduza sua vitrine para seu próximo público.",
+          "imageAlt": "Um pacote de café de origem única"
+        }
+      }
+    }
+  },
+  "common": {
+    "forCreators": "Para criadores",
+    "learnMore": "Saber mais",
+    "viewPricing": "Ver preços",
+    "discover": "Descobrir",
+    "status": {
+      "comingSoon": "Em breve",
+      "earlyAccess": "Acesso antecipado"
+    },
+    "startBuildingFree": "Começar a criar grátis",
+    "pricing": "Preços",
+    "talkToSales": "Falar com vendas",
+    "industries": "Setores"
+  },
+  "navigation": {
+    "audiences": {
+      "brands": {
+        "label": "Marcas e donos de lojas",
+        "description": "Crie sua loja em minutos e cuide dela com ajuda da IA"
+      },
+      "resellers": {
+        "label": "Dropshippers e revendedores",
+        "description": "Produtos selecionados, adicionados em poucos cliques"
+      },
+      "digital": {
+        "label": "Negócios digitais",
+        "description": "Venda e-books, imagens e vídeos e cuide da sua comunidade"
+      },
+      "subscriptions": {
+        "label": "Assinaturas",
+        "description": "Caixas, planos de membros e refis que se renovam automaticamente"
+      },
+      "communities": {
+        "label": "Comunidades",
+        "description": "Publicações, eventos e downloads exclusivos para membros na sua loja"
+      }
+    },
+    "creators": {
+      "developers": {
+        "label": "Desenvolvedores",
+        "description": "Crie lojas e venda como templates em Descobrir"
+      },
+      "content": {
+        "label": "Criadores de conteúdo",
+        "description": "Receba por divulgar produtos de comerciantes com seu link ou loja"
+      }
+    },
+    "creatorsCaption": "Participe da Estori sem ter uma loja.",
+    "capabilities": {
+      "store-builder": {
+        "name": "Criador de lojas com IA",
+        "description": "Uma loja completa a partir de uma descrição, com alterações feitas só de pedir"
+      },
+      "agentic-commerce": {
+        "name": "Seja encontrado por assistentes de IA",
+        "description": "Sua loja nas recomendações quando compradores perguntarem à IA"
+      },
+      "operations-agents": {
+        "name": "Assistentes da loja",
+        "description": "Ajuda com estoque, compradores e marketing"
+      },
+      "personalized-shopping": {
+        "name": "Compras personalizadas",
+        "description": "Recomendações, carrinho inteligente e busca com IA"
+      },
+      "product-catalog": {
+        "name": "Catálogo e processamento de pedidos",
+        "description": "Produtos do catálogo, processamento pelos fornecedores e rastreamento"
+      },
+      "payments": {
+        "name": "Pagamentos",
+        "description": "Compras finalizadas na sua loja e repasses para seu banco"
+      },
+      "digital-products": {
+        "name": "Criação de comunidades",
+        "description": "Venda downloads e cuide da sua comunidade"
+      },
+      "developer-templates": {
+        "name": "Templates em Descobrir",
+        "description": "Crie lojas e venda como templates"
+      },
+      "content-creators": {
+        "name": "Programa de criadores de conteúdo",
+        "description": "Receba por divulgar produtos de comerciantes"
+      },
+      "subscriptions": {
+        "name": "Assinaturas",
+        "description": "Caixas, planos de membros e refis que se renovam automaticamente"
+      },
+      "email-marketing": {
+        "name": "E-mail marketing",
+        "description": "Newsletters e e-mails automáticos, escritos só de pedir"
+      },
+      "web-analytics": {
+        "name": "Análises do site",
+        "description": "Visitantes, origens e vendas, direto na sua loja"
+      },
+      "search-optimization": {
+        "name": "Otimização de SEO, GEO e AEO",
+        "description": "Apareça nos resultados de busca e nas respostas da IA"
+      },
+      "order-management": {
+        "name": "Gerenciamento de pedidos",
+        "description": "Gerencie pedidos, pagamentos, envios e reembolsos em um só lugar"
+      },
+      "store-translations": {
+        "name": "Traduções da loja",
+        "description": "Vitrines em inglês, espanhol e português, com tradução por IA e suas próprias edições"
+      }
+    },
+    "solutions": "Soluções",
+    "accessibility": {
+      "main": "Navegação principal",
+      "openMenu": "Abrir menu",
+      "menu": "Menu",
+      "back": "Voltar ao menu",
+      "close": "Fechar menu",
+      "utility": "Utilidades"
+    },
+    "openApp": "Abrir app",
+    "signIn": "Entrar",
+    "contactUs": "Falar conosco",
+    "support": "Suporte",
+    "menus": {
+      "solutions": {
+        "feature": {
+          "title": "Da primeira ideia ao primeiro pedido.",
+          "link": {
+            "label": "Começar a criar grátis"
+          }
+        }
+      },
+      "creators": {
+        "feature": {
+          "title": "Venda as lojas que você cria.",
+          "link": {
+            "label": "Ver como funciona"
+          }
+        },
+        "links": {
+          "discover": "Templates em Descobrir",
+          "fees": "Taxas de venda de templates"
+        }
+      }
+    },
+    "menuFooter": {
+      "start": {
+        "label": "Comparar planos"
+      },
+      "end": {
+        "support": "Suporte por e-mail",
+        "sales": "Falar com vendas"
+      }
+    },
+    "getStarted": "Começar",
+    "estoriFor": "Estori para",
+    "platform": "Plataforma",
+    "announcement": {
+      "text": "Descobrir da Estori está disponível: venda as lojas que você cria e fique com o valor menos {platformFee}.",
+      "link": "Saber mais →"
+    }
+  },
+  "footer": {
+    "solutions": {
+      "title": "Soluções",
+      "links": {
+        "brands": "Marcas",
+        "resellers": "Revendedores",
+        "digital": "Negócios digitais",
+        "industries": "Setores",
+        "agentic-commerce": "Recomendações de IA",
+        "pricing": "Preços",
+        "contact": "Falar com vendas",
+        "blog": "Blog"
+      }
+    },
+    "creators": {
+      "title": "Para criadores",
+      "links": {
+        "developers": "Desenvolvedores",
+        "content": "Criadores de conteúdo",
+        "discover": "Descobrir"
+      }
+    },
+    "legal": "Informações legais",
+    "contact": "Contato"
+  },
+  "pricing": {
+    "builder": {
+      "drafts": "Rascunhos por loja, incluindo Main",
+      "publishDraft": "Publicar o rascunho que você escolher",
+      "languages": "Usar o app Estori em inglês, espanhol ou português"
+    },
+    "orders": {
+      "allStores": "Pedidos de todas as suas lojas",
+      "tracking": "Atualizações de envio e rastreamento",
+      "refunds": "Reembolsos totais e parciais"
+    },
+    "translations": {
+      "languages": "Idiomas da loja",
+      "languageList": "Inglês, espanhol, português",
+      "automatic": "Tradução automática",
+      "credits": "Usa créditos de IA",
+      "review": "Revisar e editar traduções",
+      "publish": "Traduzir novos textos ao publicar",
+      "switcher": "Seletor de idioma para compradores"
+    },
+    "cards": {
+      "build": "Criar e alterar lojas só de pedir",
+      "preview": "Pré-visualização interativa no computador e no celular",
+      "templates": "Começar com qualquer template de Descobrir",
+      "publish": "Publicar suas lojas e vender como templates",
+      "drafts": "{count} rascunhos por loja, incluindo Main",
+      "translations": "Traduções da loja em três idiomas com créditos de IA",
+      "languages": "App Estori em inglês, espanhol e português",
+      "customEmails": "Enviar e-mails automáticos de pedidos, envios e reembolsos",
+      "flexiblePayouts": "Escolher quando receber repasses no banco",
+      "stores": "Até {count} lojas, todas podem ir ao ar",
+      "basicSelling": "Vender online, acompanhar pedidos e receber repasses no banco"
+    },
+    "credits": {
+      "title": "Crie mais com créditos de IA",
+      "description": "Os créditos alimentam a IA que cria sua loja, escreve seu conteúdo e traduz sua vitrine. Compre mais quando quiser para continuar criando.",
+      "calculatorLink": "Estimar os créditos de que preciso",
+      "usageNote": "O uso de créditos depende do modelo de IA e do tamanho do seu pedido.",
+      "cards": {
+        "build": {
+          "title": "Criar sua loja",
+          "description": "Transforme sua ideia em uma vitrine com produtos, carrinho e a etapa de finalizar compra."
+        },
+        "change": {
+          "title": "Fazer alterações pelo chat",
+          "description": "Peça uma nova seção, um visual renovado ou uma correção rápida."
+        },
+        "translation": {
+          "title": "Traduzir sua loja",
+          "description": "Alcance mais compradores com traduções de IA que você pode revisar e ajustar."
+        },
+        "assistant": {
+          "title": "Receber ajuda nas tarefas diárias",
+          "description": "Deixe a IA ajudar com estoque, perguntas dos compradores e tarefas do dia a dia da loja."
+        },
+        "content": {
+          "title": "Escrever textos de produtos e posts de blog",
+          "description": "Crie rascunhos de descrições de produtos, textos de páginas e posts de blog com a voz da sua marca."
+        },
+        "images": {
+          "title": "Criar imagens de produtos",
+          "description": "Gere imagens de produtos e cenas de uso no dia a dia para sua loja."
+        },
+        "research": {
+          "title": "Pesquisar produtos e tendências",
+          "description": "Encontre oportunidades de produtos e novas tendências, com fontes para explorar."
+        },
+        "optimization": {
+          "title": "Melhorar sua loja com dados",
+          "description": "Receba sugestões práticas com base na atividade dos compradores e nos pontos em que as vendas caem."
+        }
+      },
+      "calculatorNote": "Rascunhos de textos e posts de blog fazem parte dos pedidos de alteração com IA. As estimativas de créditos para imagens de produtos, pesquisas e avaliações da loja serão adicionadas quando essas ferramentas estiverem disponíveis."
+    },
+    "comparison": {
+      "title": "Comparar planos",
+      "caption": "Encontre o plano certo para sua próxima etapa",
+      "featureHelp": "Sobre {feature}",
+      "premiumContact": "Fale conosco para ativar o Premium.",
+      "proContact": "Fale conosco para começar com o Pro.",
+      "paymentDetails": "Ver taxas de pagamento, limites e prazos de repasse",
+      "features": {
+        "aiCredits": {
+          "label": "Créditos de IA",
+          "description": "Os créditos pagam pela criação, edição e tradução com IA. Alterações maiores usam mais créditos."
+        },
+        "build": {
+          "label": "Criar e editar com IA",
+          "description": "Descreva o que você quer. A Estori cria sua loja, e você pode pedir alterações sem escrever código."
+        },
+        "preview": {
+          "label": "Pré-visualizar no computador e no celular",
+          "description": "Confira como sua loja fica no computador ou no celular antes de compartilhar."
+        },
+        "publish": {
+          "label": "Publicar quando quiser",
+          "description": "Escolha o rascunho que os compradores vão ver e publique como sua loja no ar."
+        },
+        "appLanguages": {
+          "label": "Trabalhar no idioma de sua preferência",
+          "description": "Use o app Estori no idioma de sua preferência. Isso altera os menus e as mensagens do app."
+        },
+        "stores": {
+          "label": "Criar e publicar lojas",
+          "description": "Crie lojas para diferentes marcas ou ideias e coloque todas online para os compradores. Este é seu limite total de criação, incluindo as lojas que você excluir."
+        },
+        "domain": {
+          "label": "Sua marca, seu próprio domínio",
+          "description": "Conecte um endereço que você possui, como yourbrand.com, a cada loja no ar. O domínio é comprado separadamente."
+        },
+        "templates": {
+          "label": "Começar com designs prontos",
+          "description": "Comece com um design de Descobrir e personalize sua própria cópia. Alguns designs são grátis e outros têm um preço único."
+        },
+        "sellTemplates": {
+          "label": "Ganhar com os designs das suas lojas",
+          "description": "Coloque um design de loja à venda em Descobrir. Após a revisão, compradores podem pagar pela própria cópia. Há uma taxa em cada venda."
+        },
+        "receipts": {
+          "label": "Recibos automáticos para compradores de templates",
+          "description": "Quando alguém compra seu design de loja, a Estori envia um recibo por e-mail."
+        },
+        "ownProducts": {
+          "label": "Vender seus próprios produtos",
+          "description": "Adicione seus próprios produtos, defina preços e ofereça tamanhos ou cores diferentes. Você cuida do envio aos compradores."
+        },
+        "catalog": {
+          "label": "Vender sem manter estoque",
+          "description": "Escolha produtos de fornecedores para vender na sua loja. Veja o custo dos produtos antes de adicionar."
+        },
+        "fulfillment": {
+          "label": "Envio e rastreamento pelos fornecedores",
+          "description": "Nos produtos do catálogo, os fornecedores recebem o pedido e enviam ao comprador. Você acompanha o processamento e o rastreamento na Estori."
+        },
+        "orders": {
+          "label": "Todos os seus pedidos, um só lugar",
+          "description": "Veja os pedidos de todas as suas lojas juntos, incluindo os itens comprados, o status do pagamento e o andamento da entrega."
+        },
+        "tracking": {
+          "label": "Rastreamento de envios",
+          "description": "Adicione uma transportadora e um código de rastreamento aos pedidos que você envia."
+        },
+        "refunds": {
+          "label": "Reembolsos flexíveis",
+          "description": "Reembolse itens selecionados ou um pedido inteiro pela Estori. Seu saldo na Stripe deve cobrir o reembolso."
+        },
+        "sellerEmails": {
+          "label": "Alertas de novos pedidos por e-mail",
+          "description": "Receba um e-mail quando um comprador fizer um pedido para você dar o próximo passo."
+        },
+        "shopperEmails": {
+          "label": "E-mails automáticos para compradores",
+          "description": "Deixe a Estori enviar aos compradores a confirmação do pedido, uma atualização de envio e um e-mail quando você fizer um reembolso."
+        },
+        "editEmails": {
+          "label": "E-mails com a voz da sua marca",
+          "description": "Edite os textos dos e-mails da sua loja para compradores, veja a pré-visualização ou desative um e-mail."
+        },
+        "brandedEmails": {
+          "label": "E-mails enviados pelo endereço da sua loja",
+          "description": "Os e-mails para compradores usam o endereço de e-mail que a Estori fornece para sua loja."
+        },
+        "aiTranslation": {
+          "label": "Traduzir sua loja com IA",
+          "description": "Traduza sua vitrine para outros idiomas com IA. Veja uma estimativa de créditos antes de começar, depois revise e edite os resultados."
+        },
+        "editTranslations": {
+          "label": "Ajustar cada tradução",
+          "description": "Revise as traduções e altere frases individuais. Suas edições salvas são mantidas quando a tradução por IA é executada novamente."
+        },
+        "publishTranslations": {
+          "label": "Atualizar traduções ao publicar",
+          "description": "Ative a tradução automática de novos textos ao publicar uma atualização da loja. Isso usa créditos de IA."
+        },
+        "languageSwitcher": {
+          "label": "Deixar os compradores escolherem o idioma",
+          "description": "Os compradores podem alternar entre os idiomas da loja que você ativar. Um idioma compatível do navegador pode ser usado automaticamente."
+        },
+        "translationControl": {
+          "label": "Pausar e retomar traduções",
+          "description": "Pare uma tarefa de tradução por IA e retome depois. O trabalho também é pausado se seus créditos de IA acabarem."
+        },
+        "checkout": {
+          "label": "Pagamentos com cartão na sua loja",
+          "description": "Os compradores pagam com cartão pela Stripe na página de finalizar compra da sua loja, com seu logo e estilo. Conclua a configuração de pagamentos antes de aceitar pagamentos reais."
+        },
+        "payouts": {
+          "label": "Frequências flexíveis de repasse",
+          "description": "Escolha repasses diários, semanais ou mensais para seu banco, após o prazo de espera do seu nível de vendedor. As taxas de repasse da Stripe se aplicam."
+        },
+        "aiDiscovery": {
+          "label": "Ser encontrado por assistentes de IA",
+          "description": "Ajude os compradores a encontrar sua loja quando pedirem recomendações de produtos a um assistente de IA."
+        },
+        "operations": {
+          "label": "Ajuda da IA com estoque e marketing",
+          "description": "Assistentes para ajudar com tarefas de estoque e marketing."
+        },
+        "customerService": {
+          "label": "Ajuda da IA para seus compradores",
+          "description": "Um assistente para ajudar a responder às perguntas dos compradores."
+        },
+        "personalization": {
+          "label": "Produtos selecionados para cada comprador",
+          "description": "Sugestões de produtos e um carrinho mais inteligente com base na visita do comprador."
+        },
+        "bundles": {
+          "label": "Kits, ofertas e busca mais inteligente",
+          "description": "Kits de produtos, ofertas após finalizar a compra e uma busca mais inteligente na loja."
+        },
+        "digital": {
+          "label": "Vender conteúdo e criar uma comunidade",
+          "description": "Venda downloads e reúna os compradores em uma comunidade."
+        },
+        "support": {
+          "label": "Ajuda quando você precisar",
+          "description": "Envie um e-mail à equipe da Estori quando precisar de ajuda com sua loja."
+        },
+        "prioritySupport": {
+          "label": "Suporte prioritário por e-mail",
+          "description": "Suas perguntas por e-mail recebem atenção prioritária da equipe de suporte."
+        },
+        "bankPayouts": {
+          "label": "Receber as vendas na sua conta bancária",
+          "description": "Receba repasses pela Stripe após o prazo de espera do seu nível de vendedor. Contas novas começam com repasses semanais às segundas-feiras."
+        },
+        "orderStatus": {
+          "label": "Acompanhar pagamentos e processamento de pedidos",
+          "description": "Veja se um pedido está pago, reembolsado ou enviado sem consultar ferramentas separadas."
+        },
+        "previewEmails": {
+          "label": "Pré-visualizar e testar seus e-mails",
+          "description": "Veja como o e-mail vai ficar e envie uma amostra para você antes de chegar aos compradores."
+        },
+        "replyToEmails": {
+          "label": "Respostas direto na sua caixa de entrada",
+          "description": "Escolha para onde vão as respostas dos compradores para responder pela sua própria caixa de entrada."
+        },
+        "accountManager": {
+          "label": "Acesso direto a um gerente de conta",
+          "description": "Fale diretamente com um gerente de conta para receber ajuda com suas lojas e sua conta."
+        }
+      },
+      "emailNotifications": "E-mail e notificações"
+    },
+    "premiumAvailabilityAnswer": "Sim. Fale conosco para ativar o Premium. Se sua conta permitir mudanças de plano online, você pode contratar o Premium pela página de cobrança.",
+    "metaDescription": "Comece grátis com o Basic, cresça com o Pro ou tenha mais créditos de IA com o Premium. Compare limites de lojas, traduções, pagamentos e ferramentas para vender online.",
+    "plans": {
+      "basic": {
+        "description": "Tire sua primeira ideia de loja do papel, grátis.",
+        "benefit": "Crie sua primeira vitrine e experimente edições com IA.",
+        "headerNote": "Crie sua primeira vitrine"
+      },
+      "pro": {
+        "description": "Lance sua marca e expanda um pequeno conjunto de lojas.",
+        "benefit": "Publique até {liveStores} lojas e continue melhorando com IA.",
+        "headerNote": "Lance e expanda sua marca"
+      },
+      "premium": {
+        "description": "Crie para mais marcas e mantenha cada loja evoluindo.",
+        "benefit": "Expanda até {liveStores} lojas no ar com mais IA para atualizações contínuas.",
+        "headerNote": "Para agências e estúdios de marcas"
+      }
+    },
+    "paidActivationAnswer": "Escolha Pro ou Premium para começar. Ative pela página de cobrança quando a opção de finalizar compra online estiver disponível ou fale conosco para receber ajuda.",
+    "creditsNote": "O uso de IA varia conforme o modelo escolhido e o tamanho das alterações.",
+    "billing": {
+      "monthly": "Mensal",
+      "yearly": "Anual",
+      "savings": "Economize 20%",
+      "monthlyNote": "Cobrança mensal. Cancele quando quiser.",
+      "yearlyNote": "{amount} cobrados anualmente. Cancele quando quiser."
+    }
+  },
+  "platform": {
+    "orders": {
+      "eyebrow": "Gerenciamento de pedidos",
+      "title": "Pedidos, envios e e-mails para compradores",
+      "description": "Gerencie os pedidos de todas as suas lojas em um só lugar, incluindo pedidos de teste enquanto você se prepara para vender.",
+      "cards": [
+        {
+          "title": "Processar pedidos dos seus próprios produtos",
+          "body": "Marque itens como enviados e adicione o rastreamento. As atualizações de processamento do catálogo ficam registradas junto aos produtos que você envia."
+        },
+        {
+          "title": "Gerenciar reembolsos",
+          "body": "Emita reembolsos totais ou parciais e veja o histórico do pedido. Os reembolsos seguem os termos de venda e seu saldo disponível na Stripe."
+        },
+        {
+          "title": "Manter os compradores informados",
+          "body": "Nos planos Pro e Premium, envie e-mails de confirmação, envio e reembolso pelo endereço da sua loja e personalize os textos."
+        }
+      ]
+    },
+    "storeTranslations": {
+      "meta": {
+        "title": "Traduções da loja",
+        "description": "Mostre sua vitrine em inglês, espanhol e português do Brasil. Traduza com créditos de IA, revise cada frase e mantenha o controle das suas edições."
+      },
+      "eyebrow": "Traduções da loja",
+      "title": "Deixe os compradores explorar sua loja no idioma deles",
+      "lead": "Nos planos Pro e Premium, mostre sua vitrine em inglês, espanhol e português do Brasil. As traduções automáticas usam créditos de IA, e você pode revisar e editar cada frase.",
+      "sections": [
+        {
+          "eyebrow": "Idiomas",
+          "title": "Escolha os idiomas que seus compradores veem",
+          "cards": [
+            {
+              "title": "Confirmar o idioma da sua loja",
+              "body": "Escolha o idioma em que sua loja foi escrita antes de ativar as traduções."
+            },
+            {
+              "title": "Traduzir com créditos de IA",
+              "body": "Traduza os textos que faltam para os outros idiomas disponíveis. O trabalho pausa quando os créditos acabam e pode continuar quando houver créditos."
+            },
+            {
+              "title": "Um seletor de idioma para compradores",
+              "body": "Deixe os compradores escolherem um idioma ou mostre uma tradução disponível que corresponda ao navegador deles."
+            }
+          ]
+        },
+        {
+          "eyebrow": "Mantenha o controle",
+          "title": "Seus textos continuam sendo seus",
+          "cards": [
+            {
+              "title": "Revisar cada tradução",
+              "body": "Pesquise o texto original e corrija traduções individuais. A tradução automática mantém as edições que você salva."
+            },
+            {
+              "title": "Traduzir novos textos ao publicar",
+              "body": "Escolha traduzir os novos textos ao publicar, sem traduzir tudo novamente."
+            },
+            {
+              "title": "Textos da loja e de finalizar compra",
+              "body": "As traduções disponíveis acompanham os compradores pela vitrine e pelas mensagens da Estori ao finalizar a compra."
+            }
+          ]
+        }
+      ],
+      "steps": [
+        "Confirme o idioma em que sua loja foi escrita.",
+        "Escolha outro idioma disponível e inicie uma tradução usando créditos de IA.",
+        "Revise os resultados e ative os idiomas que você quer mostrar aos compradores."
+      ],
+      "faq": [
+        {
+          "question": "Quais planos incluem traduções da loja?",
+          "answer": "As traduções da loja estão incluídas nos planos Pro e Premium. A tradução automática usa os créditos de IA da sua conta."
+        },
+        {
+          "question": "Quais idiomas estão disponíveis?",
+          "answer": "Inglês, espanhol e português do Brasil."
+        },
+        {
+          "question": "As traduções automáticas são grátis?",
+          "answer": "A tradução automática usa os créditos de IA da sua conta. Revisar e salvar suas próprias edições não aciona a IA de tradução."
+        },
+        {
+          "question": "Isso reescreve os arquivos da minha loja?",
+          "answer": "Não. As traduções são armazenadas separadamente e aplicadas quando os compradores acessam sua loja."
+        }
+      ]
+    },
+    "catalog": {
+      "availabilityAnswer": "Sim. Todos os planos permitem explorar produtos do catálogo e adicionar à loja. Os produtos, preços e opções de envio dependem do catálogo atual.",
+      "pickProducts": "Escolha produtos do catálogo de fornecedores.",
+      "resellerAvailability": "Todos os planos permitem explorar e adicionar produtos do catálogo atual.",
+      "resellerLead": "Escolha produtos do catálogo de fornecedores, confira os custos e o envio e adicione à sua loja em qualquer plano.",
+      "storeLead": "Crie e pré-visualize sua loja com a Estori. Depois, adicione produtos do catálogo junto aos produtos que você vende por conta própria.",
+      "metaDescription": "Escolha produtos do catálogo de fornecedores em qualquer plano, crie sua loja com a Estori e acompanhe o processamento dos pedidos."
+    },
+    "payments": {
+      "availabilityAnswer": "Sim. Lojas no ar podem aceitar pagamentos com cartão pela Stripe depois que você concluir a configuração de pagamentos e publicar sua loja. Na pré-visualização, finalizar a compra continua em modo de teste.",
+      "metaDescription": "Aceite pagamentos com cartão na sua loja Estori no ar, receba repasses no banco e gerencie pedidos e reembolsos pela Stripe.",
+      "communitiesAnswer": "As comunidades pagas estão em acesso antecipado. Solicite acesso para conversar sobre sua configuração.",
+      "payoutsBenefit": "Receba repasses no banco semanalmente às segundas-feiras por padrão. Os planos Pro e Premium permitem escolher repasses diários, semanais ou mensais. Sua conta custa {stripeFees}.",
+      "stripeLimitNote": "A Stripe informa um limite técnico geral de US$ 999.999,99 por pagamento. As bandeiras de cartão podem impor limites menores. As proteções da Estori para pedidos e vendas semanais descritas acima também se aplicam.",
+      "stripeLimitSource": "Ler os limites de valor de pagamento da Stripe"
+    }
+  },
+  "solutions": {
+    "brands": {
+      "eyebrow": "Para marcas e donos de lojas",
+      "title": "Sua marca merece uma loja do seu jeito.",
+      "lead": "Conte à Estori o que você vende. Crie uma loja com a sua cara e continue melhorando só de pedir.",
+      "problemTitle": "Sua próxima ideia não deveria esperar pelo seu site.",
+      "problems": [
+        "Seus produtos precisam de mais que um template genérico.",
+        "Pequenas alterações não deveriam virar outro projeto.",
+        "Os pedidos não deveriam se perder entre ferramentas."
+      ],
+      "benefitsTitle": "Da sua primeira ideia ao próximo pedido.",
+      "benefitsLead": "Uma vitrine, páginas de produtos e a etapa de finalizar compra que funcionam juntas. Tudo pensado no que torna sua marca única.",
+      "features": [
+        {
+          "title": "Faça da sua marca a primeira impressão.",
+          "body": "Transforme suas cores, layouts e a história dos seus produtos em uma loja com a sua cara."
+        },
+        {
+          "title": "Uma nova ideia? É só pedir.",
+          "body": "Adicione uma coleção, reescreva uma página de produto ou renove o visual da página inicial pelo chat."
+        },
+        {
+          "title": "Acompanhe cada pedido.",
+          "body": "Veja o que os compradores compraram e acompanhe pagamentos e processamento de pedidos em todas as suas lojas."
+        },
+        {
+          "title": "Alcance compradores no idioma deles.",
+          "body": "Use IA para traduzir sua vitrine. Depois, revise e ajuste os textos antes de publicar."
+        }
+      ],
+      "carouselTitle": "Veja o que você pode criar.",
+      "examples": [
+        {
+          "title": "Uma coleção com uma história",
+          "body": "Dê a uma nova linha seu próprio espaço, com os detalhes que fazem cada produto valer a descoberta.",
+          "prompt": "Crie uma loja para minhas cerâmicas artesanais, com uma página para a nova coleção de verão."
+        },
+        {
+          "title": "Uma pequena alteração, uma vitrine renovada",
+          "body": "Atualize o visual da sua loja conforme seus produtos e ideias mudam.",
+          "prompt": "Deixe minha página inicial mais acolhedora e coloque nossa nova coleção de cafés em primeiro lugar."
+        },
+        {
+          "title": "Espaço para sua próxima marca",
+          "body": "Crie uma vitrine diferente para uma nova ideia sem começar de uma página em branco.",
+          "prompt": "Crie uma loja minimalista de produtos para atividades ao ar livre, com nossos essenciais para trilhas e páginas detalhadas de produtos."
+        }
+      ],
+      "steps": [
+        "Descreva sua marca e o que você vende.",
+        "Revise sua loja e peça alterações.",
+        "Configure os pagamentos e publique quando quiser."
+      ],
+      "closingTitle": "Crie a loja que você vem imaginando.",
+      "closingLead": "Comece com sua ideia. Continue dando forma a ela conforme sua marca cresce.",
+      "faq": [
+        {
+          "question": "Preciso saber programar?",
+          "answer": "Não. Descreva sua loja e peça alterações com palavras simples. A Estori cria as páginas, e você revisa na pré-visualização interativa."
+        },
+        {
+          "question": "Como atualizo minha loja?",
+          "answer": "Peça à Estori para alterar um layout, adicionar uma seção ou renovar os textos dos produtos. Confira as alterações na pré-visualização antes de publicar."
+        },
+        {
+          "question": "Posso vender produtos que eu faço?",
+          "answer": "Sim. Adicione seus próprios produtos com fotos, descrições e preços. Você cuida do envio desses produtos."
+        },
+        {
+          "question": "Como os compradores pagam?",
+          "answer": "Configure os pagamentos e conecte sua conta Stripe. Os compradores pagam ao finalizar a compra na sua loja, e os repasses vão para seu banco."
+        }
+      ]
+    },
+    "resellers": {
+      "eyebrow": "Para dropshippers e revendedores",
+      "title": "Encontre seu nicho. Crie sua loja. Deixe o envio com os fornecedores.",
+      "lead": "Escolha produtos do catálogo de fornecedores, defina seus preços e traga sua própria visão. Disponível em todos os planos.",
+      "problemTitle": "Crie um negócio em torno de produtos, não de caixas.",
+      "problems": [
+        "Encontrar produtos pode levar mais tempo que criar uma loja.",
+        "As informações do fornecedor ainda precisam de uma história própria.",
+        "Os pedidos precisam de um caminho claro entre finalizar a compra e a entrega."
+      ],
+      "benefitsTitle": "Sua vitrine. Processamento de pedidos conectado.",
+      "benefitsLead": "Concentre-se na coleção e na experiência dos compradores. A Estori conecta os produtos do catálogo ao processamento dos pedidos pelos fornecedores.",
+      "features": [
+        {
+          "title": "Encontre produtos que combinem com sua ideia.",
+          "body": "Explore o catálogo e confira os produtos disponíveis antes de adicionar à sua loja."
+        },
+        {
+          "title": "Deixe a coleção com a sua cara.",
+          "body": "Peça à Estori para escrever páginas de produtos com a voz da sua loja e organizar tudo em torno do seu nicho."
+        },
+        {
+          "title": "Deixe os pedidos pagos seguirem seu caminho.",
+          "body": "Os pedidos do catálogo vão para os fornecedores processarem, com o andamento do envio e o rastreamento na Estori."
+        },
+        {
+          "title": "Inclua produtos que você faz.",
+          "body": "Venda seus próprios produtos junto aos produtos de fornecedores. Você cuida do envio dos itens que fornece."
+        }
+      ],
+      "carouselTitle": "Um catálogo. Diferentes ideias de loja.",
+      "examples": [
+        {
+          "title": "Essenciais do dia a dia, escolhidos com cuidado",
+          "body": "Reúna produtos úteis para um tipo específico de comprador.",
+          "prompt": "Crie uma loja de essenciais para atividades ao ar livre com produtos do catálogo de fornecedores, organizados por atividade."
+        },
+        {
+          "title": "Uma coleção com foco",
+          "body": "Facilite a compra de uma seleção enxuta em vez de uma lista interminável de produtos.",
+          "prompt": "Crie uma loja de essenciais para casa com um catálogo pequeno e comparações claras entre os produtos."
+        },
+        {
+          "title": "Seus produtos e os produtos de fornecedores",
+          "body": "Combine o que você faz com produtos que complementam sua criação.",
+          "prompt": "Crie uma loja de café com nossos próprios grãos e acessórios do catálogo em coleções separadas."
+        }
+      ],
+      "steps": [
+        "Escolha produtos e defina seus preços de venda.",
+        "Peça à Estori para criar as páginas dos produtos e sua vitrine.",
+        "Conecte os pagamentos, publique e acompanhe os pedidos pagos."
+      ],
+      "closingTitle": "Dê à sua próxima ideia de loja um lugar para crescer.",
+      "closingLead": "Comece grátis. Adicione os produtos que fazem sentido para sua loja.",
+      "faq": [
+        {
+          "question": "Preciso comprar estoque antecipadamente?",
+          "answer": "Não. Escolha produtos do catálogo para sua loja, e os fornecedores enviam quando os compradores fazem pedidos."
+        },
+        {
+          "question": "Como escolho quais produtos vender?",
+          "answer": "Explore o catálogo de fornecedores e confira os custos dos produtos e os detalhes de envio. Adicione os produtos que combinam com sua loja e defina seus preços de venda."
+        },
+        {
+          "question": "Quem cuida do envio?",
+          "answer": "O fornecedor envia os produtos do catálogo diretamente ao comprador. As atualizações de envio e o rastreamento voltam para sua loja."
+        },
+        {
+          "question": "Posso vender meus próprios produtos junto aos produtos do catálogo?",
+          "answer": "Sim. Crie uma coleção com os dois. Os fornecedores enviam os itens do catálogo, e você envia os produtos que faz."
+        }
+      ]
+    },
+    "digital": {
+      "eyebrow": "Para negócios digitais",
+      "title": "Crie uma vez. Dê à sua criação um lugar só dela.",
+      "lead": "Venda seus guias, downloads e trabalhos criativos em uma loja com a sua cara. Dê aos compradores um só lugar para descobrir, comprar e aproveitar o que você cria.",
+      "problemTitle": "Seu trabalho não deveria ficar espalhado por vários links.",
+      "problems": [
+        "Seu melhor conteúdo precisa de um lugar para ser descoberto.",
+        "Os compradores precisam de um caminho claro para encontrar o que compraram.",
+        "Seu próximo lançamento merece mais que outro link compartilhado."
+      ],
+      "benefitsTitle": "Um lar para o que você cria.",
+      "benefitsLead": "Reúna suas páginas de produtos, a entrega digital e a experiência dos compradores em uma só loja.",
+      "features": [
+        {
+          "title": "Coloque seu trabalho em destaque.",
+          "body": "Crie páginas de produtos para guias, imagens, vídeos e outros downloads, com espaço para mostrar seu valor."
+        },
+        {
+          "title": "Entregue arquivos após a compra.",
+          "body": "Dê aos compradores acesso aos arquivos após o pagamento, sem enviar cada compra manualmente."
+        },
+        {
+          "title": "Crie a partir do que você sabe.",
+          "body": "Reúna seus guias, aulas e recursos em um lugar com identidade própria."
+        },
+        {
+          "title": "Dê aos compradores um motivo para ficar.",
+          "body": "Conecte seu trabalho digital a uma comunidade onde os compradores possam continuar aprendendo e compartilhando."
+        }
+      ],
+      "carouselTitle": "Algumas formas de compartilhar o que você sabe.",
+      "examples": [
+        {
+          "title": "Uma biblioteca de guias práticos",
+          "body": "Dê aos leitores um lugar dedicado a descobrir seu trabalho para download.",
+          "prompt": "Crie uma vitrine para meus guias ilustrados de jardinagem, com pré-visualizações de cada guia."
+        },
+        {
+          "title": "Uma loja de recursos criativos",
+          "body": "Organize arquivos úteis pensando nas pessoas que vão usá-los.",
+          "prompt": "Crie uma loja para meus presets de fotografia e guias de edição, com páginas claras de produtos."
+        },
+        {
+          "title": "Uma vitrine para seu conhecimento",
+          "body": "Reúna seus templates e materiais de aprendizado em uma loja construída em torno do seu conhecimento.",
+          "prompt": "Crie uma loja para meus templates de design e materiais de aprendizado, com uma página sobre mim."
+        }
+      ],
+      "steps": [
+        "Adicione seus produtos digitais e conte a história deles.",
+        "Crie sua vitrine e organize seu trabalho.",
+        "Publique sua loja e entregue os arquivos após a compra."
+      ],
+      "closingTitle": "Seu próximo lançamento pode começar com uma vitrine.",
+      "closingLead": "Transforme seu trabalho criativo em produtos que os compradores possam descobrir, comprar e voltar para buscar mais.",
+      "faq": [
+        {
+          "question": "Que tipos de produtos digitais posso vender?",
+          "answer": "Venda e-books, guias, templates, recursos de design, vídeos e cursos. Dê a cada lançamento sua própria página de produto na sua loja."
+        },
+        {
+          "question": "Como os compradores recebem suas compras?",
+          "answer": "Os compradores recebem acesso aos arquivos após o pagamento para começar a usar o que compraram sem esperar que você envie."
+        },
+        {
+          "question": "Posso personalizar minhas páginas de produtos?",
+          "answer": "Sim. Peça à Estori para criar páginas pensadas no seu trabalho, com seu próprio estilo, detalhes dos produtos e pré-visualizações."
+        },
+        {
+          "question": "Posso oferecer produtos digitais aos membros da comunidade?",
+          "answer": "Sim. Inclua downloads, aulas e outros recursos no seu plano de membros para dar mais motivos para participar e ficar."
+        }
+      ]
+    },
+    "subscriptions": {
+      "eyebrow": "Para negócios de assinatura",
+      "title": "Dê aos compradores um motivo para voltar.",
+      "lead": "Venda caixas, refis ou planos de membros pela sua própria vitrine. Simplifique as compras recorrentes com planos que os próprios compradores podem gerenciar.",
+      "problemTitle": "Vendas recorrentes merecem uma rotina mais simples.",
+      "problems": [
+        "Ofertas recorrentes precisam de mais que uma página de produto.",
+        "Os compradores querem saber o que chega e quando.",
+        "As mudanças de plano não deveriam se perder nos e-mails."
+      ],
+      "benefitsTitle": "Crie pensando na próxima entrega. E na seguinte.",
+      "benefitsLead": "Reúna pagamentos recorrentes, páginas claras de planos e contas de assinantes em uma só loja.",
+      "features": [
+        {
+          "title": "Deixe sua oferta recorrente clara.",
+          "body": "Mostre aos compradores o que está incluído, com que frequência chega e para quem é."
+        },
+        {
+          "title": "Dê aos planos seu próprio espaço.",
+          "body": "Mostre as diferenças entre suas caixas, refis ou planos de membros em uma página clara."
+        },
+        {
+          "title": "Deixe os assinantes no controle.",
+          "body": "Permita que os compradores pausem, pulem, troquem ou cancelem o plano pela própria conta."
+        },
+        {
+          "title": "Mantenha toda a experiência conectada.",
+          "body": "Reúna a história da sua assinatura, os produtos e as páginas dos compradores em uma só vitrine."
+        }
+      ],
+      "carouselTitle": "Como pode ser sua próxima entrega?",
+      "examples": [
+        {
+          "title": "Uma caixa que dá vontade de esperar",
+          "body": "Apresente uma coleção recorrente e as pessoas por trás dela.",
+          "prompt": "Crie uma vitrine para nossa caixa mensal de café, com uma página explicando cada torra."
+        },
+        {
+          "title": "Refis com propósito",
+          "body": "Ajude os compradores a escolher os refis e encontrar uma frequência de entrega que funcione para eles.",
+          "prompt": "Crie uma loja para nossos refis de produtos para casa, com tamanhos e detalhes claros dos produtos."
+        },
+        {
+          "title": "Um plano de membros pensado para valer a pena",
+          "body": "Mostre aos membros o que recebem e dê motivos para ficar.",
+          "prompt": "Crie um site para nosso plano de membros artesãos, com uma página comparando os benefícios."
+        }
+      ],
+      "steps": [
+        "Crie uma vitrine em torno da sua oferta recorrente.",
+        "Defina seus planos, preços e frequências de renovação.",
+        "Receba os assinantes e gerencie os pedidos recorrentes."
+      ],
+      "closingTitle": "Comece a criar o que vai fazer os compradores voltarem.",
+      "closingLead": "Crie uma oferta que vale repetir, com uma loja que facilita a assinatura.",
+      "faq": [
+        {
+          "question": "O que posso oferecer como assinatura?",
+          "answer": "Crie caixas recorrentes, refis de produtos ou planos de membros. Mostre aos compradores o que cada plano inclui e com que frequência se renova."
+        },
+        {
+          "question": "Como funcionam as renovações de assinatura?",
+          "answer": "Os compradores escolhem um plano ao finalizar a compra. Os pagamentos se repetem na frequência do plano, sem precisar fazer um novo pedido a cada vez."
+        },
+        {
+          "question": "Como os compradores gerenciam suas assinaturas?",
+          "answer": "Os assinantes podem pular, pausar, trocar ou cancelar pela conta na sua loja, sem precisar enviar um e-mail para você."
+        },
+        {
+          "question": "Posso personalizar a apresentação dos meus planos?",
+          "answer": "Sim. Peça à Estori para criar páginas de planos que expliquem suas opções, comparem o que está incluído e ajudem os compradores a escolher."
+        }
+      ]
+    },
+    "communities": {
+      "eyebrow": "Para comunidades",
+      "title": "Um lugar para se reunir em torno do que você faz.",
+      "lead": "Reúna conversas, eventos e recursos compartilhados em um espaço exclusivo para membros, conectado à sua loja.",
+      "problemTitle": "Sua comunidade precisa de mais que uma sequência de comentários.",
+      "problems": [
+        "Conversas úteis desaparecem nos feeds movimentados.",
+        "Os recursos acabam espalhados por ferramentas diferentes.",
+        "Os membros precisam de um lugar claro para voltar."
+      ],
+      "benefitsTitle": "Traga a conversa para perto da sua loja.",
+      "benefitsLead": "Dê aos membros um só lugar para se conectar, encontrar recursos e continuar participando da sua marca.",
+      "features": [
+        {
+          "title": "Abra espaço para conversas.",
+          "body": "Crie um espaço dedicado para os membros fazerem perguntas e compartilharem seus projetos."
+        },
+        {
+          "title": "Mantenha os recursos por perto.",
+          "body": "Organize guias, gravações e downloads para os membros encontrarem de novo."
+        },
+        {
+          "title": "Reúna as pessoas.",
+          "body": "Compartilhe eventos e sessões ao vivo, com um lugar para continuar a conversa depois."
+        },
+        {
+          "title": "Conecte seu trabalho e sua comunidade.",
+          "body": "Dê aos seus produtos e à experiência dos membros um só lar, com uma identidade em comum."
+        }
+      ],
+      "carouselTitle": "Toda comunidade começa com algo em comum.",
+      "examples": [
+        {
+          "title": "Um espaço para quem cria",
+          "body": "Conecte uma vitrine às ideias e aos projetos ao redor dela.",
+          "prompt": "Crie uma loja para meu ateliê de cerâmica, com um espaço para nossa comunidade de artesãos."
+        },
+        {
+          "title": "Aprendizado além da primeira compra",
+          "body": "Mantenha os compradores aprendendo com recursos compartilhados e conversas que continuam após a compra.",
+          "prompt": "Crie uma vitrine para meus materiais de jardinagem, com uma área de membros para aulas e discussões."
+        },
+        {
+          "title": "Um lar para seu próximo encontro",
+          "body": "Reúna pessoas em torno de eventos, interesses em comum e recursos úteis.",
+          "prompt": "Crie um site para nosso grupo criativo local, com eventos e recursos para membros."
+        }
+      ],
+      "steps": [
+        "Crie sua comunidade e escolha o que compartilhar.",
+        "Crie sua vitrine e apresente sua ideia.",
+        "Convide membros e comece a conversa."
+      ],
+      "closingTitle": "Crie um lar para sua comunidade.",
+      "closingLead": "Reúna seus produtos, conversas e experiências compartilhadas sob sua marca.",
+      "faq": [
+        {
+          "question": "O que posso compartilhar com minha comunidade?",
+          "answer": "Compartilhe publicações, aulas, eventos, gravações e downloads. Dê aos membros um lugar para fazer perguntas e conversar entre si."
+        },
+        {
+          "question": "Posso oferecer planos de membros grátis e pagos?",
+          "answer": "Sim. Crie um espaço grátis para receber seu público e um espaço pago com conteúdo extra, recursos ou benefícios."
+        },
+        {
+          "question": "Como minha comunidade se conecta à minha loja?",
+          "answer": "Sua comunidade fica junto aos seus produtos e compartilha a mesma lista de compradores. Mantenha as compras e a participação na comunidade juntas sob sua marca."
+        },
+        {
+          "question": "Posso incluir downloads para os membros?",
+          "answer": "Sim. Ofereça e-books, templates, vídeos e outros recursos como parte da participação na sua comunidade."
+        }
+      ],
+      "subscriptionPreview": {
+        "title": "Obrigado por assinar!",
+        "description": "Continue explorando. Veja alguns criadores de que você pode gostar.",
+        "creatorTitle": "The creative practice",
+        "creatorDescription": "Novas ideias e conversas para mentes curiosas.",
+        "recommendationTitle": "Encontre seu próximo favorito",
+        "recommendationDescription": "Descubra mais criadores que compartilham seus interesses."
+      }
+    }
+  }
+}

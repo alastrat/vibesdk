@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
 import { SparkleIcon } from '@phosphor-icons/react';
@@ -36,10 +37,10 @@ function AssistantCard({ assistant }: { assistant: StoreAssistant }) {
 			<div className={cn(REVEAL, 'grid gap-4 delay-1000')}>
 				<p className="flex items-center gap-3 text-lg font-medium">
 					<SparkleIcon weight="fill" className="size-6 shrink-0" aria-hidden />
-					{assistant.name}
+					{t(assistant.name)}
 				</p>
-				<h3 className="text-2xl leading-tight font-medium text-balance">{assistant.title}</h3>
-				<p className="text-base leading-relaxed font-light text-white/80">{assistant.body}</p>
+				<h3 className="text-2xl leading-tight font-medium text-balance">{t(assistant.title)}</h3>
+				<p className="text-base leading-relaxed font-light text-white/80">{t(assistant.body)}</p>
 			</div>
 			<div aria-hidden className={cn(REVEAL, 'delay-[1500ms]')}>
 				<AssistantMock id={assistant.id} />
@@ -62,13 +63,13 @@ export function AssistantsPanel({ id, action }: { id?: string; action?: ReactNod
 				<div className={cn(REVEAL, 'relative z-10 mx-auto max-w-3xl pt-20 text-center delay-500 sm:pt-28')}>
 					<CapabilityTag id="operations-agents" tone="dark" />
 					<h2 id="assistants-title" className={cn(HEADING_SECTION, 'mt-5 text-balance')}>
-						{ASSISTANTS_HEADING}
+						{t(ASSISTANTS_HEADING)}
 					</h2>
-					<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-pretty text-white/80')}>{ASSISTANTS_LEAD}</p>
+					<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-pretty text-white/80')}>{t(ASSISTANTS_LEAD)}</p>
 					<div className="mt-10 flex justify-center">
 						{action ?? (
 							<PillLink to="/solutions/brands#operations" variant="white">
-								{marketingCopy.home.assistants.link}</PillLink>
+								{t(marketingCopy.home.assistants.link)}</PillLink>
 						)}
 					</div>
 				</div>

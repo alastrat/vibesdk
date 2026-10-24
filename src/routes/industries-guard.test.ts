@@ -41,7 +41,7 @@ describe('industry pages', () => {
 	it('uses the solution page template, with example requests, then what the stores can include as a carousel', () => {
 		const page = source(PAGE);
 		for (const part of ['<SolutionHero', 'industry.prompts.map', '<ClosingPanel']) expect(page, part).toContain(part);
-		const carousel = page.indexOf('<FeatureCarousel title={`What your ${industry.store} can include`} features={industry.features} />');
+		const carousel = page.indexOf("<FeatureCarousel title={t('What your {store} can include', { store: t(industry.store) })} features={industry.features} />");
 		expect(carousel).toBeGreaterThan(page.indexOf('industry.prompts.map'));
 		expect(carousel).toBeLessThan(page.indexOf('<PublicFaq'));
 		// What every store comes with, and how it works, belong on the general pages, not each industry's.
@@ -80,11 +80,11 @@ describe('industry pages', () => {
 		for (const part of [
 			'srcSet={industryPhotoSrcSet(feature.photo)}',
 			'loading="lazy"',
-			'alt={feature.photo.alt}',
+			'alt={t(feature.photo.alt)}',
 			'<FeaturePreview preview={feature.preview} />',
 			'style={{ backgroundColor: feature.accent }}',
-			'{feature.request}',
-			'Photo by {feature.photo.photographer} on Unsplash',
+			'{t(feature.request)}',
+			'{t("Photo by")} {feature.photo.photographer} {t("on Unsplash")}',
 			'<StartBuildingButton variant="outline-on-dark"',
 		]) {
 			expect(carousel, part).toContain(part);
@@ -97,17 +97,17 @@ describe('industry pages', () => {
 		const page = source(PAGE);
 		expect(page).toContain('srcSet={industryPhotoSrcSet(industry.photo)}');
 		expect(page).toContain('fetchPriority="high"');
-		expect(page).toContain('alt={industry.photo.alt}');
-		expect(page).toMatch(/Photo by \{industry\.photo\.photographer\} on Unsplash/);
+		expect(page).toContain('alt={t(industry.photo.alt)}');
+		expect(page).toContain('t("Photo by {name} on Unsplash", { name: industry.photo.photographer })');
 		expect(page).toContain('href={industry.photo.url}');
 	});
 
 	it('answers what Estori is for the industry, then its questions, for search engines and AI assistants', () => {
 		const page = source(PAGE);
-		expect(page).toContain('What is Estori for {industry.audience}?');
-		expect(page).toContain('{industry.summary}');
-		expect(page).toContain('<PublicFaq items={industryFaq(industry)} />');
-		expect(page).toContain('<JsonLd data={industryStructuredData(industry, window.location.origin)} />');
+		expect(page).toContain('t("What is Estori for {audience}?", { audience: t(industry.audience) })');
+		expect(page).toContain('{t(industry.summary)}');
+		expect(page).toContain('<PublicFaq items={industryFaq(industry, publicTranslator())} />');
+		expect(page).toContain('<JsonLd data={industryStructuredData(industry, window.location.origin, publicTranslator())} />');
 	});
 
 	it('gives every industry page its canonical address, social preview and breadcrumb trail', () => {
@@ -117,7 +117,7 @@ describe('industry pages', () => {
 		const meta = source('/src/components/public-site/solution-page.tsx');
 		// The worker writes the same tags into the HTML; page-head.test.ts covers which tags they are.
 		expect(meta).toContain('pageHeadTags(head, window.location.origin)');
-		expect(meta).toContain('<nav aria-label="Breadcrumb"');
+		expect(meta).toContain('<nav aria-label={t("Breadcrumb")}');
 		expect(meta).toContain('aria-current="page"');
 	});
 
@@ -134,7 +134,7 @@ describe('industry pages', () => {
 		expect(source(PAGE)).toMatch(/<IndustryCards\s+industries=\{INDUSTRIES\.filter\(\(other\) => other\.slug !== industry\.slug\)\}\s+showAll/);
 		const hub = source(HUB);
 		expect(hub).toContain('<IndustryCards industries={INDUSTRIES} />');
-		expect(hub).toContain('<JsonLd data={industriesStructuredData(window.location.origin)} />');
+		expect(hub).toContain('<JsonLd data={industriesStructuredData(window.location.origin, publicTranslator())} />');
 		expect(hub).toContain('crumbs={INDUSTRIES_CRUMBS}');
 		const cards = source('/src/components/public-site/IndustryCards.tsx');
 		expect(cards).toContain('loading="lazy"');
@@ -149,9 +149,9 @@ describe('industry pages', () => {
 
 	it('lists the industries second in the Solutions menu, in place of Get started', () => {
 		const nav = source(NAV);
-		const audiences = nav.indexOf('<Column title={marketingCopy.navigation.estoriFor} links={AUDIENCE_LINKS}');
-		const industries = nav.indexOf('<Column title={marketingCopy.common.industries} links={INDUSTRY_LINKS}');
-		const platform = nav.indexOf('<Column title={marketingCopy.navigation.platform} links={PLATFORM_LINKS}');
+		const audiences = nav.indexOf('<Column title={t(marketingCopy.navigation.estoriFor)} links={AUDIENCE_LINKS}');
+		const industries = nav.indexOf('<Column title={t(marketingCopy.common.industries)} links={INDUSTRY_LINKS}');
+		const platform = nav.indexOf('<Column title={t(marketingCopy.navigation.platform)} links={PLATFORM_LINKS}');
 		expect(audiences).toBeGreaterThanOrEqual(0);
 		expect(industries).toBeGreaterThan(audiences);
 		expect(platform).toBeGreaterThan(industries);

@@ -1,7 +1,7 @@
+import { ENGLISH, type Translator } from '../../shared/i18n/translate';
 import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
 import type { ReactNode } from 'react';
-import { EXTRA_CREDITS, PLATFORM_FEE_LABEL, formatCredits } from '@/api-types';
-import { EXTRA_CREDITS_PRICE } from '@/lib/plans';
+import { EXTRA_CREDITS, PLATFORM_FEE_LABEL, formatCredits, extraCreditsPriceLabel } from '@/api-types';
 
 export interface CardCopy {
 	title: string;
@@ -169,11 +169,13 @@ export const AGENTIC_FAQ: readonly FaqItem[] = [
 	{ question: 'Is it available yet?', answer: "Not yet. It's coming soon to every Estori store." },
 ];
 
-export const DEVELOPER_FAQ: readonly FaqItem[] = [
-	{ question: 'What does Estori charge?', answer: `${PLATFORM_FEE_LABEL} per sale. You receive the rest through Stripe.` },
+export function developerFaq(i18n: Translator = ENGLISH): readonly FaqItem[] { return [
+	{ question: 'What does Estori charge?', answer: i18n.t('{fee} per sale. You receive the rest through Stripe.', { fee: PLATFORM_FEE_LABEL }) },
 	{ question: 'What do I need to sell?', answer: 'A Stripe account, and you must be 18 or older.' },
 	{ question: 'Can buyers resell my store?', answer: "No. A buyer gets their own copy for their own business, and it can't be republished or resold." },
-];
+]; }
+
+export const DEVELOPER_FAQ = developerFaq();
 
 export const CONTENT_FAQ: readonly FaqItem[] = [
 	{ question: 'Do I need to run a store?', answer: 'No. You can promote merchants with your own link. A store of your own is optional.' },
@@ -268,22 +270,22 @@ export const STORE_FEATURES: readonly StoreFeature[] = [
 ];
 
 /** "A typical step takes about 16 to 445 credits.", from the models' typical credits per step; empty until they're known. */
-function typicalStep(rates: readonly number[]): string {
+function typicalStep(rates: readonly number[], i18n: Translator): string {
 	if (rates.length === 0) return '';
 	const low = Math.min(...rates);
 	const high = Math.max(...rates);
-	return ` A typical step takes about ${low === high ? formatCredits(low) : `${formatCredits(low)} to ${formatCredits(high)}`} credits.`;
+	return ' ' + i18n.t('A typical step takes about {credits} credits.', { credits: low === high ? formatCredits(low, i18n.locale) : i18n.t('{low} to {high}', { low: formatCredits(low, i18n.locale), high: formatCredits(high, i18n.locale) }) });
 }
 
 /**
  * The pricing page's questions, shown before the launch questions: the plans and extra credits once billing is on, and
  * monthly plan allowances and contact-based activation when online checkout is unavailable. `rates` are the models' typical credits per step.
  */
-export function pricingFaq(billing: boolean, rates: readonly number[]): readonly FaqItem[] {
+export function pricingFaq(billing: boolean, rates: readonly number[], i18n: Translator = ENGLISH): readonly FaqItem[] {
 	return [
 		{
 			question: 'What are AI credits?',
-			answer: `Credits pay for the AI's work. Each step is charged from the work it really does, at the price of the model you pick, so lighter models go further.${typicalStep(rates)}`,
+			answer: i18n.t("Credits pay for the AI's work. Each step is charged from the work it really does, at the price of the model you pick, so lighter models go further.") + typicalStep(rates, i18n),
 		},
 		{
 			question: 'What happens when I run out of credits?',
@@ -291,13 +293,13 @@ export function pricingFaq(billing: boolean, rates: readonly number[]): readonly
 		},
 		{
 			question: 'Can I buy more credits?',
-			answer: `Yes, on every plan at the same price: ${EXTRA_CREDITS_PRICE}, from ${formatCredits(EXTRA_CREDITS.minCredits)} at a time. They're used after your monthly credits and last ${EXTRA_CREDITS.monthsValid} months.`,
+			answer: i18n.t("Yes, on every plan at the same price: {price}, from {credits} at a time. They're used after your monthly credits and last {months} months.", { price: extraCreditsPriceLabel(i18n), credits: formatCredits(EXTRA_CREDITS.minCredits, i18n.locale), months: EXTRA_CREDITS.monthsValid }),
 		},
 		{
 			question: 'Can I change or cancel my plan?',
 			answer: 'Any time, from your billing page. Upgrading to Premium at the same billing frequency happens at once. Downgrading, changing billing frequency or cancelling takes effect at the end of your paid period.',
 		},
-		{ question: 'Do unused credits roll over?', answer: `Monthly credits don't; extra credits you buy do, for ${EXTRA_CREDITS.monthsValid} months.` },
+		{ question: 'Do unused credits roll over?', answer: i18n.t("Monthly credits don't; extra credits you buy do, for {months} months.", { months: EXTRA_CREDITS.monthsValid }) },
 		...(!billing ? [{ question: 'How do I activate a paid plan?', answer: marketingCopy.pricing.paidActivationAnswer }] : []),
 	];
 }

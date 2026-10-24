@@ -1,3 +1,5 @@
+import { publicTranslator } from '@/lib/i18n/public-pricing';
+import { t, getLocale } from '@/lib/i18n';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CheckIcon } from '@phosphor-icons/react';
@@ -38,70 +40,65 @@ export default function PricingPage() {
 		<div>
 			<PageMeta {...PRICING_PAGE} />
 			<section className="bg-public-charcoal px-4 pt-20 pb-24 text-center text-white sm:px-6 sm:pt-28 sm:pb-28">
-				<Eyebrow tone="dark">Pricing</Eyebrow>
-				<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-3xl text-balance')}>Pricing that grows with your stores</h1>
-				<p className={cn(LEAD, 'mx-auto mt-5 max-w-xl text-white/80')}>
-					Start free on Basic. Move to Pro or Premium when you need more AI credits, or talk to us about Enterprise.
-				</p>
+				<Eyebrow tone="dark">{t("Pricing")}</Eyebrow>
+				<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-3xl text-balance')}>{t("Pricing that grows with your stores")}</h1>
+				<p className={cn(LEAD, 'mx-auto mt-5 max-w-xl text-white/80')}>{t("Start free on Basic. Move to Pro or Premium when you need more AI credits, or talk to us about Enterprise.")}</p>
 			</section>
 			<PlanCards interval={interval} onIntervalChange={setInterval} credits={credits} onCreditsChange={chooseCredits} />
 			<ComparePlans billing={billing} interval={interval} credits={credits} />
 			<CreditsExplainer />
 			<section id="developers" className="scroll-mt-36 border-t border-public-line bg-white px-4 py-16 sm:px-6 sm:py-20">
 				<div className="mx-auto max-w-[1248px]">
-					<Eyebrow>For developers</Eyebrow>
-					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>Selling templates in Discover</h2>
+					<Eyebrow>{t("For developers")}</Eyebrow>
+					<h2 className={cn(HEADING_SECTION, 'mt-4 text-balance text-public-ink')}>{t("Selling templates in Discover")}</h2>
 					<div className="mt-10 grid gap-6 lg:grid-cols-2">
 						{/* Positioned, so the table's absolute sr-only caption stays inside the page's own scroll. */}
 						<article className={cn(CARD, 'relative bg-public-charcoal text-white')}>
-							<h3 className={cn(CARD_LABEL, 'text-white/80')}>Sell</h3>
+							<h3 className={cn(CARD_LABEL, 'text-white/80')}>{t("Sell")}</h3>
 							<p className="mt-4 text-5xl font-light tracking-[-0.02em]">{PLATFORM_FEE_LABEL}</p>
-							<p className="mt-3 text-sm text-white/70">per sale</p>
+							<p className="mt-3 text-sm text-white/70">{t("per sale")}</p>
 							<ul className="mt-8 grid gap-3">
-								<Feature tone="dark">Choose a price. An Estori admin reviews it before buyers can use your store.</Feature>
-								<Feature tone="dark">Buyers pay by card through Stripe. You receive the rest automatically, on Stripe's payout schedule.</Feature>
-								<Feature tone="dark">You need a Stripe account and must be 18 or older.</Feature>
+								<Feature tone="dark">{t("Choose a price. An Estori admin reviews it before buyers can use your store.")}</Feature>
+								<Feature tone="dark">{t("Buyers pay by card through Stripe. You receive the rest automatically, on Stripe's payout schedule.")}</Feature>
+								<Feature tone="dark">{t("You need a Stripe account and must be 18 or older.")}</Feature>
 							</ul>
 							<table className="mt-8 w-full text-left text-sm">
-								<caption className="sr-only">What a seller keeps at each price</caption>
+								<caption className="sr-only">{t("What a seller keeps at each price")}</caption>
 								<thead className="text-white/60">
 									<tr>
-										<th scope="col" className="py-2 font-normal">Price</th>
-										<th scope="col" className="py-2 font-normal">Estori fee</th>
-										<th scope="col" className="py-2 text-right font-normal">You keep</th>
+										<th scope="col" className="py-2 font-normal">{t("Price")}</th>
+										<th scope="col" className="py-2 font-normal">{t("Estori fee")}</th>
+										<th scope="col" className="py-2 text-right font-normal">{t("You keep")}</th>
 									</tr>
 								</thead>
 								<tbody>
 									{sellerKeepsTable().map((row) => (
 										<tr key={row.priceCents} className="border-t border-white/15">
-											<th scope="row" className="py-2.5 font-normal">{formatTemplatePrice(row.priceCents)}</th>
-											<td className="py-2.5 text-white/70">{formatCents(row.feeCents)}</td>
-											<td className="py-2.5 text-right">{formatCents(row.sellerCents)}</td>
+											<th scope="row" className="py-2.5 font-normal">{formatTemplatePrice(row.priceCents, getLocale())}</th>
+											<td className="py-2.5 text-white/70">{formatCents(row.feeCents, getLocale())}</td>
+											<td className="py-2.5 text-right">{formatCents(row.sellerCents, getLocale())}</td>
 										</tr>
 									))}
 								</tbody>
 							</table>
 						</article>
 						<article className={cn(CARD, 'ring ring-public-line')}>
-							<h3 className={cn(CARD_LABEL, 'text-public-ink/80')}>Buy a store design</h3>
-							<p className="mt-4 text-5xl font-light tracking-[-0.02em] text-public-ink">One-time</p>
-							<p className="mt-3 text-sm text-public-muted">the price on its page</p>
+							<h3 className={cn(CARD_LABEL, 'text-public-ink/80')}>{t("Buy a store design")}</h3>
+							<p className="mt-4 text-5xl font-light tracking-[-0.02em] text-public-ink">{t("One-time")}</p>
+							<p className="mt-3 text-sm text-public-muted">{t("the price on its page")}</p>
 							<ul className="mt-8 grid gap-3">
-								<Feature>Your own copy to adapt for your own store</Feature>
-								<Feature>Keep editing it with the AI</Feature>
-								<Feature>For your use only: it can't be republished or resold</Feature>
-								<Feature>
-									Refunded if it can't be used.{' '}
-									<Link to="/refunds" className="underline underline-offset-4">
-										Refund policy
-									</Link>
+								<Feature>{t("Your own copy to adapt for your own store")}</Feature>
+								<Feature>{t("Keep editing it with the AI")}</Feature>
+								<Feature>{t("For your use only: it can't be republished or resold")}</Feature>
+								<Feature>{t("Refunded if it can't be used.")}{' '}
+									<Link to="/refunds" className="underline underline-offset-4">{t("Refund policy")}{getLocale() !== 'en' && t(' (in English)')}</Link>
 								</Feature>
 							</ul>
 						</article>
 					</div>
 				</div>
 			</section>
-			<PublicFaq leading={pricingFaq(billing, rates)} />
+			<PublicFaq leading={pricingFaq(billing, rates, publicTranslator())} />
 		</div>
 	);
 }

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { useId, useState } from 'react';
 import { MinusIcon, PlusIcon } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
@@ -32,10 +33,10 @@ export function Stepper({
 	return (
 		<div className={cn('flex flex-wrap items-center justify-between gap-3', className)}>
 			<label htmlFor={id} className="text-[15px] text-public-ink">
-				{label}
+				{t(label)}
 			</label>
 			<div className="flex items-center overflow-hidden rounded-lg bg-white ring-1 ring-public-line focus-within:ring-2 focus-within:ring-public-blue">
-				<button type="button" aria-label={`Fewer ${noun}`} disabled={value <= min} onClick={() => set(value - step)} className={button}>
+				<button type="button" aria-label={t('Fewer {items}', { items: noun })} disabled={value <= min} onClick={() => set(value - step)} className={button}>
 					<MinusIcon className="size-4" aria-hidden />
 				</button>
 				<input
@@ -54,7 +55,7 @@ export function Stepper({
 					onBlur={() => setDraft(null)}
 					className="h-9 w-20 border-x border-public-line text-center text-[15px] tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
 				/>
-				<button type="button" aria-label={`More ${noun}`} disabled={value >= max} onClick={() => set(value + step)} className={button}>
+				<button type="button" aria-label={t('More {items}', { items: noun })} disabled={value >= max} onClick={() => set(value + step)} className={button}>
 					<PlusIcon className="size-4" aria-hidden />
 				</button>
 			</div>

@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Fragment, useEffect, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { pageTitle } from '@/brand';
@@ -25,7 +26,8 @@ function useReplaceDefaultHead() {
  * The page's title and description for search results and shared links. With its path, the page also names its
  * canonical address; with an image, shared links show it large.
  */
-export function PageMeta(head: PageHead) {
+export function PageMeta(source: PageHead) {
+	const head = { ...source, title: source.title ? t(source.title) : undefined, description: t(source.description), ...(source.image ? { image: { ...source.image, alt: t(source.image.alt) } } : {}) };
 	useReplaceDefaultHead();
 	return (
 		<>
@@ -42,7 +44,7 @@ export function PageMeta(head: PageHead) {
 function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
 	const current = crumbs.length - 1;
 	return (
-		<nav aria-label="Breadcrumb" className="text-xs tracking-[0.02em] uppercase">
+		<nav aria-label={t("Breadcrumb")} className="text-xs tracking-[0.02em] uppercase">
 			<ol className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1">
 				{crumbs.map((crumb, index) => (
 					<Fragment key={crumb.path}>
@@ -54,11 +56,11 @@ function Breadcrumbs({ crumbs }: { crumbs: readonly Crumb[] }) {
 						<li>
 							{index === current ? (
 								<span aria-current="page" className="text-white">
-									{crumb.name}
+									{t(crumb.name)}
 								</span>
 							) : (
 								<Link to={crumb.path} className={cn('text-white/80 hover:text-white', UNDERLINE_GROW)}>
-									{crumb.name}
+									{t(crumb.name)}
 								</Link>
 							)}
 						</li>
@@ -89,11 +91,11 @@ export function SolutionHero({
 	return (
 		<section className="bg-public-charcoal px-4 pt-20 pb-24 text-center text-white sm:px-6 sm:pt-28 sm:pb-28">
 			<div className="flex flex-wrap items-center justify-center gap-3">
-				{crumbs ? <Breadcrumbs crumbs={crumbs} /> : <Eyebrow tone="dark">{eyebrow}</Eyebrow>}
+				{crumbs ? <Breadcrumbs crumbs={crumbs} /> : <Eyebrow tone="dark">{t(eyebrow)}</Eyebrow>}
 				{tag && <CapabilityTag id={tag} tone="dark" />}
 			</div>
-			<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-4xl text-balance')}>{title}</h1>
-			<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-pretty text-white/80')}>{lead}</p>
+			<h1 className={cn(HEADING_SECTION, 'mx-auto mt-4 max-w-4xl text-balance')}>{t(title)}</h1>
+			<p className={cn(LEAD, 'mx-auto mt-5 max-w-2xl text-pretty text-white/80')}>{t(lead)}</p>
 			<div className="mt-10 flex flex-wrap items-center justify-center gap-3">
 				{actions ?? (
 					<StartBuildingButton variant="white" />
@@ -126,18 +128,18 @@ export function CardSection({
 			<BlurFade inView className="mx-auto max-w-[1248px]">
 				{(eyebrow || tag) && (
 					<div className="flex flex-wrap items-center gap-3">
-						{eyebrow && <Eyebrow>{eyebrow}</Eyebrow>}
+						{eyebrow && <Eyebrow>{t(eyebrow)}</Eyebrow>}
 						{tag && <CapabilityTag id={tag} />}
 					</div>
 				)}
-				<h2 className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance text-public-ink')}>{title}</h2>
-				{lead && <p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty text-public-muted')}>{lead}</p>}
+				<h2 className={cn(HEADING_SECTION, 'mt-4 max-w-3xl text-balance text-public-ink')}>{t(title)}</h2>
+				{lead && <p className={cn(LEAD, 'mt-5 max-w-2xl text-pretty text-public-muted')}>{t(lead)}</p>}
 				{cards.length > 0 && (
 					<div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{cards.map((card) => (
 							<article key={card.title} className="rounded-[24px] p-7 ring ring-public-line">
-								<h3 className={cn(HEADING_CARD, 'text-public-ink')}>{card.title}</h3>
-								<p className="mt-3 text-[15px] leading-relaxed font-light text-public-muted">{card.body}</p>
+								<h3 className={cn(HEADING_CARD, 'text-public-ink')}>{t(card.title)}</h3>
+								<p className="mt-3 text-[15px] leading-relaxed font-light text-public-muted">{t(card.body)}</p>
 							</article>
 						))}
 					</div>
@@ -152,12 +154,12 @@ export function HowItWorks({ steps }: { steps: readonly string[] }) {
 	return (
 		<section className="border-t border-public-line bg-white px-4 py-20 sm:px-6 sm:py-28">
 			<div className="mx-auto max-w-[1248px]">
-				<Eyebrow>How it works</Eyebrow>
+				<Eyebrow>{t("How it works")}</Eyebrow>
 				<ol className="mt-8 grid gap-4 md:grid-cols-3">
 					{steps.map((step, index) => (
 						<li key={step} className="rounded-[24px] bg-public-charcoal p-7 text-white">
-							<span className="text-sm text-white/70">Step {index + 1}</span>
-							<p className="mt-3 text-xl leading-snug font-light">{step}</p>
+							<span className="text-sm text-white/70">{t("Step {number}", { number: index + 1 })}</span>
+							<p className="mt-3 text-xl leading-snug font-light">{t(step)}</p>
 						</li>
 					))}
 				</ol>

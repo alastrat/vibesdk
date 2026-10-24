@@ -1,3 +1,5 @@
+import { publicTranslator } from '@/lib/i18n/public-pricing';
+import { t } from '@/lib/i18n';
 import { IndustryCards } from '@/components/public-site/IndustryCards';
 import { JsonLd } from '@/components/public-site/JsonLd';
 import { PillLink } from '@/components/public-site/primitives';
@@ -11,7 +13,7 @@ export default function IndustriesPage() {
 	return (
 		<div>
 			<PageMeta title={INDUSTRIES_PAGE.metaTitle} description={INDUSTRIES_PAGE.metaDescription} path={INDUSTRIES_PATH} />
-			<JsonLd data={industriesStructuredData(window.location.origin)} />
+			<JsonLd data={industriesStructuredData(window.location.origin, publicTranslator())} />
 			<SolutionHero
 				crumbs={INDUSTRIES_CRUMBS}
 				title={INDUSTRIES_PAGE.title}
@@ -19,9 +21,7 @@ export default function IndustriesPage() {
 				actions={
 					<>
 						<StartBuildingButton variant="white" />
-						<PillLink to="/discover" variant="outline-on-dark">
-							Browse templates
-						</PillLink>
+						<PillLink to="/discover" variant="outline-on-dark">{t("Browse templates")}</PillLink>
 					</>
 				}
 			/>

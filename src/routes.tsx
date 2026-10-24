@@ -1,3 +1,5 @@
+import NotFoundPage from './routes/not-found';
+import LayoutPreview from './routes/layout-preview/route';
 import { Navigate, type RouteObject } from 'react-router';
 import { BILLING_CARD_PATH, BILLING_CARD_RETURN_PATH, BILLING_CHECKOUT_PATH, BILLING_CHECKOUT_RETURN_PATH, BILLING_PATH } from './api-types';
 
@@ -175,6 +177,8 @@ const routes = [
 					},
 				],
 			},
+			{ path: 'layout-preview', Component: import.meta.env.DEV ? LayoutPreview : protectedPage(LayoutPreview) },
+			{ path: '*', Component: NotFoundPage },
 			// Signing up and in: full pages of their own, outside the site header and footer.
 			{
 				path: 'signup',

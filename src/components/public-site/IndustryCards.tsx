@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Link } from 'react-router';
 import { ArrowRightIcon } from '@phosphor-icons/react';
 import { INDUSTRIES_PATH, industryPath, industryPhotoSrcSet, type Industry } from '@/content/industries';
@@ -27,7 +28,7 @@ export function IndustryCards({ industries, showAll = false }: { industries: rea
 							/>
 						</span>
 						<span className="mt-3 block">
-							<span className={cn(NAME, GROUP_UNDERLINE_GROW)}>{industry.name}</span>
+							<span className={cn(NAME, GROUP_UNDERLINE_GROW)}>{t(industry.name)}</span>
 						</span>
 					</Link>
 				</li>
@@ -39,7 +40,7 @@ export function IndustryCards({ industries, showAll = false }: { industries: rea
 							<ArrowRightIcon className="size-8" aria-hidden />
 						</span>
 						<span className="mt-3 block">
-							<span className={cn(NAME, GROUP_UNDERLINE_GROW)}>All industries</span>
+							<span className={cn(NAME, GROUP_UNDERLINE_GROW)}>{t("All industries")}</span>
 						</span>
 					</Link>
 				</li>

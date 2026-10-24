@@ -1,3 +1,5 @@
+import { t, getLocale } from '@/lib/i18n';
+import { formatUsd } from '@/lib/plans';
 import { CaretRightIcon, CheckIcon } from '@phosphor-icons/react';
 import type { StorePreview } from '@/content/industries';
 import { cn } from '@/lib/utils';
@@ -19,7 +21,7 @@ function PreviewBody({ preview }: { preview: StorePreview }) {
 							/>
 						))}
 					</div>
-					<p className="mt-3 text-[13px] text-public-muted">{preview.caption}</p>
+					<p className="mt-3 text-[13px] text-public-muted">{t(preview.caption)}</p>
 				</>
 			);
 		case 'options':
@@ -31,11 +33,11 @@ function PreviewBody({ preview }: { preview: StorePreview }) {
 								key={option}
 								className={cn(CHIP, index === preview.selected ? 'bg-public-ink text-white ring-public-ink' : 'text-public-ink ring-public-line')}
 							>
-								{option}
+								{t(option)}
 							</span>
 						))}
 					</div>
-					{preview.caption && <p className="mt-3 text-[13px] text-public-muted">{preview.caption}</p>}
+					{preview.caption && <p className="mt-3 text-[13px] text-public-muted">{t(preview.caption)}</p>}
 				</>
 			);
 		case 'table':
@@ -43,8 +45,8 @@ function PreviewBody({ preview }: { preview: StorePreview }) {
 				<dl className="text-[14px]">
 					{preview.rows.map(([label, value]) => (
 						<div key={label} className={ROW}>
-							<dt className="text-public-muted">{label}</dt>
-							<dd className="text-right">{value}</dd>
+							<dt className="text-public-muted">{t(label)}</dt>
+							<dd className="text-right">{t(value)}</dd>
 						</div>
 					))}
 				</dl>
@@ -63,7 +65,7 @@ function PreviewBody({ preview }: { preview: StorePreview }) {
 								</span>
 							)}
 							{preview.style === 'plain' && <span className="size-8 shrink-0 rounded-lg bg-[#efedea]" />}
-							<span className="min-w-0 flex-1">{item}</span>
+							<span className="min-w-0 flex-1">{t(item)}</span>
 							{preview.style === 'plain' && <CaretRightIcon className="size-4 text-public-muted" />}
 						</li>
 					))}
@@ -76,13 +78,13 @@ function PreviewBody({ preview }: { preview: StorePreview }) {
 						{preview.items.map((item) => (
 							<li key={item} className="flex items-center gap-2.5">
 								<CheckIcon weight="bold" className="size-3.5 text-public-blue" />
-								{item}
+								{t(item)}
 							</li>
 						))}
 					</ul>
 					<div className="mt-4 flex items-center justify-between gap-3">
-						<span className="text-[14px] font-medium">{preview.price}</span>
-						<span className="rounded-full bg-public-blue px-4 py-2 text-[13px] text-white">Add set to cart</span>
+						<span className="text-[14px] font-medium">{/^\$[\d.]+$/.test(preview.price) ? formatUsd(Math.round(Number(preview.price.slice(1)) * 100), getLocale()) : t(preview.price)}</span>
+						<span className="rounded-full bg-public-blue px-4 py-2 text-[13px] text-white">{t("Add set to cart")}</span>
 					</div>
 				</>
 			);
@@ -96,7 +98,7 @@ function PreviewBody({ preview }: { preview: StorePreview }) {
 export function FeaturePreview({ preview }: { preview: StorePreview }) {
 	return (
 		<div aria-hidden className="w-full max-w-[17rem] rounded-2xl bg-white p-5 text-left text-public-ink shadow-[0_18px_40px_rgba(0,0,0,0.25)]">
-			<p className="text-[15px] font-medium">{preview.title}</p>
+			<p className="text-[15px] font-medium">{t(preview.title)}</p>
 			<div className="mt-3">
 				<PreviewBody preview={preview} />
 			</div>

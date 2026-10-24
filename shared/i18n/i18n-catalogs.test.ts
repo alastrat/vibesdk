@@ -1,3 +1,9 @@
+import marketingEn from '../../src/content/marketing/en.json';
+import marketingEs from '../../src/content/marketing/es.json';
+import marketingPt from '../../src/content/marketing/pt-BR.json';
+import publicEs from '../../src/content/marketing/es.extra.json';
+import publicPt from '../../src/content/marketing/pt-BR.extra.json';
+import { marketingCatalog } from '../../src/content/marketing/catalog';
 import { describe, expect, it } from 'vitest';
 import es from './catalogs/es.json';
 import ptBR from './catalogs/pt-BR.json';
@@ -265,10 +271,11 @@ describe('the catalogs against the source', () => {
 	});
 
 	describe.each([
-		['es.json', es],
-		['pt-BR.json', ptBR],
-	])('%s', (_name, catalog) => {
-		const report = checkCatalog(messages, catalog);
+		['es.json', es, publicEs, marketingEs],
+		['pt-BR.json', ptBR, publicPt, marketingPt],
+	])('%s', (_name, catalog, extra, marketing) => {
+		const report = checkCatalog(messages, { ...catalog, ...extra, ...marketingCatalog(marketingEn, marketing) });
+		const appReport = checkCatalog(messages, catalog);
 
 		it('translates every message the source marks, with no blank translation', () => {
 			expect(report.missing.map(describeMessage)).toEqual([]);
@@ -276,7 +283,7 @@ describe('the catalogs against the source', () => {
 		});
 
 		it('has no key that no source uses', () => {
-			expect(report.unused).toEqual([]);
+			expect(appReport.unused).toEqual([]);
 		});
 
 		it('keeps every placeholder and tag of the English', () => {
@@ -288,7 +295,7 @@ describe('the catalogs against the source', () => {
 		});
 
 		it('keeps its keys sorted, as bun run i18n:extract writes them', () => {
-			expect(report.unsorted).toBe(false);
+			expect(appReport.unsorted).toBe(false);
 		});
 	});
 });

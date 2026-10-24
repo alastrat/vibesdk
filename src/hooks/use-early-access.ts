@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { msg, t } from '@/lib/i18n';
 import { useLocation, useNavigate } from 'react-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -9,7 +10,7 @@ import { requestedCapability } from '@/lib/early-access';
 import { queryKeys } from '@/lib/query-keys';
 import { unwrap } from '@/lib/unwrap-response';
 
-export const EARLY_ACCESS_CONFIRMATION = "You're on the list. We'll email you when it opens.";
+export const EARLY_ACCESS_CONFIRMATION = msg("You're on the list. We'll email you when it opens.");
 
 export function useMyEarlyAccess() {
 	const { user, isAuthenticated } = useAuth();
@@ -49,8 +50,8 @@ export function useEarlyAccessFromUrl(): void {
 	useEffect(() => {
 		if (!isAuthenticated || !capability) return;
 		mutate(capability, {
-			onSuccess: () => toast.success(EARLY_ACCESS_CONFIRMATION),
-			onError: (error) => toast.error(error.message),
+			onSuccess: () => toast.success(t(EARLY_ACCESS_CONFIRMATION)),
+			onError: (error) => toast.error(t(error.message)),
 		});
 		navigate({ pathname, hash }, { replace: true });
 	}, [isAuthenticated, capability, mutate, navigate, pathname, hash]);

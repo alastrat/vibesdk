@@ -1,3 +1,4 @@
+import { useLocale, t } from '@/lib/i18n';
 import { marketingCopy } from '@/content/marketing-copy';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
@@ -36,6 +37,7 @@ const ROW_STAGGER_MS = 40;
 
 /** Top of every public page: the gold announcement, gray utility row, then the white navigation and build action. */
 export function PublicTopBar() {
+	useLocale();
 	const { isAuthenticated } = useAuth();
 	const { pathname, hash, key } = useLocation();
 	const [menuOpen, setMenuOpen] = useState(false);
@@ -98,10 +100,10 @@ export function PublicTopBar() {
 			<div className="relative border-b border-public-line bg-white">
 				<div className="mx-auto flex h-16 max-w-[1296px] items-center justify-between gap-4 px-4 sm:h-[72px] sm:px-6">
 					<div className="flex items-center gap-8">
-						<Link to="/" aria-label={`${BRAND.name} home`} className="flex items-center text-public-brand">
+						<Link to="/" aria-label={t('{brand} home', { brand: BRAND.name })} className="flex items-center text-public-brand">
 							<EstoriLogo className="h-7 w-auto" />
 						</Link>
-						<nav aria-label={marketingCopy.navigation.accessibility.main} className="hidden lg:flex items-center gap-6 whitespace-nowrap text-[15px] text-public-charcoal">
+						<nav aria-label={t(marketingCopy.navigation.accessibility.main)} className="hidden lg:flex items-center gap-6 whitespace-nowrap text-[15px] text-public-charcoal">
 							{MENUS.map((menu) => (
 								<div
 									key={menu.id}
@@ -123,7 +125,7 @@ export function PublicTopBar() {
 										onClick={() => setOpenPanel((open) => (open === menu.id ? null : menu.id))}
 										className={cn('inline-flex items-center gap-1 aria-expanded:bg-[length:100%_2px]', NAV_ITEM)}
 									>
-										{menu.label}
+										{t(menu.label)}
 										<CaretDownIcon
 											className={cn('size-3.5 transition-transform motion-reduce:transition-none', openPanel === menu.id && 'rotate-180')}
 											aria-hidden
@@ -134,14 +136,14 @@ export function PublicTopBar() {
 							))}
 							{PAGE_LINKS.map((link) => (
 								<Link key={link.to} to={link.to} className={NAV_ITEM}>
-									{link.label}
+									{t(link.label)}
 								</Link>
 							))}
 						</nav>
 					</div>
 					<div className="flex items-center gap-4 whitespace-nowrap">
 						<Link to={SALES_LINK.to} className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>
-							{SALES_LINK.label}
+							{t(SALES_LINK.label)}
 						</Link>
 						<StartBuildingButton className="hidden sm:inline-flex" />
 						<button
@@ -149,7 +151,7 @@ export function PublicTopBar() {
 							className="rounded-full p-2 text-public-charcoal lg:hidden"
 							aria-expanded={menuOpen}
 							aria-controls="public-menu"
-							aria-label={marketingCopy.navigation.accessibility.openMenu}
+							aria-label={t(marketingCopy.navigation.accessibility.openMenu)}
 							onClick={() => setMenuOpen(true)}
 						>
 							<span aria-hidden className="relative block h-4 w-6">
@@ -164,7 +166,7 @@ export function PublicTopBar() {
 				<dialog
 					ref={sheetRef}
 					id="public-menu"
-					aria-label={marketingCopy.navigation.accessibility.menu}
+					aria-label={t(marketingCopy.navigation.accessibility.menu)}
 					onClose={() => {
 						setMenuOpen(false);
 						setMobileSection(null);
@@ -176,19 +178,19 @@ export function PublicTopBar() {
 						<div className="grid h-16 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-public-line px-4 sm:h-[72px] sm:px-6">
 							{mobileSection ? (
 								<>
-									<button type="button" aria-label={marketingCopy.navigation.accessibility.back} onClick={() => setMobileSection(null)} className={cn(SHEET_BUTTON, '-ml-2')}>
+									<button type="button" aria-label={t(marketingCopy.navigation.accessibility.back)} onClick={() => setMobileSection(null)} className={cn(SHEET_BUTTON, '-ml-2')}>
 										<CaretLeftIcon className="size-6" aria-hidden />
 									</button>
-									<p className="text-xl">{MENUS.find((menu) => menu.id === mobileSection)?.label}</p>
+									<p className="text-xl">{t(MENUS.find((menu) => menu.id === mobileSection)?.label ?? '')}</p>
 								</>
 							) : (
-								<Link to="/" aria-label={`${BRAND.name} home`} className="w-fit text-public-brand">
+								<Link to="/" aria-label={t('{brand} home', { brand: BRAND.name })} className="w-fit text-public-brand">
 									<EstoriLogo className="h-7 w-auto" />
 								</Link>
 							)}
 							<button
 								type="button"
-								aria-label={marketingCopy.navigation.accessibility.close}
+								aria-label={t(marketingCopy.navigation.accessibility.close)}
 								onClick={() => setMenuOpen(false)}
 								className={cn(SHEET_BUTTON, '-mr-2 justify-self-end', !mobileSection && 'col-start-3')}
 							>
@@ -206,7 +208,7 @@ export function PublicTopBar() {
 									{MENUS.map((menu, index) => (
 										<li key={menu.id} className={cn('motion-safe:animate-public-menu-item', menu.id === 'creators' && 'hidden')} style={{ animationDelay: `${index * ROW_STAGGER_MS}ms` }}>
 											<button type="button" onClick={() => setMobileSection(menu.id)} className={SHEET_ROW}>
-												{menu.label}
+												{t(menu.label)}
 												<CaretRightIcon className="size-6" aria-hidden />
 											</button>
 										</li>
@@ -218,7 +220,7 @@ export function PublicTopBar() {
 											style={{ animationDelay: `${(MENUS.length + index) * ROW_STAGGER_MS}ms` }}
 										>
 											<Link to={link.to} className={SHEET_ROW}>
-												{link.label}
+												{t(link.label)}
 											</Link>
 										</li>
 									))}
@@ -230,11 +232,11 @@ export function PublicTopBar() {
 							<div className="shrink-0 border-t border-public-line px-4 py-5 sm:px-6">
 								{isAuthenticated && (
 									<Link to="/" className="text-[17px] text-public-charcoal">
-										{marketingCopy.navigation.openApp}</Link>
+										{t(marketingCopy.navigation.openApp)}</Link>
 								)}
 								<div className={cn('grid grid-cols-2 gap-3', isAuthenticated && 'mt-4')}>
 									<PillLink to={SALES_LINK.to} variant="outline-on-light" className="w-full px-3 text-[15px]">
-										{SALES_LINK.label}
+										{t(SALES_LINK.label)}
 									</PillLink>
 									<StartBuildingButton className="w-full px-3 text-[15px]" />
 								</div>

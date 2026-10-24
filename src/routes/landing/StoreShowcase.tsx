@@ -1,3 +1,5 @@
+import { t, getLocale } from '@/lib/i18n';
+import { formatUsd } from '@/lib/plans';
 import { marketingCopy } from '@/content/marketing-copy';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -28,14 +30,14 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 		<section id="discover" aria-labelledby="showcase-title" className="scroll-mt-36 bg-public-charcoal py-20 text-white sm:py-28">
 			<div className="mx-auto flex max-w-[1296px] flex-col gap-8 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
 				<div className="max-w-2xl">
-					<Eyebrow tone="dark">{marketingCopy.common.discover}</Eyebrow>
+					<Eyebrow tone="dark">{t(marketingCopy.common.discover)}</Eyebrow>
 					<h2 id="showcase-title" className={cn(HEADING_SECTION, 'mt-4 text-balance')}>
-						{marketingCopy.home.showcase.title}</h2>
+						{t(marketingCopy.home.showcase.title)}</h2>
 					<p className={cn(LEAD, 'mt-5 text-white/80')}>
-						{marketingCopy.home.showcase.description}</p>
+						{t(marketingCopy.home.showcase.description)}</p>
 				</div>
 				{filters.length > 0 && (
-					<div role="group" aria-label={marketingCopy.home.showcase.filterLabel} className="flex flex-wrap gap-2">
+					<div role="group" aria-label={t(marketingCopy.home.showcase.filterLabel)} className="flex flex-wrap gap-2">
 						{filters.map((option) => (
 							<button
 								key={option}
@@ -47,7 +49,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 									activeFilter === option ? 'bg-white text-public-charcoal' : 'bg-white/10 text-white/85 hover:bg-white/20',
 								)}
 							>
-								{showcaseFilterLabel(option)}
+								{t(showcaseFilterLabel(option))}
 							</button>
 						))}
 					</div>
@@ -79,7 +81,7 @@ export function StoreShowcase({ stores }: { stores: readonly ShowcaseStore[] }) 
 			</div>
 			<div className="mx-auto mt-10 max-w-[1296px] px-4 sm:px-6">
 				<TextLink to="/discover" tone="dark">
-					{marketingCopy.home.showcase.link}</TextLink>
+					{t(marketingCopy.home.showcase.link)}</TextLink>
 			</div>
 		</section>
 	);
@@ -114,12 +116,12 @@ function ShowcaseCard({ store, focusable = true }: { store: ShowcaseStore; focus
 					store.isFree ? 'bg-[#047857] text-white' : 'bg-white text-public-charcoal',
 				)}
 			>
-				{store.priceLabel}
+				{store.isFree ? t('Free') : formatUsd(store.priceCents ?? Math.round(Number(store.priceLabel.replace(/[$,]/g, '')) * 100), getLocale())}
 			</span>
 			<span className="absolute inset-x-4 bottom-4 grid justify-items-start gap-1 text-white">
-				{store.categoryLabel && <span className="mb-1 rounded-full bg-white/20 px-2.5 py-0.5 text-xs backdrop-blur-sm">{store.categoryLabel}</span>}
+				{store.categoryLabel && <span className="mb-1 rounded-full bg-white/20 px-2.5 py-0.5 text-xs backdrop-blur-sm">{t(store.categoryLabel)}</span>}
 				<span className="text-lg leading-tight font-medium">{store.title}</span>
-				{store.byline && <span className="text-xs text-white/75">{store.byline}</span>}
+				{store.byline && <span className="text-xs text-white/75">{t('by {name}', { name: store.userName ?? store.byline.replace(/^by /, '') })}</span>}
 			</span>
 		</Link>
 	);

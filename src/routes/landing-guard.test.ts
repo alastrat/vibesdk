@@ -58,7 +58,7 @@ describe('landing page', () => {
 	it('shows the builder demo on a bundled store image under a neutral address, with motion from Magic UI', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
 		expect(hero).toContain("HERO_STORE_IMAGE = '/marketing/hero-store.jpg'");
-		expect(hero).toContain('url={marketingCopy.home.hero.demo.previewLabel}');
+		expect(hero).toContain('url={t(marketingCopy.home.hero.demo.previewLabel)}');
 		expect(marketingCopy.home.hero.demo.previewLabel).toBe('Live preview');
 		expect(hero).toContain('<AnimatedList');
 		expect(hero).toContain('<BorderBeam');
@@ -84,8 +84,8 @@ describe('landing page', () => {
 
 	it('always underlines the Discover link under the build box', () => {
 		const hero = source('/src/routes/landing/Hero.tsx');
-		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*\{marketingCopy\.home\.hero\.discoverLink\}/);
-		expect(hero).not.toMatch(/hover:underline">\s*\{marketingCopy\.home\.hero\.discoverLink\}/);
+		expect(hero).toMatch(/className="[^"]*\bunderline underline-offset-\[5px\][^"]*">\s*\{t\(marketingCopy\.home\.hero\.discoverLink\)\}/);
+		expect(hero).not.toMatch(/hover:underline">\s*\{t\(marketingCopy\.home\.hero\.discoverLink\)\}/);
 	});
 
 	it('grows the builder demo to fill the window as the page scrolls', () => {

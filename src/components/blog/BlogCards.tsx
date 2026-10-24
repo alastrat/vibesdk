@@ -1,3 +1,4 @@
+import { t, getLocale } from '@/lib/i18n';
 import { Link } from 'react-router';
 import { BLOG_CATEGORIES, blogPostPath, formatBlogDate, type BlogCategoryId, type BlogPost } from '@/content/blog';
 import { cn } from '@/lib/utils';
@@ -17,7 +18,7 @@ export function CategoryTags({ categories, className }: { categories: readonly B
 						to={`/blog?category=${id}`}
 						className="inline-block rounded-md border border-public-line px-2 py-0.5 text-[13px] text-public-ink transition-colors hover:border-public-ink"
 					>
-						{BLOG_CATEGORIES.find((category) => category.id === id)?.label}
+						{t(BLOG_CATEGORIES.find((category) => category.id === id)?.label ?? '')}
 					</Link>
 				</li>
 			))}
@@ -33,14 +34,14 @@ export function FeaturedPost({ post, wide }: { post: BlogPost; wide: boolean }) 
 				<BlogArt id={post.art} className={cn('aspect-[16/9]', wide && 'lg:aspect-auto lg:h-full lg:min-h-[24rem]')} />
 			</Link>
 			<div className="flex flex-col p-8 sm:p-10">
-				<p className={DATE}>{formatBlogDate(post.publishedAt)}</p>
+				<p className={DATE}>{formatBlogDate(post.publishedAt, getLocale())}</p>
 				<h2 className="mt-3 text-3xl leading-[1.15] font-normal tracking-[-0.01em] text-public-ink sm:text-[40px]">
 					<Link to={blogPostPath(post.slug)} className={LINK_HOVER}>
-						{post.title}
+						{t(post.title)}
 					</Link>
 				</h2>
-				<p className="mt-4 text-[17px] text-public-ink">by {post.author}</p>
-				<p className="mt-4 text-[18px] leading-relaxed font-light text-public-muted">{post.summary}</p>
+				<p className="mt-4 text-[17px] text-public-ink">{t("by {name}", { name: post.author === 'The Estori team' ? t('The Estori team') : post.author })}</p>
+				<p className="mt-4 text-[18px] leading-relaxed font-light text-public-muted">{t(post.summary)}</p>
 				<CategoryTags categories={post.categories} className="mt-6" />
 			</div>
 		</article>
@@ -51,10 +52,10 @@ export function FeaturedPost({ post, wide }: { post: BlogPost; wide: boolean }) 
 export function PostListItem({ post }: { post: BlogPost }) {
 	return (
 		<article className="border-b border-public-line py-6 first:pt-0">
-			<p className={DATE}>{formatBlogDate(post.publishedAt)}</p>
+			<p className={DATE}>{formatBlogDate(post.publishedAt, getLocale())}</p>
 			<h3 className="mt-2 text-2xl leading-snug font-normal text-public-ink">
 				<Link to={blogPostPath(post.slug)} className={LINK_HOVER}>
-					{post.title}
+					{t(post.title)}
 				</Link>
 			</h3>
 		</article>
@@ -67,8 +68,8 @@ export function PostCard({ post }: { post: BlogPost }) {
 		<article>
 			<Link to={blogPostPath(post.slug)} className="group block">
 				<BlogArt id={post.art} className="aspect-[16/9] rounded-2xl" />
-				<p className={cn(DATE, 'mt-5')}>{formatBlogDate(post.publishedAt)}</p>
-				<h3 className={cn('mt-2 text-2xl leading-snug font-normal text-public-ink', TITLE_HOVER)}>{post.title}</h3>
+				<p className={cn(DATE, 'mt-5')}>{formatBlogDate(post.publishedAt, getLocale())}</p>
+				<h3 className={cn('mt-2 text-2xl leading-snug font-normal text-public-ink', TITLE_HOVER)}>{t(post.title)}</h3>
 			</Link>
 			<CategoryTags categories={post.categories} className="mt-4" />
 		</article>

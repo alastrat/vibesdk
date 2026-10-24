@@ -593,6 +593,7 @@ export type { ContactAdminData, ContactAdminRequest, ContactReceivedData } from 
 export {
 	COMPANY_SIZES,
 	CONTACT_FAILED_MESSAGE,
+	CONTACT_LIMITED_MESSAGE,
 	CONTACT_FIELD_LIMITS,
 	CONTACT_TOPICS,
 	contactTopicLabel,

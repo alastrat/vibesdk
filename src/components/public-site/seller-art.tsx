@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { t, tn, msg, getLocale, useI18n } from '@/lib/i18n';
+import { useCallback, type ReactNode } from 'react';
 import { CurrencyDollarIcon, DownloadSimpleIcon, LinkSimpleIcon, SparkleIcon } from '@phosphor-icons/react';
 import { NumberTicker } from '@/components/magicui/number-ticker';
 import type { SellerId } from '@/content/positioning';
@@ -14,9 +15,9 @@ const ART_WIDTH = 560;
 const ART_HEIGHT = 360;
 
 const CATALOG = [
-	{ name: 'Wool socks', photo: PHOTOS.socks, cost: '$6.20', price: '$18.00', margin: '66%' },
-	{ name: 'Insulated bottle', photo: PHOTOS.bottle, cost: '$9.80', price: '$26.00', margin: '62%' },
-	{ name: 'Brass compass', photo: PHOTOS.compass, cost: '$11.50', price: '$38.00', margin: '70%' },
+	{ name: msg("Wool socks"), photo: PHOTOS.socks, costCents: 620, priceCents: 1800, margin: '66%' },
+	{ name: msg("Insulated bottle"), photo: PHOTOS.bottle, costCents: 980, priceCents: 2600, margin: '62%' },
+	{ name: msg("Brass compass"), photo: PHOTOS.compass, costCents: 1150, priceCents: 3800, margin: '70%' },
 ] as const;
 const CATALOG_COLUMNS = 'grid grid-cols-[1fr_60px_72px_56px_92px] items-center gap-x-3';
 /** The product being added: its Add is tapped, it joins the store, and Estori writes its page. */
@@ -30,14 +31,14 @@ function CatalogArt() {
 		<StoryFrame storyRef={ref} className="relative">
 			<div className={cn(PANEL, 'px-6 pt-6 pb-4')}>
 				<div className="flex items-center justify-between">
-					<p className="text-[22px] font-bold tracking-[-0.02em]">Curated catalog</p>
-					<span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-[13px] text-[#4b5563]">Outdoor · 1,240 products</span>
+					<p className="text-[22px] font-bold tracking-[-0.02em]">{t("Curated catalog")}</p>
+					<span className="rounded-full bg-[#f3f4f6] px-3 py-1 text-[13px] text-[#4b5563]">{tn('Outdoor · {count} product', 'Outdoor · {count} products', 1240)}</span>
 				</div>
 				<div className={cn(CATALOG_COLUMNS, 'mt-4 border-b border-[#eceef1] pb-2 text-[11px] tracking-[0.06em] text-[#9aa3b2] uppercase')}>
-					<span>Product</span>
-					<span>Cost</span>
-					<span>You sell</span>
-					<span>Margin</span>
+					<span>{t("Product")}</span>
+					<span>{t("Cost")}</span>
+					<span>{t("You sell")}</span>
+					<span>{t("Margin")}</span>
 					<span />
 				</div>
 				{CATALOG.map((product, index) => (
@@ -45,18 +46,16 @@ function CatalogArt() {
 						<span className="flex min-w-0 items-center gap-3">
 							<Photo src={product.photo} className="size-12 rounded-[12px]" />
 							<span className="min-w-0">
-								<span className="block truncate text-[15px] font-semibold">{product.name}</span>
-								<span className={cn('block text-[12px]', MUTED)}>Ships in 3–5 days</span>
+								<span className="block truncate text-[15px] font-semibold">{t(product.name)}</span>
+								<span className={cn('block text-[12px]', MUTED)}>{t("Ships in 3–5 days")}</span>
 							</span>
 						</span>
-						<span className="text-[14px] text-[#4b5563]">{product.cost}</span>
-						<span className="text-[14px] font-semibold">{product.price}</span>
+						<span className="text-[14px] text-[#4b5563]">{formatCents(product.costCents, getLocale())}</span>
+						<span className="text-[14px] font-semibold">{formatCents(product.priceCents, getLocale())}</span>
 						<span className="w-fit rounded-full bg-[#e7f7ee] px-2 py-0.5 text-[12px] font-semibold text-[#14865f]">{product.margin}</span>
 						<span className="justify-self-end">
 							{index === ADDING && added ? (
-								<span className="flex items-center gap-1.5 text-[14px] text-[#4b5563]">
-									Added
-									<GreenRing />
+								<span className="flex items-center gap-1.5 text-[14px] text-[#4b5563]">{t("Added")}<GreenRing />
 								</span>
 							) : (
 								<span
@@ -65,9 +64,7 @@ function CatalogArt() {
 										index === ADDING ? 'text-white' : 'bg-[#f3f4f6] ring-1 ring-black/10',
 										index === ADDING && (beat === 1 ? 'scale-90 bg-public-blue-hover' : 'bg-public-blue'),
 									)}
-								>
-									Add
-								</span>
+								>{t("Add")}</span>
 							)}
 						</span>
 					</div>
@@ -75,18 +72,16 @@ function CatalogArt() {
 			</div>
 			{added && (
 				<p className="absolute bottom-3 left-1/2 flex -translate-x-1/2 animate-public-rise items-center gap-2 rounded-full bg-public-charcoal px-4 py-2 text-[13px] whitespace-nowrap text-white shadow-lg">
-					<SparkleIcon weight="fill" className="size-4 text-[#9cc2ff]" />
-					Product page written for Insulated bottle
-				</p>
+					<SparkleIcon weight="fill" className="size-4 text-[#9cc2ff]" />{t("Product page written for Insulated bottle")}</p>
 			)}
 		</StoryFrame>
 	);
 }
 
 const POSTS = [
-	{ who: 'Leo', tint: 'bg-[#dbe8fb] text-[#145fe4]', when: 'Just now', text: 'Got the guide this morning. Chapter 2 is so good.' },
-	{ who: 'Ana', tint: 'bg-[#fde2d4] text-[#b4532a]', when: '2h', text: 'Day 3 of the morning routine. Coffee before email!' },
-	{ who: 'Sam', tint: 'bg-[#e7f7ee] text-[#14865f]', when: '5h', text: 'Shared my favorite tea pairing in the recipes thread.' },
+	{ who: 'Leo', tint: 'bg-[#dbe8fb] text-[#145fe4]', when: msg("Just now"), text: msg("Got the guide this morning. Chapter 2 is so good.") },
+	{ who: 'Ana', tint: 'bg-[#fde2d4] text-[#b4532a]', when: msg("2h"), text: msg("Day 3 of the morning routine. Coffee before email!") },
+	{ who: 'Sam', tint: 'bg-[#e7f7ee] text-[#14865f]', when: msg("5h"), text: msg("Shared my favorite tea pairing in the recipes thread.") },
 ] as const;
 const MEMBERS = ['bg-[#fde2d4]', 'bg-[#dbe8fb]', 'bg-[#e7f7ee]', 'bg-[#f3ecff]'] as const;
 /** A copy is delivered, and its buyer says hello in the community. */
@@ -98,9 +93,9 @@ function Post({ post, className }: { post: (typeof POSTS)[number]; className?: s
 			<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-[13px] font-semibold', post.tint)}>{post.who[0]}</span>
 			<div className="min-w-0">
 				<p className="text-[13px]">
-					<span className="font-semibold">{post.who}</span> <span className={MUTED}>{post.when}</span>
+					<span className="font-semibold">{post.who}</span> <span className={MUTED}>{t(post.when)}</span>
 				</p>
-				<p className="mt-0.5 text-[14px] leading-snug">{post.text}</p>
+				<p className="mt-0.5 text-[14px] leading-snug">{t(post.text)}</p>
 			</div>
 		</div>
 	);
@@ -115,17 +110,15 @@ function DigitalArt() {
 			<div className="w-[196px] shrink-0">
 				<div className="relative h-[236px] overflow-hidden rounded-l-[6px] rounded-r-[14px] bg-[linear-gradient(160deg,#f6c9ae_0%,#e38a63_55%,#b8573a_100%)] p-6 text-white shadow-[0_18px_40px_rgba(120,60,30,0.28)]">
 					<span className="absolute inset-y-0 left-3 w-px bg-white/30" />
-					<p className="text-[11px] tracking-[0.18em] uppercase opacity-80">A field guide</p>
+					<p className="text-[11px] tracking-[0.18em] uppercase opacity-80">{t("A field guide")}</p>
 					<p className="mt-3 font-serif text-[30px] leading-[1.05]">Slow Mornings</p>
-					<p className="mt-2 text-[13px] opacity-85">Calm routines for busy weeks</p>
+					<p className="mt-2 text-[13px] opacity-85">{t("Calm routines for busy weeks")}</p>
 					<p className="absolute bottom-6 left-6 text-[13px] font-semibold">Maya Lin</p>
 				</div>
 				<div className={cn(PANEL, 'mt-4 px-4 py-3')}>
 					<p className="flex items-center justify-between text-[13px] font-semibold">
 						<span className="flex items-center gap-1.5">
-							<DownloadSimpleIcon className="size-4" />
-							Instant download
-						</span>
+							<DownloadSimpleIcon className="size-4" />{t("Instant download")}</span>
 						<span className={cn('font-normal', MUTED)}>PDF</span>
 					</p>
 					<div className="mt-2 h-1.5 rounded-full bg-[#eceef1]">
@@ -134,14 +127,14 @@ function DigitalArt() {
 				</div>
 			</div>
 			<div className={cn(PANEL, 'min-w-0 flex-1 px-5 pt-5 pb-6')}>
-				<p className="text-[18px] font-bold tracking-[-0.01em]">Members' community</p>
+				<p className="text-[18px] font-bold tracking-[-0.01em]">{t("Members' community")}</p>
 				<div className="mt-2 flex items-center gap-2">
 					<span className="flex -space-x-2">
 						{MEMBERS.map((tint) => (
 							<span key={tint} className={cn('size-6 rounded-full ring-2 ring-white', tint)} />
 						))}
 					</span>
-					<span className={cn('text-[13px]', MUTED)}>{delivered ? '1,285' : '1,284'} members</span>
+					<span className={cn('text-[13px]', MUTED)}>{tn('{count} member', '{count} members', delivered ? 1285 : 1284)}</span>
 				</div>
 				<div className="mt-5 grid gap-4">
 					{delivered && <Post post={newest} className="animate-public-rise" />}
@@ -162,13 +155,15 @@ const TEMPLATE_BEATS = [1600, 4200] as const;
 function Stat({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="rounded-[12px] bg-[#f7f8fa] px-4 py-3">
-			<p className={cn('text-[12px]', MUTED)}>{label}</p>
+			<p className={cn('text-[12px]', MUTED)}>{t(label)}</p>
 			<p className="mt-1 text-[22px] font-bold tracking-[-0.02em]">{children}</p>
 		</div>
 	);
 }
 
 function TemplateArt() {
+	const { locale } = useI18n();
+	const money = useCallback((value: number) => formatCents(Math.round(value * 100), locale), [locale]);
 	const [ref, beat] = useStory<HTMLDivElement>(TEMPLATE_BEATS);
 	const sold = beat === 1;
 	const sales = sold ? TEMPLATE_SALES + 1 : TEMPLATE_SALES;
@@ -178,20 +173,19 @@ function TemplateArt() {
 				<div className="flex gap-5">
 					<Photo src={HERO_STORE_IMAGE} className="h-[150px] w-[232px] rounded-[12px] object-left-top ring-1 ring-black/5" />
 					<div className="min-w-0 flex-1 pt-1">
-						<p className="text-[12px] tracking-[0.08em] text-public-blue uppercase">Template in Discover</p>
+						<p className="text-[12px] tracking-[0.08em] text-public-blue uppercase">{t("Template in Discover")}</p>
 						<p className="mt-1 text-[24px] leading-tight font-bold tracking-[-0.02em]">North Ridge Coffee</p>
-						<p className={cn('mt-1 text-[14px]', MUTED)}>By you · Coffee store</p>
-						<span className="mt-4 inline-block rounded-full bg-public-charcoal px-3 py-1 text-[14px] font-semibold text-white">{formatCents(EXAMPLE_SALE_CENTS)}</span>
+						<p className={cn('mt-1 text-[14px]', MUTED)}>{t("By you · Coffee store")}</p>
+						<span className="mt-4 inline-block rounded-full bg-public-charcoal px-3 py-1 text-[14px] font-semibold text-white">{formatCents(EXAMPLE_SALE_CENTS, getLocale())}</span>
 					</div>
 				</div>
 				<div className="mt-5 grid grid-cols-3 gap-3">
-					<Stat label="Sales">
+					<Stat label={t("Sales")}>
 						<NumberTicker key={sold ? 'sold' : 'waiting'} startValue={TEMPLATE_SALES} value={sales} />
 					</Stat>
-					<Stat label="You keep per sale">{formatCents(KEEPS_CENTS)}</Stat>
-					<Stat label="Earned">
-						$
-						<NumberTicker key={sold ? 'sold' : 'waiting'} startValue={(TEMPLATE_SALES * KEEPS_CENTS) / 100} value={(sales * KEEPS_CENTS) / 100} decimalPlaces={2} />
+					<Stat label={t("You keep per sale")}>{formatCents(KEEPS_CENTS, getLocale())}</Stat>
+					<Stat label={t("Earned")}>
+						<NumberTicker formatter={money} key={sold ? 'sold' : 'waiting'} startValue={(TEMPLATE_SALES * KEEPS_CENTS) / 100} value={(sales * KEEPS_CENTS) / 100} decimalPlaces={2} />
 					</Stat>
 				</div>
 			</div>
@@ -201,8 +195,8 @@ function TemplateArt() {
 						<CurrencyDollarIcon weight="bold" className="size-5" />
 					</span>
 					<span className="min-w-0">
-						<span className="block text-[13px] font-semibold">New sale</span>
-						<span className={cn('block truncate text-[12px]', MUTED)}>North Ridge Coffee · +{formatCents(KEEPS_CENTS)}</span>
+						<span className="block text-[13px] font-semibold">{t("New sale")}</span>
+						<span className={cn('block truncate text-[12px]', MUTED)}>{t('{store} · +{amount}', { store: 'North Ridge Coffee', amount: formatCents(KEEPS_CENTS, getLocale()) })}</span>
 					</span>
 				</div>
 			)}
@@ -211,9 +205,9 @@ function TemplateArt() {
 }
 
 const LINK_STATS = [
-	{ label: 'Clicks', from: 2210, to: 2340, decimals: 0, prefix: '' },
-	{ label: 'Sales', from: 79, to: 86, decimals: 0, prefix: '' },
-	{ label: 'Earned', from: 371.2, to: 412.8, decimals: 2, prefix: '$' },
+	{ label: msg("Clicks"), from: 2210, to: 2340, decimals: 0, prefix: '' },
+	{ label: msg("Sales"), from: 79, to: 86, decimals: 0, prefix: '' },
+	{ label: msg("Earned"), from: 371.2, to: 412.8, decimals: 2, prefix: '$' },
 ] as const;
 const WEEK = [
 	{ day: 'Mon', height: 38 },
@@ -225,35 +219,36 @@ const WEEK = [
 	{ day: 'Sun', height: 72 },
 ] as const;
 const SHARED = [
-	{ name: 'Wool socks', photo: PHOTOS.socks, sales: 41 },
-	{ name: 'Trail daypack', photo: PHOTOS.daypack, sales: 27 },
-	{ name: 'Brass compass', photo: PHOTOS.compass, sales: 18 },
+	{ name: msg("Wool socks"), photo: PHOTOS.socks, sales: 41 },
+	{ name: msg("Trail daypack"), photo: PHOTOS.daypack, sales: 27 },
+	{ name: msg("Brass compass"), photo: PHOTOS.compass, sales: 18 },
 ] as const;
 /** The link is copied and shared, and the week's clicks, sales and earnings climb. */
 const LINK_BEATS = [1000, 4800] as const;
 
 function AffiliateArt() {
+	const { locale } = useI18n();
+	const money = useCallback((value: number) => formatCents(Math.round(value * 100), locale), [locale]);
 	const [ref, beat] = useStory<HTMLDivElement>(LINK_BEATS);
 	const live = beat === 1;
 	return (
 		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'px-6 pt-6 pb-6')}>
 				<div className="flex items-center justify-between">
-					<p className="text-[22px] font-bold tracking-[-0.02em]">Your link</p>
-					<span className="rounded-full bg-[#e7f7ee] px-3 py-1 text-[13px] font-medium text-[#14865f]">Paid on every sale</span>
+					<p className="text-[22px] font-bold tracking-[-0.02em]">{t("Your link")}</p>
+					<span className="rounded-full bg-[#e7f7ee] px-3 py-1 text-[13px] font-medium text-[#14865f]">{t("Paid on every sale")}</span>
 				</div>
 				<div className="mt-4 flex items-center gap-3 rounded-[12px] px-4 py-3 ring-1 ring-[#d9dce3]">
 					<LinkSimpleIcon className="size-5 shrink-0 text-public-blue" />
 					<span className="min-w-0 flex-1 truncate text-[16px]">northridge.estori.app/?ref=maya</span>
 					<span className={cn('rounded-lg px-3 py-1 text-[14px] transition-colors duration-300', live ? 'bg-[#e7f7ee] text-[#14865f]' : 'bg-[#f3f4f6] ring-1 ring-black/10')}>
-						{live ? 'Copied' : 'Copy'}
+						{t(live ? 'Copied' : 'Copy')}
 					</span>
 				</div>
 				<div className="mt-5 grid grid-cols-[1fr_1fr_1.2fr_1.3fr] items-end gap-3">
 					{LINK_STATS.map((stat) => (
-						<Stat key={stat.label} label={stat.label}>
-							{stat.prefix}
-							<NumberTicker key={live ? 'live' : 'waiting'} startValue={stat.from} value={live ? stat.to : stat.from} decimalPlaces={stat.decimals} />
+						<Stat key={stat.label} label={t(stat.label)}>
+							<NumberTicker formatter={stat.prefix ? money : undefined} key={live ? 'live' : 'waiting'} startValue={stat.from} value={live ? stat.to : stat.from} decimalPlaces={stat.decimals} />
 						</Stat>
 					))}
 					<div className="flex h-[68px] items-end gap-1.5">
@@ -271,8 +266,8 @@ function AffiliateArt() {
 						<div key={product.name} className="flex items-center gap-3">
 							<Photo src={product.photo} className="size-10 rounded-[10px]" />
 							<span className="min-w-0">
-								<span className="block truncate text-[13px] font-semibold">{product.name}</span>
-								<span className={cn('block text-[12px]', MUTED)}>{product.sales} sales</span>
+								<span className="block truncate text-[13px] font-semibold">{t(product.name)}</span>
+								<span className={cn('block text-[12px]', MUTED)}>{tn('{count} sale', '{count} sales', product.sales)}</span>
 							</span>
 						</div>
 					))}

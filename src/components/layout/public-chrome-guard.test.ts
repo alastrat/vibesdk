@@ -36,10 +36,10 @@ describe('public chrome', () => {
 		expect(announcement).toContain('to={blogPostPath(ANNOUNCEMENT_POST)}');
 		const utility = source('/src/components/layout/PublicUtilityBar.tsx');
 		expect(utility).toContain('<PublicLanguageMenu />');
-		expect(utility).toContain('aria-label={marketingCopy.navigation.accessibility.utility}');
+		expect(utility).toContain('aria-label={t(marketingCopy.navigation.accessibility.utility)}');
 		const top = source(TOP);
 		expect(top.indexOf('<AnnouncementBar />')).toBeLessThan(top.indexOf('<PublicUtilityBar />'));
-		expect(top.indexOf('<PublicUtilityBar />')).toBeLessThan(top.indexOf('<nav aria-label={marketingCopy.navigation.accessibility.main}'));
+		expect(top.indexOf('<PublicUtilityBar />')).toBeLessThan(top.indexOf('<nav aria-label={t(marketingCopy.navigation.accessibility.main)}'));
 	});
 
 	it('animates the phone menu: the burger turns into a cross, the sheet fades in and out, and its rows arrive in turn', () => {
@@ -78,7 +78,7 @@ describe('public chrome', () => {
 		const top = source(TOP);
 		const utility = source('/src/components/layout/PublicUtilityBar.tsx');
 		expect(utility).toContain('onClick={() => showAuthModal()}');
-		expect(utility).toContain('{marketingCopy.navigation.signIn}');
+		expect(utility).toContain('{t(marketingCopy.navigation.signIn)}');
 		expect(utility).not.toContain('marketingCopy.navigation.contactUs');
 		expect(utility).not.toContain('marketingCopy.navigation.support');
 		expect(top).toContain("<Link to={SALES_LINK.to} className={cn('text-[15px] text-public-charcoal', UNDERLINE_GROW)}>");
@@ -94,7 +94,7 @@ describe('public chrome', () => {
 
 	it('keeps the bar on one line: the menus and links move to the menu below lg, and nothing in the bar wraps', () => {
 		const top = source(TOP);
-		expect(top).toMatch(/<nav aria-label=\{marketingCopy\.navigation\.accessibility\.main\} className="hidden lg:flex [^"]*whitespace-nowrap/);
+		expect(top).toMatch(/<nav aria-label=\{t\(marketingCopy\.navigation\.accessibility\.main\)\} className="hidden lg:flex [^"]*whitespace-nowrap/);
 		expect(top).toContain('<div className="flex items-center gap-4 whitespace-nowrap">');
 		expect(top).toContain('rounded-full p-2 text-public-charcoal lg:hidden');
 		expect(top).toMatch(/<dialog[\s\S]*?id="public-menu"[\s\S]*?className="[^"]*lg:hidden[^"]*"/);
@@ -139,7 +139,7 @@ describe('public chrome', () => {
 		expect(primitives).toMatch(/export const GROUP_UNDERLINE_FILL = `[^`]*group-hover:animate-public-underline/);
 		const nav = source(NAV);
 		expect(nav).toContain('const HOVER_TEXT = `group-hover:text-public-blue ${GROUP_UNDERLINE_GROW}`;');
-		expect(nav).toMatch(/className=\{cn\('mt-4 inline-block text-\[15px\]', GROUP_UNDERLINE_FILL\)\}>\{feature\.link\.label\}/);
+		expect(nav).toMatch(/className=\{cn\('mt-4 inline-block text-\[15px\]', GROUP_UNDERLINE_FILL\)\}>\{t\(feature\.link\.label\)\}/);
 		expect(nav).not.toContain('group-hover:underline');
 		expect(nav).not.toContain('border-b border-white');
 		const top = source(TOP);
@@ -154,8 +154,8 @@ describe('public chrome', () => {
 		const top = source(TOP);
 		expect(top).toContain('<dialog');
 		expect(top).toContain('dialog.showModal()');
-		expect(top).toContain('aria-label={marketingCopy.navigation.accessibility.back}');
-		expect(top).toContain('aria-label={marketingCopy.navigation.accessibility.close}');
+		expect(top).toContain('aria-label={t(marketingCopy.navigation.accessibility.back)}');
+		expect(top).toContain('aria-label={t(marketingCopy.navigation.accessibility.close)}');
 		expect(top).toContain('setMobileSection(menu.id)');
 		// A modal sheet left open while the window widens would keep the page inert, so it closes past lg.
 		expect(top).toContain("window.matchMedia('(min-width: 1024px)')");

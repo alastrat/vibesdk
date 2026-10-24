@@ -1,7 +1,9 @@
+import { formatUsd, formatCredits, publicTranslator } from '@/lib/i18n/public-pricing';
+import { t } from '@/lib/i18n';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Tooltip, TooltipProvider } from '@cloudflare/kumo';
-import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
+import { marketingCopy } from '@/content/marketing-copy';
 import { CaretDownIcon, CheckIcon, InfoIcon, MinusIcon } from '@phosphor-icons/react';
 import { PlanButton } from '@/components/billing/PlanButton';
 import { CapabilityTag } from '@/components/public-site/CapabilityTag';
@@ -10,8 +12,8 @@ import { StartBuildingButton } from '@/components/public-site/StartBuildingButto
 import { useIsMobile } from '@/hooks/use-mobile';
 import { CAPABILITIES, STATUS_LABELS, type CapabilityId } from '@/lib/capabilities';
 import { contactPath } from '@/lib/contact';
-import { planPriceCents, type BillingInterval, type PaidPlanId, formatCredits } from '@/api-types';
-import { comparisonFor, formatUsd, planById, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
+import { PLAN_LIMITS, planPriceCents, type BillingInterval, type PaidPlanId } from '@/api-types';
+import { comparisonFor, planById, type Plan, type PlanCell, type PlanId } from '@/lib/plans';
 import { cn } from '@/lib/utils';
 
 const ACTION = 'mt-4 w-full py-2 text-sm';
@@ -27,35 +29,30 @@ function headerFor(id: PlanId, billing: boolean, interval: BillingInterval, mont
 	switch (id) {
 		case 'basic':
 			return {
-				price: '$0',
-				note: 'Free forever',
+				price: formatUsd(0),
+				note: t('Free forever'),
 				action: (
-					<StartBuildingButton variant="blue" className={ACTION}>
-						Start building
-					</StartBuildingButton>
+					<StartBuildingButton variant="blue" className={ACTION}>{t("Start building")}</StartBuildingButton>
 				),
 			};
 		case 'pro':
 		case 'premium':
 			return {
-				price: `${formatUsd(planPriceCents(id, interval, monthlyCredits) / (interval === 'year' ? 12 : 1))}/mo`,
-				note: interval === 'year' ? formatMarketingCopy(marketingCopy.pricing.billing.yearlyNote, { amount: formatUsd(planPriceCents(id, interval, monthlyCredits)) }) : marketingCopy.pricing.plans[id].headerNote,
+				price: t('{amount}/mo', { amount: formatUsd(planPriceCents(id, interval, monthlyCredits) / (interval === 'year' ? 12 : 1)) }),
+				note: interval === 'year' ? t(marketingCopy.pricing.billing.yearlyNote, { amount: formatUsd(planPriceCents(id, interval, monthlyCredits)) }) : t(marketingCopy.pricing.plans[id].headerNote),
 				action: billing ? (
-					<PlanButton plan={id} billingInterval={interval} monthlyCredits={monthlyCredits} className={ACTION} />
+					<PlanButton i18n={publicTranslator()} plan={id} billingInterval={interval} monthlyCredits={monthlyCredits} className={ACTION} />
 				) : (
-					<PillLink to={contactPath(id)} variant="charcoal" className={ACTION}>
-						Get {planById(id).name}
+					<PillLink to={contactPath(id)} variant="charcoal" className={ACTION}>{t("Get {plan}", { plan: planById(id).name })}
 					</PillLink>
 				),
 			};
 		case 'enterprise':
 			return {
-				price: 'Custom',
-				note: 'Volume credits and terms',
+				price: t('Custom'),
+				note: t('Volume credits and terms'),
 				action: (
-					<PillLink to={contactPath('enterprise')} variant="outline-on-light" className={ACTION}>
-						Talk to sales
-					</PillLink>
+					<PillLink to={contactPath('enterprise')} variant="outline-on-light" className={ACTION}>{t("Talk to sales")}</PillLink>
 				),
 			};
 	}
@@ -66,7 +63,7 @@ function Cell({ value }: { value: PlanCell }) {
 		return (
 			<>
 				<CheckIcon className="mx-auto size-4 text-public-blue" weight="bold" aria-hidden />
-				<span className="sr-only">Included</span>
+				<span className="sr-only">{t("Included")}</span>
 			</>
 		);
 	}
@@ -74,18 +71,18 @@ function Cell({ value }: { value: PlanCell }) {
 		return (
 			<>
 				<MinusIcon className="mx-auto size-4 text-public-muted" aria-hidden />
-				<span className="sr-only">Not included</span>
+				<span className="sr-only">{t("Not included")}</span>
 			</>
 		);
 	}
-	return <>{value}</>;
+	return <>{t(value)}</>;
 }
 
 /** The status a screen reader hears with each row of a capability that isn't available yet. */
 function statusNote(capability: CapabilityId | null): string | undefined {
 	if (!capability) return undefined;
 	const { status } = CAPABILITIES[capability];
-	return status === 'available' ? undefined : STATUS_LABELS[status];
+	return status === 'available' ? undefined : t(STATUS_LABELS[status]);
 }
 
 /** Kumo handles hover, focus, Escape and outside dismissal; a press also opens help on touch screens. */
@@ -99,11 +96,11 @@ function FeatureHelp({ label, description }: { label: string; description: strin
 			}}
 			delay={150}
 			side="top"
-			content={<span className="block max-w-64 text-left font-normal leading-relaxed">{description}</span>}
+			content={<span className="block max-w-64 text-left font-normal leading-relaxed">{t(description)}</span>}
 			render={
 				<button
 					type="button"
-					aria-label={formatMarketingCopy(marketingCopy.pricing.comparison.featureHelp, { feature: label })}
+					aria-label={t(marketingCopy.pricing.comparison.featureHelp, { feature: t(label) })}
 					onClick={() => setOpen(true)}
 					className="ml-1 inline-flex size-6 cursor-help align-middle sm:size-8 items-center justify-center rounded-full text-public-muted transition-colors hover:bg-[#eef0f3] hover:text-public-blue focus-visible:outline-2 focus-visible:outline-public-blue"
 				>
@@ -133,7 +130,7 @@ function Row({
 		<tr hidden={hidden}>
 			<th scope="row" className="border-b border-public-line py-4 pr-4 pl-4 text-left font-light text-public-ink">
 				<span className="block">
-					<span>{label}</span>
+					<span>{t(label)}</span>
 					<FeatureHelp label={label} description={description} />
 				</span>
 				{note && <span className="sr-only">, {note}</span>}
@@ -174,18 +171,18 @@ export function ComparePlans({ billing, interval = 'month', credits = {} }: { bi
 					{/* No scrolling box around the table: it would stop the headers from pinning to the page. */}
 					<div className="relative">
 						<table className="w-full table-fixed border-separate border-spacing-0 text-[15px]">
-							<caption className="sr-only">{marketingCopy.pricing.comparison.caption}</caption>
+							<caption className="sr-only">{t(marketingCopy.pricing.comparison.caption)}</caption>
 							<thead>
 								<tr>
 									{/* The heading sits in the header's corner, beside the plans, and stays pinned with them. */}
 									<td className="sticky top-[var(--public-header-h)] z-10 w-1/2 bg-white pt-3 pr-3 pb-5 align-top md:w-[34%]">
 										<h2 id="compare-title" className="text-[32px] leading-[1.1] font-light tracking-[-0.02em] text-balance text-public-ink lg:text-[48px]">
-											{marketingCopy.pricing.comparison.title}
+											{t(marketingCopy.pricing.comparison.title)}
 										</h2>
 										{isPhone && (
 											<div className="relative mt-4">
 												<select
-													aria-label="Plan to compare"
+													aria-label={t("Plan to compare")}
 													value={phonePlan}
 													onChange={(event) => {
 														const next = plans.find((entry) => entry.id === event.target.value);
@@ -195,7 +192,7 @@ export function ComparePlans({ billing, interval = 'month', credits = {} }: { bi
 												>
 													{plans.map((entry) => (
 														<option key={entry.id} value={entry.id}>
-															{entry.name}
+															{t(entry.name)}
 														</option>
 													))}
 												</select>
@@ -212,7 +209,7 @@ export function ComparePlans({ billing, interval = 'month', credits = {} }: { bi
 												className="sticky top-[var(--public-header-h)] z-10 border-b border-l border-public-line bg-white px-3 pt-3 pb-5 text-left align-top font-normal lg:px-5"
 											>
 												<span className="flex flex-wrap items-center gap-2 text-lg text-public-ink">
-													{entry.name}
+													{t(entry.name)}
 												</span>
 												<span className="mt-2 block text-3xl font-light tracking-[-0.02em] text-public-ink">{header.price}</span>
 												<span className="mt-2 block min-h-10 text-[13px] font-light text-public-muted">{header.note}</span>
@@ -237,7 +234,7 @@ export function ComparePlans({ billing, interval = 'month', credits = {} }: { bi
 													className="flex w-full items-center justify-between gap-3 rounded-xl bg-[#f5f6f8] px-4 py-3 text-left text-public-ink transition-colors hover:bg-[#eef0f3] focus-visible:outline-2 focus-visible:outline-public-blue"
 												>
 													<span className="inline-flex flex-wrap items-center gap-2 text-lg">
-														{section.title}
+														{t(section.title)}
 														{section.capability && <CapabilityTag id={section.capability} />}
 													</span>
 													<CaretDownIcon className={cn('size-4 shrink-0 transition-transform motion-reduce:transition-none', !isFolded && 'rotate-180')} aria-hidden />
@@ -252,13 +249,13 @@ export function ComparePlans({ billing, interval = 'month', credits = {} }: { bi
 												note={statusNote(section.capability)}
 												hidden={isFolded}
 												plans={shown}
-												cells={row.id === 'aiCredits' ? { ...row.cells, ...(credits.pro !== undefined ? { pro: `${formatCredits(credits.pro)}/mo` } : {}), ...(credits.premium !== undefined ? { premium: `${formatCredits(credits.premium)}/mo` } : {}) } : row.cells}
+												cells={row.id === 'aiCredits' ? { ...row.cells, basic: t('{amount}/mo', { amount: formatCredits(PLAN_LIMITS.basic.aiCredits) }), pro: t('{amount}/mo', { amount: formatCredits(credits.pro ?? PLAN_LIMITS.pro.aiCredits) }), premium: t('{amount}/mo', { amount: formatCredits(credits.premium ?? PLAN_LIMITS.premium.aiCredits) }) } : row.cells}
 											/>
 										))}
 										{section.details && (
 											<tr hidden={isFolded}>
 												<td colSpan={shown.length + 1} className="px-4 py-4 text-sm text-public-muted">
-													<Link to={section.details.href} className="underline underline-offset-4 hover:text-public-blue">{section.details.label} →</Link>
+													<Link to={section.details.href} className="underline underline-offset-4 hover:text-public-blue">{t(section.details.label)} →</Link>
 												</td>
 											</tr>
 										)}

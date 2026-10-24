@@ -1,4 +1,5 @@
-import { marketingCopy, formatMarketingCopy } from '@/content/marketing-copy';
+import { ENGLISH, type Translator } from '../../shared/i18n/translate';
+import { marketingCopy } from '@/content/marketing-copy';
 import { COMPLETED_ORDER_MIN_AGE_DAYS, DEFAULT_SELLER_LIMITS, PLATFORM_FEE_LABEL } from '@/api-types';
 import { stripeFeesText } from '@/components/payments/payout-costs';
 import { OWN_PRODUCTS_WEIGHTING } from '@/lib/plans';
@@ -72,12 +73,19 @@ export const CATALOG_FULFILLMENT_COPY: SolutionCopy = {
 const { daysSinceFirstSale, completedOrders, maxDisputeRatePercent } = DEFAULT_SELLER_LIMITS.graduation;
 
 /** What makes a new seller an established one, as the level check decides it. */
-export const LEVEL_UP_RULE = `${daysSinceFirstSale} days since your first sale, ${completedOrders} completed orders, fewer than ${maxDisputeRatePercent}% of orders disputed and no lost disputes in the last 90 days`;
+export function levelUpRule(i18n: Translator = ENGLISH): string {
+	return i18n.t('{days} days since your first sale, {orders} completed orders, fewer than {percent}% of orders disputed and no lost disputes in the last 90 days', { days: daysSinceFirstSale, orders: completedOrders, percent: maxDisputeRatePercent });
+}
+export const LEVEL_UP_RULE = levelUpRule();
 
 /** What the level check counts as a completed order. */
-export const COMPLETED_ORDER_RULE = `A completed order is paid, at least ${COMPLETED_ORDER_MIN_AGE_DAYS} days old, never disputed, and every catalog item in it was delivered.`;
+export function completedOrderRule(i18n: Translator = ENGLISH): string {
+	return i18n.t('A completed order is paid, at least {days} days old, never disputed, and every catalog item in it was delivered.', { days: COMPLETED_ORDER_MIN_AGE_DAYS });
+}
+export const COMPLETED_ORDER_RULE = completedOrderRule();
 
-export const PAYMENTS_COPY: SolutionCopy = {
+export function paymentsCopy(i18n: Translator = ENGLISH): SolutionCopy {
+return {
 	capability: 'payments',
 	eyebrow: 'Payments',
 	title: 'Checkout on your store, payouts to your bank',
@@ -100,8 +108,8 @@ export const PAYMENTS_COPY: SolutionCopy = {
 					title: 'What Estori keeps',
 					body: "From each sale, Estori keeps the card processing cost, plus the catalog price of any catalog products. When a card costs more to process, such as a card from another country, Estori keeps the difference from that sale.",
 				},
-				{ title: 'Payouts on your schedule', body: formatMarketingCopy(marketingCopy.platform.payments.payoutsBenefit, { stripeFees: stripeFeesText(DEFAULT_SELLER_LIMITS.costs) }) },
-				{ title: 'Templates you sell', body: `Selling a store as a template in Discover costs ${PLATFORM_FEE_LABEL} a sale, and you receive the rest through Stripe.` },
+				{ title: 'Payouts on your schedule', body: i18n.t(marketingCopy.platform.payments.payoutsBenefit, { stripeFees: stripeFeesText(DEFAULT_SELLER_LIMITS.costs, i18n.locale, i18n.t) }) },
+				{ title: 'Templates you sell', body: i18n.t('Selling a store as a template in Discover costs {fee} a sale, and you receive the rest through Stripe.', { fee: PLATFORM_FEE_LABEL }) },
 			],
 		},
 	],
@@ -122,11 +130,11 @@ export const PAYMENTS_COPY: SolutionCopy = {
 		},
 		{
 			question: 'Why does my store have limits?',
-			answer: `Every store has a largest order, a weekly sales limit and a wait before payouts, set by its seller level. ${OWN_PRODUCTS_WEIGHTING} A store that reaches a limit stops taking new orders until the limit allows them again.`,
+			answer: i18n.t('Every store has a largest order, a weekly sales limit and a wait before payouts, set by its seller level. {weighting} A store that reaches a limit stops taking new orders until the limit allows them again.', { weighting: i18n.t(OWN_PRODUCTS_WEIGHTING) }),
 		},
 		{
 			question: 'How do my limits grow?',
-			answer: `New sellers start with lower limits and a longer wait. After ${LEVEL_UP_RULE}, you become an established seller, with higher limits and faster payouts. ${COMPLETED_ORDER_RULE}`,
+			answer: i18n.t('New sellers start with lower limits and a longer wait. After {rule}, you become an established seller, with higher limits and faster payouts. {completedOrder}', { rule: levelUpRule(i18n), completedOrder: completedOrderRule(i18n) }),
 		},
 		{ question: 'Do my limits depend on my plan?', answer: 'No. Your seller level sets them, the same on every plan.' },
 		{
@@ -136,6 +144,8 @@ export const PAYMENTS_COPY: SolutionCopy = {
 	],
 	more: { to: '/pricing#compare-title', label: 'Payments in each plan' },
 };
+}
+export const PAYMENTS_COPY = paymentsCopy();
 
 export const SUBSCRIPTIONS_COPY: SolutionCopy = {
 	capability: 'subscriptions',

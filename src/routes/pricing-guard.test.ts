@@ -47,7 +47,7 @@ describe('pricing page', () => {
 	});
 
 	it('lays out the plans, Enterprise, the comparison, credits, template selling and the questions, in that order', () => {
-		const order = ['<PlanCards ', '<ComparePlans billing={billing}', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={pricingFaq(billing, rates)} />'];
+		const order = ['<PlanCards ', '<ComparePlans billing={billing}', '<CreditsExplainer />', 'id="developers"', '<PublicFaq leading={pricingFaq(billing, rates, publicTranslator())} />'];
 		const positions = order.map((tag) => page.indexOf(tag));
 		expect(positions.every((position) => position > -1)).toBe(true);
 		expect([...positions].sort((a, b) => a - b)).toEqual(positions);
@@ -85,7 +85,7 @@ describe('pricing page', () => {
 
 	it("offers online checkout when available, otherwise plan-specific contact links", () => {
 		const cards = source(CARDS);
-		expect(cards).toContain('billing ? <PlanButton plan={plan}');
+		expect(cards).toContain('billing ? <PlanButton i18n={publicTranslator()} plan={plan}');
 		// Each card asks sales about its own plan.
 		expect(cards).toContain('contactPath(plan)');
 		expect(cards).not.toContain("contactPath('premium')");
@@ -109,7 +109,7 @@ describe('pricing page', () => {
 		const paid = compare.slice(compare.indexOf("case 'pro':"), compare.indexOf("case 'enterprise':"));
 		expect(paid).toContain("case 'premium':");
 		expect(paid).toContain('action: billing ? (');
-		expect(paid).toContain('<PlanButton plan={id}');
+		expect(paid).toContain('<PlanButton i18n={publicTranslator()} plan={id}');
 		expect(paid).toContain('contactPath(id)');
 		expect(paid).not.toContain("contactPath('premium')");
 		// Both paid plans are available; future-feature status tags remain independent.
@@ -122,7 +122,7 @@ describe('pricing page', () => {
 		expect(compare).toContain('const isPhone = useIsMobile();');
 		expect(compare).toContain('const shown = isPhone ? plans.filter((entry) => entry.id === phonePlan) : plans;');
 		expect(compare).toContain('colSpan={shown.length + 1}');
-		expect(compare).toMatch(/<select[^>]*aria-label="Plan to compare"/);
+		expect(compare).toMatch(/<select[^>]*aria-label=\{t\("Plan to compare"\)\}/);
 	});
 
 	it('puts the Compare plans heading in the corner of the pinned header, beside the plans, on every screen', () => {
@@ -131,7 +131,7 @@ describe('pricing page', () => {
 		expect(corner).toContain('<h2 id="compare-title"');
 		expect(compare.match(/<h2/g)).toHaveLength(1);
 		// The phone plan picker sits under it, in the same cell.
-		expect(corner.indexOf('<h2')).toBeLessThan(corner.indexOf('aria-label="Plan to compare"'));
+		expect(corner.indexOf('<h2')).toBeLessThan(corner.indexOf('aria-label={t("Plan to compare")}'));
 	});
 
 	it('compares plans with pinned headers, and groups that fold', () => {
@@ -143,7 +143,7 @@ describe('pricing page', () => {
 		expect(compare).not.toContain('min-w-[');
 		expect(compare).toContain('aria-expanded={!isFolded}');
 		expect(compare).toContain('<CapabilityTag id={section.capability} />');
-		expect(compare).toContain('<caption className="sr-only">{marketingCopy.pricing.comparison.caption}</caption>');
+		expect(compare).toContain('<caption className="sr-only">{t(marketingCopy.pricing.comparison.caption)}</caption>');
 		expect(compare).toContain('<span className="sr-only">, {note}</span>');
 	});
 
@@ -151,9 +151,9 @@ describe('pricing page', () => {
 		expect(page).toContain('PLATFORM_FEE_LABEL');
 		expect(page).toContain('sellerKeepsTable()');
 		expect(page).not.toMatch(/7% \+ \$0\.60/);
-		expect(page).toContain('<caption className="sr-only">What a seller keeps at each price</caption>');
+		expect(page).toContain('<caption className="sr-only">{t("What a seller keeps at each price")}</caption>');
 		// Each row is named by its price, so a screen reader reads the fee and the amount kept against it.
-		expect(page).toContain('<th scope="row" className="py-2.5 font-normal">{formatTemplatePrice(row.priceCents)}</th>');
+		expect(page).toContain('<th scope="row" className="py-2.5 font-normal">{formatTemplatePrice(row.priceCents, getLocale())}</th>');
 	});
 
 	it('answers the credit questions', () => {

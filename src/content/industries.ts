@@ -1,3 +1,4 @@
+import { ENGLISH, type Translator } from '../../shared/i18n/translate';
 import { pageTitle } from '@/brand/page-title';
 import { SCHEMA_CONTEXT, absoluteUrl, breadcrumbList, faqPage, type Crumb, type JsonLdNode } from '@/lib/seo';
 import { BRAND } from '../../shared/brand';
@@ -704,15 +705,15 @@ export function industryCrumbs(industry: Industry): readonly Crumb[] {
 }
 
 /** An industry's own questions, then the ones every seller asks, worded for its kind of store. */
-export function industryFaq(industry: Industry): readonly TextFaqItem[] {
+export function industryFaq(industry: Industry, i18n: Translator = ENGLISH): readonly TextFaqItem[] {
 	return [
 		...industry.questions,
-		{ question: `How much does it cost to build a ${industry.store} with Estori?`, answer: `Nothing to start. ${FREE_PLAN_ANSWER}` },
+		{ question: i18n.t('How much does it cost to build a {store} with Estori?', { store: i18n.t(industry.store) }), answer: i18n.t('Nothing to start. {details}', { details: i18n.t(FREE_PLAN_ANSWER) }) },
 		{
-			question: `Can I start my ${industry.store} from a template?`,
+			question: i18n.t('Can I start my {store} from a template?', { store: i18n.t(industry.store) }),
 			answer: 'Yes. Discover lists stores built with Estori. Pick one close to what you have in mind, get your own copy, and adapt it to your products by asking for changes.',
 		},
-		{ question: `Can my ${industry.store} take payments?`, answer: PAYMENTS_ANSWER },
+		{ question: i18n.t('Can my {store} take payments?', { store: i18n.t(industry.store) }), answer: PAYMENTS_ANSWER },
 	];
 }
 
@@ -726,7 +727,7 @@ const ESTORI_APP: JsonLdNode = {
 };
 
 /** Structured data for an industry page: the page and its photo, its breadcrumb trail and its questions. */
-export function industryStructuredData(industry: Industry, origin: string): JsonLdNode {
+export function industryStructuredData(industry: Industry, origin: string, i18n: Translator = ENGLISH): JsonLdNode {
 	const url = absoluteUrl(industryPath(industry.slug), origin);
 	return {
 		'@context': SCHEMA_CONTEXT,
@@ -735,25 +736,26 @@ export function industryStructuredData(industry: Industry, origin: string): Json
 				'@type': 'WebPage',
 				'@id': url,
 				url,
-				name: pageTitle(industry.metaTitle),
-				description: industry.metaDescription,
+				name: pageTitle(i18n.t(industry.metaTitle)),
+				description: i18n.t(industry.metaDescription),
+                inLanguage: i18n.locale,
 				primaryImageOfPage: {
 					'@type': 'ImageObject',
 					url: absoluteUrl(industry.photo.src, origin),
-					caption: industry.photo.alt,
+					caption: i18n.t(industry.photo.alt),
 					creditText: `${industry.photo.photographer} on Unsplash`,
 					license: 'https://unsplash.com/license',
 				},
 				about: ESTORI_APP,
 			},
-			breadcrumbList(industryCrumbs(industry), origin),
-			faqPage(industryFaq(industry)),
+			breadcrumbList(industryCrumbs(industry).map(crumb => ({ ...crumb, name: i18n.t(crumb.name) })), origin),
+			faqPage(industryFaq(industry, i18n).map(item => ({ question: i18n.t(item.question), answer: i18n.t(item.answer) }))),
 		],
 	};
 }
 
 /** Structured data for the page that lists every industry. */
-export function industriesStructuredData(origin: string): JsonLdNode {
+export function industriesStructuredData(origin: string, i18n: Translator = ENGLISH): JsonLdNode {
 	const url = absoluteUrl(INDUSTRIES_PATH, origin);
 	return {
 		'@context': SCHEMA_CONTEXT,
@@ -762,17 +764,18 @@ export function industriesStructuredData(origin: string): JsonLdNode {
 				'@type': 'CollectionPage',
 				'@id': url,
 				url,
-				name: pageTitle(INDUSTRIES_PAGE.metaTitle),
-				description: INDUSTRIES_PAGE.metaDescription,
+				name: pageTitle(i18n.t(INDUSTRIES_PAGE.metaTitle)),
+				description: i18n.t(INDUSTRIES_PAGE.metaDescription),
+                inLanguage: i18n.locale,
 				about: ESTORI_APP,
 			},
-			breadcrumbList(INDUSTRIES_CRUMBS, origin),
+			breadcrumbList(INDUSTRIES_CRUMBS.map(crumb => ({ ...crumb, name: i18n.t(crumb.name) })), origin),
 			{
 				'@type': 'ItemList',
 				itemListElement: INDUSTRIES.map((industry, index) => ({
 					'@type': 'ListItem',
 					position: index + 1,
-					name: industry.name,
+					name: i18n.t(industry.name),
 					url: absoluteUrl(industryPath(industry.slug), origin),
 				})),
 			},

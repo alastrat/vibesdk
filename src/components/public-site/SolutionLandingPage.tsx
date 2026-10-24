@@ -1,3 +1,4 @@
+import { t } from '@/lib/i18n';
 import { Link } from 'react-router';
 import { ArrowRightIcon, SparkleIcon } from '@phosphor-icons/react';
 import { isEarlyAccessCapability } from '@/api-types';
@@ -33,9 +34,7 @@ function SolutionActions({ id, dark = false }: { id: SolutionId; dark?: boolean 
 			) : (
 				<>
 					<StartBuildingButton variant={dark ? 'white' : 'blue'} />
-					<PillLink to="/contact" variant={dark ? 'outline-on-dark' : 'outline-on-light'}>
-						Talk to sales
-					</PillLink>
+					<PillLink to="/contact" variant={dark ? 'outline-on-dark' : 'outline-on-light'}>{t("Talk to sales")}</PillLink>
 				</>
 			)}
 		</div>
@@ -53,19 +52,19 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 			<section className="overflow-hidden bg-[#fafbf8] px-4 pb-12 pt-14 sm:px-6 sm:pb-20 sm:pt-20">
 				<div className="mx-auto max-w-[1248px] text-center">
 					<div className="flex flex-wrap items-center justify-center gap-3">
-						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">{copy.eyebrow}</p>
+						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">{t(copy.eyebrow)}</p>
 						{capability && <CapabilityTag id={capability} />}
 					</div>
 					<h1 className="mx-auto mt-5 max-w-5xl text-[44px] font-light leading-[1.06] tracking-[-0.035em] text-balance text-public-ink sm:text-[64px] lg:text-[76px]">
-						{copy.title}
+						{t(copy.title)}
 					</h1>
-					<p className="mx-auto mt-6 max-w-2xl text-lg font-light leading-relaxed text-pretty text-public-muted">{copy.lead}</p>
+					<p className="mx-auto mt-6 max-w-2xl text-lg font-light leading-relaxed text-pretty text-public-muted">{t(copy.lead)}</p>
 					<div className="mt-8">
 						<SolutionActions id={id} />
 					</div>
 					<div
 						role="img"
-						aria-label={`${copy.eyebrow}: ${page.art.hero === 'community' ? 'subscription confirmation example' : `${concept ? 'concept' : 'illustrative'} storefront`}`}
+						aria-label={t('{audience}: {example}', { audience: t(copy.eyebrow), example: page.art.hero === 'community' ? t('Subscription confirmation example') : concept ? t('Concept storefront') : t('Illustrative storefront') })}
 						className="mx-auto mt-12 max-w-[1040px] overflow-hidden rounded-[24px] border border-[#d4ded1] text-left shadow-[0_30px_80px_-45px_#253a2f66] sm:mt-16 sm:rounded-[32px]"
 					>
 						<SolutionVisual kind={page.art.hero} concept={concept} />
@@ -75,14 +74,14 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 
 			<section className="bg-[#193b2e] px-4 py-14 text-white sm:px-6 sm:py-20">
 				<div className="mx-auto max-w-[1248px]">
-					<p className="text-[11px] uppercase tracking-[0.2em] text-white/65">Sound familiar?</p>
+					<p className="text-[11px] uppercase tracking-[0.2em] text-white/65">{t("Sound familiar?")}</p>
 					<div className="mt-5 grid gap-10 lg:grid-cols-[1fr_1.2fr]">
-						<h2 className="max-w-md text-3xl font-light leading-tight tracking-tight sm:text-4xl">{copy.problemTitle}</h2>
+						<h2 className="max-w-md text-3xl font-light leading-tight tracking-tight sm:text-4xl">{t(copy.problemTitle)}</h2>
 						<ul className="grid gap-6">
 							{copy.problems.map((problem) => (
 								<li key={problem} className="flex items-start gap-4 text-lg font-light text-white/90">
 									<span className="mt-2 size-2 shrink-0 rounded-full bg-[#d0dcbd]" />
-									{problem}
+									{t(problem)}
 								</li>
 							))}
 						</ul>
@@ -96,11 +95,11 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 			>
 				<div className="mx-auto max-w-[1248px]">
 					<div className="mx-auto max-w-3xl text-center">
-						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">Made for your business</p>
+						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">{t("Made for your business")}</p>
 						<h2 className="mt-4 text-4xl font-light leading-[1.1] tracking-tight text-balance text-public-ink sm:text-5xl">
-							{copy.benefitsTitle}
+							{t(copy.benefitsTitle)}
 						</h2>
-						<p className="mt-5 text-lg font-light leading-relaxed text-public-muted">{copy.benefitsLead}</p>
+						<p className="mt-5 text-lg font-light leading-relaxed text-public-muted">{t(copy.benefitsLead)}</p>
 					</div>
 					<div className="mt-12 grid gap-5 md:grid-cols-12">
 						{copy.features.map((feature, index) => {
@@ -123,7 +122,7 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 												src={image.src}
 												srcSet={photo ? industryPhotoSrcSet(photo) : undefined}
 												sizes="(min-width: 1024px) 700px, 100vw"
-												alt={image.alt}
+												alt={t(image.alt)}
 												width={art?.image?.width ?? 1200}
 												height={art?.image?.height ?? 800}
 												loading="lazy"
@@ -139,20 +138,18 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 													target="_blank"
 													rel="noopener noreferrer"
 													className="absolute right-4 top-4 rounded bg-black/45 px-2 py-1 text-[9px] text-white/90"
-												>
-													Photo: {photo.photographer} / Unsplash
-												</a>
+												>{t("Photo: {name} / Unsplash", { name: photo.photographer })}</a>
 											)}
 										</>
 									) : (
 										<SolutionVisual kind={art?.visual ?? 'store'} concept={concept} />
 									)}
 									<div className={cn('relative p-6 sm:p-8', image ? 'text-white' : 'text-public-ink')}>
-										<h3 className="text-2xl font-normal leading-tight tracking-tight">{feature.title}</h3>
+										<h3 className="text-2xl font-normal leading-tight tracking-tight">{t(feature.title)}</h3>
 										<p
 											className={cn('mt-3 max-w-xl text-[15px] font-light leading-relaxed', image ? 'text-white/85' : 'text-public-muted')}
 										>
-											{feature.body}
+											{t(feature.body)}
 										</p>
 									</div>
 								</article>
@@ -162,7 +159,7 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 					{page.more && (
 						<div className="mt-8 flex justify-center">
 							<Link to={page.more.to} className={cn('inline-flex items-center gap-2 text-sm text-public-ink', UNDERLINE_GROW)}>
-								{page.more.label}
+								{t(page.more.label)}
 								<ArrowRightIcon className="size-4" />
 							</Link>
 						</div>
@@ -172,13 +169,13 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 
 			<AnimatedSolutionSteps steps={copy.steps} />
 
-			<SolutionCarousel title={copy.carouselTitle} examples={copy.examples} art={page.art.examples} concept={concept} />
+			<SolutionCarousel title={t(copy.carouselTitle)} examples={copy.examples} art={page.art.examples} concept={concept} />
 
 			{page.future.length > 0 && (
 				<section className="bg-white px-4 py-16 sm:px-6 sm:py-24">
 					<div className="mx-auto max-w-[1248px]">
-						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">Built for growth</p>
-						<h2 className="mt-4 max-w-2xl text-4xl font-light leading-tight text-public-ink">More ways to grow your business.</h2>
+						<p className="text-xs uppercase tracking-[0.18em] text-public-muted">{t("Built for growth")}</p>
+						<h2 className="mt-4 max-w-2xl text-4xl font-light leading-tight text-public-ink">{t("More ways to grow your business.")}</h2>
 						<div className="mt-8 grid gap-4 md:grid-cols-3">
 							{page.future.map((item) => (
 								<article
@@ -190,14 +187,14 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 									<div className="mt-5">
 										<CapabilityTag id={item.capability} />
 									</div>
-									<h3 className="mt-3 text-xl text-public-ink">{CAPABILITIES[item.capability].name}</h3>
-									<p className="mt-3 text-sm leading-relaxed text-public-muted">{CAPABILITIES[item.capability].description}</p>
+									<h3 className="mt-3 text-xl text-public-ink">{t(CAPABILITIES[item.capability].name)}</h3>
+									<p className="mt-3 text-sm leading-relaxed text-public-muted">{t(CAPABILITIES[item.capability].description)}</p>
 									{item.detailLink && (
 										<Link
 											to={CAPABILITIES[item.capability].path}
 											className={cn('mt-5 inline-flex items-center gap-2 text-sm text-public-ink', UNDERLINE_GROW)}
 										>
-											{marketingCopy.common.learnMore}
+											{t(marketingCopy.common.learnMore)}
 											<ArrowRightIcon className="size-4" aria-hidden />
 										</Link>
 									)}
@@ -210,8 +207,8 @@ export function SolutionLandingPage({ id }: { id: SolutionId }) {
 
 			<section className="bg-[#193b2e] px-4 py-16 text-center text-white sm:px-6 sm:py-24">
 				<div className="mx-auto max-w-3xl">
-					<h2 className="text-4xl font-light leading-tight tracking-tight text-balance sm:text-5xl">{copy.closingTitle}</h2>
-					<p className="mx-auto mt-5 max-w-xl text-lg font-light text-white/80">{copy.closingLead}</p>
+					<h2 className="text-4xl font-light leading-tight tracking-tight text-balance sm:text-5xl">{t(copy.closingTitle)}</h2>
+					<p className="mx-auto mt-5 max-w-xl text-lg font-light text-white/80">{t(copy.closingLead)}</p>
 					<div className="mt-8">
 						<SolutionActions id={id} dark />
 					</div>

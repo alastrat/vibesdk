@@ -1,3 +1,5 @@
+import { t, msg, getLocale } from '@/lib/i18n';
+import { formatUsd } from '@/lib/plans';
 import { useId, type ReactNode } from 'react';
 import { ArrowClockwiseIcon, CaretLeftIcon, CaretUpDownIcon, SparkleIcon } from '@phosphor-icons/react';
 import { NumberTicker } from '@/components/magicui/number-ticker';
@@ -49,15 +51,15 @@ function Gauge({ filled }: { filled: boolean }) {
 			</svg>
 			<div className="absolute inset-0 flex flex-col items-center justify-center pt-5">
 				<NumberTicker key={filled ? 'scored' : 'waiting'} value={filled ? 859 : 0} className="text-[52px] leading-none font-bold tracking-[-0.03em]" />
-				<span className="mt-1.5 text-[14px] font-semibold tracking-[0.04em] text-[#4b5563] uppercase">Very good</span>
+				<span className="mt-1.5 text-[14px] font-semibold tracking-[0.04em] text-[#4b5563] uppercase">{t("Very good")}</span>
 			</div>
 		</div>
 	);
 }
 
 const PICKS = [
-	{ score: 96, name: 'Wool socks', why: 'Top pick for shoppers who browse hiking gear.', photo: PHOTOS.socks },
-	{ score: 91, name: 'Insulated bottle', why: 'Often bought with the wool socks.', photo: PHOTOS.bottle },
+	{ score: 96, name: msg("Wool socks"), why: msg("Top pick for shoppers who browse hiking gear."), photo: PHOTOS.socks },
+	{ score: 91, name: msg("Insulated bottle"), why: msg("Often bought with the wool socks."), photo: PHOTOS.bottle },
 ] as const;
 
 /** The score empties, then machine learning scores the store again: the arc draws in and the numbers count up. */
@@ -73,14 +75,10 @@ function ScoreArt() {
 					<p className="flex items-center gap-2.5 text-[26px] leading-none font-bold tracking-[-0.02em]">
 						<span className="grid size-9 place-items-center rounded-[10px] bg-[linear-gradient(135deg,#6aa0ff,#145fe4)] text-white">
 							<SparkleIcon weight="fill" className="size-5" />
-						</span>
-						Shopper match
-					</p>
-					<p className={cn('mt-3.5 text-[13.5px] leading-snug', MUTED)}>Machine learning scores how well each product fits each shopper.</p>
+						</span>{t("Shopper match")}</p>
+					<p className={cn('mt-3.5 text-[13.5px] leading-snug', MUTED)}>{t("Machine learning scores how well each product fits each shopper.")}</p>
 					<span className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[#f6f6f7] px-3 py-1.5 text-[14px] ring-1 ring-black/10">
-						<SparkleIcon className="size-4" />
-						See top picks
-					</span>
+						<SparkleIcon className="size-4" />{t("See top picks")}</span>
 				</div>
 				<Gauge filled={scored} />
 			</div>
@@ -93,8 +91,8 @@ function ScoreArt() {
 							</p>
 							<Photo src={pick.photo} className="size-[68px] rounded-[16px]" />
 						</div>
-						<p className="mt-5 text-[17px] font-bold">{pick.name}</p>
-						<p className={cn('mt-1.5 text-[13.5px] leading-snug', MUTED)}>{pick.why}</p>
+						<p className="mt-5 text-[17px] font-bold">{t(pick.name)}</p>
+						<p className={cn('mt-1.5 text-[13.5px] leading-snug', MUTED)}>{t(pick.why)}</p>
 					</div>
 				))}
 			</div>
@@ -114,19 +112,17 @@ function CartArt() {
 				<div className="flex items-center gap-5">
 					<Photo src={PHOTOS.houseBlend} className="size-[84px] rounded-[20px]" />
 					<div>
-						<p className="text-[30px] leading-tight font-bold tracking-[-0.02em]">House blend</p>
-						<p className={cn('mt-0.5 text-[15px]', MUTED)}>In your cart · 1 kg · $38</p>
+						<p className="text-[30px] leading-tight font-bold tracking-[-0.02em]">{t("House blend")}</p>
+						<p className={cn('mt-0.5 text-[15px]', MUTED)}>{t('In your cart · {weight} · {price}', { weight: '1 kg', price: formatUsd(3800, getLocale()) })}</p>
 					</div>
 				</div>
 				<div className={cn(FIELDS, 'mt-7')}>
-					<Field label="goes well with">
+					<Field label={t("goes well with")}>
 						<div className="flex items-center gap-3">
 							<Photo src={PHOTOS.dripper} className="size-9 rounded-lg" />
-							<span className="min-w-0 flex-1 truncate">Ceramic dripper · $24</span>
+							<span className="min-w-0 flex-1 truncate">{t('{product} · {price}', { product: t('Ceramic dripper'), price: formatUsd(2400, getLocale()) })}</span>
 							{added ? (
-								<span className="flex items-center gap-2 text-[16px] text-[#4b5563]">
-									Added
-									<GreenRing />
+								<span className="flex items-center gap-2 text-[16px] text-[#4b5563]">{t("Added")}<GreenRing />
 								</span>
 							) : (
 								<span
@@ -134,30 +130,26 @@ function CartArt() {
 										'rounded-full px-4 py-1 text-[15px] font-medium text-white transition-transform duration-150',
 										beat === 1 ? 'scale-90 bg-public-blue-hover' : 'bg-public-blue',
 									)}
-								>
-									Add
-								</span>
+								>{t("Add")}</span>
 							)}
 						</div>
 					</Field>
-					<Field label="bundle">
+					<Field label={t("bundle")}>
 						<div className="flex items-center justify-between gap-3">
-							<span className={added ? undefined : MUTED}>{added ? 'Save 10% on both' : 'Add the dripper to save 10%'}</span>
+							<span className={added ? undefined : MUTED}>{t(added ? 'Save 10% on both' : 'Add the dripper to save 10%')}</span>
 							{added && (
-								<span className="flex items-center gap-2 text-[16px] text-[#4b5563]">
-									Applied
-									<GreenRing />
+								<span className="flex items-center gap-2 text-[16px] text-[#4b5563]">{t("Applied")}<GreenRing />
 								</span>
 							)}
 						</div>
 					</Field>
-					<Field label="subtotal">
+					<Field label={t("subtotal")}>
 						<span key={added ? 'bundle' : 'single'} className="inline-flex animate-public-rise items-baseline gap-2">
-							{added && <s className="text-[15px] text-[#9aa3b2]">$62.00</s>}
-							<span className="font-semibold">{added ? '$55.80' : '$38.00'}</span>
+							{added && <s className="text-[15px] text-[#9aa3b2]">{formatUsd(6200, getLocale())}</s>}
+							<span className="font-semibold">{formatUsd(added ? 5580 : 3800, getLocale())}</span>
 						</span>
 					</Field>
-					<Field label="ships">Free, in 2 days</Field>
+					<Field label={t("ships")}>{t("Free, in 2 days")}</Field>
 				</div>
 			</div>
 		</StoryFrame>
@@ -172,19 +164,19 @@ function OfferArt() {
 	return (
 		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'mx-auto w-[440px] px-8 pt-9 pb-8')}>
-				<p className="text-center text-[28px] leading-[1.15] font-bold tracking-[-0.02em] text-balance">Thanks for your order, Maya</p>
+				<p className="text-center text-[28px] leading-[1.15] font-bold tracking-[-0.02em] text-balance">{t('Thanks for your order, {name}', { name: 'Maya' })}</p>
 				<div className="mt-7 overflow-hidden rounded-[16px] ring-1 ring-[#e2e4e9]">
-					<p className="bg-[#dbe8fb] py-4 text-center text-[17px]">This offer is only for this order</p>
+					<p className="bg-[#dbe8fb] py-4 text-center text-[17px]">{t("This offer is only for this order")}</p>
 					<div className="px-6 pt-6 pb-5">
 						<div className="flex items-center gap-5">
 							<Photo src={PHOTOS.guji} className="size-[76px] rounded-[18px]" />
 							<p className="text-[26px] leading-tight font-bold tracking-[-0.02em]">Ethiopia Guji</p>
 						</div>
 						<div className={cn(FIELDS, 'mt-6')}>
-							<Field label="price, 250 g">
-								<span className="font-semibold">$12.00</span> <s className="text-[15px] text-[#9aa3b2]">$16.00</s>
+							<Field label={t("price, 250 g")}>
+								<span className="font-semibold">{formatUsd(1200, getLocale())}</span> <s className="text-[15px] text-[#9aa3b2]">{formatUsd(1600, getLocale())}</s>
 							</Field>
-							<Field label="offer ends in">
+							<Field label={t("offer ends in")}>
 								<span className="flex items-center gap-2.5">
 									<span className="tabular-nums">4:{59 - beat}</span>
 									<span className="inline-flex items-center rounded-full bg-[#f1f3f6] p-1">
@@ -216,7 +208,7 @@ function OfferArt() {
 
 /** An empty box, the shopper typing in their own words, then what the store understood and found. */
 const SEARCH_BEATS = [800, 2600, 4600] as const;
-const QUERY = 'a gift for my dad who loves hiking';
+const QUERY = msg('a gift for my dad who loves hiking');
 const TYPE_MS = 55;
 /** Words the search understood, colored like the digits and symbols in 1Password's generator. */
 const KEYWORDS: Readonly<Record<string, string>> = { gift: 'text-public-blue', dad: 'text-[#e0245e]', hiking: 'text-[#16a34a]' };
@@ -233,7 +225,7 @@ function Toggle({ on }: { on: boolean }) {
 function SearchRow({ label, children }: { label: string; children: ReactNode }) {
 	return (
 		<div className="flex items-center justify-between py-3.5">
-			<span className={cn('text-[16px]', MUTED)}>{label}</span>
+			<span className={cn('text-[16px]', MUTED)}>{t(label)}</span>
 			{children}
 		</div>
 	);
@@ -241,26 +233,28 @@ function SearchRow({ label, children }: { label: string; children: ReactNode }) 
 
 function SearchArt() {
 	const [ref, beat] = useStory<HTMLDivElement>(SEARCH_BEATS);
-	const typed = useTypedText(QUERY, beat === 1, TYPE_MS);
+	const queryText = t(QUERY);
+	const typed = useTypedText(queryText, beat === 1, TYPE_MS);
+	const keywords: Readonly<Record<string, string>> = { [t('gift')]: KEYWORDS.gift, [t('dad')]: KEYWORDS.dad, [t('hiking')]: KEYWORDS.hiking };
 	const understood = beat === 2;
-	const query = beat === 0 ? '' : understood ? QUERY : typed;
-	const progress = understood ? 1 : query.length / QUERY.length;
+	const query = beat === 0 ? '' : understood ? queryText : typed;
+	const progress = understood ? 1 : query.length / queryText.length;
 	return (
 		<StoryFrame storyRef={ref}>
 			<div className={cn(PANEL, 'mx-auto w-[456px] overflow-hidden')}>
 				<div className="relative flex h-16 items-center justify-center border-b border-[#e7e8ec]">
 					<CaretLeftIcon className="absolute left-6 size-5 text-[#6b7280]" />
-					<p className="text-[20px] font-semibold">Smart search</p>
+					<p className="text-[20px] font-semibold">{t("Smart search")}</p>
 				</div>
 				<div className="px-7 pt-5 pb-12">
 					<div className="flex items-center justify-between">
-						<span className="rounded-lg bg-[#f3f4f6] px-4 py-1.5 text-[16px] ring-1 ring-black/10">Clear</span>
+						<span className="rounded-lg bg-[#f3f4f6] px-4 py-1.5 text-[16px] ring-1 ring-black/10">{t("Clear")}</span>
 						<ArrowClockwiseIcon className="size-5 text-[#4b5563]" />
-						<span className="rounded-lg bg-public-blue px-4 py-1.5 text-[16px] text-white">Search</span>
+						<span className="rounded-lg bg-public-blue px-4 py-1.5 text-[16px] text-white">{t("Search")}</span>
 					</div>
 					<p className="mt-4 h-[52px] truncate rounded-[10px] px-4 py-3 text-[18px] tracking-[0.01em] ring-1 ring-[#d9dce3]">
 						{query.split(' ').map((word, index) => (
-							<span key={`${word}-${index}`} className={cn(understood && KEYWORDS[word], understood && KEYWORDS[word] && 'font-semibold')}>
+							<span key={`${word}-${index}`} className={cn(understood && keywords[word], understood && keywords[word] && 'font-semibold')}>
 								{index > 0 && ' '}
 								{word}
 							</span>
@@ -271,16 +265,16 @@ function SearchArt() {
 						<div className="h-full rounded-full bg-[#22b021] transition-[width] duration-300" style={{ width: `${progress * 88}%` }} />
 					</div>
 					<div className="mt-2 divide-y divide-[#eceef1]">
-						<SearchRow label="Looking for">
+						<SearchRow label={t("Looking for")}>
 							<span className="flex items-center gap-5 rounded-lg px-3 py-1.5 text-[16px] ring-1 ring-[#d9dce3]">
-								{understood ? 'A gift for dad' : 'Anything'}
+								{t(understood ? 'A gift for dad' : 'Anything')}
 								<CaretUpDownIcon className="size-4 text-[#6b7280]" />
 							</span>
 						</SearchRow>
-						<SearchRow label="Into hiking">
+						<SearchRow label={t("Into hiking")}>
 							<Toggle on={understood} />
 						</SearchRow>
-						<SearchRow label="Best matches">
+						<SearchRow label={t("Best matches")}>
 							<span className="flex items-center gap-2">
 								{MATCHES.map((photo, index) => (
 									<Photo

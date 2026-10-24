@@ -83,7 +83,7 @@ describe('contact sales page', () => {
 	it('only mentions the chosen Premium pool while Premium is the topic', () => {
 		const form = source(FORM);
 		expect(form).toContain("topic === 'premium' && prefill.premiumCredits !== null");
-		expect(form).toContain('You need about {formatCredits(prefill.premiumCredits)} AI credits a month.');
+		expect(form).toContain('t("You need about {credits} AI credits a month.", { credits: formatCredits(prefill.premiumCredits) })');
 		expect(form).toContain('onChange={(event) => setTopic(event.target.value)}');
 	});
 

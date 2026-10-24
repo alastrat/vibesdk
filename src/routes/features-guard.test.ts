@@ -41,7 +41,7 @@ describe('store builder features', () => {
 		expect(section).toContain("dark: { section: 'bg-public-charcoal'");
 		expect(section).toContain("export function Features({ tone = 'light' }: { tone?: SectionTone })");
 		expect(section).toContain('<StartBuildingButton variant={colors.action} />');
-		expect(section).toContain('{marketingCopy.home.features.title}</h2>');
+		expect(section).toContain('{t(marketingCopy.home.features.title)}</h2>');
 		expect(marketingCopy.home.features.title).toBe('What your store comes with today');
 	});
 
