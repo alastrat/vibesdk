@@ -24,15 +24,6 @@ import {
 	StorefrontIcon,
 	UsersIcon,
 } from '@phosphor-icons/react';
-import {
-	Area,
-	AreaChart,
-	CartesianGrid,
-	ResponsiveContainer,
-	Tooltip,
-	XAxis,
-	YAxis,
-} from 'recharts';
 import type { AppDetailsData, SellerOrderRow } from '@/api-types';
 import { StoreEmailsPanel } from '@/routes/emails/emails';
 import { StoreTranslationsPanel } from '@/routes/translations/translations';
@@ -61,6 +52,8 @@ import {
 	type CustomerSummary,
 } from './report';
 import './store-workspace.css';
+import { AnalyticsPanel } from './analytics-panel';
+import { MetricChart } from './metric-chart';
 
 const sections = [
 	{ id: 'home', label: msg('Home'), icon: HouseIcon },
@@ -137,35 +130,54 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 		setParams(next);
 	};
 	const reporting = ['home', 'analytics', 'customers'].includes(section.id);
+	const mode = params.get('mode') === 'test' ? 'test' : 'live';
 	const throughDay = new Date().toISOString().slice(0, 10);
 	const window = reportingWindow(days, throughDay);
+	const fetchWindow =
+		section.id === 'analytics'
+			? reportingWindow(days * 2, throughDay)
+			: window;
+	const previousWindow = {
+		start: window.start - days * 86400000,
+		end: window.start,
+		days,
+	};
 	const orders = useQuery({
 		queryKey: queryKeys.account.sellerOrders.workspace(
 			userId,
 			app.id,
-			days,
+			fetchWindow.days,
 			throughDay,
+			mode,
 		),
 		queryFn: ({ signal }) =>
 			fetchReportOrders(
 				app.id,
-				window,
+				fetchWindow,
 				(filters) =>
 					unwrap(
 						apiClient.getSellerOrders(filters),
 						t("Couldn't load your orders"),
 					),
 				signal,
+				mode,
 			),
 		enabled: reporting,
 		retry: false,
 	});
 	const report = orders.data
-		? aggregateOrders(orders.data, app.id, window)
+		? aggregateOrders(orders.data, app.id, window, mode)
 		: null;
+	const previous = aggregateOrders(
+		orders.data ?? [],
+		app.id,
+		previousWindow,
+		mode,
+	);
 	const sectionLink = (id: string) => {
 		const next = new URLSearchParams(params);
 		next.set('section', id);
+		if (id === 'payments' && mode === 'test') next.set('mode', 'all');
 		return `?${next.toString()}`;
 	};
 	return (
@@ -252,23 +264,55 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 						</p>
 					</div>
 					{reporting && (
-						<label className="es-range">
-							<span>{t('Reporting period')}</span>
-							<Select
-								aria-label={t('Reporting period')}
-								value={String(days)}
-								items={{
-									'7': t('Last 7 days'),
-									'30': t('Last 30 days'),
-									'90': t('Last 90 days'),
-								}}
-								onValueChange={(value) => {
-									if (value) setDays(Number(value));
-								}}
-							/>
-						</label>
+						<div className="es-report-controls">
+							<div className="es-range">
+								<span>{t('Data mode')}</span>
+								<Select
+									aria-label={t('Data mode')}
+									value={mode}
+									items={{
+										live: t('Live sales'),
+										test: t('Test data'),
+									}}
+									onValueChange={(value) => {
+										const next = new URLSearchParams(
+											params,
+										);
+										if (value === 'test')
+											next.set('mode', 'test');
+										else next.delete('mode');
+										setParams(next);
+									}}
+								/>
+							</div>
+							<div className="es-range">
+								<span>{t('Reporting period')}</span>
+								<Select
+									aria-label={t('Reporting period')}
+									value={String(days)}
+									items={{
+										'7': t('Last 7 days'),
+										'30': t('Last 30 days'),
+										'90': t('Last 90 days'),
+									}}
+									onValueChange={(value) => {
+										if (value) setDays(Number(value));
+									}}
+								/>
+							</div>
+						</div>
 					)}
 				</div>
+				{reporting && section.id !== 'analytics' && mode === 'test' && (
+					<div className="ea-test-notice" role="status">
+						<strong>{t('Test data')}</strong>
+						<span>
+							{t(
+								'Test transactions are separate from live sales. The sample stores contain illustrative transactions; no money has moved.',
+							)}
+						</span>
+					</div>
+				)}
 				{section.id === 'home' && (
 					<StoreHomeIntroduction appId={app.id} userId={userId} />
 				)}
@@ -305,15 +349,12 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 				) : (
 					<>
 						<p className="es-period">
-							{t(
-								'{start} – {end}, including today · UTC · Live orders only',
-								{
-									start: date(
-										new Date(window.start).toISOString(),
-									),
-									end: date(throughDay),
-								},
-							)}
+							{t('{start} – {end}, including today · UTC', {
+								start: date(
+									new Date(window.start).toISOString(),
+								),
+								end: date(throughDay),
+							})}
 						</p>
 						{orders.isPending ? (
 							<Loading />
@@ -327,9 +368,18 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 						) : (
 							report && (
 								<>
-									<Stats report={report} />
-									{(section.id === 'home' ||
-										section.id === 'analytics') && (
+									{section.id !== 'analytics' && (
+										<Stats report={report} />
+									)}
+									{section.id === 'analytics' && (
+										<AnalyticsPanel
+											key={`${app.id}:${mode}:${days}`}
+											report={report}
+											previous={previous}
+											mode={mode}
+										/>
+									)}
+									{section.id === 'home' && (
 										<div
 											className={
 												section.id === 'home'
@@ -358,7 +408,7 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 												</div>
 												<p className="es-report-note">
 													{t(
-														'Excludes test orders, refunded orders, and disputes. These totals are before fees and are not payout balances.',
+														'Paid totals exclude orders with refunds or disputes and do not represent profit or payout balances.',
 													)}
 												</p>
 												<SalesChart
@@ -395,23 +445,6 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 													userId={userId}
 												/>
 											)}
-										</div>
-									)}
-									{section.id === 'analytics' && (
-										<div className="es-note">
-											<ChartLineUpIcon size={22} />
-											<div>
-												<strong>
-													{t(
-														'A clear picture, built from real orders',
-													)}
-												</strong>
-												<p>
-													{t(
-														'Visitor counts and conversion rates are not available in this workspace. Paid totals exclude any order with a refund or dispute, including partial refunds.',
-													)}
-												</p>
-											</div>
 										</div>
 									)}
 									{section.id === 'home' && (
@@ -504,83 +537,14 @@ function SalesChart({
 	trend: ReturnType<typeof aggregateOrders>['trend'];
 }) {
 	return (
-		<div
-			className="es-chart"
-			role="img"
-			aria-label={t('Daily paid order totals in USD')}
-		>
-			<ResponsiveContainer width="100%" height="100%">
-				<AreaChart
-					data={trend}
-					margin={{ top: 12, right: 16, bottom: 2, left: 6 }}
-					accessibilityLayer
-				>
-					<defs>
-						<linearGradient
-							id="es-sales-fill"
-							x1="0"
-							y1="0"
-							x2="0"
-							y2="1"
-						>
-							<stop
-								offset="0%"
-								stopColor="#2563eb"
-								stopOpacity={0.2}
-							/>
-							<stop
-								offset="100%"
-								stopColor="#2563eb"
-								stopOpacity={0.01}
-							/>
-						</linearGradient>
-					</defs>
-					<CartesianGrid
-						vertical={false}
-						stroke="var(--es-line)"
-						strokeDasharray="3 4"
-					/>
-					<XAxis
-						dataKey="date"
-						tickFormatter={(value) => date(String(value), true)}
-						tickLine={false}
-						axisLine={false}
-						minTickGap={45}
-						tick={{ fill: 'var(--es-muted)', fontSize: 12 }}
-					/>
-					<YAxis
-						orientation="right"
-						tickFormatter={(value) => money(Number(value))}
-						tickLine={false}
-						axisLine={false}
-						width={78}
-						tick={{ fill: 'var(--es-muted)', fontSize: 12 }}
-					/>
-					<Tooltip
-						labelFormatter={(value) => date(String(value))}
-						formatter={(value) => [
-							money(Number(value)),
-							t('Paid order totals'),
-						]}
-						contentStyle={{
-							background: 'var(--es-surface)',
-							border: '1px solid var(--es-line)',
-							borderRadius: 10,
-							color: 'var(--es-ink)',
-							fontSize: 12,
-						}}
-					/>
-					<Area
-						type="linear"
-						dataKey="paidCents"
-						stroke="#2563eb"
-						strokeWidth={2}
-						fill="url(#es-sales-fill)"
-						isAnimationActive={false}
-					/>
-				</AreaChart>
-			</ResponsiveContainer>
-		</div>
+		<MetricChart
+			label={t('Daily paid order totals in USD')}
+			points={trend.map((day) => ({
+				date: day.date,
+				value: day.paidCents,
+			}))}
+			formatValue={money}
+		/>
 	);
 }
 

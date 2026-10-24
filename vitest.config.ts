@@ -28,6 +28,11 @@ export default defineWorkersConfig(async () => {
             '@cloudflare/sandbox',
             '@babel/traverse',
             '@babel/types',
+            // Bundle visx's vendored D3 ESM exports for the Workers test runtime.
+            '@visx/curve',
+            '@visx/scale',
+            '@visx/shape',
+            '@visx/responsive',
           ],
         },
       },

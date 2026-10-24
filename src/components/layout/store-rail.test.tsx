@@ -41,6 +41,11 @@ describe('store workspace navigation', () => {
 		expect(html).not.toContain('Other seller');
 		expect(html).not.toContain('/stores/foreign');
 	});
+	it('preserves reporting mode and period but drops store-specific filters on switch', () => {
+ const html=renderToStaticMarkup(<MemoryRouter initialEntries={['/stores/tea?section=analytics&mode=test&days=90&product=private']}><StoreRail appId="tea" section="analytics"/></MemoryRouter>);
+ expect(html).toContain('/stores/candles?section=analytics&amp;mode=test&amp;days=90');
+ expect(html).not.toContain('product=private');
+ });
 	it('does not offer a builder link for a store that is not owned', () => {
 		expect(render('foreign')).not.toContain('/chat/foreign');
 	});

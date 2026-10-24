@@ -144,3 +144,202 @@ describe('store reporting', () => {
 		).rejects.toThrow('offline');
 	});
 });
+
+describe('expanded store analytics', () => {
+	it('counts all orders and units while keeping paid value, refunds, disputes and repeat customers distinct', () => {
+		const report = aggregateOrders(
+			[
+				row('sun', {
+					createdAt: '2026-10-18T12:00:00Z',
+					totalCents: 3000,
+					units: 2,
+					fulfillmentStatus: 'fulfilled',
+				}),
+				row('mon', {
+					createdAt: '2026-10-19T12:00:00Z',
+					totalCents: 5000,
+					units: 4,
+					paymentStatus: 'partially_refunded',
+				}),
+				row('tue', {
+					createdAt: '2026-10-20T12:00:00Z',
+					totalCents: 1000,
+					units: 1,
+					paymentStatus: 'refunded',
+					customerEmail: 'bea@example.test',
+					fulfillmentStatus: 'fulfilled',
+				}),
+				row('wed', {
+					createdAt: '2026-10-21T12:00:00Z',
+					totalCents: 7000,
+					units: 3,
+					paymentStatus: 'disputed',
+					customerEmail: null,
+				}),
+				row('thu', {
+					createdAt: '2026-10-22T12:00:00Z',
+					totalCents: 2000,
+					units: 2,
+					paymentStatus: 'dispute_lost',
+					customerEmail: 'c@example.test',
+					fulfillmentStatus: 'fulfilled',
+				}),
+				row('fri', {
+					createdAt: '2026-10-23T12:00:00Z',
+					totalCents: 2000,
+					units: 1,
+					customerEmail: ' ANA@example.test ',
+					fulfillmentStatus: 'fulfilled',
+				}),
+				row('sat', {
+					createdAt: '2026-10-24T12:00:00Z',
+					totalCents: 1000,
+					units: 1,
+					customerEmail: 'd@example.test',
+					fulfillmentStatus: 'fulfilled',
+				}),
+			],
+			'tea',
+			window,
+		);
+		expect(report).toMatchObject({
+			totalOrders: 7,
+			orderedCents: 21000,
+			paidCents: 6000,
+			paidOrders: 3,
+			refundedOrders: 2,
+			disputedOrders: 2,
+			averageOrderCents: 2000,
+			units: 14,
+			averageItemsPerOrder: 2,
+			customerCount: 4,
+			repeatCustomers: 1,
+			repeatCustomerRate: 0.25,
+			fulfilledOrders: 5,
+			unfulfilledOrders: 2,
+		});
+		expect(report.trend[1]).toMatchObject({
+			date: '2026-10-19',
+			orders: 1,
+			orderedCents: 5000,
+			units: 4,
+			refundedOrders: 1,
+			paidCents: 0,
+		});
+		expect(report.trend[3]).toMatchObject({ orders: 1, disputedOrders: 1 });
+		expect(report.weekdays.map((day) => day.weekday)).toEqual([
+			0, 1, 2, 3, 4, 5, 6,
+		]);
+		expect(report.weekdays[0]).toMatchObject({
+			orders: 1,
+			paidCents: 3000,
+			units: 2,
+		});
+		expect(report.weekdays[1]).toMatchObject({
+			orders: 1,
+			refundedOrders: 1,
+			paidCents: 0,
+		});
+	});
+	it('returns finite zero averages and ratios without orders or identified customers', () => {
+		const report = aggregateOrders([], 'tea', window);
+		expect(report).toMatchObject({
+			totalOrders: 0,
+			averageOrderCents: 0,
+			averageItemsPerOrder: 0,
+			customerCount: 0,
+			repeatCustomers: 0,
+			repeatCustomerRate: 0,
+		});
+		expect(
+			report.weekdays.every((day) => day.orders === 0 && day.units === 0),
+		).toBe(true);
+	});
+	it('requires explicit test mode and isolates test orders from live orders in either direction', () => {
+		const rows = [
+			row('real'),
+			row('sample', { mode: 'test', totalCents: 9900 }),
+			row('other-sample', { mode: 'test', appId: 'other' }),
+		];
+		expect(aggregateOrders(rows, 'tea', window).paidCents).toBe(1200);
+		expect(aggregateOrders(rows, 'tea', window, 'test').paidCents).toBe(
+			9900,
+		);
+	});
+	it('compares adjacent periods without counting a boundary order twice', () => {
+		const previous = {
+			start: window.start - 7 * 86400000,
+			end: window.start,
+			days: 7,
+		};
+		const rows = [
+			row('previous', {
+				mode: 'test',
+				createdAt: '2026-10-17T23:59:59Z',
+				totalCents: 5000,
+			}),
+			row('current', {
+				mode: 'test',
+				createdAt: '2026-10-18T00:00:00Z',
+				totalCents: 3000,
+			}),
+		];
+		expect(aggregateOrders(rows, 'tea', previous, 'test').paidCents).toBe(
+			5000,
+		);
+		expect(aggregateOrders(rows, 'tea', window, 'test').paidCents).toBe(
+			3000,
+		);
+	});
+	it('preserves the row-level unrefunded own/catalog split independently of total ordered units', () => {
+		const report = aggregateOrders(
+			[
+				row('mix', {
+					units: 6,
+					ownUnits: 2,
+					catalogUnits: 3,
+					paymentStatus: 'partially_refunded',
+				}),
+			],
+			'tea',
+			window,
+		);
+		expect(report).toMatchObject({
+			units: 6,
+			ownUnits: 2,
+			catalogUnits: 3,
+		});
+		expect(report.trend[6]).toMatchObject({
+			units: 6,
+			ownUnits: 2,
+			catalogUnits: 3,
+		});
+		expect(report.weekdays[6]).toMatchObject({
+			units: 6,
+			ownUnits: 2,
+			catalogUnits: 3,
+		});
+	});
+	it('fetches the API all-modes stream for test mode without returning live orders', async () => {
+		const calls: unknown[] = [];
+		const rows = await fetchReportOrders(
+			'tea',
+			window,
+			async (filters) => {
+				calls.push(filters);
+				return {
+					orders: [row('real'), row('sample', { mode: 'test' })],
+					nextCursor: null,
+					stores: [],
+					hasTestOrders: true,
+				};
+			},
+			undefined,
+			'test',
+		);
+		expect(calls).toEqual([
+			{ store: 'tea', view: 'all', mode: 'all', cursor: null },
+		]);
+		expect(rows.map((order) => order.id)).toEqual(['sample']);
+	});
+});

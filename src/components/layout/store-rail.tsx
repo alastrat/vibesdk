@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ArrowClockwiseIcon, PlusIcon, SquaresFourIcon, SparkleIcon, StorefrontIcon } from '@phosphor-icons/react';
 import { Button, CloudflareLogo, Loader } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
@@ -14,6 +14,10 @@ export function StoreRail({ appId, section }: { appId: string; section: StoreWor
 	const { user } = useAuth();
 	const { apps, loading, error, refetch } = useApps();
 	const navigate = useNavigate();
+	const [params] = useSearchParams();
+	const switchParams = new URLSearchParams({ section });
+	if (params.get('mode') === 'test') switchParams.set('mode', 'test');
+	if (['7', '30', '90'].includes(params.get('days') ?? '')) switchParams.set('days', params.get('days')!);
 	const limits = useUsageLimitsBadgeState();
 	const owned = user ? apps.filter((app) => app.userId === user.id) : [];
 	const current = owned.find((app) => app.id === appId);
@@ -32,7 +36,7 @@ export function StoreRail({ appId, section }: { appId: string; section: StoreWor
 				{owned.map((app) => {
 					const name = app.title.trim() || t('Untitled store');
 					const initials = name.split(/\s+/).slice(0, 2).map((word) => Array.from(word)[0]).join('').toLocaleUpperCase();
-					return <Link key={app.id} to={`/stores/${encodeURIComponent(app.id)}?section=${section}`} className="workspace-rail-control workspace-rail-store" aria-current={app.id === appId ? 'page' : undefined} aria-label={t('Switch to {store}', { store: name })} title={name}><span aria-hidden="true">{initials || <StorefrontIcon size={20} />}</span></Link>;
+					return <Link key={app.id} to={`/stores/${encodeURIComponent(app.id)}?${switchParams.toString()}`} className="workspace-rail-control workspace-rail-store" aria-current={app.id === appId ? 'page' : undefined} aria-label={t('Switch to {store}', { store: name })} title={name}><span aria-hidden="true">{initials || <StorefrontIcon size={20} />}</span></Link>;
 				})}
 				{error && <Button variant="ghost" shape="square" icon={<ArrowClockwiseIcon size={18} />} aria-label={t('Retry')} title={t("Couldn't load your stores")} onClick={refetch} />}
 			</nav>

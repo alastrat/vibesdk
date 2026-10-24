@@ -157,7 +157,7 @@ export const queryKeys = {
 		},
 		/** The seller's orders: never persisted, like the rest of `account`. */
 		sellerOrders: {
-			workspace: (userId: string, appId: string, days: number, throughDay: string) => [...queryKeys.account.sellerOrders.all(), 'workspace', userId, appId, days, throughDay] as const,
+			workspace: (userId: string, appId: string, days: number, throughDay: string, mode: 'live' | 'test' = 'live') => [...queryKeys.account.sellerOrders.all(), 'workspace', userId, appId, days, throughDay, mode] as const,
 			all: () => [...queryKeys.account.all, 'seller-orders'] as const,
 			list: (view: string, mode: string, store: string | null) => [...queryKeys.account.sellerOrders.all(), 'list', view, mode, store ?? 'all'] as const,
 			detail: (orderId: string) => [...queryKeys.account.sellerOrders.all(), 'detail', orderId] as const,
