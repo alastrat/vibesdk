@@ -49,6 +49,8 @@ export function createIDBPersister(
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
 	queryKeys.auth.all,
 	queryKeys.account.all,
+	// Defense in depth for any legacy cache entries retained during rollout.
+	['apps', 'user'],
 	queryKeys.apps.sitePageAll(),
 	queryKeys.apps.showcase(),
 	// Rollout settings decide which upgrade action is available and must be refreshed.
@@ -65,10 +67,9 @@ function hasKeyPrefix(
 export const queryPersistOptions = {
 	persister: createIDBPersister(),
 	maxAge: PERSIST_MAX_AGE,
-	// Bump to discard previously persisted caches. `v2` drops blobs written
-	// before auth/account queries were excluded, which could otherwise restore
-	// a stale logged-out session once after an OAuth login.
-	buster: 'v2',
+	// v3 discards old snapshots containing owner lists under ['apps', 'user'].
+	// Private paginated lists now carry the user id and live under `account`.
+	buster: 'v3',
 	dehydrateOptions: {
 		shouldDehydrateQuery: (query: {
 			queryKey: readonly unknown[];

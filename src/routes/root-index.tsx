@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { AppLayout } from '@/components/layout/app-layout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { useOAuthErrorToast } from '@/hooks/use-oauth-error-toast';
-import Home from './home';
+import Home from './apps';
 import { LandingPage } from './landing/LandingPage';
 
 type RootView = 'loading' | 'home' | 'landing';
@@ -22,12 +22,13 @@ function useRootView(): RootView {
 export function AppShell() {
 	const { pathname } = useLocation();
 	const view = useRootView();
-	if ((pathname !== '/' && pathname !== '/discover') || view === 'home') return <AppLayout />;
+	if ((pathname !== '/' && pathname !== '/discover') || view === 'home')
+		return <AppLayout />;
 	// The loader fills the screen by itself until the visitor is known.
 	return view === 'loading' ? <Outlet /> : <PublicLayout />;
 }
 
-/** `/`: the builder home for signed-in users, the landing page for everyone else. */
+/** `/`: the store workspace for signed-in users, the landing page for everyone else. */
 export default function RootIndex() {
 	const view = useRootView();
 	useOAuthErrorToast();

@@ -1,5 +1,6 @@
-import { Link } from 'react-router';
-import { SignInIcon } from '@phosphor-icons/react';
+import { Link, useNavigate } from 'react-router';
+import { QuestionIcon, SignInIcon } from '@phosphor-icons/react';
+import { Button } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { AuthButton } from '@/components/auth/auth-button';
@@ -7,18 +8,36 @@ import { OrangeButton } from '@/components/shared/OrangeButton';
 import { BRAND, EstoriLogo } from '@/brand';
 import { t } from '@/lib/i18n';
 
-/** Full-width navy bar above the sidebar: logo, account menu and Sign In. */
+/** Workspace identity and account controls, shared by every authenticated view. */
 export function EstoriTopBar() {
+	const navigate = useNavigate();
 	const { user, isLoading: authLoading } = useAuth();
 	const { showAuthModal } = useAuthModal();
 
 	return (
-		<header className="flex h-(--estori-topbar-h) shrink-0 items-center justify-between border-b border-(--estori-topbar-line) bg-(--estori-topbar) px-4 text-(--estori-topbar-text)">
-			<Link to="/" aria-label={t('{brand} home', { brand: BRAND.name })} className="flex items-center">
-				<EstoriLogo className="h-6 w-auto" />
+		<header className="workspace-topbar flex shrink-0 items-center justify-between px-5">
+			<Link
+				to="/"
+				aria-label={t('{brand} home', { brand: BRAND.name })}
+				className="flex items-center"
+			>
+				<EstoriLogo className="h-7 w-auto" />
+				<span className="workspace-label">{t('Workspace')}</span>
 			</Link>
 			<div className="flex items-center gap-2">
-				{user && <AuthButton display="icon" />}
+				{user && (
+					<>
+						<Button
+							variant="ghost"
+							shape="square"
+							aria-label={t('Help and support')}
+							onClick={() => navigate('/contact')}
+						>
+							<QuestionIcon className="size-5" />
+						</Button>
+						<AuthButton display="icon" />
+					</>
+				)}
 				{!authLoading && !user && (
 					<OrangeButton
 						size="sm"

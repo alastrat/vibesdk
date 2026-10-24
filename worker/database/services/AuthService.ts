@@ -1384,6 +1384,7 @@ export class AuthService extends BaseService {
                     avatarUrl: schema.users.avatarUrl,
                     bio: schema.users.bio,
                     timezone: schema.users.timezone,
+                    theme: schema.users.theme,
                     provider: schema.users.provider,
                     emailVerified: schema.users.emailVerified,
                     createdAt: schema.users.createdAt,

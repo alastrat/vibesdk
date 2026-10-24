@@ -3,6 +3,7 @@ import {
 	BookmarkSimpleIcon,
 	CaretRightIcon,
 	CompassIcon,
+	StorefrontIcon,
 	EnvelopeSimpleIcon,
 	GlobeHemisphereWestIcon,
 	LockKeyIcon,
@@ -28,13 +29,16 @@ import { useApps, useFavoriteApps, useRecentApps } from '@/hooks/use-apps';
 import { AppActionsDropdown } from '@/components/shared/AppActionsDropdown';
 import { OrangeButton } from '@/components/shared/OrangeButton';
 import { useUsageLimitsBadgeState } from '@/components/usage-limits-badge';
-import { ThemeToggle } from '@/components/theme-toggle';
 import { startCloudflareConnect } from '@/lib/cloudflare-connect';
 import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { legalLinkLabel } from '@/lib/legal-link-label';
 import type { AppVisibility } from '@/lib/visibility-label';
 import { t, tn } from '@/lib/i18n';
-import { SELLER_ORDERS_PATH, SHOPPER_EMAILS_PATH, STORE_TRANSLATIONS_PATH } from '@/api-types';
+import {
+	SELLER_ORDERS_PATH,
+	SHOPPER_EMAILS_PATH,
+	STORE_TRANSLATIONS_PATH,
+} from '@/api-types';
 import { useFlag } from '@/hooks/use-flag';
 
 interface App {
@@ -93,16 +97,32 @@ function AppMenuItem({
 
 			if (diffInSeconds < 60) return t('now');
 			if (diffInSeconds < 3600)
-				return t('{count}m ago', { count: Math.floor(diffInSeconds / 60) });
+				return t('{count}m ago', {
+					count: Math.floor(diffInSeconds / 60),
+				});
 			if (diffInSeconds < 86400)
-				return t('{count}h ago', { count: Math.floor(diffInSeconds / 3600) });
+				return t('{count}h ago', {
+					count: Math.floor(diffInSeconds / 3600),
+				});
 			if (diffInSeconds < 604800)
-				return t('{count}d ago', { count: Math.floor(diffInSeconds / 86400) });
+				return t('{count}d ago', {
+					count: Math.floor(diffInSeconds / 86400),
+				});
 			if (diffInSeconds < 2592000)
-				return t('{count}w ago', { count: Math.floor(diffInSeconds / 604800) });
+				return t('{count}w ago', {
+					count: Math.floor(diffInSeconds / 604800),
+				});
 			if (diffInSeconds < 31536000)
-				return tn('{count}mo ago', '{count}mo ago', Math.floor(diffInSeconds / 2592000));
-			return tn('{count}y ago', '{count}y ago', Math.floor(diffInSeconds / 31536000));
+				return tn(
+					'{count}mo ago',
+					'{count}mo ago',
+					Math.floor(diffInSeconds / 2592000),
+				);
+			return tn(
+				'{count}y ago',
+				'{count}y ago',
+				Math.floor(diffInSeconds / 31536000),
+			);
 		}
 		if (app.updatedAtFormatted) return app.updatedAtFormatted;
 		return t('Recently');
@@ -194,7 +214,7 @@ export function AppSidebar() {
 		useFavoriteApps();
 	const { apps: allApps, loading: allAppsLoading } = useApps();
 	const getAppPath = (app: App) =>
-		app.userId === user?.id ? `/chat/${app.id}` : `/app/${app.id}`;
+		app.userId === user?.id ? `/stores/${app.id}` : `/app/${app.id}`;
 
 	const boards: Board[] = [];
 
@@ -239,14 +259,20 @@ export function AppSidebar() {
 	const showAppsSection =
 		isSearching || appsWithoutBookmarks.length > 0 || moreAvailable;
 
-	const bookmarkSearchEmptyMessage = t('No bookmarks found for "{query}"', { query: trimmedSearchQuery });
+	const bookmarkSearchEmptyMessage = t('No bookmarks found for "{query}"', {
+		query: trimmedSearchQuery,
+	});
 
 	const appSearchEmptyMessage =
 		allApps.length === 0
 			? t('No apps yet')
 			: favoriteSearchResults.length > 0
-				? t('No other apps found for "{query}"', { query: trimmedSearchQuery })
-				: t('No apps found for "{query}"', { query: trimmedSearchQuery });
+				? t('No other apps found for "{query}"', {
+						query: trimmedSearchQuery,
+					})
+				: t('No apps found for "{query}"', {
+						query: trimmedSearchQuery,
+					});
 
 	const getVisibilityIcon = (visibility: App['visibility']) => {
 		switch (visibility) {
@@ -266,7 +292,7 @@ export function AppSidebar() {
 	};
 
 	return (
-		<Sidebar className="[--sidebar-bg:var(--color-kumo-canvas)]">
+		<Sidebar className="[--sidebar-bg:var(--color-kumo-recessed)]">
 			<Sidebar.Header
 				className={cn(
 					'h-12',
@@ -274,7 +300,9 @@ export function AppSidebar() {
 				)}
 			>
 				<Sidebar.Trigger
-					aria-label={isCollapsed ? t('Open sidebar') : t('Collapse sidebar')}
+					aria-label={
+						isCollapsed ? t('Open sidebar') : t('Collapse sidebar')
+					}
 					className="flex size-9 shrink-0 items-center justify-center"
 				/>
 			</Sidebar.Header>
@@ -282,12 +310,20 @@ export function AppSidebar() {
 			<div className="shrink-0 px-[11px] py-3 group-not-data-[state=collapsed]/sidebar:px-3.5">
 				{isCollapsed ? (
 					<div className="flex flex-col items-center gap-1">
-						{pathname !== '/' && (
+						<Button
+							shape="square"
+							variant="ghost"
+							aria-label={t('My stores')}
+							title={t('My stores')}
+							onClick={() => navigate('/apps')}
+							icon={<StorefrontIcon className="size-4" />}
+						/>
+						{pathname !== '/build' && (
 							<OrangeButton
 								shape="square"
 								aria-label={t('New build')}
 								title={t('New build')}
-								onClick={() => navigate('/')}
+								onClick={() => navigate('/build')}
 								className="size-8!"
 								icon={
 									<PlusIcon
@@ -323,11 +359,14 @@ export function AppSidebar() {
 								id="catalog-link"
 								aria-label={t('Catalog')}
 								title={t('Catalog')}
-								aria-current={pathname === '/catalog' ? 'page' : undefined}
+								aria-current={
+									pathname === '/catalog' ? 'page' : undefined
+								}
 								onClick={() => navigate('/catalog')}
 								className={cn(
 									'text-kumo-subtle hover:text-kumo-default',
-									pathname === '/catalog' && 'bg-(--sidebar-active-bg) text-kumo-default',
+									pathname === '/catalog' &&
+										'bg-(--sidebar-active-bg) text-kumo-default',
 								)}
 								icon={<PackageIcon className="size-4" />}
 							/>
@@ -340,11 +379,16 @@ export function AppSidebar() {
 								id="orders-link"
 								aria-label={t('Orders')}
 								title={t('Orders')}
-								aria-current={pathname.startsWith(SELLER_ORDERS_PATH) ? 'page' : undefined}
+								aria-current={
+									pathname.startsWith(SELLER_ORDERS_PATH)
+										? 'page'
+										: undefined
+								}
 								onClick={() => navigate(SELLER_ORDERS_PATH)}
 								className={cn(
 									'text-kumo-subtle hover:text-kumo-default',
-									pathname.startsWith(SELLER_ORDERS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
+									pathname.startsWith(SELLER_ORDERS_PATH) &&
+										'bg-(--sidebar-active-bg) text-kumo-default',
 								)}
 								icon={<ReceiptIcon className="size-4" />}
 							/>
@@ -357,11 +401,16 @@ export function AppSidebar() {
 								id="emails-link"
 								aria-label={t('Emails')}
 								title={t('Emails')}
-								aria-current={pathname.startsWith(SHOPPER_EMAILS_PATH) ? 'page' : undefined}
+								aria-current={
+									pathname.startsWith(SHOPPER_EMAILS_PATH)
+										? 'page'
+										: undefined
+								}
 								onClick={() => navigate(SHOPPER_EMAILS_PATH)}
 								className={cn(
 									'text-kumo-subtle hover:text-kumo-default',
-									pathname.startsWith(SHOPPER_EMAILS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
+									pathname.startsWith(SHOPPER_EMAILS_PATH) &&
+										'bg-(--sidebar-active-bg) text-kumo-default',
 								)}
 								icon={<EnvelopeSimpleIcon className="size-4" />}
 							/>
@@ -374,11 +423,20 @@ export function AppSidebar() {
 								id="translations-link"
 								aria-label={t('Translations')}
 								title={t('Translations')}
-								aria-current={pathname.startsWith(STORE_TRANSLATIONS_PATH) ? 'page' : undefined}
-								onClick={() => navigate(STORE_TRANSLATIONS_PATH)}
+								aria-current={
+									pathname.startsWith(STORE_TRANSLATIONS_PATH)
+										? 'page'
+										: undefined
+								}
+								onClick={() =>
+									navigate(STORE_TRANSLATIONS_PATH)
+								}
 								className={cn(
 									'text-kumo-subtle hover:text-kumo-default',
-									pathname.startsWith(STORE_TRANSLATIONS_PATH) && 'bg-(--sidebar-active-bg) text-kumo-default',
+									pathname.startsWith(
+										STORE_TRANSLATIONS_PATH,
+									) &&
+										'bg-(--sidebar-active-bg) text-kumo-default',
 								)}
 								icon={<TranslateIcon className="size-4" />}
 							/>
@@ -387,7 +445,16 @@ export function AppSidebar() {
 				) : (
 					<div className="flex flex-col gap-1.5">
 						<Sidebar.Menu className="gap-y-1.5">
-							{pathname !== '/' && (
+							<Sidebar.MenuButton
+								active={
+									pathname === '/' || pathname === '/apps'
+								}
+								icon={<StorefrontIcon className="size-4" />}
+								onClick={() => navigate('/apps')}
+							>
+								{t('My stores')}
+							</Sidebar.MenuButton>
+							{pathname !== '/build' && (
 								<OrangeButton
 									icon={
 										<PlusIcon
@@ -397,7 +464,7 @@ export function AppSidebar() {
 									}
 									title={t('New build')}
 									onClick={() => {
-										navigate('/');
+										navigate('/build');
 									}}
 									className="h-8! w-full justify-start text-sm"
 								>
@@ -422,7 +489,12 @@ export function AppSidebar() {
 							{user && !catalogPaused && (
 								<Sidebar.MenuButton
 									active={pathname === '/catalog'}
-									icon={<PackageIcon weight="duotone" className="size-4 -mr-1" />}
+									icon={
+										<PackageIcon
+											weight="duotone"
+											className="size-4 -mr-1"
+										/>
+									}
 									id="catalog-link"
 									tooltip={t('Catalog')}
 									onClick={() => navigate('/catalog')}
@@ -432,8 +504,15 @@ export function AppSidebar() {
 							)}
 							{user && (
 								<Sidebar.MenuButton
-									active={pathname.startsWith(SELLER_ORDERS_PATH)}
-									icon={<ReceiptIcon weight="duotone" className="size-4 -mr-1" />}
+									active={pathname.startsWith(
+										SELLER_ORDERS_PATH,
+									)}
+									icon={
+										<ReceiptIcon
+											weight="duotone"
+											className="size-4 -mr-1"
+										/>
+									}
 									id="orders-link"
 									tooltip={t('Orders')}
 									onClick={() => navigate(SELLER_ORDERS_PATH)}
@@ -443,22 +522,40 @@ export function AppSidebar() {
 							)}
 							{user && (
 								<Sidebar.MenuButton
-									active={pathname.startsWith(SHOPPER_EMAILS_PATH)}
-									icon={<EnvelopeSimpleIcon weight="duotone" className="size-4 -mr-1" />}
+									active={pathname.startsWith(
+										SHOPPER_EMAILS_PATH,
+									)}
+									icon={
+										<EnvelopeSimpleIcon
+											weight="duotone"
+											className="size-4 -mr-1"
+										/>
+									}
 									id="emails-link"
 									tooltip={t('Emails')}
-									onClick={() => navigate(SHOPPER_EMAILS_PATH)}
+									onClick={() =>
+										navigate(SHOPPER_EMAILS_PATH)
+									}
 								>
 									{t('Emails')}
 								</Sidebar.MenuButton>
 							)}
 							{user && !translationsPaused && (
 								<Sidebar.MenuButton
-									active={pathname.startsWith(STORE_TRANSLATIONS_PATH)}
-									icon={<TranslateIcon weight="duotone" className="size-4 -mr-1" />}
+									active={pathname.startsWith(
+										STORE_TRANSLATIONS_PATH,
+									)}
+									icon={
+										<TranslateIcon
+											weight="duotone"
+											className="size-4 -mr-1"
+										/>
+									}
 									id="translations-link"
 									tooltip={t('Translations')}
-									onClick={() => navigate(STORE_TRANSLATIONS_PATH)}
+									onClick={() =>
+										navigate(STORE_TRANSLATIONS_PATH)
+									}
 								>
 									{t('Translations')}
 								</Sidebar.MenuButton>
@@ -509,7 +606,7 @@ export function AppSidebar() {
 											app={app}
 											appPath={getAppPath(app)}
 											active={
-												pathname === getAppPath(app)
+												(pathname === getAppPath(app) || pathname === `/chat/${app.id}`)
 											}
 											onClick={() =>
 												navigate(getAppPath(app))
@@ -534,7 +631,7 @@ export function AppSidebar() {
 										key={app.id}
 										app={app}
 										appPath={getAppPath(app)}
-										active={pathname === getAppPath(app)}
+										active={(pathname === getAppPath(app) || pathname === `/chat/${app.id}`)}
 										onClick={() =>
 											navigate(getAppPath(app))
 										}
@@ -570,7 +667,7 @@ export function AppSidebar() {
 											app={app}
 											appPath={getAppPath(app)}
 											active={
-												pathname === getAppPath(app)
+												(pathname === getAppPath(app) || pathname === `/chat/${app.id}`)
 											}
 											onClick={() =>
 												navigate(getAppPath(app))
@@ -596,7 +693,7 @@ export function AppSidebar() {
 											app={app}
 											appPath={getAppPath(app)}
 											active={
-												pathname === getAppPath(app)
+												(pathname === getAppPath(app) || pathname === `/chat/${app.id}`)
 											}
 											onClick={() =>
 												navigate(getAppPath(app))
@@ -656,9 +753,17 @@ export function AppSidebar() {
 																{board.name}
 															</span>
 															<span className="truncate text-xs font-normal text-kumo-subtle">
-																{tn('{count} member', '{count} members', board.memberCount)}
+																{tn(
+																	'{count} member',
+																	'{count} members',
+																	board.memberCount,
+																)}
 																{' / '}
-																{tn('{count} app', '{count} apps', board.appCount)}
+																{tn(
+																	'{count} app',
+																	'{count} apps',
+																	board.appCount,
+																)}
 															</span>
 														</span>
 													</Sidebar.MenuSubButton>
@@ -710,25 +815,23 @@ export function AppSidebar() {
 					)}
 					{!isCollapsed && (
 						<nav className="flex flex-wrap gap-x-3 gap-y-1 px-1 text-xs text-kumo-subtle">
-							<Link to={'/pricing'} className="hover:text-kumo-default">{t('Pricing')}</Link>
+							<Link
+								to={'/pricing'}
+								className="hover:text-kumo-default"
+							>
+								{t('Pricing')}
+							</Link>
 							{LEGAL_LINKS.map((link) => (
-								<Link key={link.slug} to={link.path} className="hover:text-kumo-default">
+								<Link
+									key={link.slug}
+									to={link.path}
+									className="hover:text-kumo-default"
+								>
 									{legalLinkLabel(link.slug)}
 								</Link>
 							))}
 						</nav>
 					)}
-					<div
-						className={cn(
-							'flex min-w-0 w-full items-center gap-2',
-							isCollapsed && 'flex-col',
-						)}
-					>
-						<ThemeToggle
-							align="end"
-							className="size-9 shrink-0 rounded-lg"
-						/>
-					</div>
 				</div>
 			</Sidebar.Footer>
 		</Sidebar>

@@ -87,6 +87,7 @@ export class UserController extends BaseController {
                 displayName?: string;
                 bio?: string;
                 theme?: 'light' | 'dark' | 'system';
+                timezone?: string;
             }>(request);
 
             if (!bodyResult.success) {

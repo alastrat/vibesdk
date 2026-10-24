@@ -1,4 +1,5 @@
 import React from 'react';
+import './workspace-shell.css';
 import { Outlet } from 'react-router';
 import { SidebarProvider, useSidebar } from '@cloudflare/kumo';
 import { BillingBanner } from '@/components/billing/BillingBanner';
@@ -52,7 +53,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 	const defaultOpen = React.useMemo(() => getSidebarDefaultOpen(), []);
 
 	return (
-		<div className="flex h-svh flex-col">
+		<div className="estori-workspace flex h-svh flex-col">
 			<EstoriTopBar />
 			<SidebarProvider
 				defaultOpen={defaultOpen}
@@ -67,7 +68,7 @@ export function AppLayout({ children }: AppLayoutProps) {
 				<HeaderProvider>
 					<SidebarKeyboardShortcut />
 					<AppSidebar />
-					<main className="bg-kumo-canvas flex flex-col h-full relative flex-1 min-w-0 overflow-hidden">
+					<main className="workspace-canvas bg-kumo-canvas flex flex-col h-full relative flex-1 min-w-0 overflow-hidden">
 						<GlobalHeader />
 						<BillingBanner />
 						<div className="flex-1 min-h-0 overflow-auto bg-kumo-canvas">

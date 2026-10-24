@@ -14,6 +14,8 @@ import BillingCheckoutReturnPage from './routes/settings/billing-checkout-return
 import BillingCardPage from './routes/settings/billing-card';
 import BillingCardReturnPage from './routes/settings/billing-card-return';
 import AppsPage from './routes/apps';
+import BuilderHome from './routes/home';
+import StoreWorkspace from './routes/store-workspace';
 import CatalogPage from './routes/catalog';
 import AppView from './routes/app';
 import DiscoverPage from './routes/discover/route';
@@ -71,6 +73,8 @@ const routes = [
 				Component: AppShell,
 				children: [
 					{ index: true, Component: RootIndex },
+					{ path: 'build', Component: protectedPage(BuilderHome) },
+					{ path: 'stores/:id', Component: protectedPage(StoreWorkspace) },
 					{
 						path: 'chat/:chatId',
 						Component: Chat,

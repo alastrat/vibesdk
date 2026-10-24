@@ -32,6 +32,8 @@ export function GlobalHeader() {
 		}
 	}, [hasChangeLogs]);
 
+	if (!isMobile && !hasPageContent && !hasMaintenanceMessage) return null;
+
 	return (
 		<>
 			<header className={cn('sticky top-0 z-10')}>
