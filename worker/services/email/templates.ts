@@ -167,7 +167,7 @@ export interface NewOrderEmailInput {
 	test: boolean;
 	totalCents: number;
 	shareCents: number;
-	items: ReadonlyArray<{ name: string; quantity: number; kind: 'own' | 'catalog' }>;
+	items: ReadonlyArray<{ name: string; quantity: number; kind: 'own' | 'catalog'; productType?: 'physical' | 'digital' }>;
 	shipTo: { name: string; city: string; region: string | null; countryCode: string } | null;
 	note: string | null;
 	link: string | null;
@@ -178,7 +178,7 @@ const dollars = (cents: number, locale: Locale): string => new Intl.NumberFormat
 /** To a seller for each new order in their stores: what sold, where it ships, and what they ship themselves. */
 export function sellerNewOrderEmail(to: string, order: NewOrderEmailInput, locale: Locale = 'en'): OutgoingEmail {
 	const { t } = serverT(locale);
-	const own = order.items.filter((item) => item.kind === 'own').map((item) => item.name);
+	const own = order.items.filter((item) => item.kind === 'own' && item.productType !== 'digital').map((item) => item.name);
 	const catalog = order.items.filter((item) => item.kind === 'catalog').map((item) => item.name);
 	// A test order ships nothing, so it gets no shipping steps.
 	const steps = order.test
@@ -199,7 +199,7 @@ export function sellerNewOrderEmail(to: string, order: NewOrderEmailInput, local
 			[t('Items'), order.items.map((item) => `${item.quantity} × ${item.name}`).join('\n')],
 			[t('Total'), dollars(order.totalCents, locale)],
 			[t('Your share'), dollars(order.shareCents, locale)],
-			[t('Ship to'), shipTo],
+			...(order.items.some(item => item.productType !== 'digital') ? [[t('Ship to'), shipTo] as const] : []),
 			...(order.note ? [[t('Note'), order.note] as const] : []),
 		],
 		footer: t('You get this email for every order in your stores.'),

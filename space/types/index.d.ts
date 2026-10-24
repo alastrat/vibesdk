@@ -108,6 +108,8 @@ export type PublishDraftResult =
 	| { error: string };
 
 export interface PublishDraftOptions {
+  /** Owner-validated catalog projection; merged into the selected draft before its build. */
+  storeProducts?: { managedProductIds: string[]; adoptedProductIds?: string[]; productsJson: string };
 	/** The account's plan lacks the catalog: refuse a version selling catalog products the live store doesn't. */
 	refuseNewCatalogProducts?: boolean;
 }

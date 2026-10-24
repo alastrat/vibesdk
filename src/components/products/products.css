@@ -1,0 +1,260 @@
+.product-editor-shell {
+	width: min(1160px, 96vw) !important;
+	max-width: 1160px !important;
+	max-height: 94svh;
+	padding: 0 !important;
+	overflow: auto;
+	background: var(--color-kumo-base, #fff);
+}
+.product-editor-header {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 20px 28px;
+	background: var(--color-kumo-base, #fff);
+	border-bottom: 1px solid var(--color-kumo-line, #e5e7eb);
+}
+.product-editor-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+}
+.product-editor-fields {
+	padding: 28px;
+	display: grid;
+	gap: 30px;
+}
+.product-editor-fields section {
+	display: grid;
+	gap: 16px;
+}
+.product-editor-fields h3 {
+	font-size: 16px;
+	font-weight: 600;
+}
+.product-field {
+	display: grid;
+	gap: 7px;
+	font-size: 13px;
+	font-weight: 500;
+}
+.product-textarea {
+	border: 1px solid var(--color-kumo-line, #ddd);
+	border-radius: 8px;
+	padding: 10px;
+	background: transparent;
+	font-weight: 400;
+}
+.product-type-card {
+	display: grid;
+	justify-items: start;
+	gap: 8px;
+	border: 1px solid var(--color-kumo-line, #ddd);
+	border-radius: 10px;
+	padding: 16px;
+	text-align: left;
+}
+.product-type-card.selected {
+	border-color: #2563eb;
+	box-shadow: 0 0 0 1px #2563eb;
+	background: rgba(37, 99, 235, 0.035);
+}
+.product-type-card strong {
+	font-size: 13px;
+}
+.product-type-card span {
+	font-size: 12px;
+	color: var(--text-color-kumo-subtle, #737373);
+}
+.product-variant {
+	display: grid;
+	gap: 12px;
+	padding: 16px;
+	border: 1px solid var(--color-kumo-line, #e5e7eb);
+	border-radius: 10px;
+}
+.product-preview {
+	padding: 28px;
+	background: var(--color-kumo-recessed, #f8f9fb);
+	border-left: 1px solid var(--color-kumo-line, #e5e7eb);
+}
+.product-preview-card {
+	position: sticky;
+	top: 110px;
+	max-width: 450px;
+	margin: auto;
+	background: var(--color-kumo-base, #fff);
+	border: 1px solid var(--color-kumo-line, #e5e7eb);
+	border-radius: 14px;
+	overflow: hidden;
+	transition: max-width 0.2s;
+	box-shadow: 0 4px 20px #00000005;
+}
+.product-preview-card.mobile {
+	max-width: 290px;
+}
+.product-preview-image {
+	aspect-ratio: 4/3;
+	background: var(--color-kumo-tint, #eee);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #a1a1aa;
+}
+.product-preview-image img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.product-discard {
+	position: sticky;
+	bottom: 0;
+	z-index: 4;
+	padding: 24px;
+	border-top: 1px solid #ddd;
+	background: var(--color-kumo-base, #fff);
+}
+.private-products-table {
+	width: 100%;
+	border-collapse: collapse;
+	white-space: nowrap;
+	font-size: 13px;
+}
+.private-products-table th {
+	text-align: left;
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--text-color-kumo-subtle, #737373);
+	height: 42px;
+	padding: 0 14px;
+	border-bottom: 1px solid var(--color-kumo-line, #eee);
+}
+.private-products-table td {
+	padding: 10px 14px;
+	height: 58px;
+	border-bottom: 1px solid var(--color-kumo-line, #eee);
+}
+.private-products-table tbody tr:hover {
+	background: var(--color-kumo-recessed, #fafafa);
+}
+.product-thumb {
+	width: 36px;
+	height: 36px;
+	border-radius: 7px;
+	object-fit: cover;
+	background: var(--color-kumo-tint, #f4f4f5);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+@media (max-width: 760px) {
+	.product-editor-grid {
+		grid-template-columns: 1fr;
+	}
+	.product-preview {
+		border-left: 0;
+		border-top: 1px solid #ddd;
+	}
+	.product-editor-header {
+		padding: 16px;
+		align-items: start;
+	}
+	.product-editor-fields,
+	.product-preview {
+		padding: 20px;
+	}
+	.product-editor-header h2 {
+		font-size: 16px;
+	}
+	.product-editor-header p {
+		max-width: 200px;
+	}
+	.product-editor-shell {
+		width: 100vw !important;
+		max-height: 100svh;
+		border-radius: 0 !important;
+	}
+	.product-preview-card {
+		position: static;
+	}
+}
+
+/* Product creation is a full workspace, with the form and preview side by side. */
+.product-editor-shell {
+	width: 100vw !important;
+	max-width: 100vw !important;
+	height: 100svh;
+	max-height: 100svh !important;
+	border-radius: 0 !important;
+	border: 0 !important;
+}
+.product-editor-grid {
+	min-height: calc(100svh - 88px);
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.product-editor-fields {
+	width: 100%;
+	max-width: 660px;
+	justify-self: end;
+	padding: 40px;
+}
+.product-preview {
+	padding: 40px;
+}
+.private-products-table th {
+	background: transparent !important;
+}
+.private-products-table td {
+	padding-top: 10px !important;
+	padding-bottom: 10px !important;
+}
+@media (max-width: 760px) {
+	.product-editor-grid {
+		grid-template-columns: 1fr;
+	}
+	.product-editor-fields,
+	.product-preview {
+		padding: 20px;
+	}
+}
+
+/* Choice cards contain several lines; override Kumo's fixed-size button geometry. */
+.product-editor-shell button.product-type-card[data-kumo-component='Button'] {
+	display: flex !important;
+	flex-direction: column;
+	align-items: flex-start;
+	justify-content: flex-start;
+	gap: 10px;
+	width: 100% !important;
+	min-width: 0;
+	height: auto !important;
+	min-height: 132px;
+	max-height: none !important;
+	padding: 18px !important;
+	white-space: normal;
+	text-align: left;
+}
+.product-editor-shell button.product-type-card > span.contents {
+	display: contents !important;
+}
+.product-editor-shell button.product-type-card strong {
+	color: var(--text-color-kumo-strong, currentColor);
+	line-height: 1.35;
+	white-space: normal;
+}
+.product-editor-shell button.product-type-card > span.contents > span {
+	display: block;
+	line-height: 1.45;
+	white-space: normal;
+}
+/* Kumo Input is the native input here; its intrinsic size does not fill the wrapper. */
+.estori-store input[type='search'] {
+	box-sizing: border-box;
+	width: 100% !important;
+	min-width: 0;
+	max-width: 100% !important;
+}

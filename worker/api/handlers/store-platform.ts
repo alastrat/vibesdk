@@ -39,6 +39,8 @@ import { plainPage } from './plain-page';
 import { loadServingLanguages, shopperLanguage, shopperLocale, type ShopperLanguage } from '../../services/store-translations/serve-context';
 import { STORE_LANGUAGE_PARAM } from '../../services/store-translations/language';
 import { STORE_OVERLAY_PATH, translateManifest } from '../../services/store-translations/rewrite';
+import { ProductAssetService } from '../../services/account-products/assets';
+import { receiptDownloads, servePaidDownload, type DigitalDeliveryDeps } from '../../services/store-payments/digital-delivery';
 import { overlayScript } from '../../services/store-translations/overlay-script';
 
 const logger = createLogger('StorePlatform');
@@ -430,12 +432,40 @@ async function withReceipt(request: Request, env: Env, target: StorePlatformTarg
 	});
 }
 
+function digitalDeliveryDeps(env: Env): DigitalDeliveryDeps {
+	const assets = new ProductAssetService(env);
+	return {
+		getOrder: (id) => new StoreOrderService(env).getOrder(id),
+		getCheckout: (id) => new StoreCheckoutService(env).get(id),
+		getAsset: (ownerId, id) => assets.getForEntitlement(ownerId, id),
+		getObject: (key) => env.TEMPLATES_BUCKET.get(key),
+	};
+}
+function deliveryTarget(env: Env, target: StorePlatformTarget, orderId: string) {
+	return { appId: target.appId, mode: target.viewer.kind === 'preview' ? 'test' as const : stripeModeOf(env) ?? 'live', orderId, basePath: target.basePath };
+}
+async function serveProductImage(env: Env, target: StorePlatformTarget, productId: string, assetId: string): Promise<Response> {
+	const missing = () => json({ error: 'Not found' }, 404);
+	// A shared preview cannot expose the owner's unpublished private files.
+	if (await storeAccess(env, target) === 'public') return missing();
+	const file = await loadManifest(env, target);
+	const parsed = file ? parseStoreManifest(file.text) : null;
+	const path = `${STORE_PLATFORM_PREFIX}/product-images/${productId}/${assetId}`;
+	if (!parsed?.ok || !parsed.manifest.products.some((product) => product.id === productId && product.image === path)) return missing();
+	const assets = new ProductAssetService(env);
+	const record = await assets.getOwned(sellerIdOf(target), assetId);
+	if (!record || record.asset.kind !== 'image') return missing();
+	const object = await env.TEMPLATES_BUCKET.get(record.key);
+	if (!object) return missing();
+	return new Response(object.body, { headers: { 'Content-Type': record.asset.contentType, 'Content-Length': String(object.size), 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" } });
+}
+
 async function serveReceipt(request: Request, env: Env, target: StorePlatformTarget, orderId: string): Promise<Response> {
 	const claims = await verifyReceipt(env, readReceiptCookie(request));
 	if (!receiptAllows(claims, target.appId, orderId)) return json({ error: 'Order not found' }, 404);
 	const order = await new StoreOrderService(env).getOrder(orderId);
-	if (!order || order.appId !== target.appId) return json({ error: 'Order not found' }, 404);
-	return json(receiptOf(order));
+	if (!order || order.appId !== target.appId || order.mode !== deliveryTarget(env, target, orderId).mode) return json({ error: 'Order not found' }, 404);
+	return json({ ...receiptOf(order), downloads: await receiptDownloads(digitalDeliveryDeps(env), claims, deliveryTarget(env, target, orderId)) });
 }
 
 export async function handleStorePlatform(request: Request, env: Env, target: StorePlatformTarget, ctx: ExecutionContext): Promise<Response> {
@@ -447,6 +477,10 @@ export async function handleStorePlatform(request: Request, env: Env, target: St
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/pay`) return await servePayPage(request, env, target);
 		if (request.method === 'POST' && path === `${STORE_PLATFORM_PREFIX}/checkout`) return await serveCheckout(request, env, target, ctx);
 		if (request.method === 'GET' && path === `${STORE_PLATFORM_PREFIX}/return`) return await serveReturn(request, env, target);
+		const image = path.match(/^\/__estori\/product-images\/([a-z0-9-]{1,64})\/([a-z0-9_-]{1,64})$/);
+		if (request.method === 'GET' && image) return await serveProductImage(env, target, image[1], image[2]);
+		const download = path.match(/^\/__estori\/orders\/(ord_[a-z0-9]{1,64})\/downloads\/([a-z0-9_-]{1,64})$/);
+		if (request.method === 'GET' && download) return await servePaidDownload(digitalDeliveryDeps(env), await verifyReceipt(env, readReceiptCookie(request)), deliveryTarget(env, target, download[1]), download[2]);
 		const receipt = path.match(/^\/__estori\/orders\/(ord_[a-z0-9]{1,64})$/);
 		if (request.method === 'GET' && receipt) return await serveReceipt(request, env, target, receipt[1]);
 		return json({ error: 'Not found' }, 404);

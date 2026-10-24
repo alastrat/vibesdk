@@ -16,12 +16,14 @@ import {
 	useMutation,
 	useQuery,
 	useQueryClient,
+	type QueryClient,
 } from '@tanstack/react-query';
 import { apiClient, ApiError } from '@/lib/api-client';
 import { useSentryUser } from '@/hooks/useSentryUser';
 import { applyAccountLocale, bindAccountSaver, getLocale, t } from '@/lib/i18n';
 import { oauthStartPath } from '@/lib/oauth-start';
 import { queryKeys } from '@/lib/query-keys';
+import { isPrivateAccountQuery } from '@/lib/query-client';
 import { unwrap } from '@/lib/unwrap-response';
 import type {
 	AuthProvidersResponseData,
@@ -180,6 +182,27 @@ function getAuthActionError(error: unknown): string {
 	return t('Connection error. Please try again.');
 }
 
+async function clearPrivateAccountQueries(
+	queryClient: QueryClient,
+): Promise<void> {
+	// Cancellation also prevents a request that ignores its abort signal from
+	// restoring old account data after it eventually resolves.
+	await queryClient.cancelQueries({ predicate: isPrivateAccountQuery });
+	queryClient.removeQueries({ predicate: isPrivateAccountQuery });
+}
+
+async function prepareSessionChange(
+	queryClient: QueryClient,
+	nextSession: CachedAuthSession | null,
+): Promise<void> {
+	const previousSession = queryClient.getQueryData<CachedAuthSession | null>(
+		queryKeys.auth.session(),
+	);
+	if (previousSession?.user.id !== nextSession?.user.id) {
+		await clearPrivateAccountQueries(queryClient);
+	}
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
 	const [error, setError] = useState<string | null>(null);
 	const navigate = useNavigate();
@@ -212,7 +235,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 	const sessionQuery = useQuery({
 		queryKey: queryKeys.auth.session(),
-		queryFn: fetchAuthSession,
+		queryFn: async ({ signal }) => {
+			const nextSession = await fetchAuthSession();
+			// A canceled profile request may still finish at the HTTP layer. It
+			// must not clear the account established by a newer login.
+			if (!signal.aborted)
+				await prepareSessionChange(queryClient, nextSession);
+			return nextSession;
+		},
 		staleTime: 5 * 60_000,
 		// Periodic cookie/session validation (replaces manual setInterval).
 		// Only poll while a session exists — matches prior setupTokenRefresh behavior.
@@ -292,10 +322,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 			await queryClient.cancelQueries({
 				queryKey: queryKeys.auth.session(),
 			});
-			queryClient.setQueryData(
-				queryKeys.auth.session(),
-				buildSessionFromLogin(data),
-			);
+			const nextSession = buildSessionFromLogin(data);
+			await prepareSessionChange(queryClient, nextSession);
+			queryClient.setQueryData(queryKeys.auth.session(), nextSession);
 		},
 		[queryClient],
 	);
@@ -306,9 +335,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 		await queryClient.cancelQueries({
 			queryKey: queryKeys.auth.session(),
 		});
+		await clearPrivateAccountQueries(queryClient);
 		queryClient.setQueryData(queryKeys.auth.session(), null);
-		// Drop user-scoped caches so the next account cannot see prior data.
-		queryClient.removeQueries({ queryKey: queryKeys.account.all });
 	}, [queryClient]);
 
 	const navigateAfterAuth = useCallback(() => {

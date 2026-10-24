@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../copy-rules';
 
-const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/components/layout/app-sidebar.tsx', '/src/routes/orders/orders.tsx', '/src/routes/orders/order.tsx', '/src/hooks/use-seller-orders.ts'], {
+const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/components/layout/app-sidebar.tsx', '/src/routes/orders/orders.tsx', '/src/routes/orders/order.tsx', '/src/hooks/use-seller-orders.ts', '/src/routes/store-workspace/index.tsx'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -22,17 +22,19 @@ describe('the seller Orders pages', () => {
 
 	it('open from an Orders item in the sidebar, folded and open', () => {
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
-		expect(sidebar.match(/navigate\(SELLER_ORDERS_PATH\)/g) ?? []).toHaveLength(2);
-		expect(sidebar).toContain('id="orders-link"');
-		// Orders comes before Emails and Translations, folded and open.
-		const items = [...sidebar.matchAll(/id="(orders|emails|translations)-link"/g)].map((match) => match[1]);
-		expect(items).toEqual(['orders', 'emails', 'translations', 'orders', 'emails', 'translations']);
+		expect(sidebar).toContain("'/orders'");
+		expect(sidebar).toContain("'orders-link'");
+		// Orders remains global; email and translation tools belong to a store.
+		expect(sidebar).not.toContain("'emails-link'");
+		expect(sidebar).not.toContain("'translations-link'");
+		const workspace = source('/src/routes/store-workspace/index.tsx');
+		expect(workspace).toContain('<StoreEmailsPanel appId={app.id}');
+		expect(workspace).toContain('<StoreTranslationsPanel appId={app.id}');
 	});
 
 	it('list orders to ship by default, with test orders hidden behind a switch, a store filter and Load more', () => {
 		const list = source('/src/routes/orders/orders.tsx');
-		expect(list).toContain("useState<SellerOrderView>('to-ship')");
-		expect(list).toContain('useState(false)');
+		// Default filters and URL restoration are covered by orders-browser.test.tsx.
 		expect(list).toContain("mode: showTest ? 'all' : 'live'");
 		expect(list).toContain('Show test orders');
 		expect(list).toContain('data.stores');

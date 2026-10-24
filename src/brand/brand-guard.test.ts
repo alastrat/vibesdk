@@ -243,6 +243,7 @@ describe('brand guard: Cloudflare logo usage', () => {
 		'/src/components/credits-banner.tsx',
 		'/src/components/usage-limits-card.tsx',
 		'/src/components/layout/app-sidebar.tsx',
+		'/src/components/layout/store-rail.tsx',
 		'/src/routes/chat/chat.tsx',
 		'/src/utils/usage-limit-checker.tsx',
 	];

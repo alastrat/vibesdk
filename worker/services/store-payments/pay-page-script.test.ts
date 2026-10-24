@@ -196,6 +196,21 @@ describe("Estori's checkout page script", () => {
 	beforeEach(() => vi.useFakeTimers());
 	afterEach(() => vi.useRealTimers());
 
+	it('confirms digital checkout without creating a shipping address element', async () => {
+  const answer = started('chk_digital');
+  if (!answer.ok) throw new Error('fixture checkout failed');
+  answer.summary.requiresShipping = false;
+  const tab = {local: new Map([[`estori:cart:${BASE}`, JSON.stringify({items: [{variantId: 'kenya-250', quantity: 1}]})]]), session: new Map<string, string>()};
+  const page = openPage(tab, [answer]);
+  await settle();
+  expect(page.stripe.shippingOptions).toEqual([]);
+  expect(page.elements.get('shipping-step')?.hidden).toBe(true);
+  typeEmail(page, 'shopper@example.com');
+  await settle();
+  page.elements.get('pay')?.onclick?.();
+  await settle();
+  expect(page.stripe.confirmed).toEqual(['cs_secret_chk_digital']);
+ });
 	it("shows the cart's order note in the summary and sends it with the checkout", async () => {
 		const tab = { local: new Map([[`estori:cart:${BASE}`, JSON.stringify({ items: [{ variantId: 'kenya-250', quantity: 1 }], note: 'Happy birthday, Mom!' })]]), session: new Map<string, string>() };
 		const page = openPage(tab, [started('chk_note')]);

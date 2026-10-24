@@ -8,6 +8,7 @@ const sources = import.meta.glob<string>(
 		'/src/components/layout/PublicTopBar.tsx',
 		'/src/components/layout/SiteFooter.tsx',
 		'/src/components/layout/app-sidebar.tsx',
+		'/src/components/auth/auth-button.tsx',
 		'/src/routes/legal/LegalPage.tsx',
 		'/src/routes/root-index.tsx',
 	],
@@ -48,11 +49,10 @@ describe('public pages', () => {
 		expect(root).toContain('<PublicLayout />');
 	});
 
-	it('links every legal page from the footer and the sidebar', () => {
+	it('links every legal page from the footer and the workspace account menu', () => {
 		expect(source('/src/components/layout/SiteFooter.tsx')).toContain('LEGAL_LINKS');
-		const sidebar = source('/src/components/layout/app-sidebar.tsx');
-		expect(sidebar).toContain('LEGAL_LINKS');
-		expect(sidebar).toContain("'/pricing'");
+		expect(source('/src/components/auth/auth-button.tsx')).toContain('LEGAL_LINKS');
+		expect(source('/src/components/layout/SiteFooter.tsx')).toContain('/pricing');
 	});
 
 	it('starts each public page at the top of its own scroll container', () => {

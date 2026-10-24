@@ -1,7 +1,7 @@
 import { INTL_LOCALE } from 'shared/i18n/locales';
 import { getLocale, t, useI18n } from '@/lib/i18n';
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { toast } from 'sonner';
 import { Badge, Button, Empty, Loader } from '@cloudflare/kumo';
 import { pageTitle } from '@/brand';
@@ -14,19 +14,24 @@ import { Input } from '@/components/ui/input';
 import { useRefundSellerOrder, useSellerOrder, useSellerOrderShipment } from '@/hooks/use-seller-orders';
 import { formatCents as centsInLocale } from '@/lib/pricing';
 const formatCents = (cents: number) => centsInLocale(cents, getLocale());
+import './orders.css';
 import { CATALOG_PROGRESS_LABELS, PAYMENT_LABELS, carrierChoice, customerLabel, moneySplit, shipToLines, storeLabel } from './order-format';
 
 export default function SellerOrderPage() {
 	useI18n();
-	const { id = '' } = useParams();
+	const { id = '', storeId } = useParams();
+	const [params] = useSearchParams();
+	const returnParams = new URLSearchParams(params);
+	if (storeId) returnParams.set('section', 'payments');
+	const returnPath = `${storeId ? `/stores/${encodeURIComponent(storeId)}` : SELLER_ORDERS_PATH}${returnParams.size ? `?${returnParams}` : ''}`;
 	const detail = useSellerOrder(id);
 
 	return (
-		<div className="size-full">
-			<title>{pageTitle('Order')}</title>
-			<div className="container max-w-5xl mx-auto px-4 py-8 grid gap-6">
-				<Link to={SELLER_ORDERS_PATH} className="w-fit text-sm text-kumo-default underline underline-offset-2">{t("Orders")}</Link>
-				{detail.data ? (
+		<div className="size-full seller-order-detail">
+			<title>{pageTitle(t('Order'))}</title>
+			<div className="container max-w-6xl mx-auto px-4 py-8 grid gap-6">
+				<Link to={returnPath} className="w-fit text-sm text-kumo-default underline underline-offset-2">{t("Orders")}</Link>
+				{detail.data && (!storeId || detail.data.appId === storeId) ? (
 					<OrderDetail order={detail.data} />
 				) : detail.isLoading ? (
 					<div className="flex justify-center py-16">
@@ -42,8 +47,9 @@ export default function SellerOrderPage() {
 
 function OrderDetail({ order }: { order: SellerOrderDetail }) {
 	useI18n();
-	const own = order.items.filter((item) => item.kind === 'own');
+	const own = order.items.filter((item) => item.kind === 'own' && item.productType !== 'digital');
 	const catalog = order.items.filter((item) => item.kind === 'catalog');
+	const digital = order.items.filter((item) => item.productType === 'digital');
 	const money = moneySplit(order);
 	const address = shipToLines(order.shipTo);
 
@@ -55,8 +61,8 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 	};
 
 	return (
-		<div className="grid gap-8">
-			<section className="grid gap-2">
+		<div className="order-detail-body grid gap-6">
+			<section className="order-detail-heading grid gap-2">
 				<h1 className="text-3xl font-semibold text-kumo-strong">{t('Order #{number} at {store}', { number: order.orderNumber, store: storeLabel(order.storeTitle) })}
 				</h1>
 				<div className="flex flex-wrap items-center gap-2">
@@ -87,7 +93,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 					)}
 					{order.customerPhone && <p className="text-sm">{order.customerPhone}</p>}
 				</Section>
-				<Section title={t("Ship to")}>
+				{(own.length > 0 || catalog.length > 0) && <Section title={t("Ship to")}>
 					<address className="text-sm not-italic leading-6">
 						{address.map((line, index) => (
 							<span key={index} className="block">
@@ -98,7 +104,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 					{order.shipTo && (
 						<Button variant="secondary" size="sm" className="w-fit" onClick={copyAddress}>{t("Copy address")}</Button>
 					)}
-				</Section>
+				</Section>}
 			</div>
 
 			{order.note && (
@@ -106,6 +112,8 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 					<p className="text-sm whitespace-pre-wrap">{order.note}</p>
 				</Section>
 			)}
+
+			{digital.length > 0 && <Section title={t("Digital products")}><Lines lines={digital} /></Section>}
 
 			{own.length > 0 && (
 				<Section title={t("You ship")}>
@@ -156,7 +164,7 @@ function OrderDetail({ order }: { order: SellerOrderDetail }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
 	return (
-		<section className="grid content-start gap-3">
+		<section className="order-detail-section grid content-start gap-3">
 			<h2 className="text-lg font-medium text-kumo-strong">{title}</h2>
 			{children}
 		</section>

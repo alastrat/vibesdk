@@ -1,5 +1,6 @@
 import type { DiscoverCatalogFilters } from '@/api-types';
 export type PaginatedAppsListFilters = {
+	publication?: string;
 	sort: string;
 	period: string;
 	framework: string;
@@ -11,6 +12,12 @@ export type PaginatedAppsListFilters = {
 };
 
 export const queryKeys = {
+	privateProducts: {
+		all: ['account', 'private-products'] as const,
+		list: (userId?: string) => ['account', 'private-products', userId ?? 'anonymous'] as const,
+		collection: (userId: string | undefined, appId: string, mode: 'live' | 'test' = 'live') =>
+			['account', 'private-products', userId ?? 'anonymous', 'store', appId, mode] as const,
+	},
 	discoverCatalog: {
 		all: ['discover-catalog'] as const,
 		categories: () => ['discover-catalog', 'categories'] as const,
@@ -31,15 +38,15 @@ export const queryKeys = {
 		session: () => [...queryKeys.auth.all, 'session'] as const,
 		providers: () => [...queryKeys.auth.all, 'providers'] as const,
 	},
-	/** Unauthenticated / list-scoped app feeds (public + paginated user lists). */
+	/** App feeds; paginated owner lists use account-scoped storage below. */
 	apps: {
 		all: ['apps'] as const,
 		publicAll: () => [...queryKeys.apps.all, 'public'] as const,
 		public: (filters: PaginatedAppsListFilters) =>
 			[...queryKeys.apps.publicAll(), filters] as const,
-		userAll: () => [...queryKeys.apps.all, 'user'] as const,
-		user: (filters: PaginatedAppsListFilters) =>
-			[...queryKeys.apps.userAll(), filters] as const,
+		userAll: () => [...queryKeys.account.apps.all(), 'paginated'] as const,
+		user: (filters: PaginatedAppsListFilters, userId?: string | null) =>
+			[...queryKeys.apps.userAll(), userId ?? 'anonymous', filters] as const,
 		strip: () => [...queryKeys.apps.all, 'strip'] as const,
 		/** The landing page's logo strip and showcase; carries signed screenshot links. */
 		showcase: () => [...queryKeys.apps.all, 'showcase'] as const,
@@ -56,6 +63,7 @@ export const queryKeys = {
 	},
 	account: {
 		all: ['account'] as const,
+		storeProducts: (appId: string, userId?: string | null) => ['account', 'store-products', appId, userId ?? 'anonymous'] as const,
 		user: {
 			all: () => [...queryKeys.account.all, 'user'] as const,
 			statsAll: () => [...queryKeys.account.user.all(), 'stats'] as const,
@@ -73,6 +81,7 @@ export const queryKeys = {
 				] as const,
 		},
 		settings: {
+			identities: (userId?: string | null) => [...queryKeys.account.settings.all(), 'identities', userId ?? 'anonymous'] as const,
 			all: () => [...queryKeys.account.all, 'settings'] as const,
 			activeSessionsAll: () =>
 				[...queryKeys.account.settings.all(), 'active-sessions'] as const,
@@ -153,7 +162,10 @@ export const queryKeys = {
 			products: (query: string) => [...queryKeys.account.all, 'catalog', query] as const,
 		},
 		/** The seller's orders: never persisted, like the rest of `account`. */
+		storeLiveAnalytics: (userId: string, appId: string, mode: 'live' | 'test') => [...queryKeys.account.all, 'store-live-analytics', userId, appId, mode] as const,
+		storeAnalytics: (userId: string, appId: string, days: number, mode: 'live' | 'test', throughDay = '', productId = '') => [...queryKeys.account.all, 'store-analytics', userId, appId, days, mode, throughDay, productId] as const,
 		sellerOrders: {
+			workspace: (userId: string, appId: string, days: number, throughDay: string, mode: 'live' | 'test' = 'live') => [...queryKeys.account.sellerOrders.all(), 'workspace', userId, appId, days, throughDay, mode] as const,
 			all: () => [...queryKeys.account.all, 'seller-orders'] as const,
 			list: (view: string, mode: string, store: string | null) => [...queryKeys.account.sellerOrders.all(), 'list', view, mode, store ?? 'all'] as const,
 			detail: (orderId: string) => [...queryKeys.account.sellerOrders.all(), 'detail', orderId] as const,

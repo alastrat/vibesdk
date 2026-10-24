@@ -7,6 +7,9 @@ import { AuthUser } from './api-types';
 import type { SessionTelemetry } from '../shared/types/telemetry.js';
 
 export type { SecretTemplate } from 'worker/types/secretsTemplates';
+export type { StorePublicationStatus, StorePublicationSummary, StoreWorkspaceProducts, StoreWorkspaceProduct, StoreWorkspaceVariant } from '../shared/types/store-workspace';
+
+export type { StoreLiveAnalytics, StoreTrafficAnalytics, StoreTrafficBreakdown, StoreTrafficBucket, StoreTrafficEvent } from '../shared/types/store-analytics';
 
 // Base API Response Types
 export type { ControllerResponse, ApiResponse } from 'worker/api/controllers/types';
@@ -620,3 +623,5 @@ export type { Locale } from '../shared/i18n/locales.js';
 export { DEFAULT_LOCALE, LOCALES, LOCALE_NAMES, isLocale, negotiateLocale } from '../shared/i18n/locales.js';
 
 export type { DiscoverKind, DiscoverTier, DiscoverCategory, DiscoverEntry, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '../shared/types/discover-catalog';
+
+export type { AccountProduct, AccountProductVariant, ProductAsset, SaveAccountProduct, StoreProductListing, StoreProductCollection, AccountProductList, AddStoreProduct, UpdateStoreProduct, ProductVisibility, AccountProductType } from '../shared/types/account-products';

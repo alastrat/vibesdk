@@ -1,0 +1,137 @@
+.es-metric-chart {
+	--metric-color: #1955e6;
+	--metric-axis: var(--es-muted, #6b7280);
+	--metric-grid: var(--es-line, #e5e7eb);
+	--metric-surface: var(--es-surface, #fff);
+	--metric-ink: var(--es-ink, #202632);
+	width: 100%;
+	min-width: 0;
+	position: relative;
+}
+[data-mode='dark'] .es-metric-chart {
+	--metric-color: #6e9dff;
+}
+.es-metric-plot {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	border-radius: 4px;
+	outline: none;
+	touch-action: pan-y;
+}
+.es-metric-plot:focus-visible {
+	outline: 2px solid var(--metric-color);
+	outline-offset: 3px;
+}
+.es-metric-plot svg {
+	display: block;
+	max-width: 100%;
+	overflow: hidden;
+}
+.es-metric-axis {
+	fill: var(--metric-axis);
+	font-family: inherit;
+	font-size: 10px;
+	font-variant-numeric: tabular-nums;
+}
+.es-metric-grid {
+	stroke: var(--metric-grid);
+	stroke-width: 1;
+	stroke-dasharray: 2 4;
+}
+.es-metric-line {
+	stroke: var(--metric-color);
+	stroke-width: 2;
+	fill: none;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.es-metric-previous {
+	stroke: #aac4ff;
+	stroke-width: 1.5;
+	stroke-dasharray: 4 4;
+	opacity: 0.85;
+	fill: none;
+}
+.es-metric-guide {
+	stroke: var(--metric-axis);
+	stroke-width: 1;
+	stroke-dasharray: 3 3;
+	opacity: 0.55;
+}
+.es-metric-dot {
+	fill: var(--metric-color);
+	stroke: var(--metric-surface);
+	stroke-width: 2;
+}
+.es-metric-prior-dot {
+	fill: var(--metric-axis);
+	stroke: var(--metric-surface);
+	stroke-width: 1.5;
+}
+.es-metric-tooltip {
+	position: absolute;
+	z-index: 2;
+	top: 7px;
+	width: 224px;
+	max-width: calc(100% - 8px);
+	padding: 11px 12px;
+	box-sizing: border-box;
+	border: 1px solid var(--metric-grid);
+	border-radius: 8px;
+	box-shadow: 0 4px 18px #0000000d;
+	background: var(--metric-surface);
+	color: var(--metric-ink);
+	font-size: 11px;
+	line-height: 1.45;
+	pointer-events: none;
+}
+.es-metric-tooltip > div {
+	color: var(--metric-axis);
+}
+.es-metric-tooltip > div > span {
+	font-size: 9px;
+}
+.es-metric-tooltip p {
+	margin: 6px 0 0;
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+.es-metric-tooltip p > span {
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.es-metric-tooltip strong {
+	font-size: 12px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.es-metric-tooltip-prior {
+	margin-top: 9px;
+	padding-top: 8px;
+	border-top: 1px solid var(--metric-grid);
+}
+.es-metric-chart-empty {
+	display: grid;
+	min-height: 144px;
+	place-items: center;
+	color: var(--es-muted, #6b7280);
+	font-size: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.es-metric-line {
+		animation: metric-reveal 450ms ease-out;
+	}
+	@keyframes metric-reveal {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+}

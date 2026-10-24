@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-const sources = import.meta.glob<string>(['/src/components/analytics/AnalyticsPreferenceCard.tsx', '/src/routes/settings/index.tsx', '/src/hooks/use-telemetry.ts'], {
+const sources = import.meta.glob<string>(['/src/components/account-settings/preferences.tsx', '/src/routes/settings/index.tsx', '/src/hooks/use-telemetry.ts'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -13,10 +13,10 @@ function source(path: string): string {
 }
 
 describe('the analytics setting', () => {
-	const card = source('/src/components/analytics/AnalyticsPreferenceCard.tsx');
+	const card = source('/src/components/account-settings/preferences.tsx');
 
-	it('is a card in Settings', () => {
-		expect(source('/src/routes/settings/index.tsx')).toContain('<AnalyticsPreferenceCard />');
+	it('is shared by the Settings route and account dialog', () => {
+		expect(source('/src/routes/settings/index.tsx')).toContain('<PrivacySettings />');
 	});
 
 	it('says what is shared and that the email and name never are', () => {

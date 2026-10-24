@@ -1534,3 +1534,94 @@ export const discoverPurchases = sqliteTable('discover_purchases', {
     versionId: text('version_id').notNull().references(() => discoverVersions.id), orderId: text('order_id').notNull().unique().references(() => discoverCheckoutOrders.id),
     revoked: integer('revoked').notNull().default(0), createdAt: integer('created_at').notNull(),
 }, (table) => [index('discover_purchases_user_version_idx').on(table.userId, table.versionId), uniqueIndex('discover_purchase_active_buyer_entry').on(table.userId, table.entryId).where(sql`${table.revoked} = 0`)]);
+
+/** Anonymous document events from the published store gateway; never raw network identity. */
+export const storePageEvents = sqliteTable('store_page_events', {
+    id: text('id').primaryKey(),
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    mode: text('mode', { enum: STORE_MODES }).notNull(),
+    visitorHash: text('visitor_hash').notNull(),
+    path: text('path').notNull(),
+    source: text('source').notNull(),
+    country: text('country').notNull(),
+    device: text('device', { enum: ['desktop', 'mobile', 'tablet'] }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    appModeCreatedIdx: index('store_page_events_app_mode_created_idx').on(table.appId, table.mode, table.createdAt),
+    retentionIdx: index('store_page_events_created_idx').on(table.createdAt),
+}));
+
+/** Private account catalog, separate from supplier refresh and public discovery. */
+export const accountProducts = sqliteTable(
+	'account_products',
+	{
+		id: text('id').primaryKey(),
+		ownerId: text('owner_id')
+			.notNull()
+			.references(() => users.id),
+		source: text('source', { enum: ['own', 'catalog'] }).notNull(),
+		sourceCatalogProductId: text('source_catalog_product_id'),
+		type: text('type', { enum: ['physical', 'digital'] }).notNull(),
+		name: text('name').notNull(),
+		description: text('description').notNull(),
+		category: text('category').notNull(),
+		variants: text('variants', { mode: 'json' })
+			.$type<
+				import('../../shared/types/account-products').AccountProductVariant[]
+			>()
+			.notNull(),
+		legacyImageUrl: text('legacy_image_url'),
+		imageAssetId: text('image_asset_id'),
+		downloadAssetIds: text('download_asset_ids', { mode: 'json' })
+			.$type<string[]>()
+			.notNull(),
+		weightGrams: integer('weight_grams'),
+		archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+		revision: integer('revision').notNull().default(1),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+	},
+	(t) => ({
+		ownerIdx: index('account_products_owner_idx').on(t.ownerId),
+		sourceIdx: index('account_products_source_idx').on(t.ownerId, t.sourceCatalogProductId),
+	}),
+);
+export const productAssets = sqliteTable(
+	'product_assets',
+	{
+		id: text('id').primaryKey(),
+		ownerId: text('owner_id')
+			.notNull()
+			.references(() => users.id),
+		r2Key: text('r2_key').notNull(),
+		kind: text('kind', { enum: ['image', 'download'] }).notNull(),
+		name: text('name').notNull(),
+		contentType: text('content_type').notNull(),
+		size: integer('size').notNull(),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+	},
+	(t) => ({ ownerIdx: index('product_assets_owner_idx').on(t.ownerId) }),
+);
+/** Detach marks the relationship, preserving which manifest products this collection manages. */
+export const storeProductListings = sqliteTable(
+	'store_product_listings',
+	{
+		id: text('id').primaryKey(),
+		appId: text('app_id')
+			.notNull()
+			.references(() => apps.id),
+		productId: text('product_id')
+			.notNull()
+			.references(() => accountProducts.id),
+		originalManifestProductId: text('original_manifest_product_id'),
+		visibility: text('visibility', { enum: ['visible', 'hidden'] }).notNull(),
+		detached: integer('detached', { mode: 'boolean' }).notNull().default(false),
+		createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' }).notNull(),
+	},
+	(t) => ({
+		appProductUnique: uniqueIndex(
+			'store_product_listings_app_product_unique',
+		).on(t.appId, t.productId),
+	}),
+);

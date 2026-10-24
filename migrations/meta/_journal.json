@@ -267,6 +267,34 @@
       "when": 1792709663007,
       "tag": "0037_green_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1792861192231,
+      "tag": "0038_neat_the_hand",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1792871725780,
+      "tag": "0039_famous_madripoor",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1792872066593,
+      "tag": "0040_sparkling_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1792872483743,
+      "tag": "0041_flowery_sally_floyd",
+      "breakpoints": true
     }
   ]
 }

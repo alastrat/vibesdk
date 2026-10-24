@@ -768,7 +768,10 @@ export class AuthController extends BaseController {
             const sessions = await sessionService.getUserSessions(user.id);
 
             return AuthController.createSuccessResponse({
-                sessions: sessions
+                sessions: sessions.map(session => ({
+                    ...session,
+                    isCurrent: session.id === routeContext.sessionId,
+                }))
             });
         } catch (error) {
             return AuthController.handleError(error, 'get active sessions');

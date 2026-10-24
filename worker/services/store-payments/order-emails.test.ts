@@ -32,6 +32,14 @@ function world(input: { order?: StoreOrderView; sellerEmail?: string | null; sto
 }
 
 describe('the new-order email', () => {
+	it('never asks sellers to ship snapshot-identified digital items', async () => {
+  const {deps, sent} = world({order: {...ORDER, shippingAddress: null, items: [ORDER.items[0]]}});
+  deps.facts = async () => ({storeTitle: 'Store', sellerEmail: 'seller@example.test', digitalLineNos: [1]});
+  expect(await notifySellerOfNewOrder(deps, 'ord_1')).toBe('sent');
+  expect(sent[0].text).toContain('2 × Oolong, 100 g');
+  expect(sent[0].text).not.toContain('Ship these items');
+  expect(sent[0].text).not.toContain('Ship to:');
+ });
 	it('tells the seller what was sold, their share, where it ships, the note, and what to ship themselves', async () => {
 		const { deps, sent } = world();
 		expect(await notifySellerOfNewOrder(deps, 'ord_1')).toBe('sent');

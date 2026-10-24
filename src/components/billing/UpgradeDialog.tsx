@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router';
-import { Button, buttonVariants, cn } from '@cloudflare/kumo';
+import { Button, LinkButton } from '@cloudflare/kumo';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { PlanLimitRefusal } from '@/api-types';
 import { usePlanCheckout } from '@/hooks/use-billing';
@@ -37,9 +36,9 @@ export function UpgradeDialog({ refusal, onClose }: { refusal: PlanLimitRefusal;
 						</Button>
 					)}
 					{action.kind === 'link' && (
-						<Link to={action.to} onClick={onClose} className={cn(buttonVariants({ variant: 'primary' }))}>
+						<LinkButton href={action.to} onClick={onClose} variant="primary">
 							{action.label}
-						</Link>
+						</LinkButton>
 					)}
 				</div>
 			</DialogContent>

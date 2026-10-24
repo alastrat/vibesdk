@@ -133,3 +133,21 @@ describe('toCheckoutCart', () => {
 		});
 	});
 });
+
+
+describe('digital product pricing', () => {
+ const digital: StoreManifest = { ...MANIFEST, products: [...MANIFEST.products, { id: 'guide', name: 'Guide', type: 'digital', accountProductId: 'private-guide', downloadAssetIds: ['file-original'], variants: [{id: 'guide-pdf', name: 'PDF', priceCents: 1000}] }] };
+ const priceDigital = (mixed = false, shipTo = 'FR') => priceCart({ manifest: digital, request: { shipTo, items: [{ variantId: 'guide-pdf', quantity: 1 }, ...(mixed ? [{variantId: 'trail-mug-blue', quantity: 1}] : [])] }, catalogLocks: new Map(), context: CONTEXT });
+ it('delivers digitally without physical country restrictions or shipping fees', () => {
+  const result = priceDigital();
+  expect(result.ok && result.cart.shippingCents).toBe(0);
+  expect(result.ok && result.cart.lines[0]).toMatchObject({productType: 'digital', accountProductId: 'private-guide', downloadAssetIds: ['file-original']});
+  digital.products.at(-1)!.downloadAssetIds!.push('file-new');
+  expect(result.ok && result.cart.lines[0].downloadAssetIds).toEqual(['file-original']);
+ });
+ it('retains shipping and country restrictions for mixed carts', () => {
+  expect(priceDigital(true)).toEqual({ok: false, reason: 'ships_to_unsupported'});
+  const result = priceDigital(true, 'US');
+  expect(result.ok && result.cart.shippingCents).toBe(600);
+ });
+});

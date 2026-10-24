@@ -1,3 +1,4 @@
+import { setupAccountProductRoutes } from './accountProductRoutes';
 import { setupDiscoverCatalogRoutes } from './discoverCatalogRoutes';
 import { setupAuthRoutes } from './authRoutes';
 import { setupAppRoutes } from './appRoutes';
@@ -5,6 +6,7 @@ import { setupPublishingRoutes } from './publishingRoutes';
 import { setupSitePageRoutes } from './sitePageRoutes';
 import { setupPaymentsRoutes } from './paymentsRoutes';
 import { setupStoreRoutes } from './storeRoutes';
+import { setupStoreWorkspaceRoutes } from './storeWorkspaceRoutes';
 import { setupSellerOrderRoutes } from './sellerOrderRoutes';
 import { setupShopperEmailRoutes } from './shopperEmailRoutes';
 import { setupTranslationRoutes } from './translationRoutes';
@@ -82,6 +84,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // A store's orders, for its owner
     setupStoreRoutes(app);
+    setupStoreWorkspaceRoutes(app);
     setupSellerOrderRoutes(app);
     setupShopperEmailRoutes(app);
     setupTranslationRoutes(app);
@@ -90,6 +93,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // Catalog images and catalog operations
     setupCatalogRoutes(app);
+    setupAccountProductRoutes(app);
 
     // Early-access requests for upcoming programs
     setupEarlyAccessRoutes(app);

@@ -6,6 +6,7 @@ import { BaseController } from '../baseController';
 import type { RouteContext } from '../../types/route-context';
 import type { ApiResponse, ControllerResponse } from '../types';
 import { AppService } from '../../../database/services/AppService';
+import { AccountProductsService } from '../../../database/services/AccountProductsService';
 import { LiveStoreService } from '../../../database/services/LiveStoreService';
 import { slugProblem, type LiveStoreView } from '../../../../shared/types/live-stores';
 import { storeHostConfig } from '../../../services/live-stores/hosts';
@@ -116,7 +117,13 @@ export class LiveStoreController extends BaseController {
                 this.logger.warn('Could not clear a leftover merge before publishing; publishing anyway', { appId, error });
             }
             const firstPublish = (await stores.getByApp(appId)) === null;
-            const published = await space.publishDraft(draftId, { refuseNewCatalogProducts });
+            const projection = context.user ? await new AccountProductsService(env).projectStore(context.user.id, appId) : null;
+            const storeProducts = projection?.managedProductIds.length ? {
+                managedProductIds: projection.managedProductIds,
+                adoptedProductIds: projection.adoptedProductIds,
+                productsJson: JSON.stringify(projection.products),
+            } : undefined;
+            const published = await space.publishDraft(draftId, { refuseNewCatalogProducts, storeProducts });
             if ('error' in published) {
                 if (catalogRefusal && published.error === NEW_CATALOG_PRODUCTS_ERROR) return this.createPlanLimitResponse<LiveStoreView>(catalogRefusal);
                 return this.createErrorResponse<LiveStoreView>(published.error, draftErrorStatus(published.error));

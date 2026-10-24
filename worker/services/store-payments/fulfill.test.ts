@@ -101,6 +101,17 @@ function fakeDeps(recordAs: 'recorded' | 'already-recorded' = 'recorded') {
 }
 
 describe('recordStoreOrder', () => {
+	it('records digital-only payment without a false missing-address warning', async () => {
+  const {deps, orders, handedOff} = fakeDeps();
+  const checkout = structuredClone(CHECKOUT);
+  checkout.pricedCart.lines = [{kind: 'own', productType: 'digital', productId: 'guide', variantId: 'guide-pdf', name: 'Guide', quantity: 1, unitPriceCents: 6100, downloadAssetIds: ['file-original']}];
+  deps.getCheckout = async () => checkout;
+  await recordStoreOrder(deps, {...PAID, collected_information: null});
+  expect(orders[0].needsAttention).toBeNull();
+  expect(orders[0].shippingAddress).toBeNull();
+  expect(orders[0].fulfillmentStatus).toBe('fulfilled');
+  expect(handedOff).toEqual([]);
+ });
 	it('tells the seller about the order once, when it is first recorded', async () => {
 		const first = fakeDeps('recorded');
 		await recordStoreOrder(first.deps, PAID);

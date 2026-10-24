@@ -9,6 +9,7 @@
 	"include": [
 		"./worker-configuration.d.ts",
 		"./shared",
+		"./space/src/space/store-manifest-schema.ts",
 		"./worker",
 		"./worker/types",
 		"./test/worker-entry.ts",

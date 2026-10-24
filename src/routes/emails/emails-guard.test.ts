@@ -14,22 +14,13 @@ function source(path: string): string {
 }
 
 describe('the Emails page', () => {
-	it('is routed for signed-in users and opens from an Emails item in the sidebar, folded and open', () => {
+	it('keeps legacy links behind sign-in', () => {
 		expect(source('/src/routes.tsx')).toMatch(/path: 'emails',\s*Component: protectedPage\(ShopperEmailsPage\)/);
-		const sidebar = source('/src/components/layout/app-sidebar.tsx');
-		expect(sidebar.match(/navigate\(SHOPPER_EMAILS_PATH\)/g) ?? []).toHaveLength(2);
-		expect(sidebar).toContain('id="emails-link"');
-		expect(sidebar.indexOf('id="orders-link"')).toBeLessThan(sidebar.indexOf('id="emails-link"'));
-		// Each form lists Orders, Emails, then Translations.
-		expect(sidebar.match(/id="emails-link"/g) ?? []).toHaveLength(2);
-		expect(sidebar.indexOf('id="emails-link"')).toBeLessThan(sidebar.indexOf('id="translations-link"'));
-		expect(sidebar.lastIndexOf('id="emails-link"')).toBeLessThan(sidebar.lastIndexOf('id="translations-link"'));
-		expect(sidebar.indexOf('id="translations-link"')).toBeLessThan(sidebar.lastIndexOf('id="emails-link"'));
 	});
 
-	it('shows each email with its switch, Edit and where it came from, a store picker, and where replies go', () => {
+	it('shows each email with its switch, Edit and where it came from, and where replies go', () => {
 		const page = source('/src/routes/emails/emails.tsx');
-		for (const part of ['data.templates.map', '<Switch', 'Edit', 'templateOrigin(template)', 'stores.data.stores', 'Replies go to', 'Publish a store to set up its emails.', 'Recent emails', 'STATUS_LABELS', 'Shoppers get these emails from', 'data.senderEmail']) expect(page, part).toContain(part);
+		for (const part of ['data.templates.map', '<Switch', 'Edit', 'templateOrigin(template)', 'Replies go to', 'Publish a store to set up its emails.', 'Recent emails', 'STATUS_LABELS', 'Shoppers get these emails from', 'data.senderEmail']) expect(page, part).toContain(part);
 	});
 
 	it("says Estori sends order emails only, since Cloudflare doesn't allow marketing email", () => {

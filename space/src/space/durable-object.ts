@@ -50,7 +50,8 @@ import {
   type PublishDraftOptions,
   type PublishDraftResult,
 } from "./drafts-store"
-import { NEW_CATALOG_PRODUCTS_ERROR, newCatalogVariantIds } from "./store-manifest"
+import { NEW_CATALOG_PRODUCTS_ERROR, newCatalogVariantIds, STORE_MANIFEST_PATH } from "./store-manifest"
+import { mergeManagedStoreProducts } from "./managed-store-products"
 import {
   branchTip,
   cancelMerge,
@@ -927,8 +928,37 @@ export class SpaceDO extends DurableObject<Env> {
       if ((await this.mergeState())?.branch === draft.branch) {
         return { error: "Wait for the AI to finish bringing in the live store's changes." }
       }
-      const tip = await ensureLocalBranch(this.fs, draft.branch, this.fetchBranch)
+      let tip = await ensureLocalBranch(this.fs, draft.branch, this.fetchBranch)
       if (!tip) return { error: "Deploy the store's preview before publishing it." }
+      // The catalog changes prices only through the same git/build/publication boundary as the builder.
+      // Save and restore a different active draft using the existing draft lock, never writing into its tree.
+      if (options.storeProducts?.managedProductIds.length) {
+        if (await this.mergeState()) return { error: "Finish bringing in live changes before publishing catalog products." }
+        const switched = draft.branch !== activeBranch
+        if (switched) {
+          await this.commitWorkingTree("Saved before publishing catalog products in another draft")
+          await this.git.checkout({ ref: draft.branch, force: true })
+          await this.ctx.storage.put(ACTIVE_BRANCH_KEY, draft.branch)
+        }
+        try {
+          await this.materializeAll()
+          const files = await globInfos(this.overlay, "**/*")
+          const exists = files.some((file) => file.type === "file" && file.path === STORE_MANIFEST_PATH)
+          const current = exists ? await this.fs.readFile(STORE_MANIFEST_PATH) : null
+          const next = mergeManagedStoreProducts(current, options.storeProducts)
+          if (current !== next) {
+            await this.fs.writeFile(STORE_MANIFEST_PATH, next)
+            tip = (await this.commitWorkingTree("Updated products from the account catalog")).sha
+          }
+        } catch (error) {
+          return { error: error instanceof Error ? error.message : "Catalog products couldn't be prepared for publishing." }
+        } finally {
+          if (switched) {
+            await this.git.checkout({ ref: activeBranch, force: true })
+            await this.ctx.storage.put(ACTIVE_BRANCH_KEY, activeBranch)
+          }
+        }
+      }
       if (this.readDeployment(draft.branch)?.commitHash !== tip) {
         const deployed = (await this.deploy(draft.branch)) as { error?: unknown }
         if (deployed.error) return { error: "This draft's preview doesn't build. Fix it before publishing." }

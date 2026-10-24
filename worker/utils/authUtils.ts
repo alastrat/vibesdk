@@ -296,6 +296,7 @@ export function mapUserResponse(
 		avatarUrl: user.avatarUrl || undefined,
 		bio: user.bio || undefined,
 		timezone: user.timezone || undefined,
+		theme: user.theme || undefined,
 		provider: user.provider || undefined,
 		emailVerified: user.emailVerified || undefined,
 		createdAt: user.createdAt || undefined,

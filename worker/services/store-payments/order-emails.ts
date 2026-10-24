@@ -18,7 +18,7 @@ const STORE_TITLE_MAX = 60;
 
 export interface NewOrderEmailDeps {
 	order(orderId: string): Promise<StoreOrderView | null>;
-	facts(orderId: string): Promise<{ storeTitle: string | null; sellerEmail: string | null } | null>;
+	facts(orderId: string): Promise<{ storeTitle: string | null; sellerEmail: string | null; digitalLineNos?: number[] } | null>;
 	sender: EmailSender | null;
 	counter: { get(key: string): Promise<string | null>; put(key: string, value: string, options: { expirationTtl: number }): Promise<void> };
 	baseUrl: string | null;
@@ -47,7 +47,7 @@ export async function notifySellerOfNewOrder(deps: NewOrderEmailDeps, orderId: s
 			test: order.mode === 'test',
 			totalCents: order.totalCents,
 			shareCents: order.totalCents - order.applicationFeeCents,
-			items: order.items.map((item) => ({ name: item.name, quantity: item.quantity, kind: item.kind })),
+			items: order.items.map((item) => ({ name: item.name, quantity: item.quantity, kind: item.kind, ...(facts.digitalLineNos?.includes(item.lineNo) ? {productType: 'digital' as const} : {}) })),
 			shipTo: address ? { name: address.name, city: address.city, region: address.region, countryCode: address.countryCode } : null,
 			note: order.note,
 			link: deps.baseUrl ? `${deps.baseUrl}${sellerOrderPath(order.id)}` : null,

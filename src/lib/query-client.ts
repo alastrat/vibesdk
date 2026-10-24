@@ -1,4 +1,7 @@
-import { QueryClient, defaultShouldDehydrateQuery } from '@tanstack/react-query';
+import {
+	QueryClient,
+	defaultShouldDehydrateQuery,
+} from '@tanstack/react-query';
 import type {
 	PersistedClient,
 	Persister,
@@ -46,10 +49,19 @@ export function createIDBPersister(
 // avoids leaking user-scoped data across account switches. Product pages carry
 // a signed preview URL and a per-viewer offer, so they stay out of storage too.
 // The landing showcase carries screenshot links that expire after six hours.
+const PRIVATE_ACCOUNT_KEY_PREFIXES: readonly (readonly unknown[])[] = [
+	queryKeys.account.all,
+	// These owner-only queries predate the shared `account` hierarchy.
+	[queryKeys.liveStore('')[0]],
+	[queryKeys.drafts('')[0]],
+	// Defense in depth for any legacy cache entries retained during rollout.
+	['apps', 'user'],
+	queryKeys.apps.sitePageAll(),
+];
+
 const NON_PERSISTED_KEY_PREFIXES: readonly (readonly unknown[])[] = [
 	queryKeys.auth.all,
-	queryKeys.account.all,
-	queryKeys.apps.sitePageAll(),
+	...PRIVATE_ACCOUNT_KEY_PREFIXES,
 	queryKeys.apps.showcase(),
 	// Rollout settings decide which upgrade action is available and must be refreshed.
 	queryKeys.platform.plan(),
@@ -62,13 +74,20 @@ function hasKeyPrefix(
 	return prefix.every((part, index) => queryKey[index] === part);
 }
 
+/** All viewer-specific caches, including older store keys outside `account`. */
+export function isPrivateAccountQuery(query: {
+	queryKey: readonly unknown[];
+}): boolean {
+	return PRIVATE_ACCOUNT_KEY_PREFIXES.some((prefix) =>
+		hasKeyPrefix(query.queryKey, prefix),
+	);
+}
+
 export const queryPersistOptions = {
 	persister: createIDBPersister(),
 	maxAge: PERSIST_MAX_AGE,
-	// Bump to discard previously persisted caches. `v2` drops blobs written
-	// before auth/account queries were excluded, which could otherwise restore
-	// a stale logged-out session once after an OAuth login.
-	buster: 'v2',
+	// v4 also discards old snapshots containing private live-store and draft data.
+	buster: 'v4',
 	dehydrateOptions: {
 		shouldDehydrateQuery: (query: {
 			queryKey: readonly unknown[];

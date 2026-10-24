@@ -9,6 +9,7 @@ import { UserAppsData, ProfileUpdateData, LocalePreferenceData } from './types';
 import { createLogger } from '../../../logger';
 import { isLocale } from '../../../../shared/i18n/locales';
 import { msg } from '../../../../shared/i18n/translate';
+import type { StorePublicationStatus } from '../../../../shared/types/store-workspace';
 
 const logger = createLogger('UserController');
 
@@ -24,11 +25,17 @@ export class UserController extends BaseController {
      */
     static async getApps(request: Request, env: Env, _ctx: ExecutionContext, context: RouteContext): Promise<ControllerResponse<ApiResponse<UserAppsData>>> {
         try {
-            const user = context.user!;
+            const user = context.user;
+            if (!user || user.isAnonymous) return UserController.createErrorResponse<UserAppsData>(msg('Unauthorized'), 401);
 
             const url = new URL(request.url);
-            const page = parseInt(url.searchParams.get('page') || '1');
-            const limit = parseInt(url.searchParams.get('limit') || '20');
+            const page = Math.max(1, parseInt(url.searchParams.get('page') || '1') || 1);
+            const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || '20') || 20));
+            const rawPublication = url.searchParams.get('publication');
+            if (rawPublication && !['live', 'offline', 'draft'].includes(rawPublication)) {
+                return UserController.createErrorResponse<UserAppsData>(msg('Invalid publication filter'), 400);
+            }
+            const publication = (rawPublication || undefined) as StorePublicationStatus | undefined;
             const status = url.searchParams.get('status') as 'generating' | 'completed' | undefined;
             const visibility = url.searchParams.get('visibility') as Visibility | undefined;
             const framework = url.searchParams.get('framework') || undefined;
@@ -47,7 +54,8 @@ export class UserController extends BaseController {
                 search,
                 sort,
                 order,
-                period
+                period,
+                publication
             };
 
             const appService = new AppService(env);
@@ -58,8 +66,9 @@ export class UserController extends BaseController {
                 appService.getUserAppsCount(user.id, queryOptions)
             ]);
 
+            const summaries = await appService.getPublicationSummaries(user.id, apps.map((app) => app.id));
             const responseData: UserAppsData = {
-                apps,
+                apps: apps.map((app) => ({ ...app, publication: summaries.get(app.id) })),
                 pagination: {
                     limit,
                     offset,
@@ -87,6 +96,7 @@ export class UserController extends BaseController {
                 displayName?: string;
                 bio?: string;
                 theme?: 'light' | 'dark' | 'system';
+                timezone?: string;
             }>(request);
 
             if (!bodyResult.success) {

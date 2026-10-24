@@ -13,8 +13,10 @@ import type {
 	AppSortOption,
 	DiscoverPricing,
 	TemplateCategory,
+	StorePublicationStatus,
 } from '@/api-types';
 import { appEvents } from '@/lib/app-events';
+import { useAuth } from '@/contexts/auth-context';
 import {
 	queryKeys,
 	type PaginatedAppsListFilters,
@@ -24,6 +26,7 @@ export type AppType = 'user' | 'public';
 export type AppListData = EnhancedAppData | AppWithUserAndStats;
 
 interface UsePaginatedAppsOptions {
+	publication?: StorePublicationStatus;
 	type: AppType;
 	defaultSort?: AppSortOption;
 	defaultPeriod?: TimePeriod;
@@ -94,12 +97,14 @@ async function fetchPaginatedAppsPage(
 		filterVisibility: string;
 		searchQuery: string;
 		limit: number;
+		publication?: StorePublicationStatus;
 	},
 	discover: { category: TemplateCategory | null; pricing: DiscoverPricing },
 	page: number,
 ): Promise<PaginatedAppsPage> {
 	const params = {
 		page,
+		publication: type === 'user' ? filters.publication : undefined,
 		limit: filters.limit,
 		sort: filters.sortBy,
 		period: filters.period,
@@ -178,6 +183,7 @@ export function usePaginatedApps(
 	options: UsePaginatedAppsOptions,
 ): UsePaginatedAppsResult {
 	const queryClient = useQueryClient();
+	const { user } = useAuth();
 	const limit = options.limit || 20;
 	const autoFetch = options.autoFetch !== false;
 
@@ -210,6 +216,7 @@ export function usePaginatedApps(
 			category: options.category ?? 'all',
 			pricing: options.pricing ?? 'all',
 			limit,
+			...(options.type === 'user' && options.publication ? { publication: options.publication } : {}),
 		}),
 		[
 			filterState.sortBy,
@@ -217,6 +224,8 @@ export function usePaginatedApps(
 			filterState.filterFramework,
 			filterState.filterVisibility,
 			options.includeVisibility,
+			options.type,
+			options.publication,
 			options.category,
 			options.pricing,
 			debouncedSearchQuery,
@@ -226,7 +235,7 @@ export function usePaginatedApps(
 
 	const queryKey =
 		options.type === 'user'
-			? queryKeys.apps.user(listFilters)
+			? queryKeys.apps.user(listFilters, user?.id)
 			: queryKeys.apps.public(listFilters);
 
 	const query = useInfiniteQuery({
@@ -242,6 +251,7 @@ export function usePaginatedApps(
 					filterVisibility: filterState.filterVisibility,
 					searchQuery: debouncedSearchQuery,
 					limit,
+					publication: options.publication,
 				},
 				{ category: options.category ?? null, pricing: options.pricing ?? 'all' },
 				pageParam,
@@ -249,7 +259,7 @@ export function usePaginatedApps(
 		initialPageParam: 1,
 		getNextPageParam: (lastPage, _pages, lastPageParam) =>
 			lastPage.pagination.hasMore ? lastPageParam + 1 : undefined,
-		enabled: autoFetch,
+		enabled: autoFetch && (options.type === 'public' || !!user),
 		staleTime: LIST_STALE_TIME,
 		gcTime: LIST_GC_TIME,
 	});

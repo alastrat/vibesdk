@@ -15,6 +15,11 @@ const ORDER: StoreOrderView = {
 };
 
 describe('an order for its seller', () => {
+	it('identifies digital fulfillment from purchased snapshot line facts', () => {
+  const detail = sellerOrderDetail(ORDER, {storeTitle: 'Store', carrier: null, trackingNumber: null, shippedAt: null, refundedLineNos: [], pendingRefundLineNos: [], dispute: null, digitalLineNos: [1]}, []);
+  expect(detail.items[0].productType).toBe('digital');
+  expect(detail.items[1].productType).toBeUndefined();
+ });
 	it('adds the store, phone, shipment, refunds, dispute and per-line refunds to the order summary', () => {
 		const detail = sellerOrderDetail(ORDER, { storeTitle: 'Northwind Tea', carrier: 'USPS', trackingNumber: '9400', shippedAt: new Date(1000), refundedLineNos: [2], pendingRefundLineNos: [1], dispute: null }, []);
 		expect(detail).toMatchObject({ id: 'ord_1', appId: 'app_tea', storeTitle: 'Northwind Tea', customerPhone: '+15125550100', refundedCents: 1000, carrier: 'USPS', trackingNumber: '9400', shippedAt: new Date(1000).toISOString(), dispute: null, note: 'Gift' });

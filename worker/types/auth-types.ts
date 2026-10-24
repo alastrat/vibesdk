@@ -22,6 +22,7 @@ export interface AuthUser {
 	avatarUrl?: string;
     bio?: string;
     timezone?: string;
+	theme?: 'light' | 'dark' | 'system';
     provider?: string;
     emailVerified?: boolean;
     createdAt?: Date;

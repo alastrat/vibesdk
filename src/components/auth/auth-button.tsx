@@ -15,7 +15,25 @@ import {
 	useUsageLimitsBadgeState,
 	type UsageLimitsBadgeState,
 } from '../usage-limits-badge';
-import { GearIcon, SignOutIcon, UserIcon } from '@phosphor-icons/react';
+import {
+	CaretRightIcon,
+	DesktopIcon,
+	GearIcon,
+	MoonIcon,
+	QuestionIcon,
+	ReceiptIcon,
+	SignOutIcon,
+	SunIcon,
+	TranslateIcon,
+	UserIcon,
+	FileTextIcon,
+} from '@phosphor-icons/react';
+import { useAccountSettings } from '@/components/account-settings';
+import { useTheme } from '@/contexts/theme-context';
+import { useUpdateProfile } from '@/hooks/use-profile';
+import { LEGAL_LINKS } from '@/content/legal/legal-documents';
+import { legalLinkLabel } from '@/lib/legal-link-label';
+import { toast } from 'sonner';
 
 interface AuthButtonProps {
 	className?: string;
@@ -24,7 +42,8 @@ interface AuthButtonProps {
 
 function getLimitsStatusText(limits: UsageLimitsBadgeState) {
 	if (limits.loading) return t('Checking credits...');
-	if (limits.billing) return limits.isExhausted ? t('Out of AI credits') : limits.usageText;
+	if (limits.billing)
+		return limits.isExhausted ? t('Out of AI credits') : limits.usageText;
 	if (limits.needsConfiguration) return t('Configure AI Gateway');
 	if (limits.showCredits) return limits.creditsText;
 	if (limits.isExhausted && !limits.hasUserToken)
@@ -50,6 +69,9 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 	const { user, isAuthenticated, isLoading, logout } = useAuth();
 
 	const navigate = useNavigate();
+	const { openSettings } = useAccountSettings();
+	const { theme, setTheme } = useTheme();
+	const profileUpdate = useUpdateProfile();
 	const usageLimits = useUsageLimitsBadgeState();
 	const showLimitsState = !usageLimits.hidden;
 	const limitsStatusText = getLimitsStatusText(usageLimits);
@@ -76,6 +98,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 				render={
 					display === 'sidebar' ? (
 						<Button
+							data-account-menu-trigger
 							variant="ghost"
 							size="base"
 							className={cn(
@@ -110,6 +133,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 						</Button>
 					) : (
 						<Button
+							data-account-menu-trigger
 							variant="ghost"
 							size="base"
 							shape="circle"
@@ -119,7 +143,7 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 								className,
 							)}
 						>
-							<Avatar className="h-8 w-8">
+							<Avatar className="h-9 w-9">
 								<AvatarImage
 									src={user.avatarUrl}
 									alt={user.displayName || user.email}
@@ -135,8 +159,26 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 
 			<DropdownMenu.Content
 				align={display === 'sidebar' ? 'start' : 'end'}
-				className="w-72"
+				className="workspace-account-menu w-80 max-w-[calc(100vw-24px)]"
 			>
+				<DropdownMenu.Item
+					className="account-identity"
+					onClick={() => navigate('/profile')}
+				>
+					<Avatar className="size-12 shrink-0">
+						<AvatarImage src={user.avatarUrl} alt="" />
+						<AvatarFallback>{initials}</AvatarFallback>
+					</Avatar>
+					<span className="min-w-0">
+						<strong className="block truncate text-base">
+							{user.displayName || user.email}
+						</strong>
+						<span className="text-sm text-kumo-subtle">
+							{t('View profile')}
+						</span>
+					</span>
+				</DropdownMenu.Item>
+				<DropdownMenu.Separator />
 				{showLimitsState && (
 					<div className="border-b border-kumo-line p-3 mb-2">
 						<div className="flex items-start gap-2">
@@ -189,13 +231,13 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 							</DropdownMenu.Item>
 						)}
 					<DropdownMenu.Item
-						onClick={() => navigate('/profile')}
+						onClick={() => openSettings('profile')}
 						icon={UserIcon}
 					>
 						{t('Profile')}
 					</DropdownMenu.Item>
 					<DropdownMenu.Item
-						onClick={() => navigate('/settings')}
+						onClick={() => openSettings()}
 						icon={GearIcon}
 					>
 						{t('Settings')}
@@ -203,12 +245,94 @@ export function AuthButton({ className, display = 'icon' }: AuthButtonProps) {
 				</DropdownMenu.Group>
 
 				<DropdownMenu.Item
+					icon={ReceiptIcon}
+					onClick={() => navigate('/orders')}
+				>
+					{t('Orders')}
+				</DropdownMenu.Item>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Item
+					icon={QuestionIcon}
+					onClick={() => navigate('/contact')}
+				>
+					{t('Help and support')}
+				</DropdownMenu.Item>
+				<DropdownMenu.Item
+					icon={TranslateIcon}
+					onClick={() => openSettings('appearance')}
+				>
+					{t('Language')}
+					<CaretRightIcon className="ml-auto size-4" />
+				</DropdownMenu.Item>
+				<DropdownMenu.Sub>
+					<DropdownMenu.SubTrigger icon={FileTextIcon}>
+						{t('Legal')}
+					</DropdownMenu.SubTrigger>
+					<DropdownMenu.SubContent>
+						{LEGAL_LINKS.map((link) => (
+							<DropdownMenu.Item
+								key={link.slug}
+								onClick={() => navigate(link.path)}
+							>
+								{legalLinkLabel(link.slug)}
+							</DropdownMenu.Item>
+						))}
+					</DropdownMenu.SubContent>
+				</DropdownMenu.Sub>
+				<DropdownMenu.Item
 					onClick={() => logout()}
 					icon={SignOutIcon}
 					variant="danger"
 				>
 					{t('Sign Out')}
 				</DropdownMenu.Item>
+				<DropdownMenu.Separator />
+				<div
+					className="account-appearance"
+					role="group"
+					aria-label={t('Appearance')}
+				>
+					{(
+						[
+							{
+								value: 'system',
+								label: t('System'),
+								Icon: DesktopIcon,
+							},
+							{
+								value: 'light',
+								label: t('Light'),
+								Icon: SunIcon,
+							},
+							{ value: 'dark', label: t('Dark'), Icon: MoonIcon },
+						] as const
+					).map(({ value, label, Icon }) => (
+						<Button
+							key={value}
+							variant="ghost"
+							aria-label={label}
+							title={label}
+							aria-pressed={theme === value}
+							disabled={profileUpdate.isPending}
+							onClick={async () => {
+								try {
+									await profileUpdate.mutateAsync({
+										theme: value,
+									});
+									setTheme(value);
+								} catch {
+									toast.error(
+										t(
+											'Could not save your appearance. Please try again.',
+										),
+									);
+								}
+							}}
+						>
+							<Icon className="size-5" />
+						</Button>
+					))}
+				</div>
 			</DropdownMenu.Content>
 		</DropdownMenu>
 	);

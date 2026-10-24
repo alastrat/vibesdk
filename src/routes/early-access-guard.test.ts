@@ -6,6 +6,7 @@ const sources = import.meta.glob<string>(
 		'/src/hooks/use-early-access.ts',
 		'/src/routes/admin/early-access.tsx',
 		'/src/routes/admin/reviews.tsx',
+		'/src/routes/admin/admin-layout.tsx',
 		'/src/routes.tsx',
 		'/src/lib/api-client.ts',
 		'/src/content/legal/privacy.md',
@@ -43,8 +44,9 @@ describe('early access in the app', () => {
 		expect(routes).toMatch(/path: 'admin\/early-access',\s*Component: protectedPage\(AdminEarlyAccessPage\)/);
 		const page = source('/src/routes/admin/early-access.tsx');
 		expect(page).toContain('isForbiddenError(requests.error)');
-		expect(page).toContain('title="Admins only"');
-		expect(source('/src/routes/admin/reviews.tsx')).toContain('to="/admin/early-access"');
+		expect(page).toContain("title={t('Admins only')}");
+		expect(source('/src/routes/admin/reviews.tsx')).toContain('<AdminPage');
+		expect(source('/src/routes/admin/admin-layout.tsx')).toContain("path: '/admin/early-access'");
 	});
 
 	it('tells people in the privacy policy that early access requests are kept', () => {

@@ -11,7 +11,7 @@ import type { ApiResponse, StoreLanguageStatus, StoreTranslationOverview, StoreT
 import { apiClient } from '@/lib/api-client';
 import { applyAccountLocale } from '@/lib/i18n';
 import { mountElement, silenceTestRendererDeprecation, textOf, unmountAll } from '@/test-support/mounted';
-import TranslationsPage from './translations';
+import TranslationsPage, { StoreTranslationsPanel } from './translations';
 
 const flags = vi.hoisted((): { paused: boolean } => ({ paused: false }));
 
@@ -134,9 +134,9 @@ async function settle(): Promise<void> {
 	for (let round = 0; round < 3; round++) await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
 
-async function mountPage(): Promise<TestRenderer.ReactTestRenderer> {
+async function mountPage(launcher = false, appId = 'app1'): Promise<TestRenderer.ReactTestRenderer> {
 	const queries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-	const renderer = await mountElement(createElement(QueryClientProvider, { client: queries }, createElement(MemoryRouter, null, createElement(TranslationsPage))));
+	const renderer = await mountElement(createElement(QueryClientProvider, { client: queries }, createElement(MemoryRouter, null, launcher ? createElement(TranslationsPage) : createElement(StoreTranslationsPanel, { appId }))));
 	await settle();
 	return renderer;
 }
@@ -195,12 +195,12 @@ describe('the Translations page', () => {
 		await settle();
 		expect(apiClient.runStoreTranslation).not.toHaveBeenCalled();
 	});
-	it('shows the store picker, the settings, one card per target language', async () => {
+	it('shows only the workspace store settings and languages without loading a store picker', async () => {
 		const renderer = await mountPage();
 		const screen = textOf(renderer);
-		const [picker, storeLanguage] = renderer.root.findAllByType('select');
-		expect(picker.findAllByType('option').map(textIn)).toEqual(['Lucia Candles', 'Open Shop']);
-		expect(picker.props.value).toBe('app1');
+		const [storeLanguage] = renderer.root.findAllByType('select');
+		expect(renderer.root.findAllByType('h1')).toHaveLength(0);
+		expect(apiClient.getTranslationStores).not.toHaveBeenCalled();
 		expect(storeLanguage.findAllByType('option').map(textIn)).toEqual(['English', 'Español', 'Português (Brasil)']);
 		expect(storeLanguage.props.value).toBe('en');
 		expect(apiClient.getStoreTranslations).toHaveBeenCalledWith('app1');
@@ -243,7 +243,7 @@ describe('the Translations page', () => {
 		const switches = renderer.root.findAll((node) => node.props.role === 'switch' && typeof node.type === 'string');
 		expect(switches.length).toBeGreaterThan(0);
 		expect(switches.every((node) => node.props.disabled)).toBe(true);
-		const [, storeLanguage] = renderer.root.findAllByType('select');
+		const [storeLanguage] = renderer.root.findAllByType('select');
 		await act(async () => storeLanguage.props.onChange({ target: { value: 'es' } }));
 		await settle();
 		expect(apiClient.saveStoreTranslationSettings).not.toHaveBeenCalled();
@@ -259,7 +259,7 @@ describe('the Translations page', () => {
 		expect(labelled(card(renderer, 'es'), 'Preview in Español').props.href).toBe('https://preview.example.test/p/app1?t=signed&lang=es');
 	});
 
-	it('saves a setting as it is switched, and reads another store when it is picked', async () => {
+	it('saves a setting for the workspace store and scopes the next workspace to its own store', async () => {
 		vi.mocked(apiClient.saveStoreTranslationSettings).mockResolvedValue(ok({ ...overview().settings, autoTranslate: true, version: 5 }));
 		const renderer = await mountPage();
 		const autoTranslate = renderer.root.find((node) => node.props['aria-label'] === 'Translate new text when I publish' && typeof node.props.onCheckedChange === 'function');
@@ -267,11 +267,11 @@ describe('the Translations page', () => {
 		await settle();
 		expect(apiClient.saveStoreTranslationSettings).toHaveBeenCalledWith('app1', { autoTranslate: true });
 
-		const [picker] = renderer.root.findAllByType('select');
-		await act(async () => picker.props.onChange({ target: { value: 'app2' } }));
-		await settle();
+		await unmountAll();
+		await mountPage(false, 'app2');
 		expect(apiClient.getStoreTranslations).toHaveBeenLastCalledWith('app2');
-		expect(renderer.root.findAllByType('select')[0].props.value).toBe('app2');
+		expect(apiClient.getTasks).toHaveBeenLastCalledWith('app2');
+		expect(apiClient.getTranslationStores).not.toHaveBeenCalled();
 	});
 
 	it('Translate opens a confirm with the estimate and starts a task', async () => {
@@ -440,7 +440,7 @@ describe('the Translations page', () => {
 		await applyAccountLocale('es');
 		const renderer = await mountPage();
 		const screen = textOf(renderer);
-		for (const text of ['Traducciones', 'Idioma de la tienda', 'Mostrar un selector de idioma', 'Actividad', 'Traducir a Español', '60 créditos usados']) expect(screen).toContain(text);
+		for (const text of ['Idioma de la tienda', 'Mostrar un selector de idioma', 'Actividad', 'Traducir a Español', '60 créditos usados']) expect(screen).toContain(text);
 		const es = textIn(card(renderer, 'es'));
 		for (const text of ['Traducción lista', 'Quedan 50 textos', 'Alrededor de 75 créditos', 'Vista previa en Español']) expect(es).toContain(text);
 		expect(screen).toContain('Tarea terminada');
@@ -460,7 +460,7 @@ describe('the Translations page', () => {
 		expect(apiClient.getStoreTranslationTexts).not.toHaveBeenCalled();
 		await unmountAll();
 		vi.mocked(apiClient.getTranslationStores).mockResolvedValue(ok([]));
-		expect(textOf(await mountPage())).toContain('Publish or preview your store first');
+		expect(textOf(await mountPage(true))).toContain('Publish or preview your store first');
 	});
 
 	it("says when the store couldn't be read, and reads it again on Retry", async () => {
@@ -477,7 +477,7 @@ describe('the Translations page', () => {
 
 	it('offers Retry when the stores or the activity could not be read', async () => {
 		vi.mocked(apiClient.getTranslationStores).mockResolvedValueOnce({ success: false, error: { message: 'Stores are down', name: 'Error' } });
-		const renderer = await mountPage();
+		const renderer = await mountPage(true);
 		expect(textOf(renderer)).toContain('Stores are down');
 		await act(async () => button(renderer.root, 'Retry').props.onClick());
 		await settle();
@@ -489,7 +489,7 @@ describe('the Translations page', () => {
 		expect(textOf(activity)).toContain('Activity is down');
 		await act(async () => button(activity.root, 'Retry').props.onClick());
 		await settle();
-		expect(apiClient.getTasks).toHaveBeenCalledTimes(3);
+		expect(apiClient.getTasks).toHaveBeenCalledTimes(2);
 		expect(textOf(activity)).toContain('60 credits used');
 	});
 
@@ -540,10 +540,42 @@ describe('the Translations page', () => {
 		expect(apiClient.resumeTask).toHaveBeenCalledWith('t1');
 	});
 
+	it('resets unconfirmed source language when the same workspace switches stores', async () => {
+		vi.mocked(apiClient.getStoreTranslations).mockResolvedValueOnce(ok(overview({ settings: { ...overview().settings, version: 1 } })));
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+		const content = (appId: string) => createElement(QueryClientProvider, { client }, createElement(MemoryRouter, null, createElement(StoreTranslationsPanel, { appId })));
+		const renderer = await mountElement(content('app1'));
+		await settle();
+		await act(async () => renderer.root.findAllByType('select')[0].props.onChange({ target: { value: 'pt-BR' } }));
+		expect(renderer.root.findAllByType('select')[0].props.value).toBe('pt-BR');
+		vi.mocked(apiClient.getStoreTranslations).mockResolvedValue(ok(overview({ settings: { ...overview().settings, sourceLocale: 'es', version: 1 } })));
+		await act(async () => renderer.update(content('app2')));
+		await settle();
+		expect(renderer.root.findAllByType('select')[0].props.value).toBe('es');
+		expect(apiClient.getStoreTranslations).toHaveBeenLastCalledWith('app2');
+		expect(apiClient.saveStoreTranslationSettings).not.toHaveBeenCalled();
+	});
+
+	it('requires explicit store selection on the legacy route without reading a store', async () => {
+		const renderer = await mountPage(true);
+		const links = renderer.root.findAllByType('a');
+		expect(links.map((link) => link.props.href)).toContain('/stores/app1?section=translations');
+		expect(links.map((link) => link.props.href)).toContain('/stores/app2?section=translations');
+		expect(textOf(renderer)).toContain('Lucia Candles');
+		expect(textOf(renderer)).toContain('Open Shop');
+		expect(apiClient.getStoreTranslations).not.toHaveBeenCalled();
+		expect(apiClient.getTasks).not.toHaveBeenCalled();
+	});
+
 	it('says translations are paused, and reads nothing, while the pause is on', async () => {
 		flags.paused = true;
 		const screen = textOf(await mountPage());
 		expect(screen).toContain('Store translations are paused for a few minutes. Stores already translated keep working.');
+		expect(apiClient.getTranslationStores).not.toHaveBeenCalled();
+		expect(apiClient.getStoreTranslations).not.toHaveBeenCalled();
+		expect(apiClient.getTasks).not.toHaveBeenCalled();
+		await unmountAll();
+		expect(textOf(await mountPage(true))).toContain('Store translations are paused for a few minutes.');
 		expect(apiClient.getTranslationStores).not.toHaveBeenCalled();
 	});
 });

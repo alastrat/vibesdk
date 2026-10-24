@@ -65,11 +65,12 @@ export async function recordStoreOrder(deps: RecordStoreOrderDeps, session: Stri
 		session.amount_total !== checkout.totalCents && `paid ${session.amount_total} cents, expected ${checkout.totalCents}`,
 		(session.currency ?? '').toLowerCase() !== 'usd' && `paid in ${session.currency}`,
 		metadata.storeAppId !== checkout.appId && 'paid for another store',
-		address?.countryCode !== checkout.shipToCountry && `ships to ${address?.countryCode ?? 'no address'}, expected ${checkout.shipToCountry}`,
+		checkout.pricedCart.lines.some((line) => line.productType !== 'digital') && address?.countryCode !== checkout.shipToCountry && `ships to ${address?.countryCode ?? 'no address'}, expected ${checkout.shipToCountry}`,
 	].filter((problem): problem is string => typeof problem === 'string');
 
 	const orderId = storeOrderIdFor(checkout.id);
 	const result = await deps.recordOrder({
+		...(checkout.pricedCart.lines.every((line) => line.productType === 'digital') ? { fulfillmentStatus: 'fulfilled' as const } : {}),
 		id: orderId,
 		checkoutId: checkout.id,
 		mode: checkout.mode,

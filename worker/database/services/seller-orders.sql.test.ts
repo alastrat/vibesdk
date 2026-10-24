@@ -51,6 +51,23 @@ async function ids(input: Partial<Parameters<SellerOrderService['listOrders']>[0
 }
 
 describe('seller orders on real SQL', () => {
+	it('keeps purchased digital lines out of shipping counts, queues and shipment controls', async () => {
+  await sale({id: 'digital-only', hoursAgo: 1, lines: [['own', 1]]});
+  await sale({id: 'digital-mixed', hoursAgo: 2, lines: [['own', 1], ['own', 2]]});
+  for (const id of ['digital-only', 'digital-mixed']) {
+   await db.prepare('UPDATE store_order_items SET variant_id = ? || line_no WHERE order_id = ?').bind('v', id).run();
+   await db.prepare(`INSERT INTO store_checkouts (id, mode, app_id, commit_hash, seller_user_id, ship_to_country, priced_cart, subtotal_cents, shipping_cents, total_cents, application_fee_cents, success_path, cancel_path, created_at, expires_at) VALUES (?, 'live', 'app_tea', 'snapshot', 'seller_1', 'US', ?, 4000, 0, 4000, 400, '/', '/', ?, ?)`)
+    .bind('chk_' + id, JSON.stringify({lines: [{variantId: 'v1', productType: 'digital'}, {variantId: 'v2', productType: 'physical'}]}), at(1), at(0)).run();
+  }
+  const service = new SellerOrderService(envWith(db));
+  expect(await ids()).toEqual(['digital-mixed']);
+  const all = await service.listOrders({sellerUserId: 'seller_1', view: 'all', mode: 'live'});
+  expect(all.orders.find(order => order.id === 'digital-only')?.ownUnits).toBe(0);
+  expect(all.orders.find(order => order.id === 'digital-mixed')?.ownUnits).toBe(2);
+  expect((await service.orderFacts('seller_1', 'digital-mixed'))?.digitalLineNos).toEqual([1]);
+  expect(await service.setShipment({sellerUserId: 'seller_1', orderId: 'digital-only', shipment: {carrier: null, trackingNumber: null}, now: NOW})).toBe('no-own-items');
+  expect(await service.setShipment({sellerUserId: 'seller_1', orderId: 'digital-mixed', shipment: {carrier: null, trackingNumber: null}, now: NOW})).toBe('updated');
+ });
 	it("records when an order shipped, and lists a seller's orders by date from one index", async () => {
 		const table = await db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'store_orders'").first<{ sql: string }>();
 		expect(table?.sql).toContain('`shipped_at` integer');
@@ -76,6 +93,7 @@ describe('seller orders on real SQL', () => {
 	it('counts units, what the seller ships and what Estori ships, leaving refunded lines out', async () => {
 		await sale({ id: 'mixed', hoursAgo: 1, lines: [['own', 2], ['own', 1, true], ['catalog', 3]] });
 		const [row] = (await new SellerOrderService(envWith(db)).listOrders({ sellerUserId: 'seller_1', view: 'all', mode: 'live' })).orders;
+		expect(row.products).toEqual([{id: 'p', name:'Item 1'}]);
 		expect(row).toMatchObject({ id: 'mixed', storeTitle: 'Northwind Tea', units: 6, ownUnits: 2, catalogUnits: 3, customerName: 'Ana Ruiz', totalCents: 4000, paymentStatus: 'paid', fulfillmentStatus: 'unfulfilled' });
 	});
 

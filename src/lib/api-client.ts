@@ -1,5 +1,8 @@
+import type { AccountProduct, AccountProductList, SaveAccountProduct, ProductAsset, StoreProductCollection, StoreProductListing, AddStoreProduct, UpdateStoreProduct } from '@/api-types';
+import type { StoreLiveAnalytics, StoreTrafficAnalytics } from '@/api-types';
 import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
+import type { StorePublicationStatus, StoreWorkspaceProducts } from '@/api-types';
 /**
  * Unified API Client - Premium quality abstraction for all worker API calls
  * Provides type-safe methods for all endpoints with proper error handling
@@ -212,6 +215,7 @@ interface ApiClientConfig {
  * Request options for API calls
  */
 interface RequestOptions {
+ signal?: AbortSignal;
 	method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
 	headers?: Record<string, string>;
 	body?: unknown;
@@ -233,6 +237,7 @@ interface PaginationParams {
  * User apps parameters with filtering and sorting
  */
 interface UserAppsParams extends PaginationParams {
+	publication?: StorePublicationStatus;
 	period?: 'today' | 'week' | 'month' | 'all';
 	framework?: string;
 	search?: string;
@@ -461,11 +466,12 @@ class ApiClient {
 				...options.headers,
 			},
 			credentials: options.credentials || 'include',
+ signal: options.signal,
 		};
 
 		if (options.body) {
 			config.body =
-				typeof options.body === 'string'
+				options.body instanceof Blob || typeof options.body === 'string'
 					? options.body
 					: JSON.stringify(options.body);
 		}
@@ -681,6 +687,20 @@ class ApiClient {
 	/**
 	 * Get detailed app information for viewing
 	 */
+ async getLiveStoreAnalytics(appId: string, mode: 'live' | 'test', signal?: AbortSignal): Promise<ApiResponse<StoreLiveAnalytics>> {
+  return this.request<StoreLiveAnalytics>(`/api/stores/${encodeURIComponent(appId)}/analytics/live?mode=${mode}`, { signal }, true);
+ }
+
+	async getStoreAnalytics(
+		appId: string,
+		options: { days: number; mode: 'live' | 'test'; throughDay?: string; productId?: string },
+	): Promise<ApiResponse<StoreTrafficAnalytics>> {
+		const params = new URLSearchParams({ days: String(options.days), mode: options.mode });
+		if (options.throughDay) params.set('through', options.throughDay);
+		if (options.productId) params.set('product', options.productId);
+		return this.request<StoreTrafficAnalytics>(`/api/stores/${encodeURIComponent(appId)}/analytics?${params}`, {}, true);
+	}
+
 	async getAppDetails(appId: string): Promise<ApiResponse<AppDetailsData>> {
 		return this.request<AppDetailsData>(`/api/apps/${appId}`);
 	}
@@ -965,6 +985,38 @@ class ApiClient {
 		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
 	}
 
+	async getMyProducts() {
+		return this.request<AccountProductList>('/api/my-products');
+	}
+	async createAccountProduct(body: SaveAccountProduct) {
+		return this.request<AccountProduct>('/api/my-products', { method: 'POST', body });
+	}
+	async updateAccountProduct(id: string, body: SaveAccountProduct) {
+		return this.request<AccountProduct>(`/api/my-products/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+	}
+	async uploadProductAsset(file: File, kind: 'image' | 'download') {
+		return this.request<ProductAsset>(`/api/my-products/assets?kind=${kind}`, {
+			method: 'POST', body: file,
+			headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },
+		});
+	}
+	async getStoreCollection(appId: string, mode: 'test' | 'live' = 'live') {
+		return this.request<StoreProductCollection>(`/api/stores/${encodeURIComponent(appId)}/collection?mode=${mode}`);
+	}
+	async addStoreProduct(appId: string, body: AddStoreProduct) {
+		return this.request<StoreProductListing>(`/api/stores/${encodeURIComponent(appId)}/collection`, { method: 'POST', body });
+	}
+	async updateStoreProduct(appId: string, productId: string, body: UpdateStoreProduct) {
+		return this.request<StoreProductListing>(`/api/stores/${encodeURIComponent(appId)}/collection/${encodeURIComponent(productId)}`, { method: 'PATCH', body });
+	}
+	async removeStoreProduct(appId: string, productId: string) {
+		return this.request<{ removed: boolean }>(`/api/stores/${encodeURIComponent(appId)}/collection/${encodeURIComponent(productId)}`, { method: 'DELETE' });
+	}
+
+	async getStoreProducts(appId: string): Promise<ApiResponse<StoreWorkspaceProducts>> {
+		return this.request(`/api/stores/${encodeURIComponent(appId)}/products`);
+	}
+
 	/** Refund lines of a store order; the seller's Stripe balance pays it. */
 	async refundStoreOrder(appId: string, orderId: string, request: StoreRefundRequest): Promise<ApiResponse<StoreRefundResponse>> {
 		return this.request<StoreRefundResponse>(`/api/stores/${encodeURIComponent(appId)}/orders/${encodeURIComponent(orderId)}/refunds`, { method: 'POST', body: request });
@@ -1196,6 +1248,7 @@ class ApiClient {
 		if (params?.visibility)
 			queryParams.set('visibility', params.visibility);
 		if (params?.status) queryParams.set('status', params.status);
+		if (params?.publication) queryParams.set('publication', params.publication);
 		if (params?.teamId) queryParams.set('teamId', params.teamId);
 
 		const endpoint = `/api/user/apps${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;

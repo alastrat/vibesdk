@@ -38,3 +38,7 @@ Country flag SVGs in `public/marketing/flags` come from
 https://github.com/lipis/flag-icons (4:3 set). The MIT license is included alongside
 the assets. Local SVGs keep flags consistent across platforms without relying on
 emoji font support.
+
+## Live analytics detail
+
+`live-land-points.json` uses the same public-domain Natural Earth land polygons with 180,000 Fibonacci-sphere samples (without jitter), yielding 51,992 on-land points. It is imported only for the full interactive analytics globe; the smaller globe keeps its lightweight mesh. Sampling formula matches the original above with 180,000 replacing 36,000.

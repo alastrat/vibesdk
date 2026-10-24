@@ -1,0 +1,24 @@
+.catalog-page .catalog-context {
+	padding: 12px 0;
+	border-bottom: 1px solid var(--color-kumo-line);
+}
+.catalog-page .catalog-results [data-slot='layer-card'] {
+	border-radius: 12px;
+	box-shadow: none;
+}
+.catalog-page .catalog-results h2 {
+	font-size: 16px;
+	font-weight: 600;
+}
+.catalog-page .catalog-results th {
+	font-size: 12px;
+	padding-top: 10px;
+	padding-bottom: 10px;
+}
+.catalog-page .catalog-results td {
+	padding-top: 10px;
+	padding-bottom: 10px;
+}
+.catalog-page .catalog-results img {
+	max-height: 180px;
+}

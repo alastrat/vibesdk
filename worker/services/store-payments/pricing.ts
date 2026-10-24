@@ -82,7 +82,6 @@ export function priceCart(input: {
 	for (const quantity of quantities.values()) {
 		if (!Number.isInteger(quantity) || quantity < 1 || quantity > STORE_LINE_MAX_QUANTITY) return refuse('cart_limits');
 	}
-	if (!manifest.shipping.countries.includes(request.shipTo)) return refuse('ships_to_unsupported');
 
 	const variants = variantsById(manifest);
 	const lines: PricedLine[] = [];
@@ -91,7 +90,12 @@ export function priceCart(input: {
 		if (!found) return refuse('unknown_item');
 		const { product, variant } = found;
 		if (variant.available === false) return refuse('item_unavailable');
-		const base = { productId: product.id, variantId, name: `${product.name}, ${variant.name}`, quantity, unitPriceCents: variant.priceCents };
+		if (product.type === 'digital' && variant.catalogVariantId) return refuse('invalid_request');
+		const base = {
+			...(product.type ? { productType: product.type } : {}),
+			...(product.accountProductId ? { accountProductId: product.accountProductId } : {}),
+			...(product.type === 'digital' && product.downloadAssetIds ? { downloadAssetIds: [...product.downloadAssetIds] } : {}),
+			productId: product.id, variantId, name: `${product.name}, ${variant.name}`, quantity, unitPriceCents: variant.priceCents };
 		if (variant.catalogVariantId === undefined) {
 			lines.push({ ...base, kind: 'own' });
 			continue;
@@ -110,9 +114,11 @@ export function priceCart(input: {
 		});
 	}
 
+	const needsShipping = lines.some((line) => line.productType !== 'digital');
+	if (needsShipping && !manifest.shipping.countries.includes(request.shipTo)) return refuse('ships_to_unsupported');
 	const subtotalCents = lines.reduce((sum, line) => sum + line.unitPriceCents * line.quantity, 0);
 	const { flatRateCents, freeOverCents } = manifest.shipping;
-	const shippingCents = freeOverCents !== undefined && subtotalCents >= freeOverCents ? 0 : flatRateCents;
+	const shippingCents = !needsShipping || (freeOverCents !== undefined && subtotalCents >= freeOverCents) ? 0 : flatRateCents;
 	const totalCents = subtotalCents + shippingCents;
 	if (totalCents < STORE_CART_MIN_CENTS || totalCents > STORE_CART_MAX_CENTS) return refuse('cart_limits');
 

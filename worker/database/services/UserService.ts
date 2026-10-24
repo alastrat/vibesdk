@@ -9,6 +9,7 @@ import { eq, and, sql, lt, ne } from 'drizzle-orm';
 import { generateId } from '../../utils/idGenerator';
 import type { UserRole } from '../../../shared/types/templates';
 import { isPlatformAdminDecision } from '../../services/auth/admin-access';
+import { msg } from '../../../shared/i18n/translate';
 
 /**
  * User Service Class
@@ -214,8 +215,30 @@ export class UserService extends BaseService {
             displayName?: string;
             bio?: string;
             theme?: 'light' | 'dark' | 'system';
+            timezone?: string;
         }
     ): Promise<{ success: boolean; message: string }> {
+        for (const field of ['displayName', 'username', 'bio', 'timezone', 'theme'] as const) {
+            if (profileData[field] !== undefined && typeof profileData[field] !== 'string') {
+                return { success: false, message: msg('Profile fields must be text.') };
+            }
+        }
+        if (profileData.displayName !== undefined && (!profileData.displayName.trim() || profileData.displayName.length > 100)) {
+            return { success: false, message: msg('Full name must contain between 1 and 100 characters.') };
+        }
+        if (profileData.bio !== undefined && profileData.bio.length > 500) {
+            return { success: false, message: msg('Bio must be 500 characters or fewer.') };
+        }
+        if (profileData.theme !== undefined && !['light', 'dark', 'system'].includes(profileData.theme)) {
+            return { success: false, message: msg('Choose a valid theme.') };
+        }
+        if (profileData.timezone !== undefined) {
+            try {
+                new Intl.DateTimeFormat('en', { timeZone: profileData.timezone });
+            } catch {
+                return { success: false, message: msg('Choose a valid time zone.') };
+            }
+        }
         // Validate username if provided
         if (profileData.username) {
             const { username } = profileData;
@@ -263,10 +286,11 @@ export class UserService extends BaseService {
         await this.database
             .update(schema.users)
             .set({
-                username: profileData.username || undefined,
-                displayName: profileData.displayName || undefined,
-                bio: profileData.bio || undefined,
-                theme: profileData.theme || undefined,
+                username: profileData.username === '' ? null : profileData.username,
+                displayName: profileData.displayName?.trim(),
+                bio: profileData.bio,
+                theme: profileData.theme,
+                timezone: profileData.timezone,
                 updatedAt: new Date()
             })
             .where(eq(schema.users.id, userId));

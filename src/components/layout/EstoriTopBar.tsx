@@ -1,24 +1,46 @@
-import { Link } from 'react-router';
-import { SignInIcon } from '@phosphor-icons/react';
+import { Link, useLocation, useNavigate } from 'react-router';
+import { QuestionIcon, SignInIcon } from '@phosphor-icons/react';
+import { Button, SidebarTrigger, useSidebar } from '@cloudflare/kumo';
 import { useAuth } from '@/contexts/auth-context';
 import { useAuthModal } from '@/components/auth/AuthModalProvider';
 import { AuthButton } from '@/components/auth/auth-button';
 import { OrangeButton } from '@/components/shared/OrangeButton';
-import { BRAND, EstoriLogo } from '@/brand';
-import { t } from '@/lib/i18n';
+import { workspacePageLabel } from './workspace-page';
+import { useI18n } from '@/lib/i18n';
+import { WorkspaceSearch } from './workspace-search';
 
-/** Full-width navy bar above the sidebar: logo, account menu and Sign In. */
-export function EstoriTopBar() {
+/** Workspace identity and account controls, shared by every authenticated view. */
+export function EstoriTopBar({ storeWorkspace = false }: { storeWorkspace?: boolean }) {
+	const { t } = useI18n();
+	const navigate = useNavigate();
+	const { pathname } = useLocation();
+	const { isMobile } = useSidebar();
 	const { user, isLoading: authLoading } = useAuth();
 	const { showAuthModal } = useAuthModal();
 
 	return (
-		<header className="flex h-(--estori-topbar-h) shrink-0 items-center justify-between border-b border-(--estori-topbar-line) bg-(--estori-topbar) px-4 text-(--estori-topbar-text)">
-			<Link to="/" aria-label={t('{brand} home', { brand: BRAND.name })} className="flex items-center">
-				<EstoriLogo className="h-6 w-auto" />
-			</Link>
-			<div className="flex items-center gap-2">
-				{user && <AuthButton display="icon" />}
+		<header className="workspace-topbar flex shrink-0 items-center justify-between px-5">
+			<div className="workspace-page-identity">
+				{isMobile && !storeWorkspace && <SidebarTrigger aria-label={t('Toggle sidebar')} />}
+				<nav aria-label={t('Breadcrumb')} className="workspace-breadcrumb">
+					<Link to="/apps">{t('Workspace')}</Link><span aria-hidden="true">/</span><span aria-current="page">{t(workspacePageLabel(pathname))}</span>
+				</nav>
+			</div>
+			<div className="workspace-topbar-actions flex items-center gap-2">
+				{user && <WorkspaceSearch key={user.id} />}
+				{user && (
+					<>
+						<Button
+							variant="ghost"
+							shape="square"
+							aria-label={t('Help and support')}
+							onClick={() => navigate('/contact')}
+						>
+							<QuestionIcon className="size-5" />
+						</Button>
+						<AuthButton display="icon" />
+					</>
+				)}
 				{!authLoading && !user && (
 					<OrangeButton
 						size="sm"

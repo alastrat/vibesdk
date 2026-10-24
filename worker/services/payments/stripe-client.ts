@@ -349,6 +349,8 @@ export interface CatalogCheckoutSessionInput {
 }
 
 export interface StoreCheckoutSessionInput {
+	/** Defaults to true for historical physical checkouts. */
+	collectShipping?: boolean;
 	checkoutId: string;
 	lines: readonly { name: string; quantity: number; unitPriceCents: number }[];
 	shippingCents: number;
@@ -644,16 +646,18 @@ export function createStripeClient(secretKey: string, fetchImpl: typeof fetch = 
 						quantity: line.quantity,
 						price_data: { currency: 'usd', unit_amount: line.unitPriceCents, product_data: { name: line.name } },
 					})),
-					shipping_address_collection: { allowed_countries: [input.shipToCountry] },
-					shipping_options: [
-						{
-							shipping_rate_data: {
-								type: 'fixed_amount',
-								display_name: input.shippingCents === 0 ? 'Free shipping' : 'Shipping',
-								fixed_amount: { amount: input.shippingCents, currency: 'usd' },
+					...(input.collectShipping === false ? {} : {
+						shipping_address_collection: { allowed_countries: [input.shipToCountry] },
+						shipping_options: [
+							{
+								shipping_rate_data: {
+									type: 'fixed_amount',
+									display_name: input.shippingCents === 0 ? 'Free shipping' : 'Shipping',
+									fixed_amount: { amount: input.shippingCents, currency: 'usd' },
+								},
 							},
-						},
-					],
+						],
+					}),
 					...USD_CARD_CHECKOUT,
 					payment_intent_data: {
 						application_fee_amount: input.applicationFeeCents,

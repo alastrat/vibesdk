@@ -27,29 +27,11 @@ describe('the Translations page', () => {
 		expect(source('/src/routes.tsx')).toMatch(/path: 'translations',\s*Component: protectedPage\(TranslationsPage\)/);
 	});
 
-	it('opens from a Translations item after Emails in the sidebar, folded and open, hidden while translations are paused', () => {
-		const sidebar = source('/src/components/layout/app-sidebar.tsx');
-		const order = [...sidebar.matchAll(/id="([a-z]+)-link"/g)].map((match) => match[1]);
-		expect(order).toEqual(['discover', 'catalog', 'orders', 'emails', 'translations', 'discover', 'catalog', 'orders', 'emails', 'translations']);
-		expect(sidebar.match(/navigate\(STORE_TRANSLATIONS_PATH\)/g) ?? []).toHaveLength(2);
-		expect(sidebar).toContain("const translationsPaused = useFlag('store-translations-paused');");
-		expect(sidebar.match(/\{user && !translationsPaused && \(/g) ?? []).toHaveLength(2);
-		expect(sidebar.match(/<TranslateIcon /g) ?? []).toHaveLength(2);
-		expect(sidebar.match(/t\('Translations'\)/g)?.length).toBeGreaterThanOrEqual(2);
-	});
-
-	it('has its title, store picker, settings, a card per language and the activity', () => {
+	it('keeps the settings, languages and activity available in the store panel', () => {
 		const page = source('/src/routes/translations/translations.tsx');
-		for (const part of ["pageTitle(t('Translations'))", 'stores.data', '<Select', 'data.languages.map', '<LanguageCard', '<TaskActivity', "t('Publish or preview your store first')", "t('No text to translate')", 'STORE_TRANSLATIONS_PAUSED_MESSAGE']) {
+		for (const part of ['data.languages.map', '<LanguageCard', '<TaskActivity', "t('Publish or preview your store first')", "t('No text to translate')", 'STORE_TRANSLATIONS_PAUSED_MESSAGE']) {
 			expect(page, part).toContain(part);
 		}
-	});
-
-	it('remembers the chosen store in this browser, and survives storage that is blocked', () => {
-		const page = source('/src/routes/translations/translations.tsx');
-		expect(page).toContain('localStorage.getItem(');
-		expect(page).toContain('localStorage.setItem(');
-		expect(page.match(/try \{/g)?.length).toBeGreaterThanOrEqual(2);
 	});
 
 	it('polls the light task list every 3 seconds while a task moves, never the store overview', () => {

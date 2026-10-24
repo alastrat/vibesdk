@@ -21,6 +21,7 @@ export function sellerOrderDetail(order: StoreOrderView, facts: SellerOrderFacts
 		dispute: facts.dispute,
 		items: order.items.map((item) => ({
 			lineNo: item.lineNo,
+			...(facts.digitalLineNos?.includes(item.lineNo) ? {productType: 'digital' as const} : {}),
 			name: item.name,
 			kind: item.kind,
 			quantity: item.quantity,
