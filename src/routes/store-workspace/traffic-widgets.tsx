@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useState } from 'react';
 import { Button, Table } from '@cloudflare/kumo';
 import { GlobeHemisphereWestIcon } from '@phosphor-icons/react';
 import { ParentSize } from '@visx/responsive';
@@ -9,9 +9,11 @@ import { t, useI18n } from '@/lib/i18n';
 import { formatCents } from '@/lib/pricing';
 import { INTL_LOCALE } from 'shared/i18n/locales';
 import { MetricChart } from './metric-chart';
+import { VisitGlobe } from './visit-globe';
 import './traffic-widgets.css';
 
 export type TrafficWidgetsProps = {
+	compare?: boolean;
 	data: StoreTrafficAnalytics;
 	paidCents: number;
 	/** Distinct customers with paid orders, not all traffic or all-status customers. */
@@ -19,12 +21,12 @@ export type TrafficWidgetsProps = {
 };
 type TrafficMetric = 'visitors' | 'pageViews' | 'checkoutStarts';
 const COLORS = [
-	'#7356cf',
-	'#a58be5',
-	'#c8b8ee',
-	'#527fba',
-	'#8bb2c7',
-	'#b2b7c2',
+	'#1955e6',
+	'#29a875',
+	'#8baef8',
+	'#93d3b7',
+	'#c3d5fc',
+	'#d5e5dc',
 ];
 const safeCount = (value: number) =>
 	Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -234,44 +236,15 @@ function BreakdownDonut({
 	);
 }
 
-function RequestGlobe() {
-	const id = useId().replace(/:/g, '');
-	return (
-		<svg className="tw-globe" viewBox="0 0 300 154" aria-hidden="true">
-			<defs>
-				<radialGradient id={`${id}-globe`} cx="35%" cy="28%">
-					<stop offset="0" stopColor="#a796e5" stopOpacity=".24" />
-					<stop offset="1" stopColor="#7356cf" stopOpacity=".03" />
-				</radialGradient>
-				<clipPath id={`${id}-globe-clip`}>
-					<circle cx="150" cy="92" r="79" />
-				</clipPath>
-			</defs>
-			<circle
-				cx="150"
-				cy="92"
-				r="79"
-				fill={`url(#${id}-globe)`}
-				className="tw-globe-outline"
-			/>
-			<g clipPath={`url(#${id}-globe-clip)`} className="tw-globe-grid">
-				<ellipse cx="150" cy="92" rx="28" ry="79" />
-				<ellipse cx="150" cy="92" rx="58" ry="79" />
-				<ellipse cx="150" cy="92" rx="79" ry="25" />
-				<ellipse cx="150" cy="92" rx="79" ry="53" />
-				<path d="M71 92h158M150 13v158" />
-			</g>
-		</svg>
-	);
-}
-
 export function TrafficWidgets({
+	compare = true,
 	data,
 	paidCents,
 	customerCount,
 }: TrafficWidgetsProps) {
 	const { locale } = useI18n();
 	const [metric, setMetric] = useState<TrafficMetric>('visitors');
+	const [activeCountry, setActiveCountry] = useState<string | null>(null);
 	const count = (value: number) =>
 		safeCount(value).toLocaleString(INTL_LOCALE[locale], {
 			maximumFractionDigits: 0,
@@ -312,6 +285,7 @@ export function TrafficWidgets({
 			maximumFractionDigits: 1,
 		});
 	const events = [...data.events]
+		.filter((event) => !activeCountry || event.country === activeCountry)
 		.sort(
 			(a, b) =>
 				(Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0),
@@ -323,24 +297,6 @@ export function TrafficWidgets({
 				<div className="tw-card-heading">
 					<div>
 						<h2>{t('Traffic over time')}</h2>
-						<p className="tw-subtitle">
-							{t(
-								'Published storefront requests served by Cloudflare',
-							)}
-						</p>
-					</div>
-					{data.mode === 'test' && (
-						<span className="tw-test-label">
-							{t('Test traffic')}
-						</span>
-					)}
-				</div>
-				<div className="tw-traffic-toolbar">
-					<div>
-						<strong className="tw-large-value">
-							{count(data.totals[metric])}
-						</strong>
-						<span className="tw-value-label">{labels[metric]}</span>
 					</div>
 					<div
 						role="group"
@@ -372,16 +328,34 @@ export function TrafficWidgets({
 						))}
 					</div>
 				</div>
+				<div className="tw-traffic-toolbar">
+					{data.mode === 'test' && (
+						<span className="tw-test-label">
+							{t('Test traffic')}
+						</span>
+					)}
+					<div>
+						<strong className="tw-large-value">
+							{count(data.totals[metric])}
+						</strong>
+						<span className="tw-value-label">{labels[metric]}</span>
+					</div>
+				</div>
 				<MetricChart
+					height={176}
 					label={labels[metric]}
 					points={data.trend.map((day) => ({
 						date: day.date,
 						value: safeCount(day[metric]),
 					}))}
-					previous={data.previous.map((day) => ({
-						date: day.date,
-						value: safeCount(day[metric]),
-					}))}
+					previous={
+						compare
+							? data.previous.map((day) => ({
+									date: day.date,
+									value: safeCount(day[metric]),
+								}))
+							: undefined
+					}
 					formatValue={count}
 				/>
 				<div className="tw-chart-key">
@@ -389,10 +363,12 @@ export function TrafficWidgets({
 						<i />
 						{t('Selected period')}
 					</span>
-					<span>
-						<i className="tw-prior" />
-						{t('Previous period')}
-					</span>
+					{compare && (
+						<span>
+							<i className="tw-prior" />
+							{t('Previous period')}
+						</span>
+					)}
 					<span>UTC</span>
 				</div>
 				<p className="tw-caption">
@@ -412,22 +388,52 @@ export function TrafficWidgets({
 			</section>
 			<section className="tw-card tw-events">
 				<div className="tw-card-heading">
-					<h2>{t('Recent events')}</h2>
-					<GlobeHemisphereWestIcon size={18} />
+					<h2>
+						<i className="tw-live-dot" />
+						{t('Recent events')}
+					</h2>
 				</div>
-				<RequestGlobe />
+				<VisitGlobe
+					events={data.events}
+					countries={data.countries}
+					activeCountry={activeCountry}
+					onSelectCountry={setActiveCountry}
+				/>
 				<p className="tw-caption">
-					{t('Recent storefront requests · UTC')}
+					{activeCountry
+						? country(activeCountry)
+						: t('Recent storefront requests · UTC')}
 				</p>
 				{events.length ? (
 					<ol>
 						{events.map((event) => (
-							<li key={event.id}>
+							<li
+								key={event.id}
+								className={
+									activeCountry === event.country
+										? 'tw-event-selected'
+										: undefined
+								}
+							>
 								<div className="tw-event-icon">
 									<GlobeHemisphereWestIcon size={15} />
 								</div>
 								<div className="tw-event-content">
-									<strong>{safePath(event.path)}</strong>
+									<Button
+										variant="ghost"
+										size="sm"
+										className="tw-event-link"
+										aria-label={`${country(event.country)} · ${safePath(event.path)}`}
+										onClick={() =>
+											setActiveCountry(
+												activeCountry === event.country
+													? null
+													: event.country,
+											)
+										}
+									>
+										{safePath(event.path)}
+									</Button>
 									<span>
 										{country(event.country)} ·{' '}
 										{deviceName(event.device)} ·{' '}

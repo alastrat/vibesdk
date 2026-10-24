@@ -127,6 +127,7 @@
 	"All Time": "Todo el tiempo",
 	"All WS": "Todos los WebSocket",
 	"All categories": "Todas las categorías",
+	"All countries": "Todos los países",
 	"All orders": "Todos los pedidos",
 	"All payment statuses": "Todos los estados de pago",
 	"All products": "Todos los productos",
@@ -184,6 +185,7 @@
 	"Approve prices for paid sites. A rejection needs a reason the creator will see. To take a site out of Discover, open it and use Remove from Discover.": "Aprueba los precios de los sitios de pago. Para rechazar uno, debes indicar un motivo que verá su creador. Para quitar un sitio de Descubrir, ábrelo y usa Quitar de Descubrir.",
 	"Approved at {value1}": "Aprobado a {value1}",
 	"Approved version": "Versión aprobada",
+	"Approximate country locations from recorded storefront requests.": "Ubicaciones aproximadas por país de las visitas registradas en tu tienda.",
 	"Approximate request locations": "Ubicaciones aproximadas de las solicitudes",
 	"Apps": "Apps",
 	"Apps started from this site": "Apps creadas a partir de este sitio",
@@ -826,6 +828,7 @@
 	"Explore the catalog": "Explorar el catálogo",
 	"Explore this topic": "Explorar este tema",
 	"Explore topics": "Explorar temas",
+	"Explore visitor locations": "Explorar ubicaciones de visitantes",
 	"Explore your products": "Explorar tus productos",
 	"Explore {title}": "Explorar {title}",
 	"Exploring": "Explorando",
@@ -1313,6 +1316,7 @@
 	"Manage your payouts": "Gestionar tus transferencias",
 	"Manage your profile, preferences, security, and billing.": "Gestiona tu perfil, preferencias, seguridad y facturación.",
 	"Manage your subscription, credits, and invoices.": "Gestiona tu suscripción, créditos y facturas.",
+	"Map location unavailable": "Ubicación no disponible en el mapa",
 	"Mark as not shipped": "Marcar como no enviado",
 	"Mark shipped": "Marcar como enviado",
 	"Mark this order as not shipped?": "¿Marcar este pedido como no enviado?",
@@ -1787,7 +1791,6 @@
 	"Publish your store to start a quick fix from it.": "Publica tu tienda para crear una corrección rápida a partir de ella.",
 	"Published": "Publicado",
 	"Published collection": "Colección publicada",
-	"Published storefront requests served by Cloudflare": "Solicitudes de la tienda publicada atendidas por Cloudflare",
 	"Published {date}": "Publicado el {date}",
 	"Publishes a standalone Worker to your Cloudflare account": "Publica un Worker independiente en tu cuenta de Cloudflare",
 	"Publishes a standalone Worker to {brand} hosting": "Publica un Worker independiente en el hosting de {brand}",
@@ -2608,6 +2611,7 @@
 	"Views": "Pantallas",
 	"Visibility": "Visibilidad",
 	"Visit store": "Visitar tienda",
+	"Visitor locations": "Ubicación de los visitantes",
 	"Visitors": "Visitantes",
 	"Void": "Anulada",
 	"Wait failed": "Falló la espera",
@@ -3025,6 +3029,7 @@
 	"{brand} uses the pages you visit, where you click, recordings of some sessions that show layouts and clicks but not what's written, and error reports to fix problems and improve the product. Your email and name are never shared.": "{brand} usa las páginas que visitas, dónde haces clic, grabaciones de algunas sesiones que muestran diseños y clics pero no lo que está escrito, e informes de errores para corregir problemas y mejorar el producto. Tu correo electrónico y tu nombre nunca se comparten.",
 	"{brand} uses this language in its menus and messages, and in the emails we send you.": "{brand} usa este idioma en sus menús y mensajes, y en los correos electrónicos que te enviamos.",
 	"{completed}/{total} stages complete": "{completed}/{total} etapas completas",
+	"{country}: {count} page views. Approximate country location.": "{country}: {count} páginas vistas. Ubicación aproximada del país.",
 	"{count} agent|{count} agents": {
 		"one": "{count} agente",
 		"other": "{count} agentes"
@@ -3105,6 +3110,7 @@
 		"one": "{count} operación",
 		"other": "{count} operaciones"
 	},
+	"{count} page views": "{count} páginas vistas",
 	"{count} product|{count} products": {
 		"one": "{count} producto",
 		"other": "{count} productos"

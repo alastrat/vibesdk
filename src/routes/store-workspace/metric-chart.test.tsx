@@ -128,6 +128,21 @@ describe('daily metric chart', () => {
 		}
 	});
 
+	it('places a rounded count label at its actual integer value', async () => {
+		const renderer = await mountElement(
+			<MetricChart
+				label="Checkouts"
+				formatValue={(value) => value.toFixed(0)}
+				points={[{ date: '2026-10-24', value: 1 }]}
+			/>,
+		);
+		const one = renderer.root
+			.findAllByType('text')
+			.find((node) => node.children.join('') === '1')!;
+		const dot = renderer.root.findAllByType('circle')[0];
+		expect(one.props.y).toBe(dot.props.cy);
+	});
+
 	it('shows an honest empty state without a keyboard target for nonexistent points', async () => {
 		const renderer = await mountElement(
 			<MetricChart

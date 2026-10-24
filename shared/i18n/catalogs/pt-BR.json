@@ -127,6 +127,7 @@
 	"All Time": "Todo o período",
 	"All WS": "Todos os WebSocket",
 	"All categories": "Todas as categorias",
+	"All countries": "Todos os países",
 	"All orders": "Todos os pedidos",
 	"All payment statuses": "Todos os status de pagamento",
 	"All products": "Todos os produtos",
@@ -184,6 +185,7 @@
 	"Approve prices for paid sites. A rejection needs a reason the creator will see. To take a site out of Discover, open it and use Remove from Discover.": "Aprove os preços dos sites pagos. Para rejeitar um, informe um motivo que o criador verá. Para tirar um site do Descobrir, abra-o e use Remover do Descobrir.",
 	"Approved at {value1}": "Aprovado por {value1}",
 	"Approved version": "Versão aprovada",
+	"Approximate country locations from recorded storefront requests.": "Localizações aproximadas por país das visitas registradas na sua loja.",
 	"Approximate request locations": "Localizações aproximadas das requisições",
 	"Apps": "Apps",
 	"Apps started from this site": "Apps criados a partir deste site",
@@ -826,6 +828,7 @@
 	"Explore the catalog": "Explorar o catálogo",
 	"Explore this topic": "Explorar este tema",
 	"Explore topics": "Explorar temas",
+	"Explore visitor locations": "Explorar localização dos visitantes",
 	"Explore your products": "Explorar seus produtos",
 	"Explore {title}": "Explorar {title}",
 	"Exploring": "Explorando",
@@ -1313,6 +1316,7 @@
 	"Manage your payouts": "Gerenciar seus repasses",
 	"Manage your profile, preferences, security, and billing.": "Gerencie seu perfil, preferências, segurança e faturamento.",
 	"Manage your subscription, credits, and invoices.": "Gerencie sua assinatura, créditos e faturas.",
+	"Map location unavailable": "Localização indisponível no mapa",
 	"Mark as not shipped": "Marcar como não enviado",
 	"Mark shipped": "Marcar como enviado",
 	"Mark this order as not shipped?": "Marcar este pedido como não enviado?",
@@ -1787,7 +1791,6 @@
 	"Publish your store to start a quick fix from it.": "Publique sua loja para criar uma correção rápida a partir dela.",
 	"Published": "Publicado",
 	"Published collection": "Coleção publicada",
-	"Published storefront requests served by Cloudflare": "Requisições da loja publicada atendidas pela Cloudflare",
 	"Published {date}": "Publicado em {date}",
 	"Publishes a standalone Worker to your Cloudflare account": "Publica um Worker independente na sua conta da Cloudflare",
 	"Publishes a standalone Worker to {brand} hosting": "Publica um Worker independente na hospedagem do {brand}",
@@ -2608,6 +2611,7 @@
 	"Views": "Telas",
 	"Visibility": "Visibilidade",
 	"Visit store": "Visitar loja",
+	"Visitor locations": "Localização dos visitantes",
 	"Visitors": "Visitantes",
 	"Void": "Anulada",
 	"Wait failed": "Falha na espera",
@@ -3025,6 +3029,7 @@
 	"{brand} uses the pages you visit, where you click, recordings of some sessions that show layouts and clicks but not what's written, and error reports to fix problems and improve the product. Your email and name are never shared.": "O {brand} usa as páginas que você visita, onde você clica, gravações de algumas sessões que mostram layouts e cliques, mas não o que está escrito, e relatórios de erros para corrigir problemas e melhorar o produto. Seu e-mail e seu nome nunca são compartilhados.",
 	"{brand} uses this language in its menus and messages, and in the emails we send you.": "O {brand} usa este idioma em seus menus e mensagens, e nos e-mails que enviamos para você.",
 	"{completed}/{total} stages complete": "{completed}/{total} etapas concluídas",
+	"{country}: {count} page views. Approximate country location.": "{country}: {count} visualizações de página. Localização aproximada do país.",
 	"{count} agent|{count} agents": {
 		"one": "{count} agente",
 		"other": "{count} agentes"
@@ -3105,6 +3110,7 @@
 		"one": "{count} operação",
 		"other": "{count} operações"
 	},
+	"{count} page views": "{count} visualizações de página",
 	"{count} product|{count} products": {
 		"one": "{count} produto",
 		"other": "{count} produtos"

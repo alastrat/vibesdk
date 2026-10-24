@@ -13,6 +13,7 @@ export function DeployedStoreAnalytics({
 	mode,
 	paidCents,
 	customerCount,
+	compare,
 }: {
 	appId: string;
 	userId: string;
@@ -20,6 +21,7 @@ export function DeployedStoreAnalytics({
 	mode: 'live' | 'test';
 	paidCents: number;
 	customerCount: number;
+	compare: boolean;
 }) {
 	useI18n();
 	const query = useQuery({
@@ -56,6 +58,7 @@ export function DeployedStoreAnalytics({
 		<TrafficWidgets
 			key={`${appId}:${days}:${mode}`}
 			data={query.data}
+			compare={compare}
 			paidCents={paidCents}
 			customerCount={customerCount}
 		/>

@@ -1,5 +1,5 @@
 .es-metric-chart {
-	--metric-color: #7367df;
+	--metric-color: #1955e6;
 	--metric-axis: var(--es-muted, #6b7280);
 	--metric-grid: var(--es-line, #e5e7eb);
 	--metric-surface: var(--es-surface, #fff);
@@ -9,7 +9,7 @@
 	position: relative;
 }
 [data-mode='dark'] .es-metric-chart {
-	--metric-color: #a79afb;
+	--metric-color: #6e9dff;
 }
 .es-metric-plot {
 	position: relative;
@@ -47,10 +47,10 @@
 	stroke-linejoin: round;
 }
 .es-metric-previous {
-	stroke: var(--metric-axis);
-	stroke-width: 1.25;
+	stroke: #aac4ff;
+	stroke-width: 1.5;
 	stroke-dasharray: 4 4;
-	opacity: 0.48;
+	opacity: 0.85;
 	fill: none;
 }
 .es-metric-guide {
@@ -120,4 +120,18 @@
 	place-items: center;
 	color: var(--es-muted, #6b7280);
 	font-size: 12px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.es-metric-line {
+		animation: metric-reveal 450ms ease-out;
+	}
+	@keyframes metric-reveal {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
 }

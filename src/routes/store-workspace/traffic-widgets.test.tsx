@@ -118,6 +118,52 @@ describe('store traffic widgets', () => {
 		expect(textOf(renderer)).toContain('Anonymous estimates');
 	});
 
+	it('removes and restores the prior series with the dashboard comparison control', async () => {
+		const props = { data, paidCents: 9000, customerCount: 3 };
+		const renderer = await mountElement(
+			<TrafficWidgets {...props} compare />,
+		);
+		const slider = () => renderer.root.findByProps({ role: 'slider' });
+		expect(slider().props['aria-valuetext']).toContain('UTC: 4');
+		await act(async () =>
+			renderer.update(<TrafficWidgets {...props} compare={false} />),
+		);
+		expect(slider().props['aria-valuetext']).not.toContain('UTC: 4');
+		expect(textOf(renderer)).not.toContain('Previous period');
+		await act(async () =>
+			renderer.update(<TrafficWidgets {...props} compare />),
+		);
+		expect(slider().props['aria-valuetext']).toContain('UTC: 4');
+		expect(textOf(renderer)).toContain('Previous period');
+	});
+
+	it('focuses a recorded country from a visit and filters the event feed', async () => {
+		const other = {
+			...data.events[0],
+			id: 'e2',
+			path: '/german-visit',
+			country: 'DE',
+		};
+		const renderer = await mountElement(
+			<TrafficWidgets
+				data={{ ...data, events: [...data.events, other] }}
+				paidCents={9000}
+				customerCount={3}
+			/>,
+		);
+		const visit = renderer.root
+			.findAllByType('button')
+			.find(
+				(button) =>
+					button.props['aria-label'] === 'United States · /checkout',
+			);
+		await act(async () => visit!.props.onClick());
+		expect(textOf(renderer)).not.toContain('/german-visit');
+		expect(textOf(renderer)).toContain('/checkout');
+		await act(async () => visit!.props.onClick());
+		expect(textOf(renderer)).toContain('/german-visit');
+	});
+
 	it('shows empty tracking honestly and keeps test traffic visibly distinct', () => {
 		const empty = {
 			...data,

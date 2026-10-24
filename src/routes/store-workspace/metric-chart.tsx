@@ -6,7 +6,7 @@ import {
 	type KeyboardEvent,
 	type PointerEvent,
 } from 'react';
-import { curveMonotoneX } from '@visx/curve';
+import { curveLinear } from '@visx/curve';
 import { ParentSize } from '@visx/responsive';
 import { scaleLinear, scaleUtc } from '@visx/scale';
 import { AreaClosed, LinePath } from '@visx/shape';
@@ -21,6 +21,7 @@ export type MetricChartProps = {
 	label: string;
 	color?: string;
 	compact?: boolean;
+	height?: number;
 };
 
 type TimedPoint = MetricPoint & { time: number };
@@ -50,6 +51,7 @@ export function MetricChart({
 	label,
 	color,
 	compact = false,
+	height: chartHeight,
 }: MetricChartProps) {
 	const rows = useMemo(() => {
 		const current = dailyPoints(points);
@@ -77,7 +79,7 @@ export function MetricChart({
 				{t('No data for this period.')}
 			</div>
 		);
-	const height = compact ? 144 : 288;
+	const height = chartHeight ?? (compact ? 144 : 210);
 	return (
 		<div
 			className={`es-metric-chart${compact ? ' es-metric-chart--compact' : ''}`}
@@ -156,9 +158,12 @@ function MetricPlot({
 		range: [bottom, top],
 		nice: true,
 	});
-	// Avoid duplicate tick labels when a count/percentage formatter rounds a small domain.
+	// Integer observations must never label a fractional tick as a whole visit/order.
+	const integerValues = values.every(Number.isInteger);
+	// Avoid duplicate labels for other compact formatters.
 	const ticks = y
 		.ticks(4)
+		.filter((value) => !integerValues || Number.isInteger(value))
 		.filter(
 			(value, position, all) =>
 				position === 0 ||
@@ -295,12 +300,12 @@ function MetricPlot({
 						<stop
 							offset="0%"
 							stopColor="var(--metric-color)"
-							stopOpacity=".12"
+							stopOpacity=".035"
 						/>
 						<stop
 							offset="100%"
 							stopColor="var(--metric-color)"
-							stopOpacity=".015"
+							stopOpacity="0"
 						/>
 					</linearGradient>
 					<clipPath id={`${id}-clip`}>
@@ -339,7 +344,7 @@ function MetricPlot({
 						y={yOf}
 						y0={y(0)}
 						yScale={y}
-						curve={curveMonotoneX}
+						curve={curveLinear}
 						fill={`url(#${id}-fill)`}
 					/>
 					<LinePath
@@ -347,14 +352,14 @@ function MetricPlot({
 						x={xOf}
 						y={(point) => y(point.previous?.value ?? 0)}
 						defined={(point) => point.previous !== undefined}
-						curve={curveMonotoneX}
+						curve={curveLinear}
 						className="es-metric-previous"
 					/>
 					<LinePath
 						data={rows}
 						x={xOf}
 						y={yOf}
-						curve={curveMonotoneX}
+						curve={curveLinear}
 						className="es-metric-line"
 					/>
 					{rows.length === 1 && !visible && (

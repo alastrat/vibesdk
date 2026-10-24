@@ -82,10 +82,10 @@
 	height: 6px;
 	width: 6px;
 	border-radius: 50%;
-	background: #7056db;
+	background: #1955e6;
 }
 .ea-chart-caption .ea-prior-dot {
-	background: #a3a9b7;
+	background: #aac4ff;
 }
 .ea-chart-caption small {
 	margin-left: auto;
@@ -223,7 +223,7 @@
 .ea-weekday i {
 	display: block;
 	height: 100%;
-	background: #8b78df;
+	background: #1955e6;
 	border-radius: 3px;
 }
 .ea-weekday b {
@@ -253,7 +253,7 @@
 .ea-progress i {
 	display: block;
 	height: 100%;
-	background: #7056db;
+	background: #1955e6;
 }
 .ea-customers {
 	grid-column: 1/-1;
@@ -338,7 +338,102 @@
 }
 /* Analytics uses distinct metric cards instead of the legacy borderless report. */
 .estori-store .ea-dashboard .es-panel {
- border: 1px solid var(--es-line);
- background: var(--es-surface);
- border-radius: 12px;
+	border: 1px solid var(--es-line);
+	background: var(--es-surface);
+	border-radius: 12px;
+}
+
+.ea-overview-grid {
+	grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+	gap: 16px;
+}
+.ea-dashboard {
+	gap: 16px;
+}
+.estori-store .ea-dashboard .es-panel {
+	border-radius: 16px;
+	box-shadow: 0 1px 2px #00000006;
+}
+.ea-hero-top {
+	padding: 18px 18px 8px;
+	justify-content: flex-start;
+	align-items: flex-start;
+	gap: 24px;
+}
+.ea-hero-value {
+	font-size: 30px;
+	letter-spacing: -0.035em;
+}
+.ea-hero .es-metric-chart {
+	width: calc(100% - 28px);
+	margin: 0 14px;
+}
+.ea-prior-value {
+	color: #919198;
+}
+.ea-prior-value .ea-eyebrow {
+	color: var(--es-ink);
+}
+.ea-metric-picker {
+	margin-left: auto;
+}
+.ea-chart-caption {
+	padding: 8px 18px 16px;
+}
+.ea-positive {
+	border-radius: 4px;
+	background: #e8f6ed;
+	padding: 3px 5px;
+	color: #218050;
+}
+.ea-negative {
+	border-radius: 4px;
+	background: #fceeed;
+	padding: 3px 5px;
+}
+.ea-change-caption {
+	font-size: 10px;
+}
+.ea-snapshot {
+	padding: 18px;
+}
+.ea-snapshot > strong {
+	margin-top: 16px;
+	font-size: 30px;
+}
+.ea-stat {
+	padding: 16px;
+}
+.ea-stat > strong {
+	font-size: 26px;
+}
+.ea-stat > p {
+	margin-top: 8px;
+}
+.ea-detail-grid .es-metric-chart {
+	padding: 12px;
+}
+.ea-test-notice {
+	padding: 8px 12px;
+	border-radius: 8px;
+	font-size: 11px;
+}
+@media (max-width: 1100px) {
+	.ea-overview-grid {
+		grid-template-columns: minmax(0, 2fr) minmax(200px, 1fr);
+	}
+	.ea-metric-picker {
+		margin-left: 0;
+	}
+}
+@media (max-width: 760px) {
+	.ea-overview-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.ea-hero-top {
+		gap: 12px 24px;
+	}
+	.ea-metric-picker {
+		flex-wrap: wrap;
+	}
 }

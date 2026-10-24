@@ -223,6 +223,16 @@ export function AnalyticsPanel({
 								/>
 							)}
 						</div>
+						{compare && (
+							<div className="ea-prior-value">
+								<span className="ea-eyebrow">
+									{t('Previous period')}
+								</span>
+								<strong className="ea-hero-value">
+									{active.format(priorValue)}
+								</strong>
+							</div>
+						)}
 						<div
 							className="ea-metric-picker"
 							role="group"
@@ -300,7 +310,19 @@ export function AnalyticsPanel({
 					</p>
 				</section>
 			</div>
-			<DeployedStoreAnalytics appId={appId} userId={userId} days={report.trend.length} mode={mode} paidCents={report.paidCents} customerCount={report.customers.filter(customer=>customer.paidCents>0).length}/>
+			<DeployedStoreAnalytics
+				compare={compare}
+				appId={appId}
+				userId={userId}
+				days={report.trend.length}
+				mode={mode}
+				paidCents={report.paidCents}
+				customerCount={
+					report.customers.filter(
+						(customer) => customer.paidCents > 0,
+					).length
+				}
+			/>
 			<div className="ea-stat-grid">
 				{statCards.map((stat) => (
 					<section className="es-panel ea-stat" key={stat.label}>
@@ -339,7 +361,7 @@ export function AnalyticsPanel({
 						}
 						formatValue={count}
 						compact
-						color="#7056db"
+						color="#1955e6"
 					/>
 				</section>
 				<section className="es-panel">
@@ -363,7 +385,7 @@ export function AnalyticsPanel({
 						}
 						formatValue={count}
 						compact
-						color="#d18a42"
+						color="#29a875"
 					/>
 				</section>
 			</div>
