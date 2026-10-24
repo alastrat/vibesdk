@@ -12,6 +12,7 @@ import { analyticsCsv, comparisonChange } from './analytics-export';
 import type { aggregateOrders } from './report';
 import { MetricChart } from './metric-chart';
 import './analytics-panel.css';
+import { DeployedStoreAnalytics } from './deployed-analytics';
 
 type Report = ReturnType<typeof aggregateOrders>;
 type Metric = 'paidCents' | 'paidOrders' | 'average';
@@ -76,10 +77,14 @@ export function AnalyticsPanel({
 	report,
 	previous,
 	mode,
+	appId,
+	userId,
 }: {
 	report: Report;
 	previous: Report;
 	mode: 'live' | 'test';
+	appId: string;
+	userId: string;
 }) {
 	useI18n();
 	const [metric, setMetric] = useState<Metric>('paidCents');
@@ -295,6 +300,7 @@ export function AnalyticsPanel({
 					</p>
 				</section>
 			</div>
+			<DeployedStoreAnalytics appId={appId} userId={userId} days={report.trend.length} mode={mode} paidCents={report.paidCents} customerCount={report.customers.filter(customer=>customer.paidCents>0).length}/>
 			<div className="ea-stat-grid">
 				{statCards.map((stat) => (
 					<section className="es-panel ea-stat" key={stat.label}>
@@ -455,7 +461,7 @@ export function AnalyticsPanel({
 			</div>
 			<p className="ea-footnote">
 				{t(
-					'Metrics use order creation dates in UTC and their current payment status. Repeat customers are measured within this period. Traffic, acquisition costs and subscription revenue need additional tracking.',
+					'Order metrics use creation dates in UTC and current payment status. Repeat customers are measured within the selected period.',
 				)}
 			</p>
 		</div>

@@ -9,6 +9,7 @@ import type { StoreHost } from '../../services/live-stores/hosts';
 import { createLogger } from '../../logger';
 import { handleStorePlatform, matchLivePlatformPath } from './store-platform';
 import { plainPage } from './plain-page';
+import { collectStorePage } from '../../services/store-analytics/service';
 import { serveStorePage, shopperLocale } from '../../services/store-translations/serve-context';
 
 const logger = createLogger('LiveStore');
@@ -36,7 +37,11 @@ export async function handleLiveStore(request: Request, env: Env, ctx: Execution
 	const forwarded = new URL(`${SPACE_LIVE_PATH}${url.pathname}${url.search}`, url.origin);
 	const space = namespace.get(namespace.idFromName(store.appId));
 	try {
-		return await serveStorePage(request, env, ctx, { appId: store.appId, basePath: '', pageUrl: url }, (page) => space.fetch(new Request(forwarded.toString(), page)));
+		const response = await serveStorePage(request, env, ctx, { appId: store.appId, basePath: '', pageUrl: url }, (page) => space.fetch(new Request(forwarded.toString(), page)));
+		ctx.waitUntil(collectStorePage(request, response, env, store.appId).catch(() => {
+			logger.warn('Store traffic could not be recorded', { appId: store.appId });
+		}));
+		return response;
 	} catch (error) {
 		logger.error('Live store could not be served', { appId: store.appId, error });
 		return plainPage(await shopperLocale(request, env, store.appId), 503, UNAVAILABLE_TITLE, UNAVAILABLE_MESSAGE);

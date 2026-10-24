@@ -9,6 +9,8 @@ import type { SessionTelemetry } from '../shared/types/telemetry.js';
 export type { SecretTemplate } from 'worker/types/secretsTemplates';
 export type { StorePublicationStatus, StorePublicationSummary, StoreWorkspaceProducts, StoreWorkspaceProduct, StoreWorkspaceVariant } from '../shared/types/store-workspace';
 
+export type { StoreTrafficAnalytics, StoreTrafficBreakdown, StoreTrafficBucket, StoreTrafficEvent } from '../shared/types/store-analytics';
+
 // Base API Response Types
 export type { ControllerResponse, ApiResponse } from 'worker/api/controllers/types';
 

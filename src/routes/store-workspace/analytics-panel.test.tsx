@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('./deployed-analytics',()=>({DeployedStoreAnalytics:()=>null}));
 import type { SellerOrderRow } from '@/api-types';
 import { aggregateOrders, reportingWindow } from './report';
 import { AnalyticsPanel } from './analytics-panel';
@@ -43,7 +44,7 @@ describe('analytics comparisons and export', () => {
 					reportingWindow(7, '2026-10-17'),
 					'test',
 				)}
-				mode="test"
+				mode="test" appId="a" userId="owner"
 			/>,
 		);
 		for (const label of [

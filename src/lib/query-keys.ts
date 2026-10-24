@@ -156,6 +156,7 @@ export const queryKeys = {
 			products: (query: string) => [...queryKeys.account.all, 'catalog', query] as const,
 		},
 		/** The seller's orders: never persisted, like the rest of `account`. */
+		storeAnalytics: (userId: string, appId: string, days: number, mode: 'live' | 'test') => [...queryKeys.account.all, 'store-analytics', userId, appId, days, mode] as const,
 		sellerOrders: {
 			workspace: (userId: string, appId: string, days: number, throughDay: string, mode: 'live' | 'test' = 'live') => [...queryKeys.account.sellerOrders.all(), 'workspace', userId, appId, days, throughDay, mode] as const,
 			all: () => [...queryKeys.account.all, 'seller-orders'] as const,

@@ -383,3 +383,7 @@
 .workspace-stores-empty-panel { padding: 28px 20px; }
 .workspace-stores-empty-panel > div { border: 0; min-height: 220px; padding: 20px; gap: 12px; box-shadow: none; }
 .workspace-discover-heading { border-bottom: 1px solid var(--color-kumo-line); padding-bottom: 24px; }
+/* The workspace sidebar meets the canvas without framing or divider rules. */
+.workspace-navigation [data-sidebar='content-container'],
+.workspace-navigation [data-sidebar='header'],
+.workspace-navigation [data-sidebar='footer'] { border: 0; }

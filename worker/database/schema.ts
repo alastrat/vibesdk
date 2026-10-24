@@ -1534,3 +1534,19 @@ export const discoverPurchases = sqliteTable('discover_purchases', {
     versionId: text('version_id').notNull().references(() => discoverVersions.id), orderId: text('order_id').notNull().unique().references(() => discoverCheckoutOrders.id),
     revoked: integer('revoked').notNull().default(0), createdAt: integer('created_at').notNull(),
 }, (table) => [index('discover_purchases_user_version_idx').on(table.userId, table.versionId), uniqueIndex('discover_purchase_active_buyer_entry').on(table.userId, table.entryId).where(sql`${table.revoked} = 0`)]);
+
+/** Anonymous document events from the published store gateway; never raw network identity. */
+export const storePageEvents = sqliteTable('store_page_events', {
+    id: text('id').primaryKey(),
+    appId: text('app_id').notNull().references(() => apps.id, { onDelete: 'cascade' }),
+    mode: text('mode', { enum: STORE_MODES }).notNull(),
+    visitorHash: text('visitor_hash').notNull(),
+    path: text('path').notNull(),
+    source: text('source').notNull(),
+    country: text('country').notNull(),
+    device: text('device', { enum: ['desktop', 'mobile', 'tablet'] }).notNull(),
+    createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+    appModeCreatedIdx: index('store_page_events_app_mode_created_idx').on(table.appId, table.mode, table.createdAt),
+    retentionIdx: index('store_page_events_created_idx').on(table.createdAt),
+}));

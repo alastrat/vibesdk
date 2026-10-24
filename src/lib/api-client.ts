@@ -1,3 +1,4 @@
+import type { StoreTrafficAnalytics } from '@/api-types';
 import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
 import type { StorePublicationStatus, StoreWorkspaceProducts } from '@/api-types';
@@ -683,6 +684,10 @@ class ApiClient {
 	/**
 	 * Get detailed app information for viewing
 	 */
+	async getStoreAnalytics(appId: string, options: {days: number; mode: 'live' | 'test'}): Promise<ApiResponse<StoreTrafficAnalytics>> {
+ return this.request<StoreTrafficAnalytics>(`/api/stores/${encodeURIComponent(appId)}/analytics?${new URLSearchParams({days:String(options.days),mode:options.mode})}`, {}, true);
+ }
+
 	async getAppDetails(appId: string): Promise<ApiResponse<AppDetailsData>> {
 		return this.request<AppDetailsData>(`/api/apps/${appId}`);
 	}

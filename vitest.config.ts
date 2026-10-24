@@ -58,6 +58,7 @@ export default defineWorkersConfig(async () => {
       '**/container/monitor-cli.test.ts',
       '**/cf-git/**',
       '**/sdk/test/**', // SDK tests run with bun test, not vitest
+      '**/scripts/seed-local-store-transactions.test.ts', // Local SQLite seeder uses bun:sqlite; run with bun test
       ...(runIntegrationTests ? [] : ['**/sdk/test/integration/**']),
     ],
   },

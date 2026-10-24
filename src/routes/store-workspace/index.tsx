@@ -376,6 +376,8 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 											key={`${app.id}:${mode}:${days}`}
 											report={report}
 											previous={previous}
+											appId={app.id}
+											userId={userId}
 											mode={mode}
 										/>
 									)}
