@@ -83,8 +83,19 @@ export class SellerOrderService extends BaseService {
                 .limit(1)
                 .get(),
         ]);
+        const productLines = page.length ? await this.database
+            .select({ orderId: schema.storeOrderItems.orderId, id: schema.storeOrderItems.productId, name: schema.storeOrderItems.name })
+            .from(schema.storeOrderItems)
+            .where(inArray(schema.storeOrderItems.orderId, page.map(row => row.id)))
+            .orderBy(asc(schema.storeOrderItems.lineNo)).all() : [];
+        const productsByOrder = new Map<string, Map<string, { id: string; name: string }>>();
+        for (const line of productLines) {
+            const products = productsByOrder.get(line.orderId) ?? new Map<string, { id: string; name: string }>();
+            if (!products.has(line.id)) products.set(line.id, { id: line.id, name: line.name });
+            productsByOrder.set(line.orderId, products);
+        }
         return {
-            orders: page.map((row) => ({ ...row, createdAt: row.createdAt.toISOString(), units: Number(row.units), ownUnits: Number(row.ownUnits), catalogUnits: Number(row.catalogUnits) })),
+            orders: page.map((row) => ({ ...row, products: [...(productsByOrder.get(row.id)?.values() ?? [])], createdAt: row.createdAt.toISOString(), units: Number(row.units), ownUnits: Number(row.ownUnits), catalogUnits: Number(row.catalogUnits) })),
             nextCursor: rows.length > limit && last ? keysetCursorOf(last.createdAt, last.id) : null,
             stores,
             hasTestOrders: Boolean(testOrder),

@@ -76,6 +76,7 @@ describe('seller orders on real SQL', () => {
 	it('counts units, what the seller ships and what Estori ships, leaving refunded lines out', async () => {
 		await sale({ id: 'mixed', hoursAgo: 1, lines: [['own', 2], ['own', 1, true], ['catalog', 3]] });
 		const [row] = (await new SellerOrderService(envWith(db)).listOrders({ sellerUserId: 'seller_1', view: 'all', mode: 'live' })).orders;
+		expect(row.products).toEqual([{id: 'p', name:'Item 1'}]);
 		expect(row).toMatchObject({ id: 'mixed', storeTitle: 'Northwind Tea', units: 6, ownUnits: 2, catalogUnits: 3, customerName: 'Ana Ruiz', totalCents: 4000, paymentStatus: 'paid', fulfillmentStatus: 'unfulfilled' });
 	});
 

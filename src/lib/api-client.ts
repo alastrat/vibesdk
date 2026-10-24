@@ -684,9 +684,15 @@ class ApiClient {
 	/**
 	 * Get detailed app information for viewing
 	 */
-	async getStoreAnalytics(appId: string, options: {days: number; mode: 'live' | 'test'}): Promise<ApiResponse<StoreTrafficAnalytics>> {
- return this.request<StoreTrafficAnalytics>(`/api/stores/${encodeURIComponent(appId)}/analytics?${new URLSearchParams({days:String(options.days),mode:options.mode})}`, {}, true);
- }
+	async getStoreAnalytics(
+		appId: string,
+		options: { days: number; mode: 'live' | 'test'; throughDay?: string; productId?: string },
+	): Promise<ApiResponse<StoreTrafficAnalytics>> {
+		const params = new URLSearchParams({ days: String(options.days), mode: options.mode });
+		if (options.throughDay) params.set('through', options.throughDay);
+		if (options.productId) params.set('product', options.productId);
+		return this.request<StoreTrafficAnalytics>(`/api/stores/${encodeURIComponent(appId)}/analytics?${params}`, {}, true);
+	}
 
 	async getAppDetails(appId: string): Promise<ApiResponse<AppDetailsData>> {
 		return this.request<AppDetailsData>(`/api/apps/${appId}`);

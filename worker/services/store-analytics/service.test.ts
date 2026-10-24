@@ -341,6 +341,120 @@ describe('store analytics on real migration SQL', () => {
 			raw.close();
 		}
 	});
+	it('filters exact products and historical UTC days without duplicating mixed orders or changing visits', async () => {
+		const start = Date.parse('2026-10-23T00:00:00Z') / 1000;
+		for (const [id, stamp] of [
+			['before', start - 1],
+			['start', start],
+			['last', start + 86399],
+			['after', start + 86400],
+		] as const) {
+			await testDb
+				.prepare(
+					'INSERT INTO store_page_events VALUES (?,?,?,?,?,?,?,?,?)',
+				)
+				.bind(
+					id,
+					'a',
+					'test',
+					id,
+					'/',
+					'Direct',
+					'CO',
+					'desktop',
+					stamp,
+				)
+				.run();
+		}
+		for (const [id, product, seller, mode, stamp] of [
+			['match', 'p', 'owner', 'test', start + 3600],
+			['prefix', 'prefix', 'owner', 'test', start + 3600],
+			['other', 'p', 'other', 'test', start + 3600],
+			['live', 'p', 'owner', 'live', start + 3600],
+			['next', 'p', 'owner', 'test', start + 86400],
+		] as const) {
+			await testDb
+				.prepare(
+					"INSERT INTO store_checkouts(id,mode,app_id,commit_hash,seller_user_id,ship_to_country,priced_cart,subtotal_cents,shipping_cents,total_cents,application_fee_cents,status,success_path,cancel_path,created_at,expires_at) VALUES (?,?,'a','commit',?,'CO',?,1000,0,1000,0,'expired','/','/',?,?)",
+				)
+				.bind(
+					id,
+					mode,
+					seller,
+					JSON.stringify({
+						lines: [
+							{ productId: product },
+							{ productId: product },
+							{ productId: 'mixed' },
+						],
+					}),
+					stamp,
+					stamp + 600,
+				)
+				.run();
+			await testDb
+				.prepare(
+					"INSERT INTO store_orders(id,app_id,mode,order_number,checkout_id,seller_user_id,subtotal_cents,shipping_cents,total_cents,application_fee_cents,refunded_cents,created_at,updated_at) VALUES (?,'a',?,(SELECT COALESCE(MAX(order_number),0)+1 FROM store_orders),?,?,1000,0,1000,0,150,?,?)",
+				)
+				.bind(id, mode, id, seller, stamp, stamp)
+				.run();
+			for (const line of [1, 2])
+				await testDb
+					.prepare(
+						"INSERT INTO store_order_items(order_id,line_no,kind,product_id,variant_id,name,quantity,unit_price_cents) VALUES (?,?,'own',?,'v','Product',1,500)",
+					)
+					.bind(id, line, product)
+					.run();
+		}
+		await testDb
+			.prepare(
+				"INSERT INTO store_checkouts(id,mode,app_id,commit_hash,seller_user_id,ship_to_country,priced_cart,subtotal_cents,shipping_cents,total_cents,application_fee_cents,status,success_path,cancel_path,created_at,expires_at) VALUES ('late','test','a','commit','owner','CO',?,1000,0,1000,0,'expired','/','/',?,?)",
+			)
+			.bind(
+				JSON.stringify({ lines: [{ productId: 'p' }] }),
+				start + 85500,
+				start + 86100,
+			)
+			.run();
+		const report = await aggregateStoreAnalytics(
+			testDb,
+			'a',
+			'owner',
+			1,
+			'test',
+			NOW,
+			{ throughDay: '2026-10-23', productId: 'p' },
+		);
+		expect(report.totals).toEqual({
+			pageViews: 2,
+			visitors: 2,
+			checkoutStarts: 2,
+			abandonedCheckouts: 2,
+			totalRefundedCents: 150,
+		});
+		expect(report.trend[0].date).toBe('2026-10-23');
+		expect(report.previous[0].pageViews).toBe(1);
+		const missing = await aggregateStoreAnalytics(
+			testDb,
+			'a',
+			'owner',
+			1,
+			'test',
+			NOW,
+			{ throughDay: '2026-10-23', productId: 'missing' },
+		);
+		expect(missing.totals).toMatchObject({
+			pageViews: 2,
+			checkoutStarts: 0,
+			totalRefundedCents: 0,
+		});
+		for (const throughDay of ['2026-02-30', '2026-10-25', 'garbage'])
+			await expect(
+				aggregateStoreAnalytics(testDb, 'a', 'owner', 1, 'test', NOW, {
+					throughDay,
+				}),
+			).rejects.toThrow('Invalid reporting');
+	});
 	it('records without retaining raw identity and removes expired events while preserving recent records', async () => {
 		const { raw, db } = database();
 		try {

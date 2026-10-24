@@ -53,6 +53,13 @@ import {
 } from './report';
 import './store-workspace.css';
 import { AnalyticsPanel } from './analytics-panel';
+import { AnalyticsToolbar } from './analytics-toolbar';
+import {
+	analyticsPeriod,
+	ordersForProduct,
+	productOptions,
+	ANALYTICS_WIDGETS,
+} from './analytics-filters';
 import { MetricChart } from './metric-chart';
 
 const sections = [
@@ -121,9 +128,19 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 	const section =
 		sections.find((item) => item.id === params.get('section')) ??
 		sections[0];
-	const days = [7, 30, 90].includes(Number(params.get('days')))
-		? Number(params.get('days'))
-		: 30;
+	const period = analyticsPeriod(params);
+	const productId =
+		section.id === 'analytics' ? (params.get('product') ?? '') : '';
+	const compare = params.get('compare') !== 'off';
+	const hiddenWidgets = ANALYTICS_WIDGETS.filter((widget) =>
+		params.get('hide')?.split(',').includes(widget),
+	);
+	const days =
+		section.id === 'analytics'
+			? period.days
+			: [7, 30, 90].includes(Number(params.get('days')))
+				? Number(params.get('days'))
+				: 30;
 	const setDays = (value: number) => {
 		const next = new URLSearchParams(params);
 		next.set('days', String(value));
@@ -131,7 +148,10 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 	};
 	const reporting = ['home', 'analytics', 'customers'].includes(section.id);
 	const mode = params.get('mode') === 'test' ? 'test' : 'live';
-	const throughDay = new Date().toISOString().slice(0, 10);
+	const throughDay =
+		section.id === 'analytics'
+			? period.to
+			: new Date().toISOString().slice(0, 10);
 	const window = reportingWindow(days, throughDay);
 	const fetchWindow =
 		section.id === 'analytics'
@@ -165,11 +185,22 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 		enabled: reporting,
 		retry: false,
 	});
+	const collection = useQuery({
+		queryKey: queryKeys.account.storeProducts(app.id, userId),
+		queryFn: () =>
+			unwrap(
+				apiClient.getStoreProducts(app.id),
+				t("Couldn't load your products"),
+			),
+		enabled: section.id === 'analytics',
+		retry: false,
+	});
+	const filteredOrders = ordersForProduct(orders.data ?? [], productId);
 	const report = orders.data
-		? aggregateOrders(orders.data, app.id, window, mode)
+		? aggregateOrders(filteredOrders, app.id, window, mode)
 		: null;
 	const previous = aggregateOrders(
-		orders.data ?? [],
+		filteredOrders,
 		app.id,
 		previousWindow,
 		mode,
@@ -225,84 +256,107 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 				</nav>
 			</div>
 			<div className="es-main">
-				<div className="es-page-heading">
-					<div>
-						<h1>
-							{section.id === 'home'
-								? t('Make yourself at home.')
-								: t(section.label)}
-						</h1>
-						<p>
-							{t(
-								{
-									home: msg(
-										'Your store, your next idea, and the orders behind it.',
-									),
-									analytics: msg(
-										'A closer look at your paid orders.',
-									),
-									products: msg(
-										'Your published collection, in one place.',
-									),
-									customers: msg(
-										'The people behind your orders.',
-									),
-									payments: msg(
-										'Order payments, with a clear view of their status.',
-									),
-									emails: msg(
-										'Make every message feel like your store.',
-									),
-									translations: msg(
-										'Welcome shoppers in their language.',
-									),
-									settings: msg(
-										'Your store, ready for the world.',
-									),
-								}[section.id],
+				{section.id === 'analytics' ? (
+					<>
+						<h1 className="sr-only">{t('Analytics')}</h1>
+						<AnalyticsToolbar
+							period={period}
+							appId={app.id}
+							appTitle={app.title || t('Untitled store')}
+							userId={userId}
+							mode={mode}
+							products={productOptions(
+								orders.data ?? [],
+								collection.data?.products,
 							)}
-						</p>
-					</div>
-					{reporting && (
-						<div className="es-report-controls">
-							<div className="es-range">
-								<span>{t('Data mode')}</span>
-								<Select
-									aria-label={t('Data mode')}
-									value={mode}
-									items={{
-										live: t('Live sales'),
-										test: t('Test data'),
-									}}
-									onValueChange={(value) => {
-										const next = new URLSearchParams(
-											params,
-										);
-										if (value === 'test')
-											next.set('mode', 'test');
-										else next.delete('mode');
-										setParams(next);
-									}}
-								/>
-							</div>
-							<div className="es-range">
-								<span>{t('Reporting period')}</span>
-								<Select
-									aria-label={t('Reporting period')}
-									value={String(days)}
-									items={{
-										'7': t('Last 7 days'),
-										'30': t('Last 30 days'),
-										'90': t('Last 90 days'),
-									}}
-									onValueChange={(value) => {
-										if (value) setDays(Number(value));
-									}}
-								/>
-							</div>
+							productsError={collection.isError}
+							onRetryProducts={() => void collection.refetch()}
+							productId={productId}
+							compare={compare}
+							hiddenWidgets={hiddenWidgets}
+							report={report}
+						/>
+					</>
+				) : (
+					<div className="es-page-heading">
+						<div>
+							<h1>
+								{section.id === 'home'
+									? t('Make yourself at home.')
+									: t(section.label)}
+							</h1>
+							<p>
+								{t(
+									{
+										home: msg(
+											'Your store, your next idea, and the orders behind it.',
+										),
+										analytics: msg(
+											'A closer look at your paid orders.',
+										),
+										products: msg(
+											'Your published collection, in one place.',
+										),
+										customers: msg(
+											'The people behind your orders.',
+										),
+										payments: msg(
+											'Order payments, with a clear view of their status.',
+										),
+										emails: msg(
+											'Make every message feel like your store.',
+										),
+										translations: msg(
+											'Welcome shoppers in their language.',
+										),
+										settings: msg(
+											'Your store, ready for the world.',
+										),
+									}[section.id],
+								)}
+							</p>
 						</div>
-					)}
-				</div>
+						{reporting && (
+							<div className="es-report-controls">
+								<div className="es-range">
+									<span>{t('Data mode')}</span>
+									<Select
+										aria-label={t('Data mode')}
+										value={mode}
+										items={{
+											live: t('Live sales'),
+											test: t('Test data'),
+										}}
+										onValueChange={(value) => {
+											const next = new URLSearchParams(
+												params,
+											);
+											if (value === 'test')
+												next.set('mode', 'test');
+											else next.delete('mode');
+											setParams(next);
+										}}
+									/>
+								</div>
+								<div className="es-range">
+									<span>{t('Reporting period')}</span>
+									<Select
+										aria-label={t('Reporting period')}
+										value={String(days)}
+										items={{
+											'7': t('Last 7 days'),
+											'30': t('Last 30 days'),
+											'90': t('Last 90 days'),
+										}}
+										onValueChange={(value) => {
+											if (value) setDays(Number(value));
+										}}
+									/>
+								</div>
+							</div>
+						)}
+					</div>
+				)}
 				{reporting && section.id !== 'analytics' && mode === 'test' && (
 					<div className="ea-test-notice" role="status">
 						<strong>{t('Test data')}</strong>
@@ -348,14 +402,16 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 					</>
 				) : (
 					<>
-						<p className="es-period">
-							{t('{start} – {end}, including today · UTC', {
-								start: date(
-									new Date(window.start).toISOString(),
-								),
-								end: date(throughDay),
-							})}
-						</p>
+						{section.id !== 'analytics' && (
+							<p className="es-period">
+								{t('{start} – {end}, including today · UTC', {
+									start: date(
+										new Date(window.start).toISOString(),
+									),
+									end: date(throughDay),
+								})}
+							</p>
+						)}
 						{orders.isPending ? (
 							<Loading />
 						) : orders.isError ? (
@@ -373,7 +429,11 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 									)}
 									{section.id === 'analytics' && (
 										<AnalyticsPanel
-											key={`${app.id}:${mode}:${days}`}
+											key={`${app.id}:${mode}:${days}:${throughDay}:${productId}`}
+											compare={compare}
+											hiddenWidgets={hiddenWidgets}
+											throughDay={throughDay}
+											productId={productId}
 											report={report}
 											previous={previous}
 											appId={app.id}

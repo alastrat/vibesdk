@@ -47,9 +47,29 @@ describe('private store analytics endpoint', () => {
 		};
 		expect(live.data.totals.pageViews).toBe(0);
 	});
+	it('accepts single-day historical ranges', async () => {
+		const yesterday = new Date(Date.now() - 86400000)
+			.toISOString()
+			.slice(0, 10);
+		const response = await call(`?days=1&mode=test&through=${yesterday}`);
+		expect(response.status).toBe(200);
+		const body = (await response.json()) as {
+			data: { totals: { pageViews: number }; trend: { date: string }[] };
+		};
+		expect(body.data.totals.pageViews).toBe(0);
+		expect(body.data.trend).toHaveLength(1);
+		expect(body.data.trend[0].date).toBe(yesterday);
+	});
 	it('refuses another owner and validates reporting parameters', async () => {
 		expect((await call('?days=7', 'other')).status).toBe(404);
-		for (const query of ['?days=999', '?days=7&mode=all', '?days=NaN'])
+		for (const query of [
+			'?days=999',
+			'?days=7&mode=all',
+			'?days=NaN',
+			'?days=1&through=2026-02-30',
+			'?days=1&through=2999-01-01',
+			'?days=1&product=',
+		])
 			expect((await call(query)).status).toBe(400);
 	});
 });

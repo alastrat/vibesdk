@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-vi.mock('./deployed-analytics',()=>({DeployedStoreAnalytics:()=>null}));
+vi.mock('./deployed-analytics', () => ({ DeployedStoreAnalytics: () => null }));
 import type { SellerOrderRow } from '@/api-types';
 import { aggregateOrders, reportingWindow } from './report';
 import { AnalyticsPanel } from './analytics-panel';
@@ -28,7 +28,7 @@ describe('analytics comparisons and export', () => {
 		expect(comparisonChange(150, 100)).toBe(0.5);
 		expect(comparisonChange(0, 100)).toBe(-1);
 	});
-	it('renders the populated metric grid and marks test data clearly', () => {
+	it('renders the populated metric grid without the old header banner', () => {
 		const report = aggregateOrders(
 			[row],
 			'a',
@@ -44,11 +44,12 @@ describe('analytics comparisons and export', () => {
 					reportingWindow(7, '2026-10-17'),
 					'test',
 				)}
-				mode="test" appId="a" userId="owner"
+				mode="test"
+				appId="a"
+				userId="owner"
 			/>,
 		);
 		for (const label of [
-			'Test data',
 			'Refund rate',
 			'Dispute rate',
 			'Sales by weekday',
@@ -56,6 +57,7 @@ describe('analytics comparisons and export', () => {
 			'Fulfillment overview',
 		])
 			expect(html).toContain(label);
+		expect(html).not.toContain('ea-test-notice');
 	});
 	it('exports the displayed test period as daily aggregates without shopper identities', () => {
 		const report = aggregateOrders(

@@ -320,6 +320,8 @@ export const SELLER_CARRIER_NAMES: Readonly<Record<Exclude<SellerCarrier, 'other
 
 /** An order in the seller's list. */
 export interface SellerOrderRow {
+	/** Distinct recorded products, for filtering whole orders containing a product. */
+	products?: { id: string; name: string }[];
 	id: string;
 	orderNumber: number;
 	mode: StoreMode;

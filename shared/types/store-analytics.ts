@@ -42,3 +42,10 @@ export interface StoreTrafficAnalytics {
 	/** IP/UA-based anonymous estimates, not authenticated shopper identities. */
 	estimatedVisitors: true;
 }
+
+/** Exact ISO calendar day; Date.parse alone normalizes impossible dates. */
+export function isAnalyticsDay(value: string): boolean {
+ if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+ const stamp = Date.parse(`${value}T00:00:00Z`);
+ return Number.isFinite(stamp) && new Date(stamp).toISOString().slice(0,10) === value;
+}

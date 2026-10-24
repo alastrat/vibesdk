@@ -1,3 +1,4 @@
+import { isAnalyticsDay } from '../../../../shared/types/store-analytics';
 import { msg } from '../../../../shared/i18n/translate';
 import type { StoreTrafficAnalytics } from '../../../../shared/types/store-analytics';
 import {
@@ -26,7 +27,19 @@ export class StoreAnalyticsController extends BaseController {
 		const params = new URL(request.url).searchParams;
 		const days = Number(params.get('days') ?? '30');
 		const mode = params.get('mode') ?? 'live';
-		if (![7, 30, 90].includes(days) || !['live', 'test'].includes(mode))
+		const throughDay = params.get('through') ?? undefined;
+		const productId = params.get('product') ?? undefined;
+		if (
+			!Number.isInteger(days) ||
+			days < 1 ||
+			days > 90 ||
+			!['live', 'test'].includes(mode) ||
+			(throughDay !== undefined &&
+				(!isAnalyticsDay(throughDay) ||
+					throughDay > new Date().toISOString().slice(0, 10))) ||
+			(productId !== undefined &&
+				(!productId.trim() || productId.length > 200))
+		)
 			return this.createErrorResponse(
 				msg('Invalid analytics period or mode'),
 				400,
@@ -38,6 +51,8 @@ export class StoreAnalyticsController extends BaseController {
 				context.user.id,
 				days,
 				mode as 'live' | 'test',
+				Date.now(),
+				{ throughDay, productId },
 			);
 			const response = this.createSuccessResponse(data);
 			response.headers.set('Cache-Control', 'private, no-store');

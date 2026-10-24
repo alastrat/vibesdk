@@ -1,3 +1,4 @@
+import { isAnalyticsDay } from '../../../shared/types/store-analytics';
 import type {
 	StoreTrafficAnalytics,
 	StoreTrafficBucket,
@@ -220,13 +221,20 @@ export async function aggregateStoreAnalytics(
 	days: number,
 	mode: Mode,
 	now = Date.now(),
+	filters: { throughDay?: string; productId?: string } = {},
 ): Promise<StoreTrafficAnalytics> {
 	if (
 		!Number.isInteger(days) ||
 		days < 1 ||
 		days > 90 ||
 		!['live', 'test'].includes(mode) ||
-		!Number.isFinite(now)
+		!Number.isFinite(now) ||
+		(filters.throughDay !== undefined &&
+			(!isAnalyticsDay(filters.throughDay) ||
+				filters.throughDay >
+					new Date(now).toISOString().slice(0, 10))) ||
+		(filters.productId !== undefined &&
+			(!filters.productId.trim() || filters.productId.length > 200))
 	)
 		throw new Error('Invalid reporting period or mode');
 	const owner = await db
@@ -234,7 +242,10 @@ export async function aggregateStoreAnalytics(
 		.bind(appId, ownerId)
 		.first<{ id: string }>();
 	if (!owner) throw new StoreAnalyticsAccessError();
-	const end = (Math.floor(now / 1000 / DAY) + 1) * DAY;
+	const through = filters.throughDay
+		? Date.parse(`${filters.throughDay}T00:00:00Z`)
+		: now;
+	const end = (Math.floor(through / 1000 / DAY) + 1) * DAY;
 	const start = end - days * DAY;
 	const previousStart = start - days * DAY;
 	const eventsWhere =
@@ -243,6 +254,14 @@ export async function aggregateStoreAnalytics(
 	const financialWhere =
 		'app_id=? AND seller_user_id=? AND mode=? AND created_at>=? AND created_at<?';
 	const financialValues = [appId, ownerId, mode, start, end];
+	const productValues = filters.productId ? [filters.productId] : [];
+	const checkoutProduct = filters.productId
+		? " AND EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(priced_cart) THEN priced_cart ELSE '{}' END, '$.lines') AS line WHERE json_extract(line.value, '$.productId')=?)"
+		: '';
+	const orderProduct = filters.productId
+		? ' AND EXISTS (SELECT 1 FROM store_order_items AS item WHERE item.order_id=store_orders.id AND item.product_id=?)'
+		: '';
+
 	const breakdown = async (
 		column: 'source' | 'device' | 'country' | 'path',
 	): Promise<StoreTrafficBreakdown[]> =>
@@ -281,21 +300,25 @@ export async function aggregateStoreAnalytics(
 			.all<TrafficRow>(),
 		db
 			.prepare(
-				`SELECT date(created_at,'unixepoch') AS date,COUNT(*) AS checkoutStarts FROM store_checkouts WHERE ${financialWhere} AND status IN ('open','completed','expired') GROUP BY date`,
+				`SELECT date(created_at,'unixepoch') AS date,COUNT(*) AS checkoutStarts FROM store_checkouts WHERE ${financialWhere} AND status IN ('open','completed','expired')${checkoutProduct} GROUP BY date`,
 			)
-			.bind(appId, ownerId, mode, previousStart, end)
+			.bind(appId, ownerId, mode, previousStart, end, ...productValues)
 			.all<CheckoutRow>(),
 		db
 			.prepare(
-				`SELECT COUNT(*) AS count FROM store_checkouts WHERE ${financialWhere} AND status IN ('open','expired') AND created_at<?`,
+				`SELECT COUNT(*) AS count FROM store_checkouts WHERE ${financialWhere} AND status IN ('open','expired') AND created_at<?${checkoutProduct}`,
 			)
-			.bind(...financialValues, Math.floor(now / 1000) - 1800)
+			.bind(
+				...financialValues,
+				Math.floor(now / 1000) - 1800,
+				...productValues,
+			)
 			.first<{ count: number }>(),
 		db
 			.prepare(
-				`SELECT COALESCE(SUM(refunded_cents),0) AS cents FROM store_orders WHERE ${financialWhere}`,
+				`SELECT COALESCE(SUM(refunded_cents),0) AS cents FROM store_orders WHERE ${financialWhere}${orderProduct}`,
 			)
-			.bind(...financialValues)
+			.bind(...financialValues, ...productValues)
 			.first<{ cents: number }>(),
 		breakdown('source'),
 		breakdown('device'),

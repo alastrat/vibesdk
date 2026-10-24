@@ -14,6 +14,8 @@ export function DeployedStoreAnalytics({
 	paidCents,
 	customerCount,
 	compare,
+	throughDay,
+	productId,
 }: {
 	appId: string;
 	userId: string;
@@ -22,13 +24,27 @@ export function DeployedStoreAnalytics({
 	paidCents: number;
 	customerCount: number;
 	compare: boolean;
+	throughDay?: string;
+	productId?: string;
 }) {
 	useI18n();
 	const query = useQuery({
-		queryKey: queryKeys.account.storeAnalytics(userId, appId, days, mode),
+		queryKey: queryKeys.account.storeAnalytics(
+			userId,
+			appId,
+			days,
+			mode,
+			throughDay,
+			productId,
+		),
 		queryFn: () =>
 			unwrap(
-				apiClient.getStoreAnalytics(appId, { days, mode }),
+				apiClient.getStoreAnalytics(appId, {
+					days,
+					mode,
+					throughDay,
+					productId,
+				}),
 				t("Couldn't load store analytics. Try again in a moment."),
 			),
 		enabled: !!userId,
@@ -56,7 +72,7 @@ export function DeployedStoreAnalytics({
 		);
 	return (
 		<TrafficWidgets
-			key={`${appId}:${days}:${mode}`}
+			key={`${appId}:${days}:${mode}:${throughDay}:${productId}`}
 			data={query.data}
 			compare={compare}
 			paidCents={paidCents}

@@ -1,0 +1,176 @@
+.ea-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	margin-bottom: 2px;
+}
+.ea-filters button {
+	min-height: 32px;
+	height: 32px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	white-space: nowrap;
+	border: 1px solid light-dark(#dedee1, #3e4148);
+	background: var(--es-surface);
+	box-shadow: 0 1px 2px #00000005;
+}
+.ea-date-group {
+	display: flex;
+	align-items: center;
+	max-width: 100%;
+}
+.ea-date-group > div:first-child button {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.ea-date-group > button:last-child {
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+	margin-left: -1px;
+	color: var(--es-muted);
+}
+.ea-product-filter {
+	min-width: 0;
+	max-width: 210px;
+}
+.ea-product-filter button {
+	max-width: 100%;
+}
+.ea-product-filter button > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ea-store-value {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+}
+.ea-store-value svg {
+	flex-shrink: 0;
+	color: var(--es-muted);
+}
+.ea-store-value span {
+	max-width: 160px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ea-filter-test button {
+	color: light-dark(#895e13, #e4b560);
+	background: light-dark(#fffaf0, #31291b);
+}
+.ea-customize {
+	margin-left: auto;
+}
+.ea-customize > button {
+	background: light-dark(#f2f2f2, #27292c);
+	border-color: transparent;
+	box-shadow: none;
+}
+.ea-filter-popover {
+	z-index: 70;
+	max-width: calc(100vw - 24px);
+	border-radius: 12px;
+	padding: 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	font-size: 13px;
+	box-shadow: 0 8px 32px #00000014;
+}
+.ea-filter-popover h2 {
+	font-size: 14px;
+	font-weight: 600;
+}
+.ea-date-popover {
+	width: 360px;
+}
+.ea-date-inputs {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 12px;
+}
+.ea-date-inputs input {
+	min-width: 0;
+	width: 100%;
+	font-size: 13px;
+}
+.ea-filter-actions {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+}
+.ea-filter-error {
+	color: #b62836;
+	font-size: 12px;
+}
+.ea-customize-popover {
+	width: 300px;
+}
+.ea-widget-options {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px 0;
+	border-block: 1px solid light-dark(#e8e8e8, #34363b);
+}
+.ea-widget-options > span {
+	color: light-dark(#74777b, #acafb4);
+	font-size: 12px;
+}
+.ea-timezone-popover {
+	width: 270px;
+}
+.ea-timezone-popover strong {
+	font-size: 18px;
+}
+.ea-timezone-popover p {
+	line-height: 1.6;
+	color: light-dark(#74777b, #acafb4);
+}
+@media (max-width: 600px) {
+	.ea-date-group {
+		width: 100%;
+	}
+	.ea-date-group > button:last-child {
+		flex: 1;
+		min-width: 0;
+		font-size: 12px;
+	}
+	.ea-filters {
+		gap: 8px 6px;
+	}
+	.ea-filters button {
+		font-size: 12px;
+	}
+	.ea-store-value span {
+		max-width: 125px;
+	}
+	.ea-product-filter {
+		max-width: 150px;
+	}
+}
+
+.ea-filters button:focus-visible {
+	outline: 2px solid #1955e6;
+	outline-offset: 2px;
+}
+.ea-filters .ea-filter-test button {
+	background: light-dark(#fffaf0, #31291b);
+	border-color: light-dark(#eadfc8, #5b492a);
+}
+
+.ea-date-value {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.ea-date-group > button > svg {
+	flex-shrink: 0;
+}
