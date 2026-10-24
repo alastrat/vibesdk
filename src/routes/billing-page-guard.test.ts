@@ -111,7 +111,7 @@ describe('the billing page', () => {
 		const page = source('/src/routes/settings/billing.tsx');
 		expect(page).toContain('pastDueActionsFor(view)');
 		expect(page).toContain('{actions.payNow}');
-		expect(page).toContain('to={actions.updateCard.to}');
+		expect(page).toContain('href={actions.updateCard.to}');
 		expect(page).toContain('{actions.updateCard.label}');
 		expect(page).toContain('loading={paying}');
 		expect(page).toContain('onClick={onPayNow}');

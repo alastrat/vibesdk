@@ -1,8 +1,12 @@
 import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Button, Input, Loader, Table } from '@cloudflare/kumo';
+import { Badge, Button, Dialog, Input, Loader, Select, Table } from '@cloudflare/kumo';
 import {
+	EnvelopeIcon,
+	TranslateIcon,
+	GearSixIcon,
+	XIcon,
 	ArrowLeftIcon,
 	ArrowUpRightIcon,
 	ChartLineUpIcon,
@@ -23,7 +27,10 @@ import {
 	YAxis,
 } from 'recharts';
 import type { AppDetailsData, SellerOrderRow } from '@/api-types';
-import { sellerOrderPath } from '@/api-types';
+import { StoreEmailsPanel } from '@/routes/emails/emails';
+import { StoreTranslationsPanel } from '@/routes/translations/translations';
+import { StoreProductsPanel } from './products';
+import { StoreSettingsPanel } from './settings';
 import { pageTitle } from '@/brand';
 import { useAuth } from '@/contexts/auth-context';
 import { useApp } from '@/hooks/use-app';
@@ -52,7 +59,11 @@ const sections = [
 	{ id: 'products', label: msg('Products'), icon: PackageIcon },
 	{ id: 'customers', label: msg('Customers'), icon: UsersIcon },
 	{ id: 'payments', label: msg('Payments'), icon: CreditCardIcon },
+	{ id: 'emails', label: msg('Emails'), icon: EnvelopeIcon },
+	{ id: 'translations', label: msg('Translations'), icon: TranslateIcon },
+	{ id: 'settings', label: msg('Settings'), icon: GearSixIcon },
 ] as const;
+const storeOrderPath = (appId: string, orderId: string) => `/stores/${encodeURIComponent(appId)}/orders/${encodeURIComponent(orderId)}`;
 const money = (cents: number) => formatCents(cents, getLocale());
 const date = (value: string, compact = false) =>
 	new Date(value).toLocaleDateString(INTL_LOCALE[getLocale()], {
@@ -108,6 +119,7 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 		sections.find((item) => item.id === params.get('section')) ??
 		sections[0];
 	const [days, setDays] = useState(30);
+	const reporting = ['home', 'analytics', 'customers', 'payments'].includes(section.id);
 	const throughDay = new Date().toISOString().slice(0, 10);
 	const window = reportingWindow(days, throughDay);
 	const orders = useQuery({
@@ -128,7 +140,7 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 					),
 				signal,
 			),
-		enabled: section.id !== 'products',
+		enabled: reporting,
 		retry: false,
 	});
 	const report = orders.data
@@ -142,6 +154,7 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 	return (
 		<div className="estori-store">
 			<title>{pageTitle(app.title || t('Store workspace'))}</title>
+			<div className="es-chrome">
 			<header className="es-header">
 				<div className="es-identity">
 					<Link
@@ -179,100 +192,49 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 					</Link>
 				))}
 			</nav>
-			<main className="es-main">
+			</div>
+			<div className="es-main">
 				<div className="es-page-heading">
 					<div>
-						<p className="es-eyebrow">
-							{app.title || t('Your store')}
-						</p>
+
 						<h1>
 							{section.id === 'home'
 								? t('Make yourself at home.')
 								: t(section.label)}
 						</h1>
-						<p>
-							{section.id === 'home'
-								? t(
-										'Your store, your next idea, and the orders behind it.',
-									)
-								: section.id === 'analytics'
-									? t('A closer look at your paid orders.')
-									: section.id === 'products'
-										? t(
-												'Shape your collection in the store builder.',
-											)
-										: section.id === 'customers'
-											? t(
-													'The people behind your orders.',
-												)
-											: t(
-													'Order payments, with a clear view of their status.',
-												)}
-						</p>
+						<p>{t({
+							home: msg('Your store, your next idea, and the orders behind it.'),
+							analytics: msg('A closer look at your paid orders.'),
+							products: msg('Your published collection, in one place.'),
+							customers: msg('The people behind your orders.'),
+							payments: msg('Order payments, with a clear view of their status.'),
+							emails: msg('Make every message feel like your store.'),
+							translations: msg('Welcome shoppers in their language.'),
+							settings: msg('Your store, ready for the world.'),
+						}[section.id])}</p>
 					</div>
-					{section.id !== 'products' && (
+					{reporting && (
 						<label className="es-range">
 							<span>{t('Reporting period')}</span>
-							<select
-								value={days}
-								onChange={(event) =>
-									setDays(Number(event.target.value))
-								}
-							>
-								<option value={7}>{t('Last 7 days')}</option>
-								<option value={30}>{t('Last 30 days')}</option>
-								<option value={90}>{t('Last 90 days')}</option>
-							</select>
+							<Select aria-label={t('Reporting period')} value={String(days)}
+								items={{ '7': t('Last 7 days'), '30': t('Last 30 days'), '90': t('Last 90 days') }}
+								onValueChange={(value) => { if (value) setDays(Number(value)); }} />
 						</label>
 					)}
 				</div>
 				{section.id === 'home' && (
-					<div className="es-feature-grid">
-						<section className="es-editorial">
-							<span className="es-eyebrow">
-								{t('Your next chapter')}
-							</span>
-							<h2>{t('Your ideas. A world of possibility.')}</h2>
-							<p>
-								{t(
-									'Keep shaping a store that feels like you. Update your collection, refine your story, or try a new idea with Estori.',
-								)}
-							</p>
-							<Link
-								className="es-button es-button-primary"
-								to={`/chat/${app.id}`}
-							>
-								<SparkleIcon size={16} />
-								{t('Open store builder')}
-								<ArrowUpRightIcon size={14} />
-							</Link>
-							<div
-								className="es-editorial-art"
-								aria-hidden="true"
-							>
-								<StorefrontIcon weight="duotone" />
-							</div>
-						</section>
-						<section className="es-next">
-							<span className="es-icon-tile">
-								<PackageIcon size={24} />
-							</span>
-							<h2>{t('Make room for something new.')}</h2>
-							<p>
-								{t(
-									'Explore products from the Estori catalog for your next collection.',
-								)}
-							</p>
-							<Link className="es-text-link" to="/catalog">
-								{t('Explore the catalog')}
-								<ArrowUpRightIcon size={15} />
-							</Link>
-						</section>
+					<div className="es-quick-actions">
+						<Link className="es-button" to={`/chat/${app.id}`}><SparkleIcon size={18} />{t('Open store builder')}<ArrowUpRightIcon size={16} /></Link>
+						<Link className="es-button" to={sectionLink('products')}><PackageIcon size={18} />{t('Manage products')}</Link>
+						<Link className="es-button" to={sectionLink('settings')}><GearSixIcon size={18} />{t('Publishing and domains')}</Link>
 					</div>
 				)}
 				{section.id === 'products' ? (
-					<Products appId={app.id} />
-				) : (
+					<StoreProductsPanel appId={app.id} />
+				) : section.id === 'emails' ? <StoreEmailsPanel appId={app.id} />
+				: section.id === 'translations' ? <StoreTranslationsPanel appId={app.id} />
+				: section.id === 'settings' ? <StoreSettingsPanel app={app} />
+				: (
 					<>
 						<p className="es-period">
 							{t(
@@ -371,10 +333,11 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 										<OrderTable
 											key={section.id}
 											rows={report.orders}
+											appId={app.id}
 										/>
 									)}
 									{section.id === 'customers' && (
-										<Customers rows={report.customers} />
+										<Customers rows={report.customers} orders={report.orders} appId={app.id} />
 									)}
 									{section.id === 'payments' && (
 										<div className="es-note">
@@ -420,7 +383,7 @@ function Workspace({ app, userId }: { app: AppDetailsData; userId: string }) {
 						</Link>
 					</div>
 				)}
-			</main>
+			</div>
 		</div>
 	);
 }
@@ -518,14 +481,15 @@ function SalesChart({
 						tickLine={false}
 						axisLine={false}
 						minTickGap={45}
-						tick={{ fill: 'var(--es-muted)', fontSize: 11 }}
+						tick={{ fill: 'var(--es-muted)', fontSize: 12 }}
 					/>
 					<YAxis
+						orientation="right"
 						tickFormatter={(value) => money(Number(value))}
 						tickLine={false}
 						axisLine={false}
 						width={78}
-						tick={{ fill: 'var(--es-muted)', fontSize: 11 }}
+						tick={{ fill: 'var(--es-muted)', fontSize: 12 }}
 					/>
 					<Tooltip
 						labelFormatter={(value) => date(String(value))}
@@ -555,7 +519,7 @@ function SalesChart({
 	);
 }
 
-function OrderTable({ rows }: { rows: SellerOrderRow[] }) {
+function OrderTable({ rows, appId }: { rows: SellerOrderRow[]; appId: string }) {
 	const [search, setSearch] = useState('');
 	const [status, setStatus] = useState('all');
 	const [limit, setLimit] = useState(20);
@@ -594,22 +558,9 @@ function OrderTable({ rows }: { rows: SellerOrderRow[] }) {
 						setLimit(20);
 					}}
 				/>
-				<select
-					aria-label={t('Filter orders')}
-					value={status}
-					onChange={(event) => {
-						setStatus(event.target.value);
-						setLimit(20);
-					}}
-				>
-					<option value="all">{t('All orders')}</option>
-					<option value="to-ship">{t('To ship')}</option>
-					{Object.entries(PAYMENT_LABELS).map(([value, label]) => (
-						<option key={value} value={value}>
-							{t(label)}
-						</option>
-					))}
-				</select>
+				<Select aria-label={t('Filter orders')} value={status}
+					items={{ all: t('All orders'), 'to-ship': t('To ship'), ...Object.fromEntries(Object.entries(PAYMENT_LABELS).map(([value, label]) => [value, t(label)])) }}
+					onValueChange={(value) => { if (value) { setStatus(value); setLimit(20); } }} />
 			</div>
 			<div className="es-table-scroll">
 				<Table>
@@ -636,7 +587,7 @@ function OrderTable({ rows }: { rows: SellerOrderRow[] }) {
 								<Table.Cell>
 									<Link
 										className="es-order-link"
-										to={sellerOrderPath(row.id)}
+										to={storeOrderPath(appId, row.id)}
 									>
 										#{row.orderNumber}
 										<ArrowUpRightIcon size={12} />
@@ -697,7 +648,9 @@ function OrderTable({ rows }: { rows: SellerOrderRow[] }) {
 	);
 }
 
-function Customers({ rows }: { rows: CustomerSummary[] }) {
+function Customers({ rows, orders, appId }: { rows: CustomerSummary[]; orders: SellerOrderRow[]; appId: string }) {
+	const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+	const selected = rows.find((row) => row.email === selectedEmail);
 	const [search, setSearch] = useState('');
 	const [limit, setLimit] = useState(20);
 	const filtered = rows.filter((row) =>
@@ -751,7 +704,7 @@ function Customers({ rows }: { rows: CustomerSummary[] }) {
 						{filtered.slice(0, limit).map((row) => (
 							<Table.Row key={row.email}>
 								<Table.Cell>
-									{customerLabel(row.name, row.email)}
+									<Button variant="ghost" size="sm" onClick={() => setSelectedEmail(row.email)}>{customerLabel(row.name, row.email)}</Button>
 								</Table.Cell>
 								<Table.Cell>{row.email}</Table.Cell>
 								<Table.Cell>{row.orders}</Table.Cell>
@@ -759,7 +712,7 @@ function Customers({ rows }: { rows: CustomerSummary[] }) {
 								<Table.Cell>
 									<Link
 										className="es-order-link"
-										to={sellerOrderPath(row.lastOrderId)}
+										to={storeOrderPath(appId, row.lastOrderId)}
 									>
 										{date(row.lastOrder)}
 										<ArrowUpRightIcon size={12} />
@@ -786,47 +739,15 @@ function Customers({ rows }: { rows: CustomerSummary[] }) {
 					</Button>
 				</div>
 			)}
+			<Dialog.Root open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelectedEmail(null); }}>
+				{selected && <Dialog size="xl" className="max-h-[85svh] overflow-auto p-6">
+					<div className="flex items-start justify-between gap-4 mb-6"><div><Dialog.Title className="text-xl font-semibold">{customerLabel(selected.name, selected.email)}</Dialog.Title><Dialog.Description className="mt-2 text-sm text-kumo-subtle">{t('Customer activity in the selected reporting period.')}</Dialog.Description></div><Dialog.Close render={(props) => <Button {...props} variant="ghost" shape="square" aria-label={t('Close')}><XIcon size={18} /></Button>} /></div>
+					<p className="mb-4 break-all">{selected.email}</p>
+					<dl className="grid grid-cols-2 gap-4 mb-6"><div><dt className="text-sm text-kumo-subtle">{t('Orders')}</dt><dd className="text-xl font-semibold">{selected.orders}</dd></div><div><dt className="text-sm text-kumo-subtle">{t('Paid order totals')}</dt><dd className="text-xl font-semibold">{money(selected.paidCents)}</dd></div></dl>
+					<div className="divide-y divide-kumo-line">{orders.filter((order) => order.customerEmail?.trim().toLowerCase() === selected.email).map((order) => <Link key={order.id} className="flex justify-between gap-4 py-3 text-sm hover:text-kumo-link" to={storeOrderPath(appId, order.id)}><span>#{order.orderNumber} · {date(order.createdAt)}</span><span>{money(order.totalCents)} · {t(PAYMENT_LABELS[order.paymentStatus])}</span></Link>)}</div>
+				</Dialog>}
+			</Dialog.Root>
 		</section>
-	);
-}
-
-function Products({ appId }: { appId: string }) {
-	return (
-		<div className="es-product-grid">
-			<section className="es-product-card">
-				<span className="es-icon-tile">
-					<PackageIcon size={28} />
-				</span>
-				<h2>{t('Your collection lives in your store')}</h2>
-				<p>
-					{t(
-						'A product inventory is not available in this workspace yet. Open the builder to view and change the products in this store.',
-					)}
-				</p>
-				<Link
-					className="es-button es-button-primary"
-					to={`/chat/${appId}`}
-				>
-					{t('Open store builder')}
-					<ArrowUpRightIcon size={15} />
-				</Link>
-			</section>
-			<section className="es-product-card">
-				<span className="es-icon-tile">
-					<SparkleIcon size={28} />
-				</span>
-				<h2>{t('Discover your next product')}</h2>
-				<p>
-					{t(
-						'Browse the Estori catalog, then work with the builder to add products to this store.',
-					)}
-				</p>
-				<Link className="es-button" to="/catalog">
-					{t('Explore the catalog')}
-					<ArrowUpRightIcon size={15} />
-				</Link>
-			</section>
-		</div>
 	);
 }
 

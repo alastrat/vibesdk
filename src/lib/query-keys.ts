@@ -56,6 +56,7 @@ export const queryKeys = {
 	},
 	account: {
 		all: ['account'] as const,
+		storeProducts: (appId: string, userId?: string | null) => ['account', 'store-products', appId, userId ?? 'anonymous'] as const,
 		user: {
 			all: () => [...queryKeys.account.all, 'user'] as const,
 			statsAll: () => [...queryKeys.account.user.all(), 'stats'] as const,

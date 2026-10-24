@@ -20,13 +20,15 @@ vi.mock('@/hooks/use-app', () => ({
 	}),
 }));
 
-function render() {
+vi.mock('@/hooks/use-flag', () => ({ useFlag: () => false }));
+
+function render(section = 'products') {
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});
 	return renderToStaticMarkup(
 		<QueryClientProvider client={client}>
-			<MemoryRouter initialEntries={['/stores/tea?section=products']}>
+			<MemoryRouter initialEntries={[`/stores/tea?section=${section}`]}>
 				<Routes>
 					<Route path="/stores/:id" element={<StoreWorkspace />} />
 				</Routes>
@@ -58,12 +60,15 @@ describe('store workspace access', () => {
 			expect(html).not.toContain('/chat/tea');
 		},
 	);
-	it('gives the owner the existing builder and preview routes without inventing inventory', () => {
+	it('gives the owner the published collection and existing builder and preview routes', () => {
 		const html = render();
 		expect(html).toContain('Store navigation');
 		expect(html).toContain('href="/chat/tea"');
 		expect(html).toContain('href="/app/tea"');
 		expect(html).toContain('href="/catalog"');
-		expect(html).toContain('A product inventory is not available');
+		expect(html).toContain('Published collection');
+		expect(html).not.toContain('A product inventory is not available');
+		expect(html).toContain('section=emails');
+		expect(html).toContain('section=translations');
 	});
 });

@@ -75,6 +75,7 @@ const routes = [
 					{ index: true, Component: RootIndex },
 					{ path: 'build', Component: protectedPage(BuilderHome) },
 					{ path: 'stores/:id', Component: protectedPage(StoreWorkspace) },
+					{ path: 'stores/:storeId/orders/:id', Component: protectedPage(SellerOrderPage) },
 					{
 						path: 'chat/:chatId',
 						Component: Chat,

@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button, Empty, Loader } from '@cloudflare/kumo';
-import { pageTitle } from '@/brand';
-import { STORE_TRANSLATIONS_PAUSED_MESSAGE, UNTOUCHED_SETTINGS_VERSION, type Locale, type StoreTranslationOverview, type StoreTranslationSettings, type StoreTranslationSettingsPatch, type StoreTranslationStoreSummary } from '@/api-types';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { STORE_TRANSLATIONS_PAUSED_MESSAGE, UNTOUCHED_SETTINGS_VERSION, type Locale, type StoreTranslationOverview, type StoreTranslationSettings, type StoreTranslationSettingsPatch } from '@/api-types';
 import { Switch } from '@/components/ui/switch';
 import { useFlag } from '@/hooks/use-flag';
 import { useSaveTranslationSettings, useStoreTranslations, useTranslationStores } from '@/hooks/use-store-translations';
@@ -12,75 +10,39 @@ import { LanguageCard } from './language-card';
 import { StoreLanguageSelect } from './store-language-select';
 import { Notice, TaskActivity } from './task-activity';
 import { TranslationEditor } from './translation-editor';
+import { StoreToolLauncher } from './store-tool-launcher';
 
-/** Where this browser remembers the store the seller last chose. */
-const CHOSEN_STORE_KEY = 'estori:translations-store';
-
-function storedStore(): string | null {
-	try {
-		return localStorage.getItem(CHOSEN_STORE_KEY);
-	} catch {
-		return null;
-	}
-}
-
-function rememberStore(appId: string): void {
-	try {
-		localStorage.setItem(CHOSEN_STORE_KEY, appId);
-	} catch {
-		// Storage is blocked: the choice lasts until the page closes.
-	}
-}
-
+/** Compatibility route: choose a store, then manage translations inside its workspace. */
 export default function TranslationsPage() {
 	const { t } = useI18n();
 	const paused = useFlag('store-translations-paused');
 	const stores = useTranslationStores(!paused);
-	const [chosen, setChosen] = useState(storedStore);
-	const list = stores.data ?? [];
-	const appId = list.find((store) => store.appId === chosen)?.appId ?? list[0]?.appId ?? null;
-
-	const choose = (value: string) => {
-		setChosen(value);
-		rememberStore(value);
-	};
-
 	return (
-		<div className="size-full">
-			<title>{pageTitle(t('Translations'))}</title>
-			<div className="container max-w-5xl mx-auto px-4 py-8 grid gap-6">
-				<div className="grid gap-1">
-					<h1 className="text-3xl font-semibold text-kumo-strong">{t('Translations')}</h1>
-					<p className="text-kumo-subtle">{t('Show your store in English, Spanish and Portuguese. Automatic translations use AI credits, and your edits are never changed.')}</p>
-				</div>
-
-				{paused ? (
-					<Empty title={t('Translations are paused')} description={t(STORE_TRANSLATIONS_PAUSED_MESSAGE)} />
-				) : stores.data ? (
-					list.length === 0 ? (
-						<NotDeployed />
-					) : (
-						<>
-							<StorePicker stores={list} value={appId} onChange={choose} />
-							{appId && <StoreTranslations key={appId} appId={appId} />}
-						</>
-					)
-				) : stores.isError ? (
-					<Empty
-						title={t("Couldn't load your stores")}
-						description={stores.error.message}
-						contents={
-							<Button size="sm" variant="secondary" disabled={stores.isFetching} loading={stores.isFetching} onClick={() => void stores.refetch()}>
-								{t('Retry')}
-							</Button>
-						}
-					/>
-				) : (
-					<Spinner />
-				)}
-			</div>
-		</div>
+		<StoreToolLauncher
+			title={t('Translations')}
+			description={t('Choose a store to manage its languages and translations.')}
+			section="translations"
+			stores={stores.data}
+			loading={stores.isLoading}
+			error={stores.error}
+			retrying={stores.isFetching}
+			onRetry={() => void stores.refetch()}
+			emptyTitle={t('Publish or preview your store first')}
+			emptyDescription={t('Translations start from what your store shows shoppers. Open its preview or publish it, then come back.')}
+			notice={paused ? <Paused /> : undefined}
+		/>
 	);
+}
+
+/** Mount only the supplied store, resetting editing and polling state when it changes. */
+export function StoreTranslationsPanel({ appId }: { appId: string }) {
+	const paused = useFlag('store-translations-paused');
+	return <div className="grid gap-6">{paused ? <Paused /> : <StoreTranslations key={appId} appId={appId} />}</div>;
+}
+
+function Paused() {
+	const { t } = useI18n();
+	return <Empty title={t('Translations are paused')} description={t(STORE_TRANSLATIONS_PAUSED_MESSAGE)} />;
 }
 
 function Spinner() {
@@ -94,27 +56,6 @@ function Spinner() {
 function NotDeployed() {
 	const { t } = useI18n();
 	return <Empty title={t('Publish or preview your store first')} description={t('Translations start from what your store shows shoppers. Open its preview or publish it, then come back.')} />;
-}
-
-function StorePicker({ stores, value, onChange }: { stores: StoreTranslationStoreSummary[]; value: string | null; onChange: (appId: string) => void }) {
-	const { t } = useI18n();
-	return (
-		<div className="grid w-full gap-1.5 text-sm sm:max-w-xs">
-			<span className="font-medium text-kumo-default">{t('Store')}</span>
-			<Select value={value ?? undefined} onValueChange={onChange}>
-				<SelectTrigger aria-label={t('Store')} className="w-full">
-					<SelectValue />
-				</SelectTrigger>
-				<SelectContent>
-					{stores.map((store) => (
-						<SelectItem key={store.appId} value={store.appId}>
-							{store.title.trim() || t('Untitled store')}
-						</SelectItem>
-					))}
-				</SelectContent>
-			</Select>
-		</div>
-	);
 }
 
 /** The chosen store: its settings, a card per language, what is translating, then every text to review. */

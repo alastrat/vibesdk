@@ -1,5 +1,6 @@
 import type { DiscoverCategory, DiscoverCatalogFilters, DiscoverCatalogPage, DiscoverEntryDetail, DiscoverAccess, DiscoverCheckout } from '@/api-types';
 import type { BillingInterval } from '@/api-types';
+import type { StoreWorkspaceProducts } from '@/api-types';
 /**
  * Unified API Client - Premium quality abstraction for all worker API calls
  * Provides type-safe methods for all endpoints with proper error handling
@@ -963,6 +964,10 @@ class ApiClient {
 
 	async getStoreOrders(appId: string): Promise<ApiResponse<StoreOrdersData>> {
 		return this.request<StoreOrdersData>(`/api/stores/${encodeURIComponent(appId)}/orders`);
+	}
+
+	async getStoreProducts(appId: string): Promise<ApiResponse<StoreWorkspaceProducts>> {
+		return this.request(`/api/stores/${encodeURIComponent(appId)}/products`);
 	}
 
 	/** Refund lines of a store order; the seller's Stripe balance pays it. */

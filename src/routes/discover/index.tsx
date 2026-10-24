@@ -108,13 +108,13 @@ export default function DiscoverPage() {
 				>
 					{/* Header */}
 					<div className="mb-8 mt-6">
-						<h1 className="flex items-center gap-2 text-6xl font-funky-mono font-bold mb-3 text-brand-emphasis">
+						<h1 className="flex items-center gap-2 text-[28px] font-semibold tracking-tight mb-3 text-brand-emphasis">
 							<BrandEmphasisIcon
 								icon={GlobeIcon}
 								weight="duotone"
 								className="-rotate-30"
 							/>{t("Discover")}</h1>
-						<p className="text-kumo-subtle text-lg font-funky-mono tracking-tight">
+						<p className="text-kumo-subtle text-sm leading-6">
 							{DISCOVER_PAGE.description}
 						</p>
 					</div>

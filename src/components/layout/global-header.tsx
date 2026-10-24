@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useHeaderContent } from './header-context';
 import { t } from '@/lib/i18n';
 
-export function GlobalHeader() {
+export function GlobalHeader({ showSidebarTrigger = true }: { showSidebarTrigger?: boolean }) {
 	const { isMobile } = useSidebar();
 	const { content } = useHeaderContent();
 	const { status } = usePlatformStatus();
@@ -32,13 +32,13 @@ export function GlobalHeader() {
 		}
 	}, [hasChangeLogs]);
 
-	if (!isMobile && !hasPageContent && !hasMaintenanceMessage) return null;
+	if ((!isMobile || !showSidebarTrigger) && !hasPageContent && !hasMaintenanceMessage) return null;
 
 	return (
 		<>
 			<header className={cn('sticky top-0 z-10')}>
 				<div className="relative flex h-12 items-center gap-2 border-b border-kumo-line pl-2 pr-3 md:gap-3 md:px-4">
-					{isMobile ? (
+					{isMobile && showSidebarTrigger ? (
 						<SidebarTrigger
 							aria-label={t('Toggle sidebar')}
 							className="shrink-0"

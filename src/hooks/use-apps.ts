@@ -68,6 +68,7 @@ function computeRecentApps(apps: AppWithFavoriteStatus[]) {
 }
 
 function removeAppFromCache(queryClient: QueryClient, appId: string) {
+	void invalidateAppsQueries(queryClient);
 	queryClient.removeQueries({
 		queryKey: queryKeys.account.apps.detailAll(appId),
 	});

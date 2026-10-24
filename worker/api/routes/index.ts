@@ -5,6 +5,7 @@ import { setupPublishingRoutes } from './publishingRoutes';
 import { setupSitePageRoutes } from './sitePageRoutes';
 import { setupPaymentsRoutes } from './paymentsRoutes';
 import { setupStoreRoutes } from './storeRoutes';
+import { setupStoreWorkspaceRoutes } from './storeWorkspaceRoutes';
 import { setupSellerOrderRoutes } from './sellerOrderRoutes';
 import { setupShopperEmailRoutes } from './shopperEmailRoutes';
 import { setupTranslationRoutes } from './translationRoutes';
@@ -82,6 +83,7 @@ export function setupRoutes(app: Hono<AppEnv>): void {
 
     // A store's orders, for its owner
     setupStoreRoutes(app);
+    setupStoreWorkspaceRoutes(app);
     setupSellerOrderRoutes(app);
     setupShopperEmailRoutes(app);
     setupTranslationRoutes(app);

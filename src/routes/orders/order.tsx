@@ -18,15 +18,15 @@ import { CATALOG_PROGRESS_LABELS, PAYMENT_LABELS, carrierChoice, customerLabel, 
 
 export default function SellerOrderPage() {
 	useI18n();
-	const { id = '' } = useParams();
+	const { id = '', storeId } = useParams();
 	const detail = useSellerOrder(id);
 
 	return (
 		<div className="size-full">
-			<title>{pageTitle('Order')}</title>
+			<title>{pageTitle(t('Order'))}</title>
 			<div className="container max-w-5xl mx-auto px-4 py-8 grid gap-6">
-				<Link to={SELLER_ORDERS_PATH} className="w-fit text-sm text-kumo-default underline underline-offset-2">{t("Orders")}</Link>
-				{detail.data ? (
+				<Link to={storeId ? `/stores/${encodeURIComponent(storeId)}?section=payments` : SELLER_ORDERS_PATH} className="w-fit text-sm text-kumo-default underline underline-offset-2">{t("Orders")}</Link>
+				{detail.data && (!storeId || detail.data.appId === storeId) ? (
 					<OrderDetail order={detail.data} />
 				) : detail.isLoading ? (
 					<div className="flex justify-center py-16">

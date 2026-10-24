@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { Banner, Loader, buttonVariants } from '@cloudflare/kumo';
+import { Banner, LinkButton, Loader } from '@cloudflare/kumo';
 import { WarningCircleIcon } from '@phosphor-icons/react';
 import { BILLING_PATH } from '@/api-types';
 import { pageTitle } from '@/brand';
@@ -77,9 +77,9 @@ export default function BillingCardReturnPage() {
 						<Banner variant="alert" icon={<WarningCircleIcon />} description={t(stopped.message)} />
 						<div className="flex flex-wrap items-center gap-2">
 							{stopped.tryAgain && (
-								<Link to={cardPathOf('pay')} className={buttonVariants({ variant: 'primary', size: 'sm' })}>
+								<LinkButton href={cardPathOf('pay')} variant="primary" size="sm">
 									{t('Try another card')}
-								</Link>
+								</LinkButton>
 							)}
 							<BackToBilling />
 						</div>

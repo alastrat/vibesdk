@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AI_ASSISTANT_NAMES, SUPPLIER_NAMES } from '../copy-rules';
 
-const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/components/layout/app-sidebar.tsx', '/src/routes/orders/orders.tsx', '/src/routes/orders/order.tsx', '/src/hooks/use-seller-orders.ts'], {
+const sources = import.meta.glob<string>(['/src/routes.tsx', '/src/components/layout/app-sidebar.tsx', '/src/routes/orders/orders.tsx', '/src/routes/orders/order.tsx', '/src/hooks/use-seller-orders.ts', '/src/routes/store-workspace/index.tsx'], {
 	query: '?raw',
 	import: 'default',
 	eager: true,
@@ -24,9 +24,12 @@ describe('the seller Orders pages', () => {
 		const sidebar = source('/src/components/layout/app-sidebar.tsx');
 		expect(sidebar.match(/navigate\(SELLER_ORDERS_PATH\)/g) ?? []).toHaveLength(2);
 		expect(sidebar).toContain('id="orders-link"');
-		// Orders comes before Emails and Translations, folded and open.
+		// Orders remains global; email and translation tools belong to a store.
 		const items = [...sidebar.matchAll(/id="(orders|emails|translations)-link"/g)].map((match) => match[1]);
-		expect(items).toEqual(['orders', 'emails', 'translations', 'orders', 'emails', 'translations']);
+		expect(items).toEqual(['orders', 'orders']);
+		const workspace = source('/src/routes/store-workspace/index.tsx');
+		expect(workspace).toContain('<StoreEmailsPanel appId={app.id}');
+		expect(workspace).toContain('<StoreTranslationsPanel appId={app.id}');
 	});
 
 	it('list orders to ship by default, with test orders hidden behind a switch, a store filter and Load more', () => {

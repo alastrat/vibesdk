@@ -4,7 +4,7 @@ import { BillingIntervalPicker } from '@/components/billing/BillingIntervalPicke
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router';
 import { toast } from 'sonner';
-import { Badge, Banner, Button, Empty, LayerCard, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
+import { Badge, Banner, Button, Empty, LayerCard, LinkButton, Loader, Meter, buttonVariants } from '@cloudflare/kumo';
 import { CheckCircleIcon, CoinsIcon, InfoIcon, SpinnerGapIcon, StackPlusIcon, StorefrontIcon, WarningCircleIcon } from '@phosphor-icons/react';
 import {
 	BILLING_NOT_OPEN_MESSAGE,
@@ -121,9 +121,9 @@ function PastDueButtons({ actions, paying, disabled, onPayNow }: { actions: Past
 					{actions.payNow}
 				</Button>
 			)}
-			<Link to={actions.updateCard.to} className={buttonVariants({ variant: actions.payNow ? 'secondary' : 'primary' })}>
+			<LinkButton href={actions.updateCard.to} variant={actions.payNow ? 'secondary' : 'primary'}>
 				{actions.updateCard.label}
-			</Link>
+			</LinkButton>
 		</div>
 	);
 }

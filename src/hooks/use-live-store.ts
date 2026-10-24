@@ -24,6 +24,7 @@ function useLiveStoreMutation<TInput>(appId: string, call: (input: TInput) => Pr
 		onSuccess: (view) => {
 			queryClient.setQueryData(queryKeys.liveStore(appId), view);
 			void queryClient.invalidateQueries({ queryKey: queryKeys.drafts(appId) });
+			void queryClient.invalidateQueries({ queryKey: queryKeys.account.storeProducts(appId).slice(0, 3) });
 		},
 	});
 }

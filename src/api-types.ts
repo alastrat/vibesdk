@@ -7,6 +7,7 @@ import { AuthUser } from './api-types';
 import type { SessionTelemetry } from '../shared/types/telemetry.js';
 
 export type { SecretTemplate } from 'worker/types/secretsTemplates';
+export type { StoreWorkspaceProducts, StoreWorkspaceProduct, StoreWorkspaceVariant } from '../shared/types/store-workspace';
 
 // Base API Response Types
 export type { ControllerResponse, ApiResponse } from 'worker/api/controllers/types';

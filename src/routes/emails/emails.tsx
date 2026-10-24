@@ -6,67 +6,56 @@ import { getLocale, t, useI18n } from '@/lib/i18n';
 import { useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import { Badge, Button, Empty, Loader } from '@cloudflare/kumo';
-import { pageTitle } from '@/brand';
 import { SHOPPER_EMAIL_LABELS, type RecentShopperEmail, type ShopperEmailKind, type ShopperEmailsData, type ShopperEmailTemplateView } from '@/api-types';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { useSaveShopperEmail, useSaveShopperEmailSettings, useShopperEmails, useShopperEmailStores } from '@/hooks/use-shopper-emails';
-import { storeLabel } from '../orders/order-format';
+import { StoreToolLauncher } from '../translations/store-tool-launcher';
 import { STATUS_LABELS, statusVariant, templateOrigin } from './email-format';
 import { TemplateEditor } from './template-editor';
 
+/** Compatibility route: a seller explicitly chooses which store workspace to open. */
 export default function ShopperEmailsPage() {
 	useI18n();
 	const stores = useShopperEmailStores();
-	const [chosen, setChosen] = useState<string | null>(null);
-	const appId = chosen ?? stores.data?.stores[0]?.appId ?? null;
-	const emails = useShopperEmails(appId);
-
 	return (
-		<div className="size-full">
-			<title>{pageTitle('Emails')}</title>
-			<div className="container max-w-5xl mx-auto px-4 py-8 grid gap-6">
-				<div className="grid gap-1">
-					<h1 className="text-3xl font-semibold text-kumo-strong">{t("Emails")}</h1>
-					<p className="text-kumo-subtle">{t("Manage order confirmations, shipping updates and refund emails.")}</p>
-				</div>
+		<StoreToolLauncher
+			title={t('Emails')}
+			description={t('Choose a store to manage its order emails.')}
+			section="emails"
+			stores={stores.data?.stores}
+			loading={stores.isLoading}
+			error={stores.error}
+			retrying={stores.isFetching}
+			onRetry={() => void stores.refetch()}
+			emptyTitle={t('No stores yet')}
+			emptyDescription={t('Publish a store to set up its emails.')}
+		/>
+	);
+}
 
-				{stores.data ? (
-					stores.data.stores.length === 0 ? (
-						<Empty title={t("No stores yet")} description={t("Publish a store to set up its emails.")} />
-					) : (
-						<>
-							{stores.data.stores.length > 1 && (
-								<label className="flex w-fit items-center gap-2 text-sm text-kumo-subtle">{t("Store")}<select className="rounded-md border border-kumo-line bg-kumo-base px-2 py-1 text-sm text-kumo-default" value={appId ?? ''} onChange={(event) => setChosen(event.target.value)}>
-										{stores.data.stores.map((option) => (
-											<option key={option.appId} value={option.appId}>
-												{storeLabel(option.title)}
-											</option>
-										))}
-									</select>
-								</label>
-							)}
-							{appId && emails.data ? (
-								<StoreEmails key={appId} appId={appId} data={emails.data} />
-							) : emails.isError ? (
-								<Empty title={t("Couldn't load this store's emails")} description={emails.error.message} />
-							) : (
-								<div className="flex justify-center py-16">
-									<Loader />
-								</div>
-							)}
-						</>
-					)
-				) : stores.isLoading ? (
-					<div className="flex justify-center py-16">
-						<Loader />
-					</div>
-				) : (
-					<Empty title={t("Couldn't load your stores")} description={stores.error?.message} />
-				)}
+/** The workspace supplies its owned store; this panel never picks another store. */
+export function StoreEmailsPanel({ appId }: { appId: string }) {
+	return <StoreEmailsContent key={appId} appId={appId} />;
+}
 
-				<p className="text-sm text-kumo-subtle">{t("Estori sends order emails only. Cloudflare, which delivers them, doesn't allow marketing email such as newsletters or promotions.")}</p>
-			</div>
+function StoreEmailsContent({ appId }: { appId: string }) {
+	useI18n();
+	const emails = useShopperEmails(appId);
+	return (
+		<div className="grid gap-6">
+			{emails.data ? (
+				<StoreEmails appId={appId} data={emails.data} />
+			) : emails.isError ? (
+				<Empty
+					title={t("Couldn't load this store's emails")}
+					description={emails.error.message}
+					contents={<Button size="sm" variant="secondary" loading={emails.isFetching} disabled={emails.isFetching} onClick={() => void emails.refetch()}>{t('Retry')}</Button>}
+				/>
+			) : (
+				<div className="flex justify-center py-16"><Loader /></div>
+			)}
+			<p className="text-sm text-kumo-subtle">{t("Estori sends order emails only. Cloudflare, which delivers them, doesn't allow marketing email such as newsletters or promotions.")}</p>
 		</div>
 	);
 }

@@ -523,7 +523,7 @@ export default function Profile() {
 												variant="primary"
 												size="sm"
 												onClick={() =>
-													navigate('/chat')
+													navigate('/build')
 												}
 											>
 												{t('Create your first app')}

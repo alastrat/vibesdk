@@ -4,14 +4,12 @@ import {
 	CaretRightIcon,
 	CompassIcon,
 	StorefrontIcon,
-	EnvelopeSimpleIcon,
 	GlobeHemisphereWestIcon,
 	LockKeyIcon,
 	MagnifyingGlassIcon,
 	PackageIcon,
 	ReceiptIcon,
 	PlusIcon,
-	TranslateIcon,
 	UsersThreeIcon,
 } from '@phosphor-icons/react';
 import { isValid } from 'date-fns';
@@ -34,11 +32,7 @@ import { LEGAL_LINKS } from '@/content/legal/legal-documents';
 import { legalLinkLabel } from '@/lib/legal-link-label';
 import type { AppVisibility } from '@/lib/visibility-label';
 import { t, tn } from '@/lib/i18n';
-import {
-	SELLER_ORDERS_PATH,
-	SHOPPER_EMAILS_PATH,
-	STORE_TRANSLATIONS_PATH,
-} from '@/api-types';
+import { SELLER_ORDERS_PATH } from '@/api-types';
 import { useFlag } from '@/hooks/use-flag';
 
 interface App {
@@ -184,7 +178,6 @@ export function AppSidebar() {
 	const isCollapsed = state === 'collapsed';
 	const usageLimits = useUsageLimitsBadgeState();
 	const catalogPaused = useFlag('catalog-paused');
-	const translationsPaused = useFlag('store-translations-paused');
 	// Show only when action is needed: not connected, or token without gateway.
 	// Hide when configured even if cloudflareCredits is still null, and while
 	// billing is on, where plans replace the seller's own Cloudflare account.
@@ -292,7 +285,7 @@ export function AppSidebar() {
 	};
 
 	return (
-		<Sidebar className="[--sidebar-bg:var(--color-kumo-recessed)]">
+		<Sidebar className="workspace-sidebar [--sidebar-bg:var(--color-kumo-recessed)]">
 			<Sidebar.Header
 				className={cn(
 					'h-12',
@@ -393,54 +386,7 @@ export function AppSidebar() {
 								icon={<ReceiptIcon className="size-4" />}
 							/>
 						)}
-						{user && (
-							<Button
-								shape="square"
-								size="base"
-								variant="ghost"
-								id="emails-link"
-								aria-label={t('Emails')}
-								title={t('Emails')}
-								aria-current={
-									pathname.startsWith(SHOPPER_EMAILS_PATH)
-										? 'page'
-										: undefined
-								}
-								onClick={() => navigate(SHOPPER_EMAILS_PATH)}
-								className={cn(
-									'text-kumo-subtle hover:text-kumo-default',
-									pathname.startsWith(SHOPPER_EMAILS_PATH) &&
-										'bg-(--sidebar-active-bg) text-kumo-default',
-								)}
-								icon={<EnvelopeSimpleIcon className="size-4" />}
-							/>
-						)}
-						{user && !translationsPaused && (
-							<Button
-								shape="square"
-								size="base"
-								variant="ghost"
-								id="translations-link"
-								aria-label={t('Translations')}
-								title={t('Translations')}
-								aria-current={
-									pathname.startsWith(STORE_TRANSLATIONS_PATH)
-										? 'page'
-										: undefined
-								}
-								onClick={() =>
-									navigate(STORE_TRANSLATIONS_PATH)
-								}
-								className={cn(
-									'text-kumo-subtle hover:text-kumo-default',
-									pathname.startsWith(
-										STORE_TRANSLATIONS_PATH,
-									) &&
-										'bg-(--sidebar-active-bg) text-kumo-default',
-								)}
-								icon={<TranslateIcon className="size-4" />}
-							/>
-						)}
+
 					</div>
 				) : (
 					<div className="flex flex-col gap-1.5">
@@ -520,46 +466,7 @@ export function AppSidebar() {
 									{t('Orders')}
 								</Sidebar.MenuButton>
 							)}
-							{user && (
-								<Sidebar.MenuButton
-									active={pathname.startsWith(
-										SHOPPER_EMAILS_PATH,
-									)}
-									icon={
-										<EnvelopeSimpleIcon
-											weight="duotone"
-											className="size-4 -mr-1"
-										/>
-									}
-									id="emails-link"
-									tooltip={t('Emails')}
-									onClick={() =>
-										navigate(SHOPPER_EMAILS_PATH)
-									}
-								>
-									{t('Emails')}
-								</Sidebar.MenuButton>
-							)}
-							{user && !translationsPaused && (
-								<Sidebar.MenuButton
-									active={pathname.startsWith(
-										STORE_TRANSLATIONS_PATH,
-									)}
-									icon={
-										<TranslateIcon
-											weight="duotone"
-											className="size-4 -mr-1"
-										/>
-									}
-									id="translations-link"
-									tooltip={t('Translations')}
-									onClick={() =>
-										navigate(STORE_TRANSLATIONS_PATH)
-									}
-								>
-									{t('Translations')}
-								</Sidebar.MenuButton>
-							)}
+
 						</Sidebar.Menu>
 
 						{user && (
